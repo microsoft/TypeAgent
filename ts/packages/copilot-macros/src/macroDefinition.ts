@@ -29,7 +29,8 @@ async function classifyTool(
     cwd: string,
     replayHost: ReplayToolHost | undefined,
 ): Promise<MacroExecutionClass> {
-    if (!mcpServerName || !replayHost) return "agentRequired";
+    if (!replayHost || (!mcpServerName && !replayHost.supportsNativeTools))
+        return "agentRequired";
     const descriptor = await replayHost.inspectTool(mcpServerName, toolName, {
         cwd,
     });

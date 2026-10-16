@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DurableRecipeCatalog } from "@typeagent/copilot-macros/recipeCatalog";
+import { jest } from "@jest/globals";
+import type { MacroOwnerConnection } from "../src/shared/macro-owner.js";
+import type { RunMacroRequest } from "@typeagent/copilot-macros";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -14,12 +16,47 @@ const input = { sessionId: "recipe-test", timestamp: 1, cwd: ".", prompt: "" };
 let directory: string;
 const originalData = process.env.TYPEAGENT_PLUGIN_DATA;
 const originalProfile = process.env.TYPEAGENT_RECIPE_PROFILE_ID;
+const originalOwner = process.env.TYPEAGENT_RECIPE_OWNER;
+const missing = async () => {
+    throw new Error("Unknown saved recipe.");
+};
+function connection(
+    overrides: Partial<MacroOwnerConnection> = {},
+): MacroOwnerConnection {
+    return {
+        close: async () => {},
+        listMacros: async () => [],
+        getMacroRecordingState: async () => ({ status: "idle" }),
+        getMacroLearningPreference: missing,
+        setMacroLearningPreference: missing,
+        getMacroLearningJob: missing,
+        cancelMacroLearningJob: missing,
+        armMacroRecording: missing,
+        claimMacroRecording: missing,
+        cancelMacroRecording: missing,
+        failMacroRecording: missing,
+        finalizeMacroRecording: missing,
+        searchMacros: missing,
+        inspectMacro: missing,
+        getMacroRequirements: missing,
+        validateMacro: missing,
+        approveMacro: missing,
+        disableMacro: missing,
+        deleteMacro: missing,
+        runMacro: missing,
+        cancelMacroRun: missing,
+        getMacroRun: missing,
+        ...overrides,
+    };
+}
+const connect = async () => connection();
 
 beforeEach(() => {
     directory = resolve(".recipe-command-tests", randomUUID());
     mkdirSync(directory, { recursive: true });
     process.env.TYPEAGENT_PLUGIN_DATA = directory;
     delete process.env.TYPEAGENT_RECIPE_PROFILE_ID;
+    process.env.TYPEAGENT_RECIPE_OWNER = "plugin";
 });
 afterEach(() => {
     rmSync(directory, { recursive: true, force: true });
@@ -28,6 +65,8 @@ afterEach(() => {
     if (originalProfile === undefined)
         delete process.env.TYPEAGENT_RECIPE_PROFILE_ID;
     else process.env.TYPEAGENT_RECIPE_PROFILE_ID = originalProfile;
+    if (originalOwner === undefined) delete process.env.TYPEAGENT_RECIPE_OWNER;
+    else process.env.TYPEAGENT_RECIPE_OWNER = originalOwner;
 });
 
 test("ordinary prompts and legacy modes do not create/open recipe storage", async () => {
@@ -52,73 +91,115 @@ test("recognized malformed commands return usage with no mutation", async () => 
     ])
         expect(
             (await handleRecipeCommand({ ...input, prompt }))?.responseContent,
-        ).toContain("Local recipe commands");
+        ).toContain("Recipe commands");
     expect(existsSync(join(directory, "recipes"))).toBe(false);
 });
 
-test("local status/list operate without a TypeAgent connection and report P3 gate", async () => {
-    const status = await handleRecipeCommand({
-        ...input,
-        prompt: "@typeagent recipe status",
-    });
-    expect(status).toMatchObject({ handled: true, handledBy: "typeagent" });
-    expect(status?.responseContent).toContain(
-        "Plugin-local program execution is not enabled.",
+test("status/list use the selected owner's real macro catalog, not a SQLite mirror", async () => {
+    const status = await handleRecipeCommand(
+        {
+            ...input,
+            prompt: "@typeagent recipe status",
+        },
+        connect,
     );
+    expect(status).toMatchObject({ handled: true, handledBy: "typeagent" });
+    expect(status?.responseContent).toContain('"owner": "plugin"');
     expect(status?.responseContent).toContain("local-default");
     expect(
         (
-            await handleRecipeCommand({
-                ...input,
-                prompt: "@typeagent recipe list",
-            })
+            await handleRecipeCommand(
+                {
+                    ...input,
+                    prompt: "@typeagent recipe list",
+                },
+                connect,
+            )
         )?.responseContent,
     ).toBe("[]");
 });
 
 test("unknown IDs/cancel return explicit local failure, not legacy fallback", async () => {
     for (const prompt of [
-        "@typeagent recipe disable missing revision",
-        "@typeagent recipe delete missing revision",
+        "@typeagent recipe disable missing 1",
+        "@typeagent recipe delete missing 1",
         "@typeagent recipe cancel job missing",
         "@typeagent recipe cancel run missing",
     ]) {
-        const result = await handleRecipeCommand({ ...input, prompt });
+        const result = await handleRecipeCommand({ ...input, prompt }, connect);
         expect(result?.handled).toBe(true);
-        expect(result?.responseContent).toContain("failed locally");
+        expect(result?.responseContent).toContain("failed");
     }
 });
 
-test("catalog initialization failure is handled without retrying another backend", async () => {
-    process.env.TYPEAGENT_PLUGIN_DATA = join(directory, "invalid");
-    const { writeFileSync } = await import("node:fs");
-    writeFileSync(process.env.TYPEAGENT_PLUGIN_DATA, "not a directory");
+test("owner connection failure is handled without retrying another backend", async () => {
+    const unavailable = jest.fn(async () => {
+        throw new Error("owner unavailable");
+    });
     expect(
         (
-            await handleRecipeCommand({
-                ...input,
-                prompt: "@typeagent recipe status",
-            })
+            await handleRecipeCommand(
+                {
+                    ...input,
+                    prompt: "@typeagent recipe status",
+                },
+                unavailable,
+            )
         )?.responseContent,
-    ).toContain("failed locally");
+    ).toContain("owner unavailable");
+    expect(unavailable).toHaveBeenCalledTimes(1);
 });
 
-test("explicit profile/workspace scope cannot list another catalog's work", async () => {
+test("reports the current workspace/profile scope", async () => {
     const scope = getRecipeCommandScope(input.cwd);
-    const catalog = new DurableRecipeCatalog(join(directory, "recipes"));
-    try {
-        await catalog.setLearningMode(scope, "prepare");
-        expect((await catalog.snapshot(scope)).catalogRevision).toBe(1);
-    } finally {
-        catalog.close();
-    }
     process.env.TYPEAGENT_RECIPE_PROFILE_ID = "other";
-    const result = await handleRecipeCommand({
-        ...input,
-        prompt: "@typeagent recipe status",
-    });
-    expect(result?.responseContent).toContain('"catalogRevision": 0');
+    const result = await handleRecipeCommand(
+        {
+            ...input,
+            prompt: "@typeagent recipe status",
+        },
+        connect,
+    );
+    expect(result?.responseContent).toContain('"profileId": "other"');
     expect(getRecipeCommandScope("another-workspace").workspaceId).not.toBe(
         scope.workspaceId,
     );
+});
+
+test("explicit execution preserves JSON string whitespace and preallocates a run identity", async () => {
+    let request: RunMacroRequest | undefined;
+    const client = connection({
+        runMacro: async (value) => {
+            request = value;
+            throw new Error("Injected fixture stops before any task call.");
+        },
+    });
+    const result = await handleRecipeCommand(
+        {
+            ...input,
+            prompt: '@typeagent recipe run saved 2 {"text":"two  spaces","number":7}',
+        },
+        async () => client,
+    );
+    expect(result?.handled).toBe(true);
+    expect(request).toMatchObject({
+        macroId: "saved",
+        version: 2,
+        runId: expect.any(String),
+        inputs: { text: "two  spaces", number: 7 },
+    });
+});
+
+test("off does not connect to either catalog or backend", async () => {
+    process.env.TYPEAGENT_RECIPE_OWNER = "off";
+    const never = jest.fn(connect);
+    expect(
+        (
+            await handleRecipeCommand(
+                { ...input, prompt: "@typeagent recipe list" },
+                never,
+            )
+        )?.responseContent,
+    ).toContain("off");
+    expect(never).not.toHaveBeenCalled();
 });

@@ -619,7 +619,9 @@ Should show `typeagent` under the plugins section.
 ## Tool-Composed Macros
 
 Checkpoint A uses TypeAgent to record, author, validate, store, match, and run
-checked code-first programs. Both server entry points configure this by default;
+checked code-first programs. Checkpoint B moves selected native Copilot learning
+authorship into restricted children; TypeAgent retains validation and execution.
+Both server entry points configure the shared program runtime by default;
 there is no program rollout flag or legacy step/runner execution path.
 Restart agent-server and reload the built plugin after updating.
 Development-only old macros are discarded, not converted.
@@ -636,10 +638,140 @@ explicitly, without a runner or planner fallback. Existing MCP trust/backend
 permissions, schema checks, containment, cancellation, and uncertainty evidence
 remain enforced. There is no extra recipe-layer execution consent prompt.
 
-`@typeagent recipe status` inspects a separate experimental plugin-local catalog
-without connecting to TypeAgent. It requires Node.js 22.13+ for SQLite; normal
-startup does not load SQLite. Plugin-local execution, Copilot child authorship,
-and standalone inference remain future work, not implied by A.
+### Checkpoint C: plugin-owned recipes
+
+Select `@typeagent recipe owner plugin` (or `/typeagent-recipe-owner plugin`),
+then close and restart the native Copilot session. `TYPEAGENT_RECIPE_OWNER`
+overrides the config's `recipeOwner`; the compatibility default is `typeagent`.
+Select `typeagent` and restart to restore B's backend path, or `off` to disable
+recipe routing and learning. Owner selection is stored separately from the
+legacy mode; `bypass` still disables hook/MCP routing.
+In plugin ownership, unmatched ordinary prompts go to native Copilot, not the
+TypeAgent planner. Explicit TypeAgent commands/tools remain optional backend
+operations; they are not required by the local recipe path.
+
+The joined extension owns one shared `MacroManager` per workspace/profile.
+Capture, scoped authoring outbox, validation/publication, current approved
+versions, cancellation and journals use the same implementation as A/B.
+`recipe list|status|inspect|approve|disable|delete|cancel|run`, recording commands,
+NL matches and macro MCP tools use that owner, not a mirrored SQLite catalog.
+`recipe run <macroId> <version> [JSON inputs]` and NL matches both call the same
+`runMacro`. Old experimental SQLite data is left untouched and is not migrated.
+The TypeAgent and plugin rollout selections retain their own stored data.
+
+State lives under the plugin data root's `recipes/<workspace-profile digest>/`.
+`TYPEAGENT_RECIPE_PROFILE_ID` selects a profile (default `local-default`).
+Node.js **22.13+** is required: a small SQLite writer-lock database prevents
+two native sessions from mutating that scope. The OS releases it after a crash;
+there is no PID-based lock stealing. Close the current native session before
+transferring that workspace/profile to another. Authenticated local IPC binds
+hooks and MCP processes to the actual session. Lost/ambiguous replies are
+failures requiring run reconciliation, never permission to repeat natively.
+
+The C broker supports native `view`, `rg`, `glob` and explicitly classified
+read-only MCP identities. For MCP recording, add the exact identities to the
+plugin's config, for example:
+
+```json
+{
+  "mode": "direct",
+  "recipeOwner": "plugin",
+  "recipeReadOnlyMcpTools": [
+    { "mcpServerName": "documents", "toolName": "read_document" }
+  ]
+}
+```
+
+This is read-effect classification, **not** permission approval. The normal
+native tool permission, hooks and content-exclusion checks still run; unknown
+effects, writes, unsupported schemas and changed bindings fail explicitly.
+`All` does not enable writes in this initial broker.
+Registry metadata resolves MCP server/raw-tool identities without name-prefix
+guessing. Capture and execution use the same processed model-visible JSON value,
+not incompatible event/RPC transport envelopes. Missing optional tool output
+schemas do not invent contracts: independently evidenced program output subsets
+are checked at runtime and unsupported fresh shapes fail explicitly.
+
+Source authorship still uses B's tools-disabled task children. The independent
+source-blind verifier and declared semantic calls instead use fresh tools-disabled
+sessions on a separate native CLI, with no inherited root context, ambient
+plugins/skills/MCP/config discovery, TypeAgent config, API keys or backend.
+This is **not same-process inference**. It uses ordinary native CLI login and
+checks the actual account/workspace binding. The native executable must be on
+PATH; `TYPEAGENT_RECIPE_CLI_PATH` or config `recipeInferenceCliPath` can select its
+executable path explicitly. No shell or bundled-SDK dependency fallback is used.
+
+The copied distribution includes the real TypeScript libraries, QuickJS worker,
+WASM dependency closure, licenses and asset hashes. Programs still compile and
+run in QuickJS, never Node `eval`/`vm`. Symbolic repeats make zero model calls;
+hybrid runs use only declared bounded inference, not another planner.
+Native CLI evidence does not establish VS Code compatibility; see the
+[current verification status](../../docs/plans/copilot-fastActions/STATUS.md).
+
+### Optional TypeAgent actions in plugin-owned programs
+
+A recorded read-only TypeAgent action can run alongside native reads in the same
+checked program. The bridge uses the existing structured discovery, execution,
+continuation and cancellation MCP tools through the normal native host.
+It does not open a backend connection or introduce a second recipe executor.
+Native-only recipes do not initialize this optional bridge.
+
+Record a successful `typeagent-executeAction` backed by an actual
+`typeagent-searchActions` contract. Discovery from an earlier turn in the same
+owning session is supported. Learning replaces transient protocol calls with a
+stable schema/action capability and concrete action parameters. Programs retain
+neither scopes nor operation/interaction IDs. Completed program-visible results
+contain `{ output, results }`, preserving the backend action output rather than
+the protocol envelope.
+
+The exact action must declare read-only effects and have a supported closed
+parameter schema. Do not classify the generic `typeagent-executeAction` tool as
+read-only: its effects depend on the selected action. Every declared dependency
+is preflighted before the first program tool dispatch; execution resolves current
+contracts/scopes and rejects changed contracts. Native permissions, hooks and
+backend authorization still apply. Missing dependencies and lost replies fail
+explicitly; uncertain actions are never automatically repeated.
+
+All six structured statuses remain distinct, including `requires_interaction`
+and `execution_uncertain`, even when native MCP also marks a response as an
+error. Confirmation, single-choice questions and yes/no interactions use the
+actual native user-input tool; only its exact answer is forwarded. Cancellation
+uses the existing cancellation protocol. No defaults or model-generated approval
+are accepted. Rich forms/proposals and learning interactive workflows are not
+supported; writes remain disabled. Native user-interaction fixtures are tested,
+but this does not certify live interaction UI or VS Code compatibility.
+
+The macro MCP connector resolves the workspace from its actual native
+session/profile registration, not its process working directory (which Copilot
+may set to the plugin directory). Explicit workspace-bound hook clients retain
+their original binding. Session registration is private, authenticated at the
+existing broker and removed with its owner; no catalog is copied.
+
+### Native Copilot child authoring
+
+For a selected learning turn, the router asks the parent to call the metadata-only
+`typeagent_recorded_task_succeeded` tool only after actual task success and before
+the final answer. Receipt, prompt hash, final output, and recording token must
+correlate. Failed/denied/aborted work cannot queue child authorship; ordinary idle
+events do not certify success. The original answer never waits for authoring.
+
+After durable finalization, a background worker services TypeAgent's scoped
+authoring requests using tools-disabled native `task` children. Each phase gets
+explicit context, a bounded lifetime, and an exact correlated result. No business
+tools, recursive agents, blanket permission grants, model pin, or fallback author
+are added. Native context isolation is not assumed: the source-blind independent
+verifier stays in TypeAgent for owner `typeagent`. Owner `plugin` supplies the
+separate isolated native verifier described above; both use the same real
+compiler/fixtures and publication policy.
+
+New user tasks preempt authorship. Off/Cancel aborts the active child; closing the
+host leaves durable `awaitingAuthor` work for a later compatible session after
+lease expiry. Inspect `/typeagent-macro-status` for waiting/failure; no child
+authorship is promised while Copilot is closed. Reload the rebuilt plugin and restart agent-server.
+The supported host seam is the pinned native CLI/SDK, not an unproved VS Code
+child API. [B lifecycle details](../copilot-macros/README.md#checkpoint-b-copilot-child-authorship)
+describe context, leases, recovery, and the explicit TypeAgent-only compatibility
+client path.
 
 See [runtime limits](../copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs) and
 [phase status](../../docs/plans/copilot-fastActions/STATUS.md).

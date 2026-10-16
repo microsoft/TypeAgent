@@ -7,22 +7,46 @@ _Last updated: 2026-10-16._
 
 ## Plugin-first program path
 
-Checkpoint A is now program-only. Dev-action behavior is unchanged; B/C remain separate gates.
+Checkpoint A is program-only. Checkpoint B's native child transport/lifecycle is
+implemented and proved for the current read-only scope. Dev-action behavior is
+unchanged. Checkpoint C now implements opt-in plugin ownership with a live
+standalone symbolic/hybrid proof; broader release gates remain explicit.
 
-| Area                                                         | State                      | Evidence / remaining gate                                                                                           |
-| ------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Shared recipe contracts and fake host (P1)                   | offline baseline tested    | `copilot-macros/recipeCore` and `/recipeTesting`; program-only execution                                            |
-| Lean grammar runtime (P1)                                    | tested                     | `action-grammar/runtime` excludes generation/config/model initialization                                            |
-| Host capability spike (P0)                                   | partial; release gate open | Copilot child/context/local inference remain unproved                                                               |
-| Isolated MCP bundle startup (P7 preparation)                 | tested                     | Four copied-bundle selectors initialize/list tools without checkout, TypeAgent config or backend connection         |
-| Catalog, authoring, semantic and optional TypeAgent adapters | offline components tested  | Durable cross-process catalog/context storage, local commands and strict adapters; not live saved-program execution |
-| TypeAgent-hosted Checkpoint A                                | implemented, default       | Actual compiler/executor, production author/provider, read-only MCP broker, grammar and explicit calls              |
-| Standalone symbolic/hybrid release (P7/C)                    | blocked                    | Requires Copilot child/context and local adapters/clean-install evidence; no performance claim                      |
+| Area                                                         | State                                                 | Evidence / remaining gate                                                                                                                               |
+| ------------------------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared recipe contracts and fake host (P1)                   | offline baseline tested                               | `copilot-macros/recipeCore` and `/recipeTesting`; program-only execution                                                                                |
+| Lean grammar runtime (P1)                                    | tested                                                | `action-grammar/runtime` excludes generation/config/model initialization                                                                                |
+| Host capability spike (P0)                                   | native child and C adapters proved                    | CLI 1.0.97 / SDK 1.0.13: restricted children, exact tool invocation and separate-CLI isolated inference; not VS Code                                    |
+| Isolated MCP bundle startup (P7 preparation)                 | tested                                                | Four copied-bundle selectors initialize/list tools without checkout, TypeAgent config or backend connection                                             |
+| Catalog, authoring, semantic and optional TypeAgent adapters | offline components tested                             | Durable cross-process catalog/context storage, local commands and strict adapters; not live saved-program execution                                     |
+| TypeAgent-hosted Checkpoint A                                | implemented, default                                  | Actual compiler/executor, production author/provider, read-only MCP broker, grammar and explicit calls                                                  |
+| Copilot child authorship (B)                                 | implemented; native scope proved                      | Explicit root success receipt, sealed context, durable leases, independent TypeAgent verifier, same compiler/publication/executor; see B evidence below |
+| Standalone symbolic/hybrid release (P7/C)                    | native opt-in checkpoint proved; release gates remain | Actual copied production plugin, symbolic/hybrid fresh execution, MCP reuse and ready-artifact restart; no VS Code/performance certification            |
 
-The optional TypeAgent program adapter now has 39 passing offline protocol
-tests covering discovery, preflight, execution, continuation, and cancellation.
-It uses the existing MCP protocol without opening its own backend connection.
-Live mixed-recipe execution remains gated on P3 and designated-backend tests.
+The optional TypeAgent program adapter is now composed into the plugin-owned
+executable host. Stable read-only action identities replace recorded protocol
+scopes; all dependencies are preflighted before the first program dispatch.
+Existing MCP tools run through native permissions without an extension-owned
+backend connection. Offline integration tests cover mixed execution, missing and
+changed dependencies, fresh scopes, structured statuses, actual-user fixture
+continuation/cancellation, and lost replies without retry.
+
+Native mixed recording, restricted authoring, approved publication and MCP reuse
+have passed against an isolated real Dispatcher with synthetic read-only data.
+The retained 256.3-second OBS recording has decoded readable request/result
+frames and a fully decoded silent audio track. The final repeat made exactly one
+root `run_macro` call and one fresh Vega backend action, with two read checkpoints,
+zero semantic calls and no fallback. See the
+[P6 validation report](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/typeagent-bridge-native-validation.md)
+for the exact proof and failure history.
+
+Live testing fixed Copilot's plugin-directory MCP working directory through
+private session/profile workspace registration, clarified strict child builder
+output fields, and removed a duplicate discovery that exceeded the inspection
+deadline. Final validation passed the full workspace build, 415 core tests,
+521 plugin tests and 15 layout/launcher tests, plus the four ratchets and actual
+working-tree lint/complexity checks. Live interaction UI, rich forms/proposals,
+writes and VS Code remain separate gates; no performance claim is made.
 
 Final validation of these foundations passed the full workspace build,
 379 macro tests, 409 plugin tests, 33 focused grammar tests, and 15
@@ -30,10 +54,10 @@ extension-layout/launcher tests. Copied hook commands and MCP catalogs make
 no TypeAgent connection attempt. New recipe/probe functions meet the 25/30
 complexity budgets; working-tree checks found no new lint violations.
 
-The standard lint/complexity/debt ratchets currently enumerate committed
-changes only, so their successful no-op results were supplemented with
-working-tree reports and tests. The dependency-cycle ratchet passed with
-no new cycles. No live-release or performance gate is claimed complete.
+Earlier foundation checks were supplemented with working-tree reports and
+tests when ratchets returned no-op results. The final C checks enumerate changed
+sources, including new files, and pass all four ratchets with no new violations
+or cycles. No performance gate is claimed complete.
 
 ## Revised critical path and simplification
 
@@ -64,6 +88,45 @@ remain; there is no planning child or extra recipe-layer consent.
 The moved host report remains relevant to B/C. Its earlier missing TypeAgent
 compiler/author/model findings are superseded by A, not evidence that the remaining
 Copilot-local seams are available or unavailable.
+
+### Checkpoint B implementation and evidence
+
+- Native selected learning now requires an explicit parent success attestation
+  correlated to the actual root receipt event, prompt hash, token, and final
+  output. Idle/tool completion alone cannot queue a job.
+- TypeAgent persists the sealed context and job; native background workers claim
+  exact phase prompts under workspace/session/worker/digest/lease identities.
+  Awaiting a compatible host is durable `awaitingAuthor`, not provider fallback.
+- Each phase uses a tools-disabled native task child. The original answer does not
+  wait for authoring. Native launch/result correlation, exact event filtering and
+  child-only cancellation have live synthetic proof on SDK 1.0.13 / CLI 1.0.97.
+- Native inherited-context isolation remains unproved and is not trusted. The
+  independent source-blind verifier stays in TypeAgent. Its response is durably
+  memoized before source authorship, including cold restart with a deliberately
+  nondeterministic test verifier.
+- Joined provider tests cover external claim/submission through real
+  compilation/independent fixtures/publication and fresh-input contained replay.
+  Failed/aborted sources, late replies, duplicate completion, Off/Cancel, new
+  user preemption, and compatibility clients have targeted regression coverage.
+- The native receipt-to-child proof and joined live child-to-publication proof
+  both passed. The joined proof used eight real native author children, zero
+  authoring business calls, actual compilation/publication and fresh GAMMA
+  execution. Its source-blind verifier was explicitly deterministic and its
+  transport an in-process adapter over public manager RPC methods; network RPC
+  and default hosted-verifier checkpointing are covered separately by tests.
+  C/local inference/VS Code host support and an all-default-model network
+  deployment certification remain out of scope. No performance claim is made.
+
+See [B lifecycle](../../../packages/copilot-macros/README.md#checkpoint-b-copilot-child-authorship).
+
+Final B validation passed the full workspace build and 1,075 distinct tests:
+400 macro, 172 focused production-provider, 443 plugin, 45 recording/runbook RPC,
+and 15 layout/launcher tests. Formatting, six related documents' frontmatter and
+68 local links, and all four ratchets passed. Because three ratchets enumerate
+committed changes only, actual working-tree lint/complexity reports supplement
+them: no new findings, with macro/plugin source within 25/30 complexity budgets.
+Unrelated existing provider/plugin findings remain unchanged. A stale ignored
+compiled runbook test with no source was removed before the current suites passed.
 
 ### Checkpoint A implementation and evidence
 
@@ -113,8 +176,68 @@ functions, no new provider violations, and no over-budget plugin functions.
 Existing unrelated plugin/provider lint findings are not changed by this work.
 
 See [containment limits and lifecycle](../../../packages/copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs).
-Copilot child authorship (B), plugin-owned matching/standalone inference (C),
-effectful activation, and broader schema compatibility remain future work.
+Checkpoint B's native child authorship is described above. C's implemented
+plugin-owned path and current evidence are described below. Effectful activation
+and broader schema compatibility remain separate work.
+
+### Checkpoint C implementation and evidence
+
+- `recipeOwner` selects `typeagent` (compatibility default), `plugin`, or `off`;
+  changing it requires closing/restarting the session. Plugin-mode misses stay
+  native; no backend planner fallback is used.
+- The shared `MacroManager` is the sole local catalog, authoring/job,
+  publication and run authority. The actual shared typed grammar matcher,
+  compiler, fixture verifier and QuickJS executor are reused, not forked.
+- One workspace/profile writer lease is held in SQLite for the owner lifetime.
+  Authenticated session-bound IPC joins hook/MCP/command clients. Crash recovery
+  relies on the OS lock, never PID-based stale-lock stealing; accepted or
+  ambiguous dispatch is never automatically retried.
+- Native `view`, `rg`, `glob` and explicitly classified read-only MCP calls
+  retain normal native permission, hook and content-exclusion checks.
+  Registry-derived canonical MCP identities and the same processed JSON result
+  normalization connect actual captured events to programmatic invocation.
+- Source authoring uses B's tools-disabled native children. Independent
+  source-blind verification and bounded declared semantic calls instead use
+  fresh isolated sessions on a separate installed native CLI, with ordinary
+  login and no API-key/TypeAgent configuration or inherited root context.
+  This is not same-process inference or an inherited-context isolation claim.
+- Explicit semantic/JSON output obligations survive extraction and builder
+  correction as mandatory independent program-verifier requirements. They are
+  not discarded merely because the extractor cannot see private result bodies;
+  genuine missing/failed evidence still blocks learning.
+- The copied distribution carries real TypeScript libraries and the complete
+  QuickJS worker/WASM dependency closure with licenses and hashes. Copied-package
+  tests run outside the checkout under Node's stable permission model.
+- A real copied production plugin has completed recording, child authorship,
+  independent native verification, compilation/fixtures/publication, explicit
+  fresh-input execution and grammar-routed fresh-input execution. Repeats
+  returned GAMMA rather than recorded ALPHA with zero root model calls and
+  empty semantic evidence; TypeAgent was deliberately unavailable.
+- The joined proof also passes the actual copied MCP server's `run_macro`,
+  a fresh-input hybrid sentiment program with exactly one declared native
+  inference call, and ready symbolic replay after replacing the native
+  client/session. The hybrid returned `{"sentiment":"negative"}` for a fresh
+  negative message, with provider/model/token evidence rather than a stub.
+- Native synchronous child RPC results can precede their completion events.
+  The launcher now awaits the exact child's notification within the original
+  deadline, preserving all tool restrictions, registry correlation and
+  child-only cancellation; it never accepts the RPC result alone.
+- Thirteen actual native adapter checks pass, including schema inspection,
+  native/MCP reads and denials, hooks, recursion rejection, cancellation,
+  isolated canary inference and typed semantic inference.
+- Final regression validation passed the full workspace build and **1,150
+  distinct tests**: 415 core, 174 focused provider, 501 plugin, 15
+  extension-layout/launcher and 45 server compatibility tests. Formatting and
+  all four lint/complexity/circular/debt ratchets pass for the changed sources.
+
+See the external [implementation plan](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/implementation-plan.md)
+for persisted proof and remaining release gates. VS Code, effectful execution,
+performance/speedup certification, and plugin-update compatibility are not
+implied by this native CLI evidence. Interrupted-job handoff and writer-lock
+crash recovery are unit-tested; live plugin-update compatibility and paired
+baseline overhead measurement remain release work. One live observation
+delivered the selected answer in 6.856 seconds and reached recipe readiness in
+78.960 seconds; this is not an overhead or speedup estimate.
 
 ## Implementation status
 

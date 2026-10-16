@@ -4,19 +4,21 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getMode, type Mode } from "../shared/plugin-config.js";
-import { connectToAgentServer } from "../shared/typeagent-client.js";
+import {
+    connectToMacroOwner,
+    type MacroOwnerConnection,
+} from "../shared/macro-owner.js";
 
 export interface MacroServerDependencies {
-    connect: () => Promise<AgentServerConnection>;
+    connect: () => Promise<MacroOwnerConnection>;
     getMode: () => Mode;
 }
 
 const defaultDependencies: MacroServerDependencies = {
-    connect: connectToAgentServer,
+    connect: connectToMacroOwner,
     getMode,
 };
 
@@ -134,7 +136,7 @@ export class MacroCatalogAdapter {
             );
         }
         const runId = randomUUID();
-        let connection: AgentServerConnection | undefined;
+        let connection: MacroOwnerConnection | undefined;
         let removeAbort: (() => void) | undefined;
         try {
             connection = await this.dependencies.connect();
@@ -185,14 +187,14 @@ export class MacroCatalogAdapter {
     }
 
     private async call(
-        operation: (connection: AgentServerConnection) => Promise<unknown>,
+        operation: (connection: MacroOwnerConnection) => Promise<unknown>,
     ): Promise<CallToolResult> {
         if (this.dependencies.getMode() === "bypass") {
             return errorResult(
                 "TypeAgent macro tools are disabled in bypass mode.",
             );
         }
-        let connection: AgentServerConnection | undefined;
+        let connection: MacroOwnerConnection | undefined;
         try {
             connection = await this.dependencies.connect();
             return result(await operation(connection));

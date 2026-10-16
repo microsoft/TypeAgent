@@ -29,6 +29,7 @@ const diagnosticKeys = new Set([
     "toolCallIds",
     "description",
     "uncertainties",
+    "programRequirements",
     "name",
     "inputs",
     "steps",
@@ -379,6 +380,7 @@ export function parseMacroExecutionRecipe(
             "toolCallIds",
             "description",
             "uncertainties",
+            "programRequirements",
         ],
         "recipe",
     );
@@ -405,6 +407,16 @@ export function parseMacroExecutionRecipe(
             0,
             100,
         ).map((item) => text(item, "recipe uncertainty")),
+        ...(recipe.programRequirements === undefined
+            ? {}
+            : {
+                  programRequirements: list(
+                      recipe.programRequirements,
+                      "program requirements",
+                      0,
+                      100,
+                  ).map((item) => text(item, "program requirement")),
+              }),
     };
 }
 

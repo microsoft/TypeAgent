@@ -22,6 +22,7 @@
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "register": "node scripts/install-plugin.mjs",
     "test": "npm run test:local",
+    "test:checkpoint-c-package": "node --test scripts/test/checkpoint-c-package.spec.mjs",
     "test:direct": "node -e \"console.log(JSON.stringify({sessionId:'test',timestamp:1234,cwd:'.',prompt:'list the playlists'}))\" | cross-env TYPEAGENT_MODE=direct node dist/hooks/hook-router.js",
     "test:e2e-launcher": "node --test scripts/test/discovery-e2e.spec.mjs",
     "test:extension-layout": "node --test scripts/test/extension-layout.spec.mjs",

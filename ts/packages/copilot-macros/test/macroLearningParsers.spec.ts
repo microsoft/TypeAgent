@@ -61,6 +61,32 @@ function buildValue() {
 }
 
 describe("model learning JSON parsers", () => {
+    it("retains explicit deferred program obligations separately from blocking uncertainties", () => {
+        const value = {
+            ...recipeValue(),
+            programRequirements: ["Classify the captured message by meaning"],
+        };
+        expect(parseMacroExecutionRecipe(value)).toEqual(value);
+    });
+
+    it.each([
+        { value: null },
+        { value: 3 },
+        { value: [""] },
+        { value: [3] },
+        { value: Array(101).fill("Classify the captured message") },
+    ])(
+        "rejects malformed or unbounded deferred requirements: %j",
+        ({ value }) => {
+            expect(() =>
+                parseMacroExecutionRecipe({
+                    ...recipeValue(),
+                    programRequirements: value,
+                }),
+            ).toThrow();
+        },
+    );
+
     it.each([
         [
             "build",

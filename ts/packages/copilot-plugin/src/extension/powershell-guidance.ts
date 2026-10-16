@@ -3,6 +3,7 @@
 
 import {
     getMode,
+    getRecipeOwner,
     isMixedMcpMode,
     isPowerShellGuidanceEnabled,
 } from "../shared/plugin-config.js";
@@ -48,6 +49,7 @@ export function getPowerShellHookOutput(
 ): PowerShellHookOutput | undefined {
     const mode = getMode();
     if (
+        getRecipeOwner() !== "typeagent" ||
         mode === "dev" ||
         mode === "bypass" ||
         !isPowerShellGuidanceEnabled() ||

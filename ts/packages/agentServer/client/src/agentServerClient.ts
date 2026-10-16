@@ -47,6 +47,9 @@ import {
     ListMacrosRequest,
     ListSkillsRequest,
     MacroLearningJob,
+    MacroAuthoringClaim,
+    MacroAuthoringRequest,
+    MacroAuthoringSubmission,
     MacroLearningMode,
     MacroLearningPreference,
     MacroMatch,
@@ -180,6 +183,12 @@ export type AgentServerConnection = {
         traceId: string;
     }): Promise<MacroLearningJob>;
     getMacroLearningJob(jobId: string): Promise<MacroLearningJob>;
+    claimMacroAuthoringRequest(
+        claim: MacroAuthoringClaim,
+    ): Promise<MacroAuthoringRequest | undefined>;
+    submitMacroAuthoringResponse(
+        submission: MacroAuthoringSubmission,
+    ): Promise<void>;
     cancelMacroLearningJob(jobId: string): Promise<MacroLearningJob>;
     armMacroRecording(request: ArmRecordingRequest): Promise<RecordingToken>;
     getMacroRecordingState(sessionId: string): Promise<RecordingState>;
@@ -434,6 +443,10 @@ export function createAgentServerConnection(
             rpc.invoke("prepareMacroLearning", request),
         getMacroLearningJob: (jobId) =>
             rpc.invoke("getMacroLearningJob", jobId),
+        claimMacroAuthoringRequest: (claim) =>
+            rpc.invoke("claimMacroAuthoringRequest", claim),
+        submitMacroAuthoringResponse: (submission) =>
+            rpc.invoke("submitMacroAuthoringResponse", submission),
         cancelMacroLearningJob: (jobId) =>
             rpc.invoke("cancelMacroLearningJob", jobId),
         async armMacroRecording(
