@@ -19,6 +19,7 @@ export const memoryToolNames = {
     sourceListPage: "memory_source_list_page",
     sourceGet: "memory_source_get",
     sourceContentGet: "memory_source_content_get",
+    sourceSynopsisGet: "memory_source_synopsis_get",
     sourceKnowledgeGet: "memory_source_knowledge_get",
     sourceReplace: "memory_source_replace",
     sourceForgetPreview: "memory_source_forget_preview",
@@ -156,6 +157,48 @@ export const revisionAssetDescriptorSchema = z
     })
     .strict();
 
+export const sourceSynopsisPreviewSchema = z.object({
+    status: z.enum(["pending", "ready", "failed", "unavailable"]),
+    freshness: z.enum(["fresh", "stale"]),
+    preview: z.string().max(320).optional(),
+    generatedVersion: z.number().int().nonnegative(),
+    recipe: z.string(),
+    inputHash: z.string(),
+    generatedAt: z.string().optional(),
+    reason: z.string().optional(),
+});
+export const sourceSynopsisRequestSchema = z
+    .object({
+        corpusId: identifierSchema,
+        sourceId: identifierSchema,
+        revisionId: identifierSchema.optional(),
+    })
+    .strict();
+export const sourceSynopsisSchema = sourceSynopsisPreviewSchema.extend({
+    corpusId: identifierSchema,
+    sourceId: identifierSchema,
+    revisionId: identifierSchema,
+    overview: z.string().max(6000).optional(),
+    evidence: z.array(
+        z.object({
+            coordinateSpace: z.literal("retained-utf16"),
+            start: z.number().int().nonnegative(),
+            end: z.number().int().positive(),
+            excerpt: z.string().max(2000),
+        }),
+    ),
+    influenceSources: z.array(
+        z.object({ sourceId: identifierSchema, revisionId: identifierSchema }),
+    ),
+    coverage: z.object({
+        method: z.enum(["direct", "source-order-sections"]),
+        scannedChars: z.number().int().nonnegative(),
+        totalChars: z.number().int().nonnegative(),
+        sectionCount: z.number().int().nonnegative(),
+    }),
+    limitations: z.array(z.string()),
+});
+
 export const revisionSchema = z.object({
     revisionId: identifierSchema,
     sourceId: identifierSchema,
@@ -173,6 +216,7 @@ export const revisionSchema = z.object({
         .optional(),
     embeddingIdentity: z.string().optional(),
     assets: z.array(revisionAssetDescriptorSchema).optional(),
+    synopsis: sourceSynopsisPreviewSchema.optional(),
     state: z.enum(["accepted", "processing", "ready", "failed", "deleted"]),
 });
 
@@ -497,6 +541,7 @@ export const searchResultSchema = z.object({
             snippet: z.string(),
             score: z.number(),
             sourceType: sourceTypeSchema,
+            synopsis: sourceSynopsisPreviewSchema.optional(),
             capturedAt: z.string().optional(),
             indexedAt: z.string(),
         }),
@@ -584,6 +629,7 @@ export const capabilitiesSchema = z.object({
         exactSearch: z.boolean(),
         management: z.boolean(),
         groundedAnswer: z.boolean(),
+        sourceSynopses: z.boolean().optional(),
     }),
     warnings: z.array(z.string()),
 });

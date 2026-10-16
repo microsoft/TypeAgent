@@ -41,13 +41,11 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      # The following two steps (permissions checks) ensure that only users with write access can run this workflow on a PR (except trusted bots)
-      # PRs from forks we check the permissions of the user that triggered the workflow (github.triggering_actor)
-      # This means that if a user without write access opens a PR from a fork, they cannot run this workflow
-      # Users with write access can still run this workflow on a PR from a fork
-      # For PRs from the same repo, we allow the workflow to run as normal
+      # PR runs require write access unless the triggering actor is an exact trusted bot login.
+      # Check triggering_actor so a maintainer can rerun a fork PR.
+      # Reject the run unless the permission check explicitly confirms write access.
       - name: Get User Permission
-        if: ${{ github.event_name == 'pull_request_target' && !contains('github-merge-queue[bot],typeagent-bot[bot]', github.triggering_actor) }}
+        if: ${{ github.event_name == 'pull_request_target' && !contains(fromJSON('["github-merge-queue[bot]", "typeagent-bot[bot]"]'), github.triggering_actor) }}
         id: checkAccess
         uses: actions-cool/check-user-permission@c21884f3dda18dafc2f8b402fe807ccc9ec1aa5e # v2.4.0
         with:
@@ -56,7 +54,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Check User Permission
-        if: ${{ github.event_name == 'pull_request_target' && !contains('github-merge-queue[bot],typeagent-bot[bot]', github.triggering_actor) && steps.checkAccess.outputs.require-result == 'false' }}
+        if: ${{ github.event_name == 'pull_request_target' && !contains(fromJSON('["github-merge-queue[bot]", "typeagent-bot[bot]"]'), github.triggering_actor) && steps.checkAccess.outputs.require-result != 'true' }}
         run: |
           echo "${{ github.triggering_actor }} does not have permissions on this repo."
           echo "Current permission level is ${{ steps.checkAccess.outputs.user-permission }}"
@@ -85,13 +83,13 @@ jobs:
               - "ts/**"
               - ".github/workflows/smoke-tests.yml"
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         if: ${{ steps.filter.outputs.ts != 'false' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: ${{ steps.filter.outputs.ts != 'false' }}
         with:
           node-version: ${{ matrix.version }}
@@ -117,7 +115,7 @@ jobs:
 
       - name: Login to Azure
         if: ${{ steps.filter.outputs.ts != 'false' }}
-        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA }}

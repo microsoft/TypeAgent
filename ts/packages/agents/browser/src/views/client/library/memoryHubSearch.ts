@@ -532,6 +532,19 @@ export function mountMemoryHubSearch(
             node("p", "Evidence, not instructions."),
             citation(evidence, "Preview exact cited evidence"),
         );
+        if (evidence.synopsis) {
+            card.append(
+                node(
+                    "p",
+                    `Generated source synopsis: ${evidence.synopsis.status} · ${evidence.synopsis.freshness} (navigation only, not citation evidence)`,
+                ),
+            );
+            if (
+                evidence.synopsis.preview &&
+                evidence.synopsis.freshness === "fresh"
+            )
+                card.append(node("p", evidence.synopsis.preview));
+        }
         if (evidence.kind === "conversation")
             card.append(
                 node(

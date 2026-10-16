@@ -300,7 +300,7 @@ test("covered requires explicit actual prose for every fragment; contribution re
     const context = wikiPageContext(input, page);
     expect(() =>
         parseWikiAssessment(assessment(input, context, "covered"), [context]),
-    ).toThrow("actual prose coverage");
+    ).toThrow("incomplete-prose-coverage");
     const contribution = assessment(input, context, "contribute");
     expect(parseWikiAssessment(contribution, [context]).disposition).toBe(
         "contribute",
@@ -309,7 +309,7 @@ test("covered requires explicit actual prose for every fragment; contribution re
         parseWikiAssessment({ ...contribution, essentialDistinctions: [] }, [
             context,
         ]),
-    ).toThrow("omit");
+    ).toThrow("incomplete-prose-coverage");
     expect(() =>
         parseWikiAssessment(
             {
@@ -324,7 +324,7 @@ test("covered requires explicit actual prose for every fragment; contribution re
             },
             [context],
         ),
-    ).toThrow("invent");
+    ).toThrow("invalid-distinction-evidence");
     const independent = assessment(input, context, "distinct");
     expect(parseWikiAssessment(independent, [context]).disposition).toBe(
         "distinct",
@@ -460,7 +460,7 @@ test("contribution union retains original exact evidence, metadata, stable ID an
             [contextAfter],
             combined.wikiContribution!.essentialDistinctions,
         ),
-    ).toThrow("required essential");
+    ).toThrow("required-distinction-omitted");
     const refreshed = refreshWikiContributionInput(
         { ...combined, inputs: [snapshot().inputs[0]] },
         next,
@@ -552,6 +552,7 @@ async function rehearsal(
         assessed = 0;
     let service: FileMemoryService;
     let corpusId = "";
+    let forgetting: Promise<unknown> | undefined;
     const adapter = {
         identity: "offline-contribution",
         assessWikiSubject: async (
@@ -604,11 +605,12 @@ async function rehearsal(
                         corpusId,
                         "source",
                     );
-                    await service.forgetSource({
+                    forgetting = service.forgetSource({
                         corpusId,
                         sourceId: "source",
                         confirmationToken: preview.confirmationToken,
                     });
+                    await forgetting;
                 }
                 if (mode === "replacement") {
                     await maintainFamily(service, corpusId, "wiki", "pause");
@@ -696,6 +698,10 @@ async function rehearsal(
         );
         if (mode === "forget") {
             const jobId = second.job!.jobId;
+            for (let attempt = 0; !forgetting && attempt < 500; attempt++)
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            expect(forgetting).toBeDefined();
+            await forgetting;
             let remaining = await service.getViewBuild({ corpusId, jobId });
             for (let attempt = 0; remaining && attempt < 500; attempt++) {
                 await new Promise((resolve) => setTimeout(resolve, 10));

@@ -22,8 +22,16 @@ export {
 export {
     createMacroLearningRuntime,
     validateMacroGrammar,
+    replayMacroGrammarDiagnostic,
+    type MacroGrammarTuple,
     type MacroLearningQuery,
 } from "./macroLearningRuntime.js";
+export {
+    createSyntheticMacroLearningDiagnostics,
+    syntheticMacroBuildResponsePolicyKind,
+    nativeSyntheticBuildResponseDiagnosticContract,
+    nativeSyntheticGrammarDiagnosticContract,
+} from "./macroLearningDiagnostics.js";
 export {
     SessionMcpCredentialStore,
     type McpCredentialStore,

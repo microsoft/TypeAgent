@@ -149,6 +149,7 @@ async function documentResults(
         sourceId: evidence.sourceId,
         revisionId: evidence.revisionId,
         sourceType: evidence.sourceType,
+        ...(evidence.synopsis ? { synopsis: evidence.synopsis } : {}),
         ...(evidence.locator === undefined
             ? {}
             : { locator: evidence.locator }),
@@ -796,7 +797,11 @@ export function createMemoryHubQueryFunctions(
                     { generateAnswer: request.generateAnswer ?? false },
                 );
             const reviewed = request.generateAnswer
-                ? resolveReviewedWikiBudget()
+                ? resolveReviewedWikiBudget(
+                      process.env,
+                      process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT?.trim() ||
+                          undefined,
+                  )
                 : undefined;
             return reviewed
                 ? runWithRequestBudget(new RequestBudget(reviewed), work)

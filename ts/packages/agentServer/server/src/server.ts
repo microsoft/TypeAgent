@@ -30,6 +30,7 @@ import {
     createDefaultAgentRuntime,
     createMacroAppAgentProvider,
     createMacroLearningRuntime,
+    createSyntheticMacroLearningDiagnostics,
     getCurrentMcpToolCatalogs,
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
@@ -420,8 +421,10 @@ async function main() {
             getCurrentMcpToolCatalogs(defaultAgentRuntime.appAgentSources),
     });
     await macroManager.configureLearning(
-        createMacroLearningRuntime(undefined, () =>
-            macroManager.getApprovedMacros(),
+        createMacroLearningRuntime(
+            undefined,
+            () => macroManager.getApprovedMacros(),
+            createSyntheticMacroLearningDiagnostics(instanceDir),
         ),
     );
 

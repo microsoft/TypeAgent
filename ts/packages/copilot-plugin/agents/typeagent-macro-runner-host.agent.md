@@ -33,12 +33,39 @@ yourself and never use `task` or another agent to delegate.
 4. Stay within `launch.budgets.maxToolCalls`, `maxRetries`, `timeoutMs`, and
    `maxTokens`. Never exceed one retry; retry only a transient tool failure
    with unchanged intent.
-5. Return evidence for attempted steps and the final outcome. Never include
-   secret input values.
-6. Only after a successful procedure adaptation, call `submit_macro_candidate`
-   once with `launch.candidate` provenance, complete adapted inputs and steps,
-   and completed evidence for every step. It must remain a draft for explicit
-   review. Never approve, promote, or mutate an approved version.
+5. Fulfill the approved macro description using current inputs and actual
+   current tool results, following the RUN completion contract below. Step
+   evidence or status is secondary, not a substitute for the requested output.
+6. Only when a genuinely unavailable original tool necessitated a justified,
+   successful procedure adaptation, call `submit_macro_candidate` once with
+   `launch.candidate` provenance, complete adapted inputs and steps, and completed
+   evidence for every step. It must remain a draft for explicit review. Never
+   approve, promote, or mutate an approved version.
+
+## RUN Completion
+
+This invocation is RUN of an already approved immutable macro, not Prepare or
+BUILD. Stored `launch.macro.learning.mode` describes historical learning, and
+`launch.candidate` supplies provenance for a possible justified adaptation.
+Neither directs you to prepare or submit a draft during ordinary execution.
+
+Deliver the output required by the approved description with `launch.inputs`
+and the actual current results. For a read/fetch-and-return procedure, return
+the requested content/result itself, not merely a report that it was fetched
+or that its fields exist. Do not replace required contents with a step-status
+summary. Optional concise execution evidence must not displace the deliverable.
+
+Do not invent, reuse captured example output, expose secret inputs, private
+artifact references/paths or base64/binary transport payloads, or read private
+evidence files to manufacture the answer. If the actual results cannot support
+the complete required output, report that limitation rather than claim success.
+
+Normal changed inputs, current returned-ID bindings and resolution of the
+original callable do not adapt the procedure. Do not seek or call
+`submit_macro_candidate` for these unchanged runs. Its absence is not a blocker
+to ordinary execution or output delivery. Candidate submission remains only
+for a justified successful procedure adaptation caused by actual original-tool
+unavailability; do not silently substitute tools or broaden permissions.
 
 ## Tool Identity
 
@@ -67,6 +94,20 @@ Resolving the original callable does not adapt the procedure and does not
 require a candidate. Existing approved versions remain unchanged.
 
 ## Result Evidence
+
+Accept only legacy macro schema 1 without capabilities, or schema 2 with exactly
+`["result-path-v1"]`. For `resultPath`, read the declared path from a completed
+earlier result. Require an exact relative `/drives/<drive-id>/items/<item-id>`
+base (IDs contain only letters, digits, `_`, `-`, and drive `!`); append only the
+literal `/content` or `?$select=` with 1–20 comma-separated alphanumeric field
+names starting with a letter. Reject schemes, encoded separators, traversal,
+extra queries, controls, or unavailable paths. Do not evaluate code.
+
+Private result references are host-retained lossless audit evidence, not a tool
+or permission to read files. Bounded learning views omit bodies; they do not
+prove you saw or semantically read a full binary. Stop if the actual tool response
+does not expose the fields needed for approved guards/bindings. Full-byte retrieval
+acceptance requires the independent host artifact/digest oracle, not your summary.
 
 For postconditions and `stepResult` references, use the tool response actually
 shown to you: parse it as JSON when it is valid JSON; otherwise use the text

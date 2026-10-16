@@ -44,6 +44,10 @@ import {
     handleModeSetting,
 } from "../shared/mode-command.js";
 import { cancelMacroWork, learningSetting } from "../shared/macro-learning.js";
+import {
+    publishControlMetadata,
+    readControlledMode,
+} from "../shared/control-metadata.js";
 
 async function handleMacroCommand(
     input: UserPromptSubmittedInput,
@@ -269,6 +273,12 @@ export async function handleSlashCommand(
 }
 
 async function main(): Promise<void> {
+    if (process.argv[2] === "--control-metadata") {
+        process.stdout.write(
+            `${JSON.stringify(publishControlMetadata("native-hook") ?? null)}\n`,
+        );
+        return;
+    }
     const abortController = new AbortController();
     const abortRequest = () => abortController.abort();
     process.once("SIGINT", abortRequest);
@@ -290,6 +300,7 @@ async function main(): Promise<void> {
             process.exit(1);
         }
 
+        const mode = readControlledMode("native-hook", input);
         // Check for slash commands first
         const slashResult = await handleSlashCommand(input);
         if (slashResult) {
@@ -298,7 +309,6 @@ async function main(): Promise<void> {
             return;
         }
 
-        const mode = getMode();
         const output = await routePrompt(input, mode, abortController.signal);
 
         console.log(JSON.stringify(output));

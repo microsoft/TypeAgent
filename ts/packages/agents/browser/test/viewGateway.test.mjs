@@ -13,6 +13,62 @@ import {
 } from "@typeagent/browser-control-rpc/viewRoutes";
 import { validateViewRequest } from "../dist/views/server/features/views/viewValidation.mjs";
 
+test("topic browse/rebuild and maintenance cross strict gateway with honest bounds", () => {
+    for (const [method, params] of [
+        [
+            "memoryQueryTopics",
+            {
+                corpusId: "corpus",
+                pageSize: 200,
+                depth: 10,
+                continuationToken: "generation-token",
+            },
+        ],
+        ["memoryRebuildTopics", { corpusId: "corpus" }],
+        [
+            "memoryMaintainViews",
+            {
+                corpusId: "corpus",
+                expectedHead: null,
+                family: "topics",
+                operation: "resume",
+            },
+        ],
+    ]) {
+        assert.deepEqual(validateViewRequest({ method, params }), {
+            method,
+            params,
+        });
+    }
+    for (const params of [
+        { corpusId: "corpus", pageSize: 201 },
+        { corpusId: "corpus", depth: 11 },
+        { corpusId: "corpus", sources: ["display-cap"] },
+    ])
+        assert.throws(() =>
+            validateViewRequest({ method: "memoryQueryTopics", params }),
+        );
+});
+
+test("source synopsis exact revision read crosses the strict HTTP gateway without accepting derived citations", () => {
+    const params = {
+        corpusId: "corpus",
+        sourceId: "source",
+        revisionId: "revision",
+    };
+    assert.deepEqual(
+        validateViewRequest({ method: "memoryGetSourceSynopsis", params })
+            .params,
+        params,
+    );
+    assert.throws(() =>
+        validateViewRequest({
+            method: "memoryGetSourceSynopsis",
+            params: { ...params, locator: "chars:0-10" },
+        }),
+    );
+});
+
 test("indexed Search/Ask citations preserve their exact locator through the HTTP gateway", () => {
     const params = {
         corpusId: "corpus",

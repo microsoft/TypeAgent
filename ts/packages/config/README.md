@@ -99,6 +99,24 @@ values are nonsecret; credentials remain in the hosted provider sections.
 
 ## Usage
 
+Implicit chat selection (`createChatModel()`, `DEFAULT`, or
+`apiSettingsFromEnv()`) uses the named Azure `gpt_6_luna` deployment and its
+regional pool, even when the legacy bare endpoint points to an older model.
+Configure that deployment before using Azure chat defaults; a missing Luna
+deployment fails instead of silently routing to GPT-4o. Explicit `azure`
+continues to select the bare endpoint, and explicit legacy deployment names
+remain available. Provider overrides and explicit API settings retain their
+provider semantics; configured OpenAI and Copilot model overrides are honored.
+When synthesizing a bare endpoint, the config builder prefers Luna.
+
+OpenAI chat defaults to `gpt-6-luna` when no model is configured. For resolved
+Azure/OpenAI chat settings identifying exactly `gpt-6-luna`, aiclient supplies
+request constraints of 1,050,000 context, 922,000 input, and 128,000 output
+tokens ([model documentation](https://developers.openai.com/api/docs/models/gpt-6-luna)).
+Explicit request constraints take precedence without merging. Unknown model
+IDs receive no guessed limits. Application output caps, conservative serialized
+UTF-8 byte accounting, retries, and throttling are unchanged.
+
 ```ts
 import { loadConfig } from "@typeagent/config";
 

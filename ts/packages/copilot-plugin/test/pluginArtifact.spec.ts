@@ -85,6 +85,36 @@ describe("staged plugin artifact", () => {
         ).toBe(
             runner.split("## Tool Identity")[1].split("## Result Evidence")[0],
         );
+        const completion = host
+            .split("## RUN Completion")[1]
+            .split("## Tool Identity")[0];
+        expect(completion).toBe(
+            runner.split("## RUN Completion")[1].split("## Tool Identity")[0],
+        );
+        for (const required of [
+            "RUN of an already approved immutable macro, not Prepare or",
+            "Stored `launch.macro.learning.mode` describes historical learning",
+            "`launch.candidate` supplies provenance",
+            "actual current results",
+            "not merely a report that it was fetched",
+            "Do not replace required contents with a step-status",
+            "Optional concise execution evidence must not displace the deliverable",
+            "private\nartifact references/paths or base64/binary transport payloads",
+            "rather than claim success",
+            "do not adapt the procedure",
+            "Its absence is not a blocker",
+            "actual original-tool\nunavailability",
+        ])
+            expect(completion).toContain(required);
+        for (const profile of [host, runner]) {
+            expect(profile).toContain("Do not seek or call");
+            expect(profile).toContain("a genuinely unavailable original tool");
+            expect(profile).toContain("Check every declared postcondition");
+            expect(profile).toContain(
+                "Do not submit a candidate after permission",
+            );
+            expect(profile).toContain("Do not call `run_macro` recursively");
+        }
     });
 
     it("keeps explicit catalog review but removes inspection from the macro run skill", async () => {
@@ -283,6 +313,27 @@ describe("staged plugin artifact", () => {
         );
         expect(bundle).toContain(
             "otherwise discover a suitable capability before choosing native tools",
+        );
+        expect(bundle).toContain(
+            "RUN of the already approved immutable macro, not Prepare or BUILD",
+        );
+        expect(bundle).toContain(
+            "actual current tool results before optional concise execution evidence",
+        );
+        expect(bundle).toContain("not a step-status summary");
+        expect(bundle).toContain(
+            "secret inputs/private artifact references or base64/binary transport payloads",
+        );
+        expect(bundle).toContain(
+            "only after a justified successful procedure adaptation caused by actual original-tool unavailability",
+        );
+        expect(bundle).toContain("TYPEAGENT_WORKIQ_SDK_ORIGINALS_POLICY");
+        expect(bundle).toContain("workiq-sdk-originals-v1");
+        expect(bundle).toContain(
+            "WorkIQ native binary/model-input exposure boundary is not admitted.",
+        );
+        expect(bundle).toContain(
+            "WorkIQ SDK capture requires an owned native control context.",
         );
     });
 

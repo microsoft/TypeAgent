@@ -6,9 +6,9 @@
  *
  * The engine is madge — the de-facto-standard dependency-graph tool — driven
  * through its Node API (loaded via createRequire because the npx shim cannot
- * resolve local bins in this environment). Type-only imports are excluded
- * (skipTypeImports), so the cycles reported are real runtime import cycles, the
- * ones that cause initialization-order bugs.
+ * resolve local bins in this environment). Explicit type-only imports are
+ * excluded (skipTypeImports). Imports used only as types should use `import
+ * type` so they do not appear as runtime edges in this source graph.
  *
  * Two modes:
  *   - Report (default): scan the source subtrees and write CSV/JSON/HTML + a
@@ -43,7 +43,6 @@
 
 import { createRequire } from "node:module";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -114,6 +113,43 @@ function madgeOptions(includeTests: boolean): Record<string, unknown> {
 
 const norm = (p: string) => p.replace(/\\/g, "/");
 
+function sourceFiles(cwd: string, includeTests: boolean): string[] {
+    const excludes = (
+        includeTests ? BASE_EXCLUDES : [...BASE_EXCLUDES, ...TEST_EXCLUDES]
+    ).map((pattern) => new RegExp(pattern));
+    const files: string[] = [];
+    function visit(directory: string): void {
+        for (const entry of fs.readdirSync(directory, {
+            withFileTypes: true,
+        })) {
+            if (entry.name === "node_modules" || entry.name === ".git") {
+                continue;
+            }
+            const file = path.join(directory, entry.name);
+            const relative = `/${norm(path.relative(cwd, file))}`;
+            if (excludes.some((pattern) => pattern.test(relative + "/"))) {
+                continue;
+            }
+            if (entry.isDirectory()) {
+                visit(file);
+            } else if (
+                entry.isFile() &&
+                FILE_EXTENSIONS.includes(path.extname(file).slice(1)) &&
+                !excludes.some((pattern) => pattern.test(relative))
+            ) {
+                files.push(file);
+            }
+        }
+    }
+    for (const subdir of SCAN_SUBDIRS) {
+        const directory = path.join(cwd, subdir);
+        if (fs.existsSync(directory)) {
+            visit(directory);
+        }
+    }
+    return files;
+}
+
 /** Run madge from `cwd` over the existing SCAN_SUBDIRS; return cycles + file count. */
 async function runMadge(
     cwd: string,
@@ -123,11 +159,16 @@ async function runMadge(
     const prev = process.cwd();
     process.chdir(cwd);
     try {
-        const targets = SCAN_SUBDIRS.filter((d) => fs.existsSync(d));
+        // walkdir, used by madge for directories, rounds Windows 64-bit inode
+        // numbers and can skip unrelated src directories as duplicate inodes.
+        const targets = sourceFiles(cwd, includeTests);
         if (targets.length === 0) {
             return { cycles: [], files: 0 };
         }
-        const res = await madge(targets, madgeOptions(includeTests));
+        const res = await madge(targets, {
+            ...madgeOptions(includeTests),
+            baseDir: cwd,
+        });
         const cycles = res.circular().map((c) => c.map(norm));
         return { cycles, files: Object.keys(res.obj()).length };
     } finally {
@@ -646,7 +687,7 @@ async function runRatchet(opts: Options): Promise<number> {
     // BASE cycles: check the merge base out into a throwaway worktree.
     // Use a path git creates itself (worktree add refuses a pre-existing dir).
     const worktree = path.join(
-        os.tmpdir(),
+        opts.outDir,
         `circular-base-${process.pid}-${Date.now()}`,
     );
     const baseKeys = new Set<string>();

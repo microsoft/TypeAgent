@@ -92,11 +92,15 @@ async function waitForBuild(
 }
 
 function configuredLimits(): RequestBudgetLimits {
-    const reviewed = resolveReviewedWikiBudget();
+    const reviewed = resolveReviewedWikiBudget(
+        process.env,
+        process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT?.trim() || undefined,
+    );
     return {
         ...reviewed,
         chatAttempts: 512,
-        reservedTokens: 2000000,
+        inputReservedTokens: 2000000,
+        reservedTokens: 2000000 + 512 * reviewed.outputTokens,
         embeddingAttempts: 128,
         elapsedMs: 3600000,
     };
@@ -135,10 +139,8 @@ test("real staged informational wiki rehearsal (requires explicit owned paths)",
         const endpoint =
             process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT?.trim() ||
             undefined;
-        const { languageModel, extractionModel, provider } = createWikiModels(
-            limits.outputTokens,
-            endpoint,
-        );
+        const { languageModel, extractionModel, provider } =
+            createWikiModels(endpoint);
         receipt.provider = provider;
         receipt.tokenizer = limits.tokenizer;
         receipt.tokenAccounting = "estimated-input-and-reserved-output";
@@ -736,7 +738,7 @@ test("real small informational wiki pipeline smoke (requires a fresh owned path)
         tokenAccounting: "estimated-input-and-reserved-output",
     };
     try {
-        const { extractionModel } = createWikiModels(limits.outputTokens);
+        const { extractionModel } = createWikiModels();
         const open = () =>
             new FileMemoryService(path.join(root, "store"), {
                 indexFactory: (corpusId, directory) =>

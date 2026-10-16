@@ -13,6 +13,58 @@ import {
 } from "../shared/mode-command.js";
 import { connectToAgentServer } from "../shared/typeagent-client.js";
 import { cancelMacroWork, learningSetting } from "../shared/macro-learning.js";
+import { publishControlMetadata } from "../shared/control-metadata.js";
+import { spawnSync } from "node:child_process";
+import { readFileSync, writeFileSync, renameSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { dirname, basename, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+function controlStatus(): string {
+    const extension = publishControlMetadata("native-extension-status");
+    if (!extension)
+        return JSON.stringify({
+            effectiveMode: null,
+            source: "control admission missing",
+        });
+    const moduleDirectory = dirname(fileURLToPath(import.meta.url));
+    const root = dirname(dirname(moduleDirectory));
+    const hook =
+        basename(root) === "dist"
+            ? join(root, "hooks", "hook-router.js")
+            : join(root, "dist", "hooks", "hook-router.js");
+    const child = spawnSync("node", [hook, "--control-metadata"], {
+        encoding: "utf8",
+        env: process.env,
+        timeout: 5000,
+        stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (child.error || child.status !== 0)
+        throw new Error("Canonical Node control getter failed");
+    const metadata = JSON.parse(child.stdout);
+    if (
+        metadata.source.pid !== child.pid ||
+        metadata.source.parentPid !== process.pid
+    )
+        throw new Error(
+            "Control getter output does not match actual spawned child",
+        );
+    const getter = {
+        ProcessId: child.pid,
+        ParentProcessId: process.pid,
+        ExecutablePath: metadata.source.executable,
+        script: hook,
+        scriptHash: createHash("sha256")
+            .update(readFileSync(hook))
+            .digest("hex"),
+        observedAt: new Date().toISOString(),
+        provenance: "registered-status-public-spawnSync-result",
+    };
+    const file = join(extension.dataRoot, "native-control-getter-process.json");
+    writeFileSync(`${file}.pending`, JSON.stringify(getter), { flag: "wx" });
+    renameSync(`${file}.pending`, file);
+    return JSON.stringify({ extension, hook: metadata, getter });
+}
 
 function statusText(): string {
     const config = readConfig();
@@ -37,7 +89,10 @@ export function createExtensionCommands(
         {
             name: "typeagent-status",
             description: "Show TypeAgent configuration and connection details",
-            handler: async () => log(statusText()),
+            handler: async ({ args }) =>
+                args?.trim() === "--control"
+                    ? log(controlStatus())
+                    : log(statusText()),
         },
         {
             name: "typeagent-mode",

@@ -17,6 +17,7 @@ import {
     McpReplayHost,
     createMacroAppAgentProvider,
     createMacroLearningRuntime,
+    createSyntheticMacroLearningDiagnostics,
     getCurrentMcpToolCatalogs,
 } from "default-agent-provider";
 import os from "node:os";
@@ -97,8 +98,10 @@ export async function createInProcessAgentServer(
         new McpReplayHost(instanceDir),
     );
     await macroManager.configureLearning(
-        createMacroLearningRuntime(undefined, () =>
-            macroManager.getApprovedMacros(),
+        createMacroLearningRuntime(
+            undefined,
+            () => macroManager.getApprovedMacros(),
+            createSyntheticMacroLearningDiagnostics(instanceDir),
         ),
     );
     const memoryAgentOptions = dispatcherOptions.agentInitOptions?.memory as

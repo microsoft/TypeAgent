@@ -1,0 +1,137 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+    classifyStoppedRun,
+    observeProvider,
+    observedRoles,
+    unexpectedTargets,
+    loadLiveContract,
+} from "./live-stages.mjs";
+
+test("actual fresh compiled live imports/public APIs and production job handle completion are available", async () => {
+    const productRoot = fileURLToPath(new URL("../../", import.meta.url));
+    const loaded = [];
+    const contract = await loadLiveContract(async (relative) => {
+        loaded.push(relative);
+        return import(pathToFileURL(path.join(productRoot, relative)).href);
+    });
+    assert.ok(loaded.includes("packages\\memory\\service\\dist\\rpcFacade.js"));
+    assert.ok(!loaded.includes("packages\\memory\\client\\dist\\index.js"));
+    const status = {
+        jobId: "compiled-job-handle-control",
+        state: "complete",
+        progress: {},
+    };
+    const reads = [];
+    assert.equal(
+        await contract.waitForMemoryJob(
+            {
+                async getJob(jobId) {
+                    reads.push(jobId);
+                    return status;
+                },
+                async cancelJob() {
+                    assert.fail("Completed handle must not cancel");
+                },
+            },
+            status.jobId,
+        ),
+        status,
+    );
+    assert.deepEqual(reads, [status.jobId]);
+});
+
+test("live observer returns unchanged responses and records only model/usage/admission metadata", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = async () =>
+        new Response(
+            JSON.stringify({
+                model: "gpt-6-luna-test",
+                usage: { total_tokens: 19 },
+                choices: [{ message: { content: "private-body" } }],
+            }),
+            { headers: { "content-type": "application/json" } },
+        );
+    const events = [];
+    const restore = observeProvider(events, () => "synopsis");
+    try {
+        const response = await fetch(
+            "https://example.invalid/openai/deployments/gpt-6-luna/chat/completions",
+            {
+                body: JSON.stringify({
+                    messages: [{ content: "private-prompt" }],
+                }),
+            },
+        );
+        assert.equal(
+            (await response.json()).choices[0].message.content,
+            "private-body",
+        );
+        assert.equal(events[0].model, "gpt-6-luna-test");
+        assert.equal(events[0].requestedOutputTokens, undefined);
+        assert.ok(!JSON.stringify(events).includes("private-"));
+        assert.ok(!JSON.stringify(events).includes("example.invalid"));
+    } finally {
+        restore();
+        globalThis.fetch = original;
+    }
+});
+
+test("production role observation delegates exact arguments and output without validation substitutes", async () => {
+    const sentinel = {};
+    const signal = new AbortController().signal;
+    const receipt = { roleCalls: [] };
+    const model = {
+        async synthesize(...args) {
+            assert.deepEqual(args, ["original", signal]);
+            return sentinel;
+        },
+        fits: () => false,
+    };
+    const wrapped = observedRoles(model, "view", receipt);
+    assert.equal(await wrapped.synthesize("original", signal), sentinel);
+    assert.equal(wrapped.fits, model.fits);
+    assert.equal(receipt.roleCalls[0].role, "view.synthesize");
+});
+
+test("first actual failed target stops even while its containing job is still running", () => {
+    const jobs = [
+        {
+            jobId: "a",
+            state: "running",
+            results: [{ viewId: "view", state: "failed" }],
+        },
+    ];
+    assert.equal(unexpectedTargets(jobs).length, 1);
+    assert.equal(unexpectedTargets(jobs, "a").length, 0);
+});
+
+test("recovered earlier429 does not relabel a later product failure as throttle", () => {
+    assert.equal(
+        classifyStoppedRun(new Error("Unexpected target"), [
+            { status: 429 },
+            { status: 200 },
+        ]),
+        "STOPPED_FIRST_UNEXPECTED_PRODUCT_OR_ROLE_FAILURE",
+    );
+    assert.equal(
+        classifyStoppedRun(new Error("429 exhausted"), [{ status: 429 }]),
+        "PARTIAL_CONFIGURED_PROVIDER_THROTTLE",
+    );
+    assert.equal(
+        classifyStoppedRun(
+            Object.assign(new Error("budget"), { name: "TimeoutError" }),
+            [],
+        ),
+        "PARTIAL_BOUNDED_WORK",
+    );
+    assert.equal(
+        classifyStoppedRun(new Error("failed request"), [{ status: 400 }]),
+        "STOPPED_PROVIDER_REQUEST_FAILURE",
+    );
+});

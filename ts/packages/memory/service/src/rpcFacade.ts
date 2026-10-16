@@ -7,6 +7,7 @@ import type {
     MemoryService,
 } from "./types.js";
 import type { MemoryViewService } from "./viewTypes.js";
+import type { MemoryTopicService } from "./topicTypes.js";
 
 export interface MemoryJobWaitOptions {
     signal?: AbortSignal;
@@ -20,8 +21,14 @@ function unsupportedCapability(operation: string): Promise<never> {
 
 export function createMemoryServiceRpcFacade(
     service: MemoryService & Partial<MemoryViewService>,
-): MemoryService & MemoryViewService {
+): MemoryService & MemoryViewService & MemoryTopicService {
     return {
+        queryTopics: (request) =>
+            service.queryTopics?.(request) ??
+            unsupportedCapability("topic queries"),
+        rebuildTopics: (corpusId) =>
+            service.rebuildTopics?.(corpusId) ??
+            unsupportedCapability("topic rebuilds"),
         planViewMaintenance: (...args) =>
             service.planViewMaintenance?.(...args) ??
             unsupportedCapability("view maintenance planning"),
@@ -130,6 +137,9 @@ export function createMemoryServiceRpcFacade(
         listSourcesPage: (...args) => service.listSourcesPage(...args),
         getSource: (...args) => service.getSource(...args),
         getSourceContent: (...args) => service.getSourceContent(...args),
+        getSourceSynopsis: (request) =>
+            service.getSourceSynopsis?.(request) ??
+            unsupportedCapability("source synopses"),
         getSourceKnowledge: (...args) => service.getSourceKnowledge(...args),
         listSourceKnowledgeSuppressions: (...args) =>
             service.listSourceKnowledgeSuppressions!(...args),

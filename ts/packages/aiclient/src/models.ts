@@ -16,19 +16,12 @@ import {
 export type CompletionSettings = {
     n?: number;
     temperature?: number;
-    /**
-     * @deprecated Use `max_completion_tokens` instead.  The runtime
-     * auto-promotes this to `max_completion_tokens` before sending the
-     * request, but new code should set `max_completion_tokens` directly.
-     */
-    max_tokens?: number;
     response_format?: { type: "json_object" };
     // Use fixed seed parameter to improve determinism
     //https://cookbook.openai.com/examples/reproducible_outputs_with_the_seed_parameter
     seed?: number;
     top_p?: number;
 
-    max_completion_tokens?: number;
     reasoning_effort?:
         | "none"
         | "minimal"
@@ -39,6 +32,19 @@ export type CompletionSettings = {
         | "max";
     verbosity?: "low" | "medium" | "high";
 };
+
+export function rejectCompletionLimits(settings?: CompletionSettings): void {
+    for (const key of [
+        "max_tokens",
+        "max_completion_tokens",
+        "max_output_tokens",
+    ]) {
+        if (settings && key in settings)
+            throw new Error(
+                `${key} is no longer supported in completion settings; use prompt guidance for final-answer length, excluding reasoning`,
+            );
+    }
+}
 
 // A JSON Schema object passed opaquely to the OpenAI API.
 export type JsonSchemaType = Record<string, unknown>;

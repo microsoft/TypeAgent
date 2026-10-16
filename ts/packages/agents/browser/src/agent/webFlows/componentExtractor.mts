@@ -36,10 +36,10 @@ export function createComponentExtractor(
             debug("Screenshot capture failed for component extraction");
         }
 
-        const apiSettings = ai.azureApiSettingsFromEnv(
+        const apiSettings = ai.apiSettingsFromEnv(
             ai.ModelType.Chat,
             undefined,
-            "GPT_4_O_MINI",
+            "GPT_6_LUNA",
         );
         const model = ai.createChatModel(apiSettings);
 

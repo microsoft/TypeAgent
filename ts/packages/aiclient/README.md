@@ -17,17 +17,25 @@ Chat, embedding, and image factories resolve each model into an **endpoint pool*
 
 ### How an endpoint gets into a pool
 
-Pools are discovered from env-var naming. For a model `GPT_4_O`, aiclient scans:
+Implicit Azure chat defaults select the named `GPT_6_LUNA` pool, even when
+`AZURE_OPENAI_ENDPOINT` still points to a legacy model. A missing Luna deployment
+fails rather than falling back to the bare endpoint. Use explicit `azure` to
+select that bare endpoint, or an explicit legacy name for compatibility.
+Configured non-Azure provider defaults and explicit API settings remain honored.
+
+Pools are discovered from env-var naming. For a model `GPT_6_LUNA`, aiclient scans:
 
 ```
-AZURE_OPENAI_ENDPOINT_GPT_4_O                    (legacy / bare — optional)
-AZURE_OPENAI_ENDPOINT_GPT_4_O_<REGION>           (e.g. _EASTUS, _SWEDENCENTRAL, _WESTUS)
-AZURE_OPENAI_ENDPOINT_GPT_4_O_<REGION>_PTU       (trailing _PTU marks a provisioned-throughput reservation)
+AZURE_OPENAI_ENDPOINT_GPT_6_LUNA                    (legacy / bare — optional)
+AZURE_OPENAI_ENDPOINT_GPT_6_LUNA_<REGION>           (e.g. _EASTUS, _SWEDENCENTRAL, _WESTUS)
+AZURE_OPENAI_ENDPOINT_GPT_6_LUNA_<REGION>_PTU       (trailing _PTU marks a provisioned-throughput reservation)
 ```
 
-and the matching `AZURE_OPENAI_API_KEY_GPT_4_O_...` variants. Each one becomes a pool member. Embeddings use the same pattern rooted at `AZURE_OPENAI_ENDPOINT_EMBEDDING[_<REGION>]`; images at `AZURE_OPENAI_ENDPOINT_GPT_IMAGE_1_5[_<REGION>]`.
+and the matching `AZURE_OPENAI_API_KEY_GPT_6_LUNA_...` variants. Each one becomes a pool member. Embeddings use the same pattern rooted at `AZURE_OPENAI_ENDPOINT_EMBEDDING[_<REGION>]`; images at `AZURE_OPENAI_ENDPOINT_GPT_IMAGE_1_5[_<REGION>]`.
 
-If only the legacy bare env vars are set (`AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`), the pool contains one member and behavior is byte-identical to earlier versions of this client — there's nothing to opt into, and nothing breaks when you don't.
+Explicit bare `azure` selection uses a single member from the legacy bare env
+vars (`AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`). Implicit Azure chat
+selection requires the Luna deployment instead.
 
 ### Selection algorithm
 
@@ -50,10 +58,10 @@ After 3 consecutive successes the 429 multiplier resets, so a transient blip doe
 For the cases where auto-detection is wrong or you want explicit weights, set `AZURE_OPENAI_POOL_<MODEL>` to a JSON array:
 
 ```
-AZURE_OPENAI_POOL_GPT_4_O=[
-  {"suffix":"GPT_4_O_EASTUS_PTU", "priority":1, "mode":"PTU", "tpm":50000},
-  {"suffix":"GPT_4_O_SWEDENCENTRAL", "priority":2, "mode":"PAYG"},
-  {"suffix":"GPT_4_O_WESTUS", "priority":2, "mode":"PAYG"}
+AZURE_OPENAI_POOL_GPT_6_LUNA=[
+  {"suffix":"GPT_6_LUNA_EASTUS_PTU", "priority":1, "mode":"PTU", "tpm":50000},
+  {"suffix":"GPT_6_LUNA_SWEDENCENTRAL", "priority":2, "mode":"PAYG"},
+  {"suffix":"GPT_6_LUNA_WESTUS", "priority":2, "mode":"PAYG"}
 ]
 ```
 
@@ -76,6 +84,25 @@ DEBUG=typeagent:pool,typeagent:rest:retry node your-app.js
 ### Provisioning more endpoints
 
 See [`ts/tools/scripts/README.md`](../../tools/scripts/README.md) for the multi-region deploy and secret-sync tooling that populates the regional env vars described above.
+
+## Completion limits and reasoning
+
+OpenAI-compatible chat completions and Responses requests omit optional
+`max_completion_tokens`, legacy `max_tokens`, and `max_output_tokens` limits.
+Completion settings no longer accept those fields; old JavaScript settings
+produce a migration error rather than being silently ignored. There is no
+fifth-argument completion-limit switch. Ask for an approximate final-answer
+length in the prompt, explicitly excluding reasoning and preserving required
+evidence. This is guidance, not a bound on actual generation.
+
+Provider capacity metadata (`requestConstraints.outputTokens`) remains
+authoritative for local context admission and opt-in request-budget reservation,
+including the full possible reasoning-plus-answer output. Missing capacity fails
+budgeted admission rather than inventing a limit. Application attempts, input,
+elapsed time, and aggregate safeguards remain separate from wire generation.
+Anthropic Messages is the protocol exception: its mandatory native `max_tokens`
+field is populated from verified provider output capacity. It is not the removed
+legacy OpenAI setting; a Messages request without known capacity fails explicitly.
 
 ## Trademarks
 

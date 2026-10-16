@@ -6,7 +6,10 @@ import type {
     Dispatcher,
 } from "@typeagent/agent-server-client";
 import { awaitCommand } from "@typeagent/dispatcher-types";
-import type { RecordedInteractionTrace } from "@typeagent/copilot-macros";
+import type {
+    RecordedInteractionTrace,
+    TraceSummary,
+} from "@typeagent/copilot-macros";
 import {
     connectToAgentServer,
     connectToTypeAgent,
@@ -161,8 +164,11 @@ export class SessionCapture {
         private readonly notifyLearning: (
             message: string,
         ) => Promise<void> = async (message) => logError(message),
+        private readonly onFinalizedTrace: (
+            summary: TraceSummary,
+        ) => Promise<void> = async () => {},
     ) {
-        this.assembler = new ExtensionTraceAssembler(sessionId, cwd);
+        this.assembler = new ExtensionTraceAssembler(sessionId, cwd, true);
     }
 
     public enqueue(event: ExtensionSessionEvent & { id?: string }): void {
@@ -298,6 +304,7 @@ export class SessionCapture {
                         tokenId: selectedToken.id,
                         trace,
                     });
+                    await this.onFinalizedTrace(summary);
                     if (summary.learningJobId) {
                         await this.notifyLearning(
                             `Macro learning queued (${summary.learningJobId}). Use /typeagent-macro-status to inspect preparation or readiness. No additional task execution is required.`,

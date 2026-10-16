@@ -363,7 +363,13 @@ export type WebPageLink = {
     );
 
     // make the request
-    const chatResponse = await chat.translate(pageMarkdown);
+    const chatResponse = await chat.translate(pageMarkdown, [
+        {
+            role: "system",
+            content:
+                "Aim for approximately 1000 tokens in the final JSON only, excluding reasoning. Preserve required content even when that needs a longer answer.",
+        },
+    ]);
 
     return chatResponse;
 }
@@ -375,7 +381,7 @@ function createModel(fastModel: boolean = true): ChatModelWithStreaming {
             apiSettings = openai.localOpenAIApiSettingsFromEnv(
                 openai.ModelType.Chat,
                 undefined,
-                "GPT_4O_mini",
+                "GPT_6_LUNA",
                 ["wikipedia"],
             );
         } else {
@@ -386,8 +392,6 @@ function createModel(fastModel: boolean = true): ChatModelWithStreaming {
 
     const completionSettings: CompletionSettings = {
         temperature: 1.0,
-        // Max response tokens
-        max_tokens: 1000,
         // createChatModel will remove it if the model doesn't support it
         response_format: { type: "json_object" },
     };

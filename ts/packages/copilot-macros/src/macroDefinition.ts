@@ -14,6 +14,13 @@ import type {
     ReplayToolHost,
     ValueExpression,
 } from "./contracts.js";
+import { learningToolResult, omittedResultPath } from "./resultEvidence.js";
+import {
+    assertMacroCapabilities,
+    constructResultPath,
+    setMacroCapabilities,
+    validateResultSuffix,
+} from "./resultPath.js";
 
 async function classifyTool(
     toolName: string,
@@ -77,7 +84,7 @@ type BoundValueExpression = Exclude<ValueExpression, { kind: "template" }>;
 
 function findPriorResultExpression(
     leaf: unknown,
-    priorSteps: MacroStep[],
+    priorSteps: Pick<MacroStep, "id">[],
     priorCalls: RecordedInteractionTrace["toolCalls"],
 ): BoundValueExpression | undefined {
     if (typeof leaf !== "string" || leaf === "[REDACTED]" || leaf.length < 3) {
@@ -86,12 +93,46 @@ function findPriorResultExpression(
     for (let index = priorCalls.length - 1; index >= 0; index--) {
         const resultPath = findValuePath(priorCalls[index].result, leaf);
         if (resultPath !== undefined) {
+            if (omittedResultPath(priorCalls[index], resultPath)) continue;
             return {
                 kind: "stepResult",
                 stepId: priorSteps[index].id,
                 ...(resultPath.length > 0 ? { path: resultPath } : {}),
             };
         }
+        const constructed = findConstructedPath(priorCalls[index].result, leaf);
+        if (
+            constructed &&
+            !omittedResultPath(priorCalls[index], constructed.path)
+        ) {
+            return {
+                kind: "resultPath",
+                stepId: priorSteps[index].id,
+                ...constructed,
+            };
+        }
+    }
+
+    function findConstructedPath(
+        root: unknown,
+        target: string,
+        path: string[] = [],
+    ): { path: string[]; suffix: string } | undefined {
+        if (typeof root === "string" && target.startsWith(root)) {
+            const suffix = target.slice(root.length);
+            try {
+                if (constructResultPath(root, suffix) === target)
+                    return { path, suffix };
+            } catch {
+                /* Not an admitted relative drive-item construction. */
+            }
+        }
+        if (!root || typeof root !== "object") return undefined;
+        for (const [key, child] of Object.entries(root)) {
+            const found = findConstructedPath(child, target, [...path, key]);
+            if (found) return found;
+        }
+        return undefined;
     }
     return undefined;
 }
@@ -158,6 +199,44 @@ function convertArguments(
         : { kind: "template", value, bindings };
 }
 
+export function getRecordedArgumentDependencies(
+    trace: RecordedInteractionTrace,
+) {
+    return trace.toolCalls.map((call, index) => {
+        const priorCalls = trace.toolCalls
+            .slice(0, index)
+            .filter((prior) => prior.status === "completed")
+            .map((prior) => ({ ...prior, result: learningToolResult(prior) }));
+        const priorSteps = priorCalls.map((prior) => ({
+            id: prior.toolCallId,
+        }));
+        const dependencies =
+            call.status !== "completed"
+                ? []
+                : collectLeafPaths(call.arguments).flatMap((argumentPath) => {
+                      let leaf: unknown = call.arguments;
+                      for (const segment of argumentPath)
+                          leaf = (leaf as Record<string, unknown>)[segment];
+                      const expression = findPriorResultExpression(
+                          leaf,
+                          priorSteps,
+                          priorCalls,
+                      );
+                      return expression?.kind === "stepResult" ||
+                          expression?.kind === "resultPath"
+                          ? [
+                                {
+                                    argumentPath,
+                                    sourceToolCallId: expression.stepId,
+                                    expressionKind: expression.kind,
+                                },
+                            ]
+                          : [];
+                  });
+        return { toolCallId: call.toolCallId, dependencies };
+    });
+}
+
 export async function induceMacroFromTrace(
     traceId: string,
     trace: RecordedInteractionTrace,
@@ -182,11 +261,21 @@ export async function induceMacroFromTrace(
         );
     }
     const agentRequired = executionClasses.includes("agentRequired");
-    const calls = trace.toolCalls.map((call) =>
-        agentRequired && call.modelResult !== undefined
-            ? { ...call, result: call.modelResult }
-            : call,
-    );
+    const calls = trace.toolCalls.map((call) => {
+        const projected = {
+            ...call,
+            result: agentRequired
+                ? learningToolResult(call)
+                : call.resultArtifact
+                  ? call.resultArtifact.view
+                  : call.result,
+        };
+        if (!agentRequired) {
+            delete projected.modelResult;
+            delete projected.modelResultArtifact;
+        }
+        return projected;
+    });
     for (const [index, call] of calls.entries()) {
         const id = `step-${index + 1}`;
         const executionClass = executionClasses[index];
@@ -224,11 +313,17 @@ export async function induceMacroFromTrace(
             sourceToolCallId: call.toolCallId,
             ...(call.result === undefined
                 ? {}
-                : { postconditions: inferPostconditions(call.result) }),
+                : {
+                      postconditions: inferPostconditions(call.result).filter(
+                          (guard) =>
+                              guard.kind !== "resultPathExists" ||
+                              !omittedResultPath(call, guard.path),
+                      ),
+                  }),
         });
     }
 
-    return {
+    const macro: CopilotToolMacro = {
         schemaVersion: 1,
         macroId,
         version: 1,
@@ -242,6 +337,37 @@ export async function induceMacroFromTrace(
         createdAt,
         warnings,
     };
+    setMacroCapabilities(macro);
+    return macro;
+}
+
+function validateTemplateExpression(
+    expression: Extract<ValueExpression, { kind: "template" }>,
+    macro: CopilotToolMacro,
+    stepIndex: number,
+): string | undefined {
+    if (expression.bindings.length === 0) {
+        return "A template expression requires at least one binding.";
+    }
+    for (const binding of expression.bindings) {
+        if (binding.path.length === 0) {
+            return "A template binding requires a non-empty path.";
+        }
+        let target = expression.value;
+        for (const segment of binding.path) {
+            if (
+                target === null ||
+                typeof target !== "object" ||
+                !Object.prototype.hasOwnProperty.call(target, segment)
+            ) {
+                return `Template binding path is unavailable: ${binding.path.join(".")}`;
+            }
+            target = (target as Record<string, unknown>)[segment];
+        }
+        const error = validateExpression(binding.expression, macro, stepIndex);
+        if (error) return error;
+    }
+    return undefined;
 }
 
 function validateExpression(
@@ -249,40 +375,21 @@ function validateExpression(
     macro: CopilotToolMacro,
     stepIndex: number,
 ): string | undefined {
-    if (expression.kind === "template") {
-        if (expression.bindings.length === 0) {
-            return "A template expression requires at least one binding.";
-        }
-        for (const binding of expression.bindings) {
-            if (binding.path.length === 0) {
-                return "A template binding requires a non-empty path.";
-            }
-            let target = expression.value;
-            for (const segment of binding.path) {
-                if (
-                    target === null ||
-                    typeof target !== "object" ||
-                    !Object.prototype.hasOwnProperty.call(target, segment)
-                ) {
-                    return `Template binding path is unavailable: ${binding.path.join(".")}`;
-                }
-                target = (target as Record<string, unknown>)[segment];
-            }
-            const error = validateExpression(
-                binding.expression,
-                macro,
-                stepIndex,
-            );
-            if (error) return error;
-        }
-        return undefined;
-    }
+    if (expression.kind === "template")
+        return validateTemplateExpression(expression, macro, stepIndex);
     if (expression.kind === "input") {
         return macro.inputs.some((input) => input.name === expression.name)
             ? undefined
             : `Unknown input: ${expression.name}`;
     }
-    if (expression.kind === "stepResult") {
+    if (expression.kind === "stepResult" || expression.kind === "resultPath") {
+        if (expression.kind === "resultPath") {
+            try {
+                validateResultSuffix(expression.suffix);
+            } catch {
+                return "Unsupported result-path suffix.";
+            }
+        }
         const referencedIndex = macro.steps.findIndex(
             (step) => step.id === expression.stepId,
         );
@@ -291,6 +398,12 @@ function validateExpression(
             return `Step result must reference an earlier step: ${expression.stepId}`;
         }
     }
+    if (
+        !["literal", "input", "stepResult", "resultPath"].includes(
+            expression.kind,
+        )
+    )
+        return "Unsupported macro expression.";
     return undefined;
 }
 
@@ -299,6 +412,15 @@ export function validateMacro(
     trace?: RecordedInteractionTrace,
 ): MacroValidationReport {
     const issues: MacroValidationIssue[] = [];
+    try {
+        assertMacroCapabilities(macro);
+    } catch (error) {
+        issues.push({
+            severity: "error",
+            code: "unsupportedCapabilities",
+            message: String(error),
+        });
+    }
     if (!macro.name.trim()) {
         issues.push({
             severity: "error",
