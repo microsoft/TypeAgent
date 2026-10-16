@@ -16,7 +16,9 @@ const input: UserPromptSubmittedInput = {
     prompt: "Read the workspace",
 };
 
-function createDependencies(claimed: boolean): RoutePromptDependencies {
+function createDependencies(
+    claimed: boolean | "child",
+): RoutePromptDependencies {
     return {
         claimRecording: jest.fn(async () => claimed),
         direct: jest.fn(async () => ({ handled: true })),
@@ -26,6 +28,26 @@ function createDependencies(claimed: boolean): RoutePromptDependencies {
 }
 
 describe("macro recording routing override", () => {
+    it("requests an explicit success receipt only for selected child learning and leaves original task ownership in Copilot", async () => {
+        const dependencies = createDependencies("child");
+        const output = await routePrompt(
+            input,
+            "direct",
+            new AbortController().signal,
+            dependencies,
+        );
+        expect(output.additionalContext).toContain(
+            "typeagent_recorded_task_succeeded",
+        );
+        expect(output.additionalContext).toContain(
+            "Do not call it after failed",
+        );
+        expect(output.additionalContext).toContain("do not rerun the task");
+        expect(output.modifiedPrompt).toBeUndefined();
+        expect(dependencies.direct).not.toHaveBeenCalled();
+        expect(dependencies.dev).not.toHaveBeenCalled();
+        expect(dependencies.mcp).not.toHaveBeenCalled();
+    });
     it.each([
         "list the playlists",
         "learn: create a playlist",

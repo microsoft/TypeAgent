@@ -50,7 +50,8 @@ Interaction, denial, unavailable dependencies, semantic abstention, and uncertai
 dispatch remain explicit outcomes; the fake never retries a call automatically.
 These fake-host exports do not establish containment. Actual stored-source
 compilation and execution use the separate `recipeCompiler` and `recipeExecutor`
-entries described below. Copilot child authorship remains a later checkpoint.
+entries described below. Checkpoint B delegates authoring queries, not execution,
+to the native Copilot host as described below.
 
 Catalog implementations must provide atomic CAS transactions, immutable content
 revisions, capture deduplication, leased job ownership, and routing invalidation.
@@ -143,6 +144,46 @@ Learning stages and validates grammar before publication. Grammar and explicit
 disabled routes, duplicate run IDs, and invalid inputs. No model-led inspection,
 planning child, extra recipe-layer consent, or automatic execution retry is added.
 Existing MCP trust and backend authorization remain authoritative.
+
+## Checkpoint B: Copilot child authorship
+
+The native extension selects contextual authorship for claimed learning
+recordings. The parent explicitly attests successful completion through
+`typeagent_recorded_task_succeeded` before its final answer. The capture binds
+the actual root receipt, user event, final output, prompt hash, and recording
+token. Idle, one successful tool, an aborted task, or a child's completion is
+not sufficient. This attestation is not a substitute for program validation.
+
+TypeAgent seals the redacted task-scoped context and persists the job before
+acknowledging finalization. Scoped phase prompts are durably queued in
+`child-authoring.json`; `awaitingAuthor` is a recoverable state, not a failed
+model attempt. Claims bind workspace, host session, worker, exact prompt digest,
+and a two-minute lease. Responses are immutable and bounded. Missing/changed
+context and late or mismatched submissions fail explicitly.
+
+The extension answers extraction, generalization, grammar, and source queries
+using fresh tools-disabled native `task` children. Children receive the explicit
+sealed context and phase request, cannot execute business tools or delegate,
+and do not block delivery of the original answer. Private output references are
+scoped; verified redacted model-visible evidence is supplied in phase prompts,
+not fetched by giving the child filesystem or credential access.
+
+Native inherited-context isolation is not assumed. The independent,
+source-blind fixture verifier remains in TypeAgent, using its configured model
+provider. Its successful responses and completed build/grammar stages are
+checkpointed so a pause/restart does not regenerate the validation oracle or
+exhaust a restart budget. TypeAgent alone compiles, runs independent fixtures,
+applies existing publication modes, stores, matches, and executes the program.
+Repeat-time symbolic/semantic behavior is unchanged.
+
+New user work preempts only the active author child. Off/Cancel stops pending
+work and aborts an active child; host shutdown leaves unanswered leases
+recoverable by a later compatible session. No work is promised while Copilot is
+closed. Contextual jobs never silently fall back to TypeAgent authoring. Clients
+omitting `childAuthoring` retain the named Checkpoint A compatibility path.
+This is still the read-only MCP scope of A, not plugin-local execution,
+standalone inference, arbitrary native tools, or a VS Code host compatibility
+claim.
 
 ## Durable learning
 

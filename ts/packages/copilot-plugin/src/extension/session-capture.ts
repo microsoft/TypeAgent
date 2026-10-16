@@ -167,6 +167,7 @@ export class SessionCapture {
         private readonly onFinalizedTrace: (
             summary: TraceSummary,
         ) => Promise<void> = async () => {},
+        private readonly useChildAuthoring = false,
     ) {
         this.assembler = new ExtensionTraceAssembler(sessionId, cwd, true);
     }
@@ -232,6 +233,7 @@ export class SessionCapture {
     private async handle(
         event: ExtensionSessionEvent & { id?: string },
     ): Promise<void> {
+        if (event.agentId && event.type === "session.idle") return;
         this.assembler.record(event);
         const key = toolCallKey(event);
         if (event.type === "tool.execution_start" && key) {
@@ -298,11 +300,22 @@ export class SessionCapture {
                 selectedToken?.promptHash,
                 aborted,
             );
+            const childAuthoring = this.assembler.getChildAuthoringCapture();
             if (selectedToken) {
-                if (trace) {
+                if (
+                    trace &&
+                    (!selectedToken.learning ||
+                        !this.useChildAuthoring ||
+                        childAuthoring?.recordingTokenId === selectedToken.id)
+                ) {
                     const summary = await connection.finalizeMacroRecording({
                         tokenId: selectedToken.id,
                         trace,
+                        ...(selectedToken.learning &&
+                        this.useChildAuthoring &&
+                        childAuthoring
+                            ? { childAuthoring }
+                            : {}),
                     });
                     await this.onFinalizedTrace(summary);
                     if (summary.learningJobId) {
@@ -314,7 +327,9 @@ export class SessionCapture {
                     await connection.failMacroRecording(
                         this.sessionId,
                         selectedToken.id,
-                        "The selected interaction was incomplete and was not stored.",
+                        this.useChildAuthoring
+                            ? "The selected task has no explicit root success receipt correlated to this recording and final output; Copilot authoring was not queued."
+                            : "The selected interaction was incomplete and was not stored.",
                     );
                 }
             }

@@ -47,6 +47,12 @@ import type {
 import { validateMacro } from "./macroDefinition.js";
 
 import { MacroLearningEngine } from "./macroLearning.js";
+import { sealMacroChildCapture } from "./macroChildCapture.js";
+import type {
+    MacroAuthoringClaim,
+    MacroAuthoringRequest,
+    MacroAuthoringSubmission,
+} from "./contracts.js";
 import { readProgramJournal, runMacroProgram } from "./macroProgramRun.js";
 import type { JsonValue } from "./recipeContracts.js";
 import { redactTraceValue } from "./redaction.js";
@@ -100,7 +106,7 @@ export class MacroManager {
     private programRuntime?: MacroProgramRuntime;
 
     constructor(instanceDir: string, replayHost?: ReplayToolHost) {
-        this.rootDir = path.join(instanceDir, "copilot-macros");
+        this.rootDir = path.resolve(instanceDir, "copilot-macros");
         this.learning = new MacroLearningEngine(
             this.rootDir,
             {
@@ -150,6 +156,18 @@ export class MacroManager {
 
     getMacroLearningJob(jobId: string): Promise<MacroLearningJob> {
         return this.learning.getJob(jobId);
+    }
+
+    claimMacroAuthoringRequest(
+        claim: MacroAuthoringClaim,
+    ): Promise<MacroAuthoringRequest | undefined> {
+        return this.learning.claimAuthoring(claim);
+    }
+
+    submitMacroAuthoringResponse(
+        submission: MacroAuthoringSubmission,
+    ): Promise<void> {
+        return this.learning.submitAuthoring(submission);
     }
 
     cancelMacroLearningJob(jobId: string): Promise<MacroLearningJob> {
@@ -329,12 +347,35 @@ export class MacroManager {
             createdAt,
             toolCallCount: request.trace.toolCalls.length,
         };
+        try {
+            if (token.learning) {
+                const envelope = request.childAuthoring
+                    ? sealMacroChildCapture(
+                          traceId,
+                          request.trace,
+                          token,
+                          request.childAuthoring,
+                          (await this.learning.getPreference(request.trace.cwd))
+                              .mode,
+                          storedTrace,
+                      )
+                    : undefined;
+                const job = await this.learning.prepare(
+                    traceId,
+                    true,
+                    envelope,
+                );
+                summary.learningJobId = job.jobId;
+            }
+        } catch (error) {
+            this.failures.set(
+                token.sessionId,
+                `The stored trace ${traceId} could not be queued for learning: ${redactTraceValue(error instanceof Error ? error.message : String(error))}`,
+            );
+            throw error;
+        }
         this.failures.delete(token.sessionId);
         this.completed.set(token.sessionId, summary);
-        if (token.learning) {
-            const job = await this.learning.prepare(traceId, true);
-            summary.learningJobId = job.jobId;
-        }
         return summary;
     }
 

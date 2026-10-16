@@ -32,6 +32,7 @@ import { getMacroActionName } from "./macroAgentProvider.js";
 import {
     validateMacroGrammar,
     type MacroLearningQuery,
+    type MacroVerifierCache,
 } from "./macroLearningRuntime.js";
 
 export interface MacroProgramFixtureCall {
@@ -600,11 +601,13 @@ function constructArtifact(
     plan: MacroProgramFixturePlan,
 ): RecipeArtifact {
     const { macro, trace } = context;
+    const authoring = macro.learning!.authoring;
     const evidenceIds = [
         macro.sourceTraceId,
         `${macro.sourceTraceId}:response`,
         ...trace.toolCalls.map((call) => call.toolCallId),
         ...plan.fixtures.map((fixture) => fixture.id),
+        ...(authoring ? [authoring.contextDigest] : []),
     ];
     const capabilities = [
         ...new Map(
@@ -672,9 +675,9 @@ function constructArtifact(
             collisionEvidenceIds: [],
         },
         provenance: {
-            captureId: macro.sourceTraceId,
-            taskId: macro.learning!.jobId,
-            tokenId: `legacy:${macro.sourceTraceId}`,
+            captureId: authoring?.captureId ?? macro.sourceTraceId,
+            taskId: authoring?.taskId ?? macro.learning!.jobId,
+            tokenId: authoring?.tokenId ?? `legacy:${macro.sourceTraceId}`,
             evidenceIds,
             legacySource: { macroId: macro.macroId, version: macro.version },
         },
@@ -689,15 +692,16 @@ async function ask(
     instructions: string,
     evidence: unknown,
     signal: AbortSignal,
+    cacheVerifier?: MacroVerifierCache,
 ): Promise<unknown> {
     signal.throwIfAborted();
     const bounded = AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
+    const prompt = `${instructions}\nEVIDENCE:\n${JSON.stringify(evidence)}`;
     const result = await observe(
         () =>
-            query(
-                `${instructions}\nEVIDENCE:\n${JSON.stringify(evidence)}`,
-                bounded,
-            ),
+            cacheVerifier
+                ? cacheVerifier(prompt, () => query(prompt, bounded))
+                : query(prompt, bounded),
         bounded,
     );
     signal.throwIfAborted();
@@ -738,12 +742,14 @@ function observe<T>(work: () => Promise<T>, signal: AbortSignal): Promise<T> {
 export function createMacroProgramAuthor(
     options: MacroProgramAuthorOptions = {},
 ) {
-    const query = options.query ?? defaultQuery;
     return async (
         macro: CopilotToolMacro,
         trace: RecordedInteractionTrace,
         signal: AbortSignal,
+        queryOverride?: MacroLearningQuery,
+        cacheVerifier?: MacroVerifierCache,
     ): Promise<RecipeArtifact> => {
+        const query = queryOverride ?? options.query ?? defaultQuery;
         const bounded = AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
         bounded.throwIfAborted();
         const context: MacroProgramAuthoringContext = {
@@ -807,6 +813,8 @@ export function createMacroProgramAuthor(
                 );
             context.capabilities.push(structuredClone(capability));
         }
+        // External author children may inherit source-bearing context, so the
+        // independent verifier must remain on the trusted TypeAgent path.
         const plan = planSchema.parse(
             options.createFixturePlan
                 ? await observe(
@@ -817,7 +825,13 @@ export function createMacroProgramAuthor(
                           ),
                       bounded,
                   )
-                : await ask(query, verifierInstructions, context, bounded),
+                : await ask(
+                      options.query ?? defaultQuery,
+                      verifierInstructions,
+                      context,
+                      bounded,
+                      cacheVerifier,
+                  ),
         );
         assertIndependentEvidence(context, plan);
         const candidate = candidateSchema.parse(

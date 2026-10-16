@@ -68,6 +68,42 @@ export interface RecordingState {
 export interface FinalizeRecordingRequest {
     tokenId: string;
     trace: RecordedInteractionTrace;
+    childAuthoring?: MacroChildCapture;
+}
+
+export interface MacroChildCapture {
+    taskId: string;
+    firstEventId: string;
+    successEventId: string;
+    outputEventId: string;
+    recordingTokenId: string;
+}
+
+export interface MacroAuthoringClaim {
+    cwd: string;
+    sessionId: string;
+    workerId: string;
+}
+
+export interface MacroAuthoringRequest {
+    requestId: string;
+    jobId: string;
+    captureId: string;
+    contextDigest: string;
+    promptDigest: string;
+    prompt: string;
+    leaseId: string;
+    leaseExpiresAt: string;
+    context: import("./recipeAuthoring.js").SealedRecipeAuthoringContext;
+}
+
+export interface MacroAuthoringSubmission extends MacroAuthoringClaim {
+    requestId: string;
+    leaseId: string;
+    promptDigest: string;
+    outcome:
+        | { status: "completed"; text: string; childId: string }
+        | { status: "failed"; error: string };
 }
 
 export interface TraceSummary {
@@ -150,6 +186,7 @@ export interface CopilotToolMacro {
         grammarRules: string[];
         exampleInputs: Record<string, unknown>;
         requests: string[];
+        authoring?: MacroChildAuthoringIdentity;
     };
 }
 
@@ -191,6 +228,7 @@ export interface MacroLearningJob {
         | "queued"
         | "extracting"
         | "building"
+        | "awaitingAuthor"
         | "needsReview"
         | "ready"
         | "failed"
@@ -199,13 +237,35 @@ export interface MacroLearningJob {
     error?: string;
     createdAt: string;
     updatedAt: string;
+    authoring?: MacroChildAuthoringIdentity;
 }
 
+export interface MacroChildAuthoringIdentity {
+    captureId: string;
+    taskId: string;
+    tokenId: string;
+    contextDigest: string;
+}
+export type MacroAuthoringQuery = (
+    prompt: string,
+    signal: AbortSignal,
+) => Promise<string>;
+export type MacroVerifierQueryCache = (
+    prompt: string,
+    execute: () => Promise<string>,
+) => Promise<string>;
+
 export interface MacroLearningRuntime {
+    withAuthorQuery?(
+        query: MacroAuthoringQuery,
+        cacheVerifier?: MacroVerifierQueryCache,
+    ): MacroLearningRuntime;
     buildProgram(
         macro: CopilotToolMacro,
         trace: RecordedInteractionTrace,
         signal: AbortSignal,
+        query?: MacroAuthoringQuery,
+        cacheVerifier?: MacroVerifierQueryCache,
     ): Promise<RecipeArtifact>;
     extract(
         trace: RecordedInteractionTrace,

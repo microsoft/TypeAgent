@@ -130,6 +130,12 @@ export function makeStubConnection(
         async getMacroLearningJob() {
             throw new Error("Not implemented by conversation test stub");
         },
+        async claimMacroAuthoringRequest() {
+            throw new Error("Unexpected child authoring claim.");
+        },
+        async submitMacroAuthoringResponse() {
+            throw new Error("Unexpected child authoring response.");
+        },
         async cancelMacroLearningJob() {
             throw new Error("Not implemented by conversation test stub");
         },
