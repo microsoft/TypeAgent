@@ -95,7 +95,9 @@ formerly the separate "Design" section, now folded in here:
 - [Workflow system overview](./workflows/README.md) — the surface DSL, the IR
   it compiles to, the editor/LSP design, engineering plan, and principles.
 - [Workflows architecture](./workflows/workflows.md) — how workflows are
-  captured, persisted, and executed at runtime.
+  captured, persisted, and executed by their owning providers.
+- [Checked program macros](./workflows/macros.md) — learning, publication,
+  TypeAgent/plugin ownership and contained symbolic/hybrid execution.
 
 ## Documentation pipeline
 
