@@ -1,171 +1,155 @@
 # @typeagent/copilot-macros
 
-`@typeagent/copilot-macros` is the internal engine for TypeAgent
-tool-composed macros. It defines recorded Copilot tool traces, macro
-definitions, validation, immutable lifecycle operations, deterministic MCP
-replay, agent-runner handoff payloads, redaction, and persisted run evidence.
+`@typeagent/copilot-macros` records, authors, validates, catalogs, matches, and
+executes checked code-first macros. Agent-server owns its `MacroManager` and
+storage; the plugin exposes recording commands, lifecycle MCP tools, and the
+[macro skill](../copilot-plugin/skills/typeagent-macros/SKILL.md).
+Only checked programs can be persisted, approved, or run. The former step replay
+engine, Copilot macro runner, adaptation bridge/RPCs, and execution switches have
+been removed. Development-only old macro records are discarded, not migrated.
+See the [cross-package plan](../../docs/plans/copilot-fastActions/PLAN.md).
 
-The package does not expose an MCP server or launch Copilot by itself.
-Agent-server owns the `MacroManager` instance and its storage. The Copilot
-plugin exposes the lifecycle through
-[`macroServer.ts`](../copilot-plugin/src/mcp/macroServer.ts), a macro skill, and
-the TypeAgent Macro Runner agent.
+## Host-independent program contracts
 
-For the cross-package request flow and its relationship to PowerShell dev
-actions, see the
-[Copilot fast actions plan](../../docs/plans/copilot-fastActions/PLAN.md).
+The `@typeagent/copilot-macros/recipeCore` entry point defines the v1
+program artifact and runtime ABI, schemas, capability and semantic boundaries,
+capture/jobs, catalog transactions, publication modes, effects, and migration
+contracts. It imports no dispatcher, agent-server, model SDK, or configuration.
+Program APIs are organized as subpath imports:
+
+- `recipeCore`, `recipeTesting`: contracts, validation, and the offline fake host.
+- `recipeCatalog`, `recipeRouting`: `DurableRecipeCatalog` SQLite persistence
+  and `RecipeRouter` local grammar routing.
+- `recipeAuthoring`, `recipeAuthoringCandidate`, `recipeAuthoringValidation`:
+  contextual capture, candidate construction, and offline validation components.
+- `recipeAuthoringStore`: `DurableRecipeAuthoringContextStore(userDataDirectory)`
+  and `parseRecipeAuthoringEnvelope(text)` for immutable, scoped authoring
+  envelopes that persist across restart.
+- `recipeSemantic`, `recipeSemanticTesting`: typed semantic adapter components
+  and injected test providers.
+
+All names above are under `@typeagent/copilot-macros/`. Constructing the SQLite
+catalog requires **Node >=22.13**; importing the core does not open a database.
+Catalog data is local and scoped by workspace/profile, not synchronized or
+published remotely. Live provider/account/session bindings remain separate from
+durable recipe content.
+Authoring-store persistence is limited to the validated envelope contract; it
+does not establish retention of secrets or private raw artifact contents.
+
+`sealRecipeArtifact` hashes and freezes an already checked source/executable
+pair; it does not compile, execute, or prove the program correct. Runtime schemas
+support explicit primitive types, closed objects, arrays, enums, and bounds.
+Unsupported JSON Schema keywords fail validation rather than being ignored.
+Capability compatibility is deliberately exact in v1.
+
+`@typeagent/copilot-macros/recipeTesting` provides an in-memory `FakeRecipeHost`
+and `runRecipeFixture` for trusted test callbacks with injected native/MCP and
+semantic results. This is neither a sandbox nor a live host implementation.
+Fixture callbacks do not execute the artifact's stored source or executable.
+Interaction, denial, unavailable dependencies, semantic abstention, and uncertain
+dispatch remain explicit outcomes; the fake never retries a call automatically.
+These fake-host exports do not establish containment. Actual stored-source
+compilation and execution use the separate `recipeCompiler` and `recipeExecutor`
+entries described below. Copilot child authorship remains a later checkpoint.
+
+Catalog implementations must provide atomic CAS transactions, immutable content
+revisions, capture deduplication, leased job ownership, and routing invalidation.
+Publication metadata is separate from immutable program content. Disabled or
+superseded revisions cannot start a new invocation; in-flight evidence pins its
+revision and stops future calls without promising effect rollback. Credentials
+and session bindings do not belong in artifacts. Source-recording provenance is retained for audit, not as an executable fallback.
+
+## Checkpoint A: TypeAgent-hosted programs
+
+Program authoring and execution are configured unconditionally by both server
+entry points. Restart agent-server and reload the built plugin after updating.
+Use the normal recording/status/run commands; no program feature flag is needed.
+The separate plugin-local `recipe` catalog does not yet execute these programs.
+
+The production author derives fixture expectations independently of candidate
+source, compiles TypeScript, executes the stored executable against strict
+fixtures, and seals the artifact before publication. Program authoring has a
+120-second stage deadline; other model-learning stages retain their existing
+30-second deadlines. `All` publishes valid local candidates without a new
+recipe-layer consent prompt; `Prepare` still stages them, and `Read-only`
+checks actual tool descriptors.
+
+Grammar and explicit program invocation resolve the current approved revision
+through the same manager path. They run stored code directly, not the planning
+runner or a legacy-step fallback. Symbolic execution uses no model. Hybrid
+execution calls only declared semantic functions through the configured TypeAgent
+provider, with strict schemas, bounded attempts, cancellation, and actual model/
+token evidence. `TYPEAGENT_MACRO_LEARNING_MODEL` selects the configured Copilot
+model for authoring and the approved `typeagent-default@1` semantic policy.
+Declarations requiring custom source-ID/quotation provenance validators are not
+auto-published by the initial author: they fail validation before publication,
+rather than producing a ready program that cannot run.
+
+The initial adapter accepts **read-only MCP tools available to TypeAgent**.
+It validates schemas and pins the actual MCP descriptor fingerprint as well as
+the normalized runtime schema digest. Unsupported schema constraints, missing
+tools, native-only tools, and writes fail explicitly rather than silently
+substituting another execution path. Existing MCP trust and backend authorization
+remain authoritative. There is no step replay or runner fallback.
+
+`recipeCompiler` performs TypeScript diagnostics and produces the checked
+executable. Execution verifies compiler/source/output identity using a bounded
+in-process cache; first use after restart or cache eviction can recheck compilation.
+`recipeExecutor` runs it in a worker-contained QuickJS/WASM guest
+without Node authority. Standalone defaults are 5 seconds, 16 MiB guest memory,
+256 KiB stack, 64 broker calls, and 1 MiB JSON; TypeAgent program runs use a
+deadline capped at 60 seconds. Limits have explicit ceilings and cancellation
+terminates the worker. Cancelling external work is not rollback: the backend may
+finish a dispatched request after cancellation.
+
+Run journals persist dispatched/completed/uncertain checkpoints before subsequent
+calls. Disabling or superseding a revision stops future calls, not completed
+effects. Interrupted journals retain evidence for inspection; continuation is not
+implemented. Exact outcomes and semantic usage remain in `MacroRunRecord.program`;
+private outputs use the existing bounded result/evidence handling. Program
+dry-run is explicitly unsupported and dispatches nothing.
 
 ## Lifecycle
 
 ```text
-arm -> claim -> finalize trace
-               |
-               v
-          induce draft v1
-               |
-          validate + review
-               |
-         approve as version 2
-               |
-     replay or agent-runner handoff
+arm -> claim -> finalize actual trace -> grounded build + staged grammar
+     -> author source + independently derived fixtures -> compile + execute fixtures
+     -> persist checked draft -> approve immutable revision -> run stored program
 ```
 
-Recording is explicit and scoped to one session. Only one recording token can
-be active for a session, and tokens expire if they are not claimed. A finalized
-trace is redacted before it is persisted.
+Recording is explicit and session-scoped. Prepare stages a draft; Read-only and
+All can publish validated local successes. Drafts and disabled versions cannot
+run. Approval writes a new immutable version and checks the combined current
+grammar catalog. The grammar targets that anticipated approved version, not the
+authoring draft version.
 
-`createMacroFromTrace()` always creates a draft. Draft and disabled versions
-cannot run. `approveMacro()` validates the draft and writes a new immutable
-approved version rather than changing the draft in place.
+Grounded `MacroStep`, `ValueExpression`, execution-class and postcondition
+metadata remain as authoring/audit evidence. `replayable` means the captured tool
+was inspectable by TypeAgent; `agentRequired` denotes an unavailable capability.
+Neither selects an execution mode. Unsupported native-only capabilities fail
+program authoring; they cannot launch a runner.
 
-`inspectMacro()` normally reads an immutable version, including historical
-draft or disabled versions. With `requireRunnable: true`, it also applies the
-execution-route checks: the requested version must be approved, unsuppressed,
-and the current approved version. Native host-controlled execution uses this
-read-only preflight immediately before launching its runner. Ordinary catalog
-inspection is unchanged; this does not grant tool or backend permissions.
-
-## Core model
-
-The public contracts in `src/contracts.ts` include:
-
-| Type                       | Purpose                                                                     |
-| -------------------------- | --------------------------------------------------------------------------- |
-| `RecordedInteractionTrace` | One completed Copilot interaction and its correlated tool calls             |
-| `CopilotToolMacro`         | A versioned macro definition, inputs, steps, provenance, and state          |
-| `MacroInput`               | A required or optional caller-supplied value, including secret inputs       |
-| `MacroStep`                | One captured tool call and its argument expression                          |
-| `ValueExpression`          | A literal, caller input, prior-step result, or template containing bindings |
-| `MacroPostcondition`       | A result-type or required-result-path check                                 |
-| `MacroValidationReport`    | Errors and warnings produced before approval                                |
-| `MacroRunRecord`           | Sanitized evidence from one deterministic run                               |
-| `ReplayToolHost`           | The host interface for tool inspection and invocation                       |
-
-Each macro and step has an execution class:
-
-- `replayable`: TypeAgent's replay host inspected and found the named MCP tool
-  when the draft was created.
-- `agentRequired`: the step needs Copilot's live tool and permission surface.
-
-Execution class is selected for the whole macro. A run never replays a prefix
-before handing later steps to the agent.
-
-## Induction boundaries
-
-`induceMacroFromTrace()` performs a narrow, deterministic conversion. It can:
-
-- turn string values that also appear in the recorded prompt into inputs;
-- turn redacted leaves into required secret inputs;
-- bind a later argument to an exact value found in a prior tool result; and
-- infer the result type and up to 50 result paths as postconditions.
-
-It does not infer arbitrary semantic parameters, loops, branches, or a
-generalized program from one example. Induction is asynchronous: calls with an
-MCP server name are inspected through the supplied replay host using the
-recorded working directory. Only tools available to that host are classified
-as replayable. Native calls, missing servers or tools, and calls without a
-configured replay host are classified as agent-required. The captured server
-and tool names are preserved for the agent runner.
-
-An MCP server name alone does not establish replayability. For example,
-`github-mcp-server/web_search` may be available in Copilot but not in
-TypeAgent. Such a call produces an agent-required draft with a review warning,
-not an unapprovable replayable draft. Connection, authentication, and tool-list
-errors still fail draft creation; they are not treated as absent capabilities.
-Unreadable configuration files and invalid entries for the requested server
-also fail discovery rather than silently selecting the agent runner.
-Inspection does not invoke the recorded tools.
-
-## Validation and approval
-
-Validate a draft before asking the user to approve it. Validation checks macro
-structure, expressions, step ordering, trace provenance, and execution
-classes.
-
-When a replay host is configured, approval inspects every replayable tool and
-records its schema fingerprint. Approval then writes the next version with
-state `approved`. Disabling an approved macro also writes a new version.
-Agent-guided adaptations are saved as separate drafts.
-
-Classification does not silently change during approval or execution. A
-replayable tool disappearing after draft creation still blocks approval, and
-existing approved replayable macros retain their preflight checks. To correct
-an older draft that misclassified a Copilot-only MCP tool, create a new draft
-from its original trace, review it, and explicitly approve it. Existing
-versions are not rewritten.
-Tool inspection refreshes the connected server's advertised catalog, so draft
-creation cannot leave approval or replay checking a stale tool schema.
-
-## Deterministic replay
-
-Replay preflights the complete macro before invoking step one:
-
-1. The version must be approved and replayable.
-2. Required inputs must exist and match their recorded value types.
-3. Every referenced input must be bound.
-4. Every tool must be available through the replay host.
-5. Recorded schema fingerprints must match the current tool schemas.
-
-A failed preflight, including `schemaDrift`, invokes no tools. After preflight,
-steps execute in order. Template expressions resolve caller inputs and prior
-step results immediately before each call. Postconditions validate result
-types and required paths.
-
-The caller supplies an `AbortSignal`. `MacroManager` also enforces a bounded
-timeout, records cancellation or failure, and persists a sanitized run record.
-
-## Agent-guided execution and adaptation
-
-If a macro is `agentRequired`, or the caller selects the `agent` preference,
-`MacroManager.runMacro()` returns an `AgentRunnerLaunchPayload`. The payload
-contains the approved macro, supplied inputs, handoff reason, execution
-budgets, and candidate provenance. The package does not launch the runner.
-The runner inherits available Copilot tools, including MCP tools outside
-TypeAgent's replay host, subject to live permissions. Its instructions restrict
-tool use to the approved procedure, inspection, required discovery, and
-successful candidate submission. An unavailable or denied tool stops the run;
-the runner does not install tools or change permissions.
-
-After a successful agent-guided run, `submitMacroCandidate()` can save an
-adapted procedure. It verifies handoff identity, source version, execution
-outcome, and budget use before writing a new draft. It never changes or
-approves the source macro.
+`induceMacroFromTrace` derives parameter bindings and observed result dependencies
+without invoking tools. Builders must preserve captured call identities/order,
+reconstruct example arguments exactly, and report unsupported work. The production
+author resolves supported requirements as checked code or bounded semantics.
 
 ## Natural-language action integration
 
-Agent-server shares this manager with the dynamic `macros` provider in
-[`defaultAgentProvider`](../defaultAgentProvider/src/macroAgentProvider.ts).
-Current approved macros without secret inputs become typed, version-pinned
-actions. Existing dispatcher translation and learning can create grammar routes;
-legacy manual approval itself does not generate a grammar. Replay and runner-handoff flags
-filter the available actions and are rechecked at execution.
+The [macro provider](../defaultAgentProvider/src/macroAgentProvider.ts) exposes
+current approved programs without secret inputs as typed, version-pinned actions.
+Learning stages and validates grammar before publication. Grammar and explicit
+`runMacro` calls use one program invocation path and reject stale approvals,
+disabled routes, duplicate run IDs, and invalid inputs. No model-led inspection,
+planning child, extra recipe-layer consent, or automatic execution retry is added.
+Existing MCP trust and backend authorization remain authoritative.
 
 ## Durable learning
 
 Learning is opt-in and uses an injected `MacroLearningRuntime`; this package has
 no model or SDK dependency and never launches a learning agent or calls task
 tools. The service supplies factual `extract`, generalized `build`, and checked
-`generateGrammar` implementations. Each receives an abort signal. A synchronous
+`generateGrammar` implementations plus a required `buildProgram` author. Each receives an abort signal. A synchronous
 `validateGrammar(macro, approved)` implementation rechecks the staged rules
 against the current approved catalog inside serialized approval and recovery.
 This validation must not generate rules or execute task tools. The injected
@@ -217,8 +201,9 @@ The four modes are `off` (default, no selected recording or preparation),
 `prepare` (stage a draft for explicit approval), `read-only` (auto-approve only
 when every MCP step's inspected descriptor explicitly has `readOnly: true`), and
 `all` (auto-approve valid procedures regardless of effects). Native or unknown
-tools are not classified as read-only. Recording, induction, and live handoff
-feature flags must all be enabled for selected learning. Manual recording without
+tools are not classified as read-only. Recording and induction
+must be enabled for selected learning. The initial production broker rejects writes
+and native-only capabilities even in All mode. Manual recording without
 `learning: true` retains its existing behavior. A preference change to Off
 cancels pending work; preference/flags are checked again before publication.
 Changing a learning preference does not revoke an already approved definition.
@@ -231,75 +216,15 @@ bindings, invalid result guards, and unresolved recipe uncertainties fail before
 publication. Inputs may generalize evidenced argument values; these checks do not
 prove semantic wildcard safety or goal-level synthesis.
 
-Learning baselines use captured model-facing results when available, including
-for MCP-only procedures. Result guards and step dependencies therefore describe
-what the live runner observes, without changing tool execution-class metadata or
-raw-result semantics for non-learning deterministic replay.
+Learning baselines use captured model-facing results where available. These
+ground dependencies and independently derived fixture expectations; they do not
+execute recorded steps on repeat. Grammar, request examples, workspace, job and
+publication preference persist with immutable versions for restart-safe routing.
 
-The runtime receives the anticipated approved artifact (`draft.version + 1`,
-initially version 2) for grammar generation. Rules, example inputs, requests,
-workspace, job, approval mode, and `requiresLivePermissions: true` are persisted
-in immutable learning metadata. Prepare mode stages the same rules for later
-explicit version-2 approval. `getApprovedMacros()` returns these complete
-artifacts so the service/provider can register schema and grammar together.
-Every learned macro uses the whole live runner even when technically replayable;
-explicit `preference: "replay"` is rejected centrally. Disabling live handoff
-blocks execution. Learning approval never grants future tool permissions.
-Learning metadata centrally forces the effective execution preference to `agent`;
-the handoff flag, not the replay flag or technical execution class, controls
-availability. The injected generator returns pre-approval rules, not an installer.
-The provider can return all approved stored rules as dynamic grammar; immutable
-artifact persistence supplies restart persistence.
-Legacy definitions without learning metadata retain their replay behavior.
-Adaptations of learned macros require a fresh grounded build and version-targeted
-grammar, rather than inheriting stale grammar from the previous version.
-
-### Converged historical and runner evidence
-
-`prepareMacroLearning({traceId})` accepts an existing, completed persisted trace,
-including verified historical recordings. It uses the same extraction, grounded
-build, policy checks, grammar generation, and durable job machinery as selected
-live recording; no historical task is rerun.
-
-Runner adaptations use the compatible overload
-`submitMacroCandidate(request: EvidencedMacroCandidateRequest): Promise<MacroLearningJob>`.
-The request extends the existing candidate payload with required `traceId` and
-`exampleInputs`. Capture must set `RecordedInteractionTrace.handoffRunId` to the
-actual runner launch run ID, preserve the canonical user request, and finalize
-the actual execution before submitting the candidate. The manager verifies the
-recorded handoff, workspace, timestamps, execution budgets, completed calls,
-exact tool identities/order, and example-input reconstruction. Each handoff is
-bound to one immutable recorded trace. Counters or proposed steps alone are not
-execution evidence; a source macro cannot stand in for the new run.
-
-Evidenced submissions enqueue and return without waiting for model work.
-The coordinator extracts/builds again from the new verified trace, not from a
-proposed procedure or fabricated results. Selected recording, later submission,
-and historical preparation of that runner trace converge on the same job.
-The adaptation retains the source macro ID and provenance, writes a new immutable
-draft/approved version pair, and generates grammar for that pair's anticipated
-approved version (for example, source v2 -> draft v3 -> approved v4).
-New adaptations reserve distinct draft/approval version pairs, including when
-another draft is still pending. Lifecycle versions are allocated above persisted
-immutable versions, so disabling v2 with a hidden v3 draft writes disabled v4
-instead of overwriting v3. Prepared grammar targets are never renumbered.
-Adaptation publication requires the source to remain the current approved
-version, including for historical traces of non-learning macros. Re-saving an
-identical persisted adaptation draft never changes the catalog; approval and
-interrupted-publication recovery recheck the source under the catalog lock.
-The prior approved route stays active while a Prepare adaptation awaits review;
-publication replaces it with one current approved artifact, not a competing
-catalog entry. Disable/forget suppress every learned version of that macro,
-including older pinned approvals. Legacy submissions without `traceId` retain
-their explicit draft-return behavior; learned sources require the evidenced
-overload rather than that compatibility producer.
-
-The factual recipe contains source trace/call IDs, the canonical request,
-description, and uncertainty, not copied raw result bodies. The learning engine
-grounds the baseline in model-facing results; the manager retains the actual redacted
-trace locally for exact validation. Verified execution still does not prove
-goal-level selection, synthesis, or complete-answer generalization. Unsupported
-full outputs must be reported and rejected, never invented as observed evidence.
+`prepareMacroLearning({traceId})` uses the same pipeline for an existing complete
+trace without rerunning the original task. There is no runner adaptation or
+candidate-submission overload; record a new successful example for a new procedure.
+Disable/forget suppress equivalent learned observations from resurrecting a macro.
 
 Jobs and preferences are atomically persisted in the manager's learning state.
 One worker runs at a time, with at most 32 pending and 1,000 retained jobs,
@@ -352,23 +277,13 @@ rendering, prove the SDK delivered full bytes, prevent pre-capture model exposur
 or claim a model semantically read a binary. Those native gates require real
 verification.
 
-New macros needing derived remote item paths declare schema 2 and exactly
-`["result-path-v1"]`. `resultPath` selects an earlier step's string by `stepId`
-and `path`, then appends the frozen literal `suffix`. Only `/content` or
-`?$select=` with 1–20 comma-separated alphanumeric field names starting with a
-letter is supported. The base must exactly match a relative
-`/drives/<drive-id>/items/<item-id>` path; schemes, encoded separators, queries,
-traversal and arbitrary interpolation/eval are rejected. Definition induction,
-strict parsing, exact captured-argument validation, deterministic replay, native
-host and ordinary server handoffs share capability validation. Both runner
-profiles document the same operation without execution-time `inspect_macro`.
-Input/tool permission and immutable approval checks remain unchanged; this
-construction grants no scope or remote permissions.
-
-Legacy v1 traces and the four original expression forms retain their behavior.
-Only manager-produced artifact traces and macros using the new operation are v2;
-unknown schema/capabilities fail closed. Deploy matched package/plugin versions;
-do not send v2 definitions to an older v1-only runner or reinterpret old approvals.
+Grounded metadata needing derived remote item paths uses schema 2 with exactly
+`["result-path-v1"]`. The `resultPath` expression supports only a captured relative
+`/drives/<drive-id>/items/<item-id>` base plus `/content` or a bounded `?$select=`
+suffix. Unsafe paths, encoded separators, traversal and arbitrary interpolation
+are rejected during grounding. This authoring representation is not a second
+runtime; the checked program must implement and fixture-test the procedure.
+Trace artifact schema/capabilities remain independently validated.
 
 Idempotency is workspace + source trace, with equivalent observed operations
 deduplicated by canonical request and ordered tool identities/arguments before
@@ -376,8 +291,7 @@ model work (result bodies, call IDs, and session timestamps do not create anothe
 job). Cancellation does not silently retry. Disable/forget persist suppression
 before catalog removal, so equivalent observations cannot resurrect a macro
 after restart. Forget removes a learned macro from the active catalog while
-retaining its immutable versions and suppression evidence; legacy forget keeps
-its existing deletion behavior. Capacity failures are explicit rather than
+retaining immutable versions and suppression evidence. Capacity failures are explicit rather than
 evicting suppression history.
 
 `onCatalogChanged()` lets providers refresh active session schemas after
@@ -385,12 +299,9 @@ successful mutations. A refresh failure is reported explicitly even though the
 catalog has already been saved. Schema source/action fingerprints reconcile
 learned rules when a route is removed or replaced.
 
-`runMacro(request, { requireLatestApproved: true, signal })` is used for routed
-execution. It rejects a superseded approved version and propagates cancellation
-to replay. Explicit calls without `requireLatestApproved` preserve existing
-approved pinned-version behavior. Agent-required runs validate inputs before
-returning a whole-procedure launch; the caller remains responsible for invoking
-Copilot's runner and observing its actual outcome.
+Every invocation validates the authoritative current approved version, even when
+called explicitly. The optional cancellation signal reaches the contained executor
+and broker. A stored historical approval is audit evidence, not an execution route.
 
 ## Persistence
 
@@ -402,7 +313,6 @@ copilot-macros/
   traces/<traceId>.json
   macros/<macroId>/versions/<version>.json
   runs/<runId>.json
-  handoffs/<runId>.json
   metrics.jsonl
 ```
 
@@ -422,47 +332,24 @@ Callers should limit what they record and which tool results they persist.
 
 ## API
 
-The package exports:
-
-- contracts from `contracts.ts`;
-- `inspectReplayTools()`, `replayMacro()`, and `ReplayValidationError`;
-- `induceMacroFromTrace()` and `validateMacro()`;
-- `MacroManager`; and
-- `redactTraceValue()`.
-
-Minimal setup:
-
-```ts
-import { MacroManager, type ReplayToolHost } from "@typeagent/copilot-macros";
-
-const replayHost: ReplayToolHost = {
-  async inspectTool(serverName, toolName) {
-    // Return the current descriptor from the host's MCP catalog.
-    return undefined;
-  },
-  async callTool(serverName, toolName, args, signal) {
-    // Invoke the MCP tool and return its structured result.
-    throw new Error("Provide a ReplayToolHost implementation.");
-  },
-};
-
-const manager = new MacroManager(instanceDirectory, replayHost);
-```
-
-TypeAgent's concrete MCP replay host lives in
-`packages/defaultAgentProvider/src/mcp/mcpReplayHost.ts`.
+The package exports contracts, `MacroManager`, grounded induction/validation,
+`MacroExpressionError`, expression/input helpers, and trace redaction.
+Program compiler/executor/catalog/semantic APIs use the subpaths above.
+TypeAgent configures the concrete broker, author and program runtime in
+[macroProgramRuntime.ts](../defaultAgentProvider/src/macroProgramRuntime.ts).
+The retained `ReplayToolHost` interface names the shared MCP discovery/invocation
+boundary; it no longer implies a step execution engine.
 
 ## Integration points
 
-| Area                              | Location                                                         |
-| --------------------------------- | ---------------------------------------------------------------- |
-| Recording and macro RPC contracts | `packages/agentServer/protocol/src/protocol.ts`                  |
-| Agent-server ownership            | `packages/agentServer/server/src/`                               |
-| MCP adapter                       | `packages/copilot-plugin/src/mcp/macroServer.ts`                 |
-| Recording hooks                   | `packages/copilot-plugin/src/hooks/`                             |
-| Macro skill                       | `packages/copilot-plugin/skills/typeagent-macros/SKILL.md`       |
-| Macro runner                      | `packages/copilot-plugin/agents/typeagent-macro-runner.agent.md` |
-| MCP replay host                   | `packages/defaultAgentProvider/src/mcp/mcpReplayHost.ts`         |
+| Area                              | Location                                                   |
+| --------------------------------- | ---------------------------------------------------------- |
+| Recording and macro RPC contracts | `packages/agentServer/protocol/src/protocol.ts`            |
+| Agent-server ownership            | `packages/agentServer/server/src/`                         |
+| MCP adapter                       | `packages/copilot-plugin/src/mcp/macroServer.ts`           |
+| Recording hooks                   | `packages/copilot-plugin/src/hooks/`                       |
+| Macro skill                       | `packages/copilot-plugin/skills/typeagent-macros/SKILL.md` |
+| MCP replay host                   | `packages/defaultAgentProvider/src/mcp/mcpReplayHost.ts`   |
 
 ## Build and test
 
@@ -474,14 +361,14 @@ pnpm run test
 pnpm run prettier
 ```
 
-The focused specs cover definition and validation, deterministic replay,
+The focused specs cover definition and validation, contained program execution,
 catalog lifecycle, approval, persistence, cancellation, schema drift, and
 run-record sanitization.
 
 ## Limitations
 
 - Single-trace induction is deliberately narrow.
-- Copilot-native tools require agent-guided execution.
+- Copilot-native tools and writes are unsupported by the initial production broker.
 - This package does not provide a catalog over PowerShell, WebFlow, TaskFlow,
   or Excel procedures.
 - Catalog mutation coordination is process-local.

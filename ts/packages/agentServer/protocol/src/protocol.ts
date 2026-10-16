@@ -8,7 +8,6 @@ import type {
     ArmRecordingRequest,
     ClaimRecordingRequest,
     CopilotToolMacro,
-    CreateMacroFromTraceRequest,
     DeleteMacroRequest,
     DisableMacroRequest,
     FinalizeRecordingRequest,
@@ -28,7 +27,6 @@ import type {
     RunMacroRequest,
     RunMacroResponse,
     SearchMacrosRequest,
-    SubmitMacroCandidateRequest,
     TraceSummary,
     ValidateMacroRequest,
 } from "@typeagent/copilot-macros";
@@ -56,7 +54,6 @@ export type {
     ArmRecordingRequest,
     ClaimRecordingRequest,
     CopilotToolMacro,
-    CreateMacroFromTraceRequest,
     DeleteMacroRequest,
     DisableMacroRequest,
     FinalizeRecordingRequest,
@@ -78,7 +75,6 @@ export type {
     RunMacroRequest,
     RunMacroResponse,
     SearchMacrosRequest,
-    SubmitMacroCandidateRequest,
     TraceSummary,
     ValidateMacroRequest,
 } from "@typeagent/copilot-macros";
@@ -326,9 +322,6 @@ export type AgentServerInvokeFunctions = {
     getMacroRequirements: (
         request: InspectMacroRequest,
     ) => Promise<MacroRequirements>;
-    createMacroFromTrace: (
-        request: CreateMacroFromTraceRequest,
-    ) => Promise<MacroVersionRef>;
     validateMacro: (
         request: ValidateMacroRequest,
     ) => Promise<MacroValidationReport>;
@@ -336,9 +329,6 @@ export type AgentServerInvokeFunctions = {
     disableMacro: (request: DisableMacroRequest) => Promise<MacroVersionRef>;
     deleteMacro: (request: DeleteMacroRequest) => Promise<void>;
     runMacro: (request: RunMacroRequest) => Promise<RunMacroResponse>;
-    submitMacroCandidate: (
-        request: SubmitMacroCandidateRequest,
-    ) => Promise<MacroVersionRef>;
     cancelMacroRun: (runId: string) => Promise<void>;
     getMacroRun: (runId: string) => Promise<MacroRunRecord>;
     listSkills: (request?: ListSkillsRequest) => Promise<CatalogEntry[]>;

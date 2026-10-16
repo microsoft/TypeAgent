@@ -17,20 +17,23 @@
  *   @typeagent status        — show current configuration
  */
 
-import { handleDirect, type DirectHandlingOptions } from "./hook-direct.js";
-import { handleMcpRedirect } from "./hook-mcp-redirect.js";
-import { handleDevActions } from "./hook-dev-actions.js";
-import { makeTurnId, writeDemoState } from "./demo-state.js";
-import { createHash } from "node:crypto";
-import { fileURLToPath } from "node:url";
 import type {
     UserPromptSubmittedInput,
     UserPromptSubmittedOutput,
 } from "@typeagent/agent-harness-hooks/copilot-cli";
-import { connectToAgentServer } from "../shared/typeagent-client.js";
 import { redactTraceValue } from "@typeagent/copilot-macros";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import {
+    publishControlMetadata,
+    readControlledMode,
+} from "../shared/control-metadata.js";
 import { getMacroFeatures } from "../shared/macro-features.js";
-import { isMacroRunnerSession } from "../shared/macro-runner-bridge.js";
+import { cancelMacroWork, learningSetting } from "../shared/macro-learning.js";
+import {
+    getModeDescription,
+    handleModeSetting,
+} from "../shared/mode-command.js";
 import {
     getConfigPath,
     getMode,
@@ -39,15 +42,12 @@ import {
     writeConfig,
     type Mode,
 } from "../shared/plugin-config.js";
-import {
-    getModeDescription,
-    handleModeSetting,
-} from "../shared/mode-command.js";
-import { cancelMacroWork, learningSetting } from "../shared/macro-learning.js";
-import {
-    publishControlMetadata,
-    readControlledMode,
-} from "../shared/control-metadata.js";
+import { handleRecipeCommand } from "../shared/recipe-commands.js";
+import { connectToAgentServer } from "../shared/typeagent-client.js";
+import { makeTurnId, writeDemoState } from "./demo-state.js";
+import { handleDevActions } from "./hook-dev-actions.js";
+import { handleDirect, type DirectHandlingOptions } from "./hook-direct.js";
+import { handleMcpRedirect } from "./hook-mcp-redirect.js";
 
 async function handleMacroCommand(
     input: UserPromptSubmittedInput,
@@ -235,6 +235,7 @@ function handleStatusCommand(
             "- `@typeagent mode dev` — route registered PowerShell flows and recording directives",
             "- `@typeagent mode bypass` — disable TypeAgent routing",
             "- `@typeagent powershell on/off` — toggle TypeAgent PowerShell redirect",
+            "- `@typeagent recipe status` — inspect the local program-recipe catalog (experimental; execution is not enabled)",
             "- `@typeagent status` — show this info",
         ].join("  \n"),
         handledBy: "typeagent",
@@ -263,6 +264,7 @@ export async function handleSlashCommand(
     const lower = trimmed.toLowerCase();
 
     return (
+        (await handleRecipeCommand(input)) ??
         (await handleMacroCommand(input, lower)) ??
         handleRunCommand(input, trimmed, dependencies.direct) ??
         handleModeCommand(lower) ??
@@ -342,7 +344,6 @@ export async function routePrompt(
     signal: AbortSignal,
     dependencies: RoutePromptDependencies = routePromptDefaults,
 ): Promise<UserPromptSubmittedOutput> {
-    if (isMacroRunnerSession(input.sessionId)) return {};
     if (mode === "bypass") return {};
     if (await dependencies.claimRecording(input)) return {};
     if (mode === "mcp") return dependencies.mcp(input);

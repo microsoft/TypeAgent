@@ -10,10 +10,10 @@
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
 import type {
     AgentServerConnection,
+    ConversationContentMatch,
     ConversationDispatcher,
     ConversationInfo,
     ConversationMatch,
-    ConversationContentMatch,
 } from "../src/index.js";
 
 export function makeInfo(
@@ -159,9 +159,6 @@ export function makeStubConnection(
         async getMacroRequirements() {
             throw new Error("Not implemented by conversation test stub");
         },
-        async createMacroFromTrace() {
-            throw new Error("Not implemented by conversation test stub");
-        },
         async validateMacro() {
             throw new Error("Not implemented by conversation test stub");
         },
@@ -173,9 +170,6 @@ export function makeStubConnection(
         },
         async deleteMacro() {},
         async runMacro() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async submitMacroCandidate() {
             throw new Error("Not implemented by conversation test stub");
         },
         async cancelMacroRun() {},
