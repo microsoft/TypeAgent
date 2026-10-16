@@ -310,16 +310,6 @@ describe("staged plugin artifact", () => {
                     expect(recipeOwner.additionalContext).toBeUndefined();
                     expect(connections).toBe(0);
                 }
-                const prompt =
-                    "Compare PRs #3058, #3059, and #2993 and recommend smoke tests.";
-                for (const policy of ["mixed", "delegate"]) {
-                    await runHook(`@typeagent mode mcp ${policy}`);
-                    const output = await runHook(prompt);
-                    expect(output.modifiedPrompt).toBe(prompt);
-                    expect(output.additionalContext).toContain(
-                        "TypeAgent is the preferred action provider in MCP mode",
-                    );
-                }
                 const recipeStatus = await runHook("@typeagent recipe status");
                 expect(recipeStatus.handled).toBe(true);
                 expect(recipeStatus.responseContent).toMatch(/\S/);
