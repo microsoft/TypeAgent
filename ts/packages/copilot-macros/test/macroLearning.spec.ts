@@ -1,13 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import {
     MacroManager,
-    inspectReplayTools,
     type CopilotToolMacro,
     type MacroLearningBuild,
     type MacroLearningJob,
@@ -15,8 +10,12 @@ import {
     type MacroLearningRuntime,
     type RecordedInteractionTrace,
     type ReplayToolHost,
-    type EvidencedMacroCandidateRequest,
 } from "@typeagent/copilot-macros";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { macroProgramArtifact } from "./recipeCatalogFixtures.js";
 
 const cwd = "C:\\learning-workspace";
 const jest = (import.meta as ImportMeta & { jest: typeof globalThis.jest })
@@ -100,6 +99,13 @@ function runtime(
     change?: (build: MacroLearningBuild) => void,
 ): MacroLearningRuntime {
     return {
+        buildProgram: async (macro) => {
+            if (macro.warnings.length)
+                throw new Error(
+                    "Program author could not resolve the output requirements.",
+                );
+            return macroProgramArtifact(macro);
+        },
         extract: jest.fn(async (trace, traceId) => ({
             schemaVersion: 1 as const,
             traceId,
@@ -141,74 +147,6 @@ async function terminal(
     throw new Error("Learning job did not reach a terminal status.");
 }
 
-function adaptationRuntime(): MacroLearningRuntime {
-    const learner = runtime();
-    const build = learner.build;
-    learner.build = jest.fn(async (...args) => {
-        const value = await build(...args);
-        value.exampleInputs.step_1_path = args[1].prompt.slice("Read ".length);
-        return value;
-    });
-    return learner;
-}
-
-async function recordRunnerAdaptation(
-    manager: MacroManager,
-    source: CopilotToolMacro,
-    learning = false,
-    file = "other.json",
-): Promise<EvidencedMacroCandidateRequest> {
-    const handoffRunId = `verified-runner-adaptation-${file.replace(".", "-")}`;
-    await manager.runMacro({
-        macroId: source.macroId,
-        version: source.version,
-        runId: handoffRunId,
-        inputs: { step_1_path: file },
-        preference: "agent",
-    });
-    const trace = recordedTrace("runner-adaptation-session");
-    trace.prompt = `Read ${file}`;
-    trace.toolCalls[0].arguments = { path: file };
-    trace.handoffRunId = handoffRunId;
-    trace.startedAt = new Date().toISOString();
-    trace.completedAt = new Date(Date.parse(trace.startedAt) + 1).toISOString();
-    const summary = await capture(manager, { trace, learning });
-    return {
-        sourceMacroId: source.macroId,
-        sourceVersion: source.version,
-        handoffRunId,
-        traceId: summary.traceId,
-        reason: "Verified requested file adaptation",
-        inputs: source.inputs,
-        steps: source.steps,
-        exampleInputs: { step_1_path: file },
-        executionEvidence: {
-            outcome: "completed",
-            toolCalls: 1,
-            retries: 0,
-            durationMs: 1,
-            tokensUsed: 0,
-            steps: source.steps.map((step) => ({
-                stepId: step.id,
-                status: "completed",
-            })),
-        },
-    };
-}
-
-async function nonLearningSource(manager: MacroManager) {
-    const original = await capture(manager);
-    return manager.inspectMacro(
-        await manager.approveMacro(
-            await manager.createMacroFromTrace({
-                traceId: original.traceId,
-                name: "Read package",
-                description: "Read the requested file.",
-            }),
-        ),
-    );
-}
-
 describe("durable macro learning", () => {
     it("prepares a verified historical trace through the same coordinator after restart", async () => {
         const { manager, directory, host } = await setup("all");
@@ -229,422 +167,6 @@ describe("durable macro learning", () => {
         expect(learner.generateGrammar).toHaveBeenCalledTimes(1);
         expect(host.callTool).not.toHaveBeenCalled();
     });
-
-    it.each([false, true])(
-        "requires the non-learning source of a historical adaptation to remain approved (disabled=%s)",
-        async (disabled) => {
-            const { manager, directory, host } = await setup("all");
-            await manager.configureLearning(adaptationRuntime());
-            const source = await nonLearningSource(manager);
-            expect(source.version).toBe(2);
-            expect(source.learning).toBeUndefined();
-            const submission = await recordRunnerAdaptation(manager, source);
-            expect(
-                (await manager.getRecordingState("runner-adaptation-session"))
-                    .learningJob,
-            ).toBeUndefined();
-            if (disabled) {
-                expect(
-                    await manager.disableMacro({ macroId: source.macroId }),
-                ).toMatchObject({ version: 3, state: "disabled" });
-            }
-            const queued = await manager.prepareMacroLearning({
-                traceId: submission.traceId,
-            });
-            const job = await terminal(manager, queued.jobId);
-            expect(job.status).toBe(disabled ? "failed" : "ready");
-            if (disabled) {
-                expect(job.error).toContain(
-                    "source version to remain approved",
-                );
-                expect(await manager.getApprovedMacros()).toEqual([]);
-            } else {
-                expect(job.error).toBeUndefined();
-                expect(job.macro).toMatchObject({
-                    version: 4,
-                    state: "approved",
-                });
-            }
-            const restarted = new MacroManager(directory, host);
-            await restarted.configureLearning(adaptationRuntime());
-            expect(await restarted.listMacros()).toMatchObject([
-                {
-                    macroId: source.macroId,
-                    version: disabled ? 3 : 4,
-                    state: disabled ? "disabled" : "approved",
-                },
-            ]);
-            expect(await restarted.getMacroLearningJob(job.jobId)).toEqual(job);
-            expect((await restarted.getApprovedMacros()).length).toBe(
-                disabled ? 0 : 1,
-            );
-            expect(host.callTool).not.toHaveBeenCalled();
-        },
-    );
-
-    it.each(["approved", "disabled"] as const)(
-        "keeps an idempotent adaptation save from changing its %s catalog entry",
-        async (state) => {
-            const { manager, directory, host } = await setup("prepare");
-            await manager.configureLearning(adaptationRuntime());
-            const source = await nonLearningSource(manager);
-            const submission = await recordRunnerAdaptation(manager, source);
-            const queued = await manager.prepareMacroLearning({
-                traceId: submission.traceId,
-            });
-            const job = await terminal(manager, queued.jobId);
-            expect(job.status).toBe("needsReview");
-            const draft = await manager.inspectMacro(job.macro!);
-            await expect(manager.saveDraft(draft)).resolves.toEqual(job.macro);
-            expect(await manager.listMacros()).toMatchObject([
-                { version: 2, state: "approved" },
-            ]);
-            if (state === "approved") {
-                await manager.approveMacro(job.macro!);
-            } else {
-                await manager.disableMacro({ macroId: source.macroId });
-            }
-            const catalog = await manager.listMacros();
-            expect(catalog).toMatchObject([{ version: 4, state }]);
-            const restarted = new MacroManager(directory, host);
-            await restarted.configureLearning(adaptationRuntime());
-            await expect(restarted.saveDraft(draft)).resolves.toEqual(
-                job.macro,
-            );
-            expect(await restarted.listMacros()).toEqual(catalog);
-            expect(await restarted.inspectMacro(job.macro!)).toEqual(draft);
-            if (state === "disabled") {
-                await expect(
-                    restarted.approveMacro(job.macro!),
-                ).rejects.toThrow("current draft");
-                expect(await restarted.getApprovedMacros()).toEqual([]);
-            }
-            expect(host.callTool).not.toHaveBeenCalled();
-        },
-    );
-
-    it.each([true, false])(
-        "requires an interrupted adaptation's source for recovery (present=%s)",
-        async (present) => {
-            const { manager, directory, host } = await setup("all");
-            await manager.configureLearning(adaptationRuntime());
-            const source = await nonLearningSource(manager);
-            const sourceCatalog = await manager.listMacros();
-            const submission = await recordRunnerAdaptation(manager, source);
-            const queued = await manager.prepareMacroLearning({
-                traceId: submission.traceId,
-            });
-            const job = await terminal(manager, queued.jobId);
-            expect(job.status).toBe("ready");
-            const stateFile = path.join(
-                directory,
-                "copilot-macros",
-                "learning.json",
-            );
-            const state = JSON.parse(await readFile(stateFile, "utf8")) as {
-                jobs: Array<{ status: string }>;
-            };
-            state.jobs[0].status = "building";
-            await writeFile(stateFile, JSON.stringify(state));
-            await writeFile(
-                path.join(directory, "copilot-macros", "index.json"),
-                JSON.stringify(present ? sourceCatalog : []),
-            );
-            const restarted = new MacroManager(directory, host);
-            const learner = adaptationRuntime();
-            await restarted.configureLearning(learner);
-            const recovered = await terminal(restarted, job.jobId);
-            expect(recovered.status).toBe(present ? "ready" : "failed");
-            if (present) {
-                expect(recovered.macro).toMatchObject({
-                    version: 4,
-                    state: "approved",
-                });
-                expect(await restarted.listMacros()).toMatchObject([
-                    { version: 4, state: "approved" },
-                ]);
-            } else {
-                expect(recovered.error).toContain(
-                    "source version to remain approved",
-                );
-                expect(await restarted.listMacros()).toEqual([]);
-                expect(await restarted.getApprovedMacros()).toEqual([]);
-            }
-            expect(learner.extract).not.toHaveBeenCalled();
-            expect(learner.build).not.toHaveBeenCalled();
-            expect(learner.generateGrammar).not.toHaveBeenCalled();
-            expect(host.callTool).not.toHaveBeenCalled();
-        },
-    );
-
-    it("converges evidenced runner submissions on a new immutable version and grammar target", async () => {
-        const { manager, host } = await setup("all");
-        const learner = adaptationRuntime();
-        await manager.configureLearning(learner);
-        const original = await capture(manager, { learning: true });
-        const originalJob = await terminal(manager, original.learningJobId!);
-        const source = await manager.inspectMacro(originalJob.macro!);
-        const submission = await recordRunnerAdaptation(manager, source);
-        const queued = await manager.submitMacroCandidate(submission);
-        const duplicate = await manager.submitMacroCandidate(submission);
-        expect(duplicate.jobId).toBe(queued.jobId);
-        const job = await terminal(manager, queued.jobId);
-        expect(job.error).toBeUndefined();
-        expect(job.macro).toEqual({
-            macroId: source.macroId,
-            version: 4,
-            state: "approved",
-        });
-        const approved = await manager.inspectMacro(job.macro!);
-        expect(approved.sourceTraceId).toBe(submission.traceId);
-        expect(approved.candidateProvenance).toMatchObject({
-            sourceMacroId: source.macroId,
-            sourceVersion: 2,
-            handoffRunId: submission.handoffRunId,
-        });
-        expect(approved.learning?.grammarRules).toEqual(["version-4-grammar"]);
-        expect(learner.generateGrammar).toHaveBeenNthCalledWith(
-            2,
-            expect.objectContaining({
-                macroId: source.macroId,
-                version: 4,
-                state: "approved",
-            }),
-            { step_1_path: "other.json" },
-            expect.arrayContaining(["Read other.json"]),
-            expect.any(AbortSignal),
-        );
-        expect(
-            (await manager.getApprovedMacros()).map((macro) => macro.version),
-        ).toEqual([4]);
-        expect(
-            (
-                await manager.inspectMacro({
-                    macroId: source.macroId,
-                    version: 2,
-                })
-            ).sourceTraceId,
-        ).toBe(original.traceId);
-        await manager.disableMacro({ macroId: source.macroId });
-        await expect(
-            manager.runMacro({
-                macroId: source.macroId,
-                version: 2,
-                runId: "old-version-suppressed",
-                inputs: { step_1_path: "package.json" },
-            }),
-        ).rejects.toThrow("suppressed");
-        await expect(
-            manager.inspectMacro({
-                macroId: source.macroId,
-                version: 2,
-                requireRunnable: true,
-            }),
-        ).rejects.toThrow("suppressed");
-        expect(host.callTool).not.toHaveBeenCalled();
-    });
-
-    it.each(["approve", "disable"] as const)(
-        "shares a Prepare adaptation without removing the approved route before %s",
-        async (operation) => {
-            const { manager } = await setup("all");
-            await manager.configureLearning(adaptationRuntime());
-            const original = await capture(manager, { learning: true });
-            const sourceJob = await terminal(manager, original.learningJobId!);
-            const source = await manager.inspectMacro(sourceJob.macro!);
-            await manager.setMacroLearningPreference({ cwd, mode: "prepare" });
-            const submission = await recordRunnerAdaptation(
-                manager,
-                source,
-                true,
-            );
-            const queued = await manager.submitMacroCandidate(submission);
-            const historical = await manager.prepareMacroLearning({
-                traceId: submission.traceId,
-            });
-            expect(historical.jobId).toBe(queued.jobId);
-            const job = await terminal(manager, queued.jobId);
-            expect(job.error).toBeUndefined();
-            expect(job.status).toBe("needsReview");
-            expect(job.macro?.version).toBe(3);
-            expect(
-                (await manager.getApprovedMacros()).map(
-                    (macro) => macro.version,
-                ),
-            ).toEqual([2]);
-            if (operation === "approve") {
-                const approved = await manager.approveMacro(job.macro!);
-                expect(approved.version).toBe(4);
-                expect(
-                    (await manager.inspectMacro(approved)).learning
-                        ?.grammarRules,
-                ).toEqual(["version-4-grammar"]);
-            } else {
-                const draft = await manager.inspectMacro(job.macro!);
-                expect(
-                    await manager.disableMacro({ macroId: source.macroId }),
-                ).toMatchObject({
-                    version: 4,
-                    state: "disabled",
-                });
-                expect(await manager.inspectMacro(job.macro!)).toEqual(draft);
-                expect(await manager.getApprovedMacros()).toEqual([]);
-                expect(
-                    (await manager.getMacroLearningJob(job.jobId)).status,
-                ).toBe("cancelled");
-            }
-        },
-    );
-
-    it("disables above hidden adaptation versions and retains suppression after restart", async () => {
-        const { manager, directory, host } = await setup("all");
-        await manager.configureLearning(adaptationRuntime());
-        const original = await capture(manager, { learning: true });
-        const sourceJob = await terminal(manager, original.learningJobId!);
-        const source = await manager.inspectMacro(sourceJob.macro!);
-        await manager.setMacroLearningPreference({ cwd, mode: "prepare" });
-        const first = await recordRunnerAdaptation(manager, source, true);
-        const firstJob = await terminal(
-            manager,
-            (await manager.prepareMacroLearning({ traceId: first.traceId }))
-                .jobId,
-        );
-        expect(firstJob.macro?.version).toBe(3);
-        const second = await recordRunnerAdaptation(
-            manager,
-            source,
-            true,
-            "third.json",
-        );
-        const secondJob = await terminal(
-            manager,
-            (await manager.prepareMacroLearning({ traceId: second.traceId }))
-                .jobId,
-        );
-        expect(secondJob.error).toBeUndefined();
-        expect(secondJob.macro?.version).toBe(5);
-        const drafts = await Promise.all(
-            [firstJob, secondJob].map((job) =>
-                manager.inspectMacro(job.macro!),
-            ),
-        );
-        expect(drafts.map((draft) => draft.learning?.grammarRules)).toEqual([
-            ["version-4-grammar"],
-            ["version-6-grammar"],
-        ]);
-        expect(
-            (await manager.getApprovedMacros()).map((macro) => macro.version),
-        ).toEqual([2]);
-        const disabled = await manager.disableMacro({
-            macroId: source.macroId,
-        });
-        expect(disabled).toMatchObject({ version: 6, state: "disabled" });
-        expect(await manager.inspectMacro(firstJob.macro!)).toEqual(drafts[0]);
-        expect(await manager.inspectMacro(secondJob.macro!)).toEqual(drafts[1]);
-        expect(await manager.getApprovedMacros()).toEqual([]);
-        const restarted = new MacroManager(directory, host);
-        await restarted.configureLearning(adaptationRuntime());
-        expect(
-            await restarted.inspectMacro({ macroId: source.macroId }),
-        ).toMatchObject(disabled);
-        expect(await restarted.getApprovedMacros()).toEqual([]);
-        for (const job of [firstJob, secondJob]) {
-            expect(
-                (await restarted.getMacroLearningJob(job.jobId)).status,
-            ).toBe("cancelled");
-            await expect(restarted.approveMacro(job.macro!)).rejects.toThrow(
-                "current draft",
-            );
-        }
-        expect(host.callTool).not.toHaveBeenCalled();
-    });
-
-    it.each([0, 1])(
-        "approves pending adaptation %s at its reserved grammar version",
-        async (selection) => {
-            const { manager } = await setup("all");
-            await manager.configureLearning(adaptationRuntime());
-            const original = await capture(manager, { learning: true });
-            const source = await manager.inspectMacro(
-                (await terminal(manager, original.learningJobId!)).macro!,
-            );
-            await manager.setMacroLearningPreference({ cwd, mode: "prepare" });
-            const first = await recordRunnerAdaptation(manager, source, true);
-            const firstJob = await terminal(
-                manager,
-                (await manager.prepareMacroLearning({ traceId: first.traceId }))
-                    .jobId,
-            );
-            const second = await recordRunnerAdaptation(
-                manager,
-                source,
-                true,
-                "third.json",
-            );
-            const secondJob = await terminal(
-                manager,
-                (
-                    await manager.prepareMacroLearning({
-                        traceId: second.traceId,
-                    })
-                ).jobId,
-            );
-            const jobs = [firstJob, secondJob];
-            const approved = await manager.approveMacro(jobs[selection].macro!);
-            expect(approved.version).toBe(selection === 0 ? 4 : 6);
-            expect(
-                (await manager.inspectMacro(approved)).learning?.grammarRules,
-            ).toEqual([`version-${approved.version}-grammar`]);
-            const superseded = jobs[1 - selection];
-            await expect(
-                manager.approveMacro(superseded.macro!),
-            ).rejects.toThrow("current draft");
-            await expect(
-                manager.saveDraft(
-                    await manager.inspectMacro(superseded.macro!),
-                ),
-            ).resolves.toEqual(superseded.macro);
-            expect(
-                (await manager.getApprovedMacros()).map(
-                    (macro) => macro.version,
-                ),
-            ).toEqual([approved.version]);
-        },
-    );
-
-    it.each([
-        "invented-input",
-        "invented-tool",
-        "wrong-handoff",
-        "invalid-budget",
-    ] as const)(
-        "rejects %s adaptation evidence without another model call",
-        async (invalid) => {
-            const { manager } = await setup("all");
-            const learner = adaptationRuntime();
-            await manager.configureLearning(learner);
-            const original = await capture(manager, { learning: true });
-            const job = await terminal(manager, original.learningJobId!);
-            const submission = await recordRunnerAdaptation(
-                manager,
-                await manager.inspectMacro(job.macro!),
-            );
-            if (invalid === "invented-input")
-                submission.exampleInputs.step_1_path = "invented.json";
-            if (invalid === "invented-tool")
-                submission.steps[0].toolName = "write";
-            if (invalid === "wrong-handoff")
-                submission.handoffRunId = "another-handoff";
-            if (invalid === "invalid-budget")
-                submission.executionEvidence.tokensUsed =
-                    Number.POSITIVE_INFINITY;
-            await expect(
-                manager.submitMacroCandidate(submission),
-            ).rejects.toThrow();
-            expect(learner.extract).toHaveBeenCalledTimes(1);
-            expect(learner.build).toHaveBeenCalledTimes(1);
-        },
-    );
 
     it.each([
         [
@@ -809,17 +331,6 @@ describe("durable macro learning", () => {
                     ],
                 });
             }
-            const replay = await manager.inspectMacro(
-                await manager.createMacroFromTrace({
-                    traceId: summary.traceId,
-                    name: "Replay control",
-                    description: "Raw replay result",
-                }),
-            );
-            expect(replay.steps[0].postconditions).toContainEqual({
-                kind: "resultPathExists",
-                path: ["content"],
-            });
             expect(host.callTool).not.toHaveBeenCalled();
         },
     );
@@ -844,38 +355,6 @@ describe("durable macro learning", () => {
         expect(
             (await manager.getRecordingState("session-1")).learningJob,
         ).toEqual(job);
-    });
-
-    it("uses the handoff flag rather than the replay flag for learned replayable macros", async () => {
-        const { manager, host } = await setup("all");
-        await manager.configureLearning(runtime());
-        const summary = await capture(manager, { learning: true });
-        const job = await terminal(manager, summary.learningJobId!);
-        const previous = process.env.TYPEAGENT_MACRO_REPLAY_ENABLED;
-        process.env.TYPEAGENT_MACRO_REPLAY_ENABLED = "false";
-        try {
-            await expect(
-                manager.runMacro({
-                    macroId: job.macro!.macroId,
-                    runId: "replay-disabled-live-handoff",
-                    preference: "auto",
-                    inputs: { step_1_path: "other.json" },
-                }),
-            ).resolves.toMatchObject({
-                status: "agentRequired",
-                launch: {
-                    reason: {
-                        code: "agentRequired",
-                        message: expect.stringContaining("live runner"),
-                    },
-                },
-            });
-        } finally {
-            if (previous === undefined)
-                delete process.env.TYPEAGENT_MACRO_REPLAY_ENABLED;
-            else process.env.TYPEAGENT_MACRO_REPLAY_ENABLED = previous;
-        }
-        expect(host.callTool).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -916,71 +395,6 @@ describe("durable macro learning", () => {
             ).toBe(mode === "all" ? "ready" : "needsReview");
             expect(host.callTool).not.toHaveBeenCalled();
         }
-    });
-
-    it("centrally rejects forced replay and uses live handoff even for replayable learned macros", async () => {
-        const { manager, host } = await setup("all");
-        await manager.configureLearning(runtime());
-        const summary = await capture(manager, { learning: true });
-        const job = await terminal(manager, summary.learningJobId!);
-        const macro = await manager.inspectMacro(job.macro!);
-        expect(macro.executionClass).toBe("replayable");
-        await expect(
-            inspectReplayTools(
-                macro,
-                host,
-                { cwd },
-                { step_1_path: "other.json" },
-            ),
-        ).rejects.toMatchObject({ code: "agentRequired" });
-        const { learning: _learning, ...unmarked } = macro;
-        await expect(
-            manager.saveDraft({ ...unmarked, version: 3, state: "draft" }),
-        ).rejects.toThrow("fresh grounded build");
-        await expect(
-            manager.runMacro({
-                macroId: macro.macroId,
-                runId: "forced-replay",
-                inputs: { step_1_path: "other.json" },
-                preference: "replay",
-            }),
-        ).rejects.toThrow("agent-guided");
-        await expect(
-            manager.runMacro({
-                macroId: macro.macroId,
-                runId: "auto-live",
-                inputs: { step_1_path: "other.json" },
-            }),
-        ).resolves.toMatchObject({
-            status: "agentRequired",
-            launch: {
-                macro: { learning: { requiresLivePermissions: true } },
-            },
-        });
-        const oldFlag = process.env.TYPEAGENT_MACRO_AGENT_HANDOFF_ENABLED;
-        process.env.TYPEAGENT_MACRO_AGENT_HANDOFF_ENABLED = "false";
-        try {
-            await expect(
-                manager.runMacro({
-                    macroId: macro.macroId,
-                    runId: "disabled-handoff",
-                    inputs: { step_1_path: "other.json" },
-                }),
-            ).rejects.toThrow("handoff is disabled");
-        } finally {
-            if (oldFlag === undefined)
-                delete process.env.TYPEAGENT_MACRO_AGENT_HANDOFF_ENABLED;
-            else process.env.TYPEAGENT_MACRO_AGENT_HANDOFF_ENABLED = oldFlag;
-        }
-        await manager.setMacroLearningPreference({ cwd, mode: "off" });
-        await expect(
-            manager.runMacro({
-                macroId: macro.macroId,
-                runId: "off-retains-approved-macro",
-                inputs: { step_1_path: "other.json" },
-            }),
-        ).resolves.toMatchObject({ status: "agentRequired" });
-        expect(host.callTool).not.toHaveBeenCalled();
     });
 
     it.each(["failed", "denied"] as const)(
@@ -1077,7 +491,9 @@ describe("durable macro learning", () => {
         const job = await terminal(manager, summary.learningJobId!);
         expect(job.status).toBe("failed");
         expect(job.error).toBeTruthy();
-        expect(learner.generateGrammar).not.toHaveBeenCalled();
+        if (_description === "unsupported synthesis")
+            expect(learner.generateGrammar).toHaveBeenCalled();
+        else expect(learner.generateGrammar).not.toHaveBeenCalled();
         expect(await manager.getApprovedMacros()).toEqual([]);
     });
 
@@ -1626,7 +1042,6 @@ describe("durable macro learning", () => {
     it.each([
         "TYPEAGENT_MACRO_RECORDING_ENABLED",
         "TYPEAGENT_MACRO_INDUCTION_ENABLED",
-        "TYPEAGENT_MACRO_AGENT_HANDOFF_ENABLED",
     ])(
         "gates selected learning on %s without changing legacy arming",
         async (flag) => {

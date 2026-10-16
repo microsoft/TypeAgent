@@ -11,23 +11,16 @@ import type {
     MacroLearningMode,
     MacroLearningPreference,
     MacroLearningRuntime,
-    MacroCandidateProvenance,
     MacroVersionRef,
     RecordedInteractionTrace,
     ReplayToolHost,
 } from "./contracts.js";
+import { induceMacroFromTrace } from "./macroDefinition.js";
 import { getMacroFeatures } from "./macroFeatures.js";
 import {
     parseMacroExecutionRecipe,
     parseMacroLearningBuild,
 } from "./macroLearningParsers.js";
-import { induceMacroFromTrace } from "./macroDefinition.js";
-import { redactTraceValue } from "./redaction.js";
-import {
-    learningToolResult,
-    cloneVerifiedLearningTrace,
-} from "./resultEvidence.js";
-import { setMacroCapabilities } from "./resultPath.js";
 import {
     assertLearningBuild,
     assertLearningGrammar,
@@ -35,20 +28,22 @@ import {
     assertLearningTrace,
     learningValuesEqual,
 } from "./macroLearningValidation.js";
+import { validateRecipeArtifact } from "./recipeValidation.js";
+import { redactTraceValue } from "./redaction.js";
+import {
+    cloneVerifiedLearningTrace,
+    learningToolResult,
+} from "./resultEvidence.js";
+import { setMacroCapabilities } from "./resultPath.js";
 
 interface StoredJob extends MacroLearningJob {
     fingerprint: string;
     preferenceRevision: number;
     recipe?: MacroExecutionRecipe;
     draft?: CopilotToolMacro;
-    attempts: Partial<Record<"extract" | "build" | "grammar", number>>;
-    target?: MacroLearningTarget;
-}
-
-export interface MacroLearningTarget {
-    macroId: string;
-    version: number;
-    provenance: MacroCandidateProvenance;
+    attempts: Partial<
+        Record<"extract" | "build" | "grammar" | "program", number>
+    >;
 }
 
 interface LearningState {
@@ -125,6 +120,7 @@ export class MacroLearningEngine {
             );
         if (
             !runtime ||
+            typeof runtime.buildProgram !== "function" ||
             typeof runtime.extract !== "function" ||
             typeof runtime.build !== "function" ||
             typeof runtime.generateGrammar !== "function" ||
@@ -172,13 +168,9 @@ export class MacroLearningEngine {
                 "Learning is off; load and select a learning preference before recording.",
             );
         }
-        if (
-            !features.recording ||
-            !features.induction ||
-            !features.agentHandoff
-        ) {
+        if (!features.recording || !features.induction) {
             throw new Error(
-                "Learning recording, induction, and live runner handoff must be enabled.",
+                "Learning recording and induction must be enabled.",
             );
         }
     }
@@ -234,7 +226,6 @@ export class MacroLearningEngine {
     async prepare(
         traceId: string,
         selectedRecording = false,
-        target?: MacroLearningTarget,
     ): Promise<MacroLearningJob> {
         await this.load();
         const trace = await this.catalog.readTrace(traceId);
@@ -268,15 +259,6 @@ export class MacroLearningEngine {
                     (item.traceId === traceId && item.cwd === cwd),
             );
             if (existing) {
-                if (
-                    target &&
-                    (existing.target?.macroId ?? existing.jobId) !==
-                        target.macroId
-                ) {
-                    throw new Error(
-                        "This trace already belongs to a different learning producer.",
-                    );
-                }
                 job = existing;
                 return;
             }
@@ -293,18 +275,6 @@ export class MacroLearningEngine {
                 );
             }
             const now = new Date().toISOString();
-            if (target) {
-                target = {
-                    ...target,
-                    version: this.state!.jobs.reduce(
-                        (version, existing) =>
-                            existing.target?.macroId === target!.macroId
-                                ? Math.max(version, existing.target.version + 2)
-                                : version,
-                        target.version,
-                    ),
-                };
-            }
             job = {
                 jobId: digest({ traceId, cwd }),
                 traceId,
@@ -318,7 +288,6 @@ export class MacroLearningEngine {
                 createdAt: now,
                 updatedAt: now,
                 ...(sourceError ? { error: sourceError.slice(0, 2_000) } : {}),
-                ...(target ? { target: structuredClone(target) } : {}),
             };
             this.state!.jobs.push(job);
             if (selectedRecording) {
@@ -379,9 +348,7 @@ export class MacroLearningEngine {
                 this.state!.suppressedMacroIds.push(macro.macroId);
             }
             for (const related of this.state!.jobs) {
-                if (
-                    (related.target?.macroId ?? related.jobId) === macro.macroId
-                ) {
+                if (related.jobId === macro.macroId) {
                     if (!this.state!.suppressed.includes(related.fingerprint)) {
                         this.state!.suppressed.push(related.fingerprint);
                     }
@@ -458,9 +425,7 @@ export class MacroLearningEngine {
             if (
                 job.status === "cancelled" ||
                 this.state!.suppressed.includes(job.fingerprint) ||
-                this.state!.suppressedMacroIds.includes(
-                    job.target?.macroId ?? job.jobId,
-                )
+                this.state!.suppressedMacroIds.includes(job.jobId)
             ) {
                 return;
             }
@@ -494,9 +459,7 @@ export class MacroLearningEngine {
         if (
             job.status === "cancelled" ||
             this.state!.suppressed.includes(job.fingerprint) ||
-            this.state!.suppressedMacroIds.includes(
-                job.target?.macroId ?? job.jobId,
-            )
+            this.state!.suppressedMacroIds.includes(job.jobId)
         ) {
             throw new Error("Learning job is cancelled or suppressed.");
         }
@@ -553,7 +516,7 @@ export class MacroLearningEngine {
 
     private async stage<T>(
         job: StoredJob,
-        stage: "extract" | "build" | "grammar",
+        stage: "extract" | "build" | "grammar" | "program",
         operation: (signal: AbortSignal) => Promise<T>,
     ): Promise<T> {
         this.check(job);
@@ -567,13 +530,14 @@ export class MacroLearningEngine {
         let timer: ReturnType<typeof setTimeout> | undefined;
         const controller = this.controller!;
         let timedOut = false;
+        const timeoutMs = stage === "program" ? 120_000 : 30_000;
         let abort!: () => void;
         const interrupted = new Promise<never>((_resolve, reject) => {
             abort = () =>
                 reject(
                     timedOut
                         ? new LearningDeadlineExceeded(
-                              `Learning ${stage} exceeded its 30s deadline.`,
+                              `Learning ${stage} exceeded its ${timeoutMs / 1000}s deadline.`,
                           )
                         : new Error(`Learning ${stage} was cancelled.`),
                 );
@@ -581,7 +545,7 @@ export class MacroLearningEngine {
             timer = setTimeout(() => {
                 timedOut = true;
                 controller.abort();
-            }, 30_000);
+            }, timeoutMs);
         });
         try {
             controller.signal.throwIfAborted();
@@ -598,8 +562,8 @@ export class MacroLearningEngine {
     }
 
     private async process(job: StoredJob): Promise<void> {
-        const macroId = job.target?.macroId ?? job.jobId;
-        const draftVersion = job.target?.version ?? 1;
+        const macroId = job.jobId;
+        const draftVersion = 1;
         const existing = await this.catalog.readVersion(
             macroId,
             draftVersion + 1,
@@ -665,11 +629,6 @@ export class MacroLearningEngine {
                     this.replayHost,
                 );
                 macro.version = draftVersion;
-                if (job.target) {
-                    macro.candidateProvenance = structuredClone(
-                        job.target.provenance,
-                    );
-                }
                 signal.throwIfAborted();
                 const build = parseMacroLearningBuild(
                     await this.runtime!.build(
@@ -690,7 +649,9 @@ export class MacroLearningEngine {
                     )
                         ? "replayable"
                         : "agentRequired",
-                    warnings: [],
+                    warnings: (build.unsupportedOutputs ?? []).map(
+                        (output) => `Program author must resolve: ${output}`,
+                    ),
                 };
                 setMacroCapabilities(draft);
                 assertLearningBuild(build, draft, trace);
@@ -731,6 +692,26 @@ export class MacroLearningEngine {
                 exampleInputs: baseline.build.exampleInputs,
                 requests: baseline.build.requests,
             };
+            {
+                const program = await this.stage(job, "program", (signal) =>
+                    this.runtime!.buildProgram(
+                        structuredClone(baseline.draft),
+                        cloneVerifiedLearningTrace(trace, job.traceId),
+                        signal,
+                    ),
+                );
+                const invalid = validateRecipeArtifact(program);
+                if (
+                    invalid.length ||
+                    program.recipeId !== macroId ||
+                    program.provenance.legacySource?.macroId !== macroId
+                )
+                    throw new Error(
+                        `Recorded program validation failed: ${invalid.map((issue) => issue.message).join("; ") || "macro identity mismatch"}`,
+                    );
+                baseline.draft.executionKind = "program";
+                baseline.draft.program = program;
+            }
             await this.update(() => {
                 job.draft = structuredClone(baseline.draft);
             });
@@ -826,7 +807,6 @@ export class MacroLearningEngine {
             fingerprint: _fingerprint,
             preferenceRevision: _revision,
             attempts: _attempts,
-            target: _target,
             ...publicJob
         } = job;
         return structuredClone(publicJob);

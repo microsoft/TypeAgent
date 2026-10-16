@@ -8,6 +8,184 @@ import { FileMemoryService } from "../src/fileMemoryService.js";
 import { getConfiguredMemoryViewOptions } from "../src/viewHostOptions.js";
 import { runMemoryViewsCli } from "../src/memoryViewsCli.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { selectIndexedFragments } from "../src/indexedFragments.js";
+import { waitForMemoryJob } from "../src/rpcFacade.js";
+import type { IndexedFragmentRequest } from "../src/types.js";
+import type { ViewSynthesisOutput } from "../src/viewTypes.js";
+
+class DeadlineCorpusIndex extends FakeSemanticCorpusIndex {
+    public async readFragments(request: IndexedFragmentRequest) {
+        return selectIndexedFragments(
+            this.documents.map((document) => ({
+                sourceId: document.source.sourceId,
+                revisionId: document.revision.revisionId,
+                blockOrdinal: 0,
+                text: document.content,
+                score: 1,
+            })),
+            request,
+        );
+    }
+}
+
+test.each([
+    { family: "wiki", elapsedMs: undefined },
+    { family: "projects", elapsedMs: undefined },
+    { family: "wiki", elapsedMs: 20 },
+    { family: "projects", elapsedMs: 20 },
+] as const)(
+    "normal host $family target enforces its actual elapsed envelope ($elapsedMs)",
+    async ({ family, elapsedMs }) => {
+        const root = await mkdtemp(
+            path.join(process.cwd(), ".memory-host-deadline-"),
+        );
+        let entered!: () => void;
+        const generating = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        let targetSignal: AbortSignal | undefined;
+        const validate = import.meta.jest.fn();
+        const service = new FileMemoryService(root, {
+            ...getConfiguredMemoryViewOptions({}),
+            sourceSynopses: false,
+            ...(elapsedMs === undefined
+                ? {}
+                : {
+                      informationalBudget: {
+                          inputTokens: 16000,
+                          outputTokens: 4000,
+                          safetyTokens: 1000,
+                          chatAttempts: 2,
+                          reservedTokens: 160000,
+                          embeddingAttempts: 128,
+                          elapsedMs,
+                          tokenizer: "synthetic",
+                          countTokens: (text: string) => text.length,
+                      },
+                  }),
+            indexFactory: (_id, directory) =>
+                new DeadlineCorpusIndex(directory),
+            viewSynthesisAdapter: {
+                identity: "offline-host-deadline",
+                generate: async (_input, signal) => {
+                    targetSignal = signal;
+                    entered();
+                    return new Promise<ViewSynthesisOutput>(() => undefined);
+                },
+                validate,
+            },
+        });
+        try {
+            const { corpusId } = await service.createCorpus("Elapsed envelope");
+            const source = await service.ingestDocument({
+                corpusId,
+                source: {
+                    sourceId: "source",
+                    sourceType: "text",
+                    title: "Acquisition",
+                    text: "Acquisition preserves approval boundaries.",
+                },
+            });
+            expect((await waitForMemoryJob(service, source.jobId)).state).toBe(
+                "complete",
+            );
+            const head = (await service.listViews(corpusId)).head;
+            const retrieval = {
+                query: "acquisition",
+                aliases: [],
+                excludedSourceIds: [],
+            };
+            import.meta.jest.useFakeTimers({
+                doNotFake: ["nextTick", "setImmediate", "performance"],
+            });
+            const admitted = await service.buildViews({
+                corpusId,
+                expectedHead: head,
+                targets: [
+                    {
+                        expectedVersion: 0,
+                        definition: {
+                            viewId: "deadline-target",
+                            kind: family === "wiki" ? "wiki" : "projectBrief",
+                            selector: {
+                                kind: "sources",
+                                sources: [
+                                    {
+                                        sourceId: source.sourceId,
+                                        revisionId: source.revisionId,
+                                    },
+                                ],
+                            },
+                            ...(family === "wiki"
+                                ? {
+                                      wiki: {
+                                          ...retrieval,
+                                          construction:
+                                              "informational-wiki-v1" as const,
+                                      },
+                                  }
+                                : {
+                                      projectSummary: {
+                                          ...retrieval,
+                                          construction:
+                                              "informational-project-summary-v1" as const,
+                                      },
+                                  }),
+                        },
+                    },
+                ],
+            });
+            await generating;
+            const timeoutMs = elapsedMs ?? 3_000_000;
+            const beforeDeadline = elapsedMs === undefined ? 120_001 : 19;
+            await import.meta.jest.advanceTimersByTimeAsync(beforeDeadline);
+            expect(targetSignal?.aborted).toBe(false);
+            expect((await service.getViewBuild(admitted))?.state).toBe(
+                "running",
+            );
+            await import.meta.jest.advanceTimersByTimeAsync(
+                timeoutMs - beforeDeadline - 1,
+            );
+            expect(targetSignal?.aborted).toBe(false);
+            expect((await service.getViewBuild(admitted))?.state).toBe(
+                "running",
+            );
+            await import.meta.jest.advanceTimersByTimeAsync(1);
+            expect(targetSignal?.aborted).toBe(true);
+            import.meta.jest.useRealTimers();
+            let completed = await service.getViewBuild(admitted);
+            for (
+                let attempts = 0;
+                completed?.state === "running" && attempts < 1000;
+                attempts++
+            ) {
+                await new Promise((resolve) => setTimeout(resolve, 10));
+                completed = await service.getViewBuild(admitted);
+            }
+            expect(completed).toMatchObject({
+                state: "failed",
+                results: [
+                    {
+                        state: "failed",
+                        reason: `Evidence-first synthesis exceeded ${timeoutMs / 1000} second limit`,
+                        snapshot: {
+                            pipeline:
+                                family === "wiki"
+                                    ? "informational-wiki-v1"
+                                    : "informational-project-summary-v1",
+                        },
+                    },
+                ],
+            });
+            expect(validate).not.toHaveBeenCalled();
+            expect((await service.listViews(corpusId)).views).toEqual([]);
+        } finally {
+            import.meta.jest.useRealTimers();
+            await service.close();
+            await rm(root, { recursive: true, force: true });
+        }
+    },
+);
 
 test("shared host options ignore rehearsal variables and preserve explicit YAML/environment disablement", () => {
     expect(getConfiguredMemoryViewOptions({})).toEqual({

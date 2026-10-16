@@ -331,10 +331,36 @@ export class MemoryBatchStore {
     >();
     private readonly writes = new Map<string, Promise<void>>();
     private readonly forgettingSources = new Set<string>();
+    private readonly maintenanceHolds = new Map<string, string>();
     public constructor(
         private readonly root: string,
         private readonly host: BatchHost,
+        private readonly onCorpusSettled?: (corpusId: string) => void,
     ) {}
+
+    public hasActiveImports(corpusId: string): boolean {
+        return [...this.maintenanceHolds.values()].includes(corpusId);
+    }
+
+    private releaseMaintenance(batch: StoredBatch): void {
+        if (
+            this.maintenanceHolds.delete(batch.batchId) &&
+            !this.hasActiveImports(batch.corpusId)
+        )
+            this.onCorpusSettled?.(batch.corpusId);
+    }
+
+    private async persistAndLaunch(batch: StoredBatch): Promise<void> {
+        // Hold before the durable admission write, not after ingestion starts.
+        this.maintenanceHolds.set(batch.batchId, batch.corpusId);
+        try {
+            await this.persist(batch);
+        } catch (error) {
+            this.releaseMaintenance(batch);
+            throw error;
+        }
+        this.launch(batch);
+    }
 
     private file(batchId: string): string {
         if (!/^[a-f0-9]{64}$/.test(batchId))
@@ -614,8 +640,7 @@ export class MemoryBatchStore {
             (member) => member.state === "duplicate",
         ))
             this.releaseAcquiredContent(batch, member);
-        await this.persist(batch);
-        this.launch(batch);
+        await this.persistAndLaunch(batch);
         return this.get(batchId);
     }
 
@@ -636,6 +661,8 @@ export class MemoryBatchStore {
                 }
                 await this.persist(batch);
             })
+            // A failed terminal checkpoint stays held until retry or recovery.
+            .then(() => this.releaseMaintenance(batch))
             .finally(() => this.active.delete(batch.batchId));
         this.active.set(batch.batchId, { controller, task, batch });
         void task.catch(() => undefined);
@@ -793,6 +820,15 @@ export class MemoryBatchStore {
     }
 
     public async retry(batchId: string): Promise<MemoryBatchImport> {
+        const task = this.admissions.then(() => this.retryAdmitted(batchId));
+        this.admissions = task.then(
+            () => undefined,
+            () => undefined,
+        );
+        return task;
+    }
+
+    private async retryAdmitted(batchId: string): Promise<MemoryBatchImport> {
         if (this.active.has(batchId)) throw new Error("Batch is still running");
         if (this.active.size >= 4)
             throw new Error(
@@ -827,10 +863,10 @@ export class MemoryBatchStore {
             throw new Error(
                 "Forgotten-source members require newly acquired content before retry",
             );
+        if (!retryable.length) return this.get(batchId);
         for (const member of retryable) member.state = "pending";
         batch.state = "running";
-        await this.persist(batch);
-        this.launch(batch);
+        await this.persistAndLaunch(batch);
         return this.get(batchId);
     }
 

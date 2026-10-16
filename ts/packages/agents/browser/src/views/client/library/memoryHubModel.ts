@@ -18,6 +18,7 @@ export type HubRoute = {
     corpusId?: string;
     objectId?: string;
     viewRevisionId?: string;
+    viewPageId?: string;
     activityKind?: "view-build";
     webView?: "analytics" | "entities" | "topics";
     webEntity?: string;
@@ -66,6 +67,11 @@ export function parseRoute(hash: string): HubRoute {
         ...(page === "views" && parts[3] === "revision" && parts[4]
             ? { viewRevisionId: parts[4] }
             : {}),
+        ...(page === "views" && parts[3] === "page" && parts[4]
+            ? { viewPageId: parts[4] }
+            : page === "views" && parts[5] === "page" && parts[6]
+              ? { viewPageId: parts[6] }
+              : {}),
         ...(page === "activity" && parts[3] === "view-build"
             ? { activityKind: "view-build" as const }
             : {}),
@@ -99,6 +105,9 @@ export function routeHash(route: HubRoute): string {
                       route.objectId,
                       ...(route.page === "views" && route.viewRevisionId
                           ? ["revision", route.viewRevisionId]
+                          : []),
+                      ...(route.page === "views" && route.viewPageId
+                          ? ["page", route.viewPageId]
                           : []),
                       ...(route.page === "activity" && route.activityKind
                           ? [route.activityKind]

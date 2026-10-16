@@ -83,7 +83,7 @@ export async function createVSCODESchemaGen(
 }
 
 async function genActionSchemaForNode(jsonNode: any, verbose: boolean = false) {
-    const model = openai.createChatModel("GPT_4_O");
+    const model = openai.createChatModel("GPT_6_LUNA");
     const prompt = `
 You will be provided with a single JSON node representing a VSCode action. Your task is to generate a TypeScript type definition that meets the following rules:
 

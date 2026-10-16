@@ -48,12 +48,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         name: Install pnpm
         with:
           package_json_file: ts/package.json
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: "pnpm"
@@ -408,20 +408,17 @@ jobs:
              '.rollbacks |= with_entries(select(.value.timestamp >= $th))' \
              "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
 
-          echo "resolved=$TOTAL_RESOLVED" >> "$GITHUB_OUTPUT"
-          echo "blocked=$TOTAL_BLOCKED" >> "$GITHUB_OUTPUT"
-          echo "no_patch=$TOTAL_NO_PATCH" >> "$GITHUB_OUTPUT"
-          echo "deferred=$TOTAL_DEFERRED" >> "$GITHUB_OUTPUT"
-          echo "min_release_age_days=$MIN_AGE_DAYS" >> "$GITHUB_OUTPUT"
-          echo "failed=$TOTAL_FAILED" >> "$GITHUB_OUTPUT"
-          echo "skipped=$TOTAL_SKIPPED" >> "$GITHUB_OUTPUT"
-          echo "applied_packages=$ALL_APPLIED" >> "$GITHUB_OUTPUT"
-          echo "rolled_back_packages=$ALL_ROLLED_BACK" >> "$GITHUB_OUTPUT"
-          echo "skipped_packages=$ALL_SKIPPED_RECENT_ROLLBACK" >> "$GITHUB_OUTPUT"
-          echo "blocked_packages=$ALL_BLOCKED_PACKAGES" >> "$GITHUB_OUTPUT"
-          echo "no_patch_packages=$ALL_NO_PATCH_PACKAGES" >> "$GITHUB_OUTPUT"
-          echo "deferred_packages=$ALL_DEFERRED_PACKAGES" >> "$GITHUB_OUTPUT"
-          echo "failed_workspaces=$ALL_FAILED_WORKSPACES" >> "$GITHUB_OUTPUT"
+          export FIX_RESOLVED="$TOTAL_RESOLVED" FIX_BLOCKED="$TOTAL_BLOCKED"
+          export FIX_NO_PATCH="$TOTAL_NO_PATCH" FIX_DEFERRED="$TOTAL_DEFERRED"
+          export FIX_MIN_RELEASE_AGE_DAYS="$MIN_AGE_DAYS" FIX_FAILED="$TOTAL_FAILED"
+          export FIX_SKIPPED="$TOTAL_SKIPPED" FIX_APPLIED_PACKAGES="$ALL_APPLIED"
+          export FIX_ROLLED_BACK_PACKAGES="$ALL_ROLLED_BACK"
+          export FIX_SKIPPED_PACKAGES="$ALL_SKIPPED_RECENT_ROLLBACK"
+          export FIX_BLOCKED_PACKAGES="$ALL_BLOCKED_PACKAGES"
+          export FIX_NO_PATCH_PACKAGES="$ALL_NO_PATCH_PACKAGES"
+          export FIX_DEFERRED_PACKAGES="$ALL_DEFERRED_PACKAGES"
+          export FIX_FAILED_WORKSPACES="$ALL_FAILED_WORKSPACES"
+          node "$GITHUB_WORKSPACE/ts/tools/scripts/remediationReport.mjs" outputs
 
           cd "$GITHUB_WORKSPACE"
           if git diff --quiet; then
@@ -477,28 +474,23 @@ jobs:
           private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
 
       - name: Create pull request
+        id: pr
         if: ${{ steps.fix.outputs.changes == 'true' && steps.build.outputs.build_ok == 'true' }}
         env:
           GH_TOKEN: ${{ steps.app-token-pr.outputs.token }}
+          REMEDIATION_OUTPUTS: ${{ toJSON(steps.fix.outputs) }}
+          REMEDIATION_SHELL_OK: ${{ steps.shell.outputs.shell_ok }}
+          REMEDIATION_CHAIN_FILE: /tmp/all-blocked-chains.txt
         run: |
-          BRANCH="automated/fix-dependabot-alerts-$(date +%Y%m%d)-${{ github.run_number }}"
+          BRANCH="automated/fix-dependabot-alerts-$(date +%Y%m%d)-$GITHUB_RUN_NUMBER"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git checkout -b "$BRANCH"
           git add -A
-          git commit -m "fix: remediate Dependabot security alerts
-
-          Automated by fix-dependabot-alerts workflow.
-
-          Applied:${{ steps.fix.outputs.applied_packages }}
-          Rolled back:${{ steps.fix.outputs.rolled_back_packages || ' (none)' }}
-          Blocked: ${{ steps.fix.outputs.blocked }} package(s)
-          Deferred (min release age): ${{ steps.fix.outputs.deferred || '0' }} package(s)
-          Shell packaging: ${{ steps.shell.outputs.shell_ok == 'true' && 'passed' || 'skipped' }}
-
-          Co-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          node "$GITHUB_WORKSPACE/ts/tools/scripts/remediationReport.mjs" files
+          git commit -F "$RUNNER_TEMP/remediation-commit.txt"
 
           git push origin "$BRANCH"
 
@@ -522,115 +514,21 @@ jobs:
             done
           fi
 
-          # Build PR body from step outputs
-          APPLIED="${{ steps.fix.outputs.applied_packages }}"
-          ROLLED="${{ steps.fix.outputs.rolled_back_packages }}"
-          RESOLVED="${{ steps.fix.outputs.resolved }}"
-          BLOCKED="${{ steps.fix.outputs.blocked }}"
-          FAILED="${{ steps.fix.outputs.failed }}"
-          BLOCKED_PKGS="${{ steps.fix.outputs.blocked_packages }}"
-          NO_PATCH_PKGS="${{ steps.fix.outputs.no_patch_packages }}"
-          DEFERRED_PKGS="${{ steps.fix.outputs.deferred_packages }}"
-          DEFER_AGE="${{ steps.fix.outputs.min_release_age_days }}"
-
-          BODY=$(cat <<'PREOF'
-          ## Automated Dependabot Alert Remediation
-
-          This PR was automatically generated by the `fix-dependabot-alerts` workflow.
-          Each fix was applied individually and build-verified before inclusion.
-
-          ### Summary
-          PREOF
-          )
-
-          BODY="$BODY
-          - **Applied ($RESOLVED):**$APPLIED
-          - **Blocked ($BLOCKED):**${BLOCKED_PKGS:- (none)}
-          - **No patch available (${{ steps.fix.outputs.no_patch }}):**${NO_PATCH_PKGS:- (none)}
-          - **Deferred — fix not yet ${DEFER_AGE:-7} days old (${{ steps.fix.outputs.deferred || '0' }}):**${DEFERRED_PKGS:- (none)}
-          - **Rolled back ($FAILED):**${ROLLED:- (none)}
-          - **Skipped (recent rollback, ${{ steps.fix.outputs.skipped }}):**${{ steps.fix.outputs.skipped_packages || ' (none)' }}
-          - **Workspaces with analysis failures:**${{ steps.fix.outputs.failed_workspaces && format(' {0}', steps.fix.outputs.failed_workspaces) || ' (none)' }}
-          - **Build:** ✅ Passed
-          - **Shell packaging:** ${{ steps.shell.outputs.shell_ok == 'true' && '✅ Passed' || '⚠️ Skipped' }}
-
-          > _Note: the analysis source (\`fix-dependabot-alerts.mjs\`) is broader than the GitHub Dependabot REST API — it also audits the lockfile directly. Some packages listed above may not have a corresponding open Dependabot alert, and vice versa._
-          "
-
-          # Explain deferred fixes when present so a waiting security fix isn't
-          # mistaken for a missing one.
-          if [ "${{ steps.fix.outputs.deferred || '0' }}" -gt 0 ]; then
-            BODY="$BODY
-          > _⏸ Deferred fixes require a package version that has been published for at least ${DEFER_AGE:-7} days (enforced by pnpm's \`minimumReleaseAge\` and the org release-age policy). They are intentionally **not** applied yet and will be picked up automatically on a later run once a qualifying version matures._
-          "
-          fi
-
-          # Embed dependency chain output for blocked packages so reviewers
-          # can see why each package couldn't be auto-fixed.
-          if [ -s /tmp/all-blocked-chains.txt ]; then
-            CHAINS=$(cat /tmp/all-blocked-chains.txt)
-            BODY="$BODY
-          ### Why blocked packages couldn't be auto-fixed
-          <details><summary>Dependency chains (\`--show-chains\` output)</summary>
-
-          \`\`\`
-          $CHAINS
-          \`\`\`
-
-          </details>
-          "
-          fi
-
-          BODY="$BODY
-          ### How this works
-          1. Analyses all open Dependabot alerts
-          2. Applies each fix **individually** with build verification
-          3. Rolls back any fix that breaks the build
-          4. Only passing fixes are included in this PR
-
-          ### Review checklist
-          - [ ] Check that no breaking changes were introduced
-          - [ ] Verify rolled-back packages are investigated separately
-          - [ ] Run tests locally if concerned about specific packages"
-
           gh pr create \
             --base main \
             --head "$BRANCH" \
             --title "fix: remediate Dependabot security alerts ($(date +%Y-%m-%d))" \
-            --body "$BODY" \
+            --body-file "$RUNNER_TEMP/remediation-pr.md" \
             --label "dependencies,security"
 
       # ── Summary ─────────────────────────────────────────────────────
       - name: Job summary
         if: always()
+        env:
+          REMEDIATION_OUTPUTS: ${{ toJSON(steps.fix.outputs) }}
+          REMEDIATION_SHELL_OK: ${{ steps.shell.outputs.shell_ok }}
+          REMEDIATION_DRY_RUN: ${{ inputs.dry-run }}
+          REMEDIATION_FIX_OUTCOME: ${{ steps.fix.outcome }}
+          REMEDIATION_PR_CREATED: ${{ steps.pr.outcome == 'success' }}
         run: |
-          echo "## Dependabot Alert Remediation" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Metric | Count |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Applied | ${{ steps.fix.outputs.resolved || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Blocked | ${{ steps.fix.outputs.blocked || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| No patch available | ${{ steps.fix.outputs.no_patch || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Deferred (min release age) | ${{ steps.fix.outputs.deferred || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Rolled back | ${{ steps.fix.outputs.failed || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ -n "${{ steps.fix.outputs.applied_packages }}" ]; then
-            echo "**Applied:**${{ steps.fix.outputs.applied_packages }}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          if [ -n "${{ steps.fix.outputs.rolled_back_packages }}" ]; then
-            echo "**Rolled back:**${{ steps.fix.outputs.rolled_back_packages }}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          if [ -n "${{ steps.fix.outputs.deferred_packages }}" ]; then
-            echo "**⏸ Deferred (waiting for minimum release age):** ${{ steps.fix.outputs.deferred_packages }}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          if [ -n "${{ steps.fix.outputs.failed_workspaces }}" ]; then
-            echo "**⚠️ Analysis failed for workspaces:** ${{ steps.fix.outputs.failed_workspaces }}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${{ steps.fix.outputs.changes }}" == "true" ]; then
-            echo "✅ Changes applied and PR created" >> "$GITHUB_STEP_SUMMARY"
-          elif [ "${{ inputs.dry-run }}" == "true" ]; then
-            echo "ℹ️ Dry run — no changes applied" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "ℹ️ No fixable alerts found" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          node "$GITHUB_WORKSPACE/ts/tools/scripts/remediationReport.mjs" summary

@@ -176,11 +176,11 @@ async function main() {
     reducer.removeDivs = false;
 
     // Initialize LLM
-    console.log("Initializing LLM (GPT_4_O_MINI)...");
-    const apiSettings = ai.azureApiSettingsFromEnv(
+    console.log("Initializing LLM (GPT_6_LUNA)...");
+    const apiSettings = ai.apiSettingsFromEnv(
         ai.ModelType.Chat,
         undefined,
-        "GPT_4_O_MINI",
+        "GPT_6_LUNA",
     );
     const model = ai.createChatModel(apiSettings);
 

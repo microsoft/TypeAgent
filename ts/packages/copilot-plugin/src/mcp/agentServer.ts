@@ -16,23 +16,25 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { Dispatcher, IAgentMessage } from "@typeagent/agent-server-client";
 import type { DisplayAppendMode } from "@typeagent/agent-sdk";
-import {
-    createClientIO,
-    connectToTypeAgent,
-    formatPendingNaturalLanguageInteraction,
-    submitCancellableCommand,
-    TYPEAGENT_URL,
-} from "../shared/typeagent-client.js";
+import type {
+    Dispatcher,
+    IAgentMessage,
+    StructuredActionClient,
+} from "@typeagent/agent-server-client";
+import { z } from "zod";
 import { extractMessageText } from "../shared/message-formatter.js";
 import { getMode } from "../shared/plugin-config.js";
-import type { StructuredActionClient } from "@typeagent/agent-server-client";
 import { createStructuredActionClient } from "../shared/structured-action-client.js";
+import {
+    TYPEAGENT_URL,
+    connectToTypeAgent,
+    createClientIO,
+    formatPendingNaturalLanguageInteraction,
+    submitCancellableCommand,
+} from "../shared/typeagent-client.js";
 import { registerStructuredActionTools } from "./structuredActionTools.js";
-import { macroHandoffContext } from "../shared/macro-handoff.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -326,18 +328,9 @@ export class TypeAgentMcpServer {
                 );
             }
             if (result?.agentHandoff) {
-                return {
-                    structuredContent: {
-                        status: "agentRequired",
-                        launch: result.agentHandoff.payload,
-                    },
-                    content: [
-                        {
-                            type: "text",
-                            text: macroHandoffContext(result.agentHandoff),
-                        },
-                    ],
-                };
+                return toolResult(
+                    "TypeAgent returned an unsupported agent handoff. No fallback was attempted; inspect the accepted request before retrying.",
+                );
             }
             if (responseCollector.messages.length > 0) {
                 const response = responseCollector.messages.join("\n\n");

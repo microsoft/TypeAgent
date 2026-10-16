@@ -26,7 +26,7 @@ User prompt
 
 Registered alongside routing (calls are disabled in bypass mode):
   typeagent-workspace MCP tools
-  typeagent-macros MCP tools -> replay or macro-runner handoff
+  typeagent-macros MCP tools -> checked program execution
 ```
 
 The hook output fields `handled`, `responseContent`, and `handledBy` are supported in current Copilot CLI behavior, allowing the hook to skip the agentic loop entirely when TypeAgent handles a request. For local runtime debugging against the runtime repo, use `pnpm copilot:dev`.
@@ -618,78 +618,33 @@ Should show `typeagent` under the plugins section.
 
 ## Tool-Composed Macros
 
-The plugin includes the `typeagent-macros` MCP server, the TypeAgent Macro
-Runner agent, and the `typeagent-macros` skill. Legacy approved replayable macros
-can run deterministically. Newly learned macros always use the live runner,
-even when their steps are technically replayable. If `run_macro` returns
-`agentRequired`, the skill hands the
-complete launch payload to the runner, which executes the whole macro through
-Copilot's live tool and permission surface.
-The runner executes the steps itself and must not delegate the launch or its
-steps to another agent, including another copy of the macro runner.
-Its agent profile selects `gpt-6-luna` rather than inheriting the caller's
-reasoning model. This does not change the models used for task reasoning or
-background macro extraction/building. The runner may submit an adapted
-procedure as a new draft but cannot approve it.
+Checkpoint A uses TypeAgent to record, author, validate, store, match, and run
+checked code-first programs. Both server entry points configure this by default;
+there is no program rollout flag or legacy step/runner execution path.
+Restart agent-server and reload the built plugin after updating.
+Development-only old macros are discarded, not converted.
 
-`inspect_macro` declares read-only, non-destructive, idempotent, local-catalog
-MCP annotations for explicit catalog inspection and draft review without
-the unnecessary mutating-tool consent prompt. It is not an execution
-prerequisite: `run_macro` validates the macro and supplies its complete
-immutable definition in the handoff. Neither the caller nor either runner
-performs another model-driven inspection. Recorded steps, publication, adaptation,
-and backend access retain their existing permission enforcement.
+The `typeagent-macros` MCP server and [macro skill](./skills/typeagent-macros/SKILL.md)
+expose catalog review and direct program execution. Symbolic repeats make no model
+calls; hybrid repeats invoke only declared bounded semantic functions.
+`inspect_macro` remains read-only explicit catalog/draft review, not a model-led
+execution prerequisite. All runs validate the current approved revision.
 
-### Native host-controlled reuse
+The initial broker supports **read-only MCP tools available to TypeAgent**.
+Native-only tools, writes, unsupported schemas and provenance requirements fail
+explicitly, without a runner or planner fallback. Existing MCP trust/backend
+permissions, schema checks, containment, cancellation, and uncertainty evidence
+remain enforced. There is no extra recipe-layer execution consent prompt.
 
-Direct macro handoffs always use the native host. This path requires
-the native TypeAgent extension (`--experimental` on tested CLI 1.0.89), its
-normal hook-registration approval, and the SDK `session.rpc.tools.execute`
-surface. Keep the existing macro agent-handoff feature enabled.
+`@typeagent recipe status` inspects a separate experimental plugin-local catalog
+without connecting to TypeAgent. It requires Node.js 22.13+ for SQLite; normal
+startup does not load SQLite. Plugin-local execution, Copilot child authorship,
+and standalone inference remain future work, not implied by A.
 
-After grammar selects an approved macro, an authenticated session-local IPC
-bridge passes the launch from the command-hook process to the persistent
-extension. The extension invokes one synchronous `task` through the native
-offered-tool pipeline with the packaged Luna runner. There is no root-model
-turn to regenerate the launch JSON or reformat the completed child answer.
-The Direct hook displays the child's actual full answer only after its
-correlated completion event. No permission handler grants execution access.
-
-Before launching the child, the host reads the exact catalog version with
-`requireRunnable: true`, checking approval, suppression, and the current
-approved route. It rejects any difference between the complete catalog macro
-and the handoff. The host then supplies a matching `hostValidation` marker
-to the dedicated `typeagent-macro-runner-host` Luna profile. This profile starts
-with the first recorded step, without a model-driven `inspect_macro` call.
-The live pre-tool hook rejects all calls from this profile unless its native
-child is correlated to the host's actual catalog verification; a prompt marker
-alone grants nothing. The caller-launched `typeagent-macro-runner` profile
-executes the complete server-validated caller/MCP handoff without inspection.
-Catalog errors are terminal and never trigger
-another launch.
-
-The extension marks runner sessions from native events, so their structured
-prompts are not routed or translated again. A pre-tool hook denies nested
-agent/workflow delegation from runners; an attempted delegation makes the
-host execution fail and blocks further calls in that child. Ordinary tools
-retain live permissions. Cancellation/disconnection cancels the exact owned
-child, and the host respects the launch timeout with a 270-second transport
-ceiling. Failures never fall back to another runner or rerun the user request.
-
-The extension emits payload-free `typeagent-macro-phases` timeline records
-for dispatch, catalog validation, child startup/completion, model turns, inspection, tool calls,
-and permission events. These are diagnostic timings, not a speed benchmark.
-MCP-originated handoffs retain the caller launch path, without an inspection
-prerequisite. Runner routing/delegation protection applies in both paths.
-There is no host-execution flag or Direct fallback to a caller launch.
-
-Agent-guided adaptations may be saved only through
-`submit_macro_candidate`. The server validates handoff provenance, execution
-budgets, and macro structure, then creates a new draft. It never mutates or
-promotes the approved version.
-
-Macros are not a plugin routing mode. They are a tool surface available in
-direct, MCP, and dev modes.
+See [runtime limits](../copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs),
+[phase status](../../docs/plans/copilot-fastActions/STATUS.md), and the
+[historical host evidence](../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/HOST-CAPABILITIES-2026-10-15.md).
+Macros are a tool surface in direct/MCP/dev modes, not another routing mode.
 
 ### Learn from one executed task
 
@@ -745,8 +700,9 @@ original answer does not wait for model generation.
 Extraction receives result availability and JSON types, not the recorded result
 bodies. It describes the procedure (for example, read a file and return the new
 result), not the previous answer's contents. Withheld contents alone are not
-missing evidence; unrecorded ranking, synthesis, or other unsupported work still
-blocks preparation. Failure status includes the specific uncertainty, subject to
+missing evidence. The program author must resolve ranking/synthesis requirements
+as checked code or declared bounded semantics; unresolved work still blocks
+publication. Failure status includes the specific uncertainty, subject to
 the existing redaction and error-length limits.
 Optional conversation indexing uses its own bounded background queue, not
 the event-ingestion path. Native `report_intent` telemetry is not a task operation.
@@ -758,15 +714,14 @@ The four modes are:
 | Off       | Coordinated learning is disabled.                                                                                       |
 | Prepare   | Prepare a candidate with staged grammar; explicit approval is required.                                                 |
 | Read-only | Automatically approve only when every tool is explicitly classified read-only; otherwise retain a reviewable candidate. |
-| All       | Automatically approve valid procedures, including writes.                                                               |
+| All       | Automatically approve valid programs; the initial broker still rejects writes.                                          |
 
 Approval makes the stored grammar available immediately for the original
 request and generated equivalent requests. No preliminary macro execution,
 manual grammar file, or separate compile command is necessary. Subsequent
-natural requests pass changed inputs to the whole-procedure Copilot runner.
-Approval of a definition never approves future tool calls: native permission
-prompts, denials, and cancellations still apply. Explicit `preference: "replay"`
-cannot bypass this policy for newly learned macros.
+natural requests pass changed inputs directly to the contained executor.
+Program runs add no recipe-layer consent; actual MCP trust/backend authorization
+still applies. The initial adapter rejects native-only tools and writes.
 
 The background model uses the configured Copilot provider. Set
 `TYPEAGENT_MACRO_LEARNING_MODEL` on agent-server only to override its model.
@@ -786,15 +741,9 @@ request is preserved exactly. Grammar generation is instructed to escape literal
 tool-name hyphens and JSON punctuation; malformed or overly broad rules still
 fail validation rather than being published.
 
-This is an initial learning implementation, not a completed live WorkIQ
-certification. The engine supports preparation from stored traces and
-evidenced adaptation; automatic native-runner adaptation capture/submission
-and hosted-reasoning producer adapters are not yet connected. There is no
-automatic deterministic promotion or learning-mode environment override.
-Account/config identity drift, retention/privacy policy, broader wildcard
-safety, and real-model latency/coverage still require validation/hardening.
-Restart the existing agent-server and reload the built plugin before testing;
-building does not change an already running server or session.
+This is not a completed live WorkIQ or Copilot UI certification. Account/config
+identity drift, retention/privacy, wildcard coverage and latency still require
+broader validation. Restart agent-server and reload the plugin after building.
 
 ### Recording does not produce a candidate
 
@@ -810,7 +759,7 @@ macro creation, inspection, or execution. Recording and learning are separate:
 - `failed` includes an error to investigate. An empty macro catalog alone does
   not establish whether a trace exists or learning is still pending.
 
-Never pass a recording token to `create_macro_from_trace`. Selected learning
+A recording token is not a saved trace ID. Selected learning
 prepares its own candidate; do not create a second draft to bypass a pending or
 failed learning job. An inspection-only request must not create, approve, or run
 a macro when no candidate is available.
@@ -835,70 +784,15 @@ workspace `README.md` for this smoke test: its API-key placeholders trigger
 secret redaction and make the trace ineligible for learning. Do not delete saved
 job data or create a manual draft to force a retry.
 
-### Legacy manual lifecycle
+### Review and run a prepared program
 
-Use `@typeagent mode mcp mixed` for macro lifecycle requests. Ask Copilot to
-call the `typeagent-macros` lifecycle tools directly, not `processCommand` or
-structured action discovery/execution. The `macros` action schema lists and
-runs approved procedures; it does not create, review, or approve drafts.
-Return to Direct mode when testing approved macro grammar routing.
-
-The server-hosted reasoning agent has its own permission prompts. The plugin's
-natural-language client cannot continue those prompts; a timeout/cancellation
-can resolve a permission question to its safe default, Deny, even though no
-interactive prompt appeared in Copilot. Do not enable blanket permissions to
-work around this. Use the lifecycle server for approval, preserve normal tool
-permissions, and verify the stored macro state before retrying.
-
-1. Existing integrations can arm one interaction through the agent-server
-   `armMacroRecording` RPC without the `learning` flag.
-2. Complete one successful Copilot turn that uses an MCP tool.
-3. Retrieve the trace ID:
-
-   ```text
-   @typeagent macro status
-   ```
-
-4. Ask Copilot to use `create_macro_from_trace`, then inspect the draft,
-   retrieve its requirements, and call `validate_macro`.
-5. Review the draft and explicitly call `approve_macro`. A draft cannot run;
-   approval creates a new immutable version.
-6. Call `run_macro` with the approved macro ID, required inputs, and
-   `preference: "auto"`.
-7. Use `get_macro_run` to inspect the sanitized persisted run record.
-
-Replayable macros are preflighted in full before step one. Preflight checks
-approval, required inputs, tool availability, and tool-schema fingerprints.
-Macros containing Copilot-native tools use the macro runner for the whole
-procedure. TypeAgent never replays a prefix and hands only the remainder to
-the agent.
-
-For agent-guided execution, `step.toolName` preserves Copilot's captured
-callable name; `mcpServerName` preserves backend provenance, not a namespace
-to prepend. For example, Copilot CLI exposes `web_search` (rendered as
-`functions.web_search`) while its runtime metadata and execution events
-identify the backend as `github-mcp-server/web_search`. The runner uses the
-original callable and its live `{ query: string }` schema even when web search
-is absent from the deferred GitHub catalog. This does not substitute providers,
-grant permissions, or modify an existing approved macro. Unknown identities,
-incompatible arguments, permission denials, and cancellations still stop the
-run; no arbitrary aliases are inferred.
-
-Captures retain the raw Copilot event result for audit and deterministic replay,
-and separately retain the model-facing result text (parsed when it is JSON).
-When the whole procedure requires the runner, induction uses the model-facing
-values for normal result-type/path postconditions and prior-step bindings,
-including any replayable steps within that procedure. UI-only envelope fields
-are not evidence the runner can verify. Plain or truncated text remains a
-string, not an invented structured result.
-
-Older approved macros may require event-wrapper paths such as `content`,
-`detailedContent`, and `contents` that are not shown to the runner. Such runs
-must stop, not waive those guards. Record a new interaction after updating the
-plugin and restarting Copilot, inspect its newly induced guards and inputs, and
-explicitly approve the new draft. Existing traces without model-facing evidence
-and existing immutable versions are not silently rewritten. Resolving tool
-access alone does not make an old macro's result guards verifiable.
+Use mixed MCP mode for lifecycle tools rather than asking `processCommand` to
+create or approve a macro. Selected learning creates the checked candidate.
+Inspect the returned candidate/version, call `validate_macro`, then explicitly
+`approve_macro` in Prepare mode. Drafts cannot run. Call `run_macro` with the
+current approved macro ID/version, a unique run ID and declared inputs.
+`get_macro_run` returns sanitized durable evidence. There is no `preference`
+parameter, manual step-draft creation, or adapted-candidate submission tool.
 
 ### Route approved macros from natural language
 
@@ -917,58 +811,35 @@ For a Direct-mode grammar demo:
 @typeagent run list approved macros
 ```
 
-Ask for the approved procedure with concrete inputs. The initial request can
-use translation and learn a grammar through the normal dispatcher learning
-path; approval alone does not generate utterances. Repeat a covered request
-with another input, inspect its grammar/cache evidence, and verify the actual
-tool arguments. A grammar miss uses normal routing, not a guaranteed macro hit.
+Ask for the approved procedure with concrete inputs. Successful recording/learning
+stages grammar before publication, so a covered request can match immediately.
+A grammar miss uses ordinary routing, not a guaranteed macro hit. Hits and explicit
+calls run the same current program; disabled/stale actions cannot execute.
 
-Replayable selections run full macro preflight and return durable sanitized run
-evidence. Agent-required selections return a complete launch payload: the Direct
-hook continues Copilot with runner instructions, and MCP `processCommand`
-returns the launch. Structured action results retain `agentHandoff`; shared MCP
-guidance directs Copilot to pass its complete payload to `typeagent-macro-runner`.
-Do not call `run_macro` again or repeat the original request after handoff.
-A handoff means the procedure was selected, not that the runner completed it.
+Accepted failures/cancellations are terminal in Direct mode, preventing duplicate
+effects. No agent handoff or automatic retry follows a program failure. Approval,
+disable and deletion refresh schemas and reconcile stored routes.
 
-Accepted macro failures/cancellations are terminal in Direct mode, preventing
-Copilot from duplicating possibly completed effects. Handoffs must be standalone
-actions; queued trailing actions are rejected and are not automatically resumed.
-Approval, disable, and deletion refresh schemas and reconcile learned routes.
-Execution also rejects a stale version even if a cached action reaches the
-handler. These routes select only the current approved version; explicit
-`run_macro` calls retain their existing pinned-version behavior.
+### Recording controls and recovery
 
-### Rollout Controls
+Program authoring/execution is unconditional. Only these recording boundaries
+remain configurable (enabled by default):
 
-Each macro boundary is enabled by default and can be disabled independently:
+| Environment variable                | Boundary                      |
+| ----------------------------------- | ----------------------------- |
+| `TYPEAGENT_MACRO_RECORDING_ENABLED` | Explicit trace recording      |
+| `TYPEAGENT_MACRO_INDUCTION_ENABLED` | Learning from recorded traces |
 
-| Environment variable                    | Boundary                   |
-| --------------------------------------- | -------------------------- |
-| `TYPEAGENT_MACRO_RECORDING_ENABLED`     | Explicit trace recording   |
-| `TYPEAGENT_MACRO_INDUCTION_ENABLED`     | Draft creation from traces |
-| `TYPEAGENT_MACRO_REPLAY_ENABLED`        | Deterministic replay       |
-| `TYPEAGENT_MACRO_AGENT_HANDOFF_ENABLED` | Agent-runner handoff       |
+Set either to `0`, `false`, or `off` before startup to disable that boundary.
+They do not revoke approved programs. Disable/forget the program to remove its route.
+Restart the affected server/plugin processes after changing startup settings.
 
-Set a variable to `0`, `false`, or `off` before starting Copilot to disable
-that boundary. These flags do not change direct, MCP, dev, or PowerShell mode
-selection. Restart Copilot after changing them. For natural-language macro
-routing, set replay/handoff flags consistently in both the agent-server and
-Copilot plugin environments and restart both processes. Disabled boundaries
-remove the corresponding macros from the routed catalog and block execution.
-
-### Recovery And Rollback
-
-Macro data is stored under the agent-server instance directory in
-`copilot-macros/`. Back up that directory before schema or deployment changes.
-Run records, handoffs, and immutable macro versions are separate files;
-`metrics.jsonl` contains only timestamp, operation, and outcome.
-
-To stop a rollout, disable the affected boundary and restart Copilot. Existing
-approved versions and drafts remain intact. Restore the backed-up
-`copilot-macros/` directory only while agent-server is stopped. To roll back the
-plugin, reinstall the previous plugin snapshot and leave the newer boundary
-disabled until compatibility is confirmed.
+Macro data is under the agent-server instance directory in `copilot-macros/`.
+Runs, immutable versions, learning state, private evidence and program journals are
+separate. Journals retain dispatched/completed/uncertain evidence; automatic
+continuation is not implemented. Cancellation is not backend rollback.
+Back up data before deployment changes and restore only with agent-server stopped.
+Do not restore old step-only test macros as runnable programs.
 
 ---
 
@@ -1265,7 +1136,7 @@ single-file release executable:
 | `typeagent-workspace` | `grep`                              | Search bounded workspace text                                                                   |
 | `typeagent-workspace` | `fetch`                             | Fetch bounded public HTTP(S) text without ambient credentials or private-network access         |
 | `typeagent-macros`    | `list_macros`                       | List and search reusable captured procedures                                                    |
-| `typeagent-macros`    | `run_macro`                         | Replay an approved macro or return an agent-runner handoff                                      |
+| `typeagent-macros`    | `run_macro`                         | Run the current approved checked program directly                                               |
 | `typeagent-macros`    | lifecycle tools                     | Capture-derived draft validation, approval, disablement, and candidate submission               |
 | `typeagent-skills`    | `typeagent-listSkills`              | List local immutable skill package revisions                                                    |
 | `typeagent-skills`    | `typeagent-searchSkills`            | Search the local catalog by exact name or origin-qualified identity                             |
@@ -1350,19 +1221,17 @@ The plugin therefore behaves as follows:
 The workspace MCP server is local to the plugin and does not require
 agent-server. Agent-server receives bounded tool and turn history from the
 extension and owns macro recording state, catalog management, validation,
-immutable approval, replay orchestration, handoff records, and persisted run
+immutable approval, program execution, durable dispatch journals, and persisted run
 evidence.
 
 ### Agents (`agents/`)
 
 - `typeagent.agent.md` — Sub-agent that delegates action requests to TypeAgent via MCP tools
-- `typeagent-macro-runner.agent.md` — Executes an entire agent-required macro
-  through Copilot's live tools and permissions
 
 ### Skills (`skills/`)
 
 - `typeagent-setup/` — Interactive skill to configure integration mode and server connection
-- `typeagent-macros/` — Discovers, validates, runs, and adapts TypeAgent macros
+- `typeagent-macros/` — Discovers, reviews, and runs checked TypeAgent programs
 
 ---
 
@@ -1402,16 +1271,16 @@ Expected output shows server URL and current mode. If TypeAgent is not running, 
 
 ### Common Issues
 
-| Issue                        | Cause                                                                   | Fix                                                                                         |
-| ---------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `copilot` not found          | Copilot CLI not installed                                               | Install GitHub Copilot CLI and verify with `copilot --version`                              |
-| Dev action falls through     | Request was unsuitable, PowerShell is unavailable, or mode is not `dev` | Check `@typeagent status`, Windows platform, agent-server, and the PowerShell agent         |
-| TypeAgent connection refused | Server not running                                                      | Start TypeAgent server (`pnpm run start:agent-server`)                                      |
-| Hook timeout                 | TypeAgent slow to respond                                               | Increase `timeout` in `hooks.json` or use MCP mode                                          |
-| Recording does not complete  | The turn is still running or recording failed                           | Run `@typeagent macro status`; re-arm after a failed or expired recording                   |
-| Macro will not run           | Version is not approved or a feature boundary is disabled               | Inspect the macro state and the macro flags shown by `@typeagent status`                    |
-| Replay fails before step one | Required input, tool, or approved schema no longer matches              | Inspect requirements and the structured replay error; revalidate or create a reviewed draft |
-| SQLite experimental warning  | Node 24 feature                                                         | Normal — can be suppressed with `--no-experimental-warnings`                                |
+| Issue                        | Cause                                                                   | Fix                                                                                        |
+| ---------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `copilot` not found          | Copilot CLI not installed                                               | Install GitHub Copilot CLI and verify with `copilot --version`                             |
+| Dev action falls through     | Request was unsuitable, PowerShell is unavailable, or mode is not `dev` | Check `@typeagent status`, Windows platform, agent-server, and the PowerShell agent        |
+| TypeAgent connection refused | Server not running                                                      | Start TypeAgent server (`pnpm run start:agent-server`)                                     |
+| Hook timeout                 | TypeAgent slow to respond                                               | Increase `timeout` in `hooks.json` or use MCP mode                                         |
+| Recording does not complete  | The turn is still running or recording failed                           | Run `@typeagent macro status`; re-arm after a failed or expired recording                  |
+| Macro will not run           | Version is not the current approved program                             | Inspect the macro state, runtime availability and program failure evidence                 |
+| Program preflight fails      | Required input, capability, or approved schema no longer matches        | Inspect requirements and structured program evidence; record a corrected supported example |
+| SQLite experimental warning  | Node 24 feature                                                         | Normal — can be suppressed with `--no-experimental-warnings`                               |
 
 ---
 

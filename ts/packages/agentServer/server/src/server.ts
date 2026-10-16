@@ -27,6 +27,7 @@ import registerDebug from "debug";
 import {
     McpReplayHost,
     SessionMcpCredentialStore,
+    configureCheckpointAPrograms,
     createDefaultAgentRuntime,
     createMacroAppAgentProvider,
     createMacroLearningRuntime,
@@ -408,9 +409,11 @@ async function main() {
     // (shell, CLI dispatcher) skip this and let each dispatcher mint
     // its own — see DispatcherOptions.portRegistrar in agent-dispatcher.
     const portRegistrar = new PortRegistrar();
-    const macroManager = new MacroManager(
-        instanceDir,
-        new McpReplayHost(instanceDir),
+    const macroReplayHost = new McpReplayHost(instanceDir);
+    const macroManager = new MacroManager(instanceDir, macroReplayHost);
+    const programAuthor = await configureCheckpointAPrograms(
+        macroManager,
+        macroReplayHost,
     );
     const { skillCatalog, skillAcquirer } =
         await createLocalSkillServices(instanceDir);
@@ -425,6 +428,7 @@ async function main() {
             undefined,
             () => macroManager.getApprovedMacros(),
             createSyntheticMacroLearningDiagnostics(instanceDir),
+            programAuthor,
         ),
     );
 
@@ -487,10 +491,15 @@ async function main() {
             instanceDir,
         );
     failedStartupCleanup = async () => {
+        macroManager.cancelAllMacroRuns();
         try {
             await conversationManager.close();
         } finally {
-            await memoryServiceHost.close();
+            try {
+                await macroReplayHost.close();
+            } finally {
+                await memoryServiceHost.close();
+            }
         }
     };
 
@@ -552,10 +561,15 @@ async function main() {
     function teardownServer(): Promise<void> {
         teardownPromise ??= (async () => {
             wss?.close();
+            macroManager.cancelAllMacroRuns();
             try {
                 await conversationManager.close();
             } finally {
-                await memoryServiceHost.close();
+                try {
+                    await macroReplayHost.close();
+                } finally {
+                    await memoryServiceHost.close();
+                }
             }
             removeServerPid(port);
         })();

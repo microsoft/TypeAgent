@@ -4,6 +4,16 @@ A grammar engine for [TypeAgent](../../README.md) that parses, compiles, and mat
 
 Grammar rules are defined in **`.agr` files** — a custom DSL that supports literals, wildcards, alternation, optionals, repetition, rule references, imports, and entity declarations.
 
+## Lean runtime entry point
+
+`@typeagent/action-grammar/runtime` exports grammar loading/compilation,
+serialization, AST/NFA matching, and entity registration without importing
+generation, model clients, dispatcher initialization, or persistent stores.
+Pass grammar source directly to `loadGrammarRules` for local-only matching.
+Call `registerBuiltInEntities()` and use `globalEntityRegistry.getConverter()`
+to convert entity wildcard strings through the shared built-in converters.
+The existing package exports remain available.
+
 ## Architecture
 
 ```

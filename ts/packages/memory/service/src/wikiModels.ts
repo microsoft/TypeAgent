@@ -3,7 +3,7 @@
 
 import { openai } from "@typeagent/aiclient";
 
-export function createWikiModels(outputTokens: number, endpoint?: string) {
+export function createWikiModels(endpoint?: string) {
     const extractionProvider = openai.getChatModelSettings(
         openai.GPT_6_LUNA,
     ).provider;
@@ -19,22 +19,13 @@ export function createWikiModels(outputTokens: number, endpoint?: string) {
         openai.GPT_6_LUNA,
         {
             response_format: { type: "json_object" },
-            max_completion_tokens: openai.getChatModelOutputLimit(
-                outputTokens,
-                openai.GPT_6_LUNA,
-            ),
         },
         undefined,
         ["durable-index"],
     );
     return {
         extractionModel,
-        languageModel: openai.createChatModel(endpoint, {
-            max_completion_tokens: openai.getChatModelOutputLimit(
-                outputTokens,
-                endpoint,
-            ),
-        }),
+        languageModel: openai.createChatModel(endpoint),
         provider: viewProvider,
     };
 }

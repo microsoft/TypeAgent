@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHash, randomUUID } from "node:crypto";
 import {
     parseToolsJsonSchema,
     toJSONParsedActionSchema,
@@ -18,11 +17,11 @@ import {
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
-    getMacroFeatures,
     type CopilotToolMacro,
     type MacroManager,
 } from "@typeagent/copilot-macros";
 import type { AppAgentProvider } from "agent-dispatcher";
+import { createHash, randomUUID } from "node:crypto";
 
 export const macroAgentName = "macros";
 const schemaType = "MacroActions";
@@ -32,6 +31,14 @@ export function getMacroActionName(macro: CopilotToolMacro): string {
 }
 
 export function getMacroInputSchema(macro: CopilotToolMacro) {
+    // Grammar staging precedes program authoring and uses the grounded inputs.
+    if (!macro.program) return getStagedMacroInputSchema(macro);
+    if (macro.program?.inputSchema.type !== "object")
+        throw new Error("Program macro inputs must use an object schema.");
+    return macro.program.inputSchema;
+}
+
+function getStagedMacroInputSchema(macro: CopilotToolMacro) {
     return {
         type: "object",
         properties: Object.fromEntries(
@@ -61,13 +68,11 @@ export function createMacroAppAgentProvider(
     let loadCount = 0;
 
     async function routableMacros(): Promise<CopilotToolMacro[]> {
-        const features = getMacroFeatures();
         return (await manager.getApprovedMacros()).filter(
             (macro) =>
                 !macro.inputs.some((input) => input.secret) &&
-                (macro.executionClass === "replayable" && !macro.learning
-                    ? features.replay
-                    : features.agentHandoff),
+                macro.executionKind === "program" &&
+                manager.canRunPrograms(),
         );
     }
 
@@ -158,55 +163,65 @@ export function createMacroAppAgentProvider(
                         macroId: macro.macroId,
                         version: macro.version,
                         inputs: action.parameters ?? {},
-                        preference: "auto",
                     },
                     {
                         signal: context.abortSignal,
                         requireLatestApproved: true,
                     },
                 );
-                if (response.status === "agentRequired") {
-                    return {
-                        ...createActionResult(
-                            `Macro '${macro.name}' requires the Copilot macro runner. No replay steps were executed.`,
-                        ),
-                        agentHandoff: {
-                            agentName: response.launch.agent,
-                            payload: response.launch,
-                        },
-                        tokenUsage: {
-                            prompt_tokens: 0,
-                            completion_tokens: 0,
-                            total_tokens: 0,
-                        },
-                    };
-                }
                 if (
                     response.status === "failed" ||
                     response.status === "cancelled"
                 ) {
-                    return createActionResultFromError(
-                        `Macro run ${response.run.runId} ${response.status}: ${response.run.error?.message ?? "Replay did not complete."} Do not repeat the request; effects may already have occurred.`,
-                    );
+                    return {
+                        ...createActionResultFromError(
+                            `Macro run ${response.run.runId} ${response.run.program?.status ?? response.status}: ${response.run.error?.message ?? "Execution did not complete."} Do not repeat the request; effects may already have occurred.`,
+                        ),
+                        ...(response.run.program
+                            ? { resultValue: response.run.program }
+                            : {}),
+                    };
                 }
                 if (response.status !== "completed") {
                     throw new Error("Macro execution did not return a run.");
                 }
                 return {
                     ...createActionResult(
-                        `Macro '${macro.name}' completed (run ${response.run.runId}).\n${JSON.stringify(response.run.result, null, 2)}`,
+                        typeof response.run.result === "string"
+                            ? response.run.result
+                            : JSON.stringify(response.run.result, null, 2),
                     ),
-                    resultValue: response.run,
-                    tokenUsage: {
-                        prompt_tokens: 0,
-                        completion_tokens: 0,
-                        total_tokens: 0,
-                    },
+                    resultValue: response.run.result,
+                    tokenUsage: programTokenUsage(response.run.program),
                 };
             } catch (error) {
                 return createActionResultFromError(
                     error instanceof Error ? error.message : String(error),
                 );
+            }
+
+            function programTokenUsage(
+                program:
+                    | import("@typeagent/copilot-macros/recipeCore").RecipeRunResult
+                    | undefined,
+            ) {
+                const prompt_tokens =
+                    program?.semanticEvidence.reduce(
+                        (total, evidence) =>
+                            total + (evidence.inputTokens ?? 0),
+                        0,
+                    ) ?? 0;
+                const completion_tokens =
+                    program?.semanticEvidence.reduce(
+                        (total, evidence) =>
+                            total + (evidence.outputTokens ?? 0),
+                        0,
+                    ) ?? 0;
+                return {
+                    prompt_tokens,
+                    completion_tokens,
+                    total_tokens: prompt_tokens + completion_tokens,
+                };
             }
         },
     };

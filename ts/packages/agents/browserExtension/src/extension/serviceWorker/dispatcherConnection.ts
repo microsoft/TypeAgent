@@ -14,23 +14,6 @@
 
 import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
-import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
-import {
-    createDispatcherRpcClient,
-    wrapClientIOForCompletion,
-} from "@typeagent/dispatcher-rpc/dispatcher/client";
-import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
-import type {
-    AgentServerInvokeFunctions,
-    DispatcherConnectOptions,
-    JoinConversationResult,
-} from "@typeagent/agent-server-protocol";
-import {
-    getDispatcherChannelName,
-    getClientIOChannelName,
-    AgentServerChannelName,
-    AGENT_SERVER_DEFAULT_URL,
-} from "@typeagent/agent-server-protocol";
 import type {
     AgentServerConnection,
     ConversationDispatcher,
@@ -38,9 +21,26 @@ import type {
 import {
     manageConversation as manageConversationHelper,
     type ConversationActionResult,
-    type ManageConversationContext,
     type ManageConversationPayload as HelperPayload,
+    type ManageConversationContext,
 } from "@typeagent/agent-server-client/conversation";
+import type {
+    AgentServerInvokeFunctions,
+    DispatcherConnectOptions,
+    JoinConversationResult,
+} from "@typeagent/agent-server-protocol";
+import {
+    AGENT_SERVER_DEFAULT_URL,
+    AgentServerChannelName,
+    getClientIOChannelName,
+    getDispatcherChannelName,
+} from "@typeagent/agent-server-protocol";
+import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
+import {
+    createDispatcherRpcClient,
+    wrapClientIOForCompletion,
+} from "@typeagent/dispatcher-rpc/dispatcher/client";
+import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 
 import registerDebug from "debug";
 
@@ -584,13 +584,11 @@ function makeConnectionAdapter(): AgentServerConnection {
         searchMacros: () => notSupported("searchMacros"),
         inspectMacro: () => notSupported("inspectMacro"),
         getMacroRequirements: () => notSupported("getMacroRequirements"),
-        createMacroFromTrace: () => notSupported("createMacroFromTrace"),
         validateMacro: () => notSupported("validateMacro"),
         approveMacro: () => notSupported("approveMacro"),
         disableMacro: () => notSupported("disableMacro"),
         deleteMacro: () => notSupported("deleteMacro"),
         runMacro: () => notSupported("runMacro"),
-        submitMacroCandidate: () => notSupported("submitMacroCandidate"),
         cancelMacroRun: () => notSupported("cancelMacroRun"),
         getMacroRun: () => notSupported("getMacroRun"),
 

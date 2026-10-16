@@ -118,9 +118,14 @@ export class MessagesWireApiProvider implements ProviderAdapter {
         const { system, turns } = splitSystemMessages(request.messages);
         const cs = request.completionSettings;
 
-        if (cs.max_completion_tokens === undefined) {
+        const outputTokens = request.providerOutputTokens;
+        if (
+            outputTokens === undefined ||
+            !Number.isSafeInteger(outputTokens) ||
+            outputTokens < 1
+        ) {
             throw new Error(
-                "messages wireApi requires completionSettings.max_completion_tokens",
+                "messages wireApi requires verified provider output capacity for its mandatory max_tokens field",
             );
         }
 
@@ -130,7 +135,7 @@ export class MessagesWireApiProvider implements ProviderAdapter {
                     ? request.defaultParams.model
                     : "")) as Model,
             messages: toMessageParams(turns),
-            max_tokens: cs.max_completion_tokens,
+            max_tokens: outputTokens,
         };
 
         if (system) {

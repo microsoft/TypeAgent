@@ -2,8 +2,10 @@
 // Licensed under the MIT License.
 
 import { otel } from "@typeagent/telemetry";
+import { stopCopilotClient } from "@typeagent/aiclient";
 
 let exitPromise: Promise<void> | undefined;
+let shutdownPromise: Promise<void> | undefined;
 let earlySigintHandler: (() => void) | undefined;
 
 export function registerEarlyTelemetrySignalHandlers(): void {
@@ -23,12 +25,17 @@ export function removeEarlyTelemetrySigintHandler(): void {
 }
 
 export function exitCli(exitCode: number): void {
-    exitPromise ??= otel
-        .shutdownTelemetry()
+    exitPromise ??= shutdownCli()
         .catch((error) => {
-            console.error("Failed to shut down telemetry:", error);
+            console.error("Failed to shut down CLI:", error);
         })
         .then(() => {
             process.exit(exitCode);
         });
+}
+
+export function shutdownCli(): Promise<void> {
+    return (shutdownPromise ??= stopCopilotClient().finally(() =>
+        otel.shutdownTelemetry(),
+    ));
 }

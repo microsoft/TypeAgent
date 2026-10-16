@@ -148,7 +148,10 @@ test("document reset replays canonical content and never copies an unmarked gene
                 await super.append(documents);
             }
         })(directory);
-    let service = new FileMemoryService(root, { indexFactory: factory });
+    let service = new FileMemoryService(root, {
+        informationalViews: false,
+        indexFactory: factory,
+    });
     const ingest = async (corpusId: string, sourceId: string) => {
         const accepted = await service.ingestDocument({
             corpusId,
@@ -184,7 +187,10 @@ test("document reset replays canonical content and never copies an unmarked gene
         ).toEqual(JSON.parse(descriptor("documents")));
         const initialRebuilds = counts.rebuild;
         await service.close();
-        service = new FileMemoryService(root, { indexFactory: factory });
+        service = new FileMemoryService(root, {
+            informationalViews: false,
+            indexFactory: factory,
+        });
         expect(
             (await service.search({ corpusId, query: "alpha" })).matches,
         ).toHaveLength(1);
@@ -195,7 +201,10 @@ test("document reset replays canonical content and never copies an unmarked gene
         manifest.sources[0].revisions[0].pipeline.maxCharsPerChunk = 512;
         await writeFile(firstManifestPath, JSON.stringify(manifest));
         await service.close();
-        service = new FileMemoryService(root, { indexFactory: factory });
+        service = new FileMemoryService(root, {
+            informationalViews: false,
+            indexFactory: factory,
+        });
         const facade = createMemoryServiceRpcFacade(service);
         const legacyRevisionId = manifest.sources[0].activeRevisionId;
         expect(

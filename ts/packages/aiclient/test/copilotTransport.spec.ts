@@ -455,6 +455,9 @@ describe("createCopilotTransportModel", () => {
         const body = JSON.parse(fetchArgs[0].init.body as string);
         expect(body.model).toBe("gpt-5-mini");
         expect(body.temperature).toBe(0);
+        expect(body).not.toHaveProperty("max_tokens");
+        expect(body).not.toHaveProperty("max_completion_tokens");
+        expect(body).not.toHaveProperty("max_output_tokens");
         expect(body.messages).toEqual([
             { role: "user", content: "what time is it" },
         ]);
@@ -500,6 +503,9 @@ describe("createCopilotTransportModel", () => {
         const body = JSON.parse(fetchArgs[0].init.body as string);
         expect(body.model).toBe("gpt-5.6-luna");
         expect(body.temperature).toBeUndefined();
+        expect(body).not.toHaveProperty("max_tokens");
+        expect(body).not.toHaveProperty("max_completion_tokens");
+        expect(body).not.toHaveProperty("max_output_tokens");
         expect(body.input).toEqual([
             {
                 role: "user",
