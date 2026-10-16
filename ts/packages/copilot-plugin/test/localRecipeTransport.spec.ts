@@ -35,11 +35,20 @@ const report = (message: string) => {
 };
 
 test("correlates bounded requests without connecting to TypeAgent", async () => {
+    process.env.TYPEAGENT_PLUGIN_DATA = join(
+        directory,
+        "long-profile-".repeat(3),
+    );
     const dispatch = jest.fn(async (method: string, args: unknown[]) => ({
         method,
         args,
     }));
     broker = await startLocalRecipeBroker(cwd, "session", dispatch, report);
+    const endpoint = JSON.parse(
+        await readFile(localRecipeEndpoint(cwd, "session"), "utf8"),
+    ) as { address: string };
+    if (process.platform !== "win32")
+        expect(Buffer.byteLength(endpoint.address)).toBeLessThanOrEqual(103);
     await expect(
         callLocalRecipe(cwd, "session", "inspect", [
             { text: "007 雪", nested: [false, null] },

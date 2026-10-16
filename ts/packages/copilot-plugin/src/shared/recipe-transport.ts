@@ -2,7 +2,15 @@
 // Licensed under the MIT License.
 
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import {
+    mkdir,
+    mkdtemp,
+    readFile,
+    rename,
+    rm,
+    unlink,
+    writeFile,
+} from "node:fs/promises";
 import { createConnection, createServer, type Socket } from "node:net";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -195,19 +203,6 @@ export async function startLocalRecipeBroker(
     const endpointFile = localRecipeEndpoint(cwd, sessionId);
     const sessionFile = localRecipeSessionEndpoint(sessionId);
     const token = randomBytes(32).toString("hex");
-    const address =
-        process.platform === "win32"
-            ? `\\\\.\\pipe\\typeagent-recipes-${randomUUID()}`
-            : join(directory, `${randomUUID()}.sock`);
-    const endpoint: Endpoint = {
-        version: 1,
-        address,
-        token,
-        sessionId,
-        pid: process.pid,
-        ...localRecipeScope(cwd),
-    };
-    const text = JSON.stringify(endpoint);
     const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as {
         DatabaseSync: new (path: string) => {
             exec(sql: string): void;
@@ -229,6 +224,26 @@ export async function startLocalRecipeBroker(
             );
         throw error;
     }
+    let socketDirectory: string | undefined;
+    try {
+        if (process.platform !== "win32")
+            socketDirectory = await mkdtemp("/tmp/typeagent-recipes-");
+    } catch (error) {
+        lease.close();
+        throw error;
+    }
+    const address = socketDirectory
+        ? join(socketDirectory, "broker.sock")
+        : `\\\\.\\pipe\\typeagent-recipes-${randomUUID()}`;
+    const endpoint: Endpoint = {
+        version: 1,
+        address,
+        token,
+        sessionId,
+        pid: process.pid,
+        ...localRecipeScope(cwd),
+    };
+    const text = JSON.stringify(endpoint);
     const sockets = new Set<Socket>();
     const pending = new Set<Promise<void>>();
     const server = createServer((socket) => {
@@ -310,9 +325,14 @@ export async function startLocalRecipeBroker(
         await rename(sessionTemporary, sessionFile);
     } catch (error) {
         if (server.listening) server.close();
-        await removeOwned(endpointFile);
-        await removeOwned(sessionFile);
-        lease.close();
+        try {
+            await removeOwned(endpointFile);
+            await removeOwned(sessionFile);
+        } finally {
+            lease.close();
+            if (socketDirectory)
+                await rm(socketDirectory, { recursive: true, force: true });
+        }
         throw error;
     }
     let closing: Promise<void> | undefined;
@@ -331,6 +351,11 @@ export async function startLocalRecipeBroker(
                     await removeOwned(sessionFile);
                 } finally {
                     lease.close();
+                    if (socketDirectory)
+                        await rm(socketDirectory, {
+                            recursive: true,
+                            force: true,
+                        });
                 }
             })();
             return closing;

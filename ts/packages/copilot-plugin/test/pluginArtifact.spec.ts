@@ -310,12 +310,14 @@ describe("staged plugin artifact", () => {
                     expect(recipeOwner.additionalContext).toBeUndefined();
                     expect(connections).toBe(0);
                 }
+                await runHook("@typeagent recipe owner plugin");
                 const recipeStatus = await runHook("@typeagent recipe status");
                 expect(recipeStatus.handled).toBe(true);
                 expect(recipeStatus.responseContent).toMatch(/\S/);
                 expect(recipeStatus.modifiedPrompt).toBeUndefined();
                 expect(recipeStatus.additionalContext).toBeUndefined();
                 expect(connections).toBe(0);
+                await runHook("@typeagent recipe owner typeagent");
                 const prompt =
                     "Compare PRs #3058, #3059, and #2993 and recommend smoke tests.";
                 for (const policy of ["mixed", "delegate"]) {
