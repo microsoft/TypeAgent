@@ -14,6 +14,11 @@ import { TypeChatLanguageModel } from "typechat";
 import { fileURLToPath } from "url";
 import { importDocMemoryFromTextFile } from "./docImport.js";
 import { ChatModel } from "@typeagent/aiclient";
+import {
+    getIndexingErrors,
+    readMemoryDataFromFile,
+    writeMemoryDataToFile,
+} from "./common.js";
 
 export class DocPartMeta extends MessageMetadata {
     constructor(public sourceUrl?: string | undefined) {
@@ -146,6 +151,7 @@ export class DocMemory
     public async buildIndex(
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
+        await this.prepareEmbeddings();
         this.beginIndexing();
         try {
             const result = await kp.buildConversationIndex(
@@ -153,7 +159,7 @@ export class DocMemory
                 this.settings.conversationSettings,
                 eventHandler,
             );
-            this.updateIndexingState();
+            if (!getIndexingErrors(result)) this.updateIndexingState();
             return result;
         } finally {
             this.endIndexing();
@@ -170,6 +176,7 @@ export class DocMemory
     public async addToIndex(
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
+        await this.prepareEmbeddings();
         this.beginIndexing();
         try {
             const messageOrdinalStartAt =
@@ -182,7 +189,7 @@ export class DocMemory
                     this.semanticRefs.length,
                     eventHandler,
                 );
-                this.updateIndexingState();
+                if (!getIndexingErrors(result)) this.updateIndexingState();
                 return result;
             }
             return {};
@@ -203,6 +210,12 @@ export class DocMemory
         eventHandler?: kp.IndexingEventHandlers,
         overrideSettings?: DocMemorySettings,
     ): Promise<kp.IndexingResults> {
+        if (overrideSettings && overrideSettings !== this.settings) {
+            throw new Error(
+                "Per-part embedding settings are unsafe. Update memory settings and rebuild all embeddings instead.",
+            );
+        }
+        await this.prepareEmbeddings();
         this.beginIndexing();
         try {
             this.messages.append(docPart);
@@ -216,7 +229,7 @@ export class DocMemory
                 this.semanticRefs.length,
                 eventHandler,
             );
-            this.updateIndexingState();
+            if (!getIndexingErrors(result)) this.updateIndexingState();
             return result;
         } finally {
             this.endIndexing();
@@ -235,6 +248,7 @@ export class DocMemory
         updatedItem: DocPart,
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
+        await this.prepareEmbeddings();
         this.beginIndexing();
         try {
             this.removeSemanticRefsForMessage(messageOrdinal);
@@ -310,7 +324,10 @@ export class DocMemory
      * @returns
      */
     public async serialize(): Promise<DocMemoryData> {
+        const identities = await this.prepareEmbeddings();
         const data: DocMemoryData = {
+            embeddingIdentities:
+                Object.keys(identities).length > 0 ? identities : undefined,
             nameTag: this.nameTag,
             messages: this.messages.getAll(),
             tags: this.tags,
@@ -329,6 +346,16 @@ export class DocMemory
      * @param docMemoryData
      */
     public async deserialize(docMemoryData: DocMemoryData): Promise<void> {
+        const identities = await this.prepareEmbeddings();
+        kp.validateConversationEmbeddingIdentities(
+            docMemoryData,
+            identities,
+            this.settings.embeddingSize,
+        );
+        this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
+            this.settings.conversationSettings,
+        );
+        this.semanticRefIndex = new kp.TermToSemanticRefIndex();
         this.nameTag = docMemoryData.nameTag;
         const docParts = docMemoryData.messages.map((m) => {
             return docPartClassFromJsonObj(m);
@@ -386,8 +413,14 @@ export class DocMemory
         dirPath: string,
         baseFileName: string,
     ): Promise<void> {
+        await this.prepareEmbeddings();
         const data = await this.serialize();
-        await kp.writeConversationDataToFile(data, dirPath, baseFileName);
+        await writeMemoryDataToFile(
+            data,
+            this.settings.conversationSettings,
+            dirPath,
+            baseFileName,
+        );
     }
 
     /**
@@ -402,18 +435,77 @@ export class DocMemory
         dirPath: string,
         baseFileName: string,
         settings?: DocMemorySettings,
+        options?: { rebuildEmbeddings?: boolean },
     ): Promise<DocMemory | undefined> {
         const docMemory = new DocMemory(undefined, undefined, settings);
-        const data = await kp.readConversationDataFromFile(
-            dirPath,
-            baseFileName,
-            docMemory.settings.conversationSettings.relatedTermIndexSettings
-                .embeddingIndexSettings?.embeddingSize,
-        );
+        await docMemory.prepareEmbeddings();
+        let data: kp.IConversationDataWithIndexes | undefined;
+        try {
+            data = await readMemoryDataFromFile(
+                docMemory.settings.conversationSettings,
+                dirPath,
+                baseFileName,
+            );
+        } catch (error) {
+            if (
+                !options?.rebuildEmbeddings ||
+                !(error instanceof kp.PersistedEmbeddingIdentityError)
+            ) {
+                throw error;
+            }
+            data = error.conversationData;
+        }
         if (data) {
-            docMemory.deserialize(data);
+            await docMemory.deserialize(data);
+            if (options?.rebuildEmbeddings) {
+                await docMemory.rebuildEmbeddings();
+            }
+        } else {
+            return undefined;
         }
         return docMemory;
+    }
+
+    /**
+     * Replace every vector using retained text and semantic refs, without
+     * invoking knowledge extraction. Save explicitly to commit the new space.
+     */
+    public async rebuildEmbeddings(
+        eventHandler?: kp.IndexingEventHandlers,
+    ): Promise<kp.SecondaryIndexingResults> {
+        if (
+            !this.settings.conversationSettings.messageTextIndexSettings
+                .embeddingIndexSettings.embeddingModel
+        ) {
+            throw new Error(
+                "Configure an embedding model before rebuilding document embeddings.",
+            );
+        }
+        this.embeddingRebuildRequired = true;
+        await this.prepareEmbeddingRebuild();
+        this.beginIndexing();
+        try {
+            const aliases =
+                this.secondaryIndexes.termToRelatedTermsIndex.aliases.serialize();
+            this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
+                this.settings.conversationSettings,
+            );
+            this.secondaryIndexes.termToRelatedTermsIndex.aliases.deserialize(
+                aliases,
+            );
+            const result = await kp.buildSecondaryIndexes(
+                this,
+                this.settings.conversationSettings,
+                eventHandler,
+            );
+            const error = getIndexingErrors({ secondaryIndexResults: result });
+            if (error) throw new Error(`Embedding rebuild failed: ${error}`);
+            this.updateIndexingState();
+            this.embeddingRebuildRequired = false;
+            return result;
+        } finally {
+            this.endIndexing();
+        }
     }
 
     /**
@@ -435,12 +527,17 @@ export class DocMemory
         docName?: string,
         settings?: DocMemorySettings,
     ) {
-        return importDocMemoryFromTextFile(docFilePath, maxCharsPerChunk);
+        return importDocMemoryFromTextFile(
+            docFilePath,
+            maxCharsPerChunk,
+            docName,
+            settings ?? this.settings,
+        );
     }
 }
 
 export interface DocMemoryData
-    extends kp.IConversationDataWithIndexes<DocPart> {
+    extends kp.EmbeddingIdentifiedConversationData<DocPart> {
     indexingState?: DocIndexingState;
 }
 
@@ -484,7 +581,7 @@ function customizeScopeQueryProcessing(
  * @returns
  */
 function docPartClassFromJsonObj(jMsg: DocPart): DocPart {
-    const jMeta: DocPartMeta = jMsg.metadata;
+    const jMeta = new DocPartMeta(jMsg.metadata?.sourceUrl);
     const part = new DocPart(
         jMsg.textChunks,
         jMeta,

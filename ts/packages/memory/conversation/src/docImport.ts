@@ -75,6 +75,8 @@ export async function importDocMemoryFromTextFile(
         type,
         maxCharsPerChunk,
         sourceUrl,
+        docName,
+        settings,
     );
     return memory;
 }

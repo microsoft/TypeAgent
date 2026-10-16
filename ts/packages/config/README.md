@@ -49,6 +49,54 @@ Optional endpoint field (default `chat_completions`). Maps to aiclient providers
 `messages` → `messagesWireApiProvider`.
 Carried on `AZURE_OPENAI_POOL_*`; does not affect pool routing.
 
+## Embedding capabilities
+
+Embedding configuration is independent of chat configuration. The optional
+`embedding.modalities` declaration enables capabilities, rather than inferring
+them from model availability. It must contain `text`; omitted declarations retain
+legacy text-only behavior. Audio and video are not supported.
+
+```yaml
+embedding:
+  provider: local
+  runtime: embeddinggemma
+  model: onnx-community/embeddinggemma-2-ONNX
+  modalities: [text, image]
+  revision: daa72c51243991dfcaf9f9137d2c573d8f7790c0
+  localFilesOnly: true
+  size: 768
+  maxBatchSize: 4
+  maxPending: 32
+```
+
+Image opt-in requires `provider: local` and `runtime: embeddinggemma`, or the
+exact ONNX model above when runtime is omitted. `runtime: minilm` is text-only.
+An explicit local runtime cannot be combined with a hosted provider.
+`size`, `maxBatchSize`, and `maxPending` must be positive finite integers.
+`revision` must be nonempty when supplied; the Gemma runtime additionally
+requires a pinned 40-hex revision. `localFilesOnly` is a strict boolean, including
+explicit `false`; omitted fields retain existing defaults.
+
+MiniLM and Gemma share pinned Transformers.js 4.3.1, with CPU FP32 inference.
+Select one local embedding model per agent-server process and restart the server
+to change models. This does not change the default provider.
+
+For offline MiniLM, set `localFilesOnly: true` and stage `config.json`,
+`tokenizer.json`, `tokenizer_config.json`, and `onnx/model.onnx` under
+`<cacheDir>\Xenova\all-MiniLM-L6-v2\<revision>`. The legacy unversioned model
+directory is supported only for revision `main`; pinned revisions never fall
+back to another snapshot. Missing FP32 artifacts fail explicitly without
+deleting the offline cache. The 4.3.1 runtime changes MiniLM's embedding identity;
+existing indexes need an explicit embedding rebuild, not dimension-only reuse.
+
+The YAML fields round-trip through the importer and compatibility shim as
+`TYPEAGENT_EMBEDDING_PROVIDER`, `_MODEL`, `_RUNTIME`, `_MODALITIES`, `_REVISION`,
+`_LOCAL_FILES_ONLY`, `_CACHE_DIR`, `_SIZE`, `_MAX_BATCH_SIZE`, and `_MAX_PENDING`
+(each suffix has the `TYPEAGENT_EMBEDDING` prefix). Modalities use a JSON array
+in the environment, for example `TYPEAGENT_EMBEDDING_MODALITIES='["text","image"]'`.
+Boolean env values accept only `true`, `false`, `1`, or `0`. These configuration
+values are nonsecret; credentials remain in the hosted provider sections.
+
 ## Usage
 
 ```ts
@@ -66,3 +114,47 @@ trademarks or logos is subject to and must follow
 [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
 Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
 Any use of third-party trademarks or logos are subject to those third-party's policies.
+
+# Named embedding models
+
+`embeddingModels` is a catalog of embedding spaces, not connections or credentials.
+`defaultEmbeddingModel` selects one alias; `none` disables embeddings. Without a
+selector, `resolveEmbeddingConfig(config)` returns the legacy `config.embedding`
+unchanged (including `undefined`), preserving hosted-provider inference.
+The catalog alone does not load weights, access the network, or change selection.
+Local defaults `local-minilm` and `local-embeddinggemma` are pinned alternatives.
+The inert `copilot-small` default uses `text-embedding-3-small` (1536 dimensions).
+
+```yaml
+defaultEmbeddingModel: local-minilm
+embeddingModels:
+  local-minilm:
+    provider: local
+    runtime: minilm
+    model: Xenova/all-MiniLM-L6-v2
+    revision: 751bff37182d3f1213fa05d7196b954e230abad9
+    size: 384
+    modalities: [text]
+    localFilesOnly: true
+```
+
+Every definition requires `provider` (local/azure/openai/copilot), `model`, `size`,
+and `modalities`. Text is required; image is supported only by the known Gemma
+checkpoint. Local models require an immutable 40-character revision and their
+known dimensions (MiniLM 384, Gemma 768). Local-only fields are rejected on hosted
+profiles. Azure profiles may specify `deployment`, referencing an existing
+`azureOpenAI.deployments` key. Omitting it reuses `azureOpenAI.defaultEmbedding`
+exactly and requires that default transport to exist; it does not select a named
+pool implicitly. Endpoint pools and credentials remain provider-owned. A migrated
+opaque model binding such as `model: "azure:"` is preserved pending operator
+attestation, rather than inferring an upstream model from a URL.
+
+Catalog layers merge by alias and field; final merged definitions are validated,
+including unused profiles. Selection never inherits another alias's fields.
+`TYPEAGENT_DEFAULT_EMBEDDING_MODEL` overrides selection and
+`TYPEAGENT_EMBEDDING_MODELS` supplies a JSON catalog layer. YAML, flat env, typed
+config, shim and importer preserve the full catalog, not just the selected entry.
+Do not combine a selector with legacy `embedding:` fields or
+`TYPEAGENT_EMBEDDING_*` single-model overrides: migrate those fields into a named
+definition and remove the old overrides. Provider connection settings may coexist.
+Switching the selected model requires a server restart.

@@ -3,6 +3,11 @@
 
 import { PromptSection, Result, TypeChatLanguageModel } from "typechat";
 import { CompletionUsageStats } from "./apiTypes.js";
+import {
+    EmbeddingIdentity,
+    EmbeddingPart,
+    EmbeddingRole,
+} from "./embeddingIdentity.js";
 
 /**
  * Translation settings for Chat models
@@ -116,6 +121,14 @@ export interface EmbeddingModel<K> {
  * A Model that generates embeddings for the given input
  */
 export interface TextEmbeddingModel extends EmbeddingModel<string> {
+    readonly embeddingIdentity?: EmbeddingIdentity | undefined;
+    readonly embeddingCapabilities?: EmbeddingCapabilities | undefined;
+    forRole?(role: EmbeddingRole): TextEmbeddingModel;
+    resolve?(): Promise<TextEmbeddingModel>;
+    dispose?(): Promise<void>;
+    generateMediaEmbeddingBatch?(
+        samples: EmbeddingPart[][],
+    ): Promise<Result<number[][]>>;
     /**
      * Optional: batching support
      * Not all models/apis support batching
@@ -127,6 +140,38 @@ export interface TextEmbeddingModel extends EmbeddingModel<string> {
      * If no batching, maxBatchSize should be 1
      */
     readonly maxBatchSize: number;
+}
+
+export interface EmbeddingCapabilities {
+    readonly inputModalities: readonly ("text" | "image")[];
+    readonly mixedInputs: boolean;
+}
+
+export async function resolveEmbeddingModel(
+    model: TextEmbeddingModel,
+): Promise<TextEmbeddingModel> {
+    return model.resolve ? model.resolve() : model;
+}
+
+export function supportsImageEmbeddings(model: TextEmbeddingModel): boolean {
+    return (
+        model.embeddingCapabilities?.inputModalities.includes("image") ===
+            true && typeof model.generateMediaEmbeddingBatch === "function"
+    );
+}
+
+export function embeddingModelForRole(
+    model: TextEmbeddingModel,
+    role: EmbeddingRole,
+): TextEmbeddingModel {
+    const selected = model.forRole?.(role) ?? model;
+    if (
+        selected.embeddingIdentity &&
+        selected.embeddingIdentity.task !== role
+    ) {
+        throw new Error(`Embedding model does not support the ${role} role`);
+    }
+    return selected;
 }
 
 /**

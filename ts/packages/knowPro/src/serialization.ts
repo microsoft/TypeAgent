@@ -13,6 +13,9 @@ import path from "path";
 import { IConversationDataWithIndexes } from "./secondaryIndexes.js";
 import {
     EmbeddingModelMetadata,
+    EmbeddingIdentity,
+    embeddingIdentityKey,
+    validateEmbeddingVector,
     modelMetadata_ada002,
 } from "@typeagent/aiclient";
 
@@ -25,12 +28,20 @@ import {
  * @param modelMeta Metadata about embedding models used
  */
 export async function writeConversationDataToFile(
-    conversationData: IConversationDataWithIndexes,
+    conversationData: EmbeddingIdentifiedConversationData,
     dirPath: string,
     baseFileName: string,
     modelMeta?: EmbeddingModelMetadata,
+    identities?: PersistedEmbeddingIdentities,
 ): Promise<void> {
+    identities ??= (conversationData as EmbeddingIdentifiedConversationData)
+        .embeddingIdentities;
     const fileData = toConversationFileData(conversationData, modelMeta);
+    if (identities) {
+        validateIdentities(identities);
+        validateIdentityVectors(fileData, identities);
+        fileData.jsonData.embeddingFileHeader!.identities = identities;
+    }
     if (fileData.binaryData) {
         if (
             fileData.binaryData.embeddings &&
@@ -55,6 +66,7 @@ export async function readConversationDataFromFile(
     dirPath: string,
     baseFileName: string,
     embeddingSize?: number,
+    expectedIdentities?: PersistedEmbeddingIdentities,
 ): Promise<IConversationDataWithIndexes | undefined> {
     const jsonData = await readJsonFile<ConversationJsonData>(
         path.join(dirPath, baseFileName + DataFileSuffix),
@@ -67,6 +79,7 @@ export async function readConversationDataFromFile(
         binaryData: {},
     };
     validateFileData(fileData, embeddingSize);
+    checkIdentities(fileData, expectedIdentities, embeddingSize);
     let embeddings: Float32Array[] | undefined;
     const embeddingsCompatible = arePersistedEmbeddingsCompatible(
         fileData,
@@ -91,6 +104,8 @@ export async function readConversationDataFromFile(
         }
     }
     fileData.jsonData.fileHeader ??= createFileHeader();
+    if (expectedIdentities)
+        validateIdentityVectors(fileData, expectedIdentities, true);
     return fromConversationFileData(fileData);
 }
 
@@ -98,6 +113,7 @@ export async function readConversationDataFromBuffer(
     jsonData: string,
     embeddingsBuffer: Buffer,
     embeddingSize: number | undefined,
+    expectedIdentities?: PersistedEmbeddingIdentities,
 ): Promise<IConversationDataWithIndexes | undefined> {
     if (!jsonData) {
         return undefined;
@@ -108,6 +124,7 @@ export async function readConversationDataFromBuffer(
         binaryData: {},
     };
     validateFileData(fileData);
+    checkIdentities(fileData, expectedIdentities, embeddingSize);
     const embeddingsCompatible = arePersistedEmbeddingsCompatible(
         fileData,
         embeddingSize,
@@ -128,6 +145,8 @@ export async function readConversationDataFromBuffer(
         }
     }
     fileData.jsonData.fileHeader ??= createFileHeader();
+    if (expectedIdentities)
+        validateIdentityVectors(fileData, expectedIdentities, true);
     return fromConversationFileData(fileData);
 }
 
@@ -154,17 +173,142 @@ type FileHeader = {
 };
 
 type EmbeddingFileHeader = {
+    identities?: PersistedEmbeddingIdentities;
     relatedCount?: number | undefined;
     messageCount?: number | undefined;
     // The V 0.1 file format requires that all embeddings are the same size
     modelMetadata?: EmbeddingModelMetadata | undefined;
 };
 
+export type PersistedEmbeddingIdentities = Record<string, EmbeddingIdentity>;
+
+export type EmbeddingIdentifiedConversationData<TMessage = unknown> =
+    IConversationDataWithIndexes<TMessage> & {
+        embeddingIdentities?: PersistedEmbeddingIdentities | undefined;
+    };
+
+export function validateConversationEmbeddingIdentities(
+    data: IConversationDataWithIndexes,
+    expected: PersistedEmbeddingIdentities,
+    embeddingSize: number,
+): void {
+    checkIdentities(
+        { jsonData: data, binaryData: {} },
+        expected,
+        embeddingSize,
+    );
+}
+
+export class PersistedEmbeddingIdentityError extends Error {
+    constructor(
+        public readonly conversationData: IConversationDataWithIndexes,
+    ) {
+        super(
+            "Persisted embedding identity is unknown or incompatible. Rebuild all embeddings with the configured model (DocMemory.readFromFile(..., settings, { rebuildEmbeddings: true })); extraction is not required. Source text and structured knowledge remain available in conversationData.",
+        );
+        this.name = "PersistedEmbeddingIdentityError";
+    }
+}
+
+function validateIdentities(identities: PersistedEmbeddingIdentities): void {
+    if (Object.keys(identities).length === 0)
+        throw new Error("Embedding lane identities must not be empty");
+    Object.values(identities).forEach(embeddingIdentityKey);
+}
+
+function checkIdentities(
+    fileData: ConversationFileData,
+    expected?: PersistedEmbeddingIdentities,
+    embeddingSize?: number,
+): void {
+    if (!expected) return;
+    if (!hasPersistedEmbeddingVectors(fileData.jsonData)) return;
+    if (Object.keys(expected).length > 0) validateIdentities(expected);
+    const stored =
+        fileData.jsonData.embeddingFileHeader?.identities ??
+        fileData.jsonData.embeddingIdentities;
+    const storedSize = getStoredEmbeddingSize(fileData);
+    if (
+        Object.keys(expected).length === 0 ||
+        (storedSize !== undefined && storedSize !== embeddingSize) ||
+        Object.values(expected).some(
+            (identity) => identity.dimensions !== embeddingSize,
+        ) ||
+        !stored ||
+        Object.entries(expected).some(
+            ([lane, identity]) =>
+                !stored[lane] || !sameEmbeddingIdentity(stored[lane], identity),
+        )
+    ) {
+        const source = cloneIndexData(fileData.jsonData);
+        dropPersistedEmbeddings(source);
+        throw new PersistedEmbeddingIdentityError(source);
+    }
+}
+
+function hasPersistedEmbeddingVectors(data: ConversationJsonData): boolean {
+    const header = data.embeddingFileHeader;
+    const related = data.relatedTermsIndexData?.textEmbeddingData;
+    const messages = data.messageIndexData?.indexData;
+    return Boolean(
+        header?.relatedCount ||
+            header?.messageCount ||
+            related?.textItems.length ||
+            messages?.textLocations.length ||
+            data.threadData?.threads?.some(
+                (thread) => thread.embedding.length > 0,
+            ),
+    );
+}
+
+function sameEmbeddingIdentity(
+    stored: EmbeddingIdentity,
+    expected: EmbeddingIdentity,
+): boolean {
+    try {
+        return embeddingIdentityKey(stored) === embeddingIdentityKey(expected);
+    } catch {
+        return false;
+    }
+}
+
+function validateIdentityVectors(
+    fileData: ConversationFileData,
+    identities: PersistedEmbeddingIdentities,
+    requireComplete = false,
+): void {
+    const vectors = fileData.binaryData.embeddings ?? [];
+    const header = fileData.jsonData.embeddingFileHeader;
+    const count = (header?.relatedCount ?? 0) + (header?.messageCount ?? 0);
+    if (requireComplete && count !== vectors.length) {
+        throw new Error(
+            `${Error_FileCorrupt}: missing or incomplete embedding artifact`,
+        );
+    }
+    for (const identity of Object.values(identities)) {
+        for (const vector of vectors) {
+            validateEmbeddingVector(Array.from(vector), identity.dimensions);
+        }
+    }
+    const threadIdentity = identities["thread.document"];
+    if (threadIdentity) {
+        for (const thread of fileData.jsonData.threadData?.threads ?? []) {
+            if (thread.embedding.length > 0) {
+                validateEmbeddingVector(
+                    thread.embedding,
+                    threadIdentity.dimensions,
+                );
+            }
+        }
+    }
+}
+
 type EmbeddingData = {
     embeddings: Float32Array[];
 };
 
 interface ConversationJsonData extends IConversationDataWithIndexes {
+    embeddingIdentities?: PersistedEmbeddingIdentities;
     fileHeader?: FileHeader | undefined;
     embeddingFileHeader?: EmbeddingFileHeader | undefined;
 }
@@ -192,7 +336,11 @@ function getStoredEmbeddingSize(
     if (fileData.jsonData?.embeddingFileHeader) {
         return (
             fileData.jsonData.embeddingFileHeader.modelMetadata
-                ?.embeddingSize ?? modelMetadata_ada002().embeddingSize
+                ?.embeddingSize ??
+            Object.values(
+                fileData.jsonData.embeddingFileHeader.identities ?? {},
+            )[0]?.dimensions ??
+            modelMetadata_ada002().embeddingSize
         );
     }
     return undefined;
@@ -234,11 +382,37 @@ function dropPersistedEmbeddings(jsonData: ConversationJsonData): void {
     }
     if (jsonData.messageIndexData?.indexData) {
         jsonData.messageIndexData.indexData = undefined;
+        jsonData.messageIndexData.messageCount = 0;
+    }
+    for (const thread of jsonData.threadData?.threads ?? []) {
+        thread.embedding = [];
     }
     if (jsonData.embeddingFileHeader) {
         jsonData.embeddingFileHeader.relatedCount = undefined;
         jsonData.embeddingFileHeader.messageCount = undefined;
     }
+}
+
+function cloneIndexData(data: ConversationJsonData): ConversationJsonData {
+    return {
+        ...data,
+        embeddingFileHeader: data.embeddingFileHeader
+            ? { ...data.embeddingFileHeader }
+            : undefined,
+        relatedTermsIndexData: data.relatedTermsIndexData
+            ? { ...data.relatedTermsIndexData }
+            : undefined,
+        messageIndexData: data.messageIndexData
+            ? { ...data.messageIndexData }
+            : undefined,
+        threadData: data.threadData
+            ? {
+                  threads: data.threadData.threads?.map((thread) => ({
+                      ...thread,
+                  })),
+              }
+            : undefined,
+    };
 }
 
 function toConversationFileData(
@@ -253,14 +427,28 @@ function toConversationFileData(
         },
         binaryData: {},
     };
+    const related = conversationData.relatedTermsIndexData;
+    if (related?.textEmbeddingData) {
+        fileData.jsonData.relatedTermsIndexData = {
+            ...related,
+            textEmbeddingData: { ...related.textEmbeddingData },
+        };
+    }
+    const messages = conversationData.messageIndexData;
+    if (messages?.indexData) {
+        fileData.jsonData.messageIndexData = {
+            ...messages,
+            indexData: { ...messages.indexData },
+        };
+    }
     const embeddingFileHeader = fileData.jsonData.embeddingFileHeader!;
     embeddingFileHeader.relatedCount = addEmbeddingsToBinaryData(
         fileData.binaryData,
-        conversationData.relatedTermsIndexData?.textEmbeddingData,
+        fileData.jsonData.relatedTermsIndexData?.textEmbeddingData,
     );
     embeddingFileHeader.messageCount = addEmbeddingsToBinaryData(
         fileData.binaryData,
-        conversationData.messageIndexData?.indexData,
+        fileData.jsonData.messageIndexData?.indexData,
     );
     const embeddingSize = checkEmbeddingSize(
         fileData,
@@ -355,7 +543,7 @@ function checkEmbeddingSize(
         const embeddings = fileData.binaryData.embeddings;
         if (embeddings && embeddings.length > 0) {
             embeddingSize ??= embeddings[0].length;
-            for (let i = 1; i < embeddings.length; ++i) {
+            for (let i = 0; i < embeddings.length; ++i) {
                 if (embeddingSize !== embeddings[i].length) {
                     throw new Error(
                         `Embeddings not of same size ${embeddingSize}`,

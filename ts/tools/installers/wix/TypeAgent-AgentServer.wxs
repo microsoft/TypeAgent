@@ -77,13 +77,25 @@
          Public property (pass uppercase on the msiexec command line, e.g.
            msiexec /i TypeAgent.msi PROVIDER=COPILOT
          COPILOT (default) synthesizes config.local.yaml with Copilot chat and
-         embedding providers. AISYSTEMS provisions through az login + getKeys.
+         local embeddings. AISYSTEMS provisions through az login + getKeys.
          ═══════════════════════════════════════════════ -->
     <Property Id="PROVIDER" Value="COPILOT" Secure="yes" />
+    <Property Id="LOCALEMBEDDINGMODEL" Value="MINILM" Secure="yes" />
+    <Property Id="DOWNLOADLOCALEMBEDDING" Value="0" Secure="yes" />
+    <Property Id="LOCALDOWNLOADCONSENT" Secure="yes" />
+    <SetProperty Id="DOWNLOADLOCALEMBEDDING" Value="1" Before="InstallInitialize" Sequence="execute">
+      LOCALDOWNLOADCONSENT="1"
+    </SetProperty>
+    <Condition Message="LOCALEMBEDDINGMODEL must be MINILM or EMBEDDINGGEMMA. Gemma requires a multi-GB CPU/FP32 snapshot.">
+      LOCALEMBEDDINGMODEL="MINILM" OR LOCALEMBEDDINGMODEL="EMBEDDINGGEMMA"
+    </Condition>
+    <Condition Message="DOWNLOADLOCALEMBEDDING must be 0 or 1. Downloads require explicit consent.">
+      DOWNLOADLOCALEMBEDDING="0" OR DOWNLOADLOCALEMBEDDING="1"
+    </Condition>
     <Condition Message="PROVIDER must be AISYSTEMS or COPILOT. Ollama is not supported by this MSI; use the TypeAgent provisioning tools for Ollama.">
       PROVIDER="AISYSTEMS" OR PROVIDER="COPILOT"
     </Condition>
-    <Condition Message="EMBEDDING and OLLAMAHOST are no longer supported MSI properties. GitHub Copilot embeddings are configured automatically.">
+    <Condition Message="EMBEDDING and OLLAMAHOST are no longer supported MSI properties. Use LOCALEMBEDDINGMODEL for pinned offline local embeddings.">
       NOT EMBEDDING AND NOT OLLAMAHOST
     </Condition>
 
@@ -496,7 +508,7 @@
     <SetProperty Id="ProvisionCopilotConfig"
            Before="ProvisionCopilotConfig"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -FailOnError -ServeCommand provision --provider COPILOT --embedding COPILOT --embedding-model text-embedding-3-small --force" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -FailOnError -ServeCommand provision --provider COPILOT --embedding LOCAL --local-embedding-model [LOCALEMBEDDINGMODEL] --local-embedding-cache-dir &quot;[LocalAppDataFolder]TypeAgent\embedding-cache&quot; --download-local-embedding [DOWNLOADLOCALEMBEDDING] --preserve-embedding-selection --force" />
 
     <CustomAction Id="ProvisionCopilotConfig"
                   BinaryKey="WixCA"
@@ -826,7 +838,7 @@
       <DialogRef Id="UserExit" />
 
       <!-- ═══ Completion-provider selection dialog ═══ -->
-      <Dialog Id="ProviderDlg" Width="370" Height="230" Title="[ProductName] Setup">
+      <Dialog Id="ProviderDlg" Width="370" Height="286" Title="[ProductName] Setup">
         <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44"
                  TabSkip="no" Text="!(loc.InstallDirDlgBannerBitmap)" />
         <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
@@ -850,28 +862,40 @@
           </RadioButtonGroup>
         </Control>
 
-        <Control Id="VsCodeChatCheckBox" Type="CheckBox" X="20" Y="122" Width="340" Height="12"
+        <Control Id="LocalEmbeddingLabel" Type="Text" X="20" Y="110" Width="330" Height="12"
+                 Text="Local embedding model (Copilot; restart server to switch)" />
+        <Control Id="LocalEmbeddingRadio" Type="RadioButtonGroup" X="24" Y="124"
+                 Width="326" Height="34" Property="LOCALEMBEDDINGMODEL">
+          <RadioButtonGroup Property="LOCALEMBEDDINGMODEL">
+            <RadioButton Value="MINILM" X="0" Y="0" Width="322" Height="16" Text="MiniLM — text, 384 dimensions (lightweight default)" />
+            <RadioButton Value="EMBEDDINGGEMMA" X="0" Y="18" Width="322" Height="16" Text="Gemma — text + image, 768 dimensions (multiple GB)" />
+          </RadioButtonGroup>
+        </Control>
+        <Control Id="DownloadLocalEmbeddingCheckBox" Type="CheckBox" X="20" Y="162" Width="340" Height="16"
+                 Property="LOCALDOWNLOADCONSENT" CheckBoxValue="1"
+                 Text="I consent to download the selected model; otherwise stage offline" />
+        <Control Id="VsCodeChatCheckBox" Type="CheckBox" X="20" Y="182" Width="340" Height="12"
                  Property="VSCODECHAT" CheckBoxValue="1"
                  Text="Install TypeAgent Chat for VS Code 1.133 or newer" />
 
-        <Control Id="VsCodeShellCheckBox" Type="CheckBox" X="20" Y="138" Width="340" Height="12"
+        <Control Id="VsCodeShellCheckBox" Type="CheckBox" X="20" Y="198" Width="340" Height="12"
                  Property="VSCODESHELL" CheckBoxValue="1"
                  Text="Install TypeAgent Shell Extension for VS Code 1.90 or newer" />
 
-        <Control Id="ShellCheckBox" Type="CheckBox" X="20" Y="154" Width="340" Height="12"
+        <Control Id="ShellCheckBox" Type="CheckBox" X="20" Y="214" Width="340" Height="12"
                  Property="SHELL" CheckBoxValue="1"
                  Text="Also install the TypeAgent Shell desktop app" />
 
-        <Control Id="StackTraceCheckBox" Type="CheckBox" X="20" Y="170" Width="340" Height="12"
+        <Control Id="StackTraceCheckBox" Type="CheckBox" X="20" Y="230" Width="340" Height="12"
                  Property="SHOWSTACKTRACE" CheckBoxValue="1"
                  Text="Show full error details if setup fails" />
 
-        <Control Id="BottomLine" Type="Line" X="0" Y="194" Width="370" Height="0" />
-        <Control Id="Back" Type="PushButton" X="180" Y="203" Width="56" Height="17"
+        <Control Id="BottomLine" Type="Line" X="0" Y="250" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="259" Width="56" Height="17"
                  Text="!(loc.WixUIBack)" />
-        <Control Id="Next" Type="PushButton" X="236" Y="203" Width="56" Height="17"
+        <Control Id="Next" Type="PushButton" X="236" Y="259" Width="56" Height="17"
                  Default="yes" Text="!(loc.WixUINext)" />
-        <Control Id="Cancel" Type="PushButton" X="304" Y="203" Width="56" Height="17"
+        <Control Id="Cancel" Type="PushButton" X="304" Y="259" Width="56" Height="17"
                  Cancel="yes" Text="!(loc.WixUICancel)">
           <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
         </Control>

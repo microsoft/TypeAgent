@@ -4,6 +4,33 @@
 # TypeAgent default configuration.
 # See config.sample.yaml for all available options.
 
+# Alternatives only: no selector is set, preserving existing hosted inference.
+embeddingModels:
+  copilot-small:
+    provider: copilot
+    model: text-embedding-3-small
+    size: 1536
+    modalities: [text]
+  local-minilm:
+    provider: local
+    runtime: minilm
+    model: Xenova/all-MiniLM-L6-v2
+    revision: 751bff37182d3f1213fa05d7196b954e230abad9
+    size: 384
+    modalities: [text]
+    localFilesOnly: true
+    maxBatchSize: 32
+  local-embeddinggemma:
+    provider: local
+    runtime: embeddinggemma
+    model: onnx-community/embeddinggemma-2-ONNX
+    revision: daa72c51243991dfcaf9f9137d2c573d8f7790c0
+    size: 768
+    modalities: [text, image]
+    localFilesOnly: true
+    maxBatchSize: 1
+    maxPending: 8
+
 azureOpenAI:
   defaultAuth: identity
   maxConcurrency: 4

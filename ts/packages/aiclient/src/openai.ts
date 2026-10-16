@@ -28,6 +28,7 @@ import {
 } from "./endpointPool.js";
 import { discoverEndpointPoolFromConfig } from "./endpointPoolFromConfig.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
+import { identifyEmbeddingModel } from "./identifiedEmbedding.js";
 import {
     PromptSection,
     Result,
@@ -894,9 +895,41 @@ export const GPT_5_CHAT: AzureChatModelName = "GPT_5_CHAT";
  * @param dimensions (optional) text-embedding-03 and later models allow variable length embeddings
  */
 export type EmbeddingModelOptions = {
+    provider?: "openai" | "azure" | undefined;
     modelName?: string | undefined;
     maxBatchSize?: number | undefined;
+    revision?: string | undefined;
+    expectedDimensions?: number | undefined;
 };
+
+function identifyHostedEmbeddingModel(
+    model: TextEmbeddingModel,
+    pool: EndpointPool,
+    dimensions: number | undefined,
+    options: EmbeddingModelOptions | undefined,
+): TextEmbeddingModel {
+    const settings = pool.members[0].settings;
+    const name = options?.modelName ?? settings.modelName ?? pool.modelKey;
+    return identifyEmbeddingModel(model, {
+        provider: settings.provider,
+        model: name,
+        revision: options?.revision ?? "provider-managed-unversioned",
+        dimensions:
+            options?.expectedDimensions ??
+            dimensions ??
+            (name === "text-embedding-3-large" ? 3072 : 1536),
+        pooling: "provider-managed",
+        normalization: "l2",
+        preprocessing:
+            "provider-managed text embedding; deployment identity is configuration-attested",
+        configuration: {
+            model: name,
+            endpoints: pool.members
+                .map((member) => member.settings.endpoint)
+                .sort(),
+        },
+    });
+}
 
 export function createEmbeddingModel(
     endpoint: string,
@@ -920,7 +953,7 @@ export function createEmbeddingModel(
             `custom:${apiSettingsOrEndpoint.provider}`,
         );
     } else {
-        const provider = defaultProvider();
+        const provider = options?.provider ?? defaultProvider();
         pool = getModelPool(
             provider,
             ModelType.Embedding,
@@ -956,7 +989,7 @@ export function createEmbeddingModel(
         generateEmbeddingBatch,
         maxBatchSize,
     };
-    return model;
+    return identifyHostedEmbeddingModel(model, pool, dimensions, options);
 
     async function generateEmbedding(input: string): Promise<Result<number[]>> {
         if (!input) {

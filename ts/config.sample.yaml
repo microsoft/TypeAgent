@@ -367,10 +367,38 @@ reasoning:
 # When omitted, the provider is inferred from the configured embedding
 # endpoints (openAI/azureOpenAI), or disabled if none is present.
 
-embedding:
-  provider: local
-  model: Xenova/all-MiniLM-L6-v2 # local provider only (384-d, ~23MB)
-  # cacheDir: /var/lib/typeagent/models  # pre-stage weights (air-gapped)
+# Named models merge by alias and field with config.defaults.yaml.
+# Uncomment one selector, and remove any legacy embedding: overrides.
+# defaultEmbeddingModel: local-minilm
+# defaultEmbeddingModel: local-embeddinggemma
+# defaultEmbeddingModel: azure-ada
+# defaultEmbeddingModel: none
+# No selector preserves existing embedding endpoint/provider inference.
+embeddingModels:
+  azure-ada:
+    provider: azure
+    deployment: embedding # references azureOpenAI.deployments.embedding above
+    model: text-embedding-ada-002 # must match the actual deployment
+    size: 1536
+    modalities: [text]
+  local-minilm:
+    provider: local
+    runtime: minilm
+    model: Xenova/all-MiniLM-L6-v2
+    revision: 751bff37182d3f1213fa05d7196b954e230abad9
+    size: 384
+    modalities: [text]
+    localFilesOnly: true
+  local-embeddinggemma:
+    provider: local
+    runtime: embeddinggemma
+    model: onnx-community/embeddinggemma-2-ONNX
+    revision: daa72c51243991dfcaf9f9137d2c573d8f7790c0
+    size: 768
+    modalities: [text, image]
+    localFilesOnly: true
+    maxBatchSize: 1
+    maxPending: 8
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Key Vault                                                       ║

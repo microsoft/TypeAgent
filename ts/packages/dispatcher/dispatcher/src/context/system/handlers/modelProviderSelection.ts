@@ -11,12 +11,24 @@ import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 
 export async function applyModelProviderSelection(
     name: ProviderMode,
-    systemContext: Pick<CommandHandlerContext, "agents" | "translatorCache">,
+    systemContext: {
+        agents: Pick<
+            CommandHandlerContext["agents"],
+            "rebuildActionSemanticMap"
+        >;
+        translatorCache: Pick<
+            CommandHandlerContext["translatorCache"],
+            "clear"
+        >;
+    },
 ): Promise<void> {
     process.env.TYPEAGENT_MODEL_PROVIDER = name;
 
     const currentConfig = getRuntimeConfig();
-    if (name === "copilot") {
+    if (
+        name === "copilot" &&
+        currentConfig.defaultEmbeddingModel === undefined
+    ) {
         process.env.TYPEAGENT_EMBEDDING_PROVIDER = "copilot";
         process.env.TYPEAGENT_EMBEDDING_MODEL = DefaultCopilotEmbeddingModel;
         setRuntimeConfig({

@@ -10,7 +10,12 @@ import {
     createTopNListAll,
     dotProduct,
 } from "@typeagent/agent-runtime";
-import { TextEmbeddingModel } from "@typeagent/aiclient";
+import {
+    TextEmbeddingModel,
+    EmbeddingRole,
+    embeddingModelForRole,
+    validateEmbeddingVector,
+} from "@typeagent/aiclient";
 import levenshtein from "fast-levenshtein";
 import { Scored } from "./common.js";
 import {
@@ -190,10 +195,20 @@ export async function generateTextEmbeddingsForIndex(
 ): Promise<Result<NormalizedEmbedding[]>> {
     try {
         const textsToEmbed = Array.isArray(texts) ? texts : [texts];
+        embeddingModel = embeddingModelForRole(embeddingModel, "document");
         const embeddings = await generateTextEmbeddingsWithRetry(
             embeddingModel,
             textsToEmbed,
         );
+        if (embeddings.length !== textsToEmbed.length) {
+            throw new Error("Embedding batch cardinality mismatch");
+        }
+        const dimensions =
+            embeddingModel.embeddingIdentity?.dimensions ??
+            embeddings[0]?.length;
+        for (const vector of embeddings) {
+            validateEmbeddingVector(Array.from(vector), dimensions!);
+        }
         return success(embeddings);
     } catch (ex) {
         return error(`generateTextEmbeddingsForIndex failed: ${ex}`);
@@ -258,8 +273,12 @@ export async function indexOfNearestTextInIndex(
     text: string,
     maxMatches?: number,
     minScore?: number,
+    role: EmbeddingRole = "query",
 ): Promise<Scored[]> {
-    const textEmbedding = await generateEmbedding(embeddingModel, text);
+    const textEmbedding = await generateEmbedding(
+        embeddingModelForRole(embeddingModel, role),
+        text,
+    );
     return embeddingIndex.getIndexesOfNearest(
         textEmbedding,
         maxMatches,
@@ -275,7 +294,10 @@ export async function indexOfNearestTextInIndexSubset(
     maxMatches?: number,
     minScore?: number,
 ): Promise<Scored[]> {
-    const textEmbedding = await generateEmbedding(embeddingModel, text);
+    const textEmbedding = await generateEmbedding(
+        embeddingModelForRole(embeddingModel, "query"),
+        text,
+    );
     return embeddingIndex.getIndexesOfNearestInSubset(
         textEmbedding,
         ordinalsToSearch,
@@ -290,9 +312,10 @@ export async function indexesOfNearestTextBatchInIndex(
     textArray: string[],
     maxMatches?: number,
     minScore?: number,
+    role: EmbeddingRole = "query",
 ): Promise<Scored[][]> {
     const textEmbeddings = await generateTextEmbeddings(
-        embeddingModel,
+        embeddingModelForRole(embeddingModel, role),
         textArray,
     );
     const results = [];
@@ -389,6 +412,7 @@ export class TextEmbeddingIndex {
             text,
             maxMatches,
             minScore,
+            this.settings.lookupRole,
         );
     }
 
@@ -408,6 +432,7 @@ export class TextEmbeddingIndex {
             textBatch,
             maxMatches,
             minScore,
+            this.settings.lookupRole,
         );
     }
 
@@ -437,6 +462,8 @@ export function deserializeEmbedding(array: number[]): NormalizedEmbedding {
 }
 
 export type TextEmbeddingIndexSettings = {
+    /** Related terms deliberately compare document embeddings symmetrically. */
+    lookupRole?: EmbeddingRole;
     embeddingModel: TextEmbeddingModel | undefined;
     embeddingSize: number;
     minScore: number;

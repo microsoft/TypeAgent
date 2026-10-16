@@ -96,8 +96,7 @@ param(
     #   copilot   - GitHub Copilot SDK chat via an authenticated 'copilot' CLI (no Key Vault).
     [ValidateSet("aisystems", "ollama", "copilot")]
     [string]$Provider = "aisystems",
-    # Embedding source for ollama/copilot providers. Defaults to copilot for
-    # Copilot chat and to the bundled CPU-only local model otherwise.
+    # Local CPU/FP32 embeddings by default; downloads require separate consent.
     [ValidateSet("copilot", "local", "ollama", "openai", "none")]
     [string]$Embedding = "local",
     [string]$OllamaHost = "http://localhost:11434",
@@ -105,6 +104,11 @@ param(
     [string]$CopilotModel = "",
     [string]$EmbeddingEndpoint = "",
     [string]$EmbeddingModel = "",
+    [ValidateSet("minilm", "embeddinggemma")]
+    [string]$LocalEmbeddingModel = "minilm",
+    [string]$LocalEmbeddingCacheDir = "$env:LOCALAPPDATA\TypeAgent\embedding-cache",
+    [int]$EmbeddingSize = 0,
+    [switch]$DownloadLocalEmbedding,
     [string]$OpenAIKey = "",
     # Opt-in: also download and install the TypeAgent Shell (Electron desktop
     # app) from Azure Blob Storage after the agent-server install, via the
@@ -124,9 +128,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if ($Provider -eq "copilot" -and -not $PSBoundParameters.ContainsKey("Embedding")) {
-    $Embedding = "copilot"
-}
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Fail($msg) { Write-Error $msg; exit 1 }
@@ -814,6 +815,12 @@ if ($Provider -eq "aisystems") {
     # Self-host provider: synthesize config.local.yaml locally (no Key Vault / az login).
     Write-Step "Provisioning config for '$Provider' provider (self-host, no Key Vault)"
     $provisionArgs = @($serve, "provision", "--provider", $Provider, "--force", "--embedding", $Embedding)
+    $provisionArgs += @("--local-embedding-model", $LocalEmbeddingModel, "--local-embedding-cache-dir", $LocalEmbeddingCacheDir)
+    if ($DownloadLocalEmbedding) { $provisionArgs += "--download-local-embedding" }
+    if ($EmbeddingSize -gt 0) { $provisionArgs += @("--embedding-size", "$EmbeddingSize") }
+    if (-not $PSBoundParameters.ContainsKey("Embedding") -and -not $PSBoundParameters.ContainsKey("LocalEmbeddingModel")) {
+        $provisionArgs += "--preserve-embedding-selection"
+    }
     if ($Provider -eq "ollama") {
         $provisionArgs += @("--ollama-host", $OllamaHost)
         if ($ChatModel) { $provisionArgs += @("--chat-model", $ChatModel) }
@@ -872,7 +879,7 @@ $hasEmbeddingEnv = (-not [string]::IsNullOrWhiteSpace($env:AZURE_OPENAI_ENDPOINT
     (-not [string]::IsNullOrWhiteSpace($env:TYPEAGENT_EMBEDDING_PROVIDER))
 $hasEmbeddingInFile = $false
 if (Test-Path $configLocalPath) {
-    $hasEmbeddingInFile = [bool](Select-String -Path $configLocalPath -Pattern "AZURE_OPENAI_ENDPOINT_EMBEDDING|OPENAI_ENDPOINT_EMBEDDING|azureOpenAiEndpointEmbedding|endpointEmbedding|endpoint_embedding|^embedding:|provider:\s*(local|openai|azure|none)" -Quiet)
+    $hasEmbeddingInFile = [bool](Select-String -Path $configLocalPath -Pattern "AZURE_OPENAI_ENDPOINT_EMBEDDING|OPENAI_ENDPOINT_EMBEDDING|azureOpenAiEndpointEmbedding|endpointEmbedding|endpoint_embedding|^defaultEmbeddingModel:|^embedding:|provider:\s*(local|openai|azure|none)" -Quiet)
 }
 
 if (-not $hasEmbeddingEnv -and -not $hasEmbeddingInFile) {
