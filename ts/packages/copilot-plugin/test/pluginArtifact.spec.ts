@@ -12,6 +12,7 @@ import {
     mkdtemp,
     readFile,
     rm,
+    symlink,
     writeFile,
 } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -140,162 +141,183 @@ describe("staged plugin artifact", () => {
         );
     });
 
-    it("consumes mode and recipe commands in a copied hook without backend connections", async () => {
-        const directory = await mkdtemp(
-            path.join(tmpdir(), "typeagent-mode-artifact-"),
-        );
-        let connections = 0;
-        const server = createServer((socket) => {
-            connections++;
-            socket.destroy();
-        });
-        try {
-            server.listen(0, "127.0.0.1");
-            await once(server, "listening");
-            const address = server.address();
-            if (!address || typeof address === "string") {
-                throw new Error("Expected a TCP address");
-            }
-            const pluginRoot = path.resolve(
-                path.dirname(fileURLToPath(import.meta.url)),
-                "..",
-                "..",
+    it.each(["direct", "symlink"])(
+        "consumes mode and recipe commands in a copied hook via %s launch without backend connections",
+        async (launch) => {
+            const directory = await mkdtemp(
+                path.join(tmpdir(), "typeagent-mode-artifact-"),
             );
-            const hook = path.join(
-                directory,
-                "dist",
-                "hooks",
-                "hook-router.js",
-            );
-            await mkdir(path.dirname(hook), { recursive: true });
-            await copyFile(
-                path.join(pluginRoot, "dist", "hooks", "hook-router.js"),
-                hook,
-            );
-            await writeFile(
-                path.join(directory, "package.json"),
-                JSON.stringify({ type: "module" }),
-            );
-            const configPath = path.join(directory, "config.json");
-            await writeFile(
-                configPath,
-                JSON.stringify({
-                    mode: "direct",
-                    powershell: { enabled: false },
-                }),
-            );
-            const env: NodeJS.ProcessEnv = {
-                ...process.env,
-                TYPEAGENT_PLUGIN_DATA: directory,
-                TYPEAGENT_HOST: "127.0.0.1",
-                TYPEAGENT_PORT: String(address.port),
-                TYPEAGENT_MACRO_RECORDING_ENABLED: "false",
-            };
-            delete env.TYPEAGENT_MODE;
-            const runHook = async (
-                prompt: string,
-            ): Promise<UserPromptSubmittedOutput> => {
-                const child = spawn(process.execPath, [hook], {
-                    env,
-                    cwd: directory,
-                    timeout: 10000,
-                    stdio: ["pipe", "pipe", "pipe"],
-                });
-                let stdout = "";
-                let stderr = "";
-                child.stdout.setEncoding("utf8").on("data", (chunk) => {
-                    stdout += chunk;
-                });
-                child.stderr.setEncoding("utf8").on("data", (chunk) => {
-                    stderr += chunk;
-                });
-                child.stdin.end(
+            let connections = 0;
+            const server = createServer((socket) => {
+                connections++;
+                socket.destroy();
+            });
+            try {
+                server.listen(0, "127.0.0.1");
+                await once(server, "listening");
+                const address = server.address();
+                if (!address || typeof address === "string") {
+                    throw new Error("Expected a TCP address");
+                }
+                const pluginRoot = path.resolve(
+                    path.dirname(fileURLToPath(import.meta.url)),
+                    "..",
+                    "..",
+                );
+                const hook = path.join(
+                    directory,
+                    "dist",
+                    "hooks",
+                    "hook-router.js",
+                );
+                await mkdir(path.dirname(hook), { recursive: true });
+                await copyFile(
+                    path.join(pluginRoot, "dist", "hooks", "hook-router.js"),
+                    hook,
+                );
+                let launchPath = hook;
+                if (launch === "symlink") {
+                    const linkedHooks = path.join(directory, "linked-hooks");
+                    await symlink(
+                        path.dirname(hook),
+                        linkedHooks,
+                        process.platform === "win32" ? "junction" : "dir",
+                    );
+                    launchPath = path.join(linkedHooks, "hook-router.js");
+                }
+                await writeFile(
+                    path.join(directory, "package.json"),
+                    JSON.stringify({ type: "module" }),
+                );
+                const configPath = path.join(directory, "config.json");
+                await writeFile(
+                    configPath,
                     JSON.stringify({
-                        sessionId: "mode-artifact",
-                        timestamp: 1,
-                        cwd: directory,
-                        prompt,
+                        mode: "direct",
+                        powershell: { enabled: false },
                     }),
                 );
-                const [code] = await once(child, "close");
-                if (code !== 0) {
-                    throw new Error(
-                        `Copied hook exited with code ${code}: ${stderr}`,
+                const env: NodeJS.ProcessEnv = {
+                    ...process.env,
+                    TYPEAGENT_PLUGIN_DATA: directory,
+                    TYPEAGENT_HOST: "127.0.0.1",
+                    TYPEAGENT_PORT: String(address.port),
+                    TYPEAGENT_MACRO_RECORDING_ENABLED: "false",
+                };
+                delete env.TYPEAGENT_MODE;
+                const runHook = async (
+                    prompt: string,
+                ): Promise<UserPromptSubmittedOutput> => {
+                    const child = spawn(process.execPath, [launchPath], {
+                        env,
+                        cwd: directory,
+                        timeout: 10000,
+                        stdio: ["pipe", "pipe", "pipe"],
+                    });
+                    let stdout = "";
+                    let stderr = "";
+                    child.stdout.setEncoding("utf8").on("data", (chunk) => {
+                        stdout += chunk;
+                    });
+                    child.stderr.setEncoding("utf8").on("data", (chunk) => {
+                        stderr += chunk;
+                    });
+                    child.stdin.end(
+                        JSON.stringify({
+                            sessionId: "mode-artifact",
+                            timestamp: 1,
+                            cwd: directory,
+                            prompt,
+                        }),
                     );
+                    const [code] = await once(child, "close");
+                    if (code !== 0) {
+                        throw new Error(
+                            `Copied hook exited with code ${code}: ${stderr}`,
+                        );
+                    }
+                    if (
+                        prompt === "@typeagent recipe status" &&
+                        stderr !== ""
+                    ) {
+                        expect(stderr).toMatch(
+                            /^\(node:\d+\) ExperimentalWarning: SQLite is an experimental feature and might change at any time\r?\n\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)\r?\n$/,
+                        );
+                    } else {
+                        expect(stderr).toBe("");
+                    }
+                    return JSON.parse(stdout) as UserPromptSubmittedOutput;
+                };
+                for (const [args, response] of [
+                    ["mcp mixed", "TypeAgent mode switched to mcp (mixed)."],
+                    ["", "TypeAgent mode: mcp (mixed)"],
+                    ["mcp typo", "Usage:"],
+                    ["mcp mixed extra", "Usage:"],
+                    ["direct mixed", "Usage:"],
+                    ["mcp\nmixed\nextra", "Usage:"],
+                    [
+                        "mcp\ndelegate",
+                        "TypeAgent mode switched to mcp (delegate).",
+                    ],
+                    ["mcp", "TypeAgent mode switched to mcp (delegate)."],
+                    ["MCP MIXED", "TypeAgent mode switched to mcp (mixed)."],
+                ]) {
+                    const output = await runHook(`@typeagent mode ${args}`);
+                    expect(output.handled).toBe(true);
+                    expect(output.responseContent).toContain(response);
+                    expect(output.modifiedPrompt).toBeUndefined();
+                    expect(output.additionalContext).toBeUndefined();
+                    expect(connections).toBe(0);
                 }
-                if (prompt === "@typeagent recipe status" && stderr !== "") {
-                    expect(stderr).toMatch(
-                        /^\(node:\d+\) ExperimentalWarning: SQLite is an experimental feature and might change at any time\r?\n\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)\r?\n$/,
-                    );
-                } else {
-                    expect(stderr).toBe("");
-                }
-                return JSON.parse(stdout) as UserPromptSubmittedOutput;
-            };
-            for (const [args, response] of [
-                ["mcp mixed", "TypeAgent mode switched to mcp (mixed)."],
-                ["", "TypeAgent mode: mcp (mixed)"],
-                ["mcp typo", "Usage:"],
-                ["mcp mixed extra", "Usage:"],
-                ["direct mixed", "Usage:"],
-                ["mcp\nmixed\nextra", "Usage:"],
-                ["mcp\ndelegate", "TypeAgent mode switched to mcp (delegate)."],
-                ["mcp", "TypeAgent mode switched to mcp (delegate)."],
-                ["MCP MIXED", "TypeAgent mode switched to mcp (mixed)."],
-            ]) {
-                const output = await runHook(`@typeagent mode ${args}`);
-                expect(output.handled).toBe(true);
-                expect(output.responseContent).toContain(response);
-                expect(output.modifiedPrompt).toBeUndefined();
-                expect(output.additionalContext).toBeUndefined();
-                expect(connections).toBe(0);
-            }
-            expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
-                mode: "mcp",
-                mcpRouting: "mixed",
-                powershell: { enabled: false },
-            });
-            const recipeStatus = await runHook("@typeagent recipe status");
-            expect(recipeStatus.handled).toBe(true);
-            expect(recipeStatus.responseContent).toContain(
-                "Plugin-local program execution is not enabled.",
-            );
-            expect(recipeStatus.modifiedPrompt).toBeUndefined();
-            expect(recipeStatus.additionalContext).toBeUndefined();
-            expect(connections).toBe(0);
-            const prompt =
-                "Compare PRs #3058, #3059, and #2993 and recommend smoke tests.";
-            for (const policy of ["mixed", "delegate"]) {
-                await runHook(`@typeagent mode mcp ${policy}`);
-                const output = await runHook(prompt);
-                expect(output.modifiedPrompt).toBe(prompt);
-                expect(output.additionalContext).toContain(
-                    "TypeAgent is the preferred action provider in MCP mode",
+                expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
+                    mode: "mcp",
+                    mcpRouting: "mixed",
+                    powershell: { enabled: false },
+                });
+                const recipeStatus = await runHook("@typeagent recipe status");
+                expect(recipeStatus.handled).toBe(true);
+                expect(recipeStatus.responseContent).toContain(
+                    "Plugin-local program execution is not enabled.",
                 );
-                expect(output.additionalContext).toContain(
-                    "Native tools are a fallback only after establishing",
-                );
-                if (policy === "mixed") {
-                    expect(output.additionalContext).toContain(
-                        "rather than native GitHub tools, gh, or web/API fetches",
-                    );
-                } else {
-                    expect(output.additionalContext).toContain(
-                        "You MUST call the typeagent-processCommand",
-                    );
-                    expect(output.additionalContext).not.toContain(
-                        "typeagent-searchActions",
-                    );
-                }
+                expect(recipeStatus.modifiedPrompt).toBeUndefined();
+                expect(recipeStatus.additionalContext).toBeUndefined();
                 expect(connections).toBe(0);
+                const prompt =
+                    "Compare PRs #3058, #3059, and #2993 and recommend smoke tests.";
+                for (const policy of ["mixed", "delegate"]) {
+                    await runHook(`@typeagent mode mcp ${policy}`);
+                    const output = await runHook(prompt);
+                    expect(output.modifiedPrompt).toBe(prompt);
+                    expect(output.additionalContext).toContain(
+                        "TypeAgent is the preferred action provider in MCP mode",
+                    );
+                    expect(output.additionalContext).toContain(
+                        "Native tools are a fallback only after establishing",
+                    );
+                    if (policy === "mixed") {
+                        expect(output.additionalContext).toContain(
+                            "rather than native GitHub tools, gh, or web/API fetches",
+                        );
+                    } else {
+                        expect(output.additionalContext).toContain(
+                            "You MUST call the typeagent-processCommand",
+                        );
+                        expect(output.additionalContext).not.toContain(
+                            "typeagent-searchActions",
+                        );
+                    }
+                    expect(connections).toBe(0);
+                }
+            } finally {
+                await new Promise<void>((resolve, reject) => {
+                    server.close((error) =>
+                        error ? reject(error) : resolve(),
+                    );
+                });
+                await rm(directory, { recursive: true, force: true });
             }
-        } finally {
-            await new Promise<void>((resolve, reject) => {
-                server.close((error) => (error ? reject(error) : resolve()));
-            });
-            await rm(directory, { recursive: true, force: true });
-        }
-    });
+        },
+    );
 
     it("contains the extension bundle at the declared discovery path", async () => {
         const testDir = path.dirname(fileURLToPath(import.meta.url));

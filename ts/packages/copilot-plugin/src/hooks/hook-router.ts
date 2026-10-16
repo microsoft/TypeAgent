@@ -23,6 +23,7 @@ import type {
 } from "@typeagent/agent-harness-hooks/copilot-cli";
 import { redactTraceValue } from "@typeagent/copilot-macros";
 import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
     publishControlMetadata,
@@ -399,7 +400,10 @@ function emitDemoStateForOutput(
     });
 }
 
-if (fileURLToPath(import.meta.url) === process.argv[1]) {
+if (
+    process.argv[1] &&
+    fileURLToPath(import.meta.url) === realpathSync(process.argv[1])
+) {
     main().catch((error) => {
         console.error("Hook error:", error);
         process.exit(1);
