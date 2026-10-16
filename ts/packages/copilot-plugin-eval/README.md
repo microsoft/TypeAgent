@@ -37,15 +37,121 @@ package-local `.native-*` run directories. Keep reusable harness scripts and
 self-contained regression tests in source control; tests must not depend on
 private session files or artifacts from a previous live run.
 Offline grading accepts host-native physical fixture paths as well as Windows
-path identities. Live native evaluation remains Windows-only; Unix test runs
-use a private executable fixture and do not launch the authenticated Copilot CLI.
+path identities. Offline tests never launch the authenticated Copilot CLI.
 
-## Native macro evaluation - gated controller and offline tooling
+## Current checked-program evaluation
+
+Current plans, live configurations and grades use
+`macro-checked-program-eval-v2`. Old live configs and serialized old grades are
+rejected with a re-record diagnostic. Historical reports below are not
+regraded or relabeled. `runnerModel` and `--runner-model` are retired; there is
+no execution-planner child or replay/handoff flag injection.
+
+`plan`, `grade`, and `report` remain offline commands. `native` defaults to
+offline configuration validation. Its current `--execute-live true` path stages
+the real plugin, launches a pinned native executable through the owned Windows
+console helpers, discovers the actual authenticated local session, arms selected
+child recording, waits for child-authored learning, independently grades source
+reads, reviews and publishes only the two-read synthetic program, reuses it and
+optionally restarts the console before another reuse. It has **offline controller
+and production-command-envelope coverage, not new live acceptance evidence**.
+The old backend-owner launcher and approved-catalog continuation were deleted.
+The WorkIQ pilot, controller, adapter, native lifecycle and
+old projection/metadata probes and their dependent fixtures were also removed,
+not migrated or left runnable. There is **no WorkIQ recording/retention parity
+claim**. Independent WorkIQ evidence validation,
+private-result integrity checks, synthetic MCP fixture audits, trusted callback
+readers and staging safety tests remain; the WorkIQ verifier rejects the retired
+native lifecycle projection instead of importing it.
+
+Current native preflight config requires `protocolVersion`, `scope:
+"synthetic-only"`, absolute `workspace`, `profileId`,
+`rootModel`, positive bounded `maxTargetModelTurns`/`maxDurationMs`, and
+`executionPath: "grammar" | "explicit-mcp"`. `recipeOwner` defaults to `plugin`;
+only `plugin`/`off` are admitted. Preflight neither creates a broker registration
+nor authorizes live tools, corporate data access, credit spend or recording.
+An optional `sessionId` pins an already known actual session; otherwise the live
+driver discovers it. Live `workspace` must be the fresh `<output>/workspace`,
+and live owner must be `plugin`. Live config additionally requires:
+
+- `cliExecutable` and `cliSha256`, absolute `helperDirectory` containing the
+  approved `Launch-Demo.ps1`, `Control-Demo.ps1`, and `console-bridge.mjs`,
+  and a reconciled root-model-specific `creditLedger`.
+- `trainingCase` and `reuseCase` selecting **different** synthetic documents,
+  plus explicit `restart`.
+- `authorization` containing `scope: "synthetic-only"`, `approvedBy`,
+  `approvedAt`, `expiresAt`, canonical `corpusSha256` (SHA-256 of
+  `JSON.stringify(corpus)`), `approveSyntheticReads: true`, and
+  `approveSyntheticPublication: true`. Optional `approveOwnedWorkspaceTrust`
+  and `approveOwnedExtension` admit only exact owned paths/dialogs.
+
+Unknown interactions, blanket permissions, unsafe programs, stale child
+provenance, uncertain effects, missing headroom and changed process identities
+stop without replay. Root/author/verifier event counts stay distinct; missing
+provider/semantic cost evidence remains unknown. Credit-ledger admission and
+turn/deadline bounds are **not a native provider hard monetary cap**. No
+recording/OBS/media validation or savings claim is made; media validation remains
+required for any future separately approved recorded demonstration. Explicit
+synthetic read/publication approval does not authorize corporate data access.
+
+The synthetic document MCP server is named `eval-docs`. Names containing
+`typeagent`, `recipe`, or `macro` are rejected by the native recursion guard;
+the fixture must not require relaxing that guard. Canonical staging preserves
+the source extension loader and its `dist/extensions/typeagent` bundle layout.
+It also copies the complete `dist/recipe-runtime` tree: TypeScript `.d.ts`
+libraries are compiler runtime assets, not disposable package declarations.
+The staging regression checks every runtime asset's manifest size/hash and
+compiles a program from the staged standalone API without a service or model.
+
+`extractNativeEvidence(events, backendAudit, binding)` reads actual handled
+normal-hook results or explicit `run_macro` MCP results, never a runner child or
+old phase report. `collectPluginProgramBinding({workspace, profileId, sessionId,
+runId, startedAt, endedAt})` resolves the authenticated current broker and reads
+`getMacroRun` and the exact immutable `inspectMacro` version; it never registers a
+session or calls backend catalog/learning RPCs. `grade` requires top-level
+`protocolVersion` and:
+
+- `routeEvidence`: `grammar`, `explicit-mcp`, `miss`, `ordinary-copilot`, or
+  `unknown`; current reuse includes actual `macroId`, `version`, and `runId`.
+  Explicit MCP reports `grammarHit: false` and `explicitMcpReuse: true` and is
+  excluded from grammar-only performance pairs.
+- `programEvidence.response`: actual `{status, run}` returned by the owner,
+  tied by `eventId` to the recorded hook/MCP completion; `reconciledRun` is the
+  independently queried `getMacroRun(runId)` record. `macro` is the inspected
+  immutable approved program macro. Identity is `run.macroId/version/runId` and
+  `run.program.recipeId/revision` (not a fabricated `programRevision` field).
+- `programEvidence.expected`: controller-bound `runId`, `sessionId`,
+  `workspaceId`, `profileId`, `catalogDirectory`, `startedAt`, and `endedAt`; `registration` contains
+  the same nonsecret scope/session metadata resolved through the authenticated
+  plugin broker. `owner` is `plugin`. Do not serialize broker tokens.
+- Accepted `completed` outer/program terminal records, `fallback: "never"`,
+  fresh current-window output, exactly two completed read checkpoints tied to
+  the inspected capabilities and independent lookup/fetch audit, unique
+  completed call IDs, exact effect and invocation counts, and actual root
+  terminal completion. Execution-planner children fail grading; restricted
+  author/verifier children are not execution planners.
+
+If the root terminal answer is the exact JSON run envelope, the document oracle
+reads its current program output only after equality with the actual completion
+response is established. Arbitrary model JSON and prior run envelopes cannot
+supply output evidence.
+
+The collector must resolve `localRecipeScope(workspace)`,
+`localRecipeDirectory(workspace)` and the actual session registration through
+`resolveLocalRecipeWorkspace(sessionId)` / `callLocalRecipe`. The catalog is
+`<plugin-config>/recipes/<sha256(JSON(scope))>`, never backend
+`profiles/<instance>/copilot-macros`. Grammar uses `matchAndRun`; explicit MCP
+uses `runMacro`, not a renamed grammar notification. Learning requires genuine
+selected-task child capture and sealed author context. No backend catalog or
+learning RPC is an evaluation fallback.
+
+## Historical native macro evaluation reports (not runnable instructions)
 
 **Historical runner evaluation, retired by the program-only Checkpoint A cutover.**
 The native macro scripts below target the removed Copilot macro runner and
-adaptation APIs. They are retained as historical diagnostic tooling, not a
-supported current acceptance path or evidence for program execution. Do not use
+adaptation APIs. Their launch surfaces were deleted; the text, old command
+examples and results below remain historical reports, not supported runnable
+tooling, current acceptance paths or evidence for program execution. Do not use
 their runner inventories or verdicts to certify the current implementation.
 See the [current program scope and validation](../../docs/plans/copilot-fastActions/STATUS.md).
 The general Copilot task evaluation above is unaffected.

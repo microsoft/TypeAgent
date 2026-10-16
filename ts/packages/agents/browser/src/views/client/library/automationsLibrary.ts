@@ -205,6 +205,9 @@ class AutomationsApp {
             ),
         );
         for (const kind of KIND_ORDER) {
+            if (!this.providers.some((provider) => provider.kind === kind)) {
+                continue;
+            }
             rail.append(
                 this.railButton(
                     KIND_LABELS[kind],

@@ -179,21 +179,7 @@ export class MacroChildAuthoring {
         signal: AbortSignal,
     ): Promise<string> {
         signal.throwIfAborted();
-        if (!job.authoring)
-            throw new Error("A sealed child authoring capture is required.");
-        const envelope = await this.contexts.get(
-            { workspaceId: job.cwd, profileId: this.profileId },
-            job.authoring.captureId,
-        );
-        if (
-            !envelope ||
-            envelope.digest !== job.authoring.contextDigest ||
-            envelope.context.capture.taskId !== job.authoring.taskId ||
-            envelope.context.capture.tokenId !== job.authoring.tokenId
-        )
-            throw new Error(
-                "The sealed Copilot authoring context is missing or changed.",
-            );
+        const envelope = await this.assertContext(job);
         boundedText(prompt);
         if (redactTraceValue(prompt) !== prompt)
             throw new Error(
@@ -212,7 +198,7 @@ export class MacroChildAuthoring {
                     requestId,
                     jobId: job.jobId,
                     cwd: job.cwd,
-                    captureId: job.authoring!.captureId,
+                    captureId: job.authoring.captureId,
                     contextDigest: envelope.digest,
                     prompt,
                     promptDigest,
@@ -228,6 +214,29 @@ export class MacroChildAuthoring {
                 `Copilot authoring failed: ${request.outcome.error}`,
             );
         return request.outcome.text;
+    }
+
+    async assertContext(job: MacroLearningJob) {
+        if (!job.authoring)
+            throw new Error(
+                "A sealed child authoring capture is required; re-record the successful task.",
+            );
+        const envelope = await this.contexts.get(
+            { workspaceId: job.cwd, profileId: this.profileId },
+            job.authoring.captureId,
+        );
+        if (
+            !envelope ||
+            envelope.digest !== job.authoring.contextDigest ||
+            envelope.context.capture.taskId !== job.authoring.taskId ||
+            envelope.context.capture.tokenId !== job.authoring.tokenId ||
+            envelope.context.capture.sessionId !== job.sessionId ||
+            job.authoring.captureId !== job.traceId
+        )
+            throw new Error(
+                "The sealed Copilot authoring context is missing or changed; re-record the successful task.",
+            );
+        return envelope;
     }
 
     async claim(

@@ -61,8 +61,9 @@ const portableTrace = {
         result: "alpha body", status: "completed",
     }],
 };
+const portableFixture = JSON.parse(readFileSync("portable-child-fixture.json", "utf8"));
 const portableMacro = {
-    schemaVersion: 1, macroId: "portable", version: 1, sourceTraceId: "trace",
+    schemaVersion: 1, macroId: "portable", version: 1, sourceTraceId: portableFixture.traceId,
     name: "Read", description: "Read current contents", state: "draft",
     executionClass: "replayable", createdAt: portableTrace.completedAt,
     inputs: [{
@@ -75,7 +76,8 @@ const portableMacro = {
     }],
     warnings: [],
     learning: {
-        jobId: "job", cwd: portableTrace.cwd, mode: "prepare", requiresLivePermissions: true,
+        jobId: portableFixture.job.jobId, cwd: portableTrace.cwd, mode: "prepare", requiresLivePermissions: true,
+        authoring: portableFixture.job.authoring,
         grammarRules: ['<Start> = read $(path:string) now -> { actionName: "run_portable_v2", parameters: { path } };'],
         requests: [portableTrace.prompt], exampleInputs: { path: "alpha" },
     },
@@ -280,6 +282,70 @@ process.stdout.write(JSON.stringify({
 }) + "\n");
 `;
 
+async function createChildFixture(directory) {
+    const { pathToFileURL } = await import("node:url");
+    const api = await import(
+        pathToFileURL(
+            path.join(pluginRoot, "dist", "recipe-runtime", "index.mjs"),
+        ).href
+    );
+    const manager = new api.MacroManager(
+        path.join(directory, "portable-child-capture"),
+    );
+    const trace = {
+        schemaVersion: 1,
+        sessionId: "recording",
+        cwd: directory,
+        prompt: "read alpha now",
+        response: "alpha body",
+        startedAt: "2026-10-15T00:00:00.000Z",
+        completedAt: "2026-10-15T00:00:01.000Z",
+        toolCalls: [
+            {
+                toolCallId: "call",
+                name: "read",
+                arguments: { path: "alpha" },
+                result: "alpha body",
+                status: "completed",
+            },
+        ],
+    };
+    try {
+        await manager.setMacroLearningPreference({
+            cwd: directory,
+            mode: "prepare",
+        });
+        const token = manager.armRecording({
+            sessionId: trace.sessionId,
+            cwd: directory,
+            learning: true,
+        });
+        manager.claimRecording({
+            sessionId: trace.sessionId,
+            cwd: directory,
+            promptHash: api.recipeDigest(trace.prompt),
+        });
+        const capture = await manager.finalizeRecording({
+            tokenId: token.id,
+            trace,
+            childAuthoring: {
+                taskId: "recording:root-user",
+                firstEventId: "root-user",
+                successEventId: "root-success-receipt",
+                outputEventId: "root-final-answer",
+                recordingTokenId: token.id,
+            },
+        });
+        const job = await manager.getMacroLearningJob(capture.learningJobId);
+        await writeFile(
+            path.join(directory, "portable-child-fixture.json"),
+            JSON.stringify({ traceId: capture.traceId, job }),
+        );
+    } finally {
+        await manager.close();
+    }
+}
+
 async function checkCopiedFiles(root) {
     for (const name of await readdir(root)) {
         const file = path.join(root, name);
@@ -320,6 +386,7 @@ test(
             await writeFile(path.join(directory, "proof.mjs"), proof);
             await mkdir(path.join(directory, "home"));
             await checkCopiedFiles(directory);
+            await createChildFixture(directory);
             const manifest = JSON.parse(
                 await readFile(
                     path.join(

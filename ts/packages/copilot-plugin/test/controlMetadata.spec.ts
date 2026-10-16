@@ -18,7 +18,6 @@ import {
     monitorControlMetadata,
 } from "../src/shared/control-metadata.js";
 import { routePrompt } from "../src/hooks/hook-router.js";
-import { handleMcpRedirect } from "../src/hooks/hook-mcp-redirect.js";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createExtensionCommands } from "../src/extension/commands.js";
@@ -55,11 +54,26 @@ describe("owned control metadata", () => {
         process.env.CLAUDE_PLUGIN_DATA = join(root, "plugin-data");
         delete process.env.TYPEAGENT_PLUGIN_DATA;
         delete process.env.TYPEAGENT_MODE;
+        delete process.env.TYPEAGENT_RECIPE_OWNER;
     });
     afterEach(() => {
         unwatchFile(join(root, "plugin-data", "config.json"));
         process.env = saved;
         rmSync(root, { recursive: true, force: true });
+    });
+    it("rejects the retired WorkIQ backend recording admission", () => {
+        const file = join(root, "data", "native-control-admission.json");
+        const admission = JSON.parse(readFileSync(file, "utf8"));
+        writeFileSync(
+            file,
+            JSON.stringify({
+                ...admission,
+                workiqOriginals: { schemaVersion: 1 },
+            }),
+        );
+        expect(() => publishControlMetadata("test")).toThrow(
+            "Backend WorkIQ original-retention recording was removed",
+        );
     });
     it("observes complete original synthetic SDK events only through the public session subscription", () => {
         writeFileSync(
@@ -252,12 +266,7 @@ describe("owned control metadata", () => {
         };
         const dependencies = {
             claimRecording: jest.fn(async () => false),
-            direct: jest.fn(async () => ({
-                handled: true,
-                handledBy: "typeagent",
-            })),
-            mcp: handleMcpRedirect,
-            dev: jest.fn(async () => ({ handled: true })),
+            localRecipes: jest.fn(async () => ({})),
         };
         writeFileSync(file, JSON.stringify({ mode: "bypass" }));
         await expect(
@@ -269,7 +278,7 @@ describe("owned control metadata", () => {
             ),
         ).resolves.toEqual({});
         expect(dependencies.claimRecording).not.toHaveBeenCalled();
-        expect(dependencies.direct).not.toHaveBeenCalled();
+        expect(dependencies.localRecipes).not.toHaveBeenCalled();
         writeFileSync(
             file,
             JSON.stringify({
@@ -284,9 +293,9 @@ describe("owned control metadata", () => {
             new AbortController().signal,
             dependencies,
         );
-        expect(mixed.modifiedPrompt).toBe(request.prompt);
+        expect(mixed.modifiedPrompt).toBeUndefined();
         expect(mixed.handled).not.toBe(true);
-        expect(dependencies.direct).not.toHaveBeenCalled();
+        expect(dependencies.localRecipes).toHaveBeenCalledTimes(1);
         dependencies.claimRecording.mockResolvedValueOnce(true);
         await expect(
             routePrompt(
@@ -303,8 +312,11 @@ describe("owned control metadata", () => {
             new AbortController().signal,
             dependencies,
         );
-        expect(dependencies.direct).toHaveBeenCalledTimes(1);
-        expect(dependencies.direct).toHaveBeenCalledWith(request);
+        expect(dependencies.localRecipes).toHaveBeenCalledTimes(2);
+        expect(dependencies.localRecipes).toHaveBeenCalledWith(
+            request,
+            expect.any(AbortSignal),
+        );
     });
     it("actual compiled user-prompt router honors bypass and rejects mode/path mismatch before translation", () => {
         const admission = join(root, "data", "native-control-admission.json");

@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import type {
     MacroLearningJob,
@@ -25,7 +24,7 @@ describe("durable scoped Copilot authoring exchange", () => {
     const trace: RecordedInteractionTrace = {
         schemaVersion: 1,
         sessionId: "source",
-        cwd: os.tmpdir(),
+        cwd: path.resolve("."),
         prompt: "read file alpha.txt for me",
         response: "original contents",
         startedAt: new Date().toISOString(),
@@ -48,7 +47,7 @@ describe("durable scoped Copilot authoring exchange", () => {
     });
     const active = new Set(["job"]);
     beforeEach(async () => {
-        directory = await mkdtemp(path.join(os.tmpdir(), "child-authoring-"));
+        directory = await mkdtemp(path.resolve(".child-authoring-"));
         broker = new MacroChildAuthoring(directory);
         const token: RecordingToken = {
             id: "token",

@@ -7,9 +7,10 @@ import {
 } from "@typeagent/agent-rpc/channel";
 import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
 import { createAgentRpcServer } from "@typeagent/agent-rpc/server";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { createAgentServerConnection } from "@typeagent/agent-server-client";
+import { AgentServerChannelName } from "@typeagent/agent-server-protocol";
 import type { RunbookHostCapabilities } from "@typeagent/agent-server-protocol";
-import { MacroManager, type CopilotToolMacro } from "@typeagent/copilot-macros";
 import type { RegisteredMcpToolCatalog } from "default-agent-provider";
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
@@ -84,20 +85,76 @@ describe("runbook host capabilities", () => {
         const { skillCatalog } = await createLocalSkillServices(
             path.join(root, randomUUID()),
         );
-        const macroManager = new MacroManager(root);
         const capabilities = createRunbookHostCapabilities({
             skillCatalog,
-            macroManager,
             ...(mcp ? { readMcpCatalogs } : {}),
         });
-        return { skillCatalog, macroManager, capabilities };
+        return { skillCatalog, capabilities };
     }
+
+    test.each(["websocket-json", "in-process-loopback"])(
+        "%s rejects retired macro RPCs instead of composing another owner",
+        async (transport) => {
+            const { skillCatalog } = await services();
+            const pair = channels(
+                `retired-macro-${transport}`,
+                transport === "websocket-json",
+            );
+            const { handler } = createAgentServerConnectionHandler({
+                conversationManager: {} as ConversationManager,
+                skillCatalog,
+                shutdown: () => {},
+                getUserIdentity: () => ({
+                    username: "test",
+                    displayName: "Test",
+                    initial: "T",
+                }),
+            });
+            handler(pair.server, () => {});
+            const rpc = createRpc<Record<string, () => Promise<unknown>>>(
+                "retired-macro-client",
+                pair.client.createChannel(AgentServerChannelName),
+            );
+            try {
+                for (const method of [
+                    "getMacroLearningPreference",
+                    "setMacroLearningPreference",
+                    "prepareMacroLearning",
+                    "getMacroLearningJob",
+                    "claimMacroAuthoringRequest",
+                    "submitMacroAuthoringResponse",
+                    "cancelMacroLearningJob",
+                    "armMacroRecording",
+                    "getMacroRecordingState",
+                    "claimMacroRecording",
+                    "cancelMacroRecording",
+                    "failMacroRecording",
+                    "finalizeMacroRecording",
+                    "listMacros",
+                    "searchMacros",
+                    "inspectMacro",
+                    "getMacroRequirements",
+                    "validateMacro",
+                    "approveMacro",
+                    "disableMacro",
+                    "deleteMacro",
+                    "runMacro",
+                    "cancelMacroRun",
+                    "getMacroRun",
+                ]) {
+                    await expect(rpc.invoke(method)).rejects.toThrow();
+                }
+            } finally {
+                pair.client.notifyDisconnected();
+                pair.server.notifyDisconnected();
+            }
+        },
+    );
 
     test.each(["websocket-json", "in-process-loopback"])(
         "%s host handler delegates named catalog and lifecycle RPCs",
         async (transport) => {
-            const { skillCatalog, macroManager, capabilities } =
-                await services(true);
+            const { skillCatalog, capabilities } = await services(true);
             const entry = await skillCatalog.publish({
                 identity,
                 schemaFingerprint: "schema",
@@ -110,7 +167,6 @@ describe("runbook host capabilities", () => {
             const { handler } = createAgentServerConnectionHandler({
                 conversationManager: {} as ConversationManager,
                 skillCatalog,
-                macroManager,
                 runbookCapabilities: capabilities,
                 shutdown: () => {},
                 getUserIdentity: () => ({
@@ -303,64 +359,30 @@ describe("runbook host capabilities", () => {
     });
 });
 
-function macro(
-    state: CopilotToolMacro["state"],
-    secret = false,
-): CopilotToolMacro {
-    return {
-        schemaVersion: 1,
-        macroId: `${state}-${secret}`,
-        version: 2,
-        name: "Recovery",
-        description: "Recovery procedure",
-        state,
-        executionClass: "replayable",
-        inputs: [
-            {
-                name: "target",
-                description: "Target",
-                required: true,
-                secret,
-                valueType: "string",
-            },
-        ],
-        steps: [],
-        sourceTraceId: "trace",
-        createdAt: "2026-10-02",
-        warnings: [],
-    };
-}
-
 describe("real binding target snapshots", () => {
     test("reports unavailable catalogs and excludes secret-input MCP tools rather than granting permission", async () => {
-        const catalog = createRunbookBindingCatalog(
+        const catalog = createRunbookBindingCatalog(async () => [
             {
-                getApprovedMacros: async () => [],
-                listMacros: async () => [],
-            },
-            async () => [
-                {
-                    serverConfigId: "server",
-                    name: "actual-server",
-                    trust: "trusted",
-                    enabled: true,
-                    available: true,
-                    notices: ["Unsupported MCP tool excluded: unsafe-schema."],
-                    entries: [
-                        {
-                            id: '["server","secret"]',
-                            serverConfigId: "server",
-                            name: "secret",
-                            fingerprint: "schema",
-                            inputSchema: {
-                                type: "object",
-                                properties: { password: { type: "string" } },
-                            },
+                serverConfigId: "server",
+                name: "actual-server",
+                trust: "trusted",
+                enabled: true,
+                available: true,
+                notices: ["Unsupported MCP tool excluded: unsafe-schema."],
+                entries: [
+                    {
+                        id: '["server","secret"]',
+                        serverConfigId: "server",
+                        name: "secret",
+                        fingerprint: "schema",
+                        inputSchema: {
+                            type: "object",
+                            properties: { password: { type: "string" } },
                         },
-                    ],
-                },
-            ],
-        );
+                    },
+                ],
+            },
+        ]);
         const snapshot = await catalog.listBindingTargets();
         expect(snapshot.targets).toEqual([]);
         expect(snapshot.notices).toContain(
@@ -380,26 +402,15 @@ describe("real binding target snapshots", () => {
             ],
         });
         expect(missing.valid).toBe(false);
-        const absent = createRunbookBindingCatalog(
-            {
-                getApprovedMacros: async () => [],
-                listMacros: async () => [],
-            },
-            async () => {
-                throw new Error("Catalog offline");
-            },
-        );
+        const absent = createRunbookBindingCatalog(async () => {
+            throw new Error("Catalog offline");
+        });
         expect((await absent.listBindingTargets()).notices).toContain(
             "Catalog offline",
         );
     });
 
-    test("filters unapproved/secret macros and unsupported flows; detects current schema/version drift", async () => {
-        const macros = [
-            macro("approved"),
-            macro("draft"),
-            macro("approved", true),
-        ];
+    test("excludes server macro bindings and detects current MCP schema/version drift", async () => {
         let fingerprint = "real-schema-1";
         const readMcp = async (): Promise<RegisteredMcpToolCatalog[]> => [
             {
@@ -423,30 +434,13 @@ describe("real binding target snapshots", () => {
                 ],
             },
         ];
-        const catalog = createRunbookBindingCatalog(
-            {
-                getApprovedMacros: async () => macros,
-                listMacros: async () =>
-                    macros.map((item) => ({
-                        macroId: item.macroId,
-                        version: item.version,
-                        name: item.name,
-                        description: item.description,
-                        state: item.state,
-                        executionClass: item.executionClass,
-                        stepCount: 0,
-                        updatedAt: item.createdAt,
-                    })),
-            },
-            readMcp,
-        );
+        const catalog = createRunbookBindingCatalog(readMcp);
         const snapshot = await catalog.listBindingTargets();
-        expect(snapshot.targets.map((item) => item.kind)).toEqual([
-            "macro",
-            "mcp",
-        ]);
-        expect(snapshot.notices).toHaveLength(3);
-        const binding = snapshot.targets[1];
+        expect(snapshot.targets.map((item) => item.kind)).toEqual(["mcp"]);
+        expect(snapshot.notices).toContain(
+            "Macro bindings unavailable: checked programs are owned by the Copilot plugin, not this server.",
+        );
+        const binding = snapshot.targets[0];
         expect(
             await catalog.checkBindingTargets({ bindings: [binding] }),
         ).toEqual({
@@ -463,10 +457,16 @@ describe("real binding target snapshots", () => {
             valid: false,
             issues: [{ message: expect.stringContaining("drifted") }],
         });
-        macros[0].state = "disabled";
         expect(
             await catalog.checkBindingTargets({
-                bindings: [snapshot.targets[0]],
+                bindings: [
+                    {
+                        kind: "macro",
+                        id: "old-server-macro",
+                        version: "1",
+                        fingerprint: "old",
+                    },
+                ],
             }),
         ).toMatchObject({ valid: false });
         const validate = createRunbookBindingValidator(catalog);

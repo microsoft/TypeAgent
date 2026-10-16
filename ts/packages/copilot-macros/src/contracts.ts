@@ -186,7 +186,7 @@ export interface CopilotToolMacro {
         grammarRules: string[];
         exampleInputs: Record<string, unknown>;
         requests: string[];
-        authoring?: MacroChildAuthoringIdentity;
+        authoring: MacroChildAuthoringIdentity;
     };
 }
 
@@ -238,7 +238,7 @@ export interface MacroLearningJob {
     error?: string;
     createdAt: string;
     updatedAt: string;
-    authoring?: MacroChildAuthoringIdentity;
+    authoring: MacroChildAuthoringIdentity;
 }
 
 export interface MacroChildAuthoringIdentity {
@@ -257,7 +257,7 @@ export type MacroVerifierQueryCache = (
 ) => Promise<string>;
 
 export interface MacroLearningRuntime {
-    withAuthorQuery?(
+    withAuthorQuery(
         query: MacroAuthoringQuery,
         cacheVerifier?: MacroVerifierQueryCache,
     ): MacroLearningRuntime;

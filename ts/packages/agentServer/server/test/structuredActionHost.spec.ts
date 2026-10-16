@@ -21,7 +21,6 @@ import {
     type ChannelProviderAdapter,
 } from "@typeagent/agent-rpc/channel";
 import { createAgentServerConnection } from "@typeagent/agent-server-client";
-import type { MacroManager } from "@typeagent/copilot-macros";
 import type { LiveSkillCatalog } from "@typeagent/skill-catalog";
 import type { ConversationManager } from "../src/conversationManager.js";
 import { createAgentServerConnectionHandler } from "../src/connectionHandler.js";
@@ -155,7 +154,6 @@ async function fixture() {
     } as unknown as ConversationManager;
     const { handler } = createAgentServerConnectionHandler({
         conversationManager: manager,
-        macroManager: {} as MacroManager,
         skillCatalog: {} as LiveSkillCatalog,
         shutdown() {},
         getUserIdentity: () => ({

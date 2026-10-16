@@ -121,6 +121,11 @@ export function summarizeCampaign(plan, rows, preparation = null) {
             misses: rows.filter((row) => row.grade.grammarHit === false).length,
             unknown: rows.filter((row) => row.grade.grammarHit == null).length,
         },
+        explicitMcp: {
+            reuse: rows.filter((row) => row.grade.explicitMcpReuse === true)
+                .length,
+            note: "Explicit MCP reuse is not a grammar hit or a matched grammar performance pair.",
+        },
         performance: {
             matchedCorrectGrammarPairs: pairs.length,
             medianBaselineMs: median(pairs.map((pair) => pair.baselineMs)),
@@ -138,8 +143,9 @@ export function summarizeCampaign(plan, rows, preparation = null) {
         preparation,
         usage: {
             rootModelTokens: null,
-            runnerModelTokens: null,
-            preparationModelTokens: null,
+            authorModelTokens: null,
+            verifierModelTokens: null,
+            semanticModelTokens: null,
             serviceModelTokens: null,
             costSavings: null,
             status: "unknown-until-complete-provider-accounting",

@@ -4,10 +4,6 @@
 import { validateRunbookBindingArguments } from "../src/runbookBindingArguments.js";
 import { createRunbookBindingCatalog } from "../src/runbookBindingCatalog.js";
 import { createRunbookBindingValidator } from "../src/runbookBindingValidator.js";
-import {
-    validateMacroInputs,
-    type CopilotToolMacro,
-} from "@typeagent/copilot-macros";
 import type { RunbookBindingReadiness } from "@typeagent/agent-server-protocol";
 import {
     validateRunbookBinding,
@@ -259,30 +255,24 @@ describe("non-executing catalog argument validation", () => {
         "preserves exact native MCP catalog identity %s without aliases or tuple inference",
         async (toolName) => {
             const nativeId = JSON.stringify(["server", toolName]);
-            const catalog = createRunbookBindingCatalog(
+            const catalog = createRunbookBindingCatalog(async () => [
                 {
-                    getApprovedMacros: async () => [],
-                    listMacros: async () => [],
+                    serverConfigId: "server",
+                    name: "actual",
+                    trust: "trusted",
+                    enabled: true,
+                    available: true,
+                    entries: [
+                        {
+                            id: nativeId,
+                            serverConfigId: "server",
+                            name: toolName,
+                            fingerprint: "f",
+                            inputSchema: { type: "object", properties: {} },
+                        },
+                    ],
                 },
-                async () => [
-                    {
-                        serverConfigId: "server",
-                        name: "actual",
-                        trust: "trusted",
-                        enabled: true,
-                        available: true,
-                        entries: [
-                            {
-                                id: nativeId,
-                                serverConfigId: "server",
-                                name: toolName,
-                                fingerprint: "f",
-                                inputSchema: { type: "object", properties: {} },
-                            },
-                        ],
-                    },
-                ],
-            );
+            ]);
             const binding = {
                 kind: "mcp" as const,
                 accepted: true,
@@ -344,30 +334,24 @@ describe("non-executing catalog argument validation", () => {
 
     test("excludes native identities the canonical schema cannot represent instead of inventing IDs", async () => {
         const unsupportedName = "x".repeat(4097);
-        const catalog = createRunbookBindingCatalog(
+        const catalog = createRunbookBindingCatalog(async () => [
             {
-                getApprovedMacros: async () => [],
-                listMacros: async () => [],
+                serverConfigId: "server",
+                name: "actual",
+                trust: "trusted",
+                enabled: true,
+                available: true,
+                entries: [
+                    {
+                        id: JSON.stringify(["server", unsupportedName]),
+                        serverConfigId: "server",
+                        name: unsupportedName,
+                        fingerprint: "f",
+                        inputSchema: { type: "object", properties: {} },
+                    },
+                ],
             },
-            async () => [
-                {
-                    serverConfigId: "server",
-                    name: "actual",
-                    trust: "trusted",
-                    enabled: true,
-                    available: true,
-                    entries: [
-                        {
-                            id: JSON.stringify(["server", unsupportedName]),
-                            serverConfigId: "server",
-                            name: unsupportedName,
-                            fingerprint: "f",
-                            inputSchema: { type: "object", properties: {} },
-                        },
-                    ],
-                },
-            ],
-        );
+        ]);
         const result = await catalog.listBindingTargets();
         expect(result.targets).toEqual([]);
         expect(
@@ -379,34 +363,28 @@ describe("non-executing catalog argument validation", () => {
 
     test("reports configured permission denial as unavailable even without schema drift", async () => {
         let denied = false;
-        const catalog = createRunbookBindingCatalog(
+        const catalog = createRunbookBindingCatalog(async () => [
             {
-                getApprovedMacros: async () => [],
-                listMacros: async () => [],
-            },
-            async () => [
-                {
-                    serverConfigId: "server",
-                    name: "actual",
-                    trust: "trusted",
-                    enabled: true,
-                    available: true,
-                    entries: [
-                        {
-                            id: '["server","recover"]',
-                            serverConfigId: "server",
-                            name: "recover",
-                            fingerprint: "same-schema",
-                            inputSchema: { type: "object", properties: {} },
-                            permission: {
-                                configuredDecision: denied ? "deny" : "allow",
-                                promptWithoutSessionGrant: false,
-                            },
+                serverConfigId: "server",
+                name: "actual",
+                trust: "trusted",
+                enabled: true,
+                available: true,
+                entries: [
+                    {
+                        id: '["server","recover"]',
+                        serverConfigId: "server",
+                        name: "recover",
+                        fingerprint: "same-schema",
+                        inputSchema: { type: "object", properties: {} },
+                        permission: {
+                            configuredDecision: denied ? "deny" : "allow",
+                            promptWithoutSessionGrant: false,
                         },
-                    ],
-                },
-            ],
-        );
+                    },
+                ],
+            },
+        ]);
         const target = (await catalog.listBindingTargets()).targets[0];
         expect(target.permission.configuredDecision).toBe("allow");
         denied = true;
@@ -502,30 +480,24 @@ describe("non-executing catalog argument validation", () => {
     });
 
     test("verifies actual catalog server metadata in addition to the compound tool identity", async () => {
-        const catalog = createRunbookBindingCatalog(
+        const catalog = createRunbookBindingCatalog(async () => [
             {
-                getApprovedMacros: async () => [],
-                listMacros: async () => [],
+                serverConfigId: "server",
+                name: "actual",
+                trust: "trusted",
+                enabled: true,
+                available: true,
+                entries: [
+                    {
+                        id: '["server","recover"]',
+                        serverConfigId: "different",
+                        name: "recover",
+                        fingerprint: "f",
+                        inputSchema: { type: "object", properties: {} },
+                    },
+                ],
             },
-            async () => [
-                {
-                    serverConfigId: "server",
-                    name: "actual",
-                    trust: "trusted",
-                    enabled: true,
-                    available: true,
-                    entries: [
-                        {
-                            id: '["server","recover"]',
-                            serverConfigId: "different",
-                            name: "recover",
-                            fingerprint: "f",
-                            inputSchema: { type: "object", properties: {} },
-                        },
-                    ],
-                },
-            ],
-        );
+        ]);
         const validate = createRunbookBindingValidator(catalog);
         expect(
             await validate([
@@ -544,75 +516,6 @@ describe("non-executing catalog argument validation", () => {
                 reason: expect.stringContaining("actual current catalog"),
             },
         ]);
-    });
-
-    test("uses actual approved macro input declarations and step-required references", async () => {
-        const macro: CopilotToolMacro = {
-            schemaVersion: 1,
-            macroId: "approved",
-            version: 3,
-            name: "Recovery",
-            description: "Recovery",
-            state: "approved",
-            executionClass: "replayable",
-            inputs: [
-                {
-                    name: "count",
-                    description: "Count",
-                    required: false,
-                    secret: false,
-                    valueType: "number",
-                },
-            ],
-            steps: [
-                {
-                    id: "s",
-                    toolName: "recover",
-                    arguments: { kind: "input", name: "count" },
-                    executionClass: "replayable",
-                    sourceToolCallId: "call",
-                },
-            ],
-            sourceTraceId: "trace",
-            createdAt: "2026-10-02",
-            warnings: [],
-        };
-        const catalog = createRunbookBindingCatalog({
-            getApprovedMacros: async () => [macro],
-            listMacros: async () => [
-                {
-                    macroId: macro.macroId,
-                    version: macro.version,
-                    name: macro.name,
-                    description: macro.description,
-                    state: macro.state,
-                    executionClass: macro.executionClass,
-                    stepCount: 1,
-                    updatedAt: macro.createdAt,
-                },
-            ],
-        });
-        const target = (await catalog.listBindingTargets()).targets[0];
-        expect(target.inputSchema.required).toEqual(["count"]);
-        expect(() => validateMacroInputs(macro, {})).toThrow("missing");
-        expect(
-            (await catalog.checkBindingTargets({ bindings: [target] })).valid,
-        ).toBe(false);
-        expect(() => validateMacroInputs(macro, { count: 3 })).not.toThrow();
-        expect(
-            (
-                await catalog.checkBindingTargets({
-                    bindings: [{ ...target, arguments: { count: 3 } }],
-                })
-            ).valid,
-        ).toBe(true);
-        expect(
-            (
-                await catalog.checkBindingTargets({
-                    bindings: [{ ...target, arguments: { count: "3" } }],
-                })
-            ).valid,
-        ).toBe(false);
     });
 
     test("validates concrete arguments against the real JSON Schema constraints", () => {
@@ -811,30 +714,24 @@ describe("non-executing catalog argument validation", () => {
     });
 
     test("host readiness and callback retain concrete arguments and reject invalid schemas, not silently dropping them", async () => {
-        const catalog = createRunbookBindingCatalog(
+        const catalog = createRunbookBindingCatalog(async () => [
             {
-                getApprovedMacros: async () => [],
-                listMacros: async () => [],
+                serverConfigId: "server",
+                name: "actual",
+                trust: "trusted",
+                enabled: true,
+                available: true,
+                entries: [
+                    {
+                        id: '["server","recover"]',
+                        serverConfigId: "server",
+                        name: "recover",
+                        inputSchema: { ...schema, type: "object" },
+                        fingerprint: "current-schema",
+                    },
+                ],
             },
-            async () => [
-                {
-                    serverConfigId: "server",
-                    name: "actual",
-                    trust: "trusted",
-                    enabled: true,
-                    available: true,
-                    entries: [
-                        {
-                            id: '["server","recover"]',
-                            serverConfigId: "server",
-                            name: "recover",
-                            inputSchema: { ...schema, type: "object" },
-                            fingerprint: "current-schema",
-                        },
-                    ],
-                },
-            ],
-        );
+        ]);
         const binding = {
             kind: "mcp" as const,
             id: '["server","recover"]',

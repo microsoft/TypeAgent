@@ -13,14 +13,16 @@ import {
 } from "@typeagent/copilot-macros";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { macroProgramArtifact } from "./recipeCatalogFixtures.js";
+import { childCapture } from "./childLearningFixtures.js";
+import { sealRecipeArtifact } from "../src/recipeCore.js";
 
 const cwd = "C:\\learning-workspace";
 const jest = (import.meta as ImportMeta & { jest: typeof globalThis.jest })
     .jest;
 const directories: string[] = [];
+const managers: MacroManager[] = [];
 const requestVariants = [
     "Show package.json",
     "Inspect package.json",
@@ -28,13 +30,20 @@ const requestVariants = [
 ];
 
 afterEach(async () => {
+    await Promise.all(managers.splice(0).map((manager) => manager.close()));
     for (const directory of directories.splice(0)) {
         await rm(directory, { recursive: true, force: true });
     }
 });
 
+function createManager(...args: ConstructorParameters<typeof MacroManager>) {
+    const manager = new MacroManager(...args);
+    managers.push(manager);
+    return manager;
+}
+
 async function setup(mode: MacroLearningMode = "prepare", readOnly?: boolean) {
-    const directory = await mkdtemp(path.join(os.tmpdir(), "macro-learning-"));
+    const directory = await mkdtemp(path.resolve(".macro-learning-"));
     directories.push(directory);
     const host: ReplayToolHost = {
         inspectTool: jest.fn(async (_server, toolName) => ({
@@ -46,7 +55,7 @@ async function setup(mode: MacroLearningMode = "prepare", readOnly?: boolean) {
             throw new Error("Learning must never execute task tools.");
         }),
     };
-    const manager = new MacroManager(directory, host);
+    const manager = createManager(directory, host);
     await manager.setMacroLearningPreference({ cwd, mode });
     return { directory, manager, host };
 }
@@ -92,13 +101,23 @@ async function capture(
         cwd: trace.cwd,
         promptHash: createHash("sha256").update(trace.prompt).digest("hex"),
     })!;
-    return manager.finalizeRecording({ tokenId: token.id, trace });
+    return manager.finalizeRecording({
+        tokenId: token.id,
+        trace,
+        ...(options.learning
+            ? { childAuthoring: childCapture(trace, token.id) }
+            : {}),
+    });
 }
 
 function runtime(
     change?: (build: MacroLearningBuild) => void,
 ): MacroLearningRuntime {
     return {
+        withAuthorQuery(query) {
+            expect(query).toEqual(expect.any(Function));
+            return this;
+        },
         buildProgram: async (macro) => {
             if (macro.warnings.length)
                 throw new Error(
@@ -148,6 +167,207 @@ async function terminal(
 }
 
 describe("durable macro learning", () => {
+    it("rejects a runtime that cannot bind the restricted child query", async () => {
+        const { manager } = await setup("all");
+        const learner = runtime();
+        Reflect.deleteProperty(learner, "withAuthorQuery");
+        await expect(manager.configureLearning(learner)).rejects.toThrow(
+            "complete learning runtime",
+        );
+        await manager.close();
+    });
+
+    it("keeps trace-only captures nonlearning even when learning is selected", async () => {
+        const { manager } = await setup("all");
+        const learner = runtime();
+        await manager.configureLearning(learner);
+        const summary = await capture(manager);
+        expect(summary.learningJobId).toBeUndefined();
+        await expect(
+            manager.prepareMacroLearning({ traceId: summary.traceId }),
+        ).rejects.toThrow("re-record");
+        expect(learner.extract).not.toHaveBeenCalled();
+        await manager.close();
+    });
+
+    it("rejects selected learning without a child capture before saving a trace", async () => {
+        const { manager, directory } = await setup("all");
+        const trace = recordedTrace("missing-envelope");
+        manager.armRecording({
+            sessionId: trace.sessionId,
+            learning: true,
+            cwd,
+        });
+        const token = manager.claimRecording({
+            sessionId: trace.sessionId,
+            cwd,
+            promptHash: createHash("sha256").update(trace.prompt).digest("hex"),
+        })!;
+        await expect(
+            manager.finalizeRecording({ tokenId: token.id, trace }),
+        ).rejects.toThrow("re-record");
+        await expect(
+            readFile(
+                path.join(directory, "copilot-macros", "learning.json"),
+                "utf8",
+            ),
+        ).resolves.not.toContain('"jobs":[{');
+        await manager.close();
+    });
+
+    it.each(["queued", "building", "ready", "saved-catalog"] as const)(
+        "persists a re-record failure for an old non-child %s job without authoring",
+        async (status) => {
+            const { manager, directory, host } = await setup("all");
+            const summary = await capture(manager, { learning: true });
+            await manager.close();
+            const filename = path.join(
+                directory,
+                "copilot-macros",
+                "learning.json",
+            );
+            const stored = JSON.parse(await readFile(filename, "utf8"));
+            const job = stored.jobs[0];
+            delete job.authoring;
+            job.status = status === "saved-catalog" ? "failed" : status;
+            if (status === "saved-catalog") {
+                job.draft = { old: true };
+                job.error = "catalog was saved";
+            }
+            await writeFile(filename, JSON.stringify(stored));
+            const restarted = createManager(directory, host);
+            const learner = runtime();
+            await restarted.configureLearning(learner);
+            expect(
+                await restarted.getMacroLearningJob(summary.learningJobId!),
+            ).toMatchObject({
+                status: "failed",
+                error: expect.stringContaining("re-record"),
+            });
+            expect(learner.extract).not.toHaveBeenCalled();
+            expect(learner.build).not.toHaveBeenCalled();
+            await restarted.close();
+            expect(
+                JSON.parse(await readFile(filename, "utf8")).jobs[0],
+            ).toMatchObject({
+                status: "failed",
+                error: expect.stringContaining("re-record"),
+            });
+        },
+    );
+
+    it.each(["missing", "changed"] as const)(
+        "rejects a persisted child job with %s sealed context across restart",
+        async (kind) => {
+            const { manager, directory, host } = await setup("all");
+            const summary = await capture(manager, { learning: true });
+            await manager.close();
+            if (kind === "missing") {
+                await rm(
+                    path.join(
+                        directory,
+                        "copilot-macros",
+                        "recipe-authoring-context",
+                    ),
+                    {
+                        recursive: true,
+                        force: true,
+                    },
+                );
+            } else {
+                const filename = path.join(
+                    directory,
+                    "copilot-macros",
+                    "learning.json",
+                );
+                const stored = JSON.parse(await readFile(filename, "utf8"));
+                stored.jobs[0].authoring.contextDigest = "0".repeat(64);
+                await writeFile(filename, JSON.stringify(stored));
+            }
+            const restarted = createManager(directory, host);
+            const learner = runtime();
+            await restarted.configureLearning(learner);
+            expect(
+                await restarted.getMacroLearningJob(summary.learningJobId!),
+            ).toMatchObject({
+                status: "failed",
+                error: expect.stringContaining("re-record"),
+            });
+            expect(learner.extract).not.toHaveBeenCalled();
+            await restarted.close();
+        },
+    );
+
+    it("rejects fabricated program provenance before saving or publishing", async () => {
+        const { manager } = await setup("all");
+        const learner = runtime();
+        const author = learner.buildProgram;
+        learner.buildProgram = async (...args) => {
+            const program = await author(...args);
+            program.provenance.tokenId = `legacy:${args[0].sourceTraceId}`;
+            return sealRecipeArtifact(program);
+        };
+        await manager.configureLearning(learner);
+        const summary = await capture(manager, { learning: true });
+        expect(await terminal(manager, summary.learningJobId!)).toMatchObject({
+            status: "failed",
+        });
+        expect(await manager.listMacros()).toEqual([]);
+        await manager.close();
+    });
+
+    it.each(["prompt", "response", "call"] as const)(
+        "rejects direct reprocessing when the stored %s no longer matches its sealed capture",
+        async (field) => {
+            const { manager, directory, host } = await setup("all");
+            const summary = await capture(manager, { learning: true });
+            await manager.close();
+            const filename = path.join(
+                directory,
+                "copilot-macros",
+                "traces",
+                `${summary.traceId}.json`,
+            );
+            const trace = JSON.parse(await readFile(filename, "utf8"));
+            if (field === "call") trace.toolCalls[0].toolCallId = "other-call";
+            else trace[field] = "Changed after sealing";
+            await writeFile(filename, JSON.stringify(trace));
+            const restarted = createManager(directory, host);
+            await expect(
+                restarted.prepareMacroLearning({ traceId: summary.traceId }),
+            ).rejects.toThrow("does not match");
+            const learner = runtime();
+            await restarted.configureLearning(learner);
+            expect(
+                await terminal(restarted, summary.learningJobId!),
+            ).toMatchObject({ status: "failed" });
+            expect(learner.extract).not.toHaveBeenCalled();
+        },
+    );
+
+    it("rejects manual publication of a staged draft whose persisted child identity was removed", async () => {
+        const { manager, directory, host } = await setup("prepare");
+        await manager.configureLearning(runtime());
+        const summary = await capture(manager, { learning: true });
+        const staged = await terminal(manager, summary.learningJobId!);
+        expect(staged.status).toBe("needsReview");
+        await manager.close();
+        const filename = path.join(
+            directory,
+            "copilot-macros",
+            "learning.json",
+        );
+        const stored = JSON.parse(await readFile(filename, "utf8"));
+        delete stored.jobs[0].authoring;
+        await writeFile(filename, JSON.stringify(stored));
+        const restarted = createManager(directory, host);
+        await restarted.configureLearning(runtime());
+        await expect(restarted.approveMacro(staged.macro!)).rejects.toThrow(
+            "re-record",
+        );
+        expect(await restarted.getApprovedMacros()).toEqual([]);
+    });
+
     it("honors cancellation before acceptance and while the approved route is being loaded", async () => {
         const { manager } = await setup("all");
         manager.cancelMacroRun("pre-cancelled");
@@ -214,7 +434,7 @@ describe("durable macro learning", () => {
             ).toBe("queued");
             resume();
             await new Promise((resolve) => setTimeout(resolve, 5));
-            current = new MacroManager(directory, host);
+            current = createManager(directory, host);
         }
         await current.configureLearning(runtime());
         expect((await terminal(current, summary.learningJobId!)).status).toBe(
@@ -230,8 +450,9 @@ describe("durable macro learning", () => {
         const { manager, directory, host } = await setup("all");
         const historical = await capture(manager, {
             sessionId: "historical-session",
+            learning: true,
         });
-        const restarted = new MacroManager(directory, host);
+        const restarted = createManager(directory, host);
         const queued = await restarted.prepareMacroLearning({
             traceId: historical.traceId,
         });
@@ -304,7 +525,7 @@ describe("durable macro learning", () => {
         expect(summary.learningJobId).toBeUndefined();
         await expect(
             manager.prepareMacroLearning({ traceId: summary.traceId }),
-        ).rejects.toThrow("Learning is off");
+        ).rejects.toThrow("re-record");
     });
 
     it("queues without a runtime, resumes after restart, and stages grammar for explicit v2 approval", async () => {
@@ -321,7 +542,7 @@ describe("durable macro learning", () => {
             trace: summary,
             learningJob: { jobId, status: "queued" },
         });
-        const restarted = new MacroManager(directory, host);
+        const restarted = createManager(directory, host);
         const learner = runtime();
         await restarted.configureLearning(learner);
         const job = await terminal(restarted, jobId);
@@ -483,10 +704,9 @@ describe("durable macro learning", () => {
             await manager.configureLearning(learner);
             const trace = recordedTrace("bad-source");
             trace.toolCalls[0].status = status;
-            const summary = await capture(manager, { trace, learning: true });
-            expect(
-                (await terminal(manager, summary.learningJobId!)).status,
-            ).toBe("failed");
+            await expect(
+                capture(manager, { trace, learning: true }),
+            ).rejects.toThrow("complete successful");
             expect(learner.extract).not.toHaveBeenCalled();
         },
     );
@@ -500,10 +720,9 @@ describe("durable macro learning", () => {
             path: "package.json",
             token: "sensitive",
         };
-        const summary = await capture(manager, { trace, learning: true });
-        expect(
-            (await terminal(manager, summary.learningJobId!)).error,
-        ).toContain("Secret-bearing");
+        await expect(
+            capture(manager, { trace, learning: true }),
+        ).rejects.toThrow("Secret-bearing");
         expect(learner.extract).not.toHaveBeenCalled();
     });
 
@@ -619,7 +838,7 @@ describe("durable macro learning", () => {
             trace: summary,
             learningJob: job,
         });
-        const restarted = new MacroManager(directory, host);
+        const restarted = createManager(directory, host);
         await expect(restarted.getMacroLearningJob(job.jobId)).resolves.toEqual(
             job,
         );
@@ -627,8 +846,15 @@ describe("durable macro learning", () => {
             learning: true,
             sessionId: "equivalent-failed-source",
         });
-        expect(equivalent.learningJobId).toBe(job.jobId);
-        expect(learner.extract).toHaveBeenCalledTimes(1);
+        expect(equivalent.learningJobId).not.toBe(job.jobId);
+        expect(
+            await terminal(manager, equivalent.learningJobId!),
+        ).toMatchObject({
+            status: "failed",
+            traceId: equivalent.traceId,
+            error: job.error,
+        });
+        expect(learner.extract).toHaveBeenCalledTimes(2);
         expect(learner.build).not.toHaveBeenCalled();
         expect(learner.generateGrammar).not.toHaveBeenCalled();
         expect(await manager.listMacros()).toEqual([]);
@@ -669,16 +895,61 @@ describe("durable macro learning", () => {
         },
     );
 
+    it("allows a fresh child capture to retry a failed equivalent without replacing its provenance", async () => {
+        const { manager } = await setup();
+        const learner = runtime();
+        jest.spyOn(learner, "extract").mockRejectedValueOnce(
+            new Error("Temporary author failure"),
+        );
+        await manager.configureLearning(learner);
+        const first = await capture(manager, { learning: true });
+        expect(await terminal(manager, first.learningJobId!)).toMatchObject({
+            status: "failed",
+        });
+        expect(
+            (
+                await manager.prepareMacroLearning({
+                    traceId: first.traceId,
+                })
+            ).jobId,
+        ).toBe(first.learningJobId);
+        expect(learner.extract).toHaveBeenCalledTimes(1);
+
+        const second = await capture(manager, {
+            sessionId: "fresh-child-session",
+            learning: true,
+        });
+        expect(second.learningJobId).not.toBe(first.learningJobId);
+        const retried = await terminal(manager, second.learningJobId!);
+        expect(retried).toMatchObject({
+            status: "needsReview",
+            traceId: second.traceId,
+            sessionId: "fresh-child-session",
+            authoring: { captureId: second.traceId },
+        });
+        expect(
+            await manager.getMacroLearningJob(first.learningJobId!),
+        ).toMatchObject({
+            status: "failed",
+            traceId: first.traceId,
+            authoring: { captureId: first.traceId },
+        });
+        expect(learner.extract).toHaveBeenCalledTimes(2);
+    });
+
     it("deduplicates simultaneous submissions and equivalent traces before model work", async () => {
         const { manager } = await setup();
-        const first = await capture(manager);
+        const first = await capture(manager, { learning: true });
         const jobs = await Promise.all(
             Array.from({ length: 8 }, () =>
                 manager.prepareMacroLearning({ traceId: first.traceId }),
             ),
         );
         expect(new Set(jobs.map((job) => job.jobId)).size).toBe(1);
-        const second = await capture(manager, { sessionId: "other-session" });
+        const second = await capture(manager, {
+            sessionId: "other-session",
+            learning: true,
+        });
         const equivalent = await manager.prepareMacroLearning({
             traceId: second.traceId,
         });
@@ -707,7 +978,7 @@ describe("durable macro learning", () => {
                     inputs: { step_1_path: "package.json" },
                 }),
             ).rejects.toThrow("suppressed");
-            const restarted = new MacroManager(directory, host);
+            const restarted = createManager(directory, host);
             const learner = runtime();
             await restarted.configureLearning(learner);
             const trace = recordedTrace("equivalent");
@@ -793,6 +1064,7 @@ describe("durable macro learning", () => {
         const finalized = await manager.finalizeRecording({
             tokenId: token.id,
             trace,
+            childAuthoring: childCapture(trace, token.id),
         });
         expect(
             (await manager.getMacroLearningJob(finalized.learningJobId!))
@@ -810,7 +1082,7 @@ describe("durable macro learning", () => {
         state.jobs[0].status = "extracting";
         state.jobs[0].attempts = { extract: 1 };
         await writeFile(file, JSON.stringify(state));
-        const restarted = new MacroManager(directory, host);
+        const restarted = createManager(directory, host);
         await restarted.configureLearning(runtime());
         expect((await terminal(restarted, summary.learningJobId!)).status).toBe(
             "ready",
@@ -830,7 +1102,7 @@ describe("durable macro learning", () => {
         expect(failed.status).toBe("failed");
         expect(failed.error).toContain("catalog was saved");
         expect((await manager.getApprovedMacros())[0].version).toBe(2);
-        const restarted = new MacroManager(directory, host);
+        const restarted = createManager(directory, host);
         const restartedRuntime = runtime();
         await restarted.configureLearning(restartedRuntime);
         expect((await terminal(restarted, failed.jobId)).status).toBe("ready");
@@ -922,17 +1194,15 @@ describe("durable macro learning", () => {
             ...trace.toolCalls[0],
             toolCallId: `call-${index}`,
         }));
-        const summary = await capture(manager, { learning: true, trace });
-        expect((await terminal(manager, summary.learningJobId!)).status).toBe(
-            "failed",
-        );
+        await expect(
+            capture(manager, { learning: true, trace }),
+        ).rejects.toThrow("complete successful");
         trace.sessionId = "incomplete-response";
         trace.toolCalls = [trace.toolCalls[0]];
         trace.response = "";
-        const incomplete = await capture(manager, { learning: true, trace });
-        expect(
-            (await terminal(manager, incomplete.learningJobId!)).status,
-        ).toBe("failed");
+        await expect(
+            capture(manager, { learning: true, trace }),
+        ).rejects.toThrow("complete successful");
         expect(learner.extract).not.toHaveBeenCalled();
     });
 
@@ -940,13 +1210,14 @@ describe("durable macro learning", () => {
         const { manager } = await setup("all");
         const trace = recordedTrace("failed-observation");
         trace.toolCalls[0].status = "failed";
-        const failed = await capture(manager, { learning: true, trace });
+        await expect(
+            capture(manager, { learning: true, trace }),
+        ).rejects.toThrow("complete successful");
         await manager.configureLearning(runtime());
         const succeeded = await capture(manager, {
             learning: true,
             sessionId: "successful-observation",
         });
-        expect(succeeded.learningJobId).not.toBe(failed.learningJobId);
         expect((await terminal(manager, succeeded.learningJobId!)).status).toBe(
             "ready",
         );
@@ -973,7 +1244,7 @@ describe("durable macro learning", () => {
                 path.join(directory, "copilot-macros", "index.json"),
                 "[]",
             );
-            const restarted = new MacroManager(directory, host);
+            const restarted = createManager(directory, host);
             const learner = runtime();
             if (conflict) {
                 learner.validateGrammar = jest.fn(() => {
@@ -1021,7 +1292,7 @@ describe("durable macro learning", () => {
         state.jobs[0].status = "extracting";
         state.jobs[0].attempts = { extract: 2 };
         await writeFile(stateFile, JSON.stringify(state));
-        const restarted = new MacroManager(directory, host);
+        const restarted = createManager(directory, host);
         const learner = runtime();
         await restarted.configureLearning(learner);
         const job = await terminal(restarted, summary.learningJobId!);

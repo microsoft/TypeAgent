@@ -1,14 +1,29 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, readFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import {
     MacroManager,
     type RecordedInteractionTrace,
 } from "@typeagent/copilot-macros";
+
+const directories: string[] = [];
+async function createDirectory() {
+    const directory = await mkdtemp(path.resolve(".macros-"));
+    directories.push(directory);
+    return directory;
+}
+afterEach(async () => {
+    await Promise.all(
+        directories
+            .splice(0)
+            .map((directory) =>
+                rm(directory, { recursive: true, force: true }),
+            ),
+    );
+});
 
 function completeTrace(
     sessionId: string,
@@ -36,7 +51,7 @@ function completeTrace(
 
 describe("MacroManager recording lifecycle", () => {
     it("claims one interaction and stores an immutable redacted trace", async () => {
-        const instanceDir = await mkdtemp(path.join(os.tmpdir(), "macros-"));
+        const instanceDir = await createDirectory();
         const manager = new MacroManager(instanceDir);
         const armed = manager.armRecording({ sessionId: "session-1" });
         const claimed = manager.claimRecording({
@@ -78,7 +93,7 @@ describe("MacroManager recording lifecycle", () => {
     });
 
     it("does not store an incomplete trace", async () => {
-        const instanceDir = await mkdtemp(path.join(os.tmpdir(), "macros-"));
+        const instanceDir = await createDirectory();
         const manager = new MacroManager(instanceDir);
         manager.armRecording({ sessionId: "session-1" });
         const claimed = manager.claimRecording({
@@ -100,7 +115,7 @@ describe("MacroManager recording lifecycle", () => {
     });
 
     it("rejects a trace for a different claimed prompt", async () => {
-        const instanceDir = await mkdtemp(path.join(os.tmpdir(), "macros-"));
+        const instanceDir = await createDirectory();
         const manager = new MacroManager(instanceDir);
         manager.armRecording({ sessionId: "session-1" });
         const claimed = manager.claimRecording({
@@ -118,7 +133,7 @@ describe("MacroManager recording lifecycle", () => {
     });
 
     it("allows only one simultaneous finalization", async () => {
-        const instanceDir = await mkdtemp(path.join(os.tmpdir(), "macros-"));
+        const instanceDir = await createDirectory();
         const manager = new MacroManager(instanceDir);
         manager.armRecording({ sessionId: "session-1" });
         const claimed = manager.claimRecording({

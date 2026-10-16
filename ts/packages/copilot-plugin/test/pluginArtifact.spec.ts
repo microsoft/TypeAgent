@@ -298,7 +298,7 @@ describe("staged plugin artifact", () => {
                     mcpRouting: "mixed",
                     powershell: { enabled: false },
                 });
-                for (const owner of ["plugin", "typeagent"]) {
+                for (const owner of ["off", "plugin"]) {
                     const recipeOwner = await runHook(
                         `@typeagent recipe owner ${owner}`,
                     );
@@ -323,25 +323,11 @@ describe("staged plugin artifact", () => {
                 for (const policy of ["mixed", "delegate"]) {
                     await runHook(`@typeagent mode mcp ${policy}`);
                     const output = await runHook(prompt);
-                    expect(output.modifiedPrompt).toBe(prompt);
+                    expect(output.handled).not.toBe(true);
+                    expect(output.modifiedPrompt).toBeUndefined();
                     expect(output.additionalContext).toContain(
-                        "TypeAgent is the preferred action provider in MCP mode",
+                        "plugin-local recipe owner is not connected",
                     );
-                    expect(output.additionalContext).toContain(
-                        "Native tools are a fallback only after establishing",
-                    );
-                    if (policy === "mixed") {
-                        expect(output.additionalContext).toContain(
-                            "rather than native GitHub tools, gh, or web/API fetches",
-                        );
-                    } else {
-                        expect(output.additionalContext).toContain(
-                            "You MUST call the typeagent-processCommand",
-                        );
-                        expect(output.additionalContext).not.toContain(
-                            "typeagent-searchActions",
-                        );
-                    }
                     expect(connections).toBe(0);
                 }
             } finally {
@@ -377,20 +363,14 @@ describe("staged plugin artifact", () => {
         expect(bundle).toContain("TYPEAGENT_SELECTED_SKILLS");
         expect(bundle).toContain("skillDirectories");
         expect(bundle).toContain(
-            "TypeAgent is the preferred action provider in MCP mode",
-        );
-        expect(bundle).toContain(
-            "otherwise discover a suitable capability before choosing native tools",
+            "Ordinary prompts: local recipes, then Copilot",
         );
         expect(bundle.includes("typeagent-macro-runner")).toBe(false);
         expect(bundle.includes("macro-runner-hosts")).toBe(false);
         expect(bundle).toContain("TYPEAGENT_WORKIQ_SDK_ORIGINALS_POLICY");
-        expect(bundle).toContain("workiq-sdk-originals-v1");
+        expect(bundle).not.toContain("workiq-sdk-originals-v1");
         expect(bundle).toContain(
-            "WorkIQ native binary/model-input exposure boundary is not admitted.",
-        );
-        expect(bundle).toContain(
-            "WorkIQ SDK capture requires an owned native control context.",
+            "original-retention recording experiment has been removed",
         );
     });
 
