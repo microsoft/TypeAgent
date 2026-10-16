@@ -382,9 +382,11 @@ During an **interactive** install the provider-selection dialog appears after
 the license page. The same choice can be driven **silently** through the public
 `PROVIDER` property:
 
-| Property   | Values                 | Default   | Notes                                                                  |
-| ---------- | ---------------------- | --------- | ---------------------------------------------------------------------- |
-| `PROVIDER` | `AISYSTEMS`, `COPILOT` | `COPILOT` | `COPILOT` generates `config.local.yaml` with local embeddings enabled. |
+| Property                 | Values                     | Default   | Notes                                                                                                              |
+| ------------------------ | -------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
+| `PROVIDER`               | `AISYSTEMS`, `COPILOT`     | `COPILOT` | `COPILOT` generates `config.local.yaml` with local embeddings enabled.                                             |
+| `LOCALEMBEDDINGMODEL`    | `MINILM`, `EMBEDDINGGEMMA` | `MINILM`  | Fresh Copilot installs select one pinned CPU/FP32 model.                                                           |
+| `DOWNLOADLOCALEMBEDDING` | `0`, `1`                   | `0`       | Explicit permission to download the selected snapshot. Gemma is multiple GB; never downloaded silently by default. |
 
 ```powershell
 # Copilot chat (default; requires an authenticated `copilot` CLI) + local embeddings
@@ -398,13 +400,18 @@ msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=COPILOT
 
 # Fully silent Copilot install
 msiexec /i TypeAgent-<version>-win32-x64.msi /quiet PROVIDER=COPILOT
+
+# Explicit Gemma selection and permission to download its text + image snapshot
+msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=COPILOT LOCALEMBEDDINGMODEL=EMBEDDINGGEMMA DOWNLOADLOCALEMBEDDING=1
 ```
 
 The UI is a custom scheme (`WixUI_TypeAgent`): WelcomeDlg → **ProviderDlg** →
 VerifyReadyDlg. For `COPILOT`, a deferred, impersonated custom action runs
 `node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider COPILOT
---embedding LOCAL --local-embedding-cache-dir
-"%LOCALAPPDATA%\TypeAgent\embedding-cache" --force` as the installing user,
+--embedding LOCAL --local-embedding-model [LOCALEMBEDDINGMODEL]
+--local-embedding-cache-dir "%LOCALAPPDATA%\TypeAgent\embedding-cache"
+--download-local-embedding [DOWNLOADLOCALEMBEDDING]
+--preserve-embedding-selection --force` as the installing user,
 writing `config.local.yaml` to `~/.typeagent`. Keeping model weights outside
 the MSI-managed `agent-server` directory preserves the cache across upgrades
 and ensures it inherits the user's per-user cache permissions. The action explicitly pins
@@ -422,6 +429,101 @@ manually.
 The MSI rejects `PROVIDER=OLLAMA` and the legacy `EMBEDDING` and `OLLAMAHOST`
 properties. Ollama and custom embedding configurations remain available through
 the script installers and the `provision`/`generate-selfhost-config` CLI.
+
+### Named local embeddings and offline staging
+
+The generated YAML uses `defaultEmbeddingModel: local-minilm` or
+`local-embeddinggemma` and an `embeddingModels` catalog. Definitions include
+`provider`, `model`, `runtime`, `size`, `modalities`, immutable `revision`,
+`cacheDir`, and `localFilesOnly: true`. Provider connection settings stay in
+their existing sections. Hosted profiles remain available, but no hosted
+inference is used to provision or validate an installation.
+
+One agent-server process selects one embedding model at startup. Defining
+additional profiles never downloads or loads them. Restart the server after
+changing the selector; existing indexes may require rebuilding when model
+identity changes. Routine chat-provider changes and MSI upgrades preserve
+an existing named (including hosted) or legacy embedding selection. MSI model
+properties choose the initial model, not an upgrade override.
+If an existing hosted/disabled selection is preserved, even
+`DOWNLOADLOCALEMBEDDING=1` does not stage a local model. This corrects an older
+MSI inconsistency: its UI/documentation promised local embeddings, while its
+custom-action command selected hosted Copilot embeddings. Fresh installations
+now consistently default to the documented lightweight local MiniLM choice;
+existing hosted selections are not changed.
+
+Both model choices use the **same** pinned Transformers.js **4.3.1** /
+Sharp **0.35.5** / ONNX Runtime Node **1.30.0** graph, CPU, FP32.
+Both artifact packagers validate these packages, reject conflicting nested
+versions, and emit `embedding-runtime.json`; they do not download model
+weights. Transformers stays external to the JavaScript bundle so its runtime
+assets and native dependencies remain deployable.
+
+| Alias                  | Model ID                               | Revision                                   | Dimensions | Modalities  |
+| ---------------------- | -------------------------------------- | ------------------------------------------ | ---------- | ----------- |
+| `local-minilm`         | `Xenova/all-MiniLM-L6-v2`              | `751bff37182d3f1213fa05d7196b954e230abad9` | 384        | text        |
+| `local-embeddinggemma` | `onnx-community/embeddinggemma-2-ONNX` | `daa72c51243991dfcaf9f9137d2c573d8f7790c0` | 768        | text, image |
+
+Stage an offline snapshot at
+`<cacheDir>\<model-owner>\<model-name>\<revision>\`. MiniLM requires
+`config.json`, `tokenizer.json`, `tokenizer_config.json`, and
+`onnx\model.onnx`. Gemma additionally requires `processor_config.json`,
+`onnx\model.onnx_data` (external weights), and, when image-enabled,
+`onnx\vision_encoder.onnx`. Quantized/FP16 files and revision `main` do not
+substitute for the pinned FP32 snapshot. Missing files fail offline with
+staging/consent guidance, never a network fallback.
+
+For explicit online staging, the CLI accepts `--download-local-embedding`
+(or `--download-local-embedding 1`; `0` forbids downloads). Downloads stream
+only missing selected-model assets from the pinned revision, publish each
+completed file atomically, remove interrupted partials, and can be retried
+without refetching completed files. Download failure leaves the prior config
+unchanged. Without consent, generation only writes offline configuration;
+the complete snapshot must be staged before first inference.
+
+```powershell
+# Repo-less fresh configuration, explicit Gemma consent (no server starts here)
+node .\typeagent-serve.mjs provision --provider copilot --embedding local `
+  --local-embedding-model embeddinggemma --download-local-embedding --force
+
+# Existing configuration: explicitly select a named profile; restart separately
+node .\tools\setModelProvider.mjs --provider copilot `
+  --default-embedding-model local-embeddinggemma
+
+# Source checkout equivalents
+node .\tools\scripts\generate-selfhost-config.mjs --provider copilot `
+  --embedding local --local-embedding-model minilm --out .\config.local.yaml
+node .\tools\scripts\setModelProvider.mjs --provider copilot
+```
+
+`--local-embedding-model` accepts `minilm` or `embeddinggemma`
+(case-insensitive), or either exact known model ID for backward compatibility.
+`--local-embedding-cache-dir` overrides the persistent cache.
+`--default-embedding-model` selects an existing catalog alias (or `none`);
+aliases inherited from `config.defaults.yaml` (including `copilot-small`)
+and partial per-alias overrides are resolved through the config loader.
+The two builtin local aliases can also be materialized automatically.
+Both artifact packagers ship the defaults next to the provisioning tools;
+the launcher honors `TYPEAGENT_CONFIG_DEFAULTS` overrides and otherwise pins
+that shipped defaults file for provisioning and server startup.
+For custom hosted models, pass `--embedding-size <positive integer>` when
+dimensions are not known. `--embedding none` emits the reserved selector
+`defaultEmbeddingModel: none`, without a legacy `embedding` section.
+The PowerShell installer exposes `-LocalEmbeddingModel`,
+`-LocalEmbeddingCacheDir`, `-EmbeddingSize`, and `-DownloadLocalEmbedding`;
+the Bash installer accepts the corresponding kebab-case CLI options.
+Provider-only setter changes preserve the existing embedding selector;
+`--embedding`, `--local-embedding-model`, or `--default-embedding-model`
+make an explicit change. Generator `--force` also preserves an existing
+selection unless embedding options are explicit; MSI adds
+`--preserve-embedding-selection` to protect upgrades.
+
+Offline regression coverage (no network, native inference, MSI execution,
+or service lifecycle):
+
+```powershell
+node --test .\tools\scripts\test\localEmbeddingProvisioning.spec.mjs .\tools\scripts\test\msiInstallerProviderUi.spec.mjs
+```
 
 ## Agent-server prerequisites & lifecycle
 

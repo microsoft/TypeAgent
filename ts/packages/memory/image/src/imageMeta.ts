@@ -10,6 +10,7 @@ import {
 import { conversation as kpLib, image } from "@typeagent/knowledge-processor";
 import path from "node:path";
 import { AddressOutput } from "@azure-rest/maps-search";
+import type { MediaEvidenceLocation } from "./mediaEvidence.js";
 //import registerDebug from "debug";
 
 //const debug = registerDebug("typeagent:image-memory");
@@ -30,6 +31,14 @@ export class Image implements IMessage {
 
 // metadata for images
 export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
+    public mediaEvidence?:
+        | {
+              sourceId: string;
+              revision: string;
+              assetHash: string;
+              locations: MediaEvidenceLocation[];
+          }
+        | undefined;
     public imageEntity: kpLib.ConcreteEntity | undefined = undefined;
     public dataFrameValues: Record<string, dataFrame.DataFrameValue> = {};
 
@@ -72,7 +81,11 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
             const exifPropertyName = this.img?.exifData[i][0];
             const exifPropertyValue = this.img?.exifData[i][1];
 
-            if (exifPropertyName && exifPropertyValue) {
+            if (
+                exifPropertyName &&
+                exifPropertyValue !== undefined &&
+                exifPropertyValue !== null
+            ) {
                 this.imageEntity.facets!.push({
                     name: exifPropertyName,
                     value: exifPropertyValue,
@@ -356,10 +369,10 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
     getGeo(): dataFrame.DataFrameRecord | undefined {
         // no EXIF data, no geo
         if (
-            !this.dataFrameValues["GPSLatitude"] ||
+            this.dataFrameValues["GPSLatitude"] === undefined ||
             //&& this.dataFrameValues["GPSLatitudeRef"]
             //&& this.dataFrameValues["GPSLongitudeRef"]
-            !this.dataFrameValues["GPSLongitude"]
+            this.dataFrameValues["GPSLongitude"] === undefined
         ) {
             return undefined;
         }

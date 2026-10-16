@@ -301,6 +301,9 @@ export type EmbeddingProviderMode =
     | "copilot"
     | "none";
 
+export type EmbeddingRuntime = "minilm" | "embeddinggemma";
+export type EmbeddingModality = "text" | "image";
+
 /**
  * Embedding provider configuration. Kept separate from chat provider
  * selection so a deployment can, for example, route chat through Copilot
@@ -310,10 +313,20 @@ export type EmbeddingProviderMode =
  * local provider) the model and weight cache directory.
  */
 export interface EmbeddingConfig {
+    /** Key of an existing Azure OpenAI deployment pool. */
+    readonly deployment?: string | undefined;
     /** Which embedding provider to use. */
     readonly provider?: EmbeddingProviderMode | undefined;
     /** Embedding model id (e.g. `text-embedding-3-small`). */
     readonly model?: string | undefined;
+    /** Local model runtime. Omit to retain legacy model-based selection. */
+    readonly runtime?: EmbeddingRuntime | undefined;
+    /** Enabled capabilities, not inferred model capabilities. Must include text. */
+    readonly modalities?: readonly EmbeddingModality[] | undefined;
+    /** Model revision; individual runtimes may require a pinned commit. */
+    readonly revision?: string | undefined;
+    /** Forbid downloads and use pre-staged local weights only. */
+    readonly localFilesOnly?: boolean | undefined;
     /** Directory used to cache / pre-stage local model weights. */
     readonly cacheDir?: string | undefined;
     /**
@@ -323,6 +336,15 @@ export interface EmbeddingConfig {
     readonly size?: number | undefined;
     /** Maximum number of inputs per embedding batch. */
     readonly maxBatchSize?: number | undefined;
+    /** Maximum pending local embedding requests. */
+    readonly maxPending?: number | undefined;
+}
+
+export interface EmbeddingModelDefinition extends EmbeddingConfig {
+    readonly provider: Exclude<EmbeddingProviderMode, "none">;
+    readonly model: string;
+    readonly size: number;
+    readonly modalities: readonly EmbeddingModality[];
 }
 
 export interface ReasoningConfig {
@@ -368,6 +390,10 @@ export interface CopilotConfig {
 
 /** Root typed configuration. */
 export interface Config {
+    readonly embeddingModels?:
+        | Readonly<Record<string, EmbeddingModelDefinition>>
+        | undefined;
+    readonly defaultEmbeddingModel?: string | undefined;
     readonly modelRequestConstraints?:
         | ReadonlyMap<string, ModelRequestConstraints>
         | undefined;

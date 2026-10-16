@@ -17,6 +17,8 @@ import {
     createStorageProvider,
     getCollectionData,
     getIndexingErrors,
+    readMemoryDataFromFile,
+    writeMemoryDataToFile,
 } from "./common.js";
 import { Result, success, error, PromptSection } from "typechat";
 
@@ -30,7 +32,7 @@ export interface EmailUserProfile {
 }
 
 export interface EmailMemoryData
-    extends kp.IConversationDataWithIndexes<EmailMessage> {
+    extends kp.EmbeddingIdentifiedConversationData<EmailMessage> {
     indexingState: IndexingState;
 }
 
@@ -118,6 +120,7 @@ export class EmailMemory
         eventHandler?: kp.IndexingEventHandlers,
         autoSave: boolean = true,
     ): Promise<Result<IndexingState>> {
+        await this.prepareEmbeddings();
         try {
             this.beginIndexing();
 
@@ -149,7 +152,10 @@ export class EmailMemory
     public async serialize(
         forExport: boolean = false,
     ): Promise<EmailMemoryData> {
+        const identities = await this.prepareEmbeddings();
         const data: EmailMemoryData = {
+            embeddingIdentities:
+                Object.keys(identities).length > 0 ? identities : undefined,
             indexingState: this.indexingState,
             nameTag: this.nameTag,
             messages: getCollectionData(this.messages, forExport),
@@ -164,6 +170,12 @@ export class EmailMemory
     }
 
     public async deserialize(emailData: EmailMemoryData): Promise<void> {
+        const identities = await this.prepareEmbeddings();
+        kp.validateConversationEmbeddingIdentities(
+            emailData,
+            identities,
+            this.settings.embeddingSize,
+        );
         this.indexingState = emailData.indexingState;
         this.nameTag = emailData.nameTag;
         this.tags = emailData.tags;
@@ -207,8 +219,9 @@ export class EmailMemory
             throw new Error("No file save settings provided");
         }
         const data = await this.serialize();
-        await kp.writeConversationDataToFile(
+        await writeMemoryDataToFile(
             data,
+            this.settings.conversationSettings,
             fileSaveSettings.dirPath,
             fileSaveSettings.baseFileName,
         );
@@ -217,20 +230,29 @@ export class EmailMemory
     public static async readFromFile(
         fileSettings: IndexFileSettings,
         useSqlite: boolean = true,
+        settings?: EmailMemorySettings,
     ): Promise<EmailMemory | undefined> {
         const storageProvider = createStorageProvider(fileSettings, useSqlite);
-        const memory = new EmailMemory(storageProvider);
+        const memory = new EmailMemory(storageProvider, settings);
         memory.settings.fileSaveSettings = fileSettings;
-        const data = (await kp.readConversationDataFromFile(
-            fileSettings.dirPath,
-            fileSettings.baseFileName,
-            memory.settings.conversationSettings.relatedTermIndexSettings
-                .embeddingIndexSettings?.embeddingSize,
-        )) as EmailMemoryData;
-        if (data) {
-            memory.deserialize(data);
+        try {
+            await memory.prepareEmbeddings();
+            const data = (await readMemoryDataFromFile(
+                memory.settings.conversationSettings,
+                fileSettings.dirPath,
+                fileSettings.baseFileName,
+            )) as EmailMemoryData | undefined;
+            if (data) {
+                await memory.deserialize(data);
+            } else {
+                memory.close();
+                return undefined;
+            }
+            return memory;
+        } catch (error) {
+            memory.close();
+            throw error;
         }
-        return memory;
     }
 
     public close() {

@@ -1608,6 +1608,9 @@ importers:
       '@github/copilot-sdk':
         specifier: 1.0.13
         version: 1.0.13
+      '@huggingface/transformers':
+        specifier: 4.3.1
+        version: 4.3.1(@types/node@22.15.18)
       '@modelcontextprotocol/server-filesystem':
         specifier: 2026.1.14
         version: 2026.1.14(zod@4.4.3)
@@ -1636,8 +1639,8 @@ importers:
         specifier: 7.9.0
         version: 7.9.0
       onnxruntime-node:
-        specifier: 1.21.0
-        version: 1.21.0
+        specifier: 1.30.0
+        version: 1.30.0
       puppeteer:
         specifier: ^24.15.0
         version: 24.37.5(typescript@5.9.3)
@@ -1651,7 +1654,7 @@ importers:
         specifier: ^2.11.2
         version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
       sharp:
-        specifier: ^0.35.4
+        specifier: 0.35.5
         version: 0.35.5(@types/node@22.15.18)
 
   packages/agentServer/client:
@@ -3135,7 +3138,7 @@ importers:
         specifier: ^2.10.1
         version: 2.11.0
       sharp:
-        specifier: ^0.35.4
+        specifier: 0.35.5
         version: 0.35.5(@types/node@26.4.1)
       typechat:
         specifier: ^0.1.1
@@ -4036,6 +4039,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
       '@types/async':
         specifier: ^3.2.24
         version: 3.2.24
@@ -4059,8 +4065,8 @@ importers:
         version: 5.4.5
     optionalDependencies:
       '@huggingface/transformers':
-        specifier: ^3.8.1
-        version: 3.8.1(@types/node@26.4.1)
+        specifier: 4.3.1
+        version: 4.3.1(@types/node@26.4.1)
 
   packages/api:
     dependencies:
@@ -5685,7 +5691,7 @@ importers:
         specifier: ^4.39.0
         version: 4.40.3
       sharp:
-        specifier: ^0.35.4
+        specifier: 0.35.5
         version: 0.35.5(@types/node@26.4.1)
       typechat:
         specifier: ^0.1.1
@@ -8237,6 +8243,9 @@ packages:
   '@emnapi/runtime@1.11.1':
     resolution: {integrity: sha1-WPHz1dgamxL3k6tojJY3GQECfCQ=}
 
+  '@emnapi/runtime@1.11.3':
+    resolution: {integrity: sha1-hCV647BTHrKuwf+iPXBwDaAHupU=}
+
   '@emnapi/wasi-threads@1.2.2':
     resolution: {integrity: sha1-TJO+z1v6OxPRu9zAau44MhrYE5o=}
 
@@ -9000,12 +9009,15 @@ packages:
     peerDependencies:
       hono: '>=4.12.8 <5.0.0'
 
-  '@huggingface/jinja@0.5.9':
-    resolution: {integrity: sha1-KU90H6CYwrMXN4i0TKZRlYv/o20=}
+  '@huggingface/jinja@0.5.10':
+    resolution: {integrity: sha512-SgS1D1bglQ94ceD4ZCL6eayUDy9uV1xuyk61OjgSxU5GJh7upqZCKII0JoTYMc6wWsg3JUgaPRX0ElQzXPk3Cw==}
     engines: {node: '>=18'}
 
-  '@huggingface/transformers@3.8.1':
-    resolution: {integrity: sha1-MX2gA4ZTIjlnlhcyI+6q8PlyPwo=}
+  '@huggingface/tokenizers@0.2.0':
+    resolution: {integrity: sha512-LidMHe1FpcSYH4vcSjXooda34pC0M8m1gmDOv7SQi6Iv+ib1zX7J3sHBCC9/3FPCkn2k1b55FneVqMRxrr99pg==}
+
+  '@huggingface/transformers@4.3.1':
+    resolution: {integrity: sha512-5+voSeUCFK6PCKlY15dPhNOKq3/zOTxDN7oC+Wy9dFb1QZ0TSQomZRRy7URRK8YRuUoE9fGMQTTPC5d/pWBJhA==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha1-qCcsoDsqz0kmcCIrIyC2xCG/3mA=}
@@ -12228,6 +12240,10 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
+  adm-zip@0.6.1:
+    resolution: {integrity: sha512-Xwrja8nx9e5o2N1my4DsKCeKpdrnACyr1wtbPxBDgGzKzKyE9kRtBFA8mWldI+RVlD7CBZNWY/wQ2+ydwOR6kQ==}
+    engines: {node: '>=14.0'}
+
   agent-base@5.1.1:
     resolution: {integrity: sha1-6Ps/JClZ20TWO+Zl23qOc5U3oyw=}
     engines: {node: '>= 6.0.0'}
@@ -12722,7 +12738,7 @@ packages:
     resolution: {integrity: sha1-Ks5XhFnMj74qcKqo9S7mO2p0xsY=}
 
   builder-util-runtime@9.7.0:
-    resolution: {integrity: sha512-g/kR520giAFYkSXTzcmF3kqQq7wi8F6N6SzeDgZrqTBN+VHdmgWOyTdD1yD7AATDId/yXLvuP34CxW46/BwCdw==}
+    resolution: {integrity: sha1-yG+6MDaE6Hfa7hXCnu3oGYcWb+8=}
     engines: {node: '>=12.0.0'}
 
   builder-util@26.15.3:
@@ -13875,7 +13891,7 @@ packages:
     resolution: {integrity: sha1-4n+xyg5r72EqZHAi4UaXAf6p7h8=}
 
   electron-updater@6.8.9:
-    resolution: {integrity: sha512-ZhVxM9iGONUpZGI1FxdMRgJjUFXi7AYGVa5PwKlO1tV1/4zDxQmfKpXOHVztKrd6L9rLcFjERvi1Mf2vxyTkig==}
+    resolution: {integrity: sha1-IePiQA7jpYt0lvCgI9lderHa4Bk=}
 
   electron-vite@4.0.1:
     resolution: {integrity: sha1-bN95j4QsJVd5mDzK3Qaz1HXAL1c=}
@@ -14633,6 +14649,10 @@ packages:
 
   global-agent@3.0.0:
     resolution: {integrity: sha1-rnzTG9NYO5PFoWQ3oa/ifMM6GrY=}
+    engines: {node: '>=10.0'}
+
+  global-agent@4.1.3:
+    resolution: {integrity: sha512-KUJEViiuFT3I97t+GYMikLPJS2Lfo/S2F+DQuBWzuzaMPnvt5yyZePzArx36fBzpGTxZjIpDbXLeySLgh+k76g==}
     engines: {node: '>=10.0'}
 
   globals@17.7.0:
@@ -16118,6 +16138,10 @@ packages:
     resolution: {integrity: sha1-vZBg9MW3CqgEHMxvgDaHYJlPMMo=}
     engines: {node: '>=10'}
 
+  matcher@4.0.0:
+    resolution: {integrity: sha512-S6x5wmcDmsDRRU/c2dkccDwQPXoFczc5+HpQ2lON8pnvHlnvHAHj5WlLVvw6n6vNyHuVugYrFohYxbS+pvFpKQ==}
+    engines: {node: '>=10'}
+
   math-intrinsics@1.1.0:
     resolution: {integrity: sha1-oN10voHiqlwvJ+Zc4oNgXuTit/k=}
     engines: {node: '>= 0.4'}
@@ -16727,18 +16751,18 @@ packages:
   only@0.0.2:
     resolution: {integrity: sha1-Kv3oTQPlC5qO3EROMGEKcCle37Q=}
 
-  onnxruntime-common@1.21.0:
-    resolution: {integrity: sha1-qB1BkdQYrLv/JUapVMwswj7rCfg=}
+  onnxruntime-common@1.30.0:
+    resolution: {integrity: sha512-7fdVWjAID1dVhH/G8qK3APARunV4VkBFoCQAP7qp4Wkab0mrorvmc+sqiT+mKXOzDqdjN5j+/Z9nb4gzNPWcyA==}
 
-  onnxruntime-common@1.22.0-dev.20250409-89f8206ba4:
-    resolution: {integrity: sha1-PUo5VjuT2z0EKLVSfLpYo8j4JsI=}
+  onnxruntime-common@1.31.0-dev.20260911-2a43ec07e:
+    resolution: {integrity: sha512-gBuF6U32YErKIAt+yD7DeGBpjRxhJ1uJwako6ygjokSZULDU6Pd+KWComX8Tumk1hYVHRxjPj7mdMnD0ryAPOw==}
 
-  onnxruntime-node@1.21.0:
-    resolution: {integrity: sha1-f09ZRVuvhRGB4gf8hAEoisLrENE=}
+  onnxruntime-node@1.30.0:
+    resolution: {integrity: sha512-twhs1C2C/BFkz1yc5OY0KIU2GUq6DURO7hD4bx5Q2Qy3nAMJwRXW8xU3NVczE29VA9lolLOYepoD8fjTGOfIqw==}
     os: [win32, darwin, linux]
 
-  onnxruntime-web@1.22.0-dev.20250409-89f8206ba4:
-    resolution: {integrity: sha1-0eOgTgPf7jkrQdQg71R7agNRsGs=}
+  onnxruntime-web@1.31.0-dev.20260914-8d85527a0:
+    resolution: {integrity: sha512-Iy7rtadoBgxS/LLvDr3QW38DB1PNXRnr0GJMcL0TAt7c9qjgVQl83UlGCVyeAnK2InpmW8Uc3PL8XIuqtDeF6g==}
 
   open@10.1.0:
     resolution: {integrity: sha1-p3lebl1Rmr5ChtmTe7JLURIlmOE=}
@@ -17913,6 +17937,10 @@ packages:
     resolution: {integrity: sha1-8TYLBEf2H/tIPsQVfHN/q313jhg=}
     engines: {node: '>=10'}
 
+  serialize-error@8.1.0:
+    resolution: {integrity: sha512-3NnuWfM6vBYoy5gZFvHiYsVbafvI9vZv/+jlIigFn4oP4zjNPK3LhcY0xSCgeb1a5L8jO71Mit9LlNoi2UfDDQ==}
+    engines: {node: '>=10'}
+
   serialize-javascript@7.0.5:
     resolution: {integrity: sha1-x5jMBVL/uwiYGRSkKodW4znQ1bE=}
     engines: {node: '>=20.0.0'}
@@ -18753,6 +18781,10 @@ packages:
 
   type-fest@0.13.1:
     resolution: {integrity: sha1-AXLLW86AsL1ULqNI21DH4hg02TQ=}
+    engines: {node: '>=10'}
+
+  type-fest@0.20.2:
+    resolution: {integrity: sha512-Ne+eE4r0/iWnpAxD852z3A+N0Bt5RN//NjJwRd2VFHEmrywxf5vsZlh4R6lixl6B+wz/8d+maTSAkN1FIkI3LQ==}
     engines: {node: '>=10'}
 
   type-fest@0.21.3:
@@ -21395,6 +21427,11 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
+  '@emnapi/runtime@1.11.3':
+    dependencies:
+      tslib: 2.8.1
+    optional: true
+
   '@emnapi/wasi-threads@1.2.2':
     dependencies:
       tslib: 2.8.1
@@ -21929,14 +21966,26 @@ snapshots:
     dependencies:
       hono: 4.13.5
 
-  '@huggingface/jinja@0.5.9':
-    optional: true
+  '@huggingface/jinja@0.5.10': {}
 
-  '@huggingface/transformers@3.8.1(@types/node@26.4.1)':
+  '@huggingface/tokenizers@0.2.0': {}
+
+  '@huggingface/transformers@4.3.1(@types/node@22.15.18)':
     dependencies:
-      '@huggingface/jinja': 0.5.9
-      onnxruntime-node: 1.21.0
-      onnxruntime-web: 1.22.0-dev.20250409-89f8206ba4
+      '@huggingface/jinja': 0.5.10
+      '@huggingface/tokenizers': 0.2.0
+      onnxruntime-node: 1.30.0
+      onnxruntime-web: 1.31.0-dev.20260914-8d85527a0
+      sharp: 0.35.5(@types/node@22.15.18)
+    transitivePeerDependencies:
+      - '@types/node'
+
+  '@huggingface/transformers@4.3.1(@types/node@26.4.1)':
+    dependencies:
+      '@huggingface/jinja': 0.5.10
+      '@huggingface/tokenizers': 0.2.0
+      onnxruntime-node: 1.30.0
+      onnxruntime-web: 1.31.0-dev.20260914-8d85527a0
       sharp: 0.35.5(@types/node@26.4.1)
     transitivePeerDependencies:
       - '@types/node'
@@ -22054,6 +22103,8 @@ snapshots:
     optional: true
 
   '@img/sharp-wasm32@0.35.5':
+    dependencies:
+      '@emnapi/runtime': 1.11.3
     optional: true
 
   '@img/sharp-webcontainers-wasm32@0.35.5':
@@ -24182,34 +24233,25 @@ snapshots:
 
   '@popperjs/core@2.11.8': {}
 
-  '@protobufjs/aspromise@1.1.2':
-    optional: true
+  '@protobufjs/aspromise@1.1.2': {}
 
-  '@protobufjs/base64@1.1.2':
-    optional: true
+  '@protobufjs/base64@1.1.2': {}
 
-  '@protobufjs/codegen@2.0.5':
-    optional: true
+  '@protobufjs/codegen@2.0.5': {}
 
-  '@protobufjs/eventemitter@1.1.1':
-    optional: true
+  '@protobufjs/eventemitter@1.1.1': {}
 
   '@protobufjs/fetch@1.1.1':
     dependencies:
       '@protobufjs/aspromise': 1.1.2
-    optional: true
 
-  '@protobufjs/float@1.0.2':
-    optional: true
+  '@protobufjs/float@1.0.2': {}
 
-  '@protobufjs/path@1.1.2':
-    optional: true
+  '@protobufjs/path@1.1.2': {}
 
-  '@protobufjs/pool@1.1.0':
-    optional: true
+  '@protobufjs/pool@1.1.0': {}
 
-  '@protobufjs/utf8@1.1.1':
-    optional: true
+  '@protobufjs/utf8@1.1.1': {}
 
   '@puppeteer/browsers@2.13.0':
     dependencies:
@@ -26358,6 +26400,8 @@ snapshots:
 
   acorn@8.18.0: {}
 
+  adm-zip@0.6.1: {}
+
   agent-base@5.1.1: {}
 
   agent-base@6.0.2(supports-color@8.1.1):
@@ -26847,7 +26891,8 @@ snapshots:
 
   boolbase@1.0.0: {}
 
-  boolean@3.2.0: {}
+  boolean@3.2.0:
+    optional: true
 
   bootstrap-icons@1.13.1: {}
 
@@ -28493,7 +28538,8 @@ snapshots:
 
   es-toolkit@1.46.1: {}
 
-  es6-error@4.1.1: {}
+  es6-error@4.1.1:
+    optional: true
 
   esbuild@0.25.12:
     optionalDependencies:
@@ -29155,8 +29201,7 @@ snapshots:
 
   flatbuffers@24.3.25: {}
 
-  flatbuffers@25.9.23:
-    optional: true
+  flatbuffers@25.9.23: {}
 
   flatted@3.4.2: {}
 
@@ -29451,6 +29496,14 @@ snapshots:
       roarr: 2.15.4
       semver: 7.8.5
       serialize-error: 7.0.1
+    optional: true
+
+  global-agent@4.1.3:
+    dependencies:
+      globalthis: 1.0.4
+      matcher: 4.0.0
+      semver: 7.8.5
+      serialize-error: 8.1.0
 
   globals@17.7.0: {}
 
@@ -29626,8 +29679,7 @@ snapshots:
       - encoding
       - supports-color
 
-  guid-typescript@1.0.9:
-    optional: true
+  guid-typescript@1.0.9: {}
 
   hachure-fill@0.5.2: {}
 
@@ -31248,7 +31300,8 @@ snapshots:
 
   json-stable-stringify-without-jsonify@1.0.1: {}
 
-  json-stringify-safe@5.0.1: {}
+  json-stringify-safe@5.0.1:
+    optional: true
 
   json5@2.2.3: {}
 
@@ -31644,8 +31697,7 @@ snapshots:
 
   long@4.0.0: {}
 
-  long@5.3.2:
-    optional: true
+  long@5.3.2: {}
 
   longest-streak@3.1.0: {}
 
@@ -31800,6 +31852,11 @@ snapshots:
   marky@1.3.0: {}
 
   matcher@3.0.0:
+    dependencies:
+      escape-string-regexp: 4.0.0
+    optional: true
+
+  matcher@4.0.0:
     dependencies:
       escape-string-regexp: 4.0.0
 
@@ -32615,26 +32672,24 @@ snapshots:
 
   only@0.0.2: {}
 
-  onnxruntime-common@1.21.0: {}
+  onnxruntime-common@1.30.0: {}
 
-  onnxruntime-common@1.22.0-dev.20250409-89f8206ba4:
-    optional: true
+  onnxruntime-common@1.31.0-dev.20260911-2a43ec07e: {}
 
-  onnxruntime-node@1.21.0:
+  onnxruntime-node@1.30.0:
     dependencies:
-      global-agent: 3.0.0
-      onnxruntime-common: 1.21.0
-      tar: 7.5.22
+      adm-zip: 0.6.1
+      global-agent: 4.1.3
+      onnxruntime-common: 1.30.0
 
-  onnxruntime-web@1.22.0-dev.20250409-89f8206ba4:
+  onnxruntime-web@1.31.0-dev.20260914-8d85527a0:
     dependencies:
       flatbuffers: 25.9.23
       guid-typescript: 1.0.9
       long: 5.3.2
-      onnxruntime-common: 1.22.0-dev.20250409-89f8206ba4
+      onnxruntime-common: 1.31.0-dev.20260911-2a43ec07e
       platform: 1.3.6
       protobufjs: 7.6.5
-    optional: true
 
   open@10.1.0:
     dependencies:
@@ -33024,8 +33079,7 @@ snapshots:
       pvutils: 1.1.5
       tslib: 2.8.1
 
-  platform@1.3.6:
-    optional: true
+  platform@1.3.6: {}
 
   play-sound@1.1.6:
     dependencies:
@@ -33282,7 +33336,6 @@ snapshots:
       '@protobufjs/utf8': 1.1.1
       '@types/node': 22.20.1
       long: 5.3.2
-    optional: true
 
   protocol-buffers-schema@3.6.1: {}
 
@@ -33954,6 +34007,7 @@ snapshots:
       json-stringify-safe: 5.0.1
       semver-compare: 1.0.0
       sprintf-js: 1.1.3
+    optional: true
 
   robust-predicates@3.0.2: {}
 
@@ -34154,7 +34208,8 @@ snapshots:
 
   semaphore@1.1.0: {}
 
-  semver-compare@1.0.0: {}
+  semver-compare@1.0.0:
+    optional: true
 
   semver@5.7.2: {}
 
@@ -34249,6 +34304,11 @@ snapshots:
   serialize-error@7.0.1:
     dependencies:
       type-fest: 0.13.1
+    optional: true
+
+  serialize-error@8.1.0:
+    dependencies:
+      type-fest: 0.20.2
 
   serialize-javascript@7.0.5: {}
 
@@ -34622,7 +34682,8 @@ snapshots:
 
   sprintf-js@1.0.3: {}
 
-  sprintf-js@1.1.3: {}
+  sprintf-js@1.1.3:
+    optional: true
 
   stack-utils@2.0.6:
     dependencies:
@@ -35371,7 +35432,10 @@ snapshots:
 
   type-detect@4.0.8: {}
 
-  type-fest@0.13.1: {}
+  type-fest@0.13.1:
+    optional: true
+
+  type-fest@0.20.2: {}
 
   type-fest@0.21.3: {}
 

@@ -97,6 +97,10 @@ function pinnedConfigDir() {
         process.env.TYPEAGENT_USER_DATA_DIR ??
         path.join(os.homedir(), ".typeagent");
     process.env.TYPEAGENT_CONFIG_DIR = dir;
+    const defaults = path.join(artifactDir, "tools", "config.defaults.yaml");
+    if (!process.env.TYPEAGENT_CONFIG_DEFAULTS && fs.existsSync(defaults)) {
+        process.env.TYPEAGENT_CONFIG_DEFAULTS = defaults;
+    }
     return dir;
 }
 

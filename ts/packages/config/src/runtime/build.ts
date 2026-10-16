@@ -22,6 +22,13 @@
 
 import type { FlatEnv } from "../types.js";
 import {
+    validateEmbeddingConfig,
+    resolveEmbeddingConfig,
+    parseEmbeddingModels,
+    EMBEDDING_MODELS_KEY,
+    DEFAULT_EMBEDDING_MODEL_KEY,
+} from "./embedding.js";
+import {
     MODEL_REQUEST_CONSTRAINTS_KEY,
     parseModelRequestConstraints,
 } from "./requestConstraints.js";
@@ -45,6 +52,8 @@ import {
     type AzureOpenAIConfig,
     type EmbeddingConfig,
     type EmbeddingProviderMode,
+    type EmbeddingRuntime,
+    type EmbeddingModality,
 } from "./types.js";
 
 /**
@@ -181,8 +190,19 @@ export function buildConfig(flat: FlatEnv): Config {
         MODEL_REQUEST_CONSTRAINTS_KEY,
     );
 
-    return {
+    const embeddingModelsRaw = popString(remaining, EMBEDDING_MODELS_KEY);
+    const defaultEmbeddingModel = popString(
+        remaining,
+        DEFAULT_EMBEDDING_MODEL_KEY,
+    );
+    const config: Config = {
         azureOpenAI,
+        ...(embeddingModelsRaw !== undefined
+            ? { embeddingModels: parseEmbeddingModels(embeddingModelsRaw) }
+            : {}),
+        ...(defaultEmbeddingModel !== undefined
+            ? { defaultEmbeddingModel }
+            : {}),
         ...(openAI ? { openAI } : {}),
         speech,
         maps,
@@ -207,6 +227,8 @@ export function buildConfig(flat: FlatEnv): Config {
             : {}),
         extra: new Map(remaining),
     };
+    resolveEmbeddingConfig(config);
+    return config;
 }
 
 // ----------------------------------------------------------------------------
@@ -976,53 +998,64 @@ function buildReasoning(flat: Map<string, string>) {
 function buildEmbedding(
     flat: Map<string, string>,
 ): EmbeddingConfig | undefined {
-    const providerRaw = popString(flat, "TYPEAGENT_EMBEDDING_PROVIDER");
-    const model = popString(flat, "TYPEAGENT_EMBEDDING_MODEL");
-    const cacheDir = popString(flat, "TYPEAGENT_EMBEDDING_CACHE_DIR");
-    const size = popPositiveInt(flat, "TYPEAGENT_EMBEDDING_SIZE");
-    const maxBatchSize = popPositiveInt(
-        flat,
-        "TYPEAGENT_EMBEDDING_MAX_BATCH_SIZE",
-    );
-
-    let provider: EmbeddingProviderMode | undefined;
-    if (providerRaw !== undefined) {
-        const v = providerRaw.toLowerCase();
-        if (
-            v === "local" ||
-            v === "openai" ||
-            v === "azure" ||
-            v === "copilot" ||
-            v === "none"
-        ) {
-            provider = v;
-        } else {
-            // Unknown value — leave it in extra rather than emitting a
-            // malformed typed field.
-            flat.set("TYPEAGENT_EMBEDDING_PROVIDER", providerRaw);
-        }
-    }
-
-    if (
-        provider === undefined &&
-        model === undefined &&
-        cacheDir === undefined &&
-        size === undefined &&
-        maxBatchSize === undefined
-    )
-        return undefined;
-
-    return {
-        ...(provider !== undefined ? { provider } : {}),
-        ...(model !== undefined ? { model } : {}),
-        ...(cacheDir !== undefined ? { cacheDir } : {}),
-        ...(size !== undefined ? { size } : {}),
-        ...(maxBatchSize !== undefined ? { maxBatchSize } : {}),
+    const config: EmbeddingConfig = {
+        deployment: popString(flat, "TYPEAGENT_EMBEDDING_DEPLOYMENT"),
+        provider: popString(
+            flat,
+            "TYPEAGENT_EMBEDDING_PROVIDER",
+        )?.toLowerCase() as EmbeddingProviderMode | undefined,
+        model: popString(flat, "TYPEAGENT_EMBEDDING_MODEL"),
+        cacheDir: popString(flat, "TYPEAGENT_EMBEDDING_CACHE_DIR"),
+        size: popPositiveInt(flat, "TYPEAGENT_EMBEDDING_SIZE"),
+        maxBatchSize: popPositiveInt(
+            flat,
+            "TYPEAGENT_EMBEDDING_MAX_BATCH_SIZE",
+        ),
+        maxPending: popPositiveInt(flat, "TYPEAGENT_EMBEDDING_MAX_PENDING"),
+        runtime: popString(flat, "TYPEAGENT_EMBEDDING_RUNTIME") as
+            | EmbeddingRuntime
+            | undefined,
+        revision: popString(flat, "TYPEAGENT_EMBEDDING_REVISION"),
+        localFilesOnly: popEmbeddingBoolean(flat),
+        modalities: popEmbeddingModalities(flat),
     };
+    validateEmbeddingConfig(config);
+    const defined = Object.fromEntries(
+        Object.entries(config).filter(([, value]) => value !== undefined),
+    );
+    return Object.keys(defined).length > 0 ? defined : undefined;
 }
 
-// Pop a positive integer; malformed values are left in extra untouched
-// and reported, so a typo (e.g. `size: -1`) does not silently fall back.
+function popEmbeddingBoolean(flat: Map<string, string>): boolean | undefined {
+    const raw = popString(flat, "TYPEAGENT_EMBEDDING_LOCAL_FILES_ONLY");
+    if (raw === undefined) return undefined;
+    if (!["true", "false", "1", "0"].includes(raw)) {
+        throw new Error(
+            "embedding.localFilesOnly (TYPEAGENT_EMBEDDING_LOCAL_FILES_ONLY): expected true, false, 1, or 0",
+        );
+    }
+    return raw === "true" || raw === "1";
+}
+
+function popEmbeddingModalities(
+    flat: Map<string, string>,
+): readonly EmbeddingModality[] | undefined {
+    const raw = popString(flat, "TYPEAGENT_EMBEDDING_MODALITIES");
+    if (raw === undefined) return undefined;
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        throw new Error(
+            "embedding.modalities (TYPEAGENT_EMBEDDING_MODALITIES): expected a JSON array",
+        );
+    }
+    if (!Array.isArray(parsed)) {
+        throw new Error("embedding.modalities: expected a JSON array");
+    }
+    return parsed as readonly EmbeddingModality[];
+}
+
 function popPositiveInt(
     flat: Map<string, string>,
     key: string,
@@ -1030,12 +1063,8 @@ function popPositiveInt(
     const raw = popString(flat, key);
     if (raw === undefined) return undefined;
     const n = Number(raw);
-    if (Number.isInteger(n) && n > 0) return n;
-    console.warn(
-        `${key}: expected a positive integer, got "${raw}"; ignoring.`,
-    );
-    flat.set(key, raw);
-    return undefined;
+    if (Number.isFinite(n) && Number.isInteger(n) && n > 0) return n;
+    throw new Error(`${key}: expected a positive finite integer, got "${raw}"`);
 }
 
 // Re-exported helpers for tests / future builders.

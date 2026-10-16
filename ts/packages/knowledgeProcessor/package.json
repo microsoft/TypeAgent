@@ -40,7 +40,7 @@
     "@typeagent/typechat-utils": "workspace:*",
     "debug": "^4.4.0",
     "exifreader": "^4.39.0",
-    "sharp": "^0.35.4",
+    "sharp": "0.35.5",
     "typechat": "^0.1.1"
   },
   "devDependencies": {

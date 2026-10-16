@@ -11,9 +11,15 @@
  * should migrate toward.
  */
 
-import { loadConfigSync } from "../loader.js";
+import { getConfigProblems, loadConfigSync } from "../loader.js";
 import type { LoadConfigOptions } from "../types.js";
 import { buildConfig } from "./build.js";
+import { mergeFlat } from "../flatten.js";
+import type { FlatEnv } from "../types.js";
+import {
+    DEFAULT_EMBEDDING_MODEL_KEY,
+    EMBEDDING_MODELS_KEY,
+} from "./embedding.js";
 import { applyToProcessEnv } from "./shim.js";
 import type { Config } from "./types.js";
 
@@ -45,7 +51,28 @@ export function loadRuntimeConfigSync(
     // AFTER building, not before — so the typed Config is the source
     // of truth, not whatever was already in process.env).
     const result = loadConfigSync({ ...options, populateProcessEnv: false });
-    const config = buildConfig(result.env);
+    const embeddingProblem = getConfigProblems().find((problem) =>
+        ["embedding", "embeddingModels", "defaultEmbeddingModel"].includes(
+            problem.section,
+        ),
+    );
+    if (embeddingProblem) {
+        throw new Error(
+            `Invalid embedding config in ${embeddingProblem.file}: ${embeddingProblem.message}`,
+        );
+    }
+    const overrides: FlatEnv = {};
+    for (const [key, value] of Object.entries(process.env)) {
+        if (
+            value !== undefined &&
+            (key === DEFAULT_EMBEDDING_MODEL_KEY ||
+                key === EMBEDDING_MODELS_KEY ||
+                key.startsWith("TYPEAGENT_EMBEDDING_"))
+        ) {
+            overrides[key] = value;
+        }
+    }
+    const config = buildConfig(mergeFlat(result.env, overrides));
     if (options.populateProcessEnv ?? true) {
         applyToProcessEnv(config);
     }

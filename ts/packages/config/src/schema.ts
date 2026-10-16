@@ -12,7 +12,7 @@ import { z } from "zod";
  * - The top-level document is a map (not a scalar or array).
  * - Leaf values are strings, numbers, booleans, or null.
  * - Arrays of objects are allowed for structured sections.
- * - `copilot.fallbackModels` is the one supported scalar-array field.
+ * - `copilot.fallbackModels` and `embedding.modalities` support scalar arrays.
  */
 const scalarSchema: z.ZodType<string | number | boolean | null> = z.union([
     z.string(),
@@ -75,7 +75,17 @@ function findUnsupportedScalarArray(
         const containsScalar = node.some(
             (item) => item === null || typeof item !== "object",
         );
-        if (containsScalar && path.join(".") !== "copilot.fallbackModels") {
+        if (
+            containsScalar &&
+            !(
+                path.length === 3 &&
+                path[0] === "embeddingModels" &&
+                path[2] === "modalities"
+            ) &&
+            !["copilot.fallbackModels", "embedding.modalities"].includes(
+                path.join("."),
+            )
+        ) {
             return path.join(".") || "<root>";
         }
         for (let i = 0; i < node.length; i++) {
