@@ -22,7 +22,7 @@ import {
 } from "@typeagent/copilot-macros/recipeCore";
 import { executeRecipeProgram } from "@typeagent/copilot-macros/recipeExecutor";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -172,7 +172,9 @@ describe("Checkpoint A recorded programs with actual contained execution", () =>
     let directory: string;
     let realReplay: McpReplayHost | undefined;
     beforeEach(async () => {
-        directory = await mkdtemp(path.join(os.tmpdir(), "checkpoint-a-"));
+        directory = await realpath(
+            await mkdtemp(path.join(os.tmpdir(), "checkpoint-a-")),
+        );
     });
     afterEach(async () => {
         await realReplay?.close();
