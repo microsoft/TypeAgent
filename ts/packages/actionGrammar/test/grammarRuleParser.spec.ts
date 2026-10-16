@@ -88,6 +88,37 @@ describe("Grammar Rule Parser", () => {
                 value: ["world"],
             });
         });
+
+        it("rule with optional rule reference", () => {
+            const grammar = "<sentence> = <greeting>? world;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            expect(result[0].rules[0].expressions).toHaveLength(2);
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "ruleReference",
+                refName: { name: "greeting" },
+                optional: true,
+            });
+            expect(result[0].rules[0].expressions[1]).toEqual({
+                type: "string",
+                value: ["world"],
+            });
+        });
+
+        it("requires the optional suffix to be adjacent", () => {
+            const grammar = "<sentence> = <greeting> ? world;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            expect(result[0].rules[0].expressions).toHaveLength(2);
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "ruleReference",
+                refName: { name: "greeting" },
+            });
+            expect(result[0].rules[0].expressions[1]).toEqual({
+                type: "string",
+                value: ["?", "world"],
+            });
+        });
     });
 
     describe("Expression Parsing", () => {
