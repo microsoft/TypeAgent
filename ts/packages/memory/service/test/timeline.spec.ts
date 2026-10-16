@@ -16,6 +16,7 @@ import type {
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { projectSources } from "./projectTestSources.js";
 import { timelineTestAnswer } from "./timelineTestModel.js";
+import { createOfflineEmbeddingModel } from "./offlineEmbedding.js";
 
 const runtimeJest = import.meta.jest;
 const jest = runtimeJest as typeof runtimeJest & {
@@ -29,18 +30,7 @@ const calls: Array<{ name: string; input: string }> = [];
 let alter: (name: string, value: unknown) => unknown = (_name, value) => value;
 let prose = "Retained record evidence.\n";
 const embeddings: string[] = [];
-const offlineEmbedding = {
-    maxBatchSize: 8,
-    generateEmbedding: async (text: string) => {
-        embeddings.push(text);
-        return {
-            success: true as const,
-            data: Array.from({ length: 1536 }, (_, index) =>
-                index === 0 ? 1 : 0,
-            ),
-        };
-    },
-};
+const offlineEmbedding = createOfflineEmbeddingModel(embeddings);
 jest.unstable_mockModule("@typeagent/aiclient", () => ({
     ...actual,
     tryCreateEmbeddingModel: () => offlineEmbedding,

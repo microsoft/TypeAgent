@@ -112,6 +112,63 @@ describe("identity-aware conversation serialization", () => {
         },
     );
 
+    test.each(["known", "legacy"] as const)(
+        "explicit text-only file and buffer reads discard %s vectors without a binary artifact",
+        async (kind) => {
+            const source = {
+                ...data(),
+                threadData: {
+                    threads: [
+                        {
+                            thread: {
+                                description: "retained discussion",
+                                ranges: [],
+                            },
+                            embedding: [1, 0],
+                        },
+                    ],
+                },
+            };
+            await writeConversationDataToFile(
+                source,
+                root,
+                "text-only",
+                { embeddingSize: 2 },
+                kind === "known" ? { message: identity } : undefined,
+            );
+            const filename = path.join(root, "text-only_data.json");
+            const json = await fs.readFile(filename, "utf8");
+            await fs.unlink(path.join(root, "text-only_embeddings.bin"));
+            const loaded = [
+                await readConversationDataFromFile(
+                    root,
+                    "text-only",
+                    3,
+                    { message: { ...identity, dimensions: 3 } },
+                    { loadEmbeddings: false },
+                ),
+                await readConversationDataFromBuffer(
+                    json,
+                    Buffer.alloc(0),
+                    3,
+                    {},
+                    { loadEmbeddings: false },
+                ),
+            ];
+            for (const result of loaded) {
+                expect(result?.messages[0].textChunks).toEqual([
+                    "source knowledge",
+                ]);
+                expect(result?.messageIndexData?.indexData).toBeUndefined();
+                expect(result?.threadData?.threads?.[0]).toEqual({
+                    thread: { description: "retained discussion", ranges: [] },
+                    embedding: [],
+                });
+            }
+            expect(await fs.readFile(filename, "utf8")).toBe(json);
+        },
+    );
+
     test("automatic identities on serialized blobs are retained by the file writer", async () => {
         await writeConversationDataToFile(
             { ...data(), embeddingIdentities: { message: identity } },

@@ -67,6 +67,7 @@ export async function readConversationDataFromFile(
     baseFileName: string,
     embeddingSize?: number,
     expectedIdentities?: PersistedEmbeddingIdentities,
+    options?: { loadEmbeddings?: boolean },
 ): Promise<IConversationDataWithIndexes | undefined> {
     const jsonData = await readJsonFile<ConversationJsonData>(
         path.join(dirPath, baseFileName + DataFileSuffix),
@@ -79,6 +80,10 @@ export async function readConversationDataFromFile(
         binaryData: {},
     };
     validateFileData(fileData, embeddingSize);
+    if (options?.loadEmbeddings === false) {
+        dropPersistedEmbeddings(fileData.jsonData);
+        embeddingSize = undefined;
+    }
     checkIdentities(fileData, expectedIdentities, embeddingSize);
     let embeddings: Float32Array[] | undefined;
     const embeddingsCompatible = arePersistedEmbeddingsCompatible(
@@ -86,6 +91,7 @@ export async function readConversationDataFromFile(
         embeddingSize,
     );
     if (
+        options?.loadEmbeddings !== false &&
         !embeddingsCompatible &&
         getStoredEmbeddingSize(fileData) !== undefined
     ) {
@@ -114,6 +120,7 @@ export async function readConversationDataFromBuffer(
     embeddingsBuffer: Buffer,
     embeddingSize: number | undefined,
     expectedIdentities?: PersistedEmbeddingIdentities,
+    options?: { loadEmbeddings?: boolean },
 ): Promise<IConversationDataWithIndexes | undefined> {
     if (!jsonData) {
         return undefined;
@@ -124,12 +131,17 @@ export async function readConversationDataFromBuffer(
         binaryData: {},
     };
     validateFileData(fileData);
+    if (options?.loadEmbeddings === false) {
+        dropPersistedEmbeddings(fileData.jsonData);
+        embeddingSize = undefined;
+    }
     checkIdentities(fileData, expectedIdentities, embeddingSize);
     const embeddingsCompatible = arePersistedEmbeddingsCompatible(
         fileData,
         embeddingSize,
     );
     if (
+        options?.loadEmbeddings !== false &&
         !embeddingsCompatible &&
         getStoredEmbeddingSize(fileData) !== undefined
     ) {

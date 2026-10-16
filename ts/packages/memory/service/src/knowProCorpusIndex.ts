@@ -5,6 +5,7 @@ import {
     DocMemory,
     DocPart,
     type DocMemorySettings,
+    createDocMemorySettings,
     docPartsFromHtml,
     docPartsFromMarkdown,
     docPartsFromText,
@@ -297,10 +298,20 @@ export class KnowProCorpusIndex implements CorpusIndex {
             () => false,
         );
         if (this.settingsFactory !== undefined || hasSemanticIndex) {
+            const settings =
+                this.settingsFactory?.() ?? createDocMemorySettings();
+            const indexes = settings.conversationSettings;
             this.memory = await DocMemory.readFromFile(
                 this.indexDirectory,
                 indexBaseName,
-                this.settingsFactory?.(),
+                settings,
+                {
+                    loadEmbeddings: [
+                        indexes.relatedTermIndexSettings.embeddingIndexSettings,
+                        indexes.messageTextIndexSettings.embeddingIndexSettings,
+                        indexes.threadSettings,
+                    ].some((lane) => lane?.embeddingModel !== undefined),
+                },
             );
             this.refreshSourceMessages(this.memory);
             if (hasSemanticIndex && this.memory?.messages.length === 0) {

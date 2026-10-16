@@ -187,6 +187,7 @@ export async function readMemoryDataFromFile(
     settings: kp.ConversationSettings,
     dirPath: string,
     baseFileName: string,
+    options?: { loadEmbeddings?: boolean },
 ): Promise<kp.IConversationDataWithIndexes | undefined> {
     const identities = await prepareConversationEmbeddings(settings);
     return kp.readConversationDataFromFile(
@@ -194,6 +195,7 @@ export async function readMemoryDataFromFile(
         baseFileName,
         settings.messageTextIndexSettings.embeddingIndexSettings.embeddingSize,
         identities,
+        options,
     );
 }
 

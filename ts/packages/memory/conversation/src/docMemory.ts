@@ -435,9 +435,27 @@ export class DocMemory
         dirPath: string,
         baseFileName: string,
         settings?: DocMemorySettings,
-        options?: { rebuildEmbeddings?: boolean },
+        options?: {
+            rebuildEmbeddings?: boolean;
+            loadEmbeddings?: boolean;
+        },
     ): Promise<DocMemory | undefined> {
         const docMemory = new DocMemory(undefined, undefined, settings);
+        if (options?.loadEmbeddings === false) {
+            const indexes = docMemory.settings.conversationSettings;
+            if (
+                options.rebuildEmbeddings ||
+                [
+                    indexes.relatedTermIndexSettings.embeddingIndexSettings,
+                    indexes.messageTextIndexSettings.embeddingIndexSettings,
+                    indexes.threadSettings,
+                ].some((lane) => lane?.embeddingModel !== undefined)
+            ) {
+                throw new Error(
+                    "Text-only loading requires disabled embedding lanes and cannot rebuild embeddings.",
+                );
+            }
+        }
         await docMemory.prepareEmbeddings();
         let data: kp.IConversationDataWithIndexes | undefined;
         try {
@@ -445,6 +463,7 @@ export class DocMemory
                 docMemory.settings.conversationSettings,
                 dirPath,
                 baseFileName,
+                options,
             );
         } catch (error) {
             if (

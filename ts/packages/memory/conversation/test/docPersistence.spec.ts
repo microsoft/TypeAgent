@@ -546,6 +546,72 @@ describe("document embedding persistence (deterministic, offline)", () => {
         ).rejects.toThrow(kp.PersistedEmbeddingIdentityError);
     });
 
+    test("explicit text-only reload preserves symbolic retrieval and saved vectors with embeddings disabled", async () => {
+        await createSaved();
+        const filename = path.join(root, "doc_data.json");
+        const binaryFilename = path.join(root, "doc_embeddings.bin");
+        const json = await fs.readFile(filename, "utf8");
+        const binary = await fs.readFile(binaryFilename);
+        setRuntimeConfig({
+            ...originalConfig,
+            embedding: { provider: "none" },
+        });
+        const before = calls.length;
+        const memory = (await DocMemory.readFromFile(
+            root,
+            "doc",
+            createDocMemorySettings(32, undefined, languageModel),
+            { loadEmbeddings: false },
+        ))!;
+        expect(memory.messages.length).toBe(2);
+        expect(memory.semanticRefs.length).toBe(2);
+        expect(await memory.searchTopics("marine", 10, true)).toEqual([
+            { text: "marine" },
+        ]);
+        const serialized = await memory.serialize();
+        expect(
+            serialized.messageIndexData?.indexData?.embeddings ?? [],
+        ).toEqual([]);
+        expect(
+            serialized.relatedTermsIndexData?.textEmbeddingData?.embeddings ??
+                [],
+        ).toEqual([]);
+        expect(calls).toHaveLength(before);
+        expect(await fs.readFile(filename, "utf8")).toBe(json);
+        expect(await fs.readFile(binaryFilename)).toEqual(binary);
+        expect(
+            await matches(
+                (await DocMemory.readFromFile(root, "doc", settings()))!,
+                "marine",
+            ),
+        ).toEqual([0]);
+    });
+
+    test("text-only reload rejects enabled lanes and conflicting rebuild requests", async () => {
+        await createSaved();
+        const partiallyEnabled = settings();
+        partiallyEnabled.embeddingModel = undefined;
+        await expect(
+            DocMemory.readFromFile(root, "doc", partiallyEnabled, {
+                loadEmbeddings: false,
+            }),
+        ).rejects.toThrow(
+            "Text-only loading requires disabled embedding lanes",
+        );
+        setRuntimeConfig({
+            ...originalConfig,
+            embedding: { provider: "none" },
+        });
+        await expect(
+            DocMemory.readFromFile(
+                root,
+                "doc",
+                createDocMemorySettings(32, undefined, languageModel),
+                { loadEmbeddings: false, rebuildEmbeddings: true },
+            ),
+        ).rejects.toThrow("cannot rebuild embeddings");
+    });
+
     test.each([
         { runtime: "minilm" as const, dimensions: 384 },
         { runtime: "embeddinggemma" as const, dimensions: 768 },
