@@ -322,9 +322,7 @@ describe("staged plugin artifact", () => {
                 }
                 const recipeStatus = await runHook("@typeagent recipe status");
                 expect(recipeStatus.handled).toBe(true);
-                expect(recipeStatus.responseContent).toMatch(
-                    /\S/,
-                );
+                expect(recipeStatus.responseContent).toMatch(/\S/);
                 expect(recipeStatus.modifiedPrompt).toBeUndefined();
                 expect(recipeStatus.additionalContext).toBeUndefined();
                 expect(connections).toBe(0);

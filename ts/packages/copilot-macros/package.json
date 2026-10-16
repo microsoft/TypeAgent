@@ -44,9 +44,9 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@tootallnate/quickjs-emscripten": "0.23.0",
     "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-schema": "workspace:*",
-    "@tootallnate/quickjs-emscripten": "0.23.0",
     "typescript": "~5.4.5",
     "zod": "^4.1.13"
   },
