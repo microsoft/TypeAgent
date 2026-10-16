@@ -548,6 +548,14 @@ function makeConnectionAdapter(): AgentServerConnection {
             const { rpc } = requireFresh();
             return rpc.invoke("getMacroLearningJob", jobId);
         },
+        claimMacroAuthoringRequest: (claim) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("claimMacroAuthoringRequest", claim);
+        },
+        submitMacroAuthoringResponse: (submission) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("submitMacroAuthoringResponse", submission);
+        },
         cancelMacroLearningJob: (jobId) => {
             const { rpc } = requireFresh();
             return rpc.invoke("cancelMacroLearningJob", jobId);

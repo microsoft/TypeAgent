@@ -46,7 +46,7 @@ type Pending = {
 };
 
 export type RecipeTypeAgentOutcome = RecipeCallOutcome & {
-    /** Exact MCP envelope, including structuredContent and isError. */
+    /** Exact MCP envelope, only when the host exposes the MCP transport. */
     mcpResult?: JsonValue;
 };
 
@@ -63,8 +63,18 @@ export type RecipeTypeAgentDiscovery =
 export interface RecipeTypeAgentAdapterOptions {
     host: RecipeHost;
     tools: RecipeTypeAgentTools;
+    /** Native hosts expose processed structured JSON, not the MCP envelope. */
+    resultFormat?: "mcp" | "structured";
     /** Additional application-specific wrappers that must never recurse. */
     isWrapperAction?: (dependency: RecipeTypeAgentDependency) => boolean;
+}
+
+export function isTypeAgentWrapperAction(
+    dependency: Pick<RecipeTypeAgentDependency, "schemaName" | "actionName">,
+): boolean {
+    return /(?:recipe|macro|processcommand|executeaction|continueaction|cancelaction)/i.test(
+        `${dependency.schemaName}.${dependency.actionName}`,
+    );
 }
 
 /**
@@ -175,6 +185,12 @@ export class RecipeTypeAgentAdapter {
     }
 
     private boundedResult(value: JsonValue) {
+        if (this.options.resultFormat === "structured") {
+            const data = typeAgentJson(value);
+            if (!data || typeof data !== "object" || Array.isArray(data))
+                throw new Error("Missing native structured action result.");
+            return { envelope: data, data, isError: false };
+        }
         return readTypeAgentMcpResult(typeAgentJson(value));
     }
 
@@ -225,9 +241,8 @@ export class RecipeTypeAgentAdapter {
 
     private wrapper(dependency: RecipeTypeAgentDependency): boolean {
         return (
-            /(?:recipe|macro|processcommand|executeaction|continueaction|cancelaction)/i.test(
-                `${dependency.schemaName}.${dependency.actionName}`,
-            ) || this.options.isWrapperAction?.(dependency) === true
+            isTypeAgentWrapperAction(dependency) ||
+            this.options.isWrapperAction?.(dependency) === true
         );
     }
 
@@ -398,7 +413,9 @@ export class RecipeTypeAgentAdapter {
             if (transport) {
                 return {
                     ...transport,
-                    mcpResult: result.envelope,
+                    ...(this.options.resultFormat === "structured"
+                        ? {}
+                        : { mcpResult: result.envelope }),
                 };
             }
             const data = readTypeAgentExecution(result.data);
@@ -415,7 +432,9 @@ export class RecipeTypeAgentAdapter {
             }
             return {
                 ...this.translate(data, result.envelope, context),
-                mcpResult: result.envelope,
+                ...(this.options.resultFormat === "structured"
+                    ? {}
+                    : { mcpResult: result.envelope }),
             };
         } catch {
             return {
@@ -423,7 +442,10 @@ export class RecipeTypeAgentAdapter {
                 operationId: `host-call:${context.callId}`,
                 message:
                     "Malformed or conflicting MCP reply after dispatch. Do not replay. operationId is a local host-call reference, not a resumable backend id.",
-                ...(envelope === undefined ? {} : { mcpResult: envelope }),
+                ...(envelope === undefined ||
+                this.options.resultFormat === "structured"
+                    ? {}
+                    : { mcpResult: envelope }),
             };
         }
     }

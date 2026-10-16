@@ -2054,6 +2054,7 @@ test("actual compiled Direct router requires a normal claim to enter native SDK 
     );
     const calls = [];
     const dependencies = {
+        recipeOwner: () => "typeagent",
         claimRecording: async () => false,
         direct: async () => {
             calls.push("direct");

@@ -12,6 +12,29 @@ author, broker, semantic provider and contained executor unconditionally.
 Legacy step execution, macro runner profiles/bridge, adaptation APIs and execution
 flags are removed. Old test macros are discarded, not migrated.
 
+Checkpoint B adds token-bound root success receipts, sealed explicit context,
+durable scoped authoring leases, and tools-disabled native Copilot children for
+extraction/build/grammar/source. TypeAgent retains source-independent verification,
+compilation/fixtures, publication, matching, and execution. Its verifier responses
+are durably checkpointed across child waits/restarts; native inherited-context
+isolation is not assumed. The original answer does not wait for authoring.
+Off/Cancel/new user work cancels only the author child. Contextual jobs have no
+silent TypeAgent-author fallback; clients without contextual capture retain the
+named A compatibility path. See [B lifecycle](../../../packages/copilot-macros/README.md#checkpoint-b-copilot-child-authorship)
+and [verification status](./STATUS.md) for supported scope and live evidence.
+
+Checkpoint C adds opt-in `plugin` ownership with explicit `typeagent` rollback
+and `off`. The joined native extension owns the same `MacroManager`, portable
+author/validator, shared action-grammar matcher and contained executor. Hooks,
+commands and macro MCP tools use bounded authenticated session-local IPC; there
+is no second artifact catalog or executor. A held SQLite writer lock prevents
+multiple native mutation owners of one workspace/profile and releases on crash.
+Unmatched requests stay in native Copilot. The independent verifier and bounded
+semantics use isolated sessions on a separate installed native CLI, not inherited
+author children or TypeAgent credentials. Copied compiler/worker assets are part
+of the distribution. See [owner setup](../../../packages/copilot-plugin/README.md#checkpoint-c-plugin-owned-recipes)
+and [verification boundaries](./STATUS.md); CLI evidence never implies VS Code support.
+
 The [implementation plan](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/implementation-plan.md)
 delivers A: TypeAgent recording/matching/execution; B: restricted Copilot child
 authorship with TypeAgent execution; C: plugin-local ownership/standalone operation.

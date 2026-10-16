@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import ts from "typescript";
+import { join } from "node:path";
 import type { RecipeArtifact } from "./recipeContracts.js";
 import { recipeRuntimeAbi } from "./recipeContracts.js";
 import { recipeDigest } from "./recipeValidation.js";
@@ -36,6 +37,16 @@ export const recipeCompilerIdentity = Object.freeze({
 });
 
 const checkedExecutables = new Map<string, string>();
+
+let libraryDirectory: string | undefined;
+
+/** Set the standard library asset root when packaging the compiler without node_modules. */
+export function configureRecipeCompilerAssets(assets: {
+    libraryDirectory: string;
+}): void {
+    libraryDirectory = assets.libraryDirectory;
+    checkedExecutables.clear();
+}
 
 function remember(sourceDigest: string, executableDigest: string): void {
     if (checkedExecutables.size >= 64)
@@ -151,6 +162,12 @@ export function compileRecipeProgram(
 ): RecipeArtifact["executable"] {
     const text = checkedSource(source);
     const host = ts.createCompilerHost(compilerOptions);
+    if (libraryDirectory) {
+        const directory = libraryDirectory;
+        host.getDefaultLibLocation = () => directory;
+        host.getDefaultLibFileName = (options) =>
+            join(directory, ts.getDefaultLibFileName(options));
+    }
     const originalGetSource = host.getSourceFile.bind(host);
     host.getSourceFile = (name, languageVersion, onError, shouldCreate) =>
         name === "recipe.ts"

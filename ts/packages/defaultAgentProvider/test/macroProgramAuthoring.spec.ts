@@ -236,6 +236,141 @@ function setup() {
 }
 
 describe("recording-to-program authoring", () => {
+    it("keeps source-blind verification hosted while routing only source generation to the child override", async () => {
+        const test = setup();
+        const previous = await test.author();
+        test.macro.program = previous;
+        test.query.mockClear().mockResolvedValue(JSON.stringify(test.plan));
+        const override = jest
+            .fn<NonNullable<MacroProgramAuthorOptions["query"]>>()
+            .mockResolvedValueOnce(JSON.stringify({ source }));
+        const artifact = await createMacroProgramAuthor({
+            inspectCapability: test.inspect,
+            query: test.query,
+        })(test.macro, test.trace, new AbortController().signal, override);
+        expect(validateRecipeArtifact(artifact)).toEqual([]);
+        expect(artifact.fixtures).toHaveLength(2);
+        expect(
+            artifact.fixtures.every(
+                (fixture) =>
+                    fixture.result === "passed" && fixture.noLiveEffects,
+            ),
+        ).toBe(true);
+        expect(override).toHaveBeenCalledTimes(1);
+        expect(test.query).toHaveBeenCalledTimes(1);
+        const verifier = JSON.parse(
+            test.query.mock.calls[0][0].split("\nEVIDENCE:\n")[1],
+        );
+        const candidate = JSON.parse(
+            override.mock.calls[0][0].split("\nEVIDENCE:\n")[1],
+        );
+        expect(verifier.macro).not.toHaveProperty("program");
+        expect(test.query.mock.calls[0][0]).not.toContain(source);
+        expect(candidate).not.toHaveProperty("fixtures");
+        expect(override.mock.calls[0][0]).not.toContain("fresh-unseen-id");
+        expect(test.query.mock.calls[0][1]).not.toBe(override.mock.calls[0][1]);
+    });
+
+    it.each([
+        [
+            "unsupported verifier",
+            { unsupported: "Missing evidence" },
+            undefined,
+        ],
+        ["invalid verifier schema", {}, undefined],
+        ["invented observed evidence", "invented-evidence", undefined],
+        ["candidate-supplied verdicts", "valid-plan", { source, fixtures: [] }],
+        [
+            "frozen recorded identity",
+            "valid-plan",
+            { source: source.replace("id: found.id", 'id: "recorded-id"') },
+        ],
+        [
+            "ambient authority",
+            "valid-plan",
+            {
+                source: "async function execute(api, params) { return process.env; }",
+            },
+        ],
+    ])(
+        "rejects %s without delegating independent verification to the child",
+        async (_name, verifierResponse, candidateResponse) => {
+            const test = setup();
+            const plan = structuredClone(test.plan);
+            if (verifierResponse === "invented-evidence")
+                plan.fixtures[0].calls[0].output = { id: "invented" };
+            test.query.mockResolvedValue(
+                JSON.stringify(
+                    typeof verifierResponse === "string"
+                        ? plan
+                        : verifierResponse,
+                ),
+            );
+            const override =
+                jest.fn<NonNullable<MacroProgramAuthorOptions["query"]>>();
+            if (candidateResponse)
+                override.mockResolvedValueOnce(
+                    JSON.stringify(candidateResponse),
+                );
+            await expect(
+                createMacroProgramAuthor({
+                    inspectCapability: test.inspect,
+                    query: test.query,
+                })(
+                    test.macro,
+                    test.trace,
+                    new AbortController().signal,
+                    override,
+                ),
+            ).rejects.toThrow(
+                _name === "unsupported verifier"
+                    ? /Independent program verifier rejected the recording: Missing evidence/
+                    : undefined,
+            );
+            expect(test.query).toHaveBeenCalledTimes(1);
+            expect(override).toHaveBeenCalledTimes(candidateResponse ? 1 : 0);
+        },
+    );
+
+    it("preserves cancellation during an external source query that ignores its signal", async () => {
+        const test = setup();
+        test.query.mockResolvedValue(JSON.stringify(test.plan));
+        const controller = new AbortController();
+        const override = jest.fn<
+            NonNullable<MacroProgramAuthorOptions["query"]>
+        >(async () => {
+            controller.abort(new Error("stop external author"));
+            return new Promise<string>(() => {});
+        });
+        await expect(
+            createMacroProgramAuthor({
+                inspectCapability: test.inspect,
+                query: test.query,
+            })(test.macro, test.trace, controller.signal, override),
+        ).rejects.toThrow("stop external author");
+        expect(test.query).toHaveBeenCalledTimes(1);
+        expect(override).toHaveBeenCalledTimes(1);
+        expect(override.mock.calls.at(-1)![1].aborted).toBe(true);
+    });
+
+    it("retains the response byte limit for an external source query", async () => {
+        const test = setup();
+        test.query.mockResolvedValue(JSON.stringify(test.plan));
+        const override = jest.fn<
+            NonNullable<MacroProgramAuthorOptions["query"]>
+        >(async () => {
+            return " ".repeat(1_048_577);
+        });
+        await expect(
+            createMacroProgramAuthor({
+                inspectCapability: test.inspect,
+                query: test.query,
+            })(test.macro, test.trace, new AbortController().signal, override),
+        ).rejects.toThrow("exceeds the authoring limit");
+        expect(test.query).toHaveBeenCalledTimes(1);
+        expect(override).toHaveBeenCalledTimes(1);
+    });
+
     it("runs submitted symbolic source with changed inputs and fresh results without live tools", async () => {
         const test = setup();
         const before = structuredClone(test.macro);
@@ -249,6 +384,8 @@ describe("recording-to-program authoring", () => {
             version: 3,
         });
         expect(artifact.provenance.captureId).toBe("trace-1");
+        expect(artifact.provenance.taskId).toBe("job-1");
+        expect(artifact.provenance.tokenId).toBe("legacy:trace-1");
         expect(artifact.matching.grammar).toEqual(
             test.macro.learning!.grammarRules,
         );
@@ -268,6 +405,32 @@ describe("recording-to-program authoring", () => {
         expect(test.query).toHaveBeenCalledTimes(1);
         expect(test.macro).toEqual(before);
         expect(Object.isFrozen(artifact.executable)).toBe(true);
+    });
+
+    it("preserves contextual capture, selected task and token provenance with the source-IR mapping", async () => {
+        const test = setup();
+        test.macro.learning!.authoring = {
+            captureId: "contextual-capture",
+            taskId: "selected-task",
+            tokenId: "selected-token",
+            contextDigest: "context-digest",
+        };
+        const artifact = await test.author();
+        expect(validateRecipeArtifact(artifact)).toEqual([]);
+        expect(artifact.provenance).toMatchObject({
+            captureId: "contextual-capture",
+            taskId: "selected-task",
+            tokenId: "selected-token",
+            legacySource: { macroId: "file-macro", version: 3 },
+        });
+        expect(artifact.provenance.evidenceIds).toEqual(
+            expect.arrayContaining([
+                "trace-1",
+                "context-digest",
+                "lookup-call",
+            ]),
+        );
+        expect(artifact.provenance.tokenId).not.toBe("legacy:trace-1");
     });
 
     it.each([

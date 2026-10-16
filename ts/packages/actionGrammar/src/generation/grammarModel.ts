@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { openai } from "@typeagent/aiclient";
 import { claudeExecutableOption } from "./cliPath.js";
 
 export type GrammarModelProvider = "copilot" | "claude";
@@ -50,6 +49,7 @@ export function createGrammarModelQuery(
 }
 
 async function queryCopilot(prompt: string, model: string): Promise<string> {
+    const { openai } = await import("@typeagent/aiclient");
     const result = await openai
         .createChatModel(`copilot:${model}`)
         .complete(prompt);
