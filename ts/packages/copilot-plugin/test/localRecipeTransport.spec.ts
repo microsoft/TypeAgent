@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { jest } from "@jest/globals";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createConnection } from "node:net";
@@ -11,6 +11,7 @@ import { once } from "node:events";
 import { localRecipeEndpoint } from "../src/shared/recipe-local-paths.js";
 import {
     callLocalRecipe,
+    isLocalRecipeAddress,
     startLocalRecipeBroker,
 } from "../src/shared/recipe-transport.js";
 
@@ -33,6 +34,26 @@ afterEach(async () => {
 const report = (message: string) => {
     throw new Error(message);
 };
+
+test.each(["linux", "darwin"] as const)(
+    "accepts only the broker's short Unix socket format on %s",
+    (platform) => {
+        expect(
+            isLocalRecipeAddress(
+                "/tmp/typeagent-recipes-aB12z9/broker.sock",
+                platform,
+            ),
+        ).toBe(true);
+        for (const address of [
+            "/tmp/unrelated.sock",
+            "/tmp/typeagent-recipes-abcdef/../broker.sock",
+            "/tmp/typeagent-recipes-abcdef/other.sock",
+            "/tmp/typeagent-recipes-abcdefg/broker.sock",
+            "/tmp/typeagent-recipes-abcdef/broker.sock\n",
+        ])
+            expect(isLocalRecipeAddress(address, platform)).toBe(false);
+    },
+);
 
 test("correlates bounded requests without connecting to TypeAgent", async () => {
     process.env.TYPEAGENT_PLUGIN_DATA = join(
@@ -70,6 +91,27 @@ test("correlates bounded requests without connecting to TypeAgent", async () => 
         ]),
     ).rejects.toThrow("exceeds");
     expect(dispatch).toHaveBeenCalledTimes(1);
+});
+
+test("rejects addresses outside the private transport format before dispatch", async () => {
+    const dispatch = jest.fn(async () => "never");
+    broker = await startLocalRecipeBroker(cwd, "session", dispatch, report);
+    const file = localRecipeEndpoint(cwd, "session");
+    const descriptor = JSON.parse(await readFile(file, "utf8")) as {
+        address: string;
+    };
+    for (const address of [
+        "/tmp/unrelated.sock",
+        "/tmp/typeagent-recipes-abcdef/../broker.sock",
+        "/tmp/typeagent-recipes-abcdef/other.sock",
+        "127.0.0.1:1234",
+    ]) {
+        await writeFile(file, JSON.stringify({ ...descriptor, address }));
+        await expect(
+            callLocalRecipe(cwd, "session", "inspect", []),
+        ).rejects.toThrow("outside its private transport scope");
+    }
+    expect(dispatch).not.toHaveBeenCalled();
 });
 
 test("rejects an unauthenticated envelope before invoking operations", async () => {

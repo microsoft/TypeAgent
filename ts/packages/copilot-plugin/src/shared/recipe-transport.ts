@@ -106,6 +106,17 @@ function readPacket(socket: Socket, consume: (value: unknown) => void): void {
     });
 }
 
+export function isLocalRecipeAddress(
+    address: string,
+    platform: NodeJS.Platform = process.platform,
+): boolean {
+    return platform === "win32"
+        ? /^\\\\\.\\pipe\\typeagent-recipes-[a-f0-9-]{36}$/.test(address)
+        : /^\/tmp\/typeagent-recipes-[A-Za-z0-9]{6}\/broker\.sock$/.test(
+              address,
+          );
+}
+
 export async function callLocalRecipe(
     cwd: string,
     sessionId: string,
@@ -123,14 +134,7 @@ export async function callLocalRecipe(
         endpoint.profileId !== scope.profileId
     )
         throw new Error("Local recipe workspace/profile binding changed.");
-    const validAddress =
-        process.platform === "win32"
-            ? /^\\\\\.\\pipe\\typeagent-recipes-[a-f0-9-]{36}$/.test(
-                  endpoint.address,
-              )
-            : dirname(endpoint.address) === localRecipeDirectory(cwd) &&
-              endpoint.address.endsWith(".sock");
-    if (!validAddress)
+    if (!isLocalRecipeAddress(endpoint.address))
         throw new Error(
             "Local recipe endpoint is outside its private transport scope.",
         );
