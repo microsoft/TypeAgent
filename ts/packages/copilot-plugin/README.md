@@ -708,6 +708,45 @@ hybrid runs use only declared bounded inference, not another planner.
 Native CLI evidence does not establish VS Code compatibility; see the
 [current verification status](../../docs/plans/copilot-fastActions/STATUS.md).
 
+### Optional TypeAgent actions in plugin-owned programs
+
+A recorded read-only TypeAgent action can run alongside native reads in the same
+checked program. The bridge uses the existing structured discovery, execution,
+continuation and cancellation MCP tools through the normal native host.
+It does not open a backend connection or introduce a second recipe executor.
+Native-only recipes do not initialize this optional bridge.
+
+Record a successful `typeagent-executeAction` backed by an actual
+`typeagent-searchActions` contract. Discovery from an earlier turn in the same
+owning session is supported. Learning replaces transient protocol calls with a
+stable schema/action capability and concrete action parameters. Programs retain
+neither scopes nor operation/interaction IDs. Completed program-visible results
+contain `{ output, results }`, preserving the backend action output rather than
+the protocol envelope.
+
+The exact action must declare read-only effects and have a supported closed
+parameter schema. Do not classify the generic `typeagent-executeAction` tool as
+read-only: its effects depend on the selected action. Every declared dependency
+is preflighted before the first program tool dispatch; execution resolves current
+contracts/scopes and rejects changed contracts. Native permissions, hooks and
+backend authorization still apply. Missing dependencies and lost replies fail
+explicitly; uncertain actions are never automatically repeated.
+
+All six structured statuses remain distinct, including `requires_interaction`
+and `execution_uncertain`, even when native MCP also marks a response as an
+error. Confirmation, single-choice questions and yes/no interactions use the
+actual native user-input tool; only its exact answer is forwarded. Cancellation
+uses the existing cancellation protocol. No defaults or model-generated approval
+are accepted. Rich forms/proposals and learning interactive workflows are not
+supported; writes remain disabled. Native user-interaction fixtures are tested,
+but this does not certify live interaction UI or VS Code compatibility.
+
+The macro MCP connector resolves the workspace from its actual native
+session/profile registration, not its process working directory (which Copilot
+may set to the plugin directory). Explicit workspace-bound hook clients retain
+their original binding. Session registration is private, authenticated at the
+existing broker and removed with its owner; no catalog is copied.
+
 ### Native Copilot child authoring
 
 For a selected learning turn, the router asks the parent to call the metadata-only

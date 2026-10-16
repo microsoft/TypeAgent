@@ -77,6 +77,26 @@ function boundsFor(options: RecipeExecutorOptions): Bounds {
 
 class Stopped extends Error {}
 
+async function preflightCapabilities(
+    artifact: RecipeArtifact,
+    context: RecipeExecutionContext,
+    signal: AbortSignal,
+) {
+    for (const capability of artifact.capabilities) {
+        const checked = await observe(
+            () => context.host.inspectCapability(capability, context.binding),
+            signal,
+        );
+        if (checked.status !== "available") return checked;
+        if (checkRecipeCapability(capability, checked.capability).length)
+            return {
+                status: "unsupported" as const,
+                message: "Capability contract changed during preflight.",
+            };
+    }
+    return undefined;
+}
+
 // Host adapters must honor signal. A non-cooperative adapter may finish later,
 // but its observation handlers never hold guest handles or dispatch more work.
 function observe<T>(work: () => Promise<T>, signal: AbortSignal): Promise<T> {
@@ -559,6 +579,17 @@ export async function executeRecipeProgram(
         if (context.signal.aborted) cancel();
         deadline = Date.now() + bounds.timeoutMs;
         timer = setTimeout(cancel, bounds.timeoutMs);
+        // Check every dependency before guest code can dispatch its first call.
+        const missing = await preflightCapabilities(
+            artifact,
+            context,
+            controller.signal,
+        );
+        if (missing) {
+            result.status = missing.status;
+            result.message = missing.message;
+            return result;
+        }
         await runGuest(
             artifact,
             inputText,

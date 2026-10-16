@@ -33,3 +33,21 @@ export function localRecipeEndpoint(cwd: string, sessionId: string): string {
     const digest = createHash("sha256").update(sessionId).digest("hex");
     return join(localRecipeDirectory(cwd), `session-${digest}.json`);
 }
+
+export function localRecipeSessionEndpoint(sessionId: string): string {
+    localRecipeEndpoint(process.cwd(), sessionId);
+    const digest = createHash("sha256")
+        .update(
+            JSON.stringify([
+                localRecipeScope(process.cwd()).profileId,
+                sessionId,
+            ]),
+        )
+        .digest("hex");
+    return join(
+        resolve(getConfigDir()),
+        "recipes",
+        "sessions",
+        `${digest}.json`,
+    );
+}

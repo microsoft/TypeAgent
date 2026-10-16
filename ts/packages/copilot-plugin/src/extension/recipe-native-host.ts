@@ -3,6 +3,8 @@
 
 import type { CopilotSession } from "@github/copilot-sdk";
 import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
+import { recipeTypeAgentTools } from "../shared/recipe-typeagent-protocol.js";
 import path from "node:path";
 import type { MacroStep } from "@typeagent/copilot-macros";
 import {
@@ -23,6 +25,8 @@ export type NativeRecipeSession = Pick<CopilotSession, "sessionId" | "on"> & {
 };
 
 export interface NativeRecipeHostPolicy {
+    /** Internal transport for the typed adapter only, never a guest capability. */
+    structuredActionServer?: string;
     /** Explicit read classification, not permission approval. SDK metadata omits MCP annotations. */
     readOnlyMcpTools?: readonly {
         mcpServerName: string;
@@ -37,6 +41,18 @@ export type NativeRecipeCapabilityInspection =
     | { status: "unsupported" | "unavailable"; message: string };
 
 const nativeReads = new Set(["view", "rg", "glob"]);
+function structuredActionTool(
+    step: Pick<MacroStep, "mcpServerName" | "toolName">,
+    policy: NativeRecipeHostPolicy,
+): boolean {
+    return (
+        step.mcpServerName !== undefined &&
+        step.mcpServerName === policy.structuredActionServer &&
+        Object.values(recipeTypeAgentTools).some(
+            (name) => name === step.toolName,
+        )
+    );
+}
 const generations = new WeakMap<NativeRecipeSession, string>();
 const invalidatingEvents = new Set([
     "session.context_changed",
@@ -193,7 +209,8 @@ async function inspect(
         )
     )
         return { status: "unsupported", message: "Native binding changed." };
-    if (recursiveTool(step.mcpServerName, step.toolName))
+    const structuredAction = structuredActionTool(step, policy);
+    if (!structuredAction && recursiveTool(step.mcpServerName, step.toolName))
         return {
             status: "unsupported",
             message: "Recipe recursion is denied.",
@@ -221,13 +238,21 @@ async function inspect(
                   entry.toolName === step.toolName,
           )
         : nativeReads.has(step.toolName);
-    if (!readOnly)
+    if (!readOnly && !structuredAction)
         return {
             status: "unsupported",
             message: "Tool has no explicit read-only classification.",
         };
     try {
-        const inputSchema = normalizeNativeRecipeSchema(tool.input_schema);
+        // The typed protocol adapter validates these requests. The backend owns
+        // open parameters/response schemas, which are not portable guest schemas.
+        const inputSchema = structuredAction
+            ? {
+                  type: "object" as const,
+                  properties: {},
+                  additionalProperties: false as const,
+              }
+            : normalizeNativeRecipeSchema(tool.input_schema);
         const providerId = step.mcpServerName ?? "copilot-native";
         const transport = step.mcpServerName ? "mcp" : "native";
         const schemaDigest = recipeSchemaDigest(inputSchema);
@@ -239,11 +264,17 @@ async function inspect(
                 transport,
                 providerId,
                 operation: step.toolName,
-                contractVersion: `copilot-session-tool-v1:${schemaDigest}`,
+                contractVersion: structuredAction
+                    ? `copilot-structured-tool-v1:${createHash("sha256").update(JSON.stringify(tool.input_schema)).digest("hex")}`
+                    : `copilot-session-tool-v1:${schemaDigest}`,
                 inputSchema,
                 schemaDigest,
                 compatibility: "exact",
-                effect: "read",
+                effect:
+                    structuredAction &&
+                    step.toolName !== recipeTypeAgentTools.search
+                        ? "unknown"
+                        : "read",
             },
         };
     } catch (error) {
@@ -282,11 +313,23 @@ function failure(
     return { status, code: `native_${status}`, message };
 }
 
-function toolResult(value: unknown, maxBytes: number): RecipeCallOutcome {
+function toolResult(
+    value: unknown,
+    maxBytes: number,
+    structuredAction = false,
+): RecipeCallOutcome {
     if (Buffer.byteLength(JSON.stringify(value), "utf8") > maxBytes)
         return failure("failed", "Native result exceeds the output bound.");
     if (typeof value === "string") return { status: "completed", value };
     if (!record(value)) return failure("failed", "Invalid native result.");
+    if (structuredAction && value.resultType !== "denied") {
+        const data = normalizeNativeRecipeResult(value);
+        if (
+            record(data) &&
+            (data.protocolVersion === 1 || data.source === "copilot-transport")
+        )
+            return { status: "completed", value: data };
+    }
     if (value.resultType !== "success")
         return failure(
             value.resultType === "denied" ||
@@ -326,6 +369,7 @@ async function boundedToolExecution(
     input: JsonValue,
     context: Parameters<RecipeHost["invokeCapability"]>[2],
     policy: NativeRecipeHostPolicy,
+    structuredAction = false,
 ): Promise<RecipeCallOutcome> {
     const toolCallId = `recipe-native-${randomUUID()}`;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -352,6 +396,7 @@ async function boundedToolExecution(
                         return toolResult(
                             value,
                             policy.maxOutputBytes ?? 1_048_576,
+                            structuredAction,
                         );
                     } catch {
                         return failure(
@@ -441,7 +486,16 @@ export function createNativeRecipeHost(
                     "unsupported",
                     "Binding or tool contract changed.",
                 );
-            if (validateRecipeValue(capability.inputSchema, input).length)
+            if (
+                !structuredActionTool(
+                    {
+                        toolName: capability.operation,
+                        mcpServerName: capability.providerId,
+                    },
+                    rules,
+                ) &&
+                validateRecipeValue(capability.inputSchema, input).length
+            )
                 return failure(
                     "unsupported",
                     "Input violates the tool schema.",
@@ -452,6 +506,13 @@ export function createNativeRecipeHost(
                 input,
                 context,
                 rules,
+                structuredActionTool(
+                    {
+                        toolName: capability.operation,
+                        mcpServerName: capability.providerId,
+                    },
+                    rules,
+                ),
             );
             return sameNativeRecipeBinding(captured, await current())
                 ? outcome

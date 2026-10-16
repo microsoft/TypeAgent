@@ -3,7 +3,10 @@
 
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import { getRecipeOwner } from "./plugin-config.js";
-import { callLocalRecipe } from "./recipe-transport.js";
+import {
+    callLocalRecipe,
+    resolveLocalRecipeWorkspace,
+} from "./recipe-transport.js";
 
 export const macroOwnerMethods = [
     "getMacroLearningPreference",
@@ -35,7 +38,7 @@ export type MacroOwnerConnection = Pick<
 >;
 
 export async function connectToMacroOwner(
-    cwd = process.cwd(),
+    cwd?: string,
     sessionId = process.env.COPILOT_AGENT_SESSION_ID,
 ): Promise<MacroOwnerConnection> {
     const owner = getRecipeOwner();
@@ -48,11 +51,12 @@ export async function connectToMacroOwner(
         throw new Error(
             "Local recipes require the actual native Copilot session.",
         );
+    const workspace = cwd ?? (await resolveLocalRecipeWorkspace(sessionId));
     const invoke = async <K extends Method>(
         method: K,
         ...args: Parameters<AgentServerConnection[K]>
     ): Promise<Awaited<ReturnType<AgentServerConnection[K]>>> =>
-        (await callLocalRecipe(cwd, sessionId, method, args)) as Awaited<
+        (await callLocalRecipe(workspace, sessionId, method, args)) as Awaited<
             ReturnType<AgentServerConnection[K]>
         >;
     return {
