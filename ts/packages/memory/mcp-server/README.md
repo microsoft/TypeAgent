@@ -1,6 +1,13 @@
 # @typeagent/memory-mcp-server
 
-Typed derived View tools expose explicit builds, drafts, exact revision history, guarded edits/conflict resolution, publication, maintenance and search. Source acquisition and revision assets remain independent evidence capabilities. Ingestion does not detect candidates or start synthesis jobs, and no tool grants review or execution permission.
+Typed derived View tools expose explicit builds, drafts, exact revision history,
+guarded edits/conflict resolution, publication, maintenance and search. Source
+acquisition and revision assets remain independent evidence capabilities.
+Committed index changes can schedule automatic Wiki/Projects and Topics work
+when informational support is enabled. Ingestion does not detect saved-procedure
+candidates or grant review or execution permission. See
+[the current-system map](../../../docs/architecture/memory/current-system.md)
+and [View maintenance](../../../docs/architecture/memory/view-maintenance.md).
 
 Views are enabled by default. `TYPEAGENT_MEMORY_VIEW_DRAFTS=false` explicitly disables them; unset or `true` requires no user opt-in, and invalid values fail. Missing or unavailable model providers surface build errors without creating successful artifacts or bypassing validation.
 

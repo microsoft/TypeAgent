@@ -641,9 +641,8 @@ without connecting to TypeAgent. It requires Node.js 22.13+ for SQLite; normal
 startup does not load SQLite. Plugin-local execution, Copilot child authorship,
 and standalone inference remain future work, not implied by A.
 
-See [runtime limits](../copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs),
-[phase status](../../docs/plans/copilot-fastActions/STATUS.md), and the
-[historical host evidence](../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/HOST-CAPABILITIES-2026-10-15.md).
+See [runtime limits](../copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs) and
+[phase status](../../docs/plans/copilot-fastActions/STATUS.md).
 Macros are a tool surface in direct/MCP/dev modes, not another routing mode.
 
 ### Learn from one executed task

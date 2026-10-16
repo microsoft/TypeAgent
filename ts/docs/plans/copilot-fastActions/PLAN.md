@@ -12,10 +12,9 @@ author, broker, semantic provider and contained executor unconditionally.
 Legacy step execution, macro runner profiles/bridge, adaptation APIs and execution
 flags are removed. Old test macros are discarded, not migrated.
 
-The [implementation plan](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/implementation-plan.md)
-delivers A: TypeAgent recording/matching/execution; B: restricted Copilot child
+The program delivers A: TypeAgent recording/matching/execution; B: restricted Copilot child
 authorship with TypeAgent execution; C: plugin-local ownership/standalone operation.
-The [historical host evidence](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/HOST-CAPABILITIES-2026-10-15.md) still informs B/C, not missing A runtime
+Host capability verification remains open for B/C, not missing A runtime
 implementation. See [status](./STATUS.md) and
 [runtime boundaries](../../../packages/copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs).
 
@@ -221,8 +220,7 @@ Dynamic scripts run in PowerShell `FullLanguage` mode. Cmdlet lists, path
 validation, module lists, and network flags restrict common command paths, but
 they do not prevent direct .NET filesystem, process, network, reflection, or
 assembly APIs. Treat dynamic flow execution as host code execution, not as a
-security sandbox. See the active FullLanguage issue in codeDocs for the
-mitigation plan.
+security sandbox.
 
 Macro recording is explicit; drafts cannot run. Program validation, current
 revision checks, schema/capability identity, containment and bounded semantic

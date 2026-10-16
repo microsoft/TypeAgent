@@ -9,15 +9,15 @@ _Last updated: 2026-10-16._
 
 Checkpoint A is now program-only. Dev-action behavior is unchanged; B/C remain separate gates.
 
-| Area                                                         | State                      | Evidence / remaining gate                                                                                                                                                                                             |
-| ------------------------------------------------------------ | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shared recipe contracts and fake host (P1)                   | offline baseline tested    | `copilot-macros/recipeCore` and `/recipeTesting`; program-only execution                                                                                                                                              |
-| Lean grammar runtime (P1)                                    | tested                     | `action-grammar/runtime` excludes generation/config/model initialization                                                                                                                                              |
-| Host capability spike (P0)                                   | partial; release gate open | [Installed-host evidence](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/HOST-CAPABILITIES-2026-10-15.md); Copilot child/context/local inference remain unproved |
-| Isolated MCP bundle startup (P7 preparation)                 | tested                     | Four copied-bundle selectors initialize/list tools without checkout, TypeAgent config or backend connection                                                                                                           |
-| Catalog, authoring, semantic and optional TypeAgent adapters | offline components tested  | Durable cross-process catalog/context storage, local commands and strict adapters; not live saved-program execution                                                                                                   |
-| TypeAgent-hosted Checkpoint A                                | implemented, default       | Actual compiler/executor, production author/provider, read-only MCP broker, grammar and explicit calls                                                                                                                |
-| Standalone symbolic/hybrid release (P7/C)                    | blocked                    | Requires Copilot child/context and local adapters/clean-install evidence; no performance claim                                                                                                                        |
+| Area                                                         | State                      | Evidence / remaining gate                                                                                           |
+| ------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Shared recipe contracts and fake host (P1)                   | offline baseline tested    | `copilot-macros/recipeCore` and `/recipeTesting`; program-only execution                                            |
+| Lean grammar runtime (P1)                                    | tested                     | `action-grammar/runtime` excludes generation/config/model initialization                                            |
+| Host capability spike (P0)                                   | partial; release gate open | Copilot child/context/local inference remain unproved                                                               |
+| Isolated MCP bundle startup (P7 preparation)                 | tested                     | Four copied-bundle selectors initialize/list tools without checkout, TypeAgent config or backend connection         |
+| Catalog, authoring, semantic and optional TypeAgent adapters | offline components tested  | Durable cross-process catalog/context storage, local commands and strict adapters; not live saved-program execution |
+| TypeAgent-hosted Checkpoint A                                | implemented, default       | Actual compiler/executor, production author/provider, read-only MCP broker, grammar and explicit calls              |
+| Standalone symbolic/hybrid release (P7/C)                    | blocked                    | Requires Copilot child/context and local adapters/clean-install evidence; no performance claim                      |
 
 The optional TypeAgent program adapter now has 39 passing offline protocol
 tests covering discovery, preflight, execution, continuation, and cancellation.
@@ -37,8 +37,7 @@ no new cycles. No live-release or performance gate is claimed complete.
 
 ## Revised critical path and simplification
 
-The [implementation plan](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/implementation-plan.md)
-now prioritizes these independently useful checkpoints:
+The program prioritizes these independently useful checkpoints:
 
 1. **A: TypeAgent-hosted code-first recipes.** Keep TypeAgent recording, catalog,
    grammar matching, and execution; add program authoring/compilation, contained

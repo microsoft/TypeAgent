@@ -5,8 +5,7 @@
 /**
  * Build a self-contained, repo-less-runnable agent-server artifact.
  *
- * Approach (see codeDocs .../2026-06-11_typeagent-plugin-agent-distribution):
- * the agent-server loads on-disk data assets (agent manifests, grammars) via
+ * The agent-server loads on-disk data assets (agent manifests, grammars) via
  * getPackageFilePath, so it CANNOT be a single-file esbuild bundle. Instead we
  * use `pnpm deploy` to produce a folder with a flat node_modules (workspace
  * packages copied in, so data-asset resolution keeps working), prune
