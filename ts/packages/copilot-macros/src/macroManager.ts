@@ -100,12 +100,23 @@ export class MacroManager {
     private readonly failures = new Map<string, string>();
     private readonly rootDir: string;
     private readonly activeRuns = new Map<string, AbortController>();
+    private readonly runCompletions = new Map<string, Promise<void>>();
+    private readonly pendingCancellations = new Map<string, number>();
+    private closed = false;
     private catalogMutation: Promise<void> = Promise.resolve();
     private readonly catalogListeners = new Set<() => Promise<void>>();
     private readonly learning: MacroLearningEngine;
     private programRuntime?: MacroProgramRuntime;
 
-    constructor(instanceDir: string, replayHost?: ReplayToolHost) {
+    constructor(
+        instanceDir: string,
+        replayHost?: ReplayToolHost,
+        private readonly authoringProfileId = "typeagent",
+    ) {
+        if (!authoringProfileId.trim() || authoringProfileId.length > 256)
+            throw new Error(
+                "A bounded authoring profile identity is required.",
+            );
         this.rootDir = path.resolve(instanceDir, "copilot-macros");
         this.learning = new MacroLearningEngine(
             this.rootDir,
@@ -118,6 +129,7 @@ export class MacroManager {
                 recoverApproved: (macro) => this.recoverLearningApproval(macro),
             },
             replayHost,
+            authoringProfileId,
         );
     }
 
@@ -126,6 +138,7 @@ export class MacroManager {
     }
 
     configureProgramRuntime(runtime: MacroProgramRuntime): void {
+        if (this.closed) throw new Error("The macro owner is closed.");
         if (this.activeRuns.size)
             throw new Error("Program runtime cannot change during execution.");
         this.programRuntime = runtime;
@@ -358,6 +371,7 @@ export class MacroManager {
                           (await this.learning.getPreference(request.trace.cwd))
                               .mode,
                           storedTrace,
+                          this.authoringProfileId,
                       )
                     : undefined;
                 const job = await this.learning.prepare(
@@ -691,69 +705,84 @@ export class MacroManager {
         request: RunMacroRequest,
         options: MacroRunOptions = {},
     ): Promise<RunMacroResponse> {
+        if (this.closed) throw new Error("The macro owner is closed.");
         options.signal?.throwIfAborted();
         this.validateMacroId(request.runId);
+        if ((this.pendingCancellations.get(request.runId) ?? 0) > Date.now())
+            throw new Error(
+                `Macro run was cancelled before acceptance: ${request.runId}`,
+            );
         if (this.activeRuns.has(request.runId))
             throw new Error(`Macro run is already active: ${request.runId}`);
-        const macro = await this.inspectMacro(request);
-        if (macro.executionKind !== "program" || !macro.program)
-            throw new Error(
-                "Step macros are no longer supported. Record the task as a program.",
-            );
-        await this.validateRunRoute(macro, {
-            ...options,
-            requireLatestApproved: true,
-        });
-        return this.runProgram(macro, request, options.signal);
+        const controller = new AbortController();
+        const unlink = forwardAbortSignal(options.signal, controller);
+        let finish!: () => void;
+        this.runCompletions.set(
+            request.runId,
+            new Promise<void>((resolve) => {
+                finish = resolve;
+            }),
+        );
+        this.activeRuns.set(request.runId, controller);
+        try {
+            const macro = await this.inspectMacro(request);
+            if (macro.executionKind !== "program" || !macro.program)
+                throw new Error(
+                    "Step macros are no longer supported. Record the task as a program.",
+                );
+            await this.validateRunRoute(macro, {
+                ...options,
+                signal: controller.signal,
+                requireLatestApproved: true,
+            });
+            return await this.runProgram(macro, request, controller.signal);
+        } finally {
+            this.activeRuns.delete(request.runId);
+            unlink();
+            finish();
+            this.runCompletions.delete(request.runId);
+        }
     }
 
     private async runProgram(
         macro: CopilotToolMacro,
         request: RunMacroRequest,
-        signal?: AbortSignal,
+        signal: AbortSignal,
     ): Promise<RunMacroResponse> {
+        if (this.closed) throw new Error("The macro owner is closed.");
+        signal?.throwIfAborted();
         if (!this.canRunPrograms() || !this.programRuntime)
             throw new Error("The TypeAgent program runtime is unavailable.");
         if (request.dryRun)
             throw new Error(
                 "Program dry-run is unsupported. No program calls were dispatched.",
             );
-        if (this.activeRuns.has(request.runId))
-            throw new Error(`Macro run is already active: ${request.runId}`);
-        const controller = new AbortController();
-        const unlink = forwardAbortSignal(signal, controller);
-        this.activeRuns.set(request.runId, controller);
-        try {
-            const run = await runMacroProgram(
-                this.rootDir,
-                macro,
-                request,
-                this.programRuntime,
-                controller.signal,
-                async () => {
-                    const latest = await this.getLatestSummary(macro.macroId);
-                    if (
-                        latest.state !== "approved" ||
-                        latest.version !== macro.version ||
-                        (await this.learning.isSuppressed(macro))
-                    )
-                        throw new Error(
-                            "Program route was disabled or superseded; future calls stopped.",
-                        );
-                },
-            );
-            const saved = await this.writeRun(run, macro);
-            await this.recordMetric("program", saved.status);
-            if (saved.status === "completed")
-                return { status: "completed", run: saved };
-            return {
-                status: saved.status === "cancelled" ? "cancelled" : "failed",
-                run: saved,
-            };
-        } finally {
-            this.activeRuns.delete(request.runId);
-            unlink();
-        }
+        const run = await runMacroProgram(
+            this.rootDir,
+            macro,
+            request,
+            this.programRuntime,
+            signal,
+            async () => {
+                const latest = await this.getLatestSummary(macro.macroId);
+                if (
+                    latest.state !== "approved" ||
+                    latest.version !== macro.version ||
+                    (await this.learning.isSuppressed(macro))
+                )
+                    throw new Error(
+                        "Program route was disabled or superseded; future calls stopped.",
+                    );
+            },
+        );
+        const saved = await this.writeRun(run, macro);
+        await this.recordMetric("program", saved.status);
+        if (saved.status === "completed")
+            return { status: "completed", run: saved };
+        return {
+            status: saved.status === "cancelled" ? "cancelled" : "failed",
+            run: saved,
+        };
     }
 
     private async validateRunRoute(
@@ -787,11 +816,38 @@ export class MacroManager {
 
     cancelMacroRun(runId: string): void {
         this.validateMacroId(runId);
+        for (const [id, expiresAt] of this.pendingCancellations)
+            if (expiresAt <= Date.now()) this.pendingCancellations.delete(id);
+        if (
+            !this.pendingCancellations.has(runId) &&
+            this.pendingCancellations.size >= 1000
+        )
+            throw new Error("Pending run cancellation capacity exceeded.");
+        this.pendingCancellations.set(runId, Date.now() + 120_000);
         this.activeRuns.get(runId)?.abort();
     }
 
     cancelAllMacroRuns(): void {
         for (const controller of this.activeRuns.values()) controller.abort();
+    }
+
+    async close(): Promise<void> {
+        this.closed = true;
+        this.cancelAllMacroRuns();
+        const outcomes = await Promise.allSettled([
+            this.learning.close(),
+            ...this.runCompletions.values(),
+            this.catalogMutation,
+        ]);
+        const failures = outcomes.filter(
+            (outcome): outcome is PromiseRejectedResult =>
+                outcome.status === "rejected",
+        );
+        if (failures.length)
+            throw new AggregateError(
+                failures.map((outcome) => outcome.reason),
+                "The macro owner stopped with persistence failures.",
+            );
     }
 
     async getMacroRun(runId: string): Promise<MacroRunRecord> {

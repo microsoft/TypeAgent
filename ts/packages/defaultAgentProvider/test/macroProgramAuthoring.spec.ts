@@ -322,7 +322,11 @@ describe("recording-to-program authoring", () => {
                     new AbortController().signal,
                     override,
                 ),
-            ).rejects.toThrow();
+            ).rejects.toThrow(
+                _name === "unsupported verifier"
+                    ? /Independent program verifier rejected the recording: Missing evidence/
+                    : undefined,
+            );
             expect(test.query).toHaveBeenCalledTimes(1);
             expect(override).toHaveBeenCalledTimes(candidateResponse ? 1 : 0);
         },

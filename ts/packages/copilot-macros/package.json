@@ -12,6 +12,9 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
+    "./macroAuthoringRuntime": "./dist/macroAuthoringRuntime.js",
+    "./macroProgramAuthoring": "./dist/macroProgramAuthoring.js",
+    "./macroSchema": "./dist/macroSchema.js",
     "./recipeCore": "./dist/recipeCore.js",
     "./recipeTesting": "./dist/recipeTesting.js",
     "./recipeCatalog": "./dist/recipeCatalog.js",
@@ -42,8 +45,10 @@
   },
   "dependencies": {
     "@typeagent/action-grammar": "workspace:*",
+    "@typeagent/action-schema": "workspace:*",
     "@tootallnate/quickjs-emscripten": "0.23.0",
-    "typescript": "~5.4.5"
+    "typescript": "~5.4.5",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/jest": "^29.5.7",

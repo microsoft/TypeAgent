@@ -8,6 +8,7 @@ import { parentPort, workerData } from "node:worker_threads";
 interface WorkerInput {
     source: string;
     deadline: number;
+    quickjsModulePath?: string;
     bounds: {
         memoryLimitBytes: number;
         stackLimitBytes: number;
@@ -28,7 +29,7 @@ function evaluate(vm: QuickJSContext, source: string) {
 async function executeGuest(data: WorkerInput): Promise<void> {
     const port = parentPort!;
     const { newQuickJSWASMModule } = createRequire(import.meta.url)(
-        "@tootallnate/quickjs-emscripten",
+        data.quickjsModulePath ?? "@tootallnate/quickjs-emscripten",
     ) as typeof import("@tootallnate/quickjs-emscripten");
     const module = await newQuickJSWASMModule();
     const runtime = module.newRuntime();

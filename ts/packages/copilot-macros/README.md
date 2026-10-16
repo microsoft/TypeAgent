@@ -1,8 +1,8 @@
 # @typeagent/copilot-macros
 
 `@typeagent/copilot-macros` records, authors, validates, catalogs, matches, and
-executes checked code-first macros. Agent-server owns its `MacroManager` and
-storage; the plugin exposes recording commands, lifecycle MCP tools, and the
+executes checked code-first macros. Agent-server or the explicitly selected
+plugin-local owner owns its `MacroManager` and storage; the plugin exposes recording commands, lifecycle MCP tools, and the
 [macro skill](../copilot-plugin/skills/typeagent-macros/SKILL.md).
 Only checked programs can be persisted, approved, or run. The former step replay
 engine, Copilot macro runner, adaptation bridge/RPCs, and execution switches have
@@ -36,6 +36,35 @@ durable recipe content.
 Authoring-store persistence is limited to the validated envelope contract; it
 does not establish retention of secrets or private raw artifact contents.
 
+## Portable recording-to-program authoring
+
+`macroAuthoringRuntime` exports `createMacroLearningRuntime(query,
+loadApprovedMacros?, options?, programAuthor?)`, grammar validation, and authoring
+evidence types. The query is required: this module never selects a TypeAgent
+model or initializes its configuration. `withAuthorQuery(query, cacheVerifier?)`
+redirects author queries while retaining the configured independent program
+verifier and its durable cache hook.
+
+`macroProgramAuthoring` exports `createMacroProgramAuthor(options)` and the public
+fixture-plan types. Supply `query`, `verifierQuery`, `inspectCapability`, and
+`semanticModelPolicy` explicitly. An optional trusted `createFixturePlan` callback
+can replace verifier inference. The inspector supplies actual native or MCP
+capability identities and schemas; only read-only recorded calls are accepted.
+The verifier sees the recording without a prior program, never candidate source.
+The candidate sees the independent specification, not the verifier's fixtures.
+The shared compiler and contained executor check observed and changed-input/
+fresh-result fixtures before sealing the same program artifact used at runtime.
+This is an authoring/validation path, not an alternate live executor.
+
+`macroSchema` exports the shared macro action-name and input-schema helpers.
+DefaultAgentProvider keeps configured TypeAgent wrappers around these portable
+factories, preserving the existing hosted A/B defaults.
+`matchMacroGrammarInputs(macro, request)` uses the same saved action grammar and
+NFA runtime with registered built-in conversions, selects the current macro's
+action name/version, and returns only valid typed parameter objects. Secret-input
+macros, invalid grammars, stale action names, and invalid inputs do not route.
+It neither selects between catalog entries nor executes a program.
+
 `sealRecipeArtifact` hashes and freezes an already checked source/executable
 pair; it does not compile, execute, or prove the program correct. Runtime schemas
 support explicit primitive types, closed objects, arrays, enums, and bounds.
@@ -65,7 +94,17 @@ and session bindings do not belong in artifacts. Source-recording provenance is 
 Program authoring and execution are configured unconditionally by both server
 entry points. Restart agent-server and reload the built plugin after updating.
 Use the normal recording/status/run commands; no program feature flag is needed.
-The separate plugin-local `recipe` catalog does not yet execute these programs.
+The plugin-local owner reuses this same manager, authoring/compiler/runtime ABI
+and grammar matcher; it does not mirror programs into the experimental SQLite
+catalog. See [plugin ownership and rollback](../copilot-plugin/README.md#checkpoint-c-plugin-owned-recipes).
+
+The manager accepts an authoring profile identity (default `typeagent`) so sealed
+captures/outbox claims remain scoped under plugin-local profiles. Native
+inspection is opt-in through `ReplayToolHost.supportsNativeTools`; existing
+TypeAgent hosts remain MCP-only. `close()` stops new runs, cancels active work,
+waits for journals/catalog mutations, and leaves interrupted learning queued with
+its stage attempt refunded for a new owner. Cancellation is reserved before
+asynchronous route loading and may precede acceptance; it never rolls back effects.
 
 The production author derives fixture expectations independently of candidate
 source, compiles TypeScript, executes the stored executable against strict
@@ -200,6 +239,17 @@ selection, synthesis, or full-output requirements in
 procedure is not proof that it reproduces the complete answer. Grammar syntax,
 action-version targeting, original-request coverage, and negative-intent checking
 belong to the injected grammar generator/compiler, not string validation here.
+
+An extraction may preserve explicit semantic interpretation or JSON-output
+obligations as optional `MacroExecutionRecipe.programRequirements` when the
+completed reads and final response exist but their private bodies are withheld
+from the extractor. This is not a correctness verdict. The portable runtime
+deterministically retains every obligation in `unsupportedOutputs`, including
+after a grounding correction, even if the builder omits it. Each becomes a
+mandatory independent program-verifier output requirement with observed and
+fresh expected-output evidence. Failed/missing calls, absent responses, unknown
+resources and unrecorded effects remain blocking `uncertainties`; deferred
+obligations never override them or authorize another tool/effect.
 
 `parseMacroExecutionRecipe(value: unknown)` and
 `parseMacroLearningBuild(value: unknown)` are exported for model JSON ingestion

@@ -28,6 +28,41 @@ function createDependencies(
 }
 
 describe("macro recording routing override", () => {
+    it("plugin-local misses fall through natively, never to TypeAgent's planner", async () => {
+        const dependencies = {
+            ...createDependencies(false),
+            recipeOwner: () => "plugin" as const,
+            localRecipes: jest.fn(async () => ({})),
+        };
+        await expect(
+            routePrompt(
+                input,
+                "direct",
+                new AbortController().signal,
+                dependencies,
+            ),
+        ).resolves.toEqual({});
+        expect(dependencies.localRecipes).toHaveBeenCalledTimes(1);
+        expect(dependencies.direct).not.toHaveBeenCalled();
+        expect(dependencies.mcp).not.toHaveBeenCalled();
+        expect(dependencies.dev).not.toHaveBeenCalled();
+    });
+    it("off bypasses recipe recording and both execution owners", async () => {
+        const dependencies = {
+            ...createDependencies(false),
+            recipeOwner: () => "off" as const,
+        };
+        await expect(
+            routePrompt(
+                input,
+                "direct",
+                new AbortController().signal,
+                dependencies,
+            ),
+        ).resolves.toEqual({});
+        expect(dependencies.claimRecording).not.toHaveBeenCalled();
+        expect(dependencies.direct).not.toHaveBeenCalled();
+    });
     it("requests an explicit success receipt only for selected child learning and leaves original task ownership in Copilot", async () => {
         const dependencies = createDependencies("child");
         const output = await routePrompt(
