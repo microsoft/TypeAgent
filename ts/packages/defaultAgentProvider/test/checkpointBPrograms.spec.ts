@@ -12,6 +12,7 @@ import {
     type RecordedInteractionTrace,
 } from "@typeagent/copilot-macros";
 import {
+    recipeDigest,
     recipeSchemaDigest,
     validateRecipeArtifact,
     type RecipeCapability,
@@ -221,9 +222,7 @@ it("publishes a context-bound externally authored program through real learning 
                     expect(children.size).toBeLessThan(12);
                     expect(request.contextDigest).toMatch(/^[a-f0-9]{64}$/);
                     expect(request.promptDigest).toBe(
-                        createHash("sha256")
-                            .update(request.prompt)
-                            .digest("hex"),
+                        recipeDigest(request.prompt),
                     );
                     let response: unknown;
                     if (request.prompt.startsWith("Extract a procedural")) {

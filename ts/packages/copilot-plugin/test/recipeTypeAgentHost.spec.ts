@@ -467,9 +467,10 @@ describe("plugin-owned TypeAgent actions through the native host and shared exec
         try {
             const found = await bridge.inspectTool({ toolName: "view" });
             if (found.status !== "available") throw new Error(found.message);
+            expect(found.capability.id).toBe("native:copilot-native/view");
             const program = artifact(
                 [found.capability],
-                `async function execute(api, params) { return await api.tools.call(${JSON.stringify(found.capability.id)}, {path:"fixture"}); }`,
+                'async function execute(api, params) { return await api.tools.call("native:copilot-native/view", {path:"fixture"}); }',
             );
             expect(
                 (
