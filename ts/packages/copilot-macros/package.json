@@ -41,8 +41,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/action-grammar": "workspace:*",
     "@tootallnate/quickjs-emscripten": "0.23.0",
+    "@typeagent/action-grammar": "workspace:*",
     "typescript": "~5.4.5"
   },
   "devDependencies": {
