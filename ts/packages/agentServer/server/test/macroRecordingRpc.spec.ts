@@ -1,10 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHash } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import {
     createChannelProviderAdapter,
     type ChannelProviderAdapter,
@@ -12,8 +8,12 @@ import {
 import { createAgentServerConnection } from "@typeagent/agent-server-client";
 import { MacroManager, type ReplayToolHost } from "@typeagent/copilot-macros";
 import type { LiveSkillCatalog } from "@typeagent/skill-catalog";
-import type { ConversationManager } from "../src/conversationManager.js";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { createAgentServerConnectionHandler } from "../src/connectionHandler.js";
+import type { ConversationManager } from "../src/conversationManager.js";
 
 describe("macro recording RPC", () => {
     it("returns the selected learning job with completed recording status", async () => {
@@ -194,84 +194,6 @@ describe("macro recording RPC", () => {
         await expect(
             connection.getMacroRecordingState("session-1"),
         ).resolves.toEqual({ status: "completed", trace: summary });
-        const draft = await connection.createMacroFromTrace({
-            traceId: summary.traceId,
-            name: "Read package",
-            description: "Reads package metadata",
-        });
-        await expect(connection.validateMacro(draft)).resolves.toMatchObject({
-            valid: true,
-            executionClass: "replayable",
-        });
-        const approved = await connection.approveMacro(draft);
-        await expect(connection.listMacros()).resolves.toMatchObject([
-            { macroId: draft.macroId, version: 2, state: "approved" },
-        ]);
-        await expect(
-            connection.searchMacros({ query: "package" }),
-        ).resolves.toMatchObject([
-            { macro: { macroId: draft.macroId }, score: 1 },
-        ]);
-        await expect(connection.inspectMacro(approved)).resolves.toMatchObject({
-            macroId: draft.macroId,
-            version: 2,
-            state: "approved",
-        });
-        await expect(
-            connection.getMacroRequirements(approved),
-        ).resolves.toMatchObject({
-            executionClass: "replayable",
-            tools: [{ toolName: "read" }],
-        });
-        await expect(
-            connection.runMacro({
-                runId: "run-1",
-                macroId: approved.macroId,
-                version: approved.version,
-            }),
-        ).resolves.toMatchObject({
-            status: "completed",
-            run: { runId: "run-1", result: { content: "{}" } },
-        });
-        await expect(connection.getMacroRun("run-1")).resolves.toMatchObject({
-            status: "completed",
-            macroId: approved.macroId,
-        });
-        const approvedMacro = await connection.inspectMacro(approved);
-        await expect(
-            connection.runMacro({
-                runId: "agent-run-1",
-                macroId: approved.macroId,
-                version: approved.version,
-                preference: "agent",
-            }),
-        ).resolves.toMatchObject({
-            status: "agentRequired",
-            launch: {
-                agent: "typeagent-macro-runner",
-                candidate: { handoffRunId: "agent-run-1" },
-            },
-        });
-        const candidate = await connection.submitMacroCandidate({
-            sourceMacroId: approved.macroId,
-            sourceVersion: approved.version,
-            handoffRunId: "agent-run-1",
-            reason: "Adapted during agent-guided execution.",
-            inputs: approvedMacro.inputs,
-            steps: approvedMacro.steps,
-            executionEvidence: {
-                outcome: "completed",
-                toolCalls: 1,
-                retries: 0,
-                durationMs: 100,
-                tokensUsed: 100,
-                steps: [{ stepId: "step-1", status: "completed" }],
-            },
-        });
-        expect(candidate).toMatchObject({ version: 3, state: "draft" });
-        await expect(connection.inspectMacro(approved)).resolves.toMatchObject({
-            state: "approved",
-        });
         const selected = await connection.armMacroRecording({
             sessionId: "learning-session",
             learning: true,

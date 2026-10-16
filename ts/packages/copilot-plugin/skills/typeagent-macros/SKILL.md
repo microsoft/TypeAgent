@@ -1,9 +1,9 @@
 ---
 name: typeagent-macros
-description: "Discover, inspect, validate, and run TypeAgent tool-composed macros. Use when a user asks to repeat a recorded workflow or run, adapt, repair, or manage a TypeAgent macro."
+description: "Discover, inspect, validate, run, and manage recorded TypeAgent program macros. Use when a user asks to repeat a recorded workflow or manage a macro."
 ---
 
-# TypeAgent Macros
+# TypeAgent Program Macros
 
 Use the `typeagent-macros` MCP server for macro catalog and lifecycle work.
 
@@ -12,47 +12,35 @@ Use the `typeagent-macros` MCP server for macro catalog and lifecycle work.
 1. If the macro reference is not already known, use `search_macros` or
    `list_macros` to find it.
 2. If required inputs are not known, use `get_macro_requirements`. Collect
-   all required inputs without exposing secret values in chat.
-   Inputs may fill nested argument-template fields, and later steps may bind
-   values from earlier results.
-3. Call `run_macro` with `preference: "auto"`.
-4. For `completed`, report the sanitized result. For `failed` or `cancelled`,
-   report the structured failure without inventing a repair. A
-   `postconditionFailed` result means the live tool output no longer has the
-   shape captured by the approved procedure.
-5. For `agentRequired`, invoke the `TypeAgent Macro Runner` agent with the
-   complete returned `launch` object. Do not manually paraphrase or reconstruct
-   the launch payload. The server has already validated it; neither the caller
-   nor the runner should call `inspect_macro` as an execution prerequisite.
+   required inputs without exposing secret values in chat.
+3. Call `run_macro` with the macro reference and current inputs. The server
+   resolves and validates the current approved immutable program revision;
+   do not call `inspect_macro` as an execution prerequisite.
+4. For `completed`, deliver the actual output without inventing or rewriting it.
+   For `failed` or `cancelled`, report the structured failure. Inspect
+   `get_macro_run` for durable dispatch/uncertainty evidence.
 
-Deterministic replay and agent-guided execution are whole-macro choices. Never
-replay a prefix before handing the remaining steps to the runner.
-
-## Adaptation
-
-The runner may submit a changed successful procedure through
-`submit_macro_candidate`. Candidate submission creates a separately reviewable
-draft. It never changes or approves the source version. Permission denial,
-cancellation, and timeout are terminal outcomes, not adaptation signals.
+Never launch a planning agent to replay steps, reconstruct a program, or retry
+an accepted failed, cancelled, denied, or uncertain run through another provider.
+Symbolic programs make no model calls; hybrid programs call only declared,
+bounded semantic functions. Backend authorization remains authoritative.
 
 ## Lifecycle
 
-- Use `inspect_macro` for explicit catalog inspection and draft review, not
-  as a prerequisite for running an approved macro.
+- Use `inspect_macro` for explicit catalog inspection and draft review, not as
+  a prerequisite for execution.
 - For inspection-only requests, inspect an existing candidate; do not create one
   when the catalog is empty. Report that no candidate is available and obtain
-  the recording/learning status before proposing another operation.
-- A recording token from `armed` or `claimed` is not a trace ID. Only use the
-  saved trace ID from a completed recording with `create_macro_from_trace`.
-  Selected learning prepares its own candidate; do not bypass a pending or
-  failed learning job by creating another draft.
-- Create drafts only from explicitly captured traces.
-- Validate drafts before asking the user to approve them.
-- Selected completed recordings automatically enter recipe extraction, generalized
-  building, grammar validation, and registration. Do not rerun the task to teach it.
-- The workspace preference is Off, Prepare, Read-only, or All. Prepare requires
-  review; Read-only auto-approves read-only procedures; All auto-approves valid
-  procedures including writes. Never change that preference for the user.
-- Newly learned macros execute through the live macro runner. Macro approval does
-  not grant tool permission; denial and cancellation remain terminal.
-- Use `get_macro_run` only for sanitized persisted deterministic run evidence.
+  recording/learning status before proposing another operation.
+- A recording token from `armed` or `claimed` is not a trace ID. Selected
+  successful recordings enter program learning automatically; do not bypass a
+  pending or failed job by making a step-only draft or rerunning the task.
+- Learning derives independent fixtures, validates source and executable,
+  and publishes under the workspace preference: Off, Prepare, Read-only, or All.
+  Prepare requires review; Read-only and All can auto-publish validated programs.
+  Never change that preference for the user.
+- Validate staged programs before explicit approval. Approval never runs a
+  program and does not grant backend permission.
+- The current production adapter supports read-only MCP tools available to
+  TypeAgent. Native-only tools, writes, and unsupported semantic provenance
+  requirements fail explicitly; they do not fall back to a runner.

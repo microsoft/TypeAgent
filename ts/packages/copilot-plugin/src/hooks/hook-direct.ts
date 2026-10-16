@@ -7,27 +7,22 @@
  * directly — skipping the Copilot LLM entirely.
  */
 
+import type {
+    UserPromptSubmittedInput,
+    UserPromptSubmittedOutput,
+} from "@typeagent/agent-harness-hooks/copilot-cli";
 import type { Dispatcher } from "@typeagent/agent-server-client";
 import { awaitCommand, type CommandResult } from "@typeagent/dispatcher-types";
+import { emitProgress } from "../shared/hook-progress.js";
 import {
     collectMessage,
     extractMessageText,
 } from "../shared/message-formatter.js";
 import {
-    createClientIO,
     connectToTypeAgent,
+    createClientIO,
     formatPendingNaturalLanguageInteraction,
 } from "../shared/typeagent-client.js";
-import { emitProgress } from "../shared/hook-progress.js";
-import type {
-    UserPromptSubmittedInput,
-    UserPromptSubmittedOutput,
-} from "@typeagent/agent-harness-hooks/copilot-cli";
-import {
-    requestMacroRunner,
-    isMacroRunnerSession,
-} from "../shared/macro-runner-bridge.js";
-import type { AgentHandoff } from "@typeagent/agent-sdk";
 
 export interface DirectHandlingOptions {
     forceHandled?: boolean;
@@ -36,17 +31,11 @@ export interface DirectHandlingOptions {
 export interface DirectDependencies {
     connectToTypeAgent: typeof connectToTypeAgent;
     emitProgress: typeof emitProgress;
-    runAgentHandoff: (
-        sessionId: string,
-        handoff: AgentHandoff,
-        submittedAt: number,
-    ) => Promise<string>;
 }
 
 const defaultDependencies: DirectDependencies = {
     connectToTypeAgent,
     emitProgress,
-    runAgentHandoff: requestMacroRunner,
 };
 
 function toForcedCommandOutput(
@@ -82,20 +71,11 @@ function toForcedCommandOutput(
     };
 }
 
-function hasSuccessfulAgentHandoff(
-    result: CommandResult | undefined,
-): result is CommandResult & {
-    agentHandoff: NonNullable<CommandResult["agentHandoff"]>;
-} {
-    return !!result?.agentHandoff && !result.lastError && !result.cancelled;
-}
-
 export async function handleDirect(
     input: UserPromptSubmittedInput,
     options: DirectHandlingOptions = {},
     dependencies: DirectDependencies = defaultDependencies,
 ): Promise<UserPromptSubmittedOutput> {
-    if (isMacroRunnerSession(input.sessionId)) return {};
     dependencies.emitProgress("Routing to TypeAgent...", { temporary: true });
 
     const responseCollector = { messages: [] as string[] };
@@ -179,16 +159,12 @@ export async function handleDirect(
             false;
 
         if (pendingPrompts.length > 0) return pendingResult();
-        if (hasSuccessfulAgentHandoff(result)) {
+        if (result?.agentHandoff) {
             acceptedMacro = true;
-            const responseContent = await dependencies.runAgentHandoff(
-                input.sessionId,
-                result.agentHandoff,
-                input.timestamp,
-            );
             return {
                 handled: true,
-                responseContent,
+                responseContent:
+                    "TypeAgent returned an unsupported agent handoff. No fallback was attempted; inspect the accepted request before retrying.",
                 handledBy: "typeagent",
             };
         }

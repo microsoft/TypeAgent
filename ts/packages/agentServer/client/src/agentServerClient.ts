@@ -37,7 +37,6 @@ import {
     ConversationMatch,
     CopilotToolMacro,
     CreateConversationOptions,
-    CreateMacroFromTraceRequest,
     DeleteMacroRequest,
     DisableMacroRequest,
     DispatcherConnectOptions,
@@ -72,7 +71,6 @@ import {
     SkillAcquisitionRevisionResponse,
     SkillGrammarRoutingResult,
     SpeechToken,
-    SubmitMacroCandidateRequest,
     TraceSummary,
     ValidateMacroRequest,
     getClientIOChannelName,
@@ -203,9 +201,6 @@ export type AgentServerConnection = {
     getMacroRequirements(
         request: InspectMacroRequest,
     ): Promise<MacroRequirements>;
-    createMacroFromTrace(
-        request: CreateMacroFromTraceRequest,
-    ): Promise<MacroVersionRef>;
     validateMacro(
         request: ValidateMacroRequest,
     ): Promise<MacroValidationReport>;
@@ -213,9 +208,6 @@ export type AgentServerConnection = {
     disableMacro(request: DisableMacroRequest): Promise<MacroVersionRef>;
     deleteMacro(request: DeleteMacroRequest): Promise<void>;
     runMacro(request: RunMacroRequest): Promise<RunMacroResponse>;
-    submitMacroCandidate(
-        request: SubmitMacroCandidateRequest,
-    ): Promise<MacroVersionRef>;
     cancelMacroRun(runId: string): Promise<void>;
     getMacroRun(runId: string): Promise<MacroRunRecord>;
     listSkills?(request?: ListSkillsRequest): Promise<CatalogEntry[]>;
@@ -502,12 +494,6 @@ export function createAgentServerConnection(
             return rpc.invoke("getMacroRequirements", request);
         },
 
-        async createMacroFromTrace(
-            request: CreateMacroFromTraceRequest,
-        ): Promise<MacroVersionRef> {
-            return rpc.invoke("createMacroFromTrace", request);
-        },
-
         async validateMacro(
             request: ValidateMacroRequest,
         ): Promise<MacroValidationReport> {
@@ -532,12 +518,6 @@ export function createAgentServerConnection(
 
         async runMacro(request: RunMacroRequest): Promise<RunMacroResponse> {
             return rpc.invoke("runMacro", request);
-        },
-
-        async submitMacroCandidate(
-            request: SubmitMacroCandidateRequest,
-        ): Promise<MacroVersionRef> {
-            return rpc.invoke("submitMacroCandidate", request);
         },
 
         async cancelMacroRun(runId: string): Promise<void> {

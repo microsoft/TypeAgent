@@ -3,15 +3,22 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import type { UserPromptSubmittedOutput } from "@typeagent/agent-harness-hooks/copilot-cli";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import {
+    copyFile,
+    mkdir,
+    mkdtemp,
+    readFile,
+    rm,
+    symlink,
+    writeFile,
+} from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parse } from "yaml";
-import type { UserPromptSubmittedOutput } from "@typeagent/agent-harness-hooks/copilot-cli";
 
 interface PluginMcpManifest {
     mcpServers: Record<
@@ -25,97 +32,91 @@ interface PluginManifest {
 }
 
 describe("staged plugin artifact", () => {
-    it("lets the macro runner discover captured Copilot MCP tools under live permissions", async () => {
-        const pluginRoot = path.resolve(
-            path.dirname(fileURLToPath(import.meta.url)),
-            "..",
-            "..",
-        );
-        const runner = await readFile(
-            path.join(pluginRoot, "agents", "typeagent-macro-runner.agent.md"),
-            "utf8",
-        );
-        const frontmatter = runner.split("---")[1];
-        const profile = parse(frontmatter);
-        expect(profile).toMatchObject({
-            name: "typeagent-macro-runner",
-            model: "gpt-6-luna",
-            tools: ["*"],
-            "user-invocable": false,
-        });
-        expect(runner).toContain("Use Copilot's live tool permissions");
-        expect(runner).toContain("Do not call `run_macro` recursively");
-        expect(runner).toContain("You are the runner, not its caller");
-        expect(runner).toContain("`task` or another agent to delegate");
-        expect(runner).toContain("Do not call other macro");
-        expect(runner).toContain("If a required tool is unavailable, stop");
-        expect(runner).toContain("Do not call `inspect_macro`");
-        expect(runner).toContain("server validates the macro");
-        expect(runner).toContain("A binding overrides the captured argument");
-    });
-
-    it("packages the host-only Luna profile with the same tool-identity rules", async () => {
-        const agents = path.resolve(
-            path.dirname(fileURLToPath(import.meta.url)),
-            "..",
-            "..",
-            "agents",
-        );
-        const [runner, host] = await Promise.all([
-            readFile(
-                path.join(agents, "typeagent-macro-runner.agent.md"),
-                "utf8",
-            ),
-            readFile(
-                path.join(agents, "typeagent-macro-runner-host.agent.md"),
-                "utf8",
-            ),
-        ]);
-        expect(parse(host.split("---")[1])).toMatchObject({
-            name: "typeagent-macro-runner-host",
-            model: "gpt-6-luna",
-            tools: ["*"],
-            "user-invocable": false,
-        });
-        expect(host).toContain("Do not call `inspect_macro`");
-        expect(host).toContain("A prompt marker alone is insufficient");
-        expect(host).toContain("A binding overrides the captured argument");
-        expect(
-            host.split("## Tool Identity")[1].split("## Result Evidence")[0],
-        ).toBe(
-            runner.split("## Tool Identity")[1].split("## Result Evidence")[0],
-        );
-        const completion = host
-            .split("## RUN Completion")[1]
-            .split("## Tool Identity")[0];
-        expect(completion).toBe(
-            runner.split("## RUN Completion")[1].split("## Tool Identity")[0],
-        );
-        for (const required of [
-            "RUN of an already approved immutable macro, not Prepare or",
-            "Stored `launch.macro.learning.mode` describes historical learning",
-            "`launch.candidate` supplies provenance",
-            "actual current results",
-            "not merely a report that it was fetched",
-            "Do not replace required contents with a step-status",
-            "Optional concise execution evidence must not displace the deliverable",
-            "private\nartifact references/paths or base64/binary transport payloads",
-            "rather than claim success",
-            "do not adapt the procedure",
-            "Its absence is not a blocker",
-            "actual original-tool\nunavailability",
-        ])
-            expect(completion).toContain(required);
-        for (const profile of [host, runner]) {
-            expect(profile).toContain("Do not seek or call");
-            expect(profile).toContain("a genuinely unavailable original tool");
-            expect(profile).toContain("Check every declared postcondition");
-            expect(profile).toContain(
-                "Do not submit a candidate after permission",
+    it.each([
+        ["agent", []],
+        ["workspace", ["--workspace"]],
+        ["macros", ["--macros"]],
+        ["skills", ["--skills"]],
+    ] as const)(
+        "starts the copied %s MCP bundle without a checkout or backend",
+        async (kind, selectors) => {
+            const directory = await mkdtemp(
+                path.join(tmpdir(), "typeagent standalone artifact "),
             );
-            expect(profile).toContain("Do not call `run_macro` recursively");
-        }
-    });
+            const backend = createServer((socket) => {
+                connections++;
+                socket.destroy();
+            });
+            let connections = 0;
+            const client = new Client({
+                name: "standalone-artifact-test",
+                version: "1",
+            });
+            try {
+                backend.listen(0, "127.0.0.1");
+                await once(backend, "listening");
+                const address = backend.address();
+                if (!address || typeof address === "string") {
+                    throw new Error("Expected a TCP address");
+                }
+                const pluginRoot = path.resolve(
+                    path.dirname(fileURLToPath(import.meta.url)),
+                    "..",
+                    "..",
+                );
+                const entry = path.join(directory, "dist", "mcp", "server.js");
+                await mkdir(path.dirname(entry), { recursive: true });
+                await copyFile(
+                    path.join(pluginRoot, "dist", "mcp", "server.js"),
+                    entry,
+                );
+                await writeFile(
+                    path.join(directory, "package.json"),
+                    JSON.stringify({ type: "module" }),
+                );
+                const transport = new StdioClientTransport({
+                    command: process.execPath,
+                    args: [entry, ...selectors],
+                    cwd: directory,
+                    env: {
+                        ...(process.env.SystemRoot
+                            ? { SystemRoot: process.env.SystemRoot }
+                            : {}),
+                        HOME: directory,
+                        USERPROFILE: directory,
+                        APPDATA: directory,
+                        LOCALAPPDATA: directory,
+                        TYPEAGENT_PLUGIN_DATA: path.join(directory, "data"),
+                        TYPEAGENT_HOST: "127.0.0.1",
+                        TYPEAGENT_PORT: String(address.port),
+                    },
+                    stderr: "pipe",
+                });
+                let diagnostics = "";
+                transport.stderr?.on("data", (chunk: Buffer) => {
+                    diagnostics += chunk.toString("utf8");
+                });
+                try {
+                    await client.connect(transport);
+                } catch (error) {
+                    throw new Error(
+                        `Copied ${kind} MCP startup failed: ${String(error)}\n${diagnostics}`,
+                    );
+                }
+                const catalog = await client.listTools();
+                expect(catalog.tools.length).toBeGreaterThan(0);
+                expect(connections).toBe(0);
+            } finally {
+                await client.close();
+                await new Promise<void>((resolve, reject) => {
+                    backend.close((error) =>
+                        error ? reject(error) : resolve(),
+                    );
+                });
+                await rm(directory, { recursive: true, force: true });
+            }
+        },
+    );
 
     it("keeps explicit catalog review but removes inspection from the macro run skill", async () => {
         const skill = await readFile(
@@ -129,163 +130,194 @@ describe("staged plugin artifact", () => {
             ),
             "utf8",
         );
-        expect(skill).toContain("server has already validated it");
+        expect(skill).toContain("current approved immutable program revision");
         expect(skill).toContain("If required inputs are not known");
         expect(skill).toContain("as an execution prerequisite");
         expect(skill).toContain("explicit catalog inspection and draft review");
+        expect(skill).not.toContain("typeagent-macro-runner");
+        expect(skill).not.toContain("submit_macro_candidate");
         expect(skill).not.toContain(
             "Use `inspect_macro` and `get_macro_requirements` before execution",
         );
     });
 
-    it("resolves the captured web-search callable without treating provenance as a namespace", async () => {
-        const pluginRoot = path.resolve(
-            path.dirname(fileURLToPath(import.meta.url)),
-            "..",
-            "..",
-        );
-        const runner = await readFile(
-            path.join(pluginRoot, "agents", "typeagent-macro-runner.agent.md"),
-            "utf8",
-        );
-
-        expect(runner).toContain("Check the already exposed tools");
-        expect(runner).toContain("exact recorded callable first");
-        expect(runner).toContain("functions.web_search");
-        expect(runner).toContain("github-mcp-server/web_search");
-        expect(runner).toContain("its input is `{ query: string }`");
-        expect(runner).toContain("load its definition");
-        expect(runner).toContain("Do not generalize this bridge");
-        expect(runner).toContain(
-            "cannot establish the required tool's identity",
-        );
-        expect(runner).toContain("Existing approved versions remain unchanged");
-        expect(runner).toContain("Check every declared postcondition");
-        expect(runner).toContain("Do not invent Copilot");
-        expect(runner).toContain("Never change the old version");
-    });
-
-    it("consumes mode commands in the bundled hook without backend connections", async () => {
-        const directory = await mkdtemp(
-            path.join(tmpdir(), "typeagent-mode-artifact-"),
-        );
-        let connections = 0;
-        const server = createServer((socket) => {
-            connections++;
-            socket.destroy();
-        });
-        try {
-            server.listen(0, "127.0.0.1");
-            await once(server, "listening");
-            const address = server.address();
-            if (!address || typeof address === "string") {
-                throw new Error("Expected a TCP address");
-            }
-            const pluginRoot = path.resolve(
-                path.dirname(fileURLToPath(import.meta.url)),
-                "..",
-                "..",
+    it.each(["direct", "symlink"])(
+        "consumes mode and recipe commands in a copied hook via %s launch without backend connections",
+        async (launch) => {
+            const directory = await mkdtemp(
+                path.join(tmpdir(), "typeagent-mode-artifact-"),
             );
-            const configPath = path.join(directory, "config.json");
-            await writeFile(
-                configPath,
-                JSON.stringify({
-                    mode: "direct",
-                    powershell: { enabled: false },
-                }),
-            );
-            const env: NodeJS.ProcessEnv = {
-                ...process.env,
-                TYPEAGENT_PLUGIN_DATA: directory,
-                TYPEAGENT_HOST: "127.0.0.1",
-                TYPEAGENT_PORT: String(address.port),
-                TYPEAGENT_MACRO_RECORDING_ENABLED: "false",
-            };
-            delete env.TYPEAGENT_MODE;
-            const runHook = async (
-                prompt: string,
-            ): Promise<UserPromptSubmittedOutput> => {
-                const child = spawn(
-                    process.execPath,
-                    [path.join(pluginRoot, "dist", "hooks", "hook-router.js")],
-                    { env, timeout: 10000, stdio: ["pipe", "pipe", "pipe"] },
+            let connections = 0;
+            const server = createServer((socket) => {
+                connections++;
+                socket.destroy();
+            });
+            try {
+                server.listen(0, "127.0.0.1");
+                await once(server, "listening");
+                const address = server.address();
+                if (!address || typeof address === "string") {
+                    throw new Error("Expected a TCP address");
+                }
+                const pluginRoot = path.resolve(
+                    path.dirname(fileURLToPath(import.meta.url)),
+                    "..",
+                    "..",
                 );
-                let stdout = "";
-                let stderr = "";
-                child.stdout.setEncoding("utf8").on("data", (chunk) => {
-                    stdout += chunk;
-                });
-                child.stderr.setEncoding("utf8").on("data", (chunk) => {
-                    stderr += chunk;
-                });
-                child.stdin.end(
+                const hook = path.join(
+                    directory,
+                    "dist",
+                    "hooks",
+                    "hook-router.js",
+                );
+                await mkdir(path.dirname(hook), { recursive: true });
+                await copyFile(
+                    path.join(pluginRoot, "dist", "hooks", "hook-router.js"),
+                    hook,
+                );
+                let launchPath = hook;
+                if (launch === "symlink") {
+                    const linkedHooks = path.join(directory, "linked-hooks");
+                    await symlink(
+                        path.dirname(hook),
+                        linkedHooks,
+                        process.platform === "win32" ? "junction" : "dir",
+                    );
+                    launchPath = path.join(linkedHooks, "hook-router.js");
+                }
+                await writeFile(
+                    path.join(directory, "package.json"),
+                    JSON.stringify({ type: "module" }),
+                );
+                const configPath = path.join(directory, "config.json");
+                await writeFile(
+                    configPath,
                     JSON.stringify({
-                        sessionId: "mode-artifact",
-                        timestamp: 1,
-                        cwd: directory,
-                        prompt,
+                        mode: "direct",
+                        powershell: { enabled: false },
                     }),
                 );
-                const [code] = await once(child, "close");
-                expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
-                return JSON.parse(stdout) as UserPromptSubmittedOutput;
-            };
-            for (const [args, response] of [
-                ["mcp mixed", "TypeAgent mode switched to mcp (mixed)."],
-                ["", "TypeAgent mode: mcp (mixed)"],
-                ["mcp typo", "Usage:"],
-                ["mcp mixed extra", "Usage:"],
-                ["direct mixed", "Usage:"],
-                ["mcp\nmixed\nextra", "Usage:"],
-                ["mcp\ndelegate", "TypeAgent mode switched to mcp (delegate)."],
-                ["mcp", "TypeAgent mode switched to mcp (delegate)."],
-                ["MCP MIXED", "TypeAgent mode switched to mcp (mixed)."],
-            ]) {
-                const output = await runHook(`@typeagent mode ${args}`);
-                expect(output.handled).toBe(true);
-                expect(output.responseContent).toContain(response);
-                expect(output.modifiedPrompt).toBeUndefined();
-                expect(output.additionalContext).toBeUndefined();
-                expect(connections).toBe(0);
-            }
-            expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
-                mode: "mcp",
-                mcpRouting: "mixed",
-                powershell: { enabled: false },
-            });
-            const prompt =
-                "Compare PRs #3058, #3059, and #2993 and recommend smoke tests.";
-            for (const policy of ["mixed", "delegate"]) {
-                await runHook(`@typeagent mode mcp ${policy}`);
-                const output = await runHook(prompt);
-                expect(output.modifiedPrompt).toBe(prompt);
-                expect(output.additionalContext).toContain(
-                    "TypeAgent is the preferred action provider in MCP mode",
-                );
-                expect(output.additionalContext).toContain(
-                    "Native tools are a fallback only after establishing",
-                );
-                if (policy === "mixed") {
-                    expect(output.additionalContext).toContain(
-                        "rather than native GitHub tools, gh, or web/API fetches",
+                const env: NodeJS.ProcessEnv = {
+                    ...process.env,
+                    TYPEAGENT_PLUGIN_DATA: directory,
+                    TYPEAGENT_HOST: "127.0.0.1",
+                    TYPEAGENT_PORT: String(address.port),
+                    TYPEAGENT_MACRO_RECORDING_ENABLED: "false",
+                };
+                delete env.TYPEAGENT_MODE;
+                const runHook = async (
+                    prompt: string,
+                ): Promise<UserPromptSubmittedOutput> => {
+                    const child = spawn(process.execPath, [launchPath], {
+                        env,
+                        cwd: directory,
+                        timeout: 10000,
+                        stdio: ["pipe", "pipe", "pipe"],
+                    });
+                    let stdout = "";
+                    let stderr = "";
+                    child.stdout.setEncoding("utf8").on("data", (chunk) => {
+                        stdout += chunk;
+                    });
+                    child.stderr.setEncoding("utf8").on("data", (chunk) => {
+                        stderr += chunk;
+                    });
+                    child.stdin.end(
+                        JSON.stringify({
+                            sessionId: "mode-artifact",
+                            timestamp: 1,
+                            cwd: directory,
+                            prompt,
+                        }),
                     );
-                } else {
-                    expect(output.additionalContext).toContain(
-                        "You MUST call the typeagent-processCommand",
-                    );
-                    expect(output.additionalContext).not.toContain(
-                        "typeagent-searchActions",
-                    );
+                    const [code] = await once(child, "close");
+                    if (code !== 0) {
+                        throw new Error(
+                            `Copied hook exited with code ${code}: ${stderr}`,
+                        );
+                    }
+                    if (
+                        prompt === "@typeagent recipe status" &&
+                        stderr !== ""
+                    ) {
+                        expect(stderr).toMatch(
+                            /^\(node:\d+\) ExperimentalWarning: SQLite is an experimental feature and might change at any time\r?\n\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)\r?\n$/,
+                        );
+                    } else {
+                        expect(stderr).toBe("");
+                    }
+                    return JSON.parse(stdout) as UserPromptSubmittedOutput;
+                };
+                for (const [args, response] of [
+                    ["mcp mixed", "TypeAgent mode switched to mcp (mixed)."],
+                    ["", "TypeAgent mode: mcp (mixed)"],
+                    ["mcp typo", "Usage:"],
+                    ["mcp mixed extra", "Usage:"],
+                    ["direct mixed", "Usage:"],
+                    ["mcp\nmixed\nextra", "Usage:"],
+                    [
+                        "mcp\ndelegate",
+                        "TypeAgent mode switched to mcp (delegate).",
+                    ],
+                    ["mcp", "TypeAgent mode switched to mcp (delegate)."],
+                    ["MCP MIXED", "TypeAgent mode switched to mcp (mixed)."],
+                ]) {
+                    const output = await runHook(`@typeagent mode ${args}`);
+                    expect(output.handled).toBe(true);
+                    expect(output.responseContent).toContain(response);
+                    expect(output.modifiedPrompt).toBeUndefined();
+                    expect(output.additionalContext).toBeUndefined();
+                    expect(connections).toBe(0);
                 }
+                expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
+                    mode: "mcp",
+                    mcpRouting: "mixed",
+                    powershell: { enabled: false },
+                });
+                const recipeStatus = await runHook("@typeagent recipe status");
+                expect(recipeStatus.handled).toBe(true);
+                expect(recipeStatus.responseContent).toContain(
+                    "Plugin-local program execution is not enabled.",
+                );
+                expect(recipeStatus.modifiedPrompt).toBeUndefined();
+                expect(recipeStatus.additionalContext).toBeUndefined();
                 expect(connections).toBe(0);
+                const prompt =
+                    "Compare PRs #3058, #3059, and #2993 and recommend smoke tests.";
+                for (const policy of ["mixed", "delegate"]) {
+                    await runHook(`@typeagent mode mcp ${policy}`);
+                    const output = await runHook(prompt);
+                    expect(output.modifiedPrompt).toBe(prompt);
+                    expect(output.additionalContext).toContain(
+                        "TypeAgent is the preferred action provider in MCP mode",
+                    );
+                    expect(output.additionalContext).toContain(
+                        "Native tools are a fallback only after establishing",
+                    );
+                    if (policy === "mixed") {
+                        expect(output.additionalContext).toContain(
+                            "rather than native GitHub tools, gh, or web/API fetches",
+                        );
+                    } else {
+                        expect(output.additionalContext).toContain(
+                            "You MUST call the typeagent-processCommand",
+                        );
+                        expect(output.additionalContext).not.toContain(
+                            "typeagent-searchActions",
+                        );
+                    }
+                    expect(connections).toBe(0);
+                }
+            } finally {
+                await new Promise<void>((resolve, reject) => {
+                    server.close((error) =>
+                        error ? reject(error) : resolve(),
+                    );
+                });
+                await rm(directory, { recursive: true, force: true });
             }
-        } finally {
-            await new Promise<void>((resolve, reject) => {
-                server.close((error) => (error ? reject(error) : resolve()));
-            });
-            await rm(directory, { recursive: true, force: true });
-        }
-    });
+        },
+    );
 
     it("contains the extension bundle at the declared discovery path", async () => {
         const testDir = path.dirname(fileURLToPath(import.meta.url));
@@ -314,19 +346,8 @@ describe("staged plugin artifact", () => {
         expect(bundle).toContain(
             "otherwise discover a suitable capability before choosing native tools",
         );
-        expect(bundle).toContain(
-            "RUN of the already approved immutable macro, not Prepare or BUILD",
-        );
-        expect(bundle).toContain(
-            "actual current tool results before optional concise execution evidence",
-        );
-        expect(bundle).toContain("not a step-status summary");
-        expect(bundle).toContain(
-            "secret inputs/private artifact references or base64/binary transport payloads",
-        );
-        expect(bundle).toContain(
-            "only after a justified successful procedure adaptation caused by actual original-tool unavailability",
-        );
+        expect(bundle.includes("typeagent-macro-runner")).toBe(false);
+        expect(bundle.includes("macro-runner-hosts")).toBe(false);
         expect(bundle).toContain("TYPEAGENT_WORKIQ_SDK_ORIGINALS_POLICY");
         expect(bundle).toContain("workiq-sdk-originals-v1");
         expect(bundle).toContain(
@@ -417,13 +438,18 @@ describe("staged plugin artifact", () => {
             await client.connect(transport);
             const catalog = await client.listTools();
             expect(catalog.tools.map((tool) => tool.name)).toEqual(
+                expect.arrayContaining(["list_macros", "run_macro"]),
+            );
+            expect(catalog.tools.map((tool) => tool.name)).not.toEqual(
                 expect.arrayContaining([
-                    "list_macros",
                     "create_macro_from_trace",
-                    "run_macro",
                     "submit_macro_candidate",
                 ]),
             );
+            const runSchema = catalog.tools.find(
+                (tool) => tool.name === "run_macro",
+            )!.inputSchema;
+            expect(runSchema.properties).not.toHaveProperty("preference");
             expect(
                 catalog.tools.find((tool) => tool.name === "inspect_macro")
                     ?.annotations,
@@ -433,12 +459,7 @@ describe("staged plugin artifact", () => {
                 idempotentHint: true,
                 openWorldHint: false,
             });
-            for (const name of [
-                "run_macro",
-                "approve_macro",
-                "create_macro_from_trace",
-                "submit_macro_candidate",
-            ]) {
+            for (const name of ["run_macro", "approve_macro"]) {
                 expect(
                     catalog.tools.find((tool) => tool.name === name)
                         ?.annotations?.readOnlyHint,

@@ -1,10 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { isDeepStrictEqual } from "node:util";
-import { createHash } from "node:crypto";
-import { openai } from "@typeagent/aiclient";
-import { parseToolsJsonSchema } from "@typeagent/action-schema";
 import {
     compileGrammarToNFA,
     loadGrammarRules,
@@ -15,17 +11,21 @@ import {
     GrammarGenerator,
     populateCache,
 } from "@typeagent/action-grammar/generation";
+import { parseToolsJsonSchema } from "@typeagent/action-schema";
+import { openai } from "@typeagent/aiclient";
 import {
+    getRecordedArgumentDependencies,
     parseMacroExecutionRecipe,
     parseMacroLearningBuild,
-    getRecordedArgumentDependencies,
     verifiedLearningEvidence,
     type CopilotToolMacro,
+    type MacroExecutionRecipe,
     type MacroLearningBuild,
     type MacroLearningRuntime,
-    type MacroExecutionRecipe,
     type RecordedInteractionTrace,
 } from "@typeagent/copilot-macros";
+import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import {
     getMacroActionName,
     getMacroInputSchema,
@@ -367,6 +367,11 @@ export function createMacroLearningRuntime(
     query: MacroLearningQuery = defaultQuery,
     loadApprovedMacros: () => Promise<CopilotToolMacro[]> = async () => [],
     options?: MacroLearningRuntimeOptions,
+    programAuthor: MacroLearningRuntime["buildProgram"] = async () => {
+        throw new Error(
+            "Program authoring requires the TypeAgent capability inspector.",
+        );
+    },
 ): MacroLearningRuntime {
     async function ask(
         instructions: string,
@@ -423,6 +428,7 @@ export function createMacroLearningRuntime(
     }
 
     return {
+        buildProgram: programAuthor,
         async extract(trace, traceId, signal) {
             signal.throwIfAborted();
             return parseMacroExecutionRecipe(

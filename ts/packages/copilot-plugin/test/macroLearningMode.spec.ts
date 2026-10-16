@@ -2,10 +2,6 @@
 // Licensed under the MIT License.
 
 import {
-    cancelMacroWork,
-    parseLearningMode,
-} from "../src/shared/macro-learning.js";
-import {
     MacroManager,
     type MacroLearningJob,
     type MacroLearningRuntime,
@@ -14,6 +10,10 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+    cancelMacroWork,
+    parseLearningMode,
+} from "../src/shared/macro-learning.js";
 
 describe("workspace macro learning preference", () => {
     it.each(["off", "prepare", "read-only", "all"] as const)(
@@ -48,6 +48,11 @@ describe("macro work cancellation", () => {
         });
         const calls: string[] = [];
         const runtime: MacroLearningRuntime = {
+            buildProgram: async () => {
+                throw new Error(
+                    "Cancelled learning must not author a program.",
+                );
+            },
             extract: async (trace, traceId) => {
                 extracting();
                 await gate;

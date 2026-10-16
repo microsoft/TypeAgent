@@ -42,6 +42,14 @@ use a private executable fixture and do not launch the authenticated Copilot CLI
 
 ## Native macro evaluation - gated controller and offline tooling
 
+**Historical runner evaluation, retired by the program-only Checkpoint A cutover.**
+The native macro scripts below target the removed Copilot macro runner and
+adaptation APIs. They are retained as historical diagnostic tooling, not a
+supported current acceptance path or evidence for program execution. Do not use
+their runner inventories or verdicts to certify the current implementation.
+See the [current program scope and validation](../../docs/plans/copilot-fastActions/STATUS.md).
+The general Copilot task evaluation above is unaffected.
+
 **Current restriction mechanism (CLI 1.0.95):** required supported
 `extensionMode: "load_only"` seeds only the fresh owned home, then confirms the
 public `/extensions mode` dialog before any task. Actual owned settings and

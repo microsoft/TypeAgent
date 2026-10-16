@@ -15,6 +15,7 @@ import { DispatcherOptions } from "agent-dispatcher";
 import registerDebug from "debug";
 import {
     McpReplayHost,
+    configureCheckpointAPrograms,
     createMacroAppAgentProvider,
     createMacroLearningRuntime,
     createSyntheticMacroLearningDiagnostics,
@@ -93,15 +94,18 @@ export async function createInProcessAgentServer(
     instanceDir: string,
     options: InProcessAgentServerOptions,
 ): Promise<InProcessAgentServer> {
-    const macroManager = new MacroManager(
-        instanceDir,
-        new McpReplayHost(instanceDir),
+    const macroReplayHost = new McpReplayHost(instanceDir);
+    const macroManager = new MacroManager(instanceDir, macroReplayHost);
+    const programAuthor = await configureCheckpointAPrograms(
+        macroManager,
+        macroReplayHost,
     );
     await macroManager.configureLearning(
         createMacroLearningRuntime(
             undefined,
             () => macroManager.getApprovedMacros(),
             createSyntheticMacroLearningDiagnostics(instanceDir),
+            programAuthor,
         ),
     );
     const memoryAgentOptions = dispatcherOptions.agentInitOptions?.memory as
@@ -208,10 +212,15 @@ export async function createInProcessAgentServer(
         conversationManager,
         async close(): Promise<void> {
             closeTransport();
+            macroManager.cancelAllMacroRuns();
             try {
                 await conversationManager.close();
             } finally {
-                await ownedMemoryService?.close();
+                try {
+                    await macroReplayHost.close();
+                } finally {
+                    await ownedMemoryService?.close();
+                }
             }
         },
     };
