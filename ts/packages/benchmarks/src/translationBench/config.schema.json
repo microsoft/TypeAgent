@@ -88,6 +88,11 @@
           "minimum": 1,
           "description": "How many eval models run in parallel."
         },
+        "caseOrder": {
+          "type": "string",
+          "enum": ["any", "strict"],
+          "description": "Optional action-order filter applied before maxCases."
+        },
         "maxCases": {
           "type": ["integer", "null"],
           "minimum": 0,

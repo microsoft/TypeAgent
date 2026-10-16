@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@modelcontextprotocol/server-filesystem": "2026.1.14",
     "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-schema": "workspace:*",
