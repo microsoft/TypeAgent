@@ -31,7 +31,7 @@ import {
     MediaEvidenceLocation,
     MediaEvidenceRecord,
 } from "@typeagent/image-memory";
-import { KnowproContext } from "./knowproMemory.js";
+import type { KnowproContext } from "./knowproMemory.js";
 
 function objectValue(value: unknown): Record<string, unknown> {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
