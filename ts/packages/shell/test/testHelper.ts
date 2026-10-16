@@ -13,7 +13,6 @@ import path from "node:path";
 import os from "node:os";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { configureShellTestModel, getShellTestModel } from "./shellTestModel";
 
 // These need to be in sync with the UI
 const chatViewUrlSuffix = "/chatView.html";
@@ -359,7 +358,7 @@ export function getLaunchArgs(testGreetings: boolean): string[] {
         // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
         args.push("--no-sandbox");
     }
-    if (!testGreetings || getShellTestModel() !== undefined) {
+    if (!testGreetings) {
         args.push("--mock-greetings");
     }
 
@@ -421,10 +420,6 @@ export async function sendUserRequestAndWaitForResponse(
     prompt: string,
     page: Page,
 ): Promise<string> {
-    if (!prompt.trimStart().startsWith("@"))
-        await configureShellTestModel((request) =>
-            sendUserRequestAndWaitForCompletion(request, page),
-        );
     const locators = await getAgentMessageLocators(page);
 
     // send the user request
@@ -447,10 +442,6 @@ export async function sendUserRequestAndWaitForCompletion(
     page: Page,
     timeout: number = 90000,
 ): Promise<string> {
-    if (!prompt.trimStart().startsWith("@"))
-        await configureShellTestModel((request) =>
-            sendUserRequestAndWaitForCompletion(request, page, timeout),
-        );
     const locators = await getAgentMessageLocators(page);
 
     // send the user request
@@ -628,9 +619,6 @@ export async function runTestCallback(
     const mainWindow: Page = await startShell(testGreetings);
 
     try {
-        await configureShellTestModel((request) =>
-            sendUserRequestAndWaitForCompletion(request, mainWindow),
-        );
         // run the supplied function
         await callback(mainWindow);
     } finally {
