@@ -119,7 +119,10 @@ export class MacroChildAuthoring {
     private mutation: Promise<void> = Promise.resolve();
     private readonly file: string;
 
-    constructor(private readonly directory: string) {
+    constructor(
+        private readonly directory: string,
+        private readonly profileId = "typeagent",
+    ) {
         this.contexts = new DurableRecipeAuthoringContextStore(directory);
         this.file = path.join(directory, "child-authoring.json");
     }
@@ -179,7 +182,7 @@ export class MacroChildAuthoring {
         if (!job.authoring)
             throw new Error("A sealed child authoring capture is required.");
         const envelope = await this.contexts.get(
-            { workspaceId: job.cwd, profileId: "typeagent" },
+            { workspaceId: job.cwd, profileId: this.profileId },
             job.authoring.captureId,
         );
         if (
@@ -265,7 +268,7 @@ export class MacroChildAuthoring {
         });
         if (!request) return undefined;
         const context = await this.contexts.get(
-            { workspaceId: request.cwd, profileId: "typeagent" },
+            { workspaceId: request.cwd, profileId: this.profileId },
             request.captureId,
         );
         if (!context || context.digest !== request.contextDigest)

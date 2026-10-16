@@ -39,12 +39,15 @@ import {
     getConfigPath,
     getMode,
     getModeLabel,
+    getRecipeOwner,
     readConfig,
     writeConfig,
     type Mode,
+    type RecipeOwner,
 } from "../shared/plugin-config.js";
 import { handleRecipeCommand } from "../shared/recipe-commands.js";
-import { connectToAgentServer } from "../shared/typeagent-client.js";
+import { connectToMacroOwner } from "../shared/macro-owner.js";
+import { handleLocalRecipes } from "./hook-local-recipes.js";
 import { makeTurnId, writeDemoState } from "./demo-state.js";
 import { handleDevActions } from "./hook-dev-actions.js";
 import { handleDirect, type DirectHandlingOptions } from "./hook-direct.js";
@@ -58,7 +61,11 @@ async function handleMacroCommand(
     if (learning) {
         return {
             handled: true,
-            responseContent: await learningSetting(input.cwd, learning[1]),
+            responseContent: await learningSetting(
+                input.cwd,
+                learning[1],
+                input.sessionId,
+            ),
             handledBy: "typeagent",
         };
     }
@@ -71,11 +78,13 @@ async function handleMacroCommand(
     if (command === "cancel") {
         return {
             handled: true,
-            responseContent: await cancelMacroWork(input.sessionId),
+            responseContent: await cancelMacroWork(input.sessionId, () =>
+                connectToMacroOwner(input.cwd, input.sessionId),
+            ),
             handledBy: "typeagent",
         };
     }
-    const connection = await connectToAgentServer();
+    const connection = await connectToMacroOwner(input.cwd, input.sessionId);
     try {
         if (command === "record") {
             const token = await connection.armMacroRecording({
@@ -323,6 +332,8 @@ async function main(): Promise<void> {
 }
 
 export interface RoutePromptDependencies {
+    recipeOwner?: () => RecipeOwner;
+    localRecipes?: typeof handleLocalRecipes;
     claimRecording: (
         input: UserPromptSubmittedInput,
     ) => Promise<boolean | "child">;
@@ -348,6 +359,8 @@ export async function routePrompt(
     dependencies: RoutePromptDependencies = routePromptDefaults,
 ): Promise<UserPromptSubmittedOutput> {
     if (mode === "bypass") return {};
+    const owner = (dependencies.recipeOwner ?? getRecipeOwner)();
+    if (owner === "off") return {};
     const recording = await dependencies.claimRecording(input);
     if (recording === "child")
         return {
@@ -355,6 +368,8 @@ export async function routePrompt(
                 "This turn is explicitly selected for TypeAgent macro learning. Perform the user's task normally. Only after it actually succeeds, call typeagent_recorded_task_succeeded once with a concise factual summary, before delivering your final answer. Do not call it after failed, denied, incomplete or aborted work. It records success metadata only; do not rerun the task, launch authoring agents yourself, or wait for background learning. If the receipt tool is unavailable, deliver the answer and report that child authoring is unavailable; do not invent success.",
         };
     if (recording) return {};
+    if (owner === "plugin")
+        return (dependencies.localRecipes ?? handleLocalRecipes)(input, signal);
     if (mode === "mcp") return dependencies.mcp(input);
     if (mode === "dev") return dependencies.dev(input, signal);
     return dependencies.direct(input);
@@ -366,7 +381,7 @@ async function claimMacroRecording(
     if (!getMacroFeatures().recording) return false;
     let connection;
     try {
-        connection = await connectToAgentServer();
+        connection = await connectToMacroOwner(input.cwd, input.sessionId);
         const token = await connection.claimMacroRecording({
             sessionId: input.sessionId,
             cwd: input.cwd,

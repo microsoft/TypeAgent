@@ -205,6 +205,7 @@ export interface MacroExecutionRecipe {
     toolCallIds: string[];
     description: string;
     uncertainties: string[];
+    programRequirements?: string[];
 }
 
 export interface MacroLearningBuild {
@@ -462,6 +463,8 @@ export interface ReplayToolContext {
 }
 
 export interface ReplayToolHost {
+    // Native inspection is opt-in; existing MCP-only hosts keep failing closed.
+    readonly supportsNativeTools?: true;
     // Missing servers/tools return undefined; connection and inspection failures throw.
     inspectTool(
         mcpServerName: string | undefined,

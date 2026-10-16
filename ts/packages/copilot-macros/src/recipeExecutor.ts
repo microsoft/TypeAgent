@@ -18,6 +18,19 @@ import {
     validateRecipeValue,
 } from "./recipeValidation.js";
 
+let executorAssets: { workerUrl: URL; quickjsModulePath?: string } | undefined;
+
+/** Set relocatable worker assets when packaging without node_modules. */
+export function configureRecipeExecutorAssets(assets: {
+    workerUrl: URL;
+    quickjsModulePath?: string;
+}): void {
+    executorAssets = {
+        ...assets,
+        workerUrl: new URL(assets.workerUrl.href),
+    };
+}
+
 export interface RecipeExecutorOptions {
     timeoutMs?: number;
     memoryLimitBytes?: number;
@@ -412,12 +425,14 @@ async function runGuest(
 ): Promise<void> {
     if (signal.aborted) throw new Stopped("Runtime stopped.");
     const worker = new Worker(
-        new URL("./recipeExecutorWorker.js", import.meta.url),
+        executorAssets?.workerUrl ??
+            new URL("./recipeExecutorWorker.js", import.meta.url),
         {
             workerData: {
                 source: guestSource(artifact, inputText, bounds.maxJsonBytes),
                 bounds,
                 deadline,
+                quickjsModulePath: executorAssets?.quickjsModulePath,
             },
             resourceLimits: { maxOldGenerationSizeMb: 64, stackSizeMb: 4 },
         },

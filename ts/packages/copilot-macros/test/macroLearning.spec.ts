@@ -148,6 +148,84 @@ async function terminal(
 }
 
 describe("durable macro learning", () => {
+    it("honors cancellation before acceptance and while the approved route is being loaded", async () => {
+        const { manager } = await setup("all");
+        manager.cancelMacroRun("pre-cancelled");
+        await expect(
+            manager.runMacro({ macroId: "not-loaded", runId: "pre-cancelled" }),
+        ).rejects.toThrow("cancelled before acceptance");
+        await manager.configureLearning(runtime());
+        const summary = await capture(manager, { learning: true });
+        const job = await terminal(manager, summary.learningJobId!);
+        expect(job.status).toBe("ready");
+        let resume!: () => void;
+        const paused = new Promise<void>((resolve) => {
+            resume = resolve;
+        });
+        const inspect = manager.inspectMacro.bind(manager);
+        const spy = jest
+            .spyOn(manager, "inspectMacro")
+            .mockImplementation(async (request) => {
+                await paused;
+                return inspect(request);
+            });
+        const execute = jest.fn(async () => {
+            throw new Error("Cancelled preflight must never execute.");
+        });
+        manager.configureProgramRuntime({ execute });
+        const running = manager.runMacro({
+            ...job.macro!,
+            runId: "cancel-preflight",
+            inputs: { step_1_path: "package.json" },
+        });
+        manager.cancelMacroRun("cancel-preflight");
+        resume();
+        await expect(running).rejects.toThrow();
+        expect(execute).not.toHaveBeenCalled();
+        spy.mockRestore();
+        await manager.close();
+    });
+    it("leaves interrupted authoring queued and refunds its attempt before owner handoff", async () => {
+        const { manager, directory, host } = await setup("all");
+        const summary = await capture(manager, { learning: true });
+        let current = manager;
+        for (let restart = 0; restart < 3; restart++) {
+            const learner = runtime();
+            let entered!: () => void;
+            const started = new Promise<void>((resolve) => {
+                entered = resolve;
+            });
+            let resume!: () => void;
+            const paused = new Promise<void>((resolve) => {
+                resume = resolve;
+            });
+            const originalExtract = learner.extract;
+            learner.extract = async (...args) => {
+                entered();
+                await paused;
+                return originalExtract(...args);
+            };
+            await current.configureLearning(learner);
+            await started;
+            await current.close();
+            expect(
+                (await current.getMacroLearningJob(summary.learningJobId!))
+                    .status,
+            ).toBe("queued");
+            resume();
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            current = new MacroManager(directory, host);
+        }
+        await current.configureLearning(runtime());
+        expect((await terminal(current, summary.learningJobId!)).status).toBe(
+            "ready",
+        );
+        await current.close();
+        await expect(current.configureLearning(runtime())).rejects.toThrow(
+            "closed",
+        );
+    });
+
     it("prepares a verified historical trace through the same coordinator after restart", async () => {
         const { manager, directory, host } = await setup("all");
         const historical = await capture(manager, {
@@ -522,6 +600,7 @@ describe("durable macro learning", () => {
         const extract = learner.extract;
         learner.extract = jest.fn(async (...args) => ({
             ...(await extract(...args)),
+            programRequirements: ["Classify the captured read result"],
             uncertainties: [
                 "The requested ranking was not performed by the recorded tools.",
                 "The final report requires unsupported synthesis.",

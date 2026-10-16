@@ -22,43 +22,17 @@ import {
 } from "@typeagent/copilot-macros";
 import type { AppAgentProvider } from "agent-dispatcher";
 import { createHash, randomUUID } from "node:crypto";
+import {
+    getMacroActionName,
+    getMacroInputSchema,
+} from "@typeagent/copilot-macros/macroSchema";
+export {
+    getMacroActionName,
+    getMacroInputSchema,
+} from "@typeagent/copilot-macros/macroSchema";
 
 export const macroAgentName = "macros";
 const schemaType = "MacroActions";
-
-export function getMacroActionName(macro: CopilotToolMacro): string {
-    return `run_${macro.macroId.replace(/-/g, "_")}_v${macro.version}`;
-}
-
-export function getMacroInputSchema(macro: CopilotToolMacro) {
-    // Grammar staging precedes program authoring and uses the grounded inputs.
-    if (!macro.program) return getStagedMacroInputSchema(macro);
-    if (macro.program?.inputSchema.type !== "object")
-        throw new Error("Program macro inputs must use an object schema.");
-    return macro.program.inputSchema;
-}
-
-function getStagedMacroInputSchema(macro: CopilotToolMacro) {
-    return {
-        type: "object",
-        properties: Object.fromEntries(
-            macro.inputs.map((input) => [
-                input.name,
-                {
-                    description: input.description,
-                    ...(input.valueType ? { type: input.valueType } : {}),
-                    ...(input.valueType === "object"
-                        ? { additionalProperties: true }
-                        : {}),
-                },
-            ]),
-        ),
-        required: macro.inputs
-            .filter((input) => input.required)
-            .map((input) => input.name),
-        additionalProperties: false,
-    };
-}
 
 export function createMacroAppAgentProvider(
     manager: MacroManager,

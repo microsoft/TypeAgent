@@ -145,6 +145,7 @@ export class MacroLearningEngine {
     private workerError?: unknown;
     private controller: AbortController | undefined;
     private activeJobId: string | undefined;
+    private stopped = false;
     private readonly authoringWakeups = new Set<string>();
     private readonly childAuthoring: MacroChildAuthoring;
 
@@ -152,11 +153,16 @@ export class MacroLearningEngine {
         private readonly rootDir: string,
         private readonly catalog: LearningCatalog,
         private readonly replayHost?: ReplayToolHost,
+        authoringProfileId = "typeagent",
     ) {
-        this.childAuthoring = new MacroChildAuthoring(rootDir);
+        this.childAuthoring = new MacroChildAuthoring(
+            rootDir,
+            authoringProfileId,
+        );
     }
 
     async configure(runtime: MacroLearningRuntime): Promise<void> {
+        if (this.stopped) throw new Error("The learning owner is closed.");
         if (this.worker)
             throw new Error(
                 "Learning runtime cannot change while jobs are active.",
@@ -186,6 +192,14 @@ export class MacroLearningEngine {
             }
         });
         this.startWorker();
+    }
+
+    async close(): Promise<void> {
+        this.stopped = true;
+        this.controller?.abort(new Error("The learning owner closed."));
+        await this.worker;
+        await this.mutation;
+        if (this.workerError !== undefined) throw this.workerError;
     }
 
     async getPreference(cwd: string): Promise<MacroLearningPreference> {
@@ -557,6 +571,7 @@ export class MacroLearningEngine {
     }
 
     private check(job: StoredJob): void {
+        if (this.stopped) throw new Error("The learning owner is closed.");
         this.assertSelected(job.cwd);
         if (
             job.status === "cancelled" ||
@@ -570,7 +585,12 @@ export class MacroLearningEngine {
     }
 
     private startWorker(): void {
-        if (!this.runtime || this.worker || this.workerError !== undefined)
+        if (
+            this.stopped ||
+            !this.runtime ||
+            this.worker ||
+            this.workerError !== undefined
+        )
             return;
         this.worker = this.drain()
             .catch((error: unknown) => {
@@ -587,6 +607,7 @@ export class MacroLearningEngine {
     private async drain(): Promise<void> {
         let job: StoredJob | undefined;
         while (
+            !this.stopped &&
             (job = this.state!.jobs.find((item) => item.status === "queued"))
         ) {
             this.controller = new AbortController();
@@ -600,18 +621,19 @@ export class MacroLearningEngine {
                 ) as string;
                 if (job.status !== "cancelled") {
                     await this.update(() => {
-                        job!.status =
-                            error instanceof MacroAuthoringPending
-                                ? this.authoringWakeups.has(job!.jobId)
-                                    ? "queued"
-                                    : "awaitingAuthor"
-                                : error instanceof LearningReviewRequired
-                                  ? "needsReview"
-                                  : error instanceof LearningDeadlineExceeded
-                                    ? "failed"
-                                    : this.controller!.signal.aborted
-                                      ? "cancelled"
-                                      : "failed";
+                        job!.status = this.stopped
+                            ? "queued"
+                            : error instanceof MacroAuthoringPending
+                              ? this.authoringWakeups.has(job!.jobId)
+                                  ? "queued"
+                                  : "awaitingAuthor"
+                              : error instanceof LearningReviewRequired
+                                ? "needsReview"
+                                : error instanceof LearningDeadlineExceeded
+                                  ? "failed"
+                                  : this.controller!.signal.aborted
+                                    ? "cancelled"
+                                    : "failed";
                         job!.error = message.slice(0, 2_000);
                         job!.updatedAt = new Date().toISOString();
                     });
@@ -665,7 +687,7 @@ export class MacroLearningEngine {
             this.check(job);
             return result;
         } catch (error) {
-            if (error instanceof MacroAuthoringPending)
+            if (this.stopped || error instanceof MacroAuthoringPending)
                 await this.update(() => {
                     job.attempts[stage] = (job.attempts[stage] ?? 1) - 1;
                 });
@@ -906,7 +928,8 @@ export class MacroLearningEngine {
     ): Promise<boolean> {
         if (!this.replayHost) return false;
         for (const step of macro.steps) {
-            if (!step.mcpServerName) return false;
+            if (!step.mcpServerName && !this.replayHost.supportsNativeTools)
+                return false;
             const descriptor = await this.replayHost.inspectTool(
                 step.mcpServerName,
                 step.toolName,

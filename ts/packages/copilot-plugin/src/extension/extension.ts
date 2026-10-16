@@ -8,6 +8,9 @@ import {
     publishControlMetadata,
 } from "../shared/control-metadata.js";
 import { connectToAgentServer } from "../shared/typeagent-client.js";
+import { connectToMacroOwner } from "../shared/macro-owner.js";
+import { getRecipeOwner } from "../shared/plugin-config.js";
+import { createPluginLocalRecipes } from "./native-recipe-service.js";
 import { createExtensionCommands } from "./commands.js";
 import { runControlDiagnostic } from "./control-diagnostic.js";
 import { getPowerShellHookOutput } from "./powershell-guidance.js";
@@ -50,12 +53,20 @@ const commands = createExtensionCommands(
 const initialControl = publishControlMetadata("native-extension-startup");
 assertControlBinding(initialControl);
 const workiqPolicy = await workiqCapturePolicyPath(initialControl);
+const recipeOwner = getRecipeOwner();
+if (recipeOwner === "plugin" && workiqPolicy !== undefined)
+    throw new Error(
+        "WorkIQ original-retention recording requires the typeagent recipe owner. Standalone recipes support native and explicitly classified read-only MCP tools.",
+    );
 
 const lifecycle = await joinTypeAgentSession({
     customAgents: [macroAuthorChildAgent],
     tools: [
         createMacroTaskReceiptTool(async () => {
-            const connection = await connectToAgentServer();
+            const connection = await connectToMacroOwner(
+                process.cwd(),
+                session.sessionId,
+            );
             try {
                 return await connection.getMacroRecordingState(
                     session.sessionId,
@@ -65,16 +76,25 @@ const lifecycle = await joinTypeAgentSession({
             }
         }),
     ],
-    requestedEnvironmentVariables: ["TYPEAGENT_TUNNEL_TOKEN"],
+    requestedEnvironmentVariables:
+        recipeOwner === "typeagent" ? ["TYPEAGENT_TUNNEL_TOKEN"] : [],
     commands,
-    hooks: {
-        onPreToolUse: (input) =>
-            workiqOriginals?.guard(input.toolName) ??
-            getPowerShellHookOutput(input.toolName, input.toolArgs),
-    },
+    ...(recipeOwner === "typeagent"
+        ? {
+              hooks: {
+                  onPreToolUse: (input) =>
+                      workiqOriginals?.guard(input.toolName) ??
+                      getPowerShellHookOutput(input.toolName, input.toolArgs),
+              },
+          }
+        : {}),
 });
 const session = lifecycle.session;
 sessionLog = (message) => session.log(message);
+const localRecipes =
+    recipeOwner === "plugin"
+        ? await createPluginLocalRecipes(session, reportCaptureError)
+        : undefined;
 if (initialControl && workiqPolicy !== undefined) {
     publishControlMetadata("native-workiq-session", {
         sessionId: session.sessionId,
@@ -114,6 +134,7 @@ if (workiqOriginals) {
 }
 const close = async () => {
     await authoring?.close();
+    await localRecipes?.close();
     await lifecycle.close();
 };
 process.once(
@@ -164,7 +185,9 @@ const launchAuthor = createMacroAuthorChildLauncher(session);
 authoring = new MacroAuthoringWorker({
     cwd: process.cwd(),
     sessionId: session.sessionId,
-    connect: connectToAgentServer,
+    connect: localRecipes
+        ? async () => localRecipes.authoringConnection
+        : connectToAgentServer,
     launch: launchAuthor,
     report: (message) => {
         void session
@@ -173,19 +196,27 @@ authoring = new MacroAuthoringWorker({
     },
 });
 session.on("session.shutdown", () => {
-    void authoring?.close().catch((error) => reportCaptureError(String(error)));
+    void close().catch((error) => reportCaptureError(String(error)));
 });
 const capture = new SessionCapture(
     session.sessionId,
     process.cwd(),
     reportCaptureError,
-    workiqOriginals
+    localRecipes
         ? {
-              connectAgentServer: connectToAgentServer,
+              connectAgentServer: async () => localRecipes.connection,
+              resolveToolIdentity: localRecipes.resolveToolIdentity,
+              normalizeToolResult: localRecipes.normalizeToolResult,
               insertToolHistory: async () => {},
               insertTurnHistory: async () => {},
           }
-        : undefined,
+        : workiqOriginals
+          ? {
+                connectAgentServer: connectToAgentServer,
+                insertToolHistory: async () => {},
+                insertTurnHistory: async () => {},
+            }
+          : undefined,
     (message) => session.log(message),
     async (summary) => {
         if (summary.learningJobId) authoring?.kick();
@@ -202,9 +233,12 @@ const capture = new SessionCapture(
     true,
 );
 
-await capture.failInterruptedRecording();
-authoring.kick();
+if (recipeOwner !== "off") {
+    await capture.failInterruptedRecording();
+    authoring.kick();
+}
 session.on((event: SessionEvent) => {
+    if (recipeOwner === "off") return;
     if (launchAuthor.isAuthoringEvent(event)) return;
     if (!event.agentId && event.type === "user.message") authoring?.pause();
     capture.enqueue({

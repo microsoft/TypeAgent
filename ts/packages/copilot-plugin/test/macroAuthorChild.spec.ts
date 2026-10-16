@@ -396,14 +396,13 @@ describe("bounded native author child", () => {
         "wrong-prompt",
         "wrong-text",
         "wrong-child",
-        "no-completion",
         "tools-enabled",
         "nested-tool",
     ])("rejects uncorrelated or unrestricted evidence: %s", async (kind) => {
         const f = fixture();
         f.invoke(async () => {
             f.started();
-            if (kind !== "no-completion") f.completed();
+            f.completed();
             if (kind === "wrong-prompt") f.child.prompt = "other context";
             if (kind === "wrong-text") f.child.latestResponse = "parent text";
             if (kind === "wrong-child") f.child.id = "other-child";
@@ -421,16 +420,52 @@ describe("bounded native author child", () => {
         expect(f.cancel).toHaveBeenCalledWith({ id: "child-1" });
     });
 
-    it("ignores an unrelated child's completion", async () => {
+    it.each(["missing", "other-child"])(
+        "waits only for exact completion until the original deadline: %s",
+        async (kind) => {
+            jest.useFakeTimers();
+            try {
+                const f = fixture();
+                f.invoke(async () => {
+                    f.started();
+                    if (kind === "other-child")
+                        f.emit(
+                            "subagent.completed",
+                            { totalToolCalls: 0 },
+                            "other-child",
+                        );
+                    return {
+                        resultType: "success",
+                        textResultForLlm: "candidate",
+                    };
+                });
+                const pending = expect(
+                    launchMacroAuthorChild(f.session, f.child.prompt),
+                ).rejects.toMatchObject({ code: "timeout" });
+                await jest.advanceTimersByTimeAsync(90_000);
+                await pending;
+                expect(f.cancel).toHaveBeenCalledWith({ id: "child-1" });
+                expect(f.off).toHaveBeenCalled();
+            } finally {
+                jest.useRealTimers();
+            }
+        },
+    );
+
+    it("accepts an exact completion notification arriving after the RPC response", async () => {
         const f = fixture();
         f.invoke(async () => {
             f.started();
-            f.emit("subagent.completed", { totalToolCalls: 0 }, "other-child");
+            setImmediate(f.completed);
             return { resultType: "success", textResultForLlm: "candidate" };
         });
         await expect(
             launchMacroAuthorChild(f.session, f.child.prompt),
-        ).rejects.toMatchObject({ code: "uncorrelated-result" });
+        ).resolves.toMatchObject({
+            text: "candidate",
+            completedEventId: "subagent.completed-event",
+        });
+        expect(f.cancel).toHaveBeenCalledWith({ id: "child-1" });
     });
 
     it("does not launch for an already aborted request", async () => {

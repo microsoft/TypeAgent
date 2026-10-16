@@ -4,7 +4,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { UserPromptSubmittedOutput } from "@typeagent/agent-harness-hooks/copilot-cli";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
 import {
     copyFile,
@@ -19,6 +19,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 interface PluginMcpManifest {
     mcpServers: Record<
@@ -32,6 +33,29 @@ interface PluginManifest {
 }
 
 describe("staged plugin artifact", () => {
+    it("compiles and executes actual contained programs from copied dependency assets", async () => {
+        const pluginRoot = path.resolve(
+            path.dirname(fileURLToPath(import.meta.url)),
+            "..",
+            "..",
+        );
+        const result = await promisify(execFile)(
+            process.execPath,
+            [
+                "--test",
+                "--test-reporter=tap",
+                path.join(
+                    pluginRoot,
+                    "scripts",
+                    "test",
+                    "checkpoint-c-package.spec.mjs",
+                ),
+            ],
+            { cwd: pluginRoot, timeout: 60_000 },
+        );
+        expect(result.stdout).toContain("# fail 0");
+    }, 65_000);
+
     it.each([
         ["agent", []],
         ["workspace", ["--workspace"]],
@@ -274,10 +298,32 @@ describe("staged plugin artifact", () => {
                     mcpRouting: "mixed",
                     powershell: { enabled: false },
                 });
+                for (const owner of ["plugin", "typeagent"]) {
+                    const recipeOwner = await runHook(
+                        `@typeagent recipe owner ${owner}`,
+                    );
+                    expect(recipeOwner.handled).toBe(true);
+                    expect(recipeOwner.responseContent).toContain(
+                        `Recipe owner: ${owner}.`,
+                    );
+                    expect(recipeOwner.modifiedPrompt).toBeUndefined();
+                    expect(recipeOwner.additionalContext).toBeUndefined();
+                    expect(connections).toBe(0);
+                }
+                const prompt =
+                    "Compare PRs #3058, #3059, and #2993 and recommend smoke tests.";
+                for (const policy of ["mixed", "delegate"]) {
+                    await runHook(`@typeagent mode mcp ${policy}`);
+                    const output = await runHook(prompt);
+                    expect(output.modifiedPrompt).toBe(prompt);
+                    expect(output.additionalContext).toContain(
+                        "TypeAgent is the preferred action provider in MCP mode",
+                    );
+                }
                 const recipeStatus = await runHook("@typeagent recipe status");
                 expect(recipeStatus.handled).toBe(true);
-                expect(recipeStatus.responseContent).toContain(
-                    "Plugin-local program execution is not enabled.",
+                expect(recipeStatus.responseContent).toMatch(
+                    /\S/,
                 );
                 expect(recipeStatus.modifiedPrompt).toBeUndefined();
                 expect(recipeStatus.additionalContext).toBeUndefined();

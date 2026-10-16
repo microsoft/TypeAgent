@@ -148,6 +148,15 @@ export function assertLearningRecipe(
 ): void {
     assertLearningValue(recipe);
     if (
+        recipe.programRequirements !== undefined &&
+        (!Array.isArray(recipe.programRequirements) ||
+            recipe.programRequirements.length > 100 ||
+            recipe.programRequirements.some(
+                (item) => typeof item !== "string" || !item.trim(),
+            ))
+    )
+        throw new Error("Invalid deferred program requirements.");
+    if (
         recipe.schemaVersion !== 1 ||
         recipe.traceId !== traceId ||
         recipe.request !== trace.prompt ||

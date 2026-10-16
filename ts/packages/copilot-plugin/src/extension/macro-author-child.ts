@@ -200,6 +200,14 @@ async function correlateChild(
     }
 }
 
+function assertAuthorChildLifecycle(
+    condition: unknown,
+    message: () => string,
+): asserts condition {
+    if (!condition)
+        throw new MacroAuthorChildError("uncorrelated-result", message());
+}
+
 /**
  * Uses synchronous native task execution, never a background parent continuation or
  * session.abort(). The returned text is untrusted and still requires validation.
@@ -237,6 +245,10 @@ async function launchAuthorChild(
     let completedEventId: string | undefined;
     let selectedToolsDisabled = false;
     let invalidChild = false;
+    let observeCompletion: () => void = () => {};
+    const completion = new Promise<void>((resolve) => {
+        observeCompletion = resolve;
+    });
     let stopped: MacroAuthorChildError | undefined;
     let cancelPromise: Promise<unknown> | undefined;
     const cancelChild = () => {
@@ -274,6 +286,7 @@ async function launchAuthorChild(
             selectedToolsDisabled =
                 Array.isArray(event.data.tools) &&
                 event.data.tools.length === 0;
+            invalidChild ||= !selectedToolsDisabled;
         }
         if (
             event.type === "subagent.completed" &&
@@ -284,12 +297,14 @@ async function launchAuthorChild(
                 event.data.toolCallId !== toolCallId ||
                 event.data.totalToolCalls !== 0;
             completedEventId = event.id;
+            observeCompletion();
         }
         if (
             event.type === "subagent.failed" ||
             event.type === "tool.execution_start"
         ) {
             invalidChild = true;
+            observeCompletion();
         }
     });
     let rejectStop: (error: Error) => void = () => {};
@@ -335,18 +350,18 @@ async function launchAuthorChild(
             throw stopped;
         }
         const text = successfulText(result);
-        if (
-            invalidChild ||
-            !selectedToolsDisabled ||
-            !startedEventId ||
-            !completedEventId ||
-            !childId
-        ) {
-            throw new MacroAuthorChildError(
-                "uncorrelated-result",
-                "Host did not prove a tools-disabled synchronous child completion matching the exact supplied prompt and native result.",
-            );
-        }
+        const proofMessage = () =>
+            `Host did not prove a tools-disabled synchronous child completion matching the exact supplied prompt and native result (invalid=${invalidChild}, toolsDisabled=${selectedToolsDisabled}, started=${Boolean(startedEventId)}, completed=${Boolean(completedEventId)}, child=${Boolean(childId)}).`;
+        assertAuthorChildLifecycle(
+            !invalidChild && selectedToolsDisabled && startedEventId && childId,
+            proofMessage,
+        );
+        // The native RPC response can precede its completion notification.
+        await Promise.race([completion, stopPromise]);
+        assertAuthorChildLifecycle(
+            !invalidChild && completedEventId,
+            proofMessage,
+        );
         await correlateChild(session, {
             childId,
             profileId,

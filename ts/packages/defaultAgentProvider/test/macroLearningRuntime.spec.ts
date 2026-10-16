@@ -498,6 +498,30 @@ describe("macro learning runtime", () => {
         expect(query).toHaveBeenCalledTimes(1);
     });
 
+    it.each([false, true])(
+        "retains deferred obligations even when the builder omits them (correction: %s)",
+        async (correction) => {
+            const { recording, baseline, recipe, build } = await buildFixture();
+            const requirement =
+                "Classify the captured message by meaning and return its sentiment";
+            const query = jest.fn<MacroLearningQuery>();
+            if (correction) {
+                const invalid = structuredClone(build);
+                invalid.requests[2] = "Open the workspace configuration for me";
+                query.mockResolvedValueOnce(JSON.stringify(invalid));
+            }
+            query.mockResolvedValueOnce(JSON.stringify(build));
+            const result = await createMacroLearningRuntime(query).build(
+                { ...recipe, programRequirements: [requirement] },
+                recording,
+                baseline,
+                new AbortController().signal,
+            );
+            expect(result.unsupportedOutputs).toEqual([requirement]);
+            expect(query).toHaveBeenCalledTimes(correction ? 2 : 1);
+        },
+    );
+
     it("corrects a variant that omits a required filename once", async () => {
         const { recording, baseline, recipe, build } = await buildFixture();
         const invalid = structuredClone(build);

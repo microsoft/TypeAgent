@@ -18,6 +18,7 @@ export function sealMacroChildCapture(
     boundary: MacroChildCapture,
     mode: MacroLearningMode,
     retainedTrace = trace,
+    profileId = "typeagent",
 ) {
     assertLearningTrace(trace);
     for (const value of Object.values(boundary))
@@ -36,7 +37,7 @@ export function sealMacroChildCapture(
         );
     const scope = {
         workspaceId: path.resolve(trace.cwd).toLowerCase(),
-        profileId: "typeagent",
+        profileId,
     };
     const outputId = `${traceId}:final-output`;
     return sealRecipeAuthoringContext(

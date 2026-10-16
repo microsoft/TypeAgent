@@ -12,6 +12,7 @@ import {
     type SessionCaptureDependencies,
 } from "../src/extension/session-capture.js";
 import type { ExtensionSessionEvent } from "../src/extension/trace-assembler.js";
+import { normalizeNativeRecipeResult } from "../src/extension/recipe-native-host.js";
 
 function event(
     type: string,
@@ -50,14 +51,25 @@ describe("extension session capture", () => {
                 expect(summary.traceId).toBeTruthy();
                 expect(summary.toolCallCount).toBe(1);
             });
-            const deps = dependencies(async () => ({
+            const deps: SessionCaptureDependencies = dependencies(async () => ({
                 getMacroRecordingState: async () =>
                     manager.getRecordingState("session-finalized"),
-                finalizeMacroRecording: async (request) =>
-                    manager.finalizeRecording(request),
+                finalizeMacroRecording: async (request) => {
+                    expect(request.trace.toolCalls[0].name).toBe("fetch");
+                    expect(request.trace.toolCalls[0].mcpServerName).toBe(
+                        "workiq",
+                    );
+                    expect(request.trace.toolCalls[0].result).toEqual({});
+                    return manager.finalizeRecording(request);
+                },
                 failMacroRecording: async () => {},
                 close: async () => {},
             }));
+            deps.resolveToolIdentity = async (toolName, mcpServerName) => ({
+                toolName: toolName === "workiq-fetch" ? "fetch" : toolName,
+                ...(mcpServerName ? { mcpServerName } : {}),
+            });
+            deps.normalizeToolResult = normalizeNativeRecipeResult;
             const capture = new SessionCapture(
                 "session-finalized",
                 directory,

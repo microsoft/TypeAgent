@@ -11,7 +11,8 @@ import {
     getModeDescription,
     handleModeSetting,
 } from "../shared/mode-command.js";
-import { connectToAgentServer } from "../shared/typeagent-client.js";
+import { connectToMacroOwner } from "../shared/macro-owner.js";
+import { recipeOwnerSetting } from "../shared/recipe-owner-command.js";
 import { cancelMacroWork, learningSetting } from "../shared/macro-learning.js";
 import { publishControlMetadata } from "../shared/control-metadata.js";
 import { spawnSync } from "node:child_process";
@@ -87,6 +88,12 @@ export function createExtensionCommands(
 ): CommandDefinition[] {
     return [
         {
+            name: "typeagent-recipe-owner",
+            description:
+                "Show or select recipe ownership: plugin, typeagent, off; restart after changing",
+            handler: async ({ args }) => log(recipeOwnerSetting(args)),
+        },
+        {
             name: "typeagent-status",
             description: "Show TypeAgent configuration and connection details",
             handler: async ({ args }) =>
@@ -106,14 +113,17 @@ export function createExtensionCommands(
             name: "typeagent-macro-learning",
             description:
                 "Show or set workspace macro learning: off, prepare, read-only, all",
-            handler: async ({ args }) =>
-                log(await learningSetting(process.cwd(), args)),
+            handler: async ({ args, sessionId }) =>
+                log(await learningSetting(process.cwd(), args, sessionId)),
         },
         {
             name: "typeagent-macro-status",
             description: "Show recording and background macro learning status",
             handler: async ({ sessionId }) => {
-                const connection = await connectToAgentServer();
+                const connection = await connectToMacroOwner(
+                    process.cwd(),
+                    sessionId,
+                );
                 try {
                     const state =
                         await connection.getMacroRecordingState(sessionId);
@@ -141,7 +151,10 @@ export function createExtensionCommands(
                         "Task execution is unavailable in this extension session.",
                     );
                 }
-                const connection = await connectToAgentServer();
+                const connection = await connectToMacroOwner(
+                    process.cwd(),
+                    sessionId,
+                );
                 try {
                     const token = await connection.armMacroRecording({
                         sessionId,

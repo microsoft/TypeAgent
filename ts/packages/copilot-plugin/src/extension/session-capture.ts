@@ -31,6 +31,11 @@ interface ToolMetadata {
 }
 
 export interface SessionCaptureDependencies {
+    normalizeToolResult?: (result: unknown) => unknown;
+    resolveToolIdentity?: (
+        toolName: string,
+        mcpServerName?: string,
+    ) => Promise<ToolMetadata>;
     connectAgentServer: () => Promise<
         Pick<
             AgentServerConnection,
@@ -169,7 +174,12 @@ export class SessionCapture {
         ) => Promise<void> = async () => {},
         private readonly useChildAuthoring = false,
     ) {
-        this.assembler = new ExtensionTraceAssembler(sessionId, cwd, true);
+        this.assembler = new ExtensionTraceAssembler(
+            sessionId,
+            cwd,
+            true,
+            dependencies.normalizeToolResult,
+        );
     }
 
     public enqueue(event: ExtensionSessionEvent & { id?: string }): void {
@@ -234,6 +244,19 @@ export class SessionCapture {
         event: ExtensionSessionEvent & { id?: string },
     ): Promise<void> {
         if (event.agentId && event.type === "session.idle") return;
+        if (
+            event.type === "tool.execution_start" &&
+            this.dependencies.resolveToolIdentity &&
+            typeof event.data.toolName === "string"
+        ) {
+            const identity = await this.dependencies.resolveToolIdentity(
+                event.data.toolName,
+                typeof event.data.mcpServerName === "string"
+                    ? event.data.mcpServerName
+                    : undefined,
+            );
+            event = { ...event, data: { ...event.data, ...identity } };
+        }
         this.assembler.record(event);
         const key = toolCallKey(event);
         if (event.type === "tool.execution_start" && key) {

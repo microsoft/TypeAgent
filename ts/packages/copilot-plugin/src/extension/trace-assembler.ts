@@ -78,6 +78,7 @@ export class ExtensionTraceAssembler {
         private readonly sessionId: string,
         private readonly cwd: string,
         private readonly retainPrivateResults = false,
+        private readonly normalizeToolResult?: (result: unknown) => unknown,
     ) {}
 
     public record(event: ExtensionSessionEvent): void {
@@ -262,7 +263,11 @@ export class ExtensionTraceAssembler {
         const call = turn.calls.get(key);
         if (!call || turn.completedCalls.has(key)) return;
 
-        const actualResult = event.data.result ?? event.data.error;
+        const rawResult = event.data.result ?? event.data.error;
+        const actualResult =
+            event.data.success !== false && this.normalizeToolResult
+                ? this.normalizeToolResult(rawResult)
+                : rawResult;
         call.result = this.retainPrivateResults
             ? structuredClone(actualResult)
             : redactTraceValue(actualResult);
