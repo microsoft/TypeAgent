@@ -207,6 +207,7 @@ const capture = new SessionCapture(
               connectAgentServer: async () => localRecipes.connection,
               resolveToolIdentity: localRecipes.resolveToolIdentity,
               normalizeToolResult: localRecipes.normalizeToolResult,
+              prepareTrace: localRecipes.prepareTrace,
               insertToolHistory: async () => {},
               insertTurnHistory: async () => {},
           }

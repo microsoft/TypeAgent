@@ -9,6 +9,8 @@ import { dirname, join } from "node:path";
 import {
     localRecipeDirectory,
     localRecipeEndpoint,
+    localRecipeScope,
+    localRecipeSessionEndpoint,
 } from "./recipe-local-paths.js";
 
 const maxPacketBytes = 8 * 1024 * 1024;
@@ -18,6 +20,8 @@ interface Endpoint {
     token: string;
     sessionId: string;
     pid: number;
+    workspaceId: string;
+    profileId: string;
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -35,6 +39,9 @@ function parseEndpoint(text: string): Endpoint {
         typeof value.token !== "string" ||
         !/^[a-f0-9]{64}$/.test(value.token) ||
         typeof value.sessionId !== "string" ||
+        typeof value.workspaceId !== "string" ||
+        !value.workspaceId.trim() ||
+        typeof value.profileId !== "string" ||
         typeof value.pid !== "number" ||
         !Number.isSafeInteger(value.pid) ||
         value.pid <= 0
@@ -46,7 +53,23 @@ function parseEndpoint(text: string): Endpoint {
         token: value.token,
         sessionId: value.sessionId,
         pid: value.pid,
+        workspaceId: value.workspaceId,
+        profileId: value.profileId,
     };
+}
+
+export async function resolveLocalRecipeWorkspace(
+    sessionId: string,
+): Promise<string> {
+    const endpoint = parseEndpoint(
+        await readFile(localRecipeSessionEndpoint(sessionId), "utf8"),
+    );
+    if (
+        endpoint.sessionId !== sessionId ||
+        endpoint.profileId !== localRecipeScope(process.cwd()).profileId
+    )
+        throw new Error("Local recipe session/profile binding changed.");
+    return endpoint.workspaceId;
 }
 
 function readPacket(socket: Socket, consume: (value: unknown) => void): void {
@@ -86,6 +109,12 @@ export async function callLocalRecipe(
     );
     if (endpoint.sessionId !== sessionId)
         throw new Error("Local recipe session binding changed.");
+    const scope = localRecipeScope(cwd);
+    if (
+        endpoint.workspaceId !== scope.workspaceId ||
+        endpoint.profileId !== scope.profileId
+    )
+        throw new Error("Local recipe workspace/profile binding changed.");
     const validAddress =
         process.platform === "win32"
             ? /^\\\\\.\\pipe\\typeagent-recipes-[a-f0-9-]{36}$/.test(
@@ -164,6 +193,7 @@ export async function startLocalRecipeBroker(
     const directory = localRecipeDirectory(cwd);
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const endpointFile = localRecipeEndpoint(cwd, sessionId);
+    const sessionFile = localRecipeSessionEndpoint(sessionId);
     const token = randomBytes(32).toString("hex");
     const address =
         process.platform === "win32"
@@ -175,6 +205,7 @@ export async function startLocalRecipeBroker(
         token,
         sessionId,
         pid: process.pid,
+        ...localRecipeScope(cwd),
     };
     const text = JSON.stringify(endpoint);
     const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as {
@@ -273,8 +304,14 @@ export async function startLocalRecipeBroker(
         const temporary = `${endpointFile}.${randomUUID()}.tmp`;
         await writeFile(temporary, text, { flag: "wx", mode: 0o600 });
         await rename(temporary, endpointFile);
+        await mkdir(dirname(sessionFile), { recursive: true, mode: 0o700 });
+        const sessionTemporary = `${sessionFile}.${randomUUID()}.tmp`;
+        await writeFile(sessionTemporary, text, { flag: "wx", mode: 0o600 });
+        await rename(sessionTemporary, sessionFile);
     } catch (error) {
         if (server.listening) server.close();
+        await removeOwned(endpointFile);
+        await removeOwned(sessionFile);
         lease.close();
         throw error;
     }
@@ -291,6 +328,7 @@ export async function startLocalRecipeBroker(
                 await Promise.all(pending);
                 try {
                     await removeOwned(endpointFile);
+                    await removeOwned(sessionFile);
                 } finally {
                     lease.close();
                 }

@@ -59,6 +59,19 @@ test("canonical macro commands and ordinary misses need no TypeAgent or model", 
     await expect(service.connection.listMacros()).resolves.toEqual([]);
     expect(forbidden).not.toHaveBeenCalled();
 });
+test("MCP resolves its actual native session workspace independently of process cwd", async () => {
+    expect(process.cwd()).not.toBe(directory);
+    const client = await connectToMacroOwner(undefined, "native-session");
+    await expect(client.listMacros()).resolves.toEqual([]);
+    await expect(
+        connectToMacroOwner(undefined, "another-session"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await service.close();
+    await expect(
+        connectToMacroOwner(undefined, "native-session"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(forbidden).not.toHaveBeenCalled();
+});
 test("blocks reflected methods, malformed arguments, cross-session and cross-workspace mutation", async () => {
     await expect(service.dispatch("constructor", [])).rejects.toThrow(
         "Unsupported",

@@ -16,14 +16,17 @@ import { createLocalRecipeService } from "./local-recipe-service.js";
 import {
     captureNativeRecipeBinding,
     createNativeRecipeCapabilityInspector,
-    createNativeRecipeHost,
     sameNativeRecipeBinding,
-    normalizeNativeRecipeResult,
 } from "./recipe-native-host.js";
 import {
     createStandaloneNativeRecipeModels,
     nativeRecipeModelPolicy,
 } from "./recipe-native-model.js";
+import {
+    createNativeTypeAgentRecipeHost,
+    createTypeAgentRecordingNormalizer,
+} from "./recipe-typeagent-host.js";
+import { createNativeTypeAgentInteraction } from "./recipe-typeagent-interaction.js";
 
 export async function createPluginLocalRecipes(
     session: CopilotSession,
@@ -37,6 +40,7 @@ export async function createPluginLocalRecipes(
             "The joined native session belongs to another workspace.",
         );
     const policy = { readOnlyMcpTools: getRecipeReadOnlyMcpTools() };
+    const recording = createTypeAgentRecordingNormalizer();
     const currentBinding = async () => {
         const current = await captureNativeRecipeBinding(
             session,
@@ -57,12 +61,24 @@ export async function createPluginLocalRecipes(
         step: Parameters<
             ReturnType<typeof createNativeRecipeCapabilityInspector>
         >[0],
-    ) =>
-        createNativeRecipeCapabilityInspector(
+    ) => {
+        const bridge = createNativeTypeAgentRecipeHost(
             session,
             await currentBinding(),
+            {
+                invokeSemantic: async () => ({
+                    status: "unsupported",
+                    message: "Discovery cannot invoke models.",
+                }),
+            },
             policy,
-        )(step);
+        );
+        try {
+            return await bridge.inspectTool(step);
+        } finally {
+            await bridge.dispose();
+        }
+    };
     const cliPath = getRecipeInferenceCliPath();
     const models = await createStandaloneNativeRecipeModels(
         session,
@@ -136,7 +152,7 @@ export async function createPluginLocalRecipes(
                             ),
                         ]),
                     );
-                    const host = createNativeRecipeHost(
+                    const bridge = createNativeTypeAgentRecipeHost(
                         session,
                         executionBinding,
                         {
@@ -157,28 +173,37 @@ export async function createPluginLocalRecipes(
                             },
                         },
                         policy,
+                        createNativeTypeAgentInteraction(
+                            session,
+                            executionBinding,
+                        ),
                     );
-                    return executeRecipeProgram(
-                        artifact,
-                        input,
-                        {
-                            runId: context.runId,
-                            signal: context.signal,
-                            binding: executionBinding,
-                            host,
-                        },
-                        {
-                            timeoutMs: context.timeoutMs,
-                            onCheckpoint: context.onCheckpoint,
-                        },
-                    );
+                    try {
+                        return await executeRecipeProgram(
+                            artifact,
+                            input,
+                            {
+                                runId: context.runId,
+                                signal: context.signal,
+                                binding: executionBinding,
+                                host: bridge.host,
+                            },
+                            {
+                                timeoutMs: context.timeoutMs,
+                                onCheckpoint: context.onCheckpoint,
+                            },
+                        );
+                    } finally {
+                        await bridge.dispose();
+                    }
                 },
             },
         });
         let closing: Promise<void> | undefined;
         return {
             ...local,
-            normalizeToolResult: normalizeNativeRecipeResult,
+            normalizeToolResult: recording.normalizeToolResult,
+            prepareTrace: recording.prepareTrace,
             async resolveToolIdentity(
                 toolName: string,
                 mcpServerName?: string,
@@ -218,6 +243,7 @@ export async function createPluginLocalRecipes(
                     try {
                         await local.close();
                     } finally {
+                        recording.clear();
                         await models.dispose();
                     }
                 })();

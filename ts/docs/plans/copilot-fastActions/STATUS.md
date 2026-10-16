@@ -23,10 +23,30 @@ standalone symbolic/hybrid proof; broader release gates remain explicit.
 | Copilot child authorship (B)                                 | implemented; native scope proved                      | Explicit root success receipt, sealed context, durable leases, independent TypeAgent verifier, same compiler/publication/executor; see B evidence below |
 | Standalone symbolic/hybrid release (P7/C)                    | native opt-in checkpoint proved; release gates remain | Actual copied production plugin, symbolic/hybrid fresh execution, MCP reuse and ready-artifact restart; no VS Code/performance certification            |
 
-The optional TypeAgent program adapter now has 39 passing offline protocol
-tests covering discovery, preflight, execution, continuation, and cancellation.
-It uses the existing MCP protocol without opening its own backend connection.
-Live mixed-recipe execution remains gated on P3 and designated-backend tests.
+The optional TypeAgent program adapter is now composed into the plugin-owned
+executable host. Stable read-only action identities replace recorded protocol
+scopes; all dependencies are preflighted before the first program dispatch.
+Existing MCP tools run through native permissions without an extension-owned
+backend connection. Offline integration tests cover mixed execution, missing and
+changed dependencies, fresh scopes, structured statuses, actual-user fixture
+continuation/cancellation, and lost replies without retry.
+
+Native mixed recording, restricted authoring, approved publication and MCP reuse
+have passed against an isolated real Dispatcher with synthetic read-only data.
+The retained 256.3-second OBS recording has decoded readable request/result
+frames and a fully decoded silent audio track. The final repeat made exactly one
+root `run_macro` call and one fresh Vega backend action, with two read checkpoints,
+zero semantic calls and no fallback. See the
+[P6 validation report](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/typeagent-bridge-native-validation.md)
+for the exact proof and failure history.
+
+Live testing fixed Copilot's plugin-directory MCP working directory through
+private session/profile workspace registration, clarified strict child builder
+output fields, and removed a duplicate discovery that exceeded the inspection
+deadline. Final validation passed the full workspace build, 415 core tests,
+521 plugin tests and 15 layout/launcher tests, plus the four ratchets and actual
+working-tree lint/complexity checks. Live interaction UI, rich forms/proposals,
+writes and VS Code remain separate gates; no performance claim is made.
 
 Final validation of these foundations passed the full workspace build,
 379 macro tests, 409 plugin tests, 33 focused grammar tests, and 15

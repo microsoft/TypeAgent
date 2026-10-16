@@ -31,7 +31,13 @@ interface ToolMetadata {
 }
 
 export interface SessionCaptureDependencies {
-    normalizeToolResult?: (result: unknown) => unknown;
+    prepareTrace?: (
+        trace: RecordedInteractionTrace,
+    ) => RecordedInteractionTrace;
+    normalizeToolResult?: (
+        result: unknown,
+        call?: { name: string; mcpServerName?: string },
+    ) => unknown;
     resolveToolIdentity?: (
         toolName: string,
         mcpServerName?: string,
@@ -331,9 +337,23 @@ export class SessionCapture {
                         !this.useChildAuthoring ||
                         childAuthoring?.recordingTokenId === selectedToken.id)
                 ) {
+                    let preparedTrace = trace;
+                    try {
+                        preparedTrace =
+                            this.dependencies.prepareTrace?.(trace) ?? trace;
+                    } catch (error) {
+                        await connection.failMacroRecording(
+                            this.sessionId,
+                            selectedToken.id,
+                            error instanceof Error
+                                ? error.message
+                                : "Recording normalization failed.",
+                        );
+                        throw error;
+                    }
                     const summary = await connection.finalizeMacroRecording({
                         tokenId: selectedToken.id,
-                        trace,
+                        trace: preparedTrace,
                         ...(selectedToken.learning &&
                         this.useChildAuthoring &&
                         childAuthoring

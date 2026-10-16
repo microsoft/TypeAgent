@@ -78,7 +78,10 @@ export class ExtensionTraceAssembler {
         private readonly sessionId: string,
         private readonly cwd: string,
         private readonly retainPrivateResults = false,
-        private readonly normalizeToolResult?: (result: unknown) => unknown,
+        private readonly normalizeToolResult?: (
+            result: unknown,
+            call?: Pick<RecordedToolCall, "name" | "mcpServerName">,
+        ) => unknown,
     ) {}
 
     public record(event: ExtensionSessionEvent): void {
@@ -266,7 +269,7 @@ export class ExtensionTraceAssembler {
         const rawResult = event.data.result ?? event.data.error;
         const actualResult =
             event.data.success !== false && this.normalizeToolResult
-                ? this.normalizeToolResult(rawResult)
+                ? this.normalizeToolResult(rawResult, call)
                 : rawResult;
         call.result = this.retainPrivateResults
             ? structuredClone(actualResult)
