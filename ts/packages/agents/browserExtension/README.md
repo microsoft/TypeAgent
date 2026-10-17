@@ -109,8 +109,7 @@ all PDF layouts or full-book performance.
 
 See [PDF Markdown import boundaries](../browser/docs/pdf-markdown-import.md).
 
-See the [implementation coverage and mandatory remaining gates](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-01_pdf-document-understanding-proposal/implementation-status.md)
-in the sibling codeDocs checkout. Passing offline import/bridge tests does not
+Passing offline import/bridge tests does not
 mean that all PDF work packages or live acceptance scenarios are complete.
 
 ## Trademarks

@@ -618,6 +618,9 @@ Should show `typeagent` under the plugins section.
 
 ## Tool-Composed Macros
 
+See [Checked program macros](../../docs/architecture/workflows/macros.md) for
+the shared lifecycle and runtime. This section covers plugin setup and controls.
+
 Checkpoint A uses TypeAgent to record, author, validate, store, match, and run
 checked code-first programs. Checkpoint B moves selected native Copilot learning
 authorship into restricted children; TypeAgent retains validation and execution.
@@ -632,7 +635,7 @@ calls; hybrid repeats invoke only declared bounded semantic functions.
 `inspect_macro` remains read-only explicit catalog/draft review, not a model-led
 execution prerequisite. All runs validate the current approved revision.
 
-The initial broker supports **read-only MCP tools available to TypeAgent**.
+The initial **TypeAgent-owned** broker supports read-only MCP tools available to TypeAgent.
 Native-only tools, writes, unsupported schemas and provenance requirements fail
 explicitly, without a runner or planner fallback. Existing MCP trust/backend
 permissions, schema checks, containment, cancellation, and uncertainty evidence
@@ -700,6 +703,17 @@ This is **not same-process inference**. It uses ordinary native CLI login and
 checks the actual account/workspace binding. The native executable must be on
 PATH; `TYPEAGENT_RECIPE_CLI_PATH` or config `recipeInferenceCliPath` can select its
 executable path explicitly. No shell or bundled-SDK dependency fallback is used.
+
+The standalone inference facade refreshes tool/MCP registry generations between
+calls while preserving owner identity. It rejects workspace/account changes and
+generation changes during inference; child-only events do not invalidate the
+root. The lower-level static-bound adapter remains strict.
+
+`awaitingAuthor` is durable waiting, not readiness. New user work can preempt the
+owned child and leave its lease recoverable; Off/Cancel cancels pending learning
+and rejects stale replies. An unsupported child host fails explicitly, without
+a default-author fallback. Synchronous task replies alone are insufficient:
+the launcher correlates the exact completion event and retires that child.
 
 The copied distribution includes the real TypeScript libraries, QuickJS worker,
 WASM dependency closure, licenses and asset hashes. Programs still compile and
@@ -773,9 +787,8 @@ child API. [B lifecycle details](../copilot-macros/README.md#checkpoint-b-copilo
 describe context, leases, recovery, and the explicit TypeAgent-only compatibility
 client path.
 
-See [runtime limits](../copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs),
-[phase status](../../docs/plans/copilot-fastActions/STATUS.md), and the
-[historical host evidence](../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/HOST-CAPABILITIES-2026-10-15.md).
+See [runtime limits](../copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs) and
+[phase status](../../docs/plans/copilot-fastActions/STATUS.md).
 Macros are a tool surface in direct/MCP/dev modes, not another routing mode.
 
 ### Learn from one executed task
@@ -918,21 +931,27 @@ job data or create a manual draft to force a retry.
 
 ### Review and run a prepared program
 
-Use mixed MCP mode for lifecycle tools rather than asking `processCommand` to
-create or approve a macro. Selected learning creates the checked candidate.
+Use lifecycle MCP tools rather than asking `processCommand` to create or approve
+a macro. They use the selected owner in direct/MCP/dev modes; bypass disables
+them. Selected learning creates the checked candidate.
 Inspect the returned candidate/version, call `validate_macro`, then explicitly
 `approve_macro` in Prepare mode. Drafts cannot run. Call `run_macro` with the
-current approved macro ID/version, a unique run ID and declared inputs.
+current approved `macroId`, optional `version`, and declared `inputs`. The MCP
+adapter assigns a unique run ID; direct manager callers supply their own.
 `get_macro_run` returns sanitized durable evidence. There is no `preference`
 parameter, manual step-draft creation, or adapted-candidate submission tool.
 
 ### Route approved macros from natural language
 
-Agent-server publishes current approved macros as typed actions in the `macros`
+In TypeAgent ownership, agent-server publishes current approved macros as typed actions in the `macros`
 agent. The macro name/description describe the whole procedure; parameters are
 its declared inputs. The generated action identity pins the macro ID and
 approved version. Drafts, disabled macros, and macros with secret inputs are not
 published on this surface. Explicit macro lifecycle tools remain available.
+
+Plugin ownership instead matches through its local shared manager; it does not
+mirror a catalog into agent-server. Its unmatched requests stay native, while
+accepted/ambiguous failures remain handled without another execution attempt.
 
 For a Direct-mode grammar demo:
 
@@ -1173,7 +1192,7 @@ Try a registered action:
 > show top 5 memory hogs
 ```
 
-To demonstrate flow creation, use a disposable read-only task:
+Flow creation can be requested with disposable read-only data:
 
 ```text
 > learn: show the 3 newest .log files under <PATH>
@@ -1182,9 +1201,12 @@ To demonstrate flow creation, use a disposable read-only task:
 ```
 
 The generated name and output can vary with the configured model. Dynamic
-PowerShell scripts currently run in FullLanguage mode. Cmdlet and path policy
-metadata does not prevent direct .NET access, so do not treat generated or
-imported flows as securely sandboxed.
+PowerShell tests, generated candidates and repairs require the exact script's
+trusted interactive authorization before execution. Model-only MCP clients lack
+that callback and fail closed; this recipe is not a promise of unattended flow
+creation. Use an interactive connected client for dynamic script approval.
+Current-user approved-local execution is not an arbitrary-code sandbox; metadata
+does not prevent .NET access. A denial never falls back to another tool.
 
 **Switch modes:**
 

@@ -1,27 +1,22 @@
 # TypeAgent memory: current system
 
-**Audience:** TypeAgent maintainers, agent authors, and engineers debugging
-memory behavior.
+**Audience:** maintainers, agent authors and engineers debugging integration.
+**Source review:** October 16, 2026, TypeAgent `00748a4be`.
+This is a code/test-contract map, not a new live acceptance run.
 
-This page maps the memory implementation as of October 2026. For the
-Structured RAG concepts, see [Memory architecture](memory.md). For supported
-user journeys, see [Memory scenarios](scenarios.md).
+Start with [Memory architecture](memory.md) for concepts,
+[Derived Views](derived-views.md) for artifact lifecycle, and
+[Scenarios](scenarios.md) for user journeys.
 
 ## Design rules
 
-1. **KnowPro is the only retrieval engine.** Documents, conversations and
-   approved how-tos are searched through KnowPro: structured search first, with
-   KnowPro's own embedding fallback. No component may add a lexical, substring
-   or separate vector search.
-2. **One model-driven `content` pipeline.** There are no basic, fast, balanced
-   or deep modes and no import presets. The only tuning option is chunk size.
-3. **Canonical data is kept, derived data is disposable.** Source revisions,
-   event ledgers, procedure versions and forget tombstones are canonical. Every
-   index is derived and is rebuilt, not migrated, when its schema marker is
-   missing or older.
-4. **Producers capture, the service indexes.** The browser, dispatcher and
-   agents supply content and provenance. Chunking, extraction, indexing and
-   answer generation belong to the memory service.
+1. KnowPro owns content retrieval: structured matching, related terms and
+   configured embedding support. No independent lexical/vector engine is added.
+2. Ingestion uses one model-driven `content` pipeline. There are no import presets.
+3. Retain sources, exact revisions, events, suppression/forget state and explicit
+   human intent. Indexes are derived; editable View history is not disposable.
+4. Producers acquire content/provenance; the service owns indexing, retrieval,
+   answers, derived construction and lifecycle.
 
 ## Runtime topology
 
@@ -29,249 +24,215 @@ user journeys, see [Memory scenarios](scenarios.md).
 flowchart TB
     subgraph Clients
         CHAT[Shell, VS Code, CLI]
-        EXT[Browser extension]
-        MCPCLIENT[External MCP client]
+        EXT[Browser extension and Memory Hub]
+        MCPCLIENT[Configured external MCP client]
     end
-
-    subgraph AgentServer[agent-server profile]
+    subgraph Host[Profile-local service owner]
         CM[ConversationManager]
-        DISP[SharedDispatcher]
-        MEMORYAGENT[Native @memory agent]
-        BROWSER[Browser agent]
-        MCPHOST[Authenticated memory MCP host]
+        DISP[Dispatcher]
+        MEMORY[Native memory agent]
+        BROWSER[Browser agent / RPC facade]
+        MCP[Authenticated loopback MCP host]
         SERVICE[FileMemoryService]
+        KP[KnowPro index adapter]
+        BUILD[View and topic maintenance]
     end
-
-    subgraph DurableStore[Profile durable memory]
-        SOURCES[(Corpora, sources, revisions)]
-        EVENTS[(Event ledgers)]
-        PROCEDURES[(Procedure versions)]
-        JOBS[(Jobs and index generations)]
+    subgraph Store[Owned local store]
+        EVIDENCE[(Sources, revisions, events, jobs)]
+        INDEX[(Derived indexes)]
+        VIEWS[(Views, edits, Topics, private history)]
+        ASSETS[(Revision assets and acquired batches)]
     end
-
     CHAT --> CM --> DISP
     DISP -->|typed events| SERVICE
-    MEMORYAGENT --> SERVICE
-    BROWSER --> SERVICE
-    EXT --> BROWSER
+    MEMORY --> SERVICE
+    EXT --> BROWSER --> SERVICE
     CM -->|searchEvents| SERVICE
-    MCPCLIENT --> MCPHOST --> SERVICE
-    SERVICE --> SOURCES
-    SERVICE --> EVENTS
-    SERVICE --> PROCEDURES
-    SERVICE --> JOBS
+    MCPCLIENT --> MCP --> SERVICE
+    SERVICE --> KP --> INDEX
+    SERVICE --> BUILD --> VIEWS
+    SERVICE --> EVIDENCE
+    SERVICE --> ASSETS
 ```
 
-The agent server (and the in-process host used by the Shell and CLI) creates
-one durable service under `<instanceDir>/memory`, starts an authenticated
-loopback MCP host, and injects an in-process RPC facade into the browser and
-memory agents. The native agent and MCP endpoint are two interfaces to the
-same service.
+The agent server constructs one service under `<instanceDir>/memory`, starts
+the loopback host, and injects service facades into consumers. Native commands
+do not need an HTTP/MCP round trip. The runtime `memory-mcp` agent uses that
+same service with host-managed credentials. This does not establish automatic
+endpoint/token discovery for arbitrary external clients.
 
-Document and procedure searches reuse prepared published index generations.
-Per-corpus shared read reservations allow these searches and document knowledge
-reads to overlap, while index preparation and mutations are exclusive. A queued
-writer blocks later readers, and active reads retain their snapshot through
-their async work. Generation and file-metadata changes invalidate the prepared
-index; schema recovery remains exclusive. Event search keeps its existing
-exclusive access. Queries and model responses are not cached.
+Prepared document searches and knowledge reads can overlap within per-corpus
+read reservations. Mutations and index preparation are exclusive; queued writers
+block later readers, and active readers retain their snapshot. This is not
+multi-process shared ownership. Model calls for View construction run outside
+the serialized commit boundary and are rechecked before materialization.
 
-For opt-in correlated search timings and the cache/shutdown guarantees, see
-[the memory service diagnostics guide](../../../packages/memory/service/README.md#indexed-reads-and-search-diagnostics).
+Sources: [host construction](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/agentServer/server/src/durableMemoryService.ts),
+[server wiring](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/agentServer/server/src/server.ts),
+[service](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/src/fileMemoryService.ts).
+Coverage: [read concurrency](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/readConcurrency.spec.ts).
 
 ## Conversation memory
 
-When a durable service is injected, conversation memory is the **event
-ledger**: the dispatcher is the only live producer. There is no separate
-per-conversation `ConversationMemory` and no separate unified index. At
-start, `initializeMemory` removes any old per-conversation `conversationMemory`
-data and creates a `ConversationDurableMemory` for the conversation.
+With a durable service, the dispatcher writes typed events to
+`typeagent-profile-conversations`; there is no separate per-conversation
+content store or unified content index in that path.
 
-| Event type               | Sender    | Authority label                         |
-| ------------------------ | --------- | --------------------------------------- |
-| `user-turn`              | user      | `user-assertion`                        |
-| `assistant-evidence`     | assistant | `evidence-only`                         |
-| `verified-action-result` | tool      | `verified-observation` (with `outcome`) |
-| `explicit-decision`      | agent     | `explicit`                              |
-| `task-outcome`           | agent     | `evidence-only`                         |
+| Event                    | Authority                                         |
+| ------------------------ | ------------------------------------------------- |
+| `user-turn`              | `user-assertion`                                  |
+| `assistant-evidence`     | `evidence-only`                                   |
+| `verified-action-result` | `verified-observation`, including failure outcome |
+| `explicit-decision`      | `explicit`                                        |
+| `task-outcome`           | `evidence-only`                                   |
 
-All events go to the profile corpus `typeagent-profile-conversations`.
-`@conversation search` calls `searchEvents` on that corpus and groups the
-KnowPro-ranked events by conversation. `@conversation index` imports
-historical user turns from display logs as `user-assertion` events.
-Deleting a conversation purges its ledger events and records a tombstone. The
-design record is `packages/agentServer/server/docs/conversation-memory.md`.
+`@conversation search` groups KnowPro-ranked events by conversation.
+Historical `index` backfills user turns from display logs. Deleting a conversation
+purges its events and records a tombstone. Authority labels distinguish evidence
+classes; they do not certify every stored assertion.
 
-A host without a durable service falls back to the older
-`knowledge-processor` conversation manager plus a KnowPro `ConversationMemory`
-(`execution.memory.legacy`). Content indexing and search in such a host fail
-explicitly instead of reporting success.
+No-service hosts retain the legacy conversation path and explicitly fail
+unsupported durable-content operations. The Copilot memory plugin intentionally
+uses a separate workspace-scoped `ConversationMemory`; do not describe it as
+another facade over this profile store.
 
-The Copilot CLI memory plugin (`packages/copilot-memory-plugin`) keeps its own
-workspace-scoped `ConversationMemory` and is intentionally not connected to the
-durable service. It is one arm of an experiment comparing a self-contained
-plugin with the service-backed MCP path as an externally consumable package.
-
-Primary code:
-
-- `packages/dispatcher/dispatcher/src/context/conversationDurableMemory.ts`
-- `packages/dispatcher/dispatcher/src/context/memory.ts`
-- `packages/dispatcher/dispatcher/src/context/personalMemorySearch.ts`
-- `packages/agentServer/server/src/conversationManager.ts`
-- `packages/agentServer/server/src/conversationSearchIndex.ts` (a facade over
-  the ledger projection plus replay state)
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Dispatcher
-    participant Ledger as Event ledger
-    participant Index as KnowPro event projection
-    participant Manager as ConversationManager
-
-    User->>Dispatcher: conversation turn
-    Dispatcher-->>Ledger: append typed events (async)
-    User->>Dispatcher: @conversation search query
-    Dispatcher->>Manager: searchConversationContent
-    Manager->>Ledger: searchEvents
-    Ledger->>Index: reconcile, structured search
-    Index-->>Manager: ranked events
-    Manager-->>User: conversations and snippets
-```
+Sources: [durable conversation adapter](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/context/conversationDurableMemory.ts),
+[initialization](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/context/memory.ts),
+[conversation manager](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/agentServer/server/src/conversationManager.ts).
+Coverage: [conversation integration](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/test/conversationMemoryIntegration.spec.ts).
 
 ## Durable corpus memory
 
-`FileMemoryService` owns source content and revisions, extraction, chunks,
-index generations, event ledgers, jobs, grounded evidence, correction,
-forgetting, and personal procedures.
+The service owns corpora, source revisions, jobs, events, search/answers,
+source synopses, revision assets, acquired batches, Changes receipts and
+derived Views. It does not own saved-procedure CRUD or promotion.
 
-Ingestion accepts only `content` mode. Revisions record their pipeline
-settings, but the stored mode is not used to choose behavior: a legacy
-revision is reported as `content` and rebuilt with the current pipeline.
+Source types include web, Markdown, text, HTML and VTT. Acquisition adapters
+normalize other input formats before ingestion; a diagram's PDF label is not
+a separate `SourceType` or a claim about every importer.
 
-Each derived index generation (`documents`, `conversation-events`,
-`procedures`) contains `index-schema.json` (`indexSchemaVersion` 1, engine
-`knowpro`). A missing or older descriptor, or a current generation without
-valid semantic data, triggers a scoped reset and a rebuild from canonical
-records. A malformed descriptor or a newer version is an explicit error and
-the generation is left in place.
-
-Primary code:
-
-- `packages/memory/service/src/fileMemoryService.ts`
-- `packages/memory/service/src/knowProCorpusIndex.ts`
-- `packages/memory/service/src/indexSchema.ts`
-- `packages/memory/service/src/types.ts`
-- `packages/memory/client/src/memoryClient.ts`
-- `packages/memory/mcp-server/src/memoryMcpServer.ts`
-- `packages/agents/memory/src/memoryAgent.ts`
+Missing/older derived-index schema descriptors trigger scoped reset/rebuild.
+Malformed or newer descriptors fail explicitly. Inspect the current
+[schema contract](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/src/indexSchema.ts)
+rather than copying a schema version into integration code.
 
 ## Producers and consumers
 
-| Producer or consumer | Data written or read                                                                     | Boundary                                                                      |
-| -------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Dispatcher           | Conversation turns, assistant evidence, verified action results, decisions, outcomes     | Fixed profile corpus; no caller-selected cross-profile corpus                 |
-| Browser agent        | Web sources plus visited, bookmarked, captured, imported events                          | Browser captures and normalizes; service chunks and extracts                  |
-| Native memory agent  | Markdown files and folders, corpus and source management, search and answers             | Host validates local paths; service never receives arbitrary filesystem paths |
-| MCP clients          | Content-oriented ingestion and management APIs                                           | Authenticated loopback transport                                              |
-| Procedure clients    | Candidates, immutable versions, settings, search, archive                                | Procedures persist independently from source manifests                        |
-| Reasoning agents     | `search_memory` over conversation events, all non-conversation corpora, saved procedures | Read only; evidence is untrusted text                                         |
+| Surface               | Actual role                                                                          | Boundary                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| Native `@memory`      | Corpora, secure local Markdown import, search/ask, source/job management and Changes | Host reads paths; not a command for every View method                    |
+| Dispatcher/reasoning  | Typed conversation events; conversation and saved-document recall                    | No saved-procedure or derived-View branch is implied                     |
+| Browser/Memory Hub    | Capture/import, evidence browsing, Views, maintenance, Topics and editorial controls | Requests route to the owning service; browser is not a second store      |
+| RPC/in-process client | Typed source, View and maintenance operations                                        | Head/version guards and capability checks remain authoritative           |
+| MCP                   | Content ingestion, management, Views, Topics and maintenance tools                   | Authenticated host transport; standalone owner configuration is separate |
+
+Sources: [native agent](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/agents/memory/README.md),
+[reasoning search](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/context/personalMemorySearch.ts),
+[View tools](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/mcp-server/src/viewTools.ts),
+[client](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/client/src/memoryClient.ts).
 
 ## Source and event lifecycle
 
-```mermaid
-stateDiagram-v2
-    [*] --> Submitted
-    Submitted --> Indexing
-    Indexing --> Active: complete or partial
-    Indexing --> Failed
-    Indexing --> Cancelled
-    Active --> Replacing: expected revision + preview token
-    Replacing --> Active: publish new generation
-    Active --> Forgetting: preview token
-    Forgetting --> Forgotten: publish rebuilt generation
-    Active --> Reindexing
-    Reindexing --> Active
-```
+Ingestion retains exact revision identity and a durable job. Replacement uses
+expected revisions; source forgetting requires preview/confirmation. Authorized
+removal is durably enrolled before cleanup, with corpus content reads withheld
+until source/index/View/history/assets/batch/context cleanup completes.
+Late model work cannot reintroduce removed evidence. Restart/reconciliation
+resumes incomplete removal.
 
-Sources are authoritative evidence. Entities, topics, relationships, chunks,
-and summaries are derived and rebuilt from the active source revision.
-Replacement rejects stale expected revisions. Forget confirmation survives a
-service restart and removes source-derived artifacts together.
+Events retain producer/idempotency, authority, time and optional source/
+conversation/run/turn provenance. Event forgetting writes tombstones and purges
+dependent Views, including event-backed timelines, without requiring deletion of
+an independently retained linked source.
 
-Events are append-only records with producer identity, idempotency key,
-observed and event times, and optional conversation, run, turn, sender, action,
-and linked-source provenance. Events can be filtered or forgotten without
-rebuilding the document index. Forgetting writes suppression tombstones that
-survive restart. Linked sources are retained unless deletion is explicit and no
-retained event references them.
+See [History and forgetting](derived-views.md#history-and-forgetting).
+Coverage: [source acquisition](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/sourceAcquisition.spec.ts),
+[maintenance foundation](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/maintenanceFoundation.spec.ts).
 
 ## Search and answer semantics
 
-| Surface                          | Search unit                                                         | Result contract                                                                                                                                                                                |
-| -------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@conversation search`           | Ledger events (KnowPro projection)                                  | Ranked conversations with snippets                                                                                                                                                             |
-| Reasoning `search_memory`        | Conversation events, corpus evidence, saved procedures, in parallel | Cited evidence sections                                                                                                                                                                        |
-| Durable `search`                 | Corpus evidence constrained by source and tag filters               | Source-linked evidence matches                                                                                                                                                                 |
-| Durable `answer` / `@memory ask` | KnowPro evidence for the question                                   | **Synthesized** answer by default, generated by KnowPro's answer generator over the evidence, with citations. `answerMode: "extractive"` (`--extractive`) returns the ranked snippets verbatim |
-| Event search                     | Event content and provenance filters                                | Ranked typed events                                                                                                                                                                            |
-| Procedure search                 | Saved procedure versions                                            | Versioned procedural guidance                                                                                                                                                                  |
+| Surface                         | Evidence/result                                                             |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `@conversation search`          | Events ranked then grouped into conversation results                        |
+| Reasoning `search_memory`       | Conversation recall and non-conversation corpus source searches in parallel |
+| Durable `search`                | Source-linked evidence, optional source/tag/capture-date constraints        |
+| Durable `answer` / native `ask` | Synthesized answer by default; extractive request returns evidence snippets |
+| `searchViews`                   | Current eligible, exact published **and** indexed derived revisions         |
+| `queryTopics`                   | Maintained navigation nodes with original evidence and explicit limits      |
 
-Synthesized answers can be scoped with `sourceIds`; the answer context is then
-built only from matched messages of those sources. A failure to generate an
-answer is an error, not a silent switch to extractive output. Index
-implementations without answer support (test fakes) return extractive answers
-unless synthesis is requested explicitly.
+When informational support is enabled, non-extractive `answer` retrieves bounded
+indexed fragments and calls `answerIndexedEvidence`, then rechecks exact citation
+eligibility before delivery. Otherwise the configured corpus-index answer path
+uses KnowPro answer support. Synthesis failure is an error, not a silent
+extractive success. Test adapters without answer support are not product fallback
+implementations.
 
-The browser page Q&A path uses the same service answer, scoped to the matching
-page sources.
+`dateFrom`/`dateTo` on source search filter active capture dates before the result
+limit. Unknown capture dates do not become indexing dates. Do not infer claim
+validity time, event time or identical filters on every answer API.
 
-Assistant prose in conversation events is evidence-only. User assertions,
-explicit decisions, and verified tool results carry stronger authority labels;
-retrieval presents the label with each snippet and does not turn unsupported
-assistant text into a verified fact.
+Synopses are revision-bound generated previews with status and fidelity limits,
+not independent evidence. Derived Views are not corroborating sources. Hub
+source/derived search does not establish the same routing in reasoning tools.
+
+Sources: [service types](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/src/types.ts),
+[indexed locators](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/src/indexedFragments.ts),
+[answer dispatch](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/src/fileMemoryService.ts).
+
+## Views, defaults and maintenance
+
+Views and informational Wiki/Projects are default-on. Host options can disable
+Views or informational work independently; invalid environment settings fail.
+Configured provider constraints are separate from rehearsal budgets.
+
+Indexed families discover/refresh after indexing, defer automatic work while a
+durable bulk import is active, and reconcile on startup and a 30-second sweep.
+This interval repairs dirty hints; it is not a completion SLA. Pause/resume,
+no-op, retry/parking and explicit timeline/troubleshooting maintenance are
+described in [View maintenance](view-maintenance.md).
+
+Sources: [options](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/src/viewHostOptions.ts),
+[capability parsing](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/src/viewBuildValidation.ts).
+Coverage: [host options](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/viewHostOptions.spec.ts),
+[batch maintenance](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/batchMaintenance.spec.ts).
+
+## Storage and ownership
+
+The service-owned store includes source manifests/revisions, event ledgers,
+ingestion jobs and derived index generations. Revision-owned assets and acquired
+batch state are independent from Views.
+
+Each corpus's `views` directory contains a private bare `view-history.git`.
+Committed snapshots hold typed Views, generated bases, edits, conflicts,
+publication/maintenance state and Topics. `refs/heads/typeagent-history` is the
+commit boundary. Per-revision derived search indexes remain separate.
+The conversation registry/replay metadata is not a competing content store.
+
+See [View history](derived-views.md#history-and-forgetting) and the
+[service operational guide](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/README.md).
 
 ## Degraded behavior and failure modes
 
-- Searching and answering need the configured extraction and query models.
-  Events are appended without a model, but nothing becomes searchable until the
-  projection can be built. There is no model-free fallback search.
-- Jobs interrupted by service restart are marked failed instead of remaining
-  permanently active.
-- Native import batch manifests (version 2) persist durable job IDs. Local abort
-  controllers do not persist, and closing an agent does not cancel accepted
-  service jobs.
-- Append failures for conversation events surface on the next `flush()` and do
-  not block the user turn.
-- A host without a durable service can manage conversations, but content
-  indexing and search fail explicitly.
+- Retained events can be appended without searchable projections; extraction/
+  query/synthesis need configured models. There is no model-free content search.
+- Source indexing and View generation are separate outcomes. A failed View must
+  not be reported as a failed source import or fabricated document.
+- Per-target View failures preserve completed peers; interrupted work is durable.
+- Native session import state and service-owned acquired batches are different
+  mechanisms. Closing an agent does not cancel already accepted service jobs.
+- Failed privacy cleanup withholds reads; editor protection cannot override it.
+- Store owner locks exclude another independent process from opening that store.
 
 ## Legacy and separate packages
 
-| Package                                                      | Status                                                                                                                                                                      |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/memory/website`                                    | Browser import helpers and HTML content extraction only. Its collection, graph, indexing service and batch processor were removed; `@index create website` no longer exists |
-| `packages/knowledgeProcessor`                                | Early Structured RAG sample, still used by the no-service dispatcher fallback and a few agents                                                                              |
-| `packages/memory/image`, `packages/memory/storage`           | Image memory for `@index` and montage; separate from the durable service                                                                                                    |
-| `packages/kp`                                                | Lightweight keyword index used by the email agent                                                                                                                           |
-| Email and podcast memories in `packages/memory/conversation` | Used by the sample chat app only                                                                                                                                            |
+The website-memory package is limited to acquisition/extraction helpers, not its
+removed collection/graph/indexing service. Image memory and lightweight email
+indexes are separate library consumers, not additional durable-service backends.
+Keep legacy/no-service and workspace-plugin behavior explicitly scoped.
 
 ## Verification map
 
-Focused automated coverage lives in:
-
-- `packages/memory/service/test/*.spec.ts` (including `indexSchema.spec.ts`,
-  `answerKnowPro.spec.ts` for real KnowPro answer synthesis)
-- `packages/memory/mcp-server/test/memoryMcpServer.spec.ts`
-- `packages/agents/memory/test/memoryAgent.spec.ts`
-- `packages/agentServer/server/test/conversationSearchIndex.spec.ts`,
-  `conversationSummary.spec.ts`, `copilotImport.spec.ts`
-- `packages/dispatcher/dispatcher/test/conversationDurableMemory.spec.ts`,
-  `personalMemorySearch.spec.ts`, `conversationMemoryIntegration.spec.ts`
-- `packages/agents/browser/test/browserMemoryService.test.ts`,
-  `websiteMemoryImport.test.ts`
-
-The remaining risk is integration acceptance, especially live browser import,
-cancelled-content visibility, restart recovery across the full UI, live model
-answer quality, and conversation-event parity. See
-[the status ledger](../../plans/memory-system/STATUS.md).
+Source-reviewed contracts have focused service, RPC/MCP, dispatcher and browser
+coverage. The [implementation ledger](https://github.com/microsoft/TypeAgent/blob/main/ts/docs/plans/memory-system/STATUS.md)
+links the relevant tests and separates them from live quality, restart/UI and
+performance acceptance. This documentation update ran no live memory workload.

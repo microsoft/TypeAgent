@@ -1,229 +1,184 @@
 # Derived-view maintenance
 
-Views are enabled by default. The host can disable all Views with
-`TYPEAGENT_MEMORY_VIEW_DRAFTS=false`, or only informational Wiki/Projects with
-`TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS=false`. Explicit test rehearsal budgets
-do not enable product behavior or impose lifetime product quotas. Configured
-provider request admission, 429/retry handling and application scheduling remain
-separate concerns.
+Maintenance keeps editable knowledge aligned with eligible evidence without
+discarding human intent. Start with [Derived Views](derived-views.md) for build,
+citation, conflict, publication and history contracts.
+
+Views are default-on. Hosts can disable all Views with
+`TYPEAGENT_MEMORY_VIEW_DRAFTS=false`, or informational Wiki/Projects with
+`TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS=false`. Explicit rehearsal budgets are
+test controls, not product enablement or lifetime quotas. Provider request
+admission/throttling and application scheduling are separate.
+
+## Automatic and explicit work
+
+![Source/index changes dirty automatic Wiki/Projects and Topics; explicit timeline/troubleshooting maintenance resolves scope. Paused, unchanged and blocked work does not synthesize. Eligible work uses guarded builds and preserves accepted checkpoints.](diagrams/view-maintenance.png)
+
+[SVG](diagrams/view-maintenance.svg) · [Editable scene](diagrams/view-maintenance.excalidraw)
+
+Automatic informational work discovers/refreshes subjects after indexing.
+Startup and a 30-second reconciliation sweep repair missed dirty hints.
+The sweep is not a promise that synthesis finishes every 30 seconds.
+
+Durable acquired bulk imports defer automatic Topics and Wiki/Projects work
+until the final active batch settles. Explicit manual builds remain available.
+Privacy invalidation is never postponed until a synthesis schedule.
+
+Targets have bounded work/deadlines. Completed targets remain committed while
+technical failures, unchanged rejections and human conflicts are recorded
+separately. Provider/materialization failures receive one automatic retry before
+parking; changed evidence/recipe or explicit rebuild can reopen admission.
+Cancellation is explicit. Recovery finishes committed publication/index effects
+without repeating synthesis or inventing duplicate versions.
 
 ## Indexed Wiki and Projects
 
-`informational-wiki-v1` is the sole operational wiki construction contract.
-Each record contains one independently identified, editable page with bounded
-indexed citations. The informational family discovers wiki targets from the
-existing index after ingestion. Family `update`, `rebuild`, `pause` and `resume`
-use the existing maintenance service; durable pause survives reopening.
+`informational-wiki-v1` is the only operational Wiki construction contract;
+`informational-project-summary-v1` is the project contract. Both use bounded
+indexed fragments and exact citations, not full-source inventories.
 
-Old source-only wiki definitions, `wiki-v1` requests, inventory-backed bundles
-and `wikiDiscovery.rules = "explicit-subjects-v1"` are rejected explicitly.
-There is no compatibility alias or serialized migration. Existing historical
-qualification receipts are not rewritten.
+Family `update`, `rebuild`, `pause` and `resume` use the existing job/View store.
+Pause is durable. Stable IDs are independent of display titles; saved selectors,
+aliases, exclusions, category and notes retain editorial intent.
 
-Page titles, fixed concept/system/project categories, personal notes, source
-exclusions, exact citations and stable identities remain editable. Prose
-regeneration retains editorial overrides or exposes conflicts rather than
-silently overwriting them. The browser creates wiki pages through the indexed
-family and rebuilds saved informational definitions, not full-source bundles.
-Bundle merges, omissions and explicit-subject registries are not operational
-editor controls.
+Discovery requires substantive local evidence, not multiple sources or a page
+quota. A service mention alone is not an initiative. Case/whitespace/alias
+normalization can nominate a match, but cannot prove identity. Explicit symbol
+names and incompatible project/episode scope remain distinct or ambiguous.
 
-Projects retain `informational-project-summary-v1`, sharing bounded indexed
-retrieval without an inventory pipeline. Family `projects` discovers typed
-initiative subjects with local goals/scope evidence after successful indexing.
-A service mention alone is not a project. New candidates and existing saved
-selectors are reconciled through the same family/job/view store as Wiki, with
-durable independent pause/resume, failures and restart recovery.
+Bounded retrieval favors relevant indexed evidence, corrections/qualifications
+and source diversity; it does not guarantee exhaustiveness. Wiki limitations
+remain visible in body and summary. Project output keeps owners, milestones,
+incident closure, capacity qualification and overall project state separate.
+Review ownership is not accountable service ownership; rehearsal is not rollout.
 
-Selector/alias case, whitespace and underscore variants nominate compatible
-descriptors, never titles. Reuse requires shared indexed subject evidence and
-compatible extracted types and explicit project/initiative/episode/scope facets.
-Missing identity metadata is not proof of equivalence; disjoint evidence records
-an ambiguity rather than creating another lexical duplicate. Explicit symbol
-types do not receive implicit underscore/space equivalence. Only duplicate
-unmaterialized nominations can be retired. Historical saved pages remain
-independent, including edits, references, exclusions and stable IDs; multiple
-compatible saved pages report an ambiguity and are never merged automatically.
-This is conservative lexical nomination, not semantic grouping or hierarchy.
-Exact indexed symbol names retain their original spelling. Multiple exact
-symbols collapsed into one folded KnowPro term expose an ambiguity instead of
-nomination as one newly generated page; no automatic cross-record consolidation
-or new disambiguation workflow is provided.
-A mixed meeting can supply
-evidence for multiple initiatives; synthesis must keep goals, owners and each
-status dimension bound to the selected initiative and retain unknowns.
-Status prose separately preserves incident closure and blocked/unvalidated
-capacity qualifications and reasons; the bounded capacity enum may represent
-unvalidated capacity as `pendingOwnerReview`. Review ownership does not establish
-accountable service ownership, and rehearsal acceptance does not complete a
-rollout. Project prompt revisions invalidate evidence no-ops without changing IDs.
-
-Indexed subject discovery requires local substantive content, not multiple
-sources or a page quota. Dates, bare quantities, metadata-only subject lists and
-unsupported headings do not independently nominate pages. Generic properties
-require explanatory content rather than an incidental state/value. Useful
-one-source definitions, observations and charters remain eligible. These
-deterministic content checks do not semantically qualify generated prose.
-Legacy unmaterialized metadata/shell nominations are filtered with explicit
-maintenance-plan reasons; saved pages are not removed or reclassified by this
-usefulness gate. Unknown extracted type/scope is not a global type or scope:
-shared indexed evidence is still required, and known metadata is retained when
-an unknown descriptor is enriched.
-
-Bounded retrieval selects by indexed relevance, new correction/counterexample/
-qualification/observation signals and source diversity rather than newest-three
-selection. Interleaved windows retain exact indexed locators and the existing
-12-fragment, 2000-character/window and 32000-character read ceilings. Unselected
-candidate blocks set the limited flag. Selection and prompts preserve older
-bounded successes, measurements and initiative-specific conditions without
-claiming exhaustiveness. Shared vocabulary and infrastructure are navigation
-hints, never authority to unify project owners, states, milestones or episodes.
-Wiki coverage limits appear in both body and summary so body-only exports retain
-the caveat. Categories, notes and readable titles remain editorial metadata,
-not retrieval scope. Grouping prompt changes invalidate Wiki evidence no-ops;
-the timeline/troubleshooting pipeline and project goals/scope remain unchanged.
-Versioned synthesis identity is shared by snapshot fingerprints and repeated
-build-receipt lookup, preserving request idempotence across prompt revisions.
+Old `wiki-v1` bundles, inventory-backed Wiki/Projects and explicit-subject
+registries are rejected, not silently migrated. Historical qualification receipts
+do not become current contracts.
 
 ### Source-overlap Wiki admission and contribution
 
-Only new, unmaterialized automatic Wiki candidates undergo purpose admission.
-The current published/index-ready pages nominate at most eight comparisons.
-Contributing source sets are derived from actual page citations and incoming
-selected indexed passages, **not** all queried sources, descriptors or derivative
-Wiki indexes. Keys include both source ID and exact revision ID. Empty sets do
-not overlap; a replacement revision is not interchangeable with its predecessor.
-Identical/subset sets rank first, then exact shared/union ratio and exact-fragment
-overlap, with stable-ID ties. No guessed "high overlap" threshold makes a decision.
+For new automatic candidates, actual source/revision overlap nominates bounded
+comparisons with current eligible pages; it does not establish equivalent purpose.
+Admission distinguishes:
 
-Source overlap nominates comparison even if locators differ. Exact shared
-fragments are separately recorded. Scope/content review preserves independently
-useful purposes, explicit projects/episodes, units/statistics, cohorts and
-qualifications. A resource definition and its scoped failure explanation can
-share a canonical page without unifying the underlying KnowPro entity/topic.
+- `distinct`: create a useful independent page.
+- `covered`: actual canonical prose explains the essential distinctions.
+- `contribute`: refresh the same scoped purpose with missing evidence.
+- `ambiguous`: record possible destinations and block for explicit review.
 
-The typed assessment has four outcomes:
+Citation overlap alone is not prose coverage. Contribution uses bounded original
+indexed evidence, preserves earlier qualifications, validates actual merged prose
+and binds only after the exact canonical revision is ready. Failures/conflicts
+do not falsely complete the candidate. Existing article prose is comparison or
+merge context, never new source truth.
 
-- `distinct`: construct an independent new page.
-- `covered`: every selected fragment's essential distinctions have explicit
-  exact witnesses in actual canonical prose; citation overlap alone is not
-  coverage. Truncated comparison prose cannot prove complete coverage.
-- `contribute`: missing essential distinctions belong in the same scoped
-  canonical purpose. Refresh the canonical stable ID using its exact cited
-  indexed evidence plus incoming current indexed evidence. Existing prose is
-  comparison/merge context, never source truth. Preserve earlier qualifications.
-- `ambiguous`: multiple existing pages serve that purpose. Persist their IDs
-  in a blocked receipt for explicit review; never delete/merge historical pages.
-  No new Inbox request/response or graph-canonicalization feature is provided.
+## Editorial protection and consolidation
 
-Contribution takes the bounded union of two existing reads: at most 24 distinct
-fragments, 2,000 characters each, 48,000 excerpt characters total. These are
-application evidence bounds, not provider context/token quotas or test envelopes.
-Overflow blocks explicitly rather than dropping earlier facts. Existing aliases
-are retained and candidate selectors are added within the existing seven-alias
-contract; capacity exhaustion is explicit, never silent alias deletion.
+Deliberate human edits are protected at reliable edit units. The service exposes
+`protectedTargets`; browser clients do not guess those units. An explicit unlock
+save records intent without immediately rewriting text, then schedules eligible
+maintenance. Ordinary saves alone do not require another synthesis pass.
 
-Refresh uses the existing generated-base merge/edit-conflict machinery. Titles,
-taxonomy, personal notes, aliases, exclusions, references and editorial changes
-remain preserved or explicitly conflicted. The merged actual prose is checked
-against **all combined evidence**, including earlier qualifications and novel
-contrasts. Unsupported claims or missing essential distinctions cannot bind
-the candidate. Target version/definition/revision, source revisions/content,
-indexed locators, exclusions, suppression/forgetting and cancellation are
-rechecked before accepting the canonical update.
+Consequential changes check actual merged prose for quantities/cohorts, scope,
+correction/withdrawal and other critical distinctions. Unsupported output is a
+technical rejection, not a request for blanket approval. Genuine human overlap
+uses the existing recoverable conflict path.
 
-The existing build result atomically records the canonical contribution and
-its frozen input with state `committed`. Only after that exact canonical revision
-is visible and derivative-index-ready does the receipt become `bound` and the
-unmaterialized candidate become a genuine covered `skipped` result. Index,
-provider, conflict or stale failures remain incomplete and do not advance family
-completion. Unresolved contribution edit conflicts remain pending/blocked
-without repeating model calls; authenticated conflict resolution is required.
-Retry of a matching committed contribution finishes indexing/binding without
-another canonical version or synthesis. Already-ready indexing is not reset.
-Privacy purge and runtime cancellation include borrowed canonical evidence.
-Initial missing-distinction requirements are remapped to combined fragment IDs
-and must survive the final coverage assessment unchanged, with exact new prose
-witnesses. A later checker cannot silently weaken/omit the original requirement.
-Subsequent canonical maintenance retains still-eligible cited fragments and
-checks contribution coverage again; obsolete source revisions/exclusions are
-never copied forward as evidence. Explicit changes of the canonical query
-invalidate that old-purpose preservation context.
+New-candidate contribution differs from consolidation of existing generated
+Wiki articles. Eligible generated, unprotected articles with no historical human
+edits can be consolidated when current original indexed evidence establishes
+one scoped purpose and consequential output checks pass. Shared infrastructure,
+vocabulary, source lists or topic parents only nominate comparison.
 
-Replay requires unchanged candidate evidence/model plus the exact current
-canonical publication/revision and bound contribution receipt. Normal refresh
-uses the added selectors to retrieve the contributing explanation. Wiki prompt
-identity is `wiki-source-contribution-v3`; Projects and their prompt identity
-are unchanged. Offline tests verify these mechanics; they do not establish
-real-model semantic quality or authorize another live rebuild/ingestion.
+Consolidation preserves unique sections/excerpts/citations, commits canonical
+acceptance before redirect activation, and waits for exact derivative readiness.
+Old-ID reads carry canonical identity and anchor mappings; historical reads
+remain explicit. Restart resumes committed effects without another synthesis.
+Human-edited historical pages are not automatically retired. Redirect cycles/
+over-deep ancestry and changed targets block rather than create semantic retry
+loops. No new approval framework or authoritative entity merge follows.
 
-Project retrieval searches current eligible indexed postings across the
-collection before selecting bounded fragments. Neither the first/last 32
-documents nor a user's source selection defines automatic coverage. The saved
-selector retains only exact evidence revisions for the bounded build. A manual
-project build may pass an empty source selector to search all eligible sources.
-Queries, aliases, exclusions and editorial titles/prose remain editable.
-Unchanged evidence makes no synthesis calls; new uncited evidence, replacements
-and removal dirty the family. Missing/excluded evidence blocks visibly rather
-than substituting invented content. Privacy eligibility still gates every read.
+## Maintained Topics and source synopses
 
-Publication and derivative indexing are independent per-record operations.
-Creating or updating a page does not imply that its derivative index is ready.
-Citation eligibility, source suppression/forgetting and privacy guards still
-apply independently of publication state.
+Topics are maintained navigation snapshots over eligible original indexed
+occurrences, with source/revision citations, parent/related associations,
+summaries and limits. `queryTopics` pages that projection; `rebuildTopics` uses
+existing maintenance jobs. Label/alias editorial authorship does not turn a
+generated summary into human-authored evidence.
+
+Source synopses are exact-revision navigation previews with pending/ready/failed/
+unavailable status, freshness and fidelity limits. Failed synopsis work does not
+block source indexing/search. Neither Topics nor synopses are independent
+corroboration or authoritative project equivalence.
 
 ## Explicit timeline and troubleshooting maintenance
 
-Timeline and troubleshooting guides retain their shared full-evidence inventory,
-support, temporal and publication helpers. Their manual maintenance definitions
-select continuing membership independently of the selector used by one build:
+These builders retain full-evidence inventory/checking and explicit definitions
+for continuing source membership:
 
-| Scope                                 | Membership                                                   |
-| ------------------------------------- | ------------------------------------------------------------ |
-| `pinned` or no maintenance definition | Exact sources/events; no automatic advancement               |
-| `currentSources`                      | Listed source IDs at current ready revisions                 |
-| `scopedSources`                       | Matching source types, all tags and exact `metadata.project` |
+| Scope              | Membership                                                   |
+| ------------------ | ------------------------------------------------------------ |
+| `pinned` or absent | Exact selected sources/events; no automatic advancement      |
+| `currentSources`   | Listed source IDs at current ready revisions                 |
+| `scopedSources`    | Source types, all required tags and exact `metadata.project` |
 
-Resolution enumerates membership rather than truncating top-K relevance. Missing,
-pending, inaccessible, empty or oversized scopes block explicitly. Timeline
-source revisions can advance while canonical-event selection and temporal bounds
-remain fixed. Dynamic event-only/future-event scopes are not implemented.
+Resolution enumerates membership, not a truncated relevance result. Missing,
+pending, inaccessible, empty or oversized scopes block explicitly. Canonical
+event selection and temporal bounds remain fixed; dynamic future-event scopes
+are not implemented.
 
-Accepted versions retain dependency fingerprints and conservative privacy source
-identities. Fingerprints include source content/metadata/pipeline, model, scope,
-temporal bounds and canonical-event evidence, not actor/job/time/output versions.
-No-op plans make no synthesis calls. Failed, cancelled, stale or conflicted work
-does not advance accepted dependency checkpoints.
-
-The removed wiki-only registry/page manifests are not required by these consumers.
-Privacy provenance still conservatively retains previous source IDs so removing
-a citation cannot evade forgetting. Forget/clear purges local views, dependencies,
-receipts, conflicts, caches and private history; external backups/exports are
-outside local guarantees.
+Accepted dependency fingerprints include eligible source content/metadata/
+pipeline, model, scope, temporal bounds and event evidence. Unchanged plans
+make no synthesis calls. Failed, stale, cancelled or conflicted work cannot
+advance an accepted checkpoint.
 
 ## Service and UI controls
 
-In-process, RPC, MCP, gateway and browser transports share strict contracts:
+The View-capable service, RPC, MCP and browser share guarded operations:
 
-- `updateViewMaintenance`: change an explicit definition under head/version guards.
-- `planViewMaintenance`: preview without writes or synthesis.
-- `maintainViews`: record a receipt and optionally admit work; also controls the
-  informational `wiki` and `projects` families.
-- `getViewMaintenance`: inspect the receipt and current build outcome.
+- `updateViewMaintenance`: save explicit scope with head/version guards.
+- `planViewMaintenance`: preview targets without writes or synthesis.
+- `maintainViews`: admit explicit targets or control a family.
+- `getViewMaintenance`: read a receipt and current outcome.
 
-The Hub exposes manual maintenance for timeline/troubleshooting, informational
-family controls, explicit editorial changes, publication state and build errors.
-Unsaved edits and failures remain visible. No approval or execution authority is
-granted by a generated view.
+Example in a host with an initialized View-capable service:
 
-The exclusive-owner CLI uses the same operations:
-
-```powershell
-node dist\memoryViewsCli.js --store <isolated-store> set-maintenance definition-update.json
-node dist\memoryViewsCli.js --store <isolated-store> plan-maintenance plan-request.json
-node dist\memoryViewsCli.js --store <isolated-store> maintain maintenance-request.json
-node dist\memoryViewsCli.js --store <isolated-store> maintenance-status <corpusId> <receiptId>
+```typescript
+const { head } = await views.listViews(corpusId);
+const result = await views.maintainViews({
+  corpusId,
+  expectedHead: head,
+  family: "wiki",
+  operation: "update",
+});
+const receipt = await views.getViewMaintenance({
+  corpusId,
+  receiptId: result.receiptId,
+});
 ```
 
-Do not use this CLI against a store owned by a running server. Offline lifecycle
-tests are not model-quality or live provider-capacity qualification.
+`result` contains `receiptId`, `plan` and an optional `job`. Do not assume every
+request generates a job; unchanged, paused or blocked outcomes remain explicit.
+`projects` and `topics` are separate families. Read the current head again before
+a subsequent mutation.
+
+Memory Hub exposes family controls, explicit maintenance, editable content,
+protection/unlock, publication/index state and visible errors. Unsaved edits
+must not be replaced by polling. The private-store CLI offers the same
+maintenance operations, but must not be used against a running owner's store.
+
+## Verification and limits
+
+Source contracts: [maintenance types](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/src/viewMaintenanceTypes.ts),
+[scheduler](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/src/fileMemoryService.ts),
+[consolidation](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/src/wikiConsolidation.ts),
+[Topics](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/src/topicTypes.ts).
+
+Coverage: [maintenance](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/viewMaintenance.spec.ts),
+[batch deferral](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/batchMaintenance.spec.ts),
+[editorial updates](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/viewEditorial.spec.ts),
+[consolidation recovery](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/wikiConsolidationRecovery.spec.ts).
+Offline tests establish lifecycle mechanics, not real-model semantic quality.
+Privacy removal and current evidence eligibility override all editorial and
+scheduling state. See [History and forgetting](derived-views.md#history-and-forgetting).

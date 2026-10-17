@@ -1,8 +1,10 @@
 # Copilot fast actions
 
-Status: Implemented, with follow-up work. This document is the source of truth
-for the cross-package design of Copilot dev actions and tool-composed macros.
-Progress and remaining work are tracked in [STATUS.md](./STATUS.md).
+Status: Implemented, with follow-up work. This repository plan records the
+cross-package delivery of dev actions and program macros. The stable public
+contract is [Checked program macros](../../architecture/workflows/macros.md);
+provider behavior is in [Workflows](../../architecture/workflows/workflows.md).
+Progress, scoped evidence and remaining gates are in [STATUS.md](./STATUS.md).
 
 ## Program-only critical path
 
@@ -35,11 +37,10 @@ author children or TypeAgent credentials. Copied compiler/worker assets are part
 of the distribution. See [owner setup](../../../packages/copilot-plugin/README.md#checkpoint-c-plugin-owned-recipes)
 and [verification boundaries](./STATUS.md); CLI evidence never implies VS Code support.
 
-The [implementation plan](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/implementation-plan.md)
-delivers A: TypeAgent recording/matching/execution; B: restricted Copilot child
+The program delivers A: TypeAgent recording/matching/execution; B: restricted Copilot child
 authorship with TypeAgent execution; C: plugin-local ownership/standalone operation.
-The [historical host evidence](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/HOST-CAPABILITIES-2026-10-15.md) still informs B/C, not missing A runtime
-implementation. See [status](./STATUS.md) and
+Native CLI B/C synthetic verification is recorded; VS Code, live upgrade and
+performance qualification remain open. See [status](./STATUS.md) and
 [runtime boundaries](../../../packages/copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs).
 
 ## Purpose
@@ -166,15 +167,17 @@ Dynamic flows use a pending/test/promote/activate transaction:
 1. Search for an existing flow with the proposed action name.
 2. Validate grammar patterns.
 3. Save a pending recipe.
-4. Execute that recipe once.
+4. Obtain trusted interactive authorization for the exact candidate and execute
+   it once. A model-only MCP client without the authorization callback fails closed.
 5. Delete the pending recipe on failure or cancellation.
 6. Promote the same recipe after success.
 7. Reload the dynamic schema and grammar.
 8. Remove the promoted flow if activation fails.
 
 Same-name mutations are serialized within one agent-server process. A promoted
-flow persists in instance storage and is available after restart. Repair is
-bounded to one attempt per request and is not attempted for policy denial,
+flow persists in instance storage and is available after restart. An explicitly
+requested repair is bounded to one attempt per request; PowerShell failures do
+not automatically enter reasoning repair. Repair is not attempted for policy denial,
 cancellation, unsafe requests, or failures that may have produced partial side
 effects.
 
@@ -185,11 +188,13 @@ extracts a factual recipe, derives grounded parameters/dependencies, stages
 version-targeted grammar, then authors checked TypeScript. Fixture expectations
 are derived independently of candidate code; the actual executable must pass them.
 Prepare stages a draft; Read-only and All may auto-publish valid local programs.
-The initial broker rejects writes/native-only tools even in All.
+Both production brokers reject writes even in All. The TypeAgent-owned broker
+also rejects native-only tools; plugin ownership supports the native reads and
+exact read-only MCP identities described in its setup guide.
 
 Programs run in worker-contained QuickJS/WASM with bounded CPU/memory/stack/JSON
 and broker calls. Symbolic repeats use no model; hybrid repeats invoke only
-declared strict semantics through the configured TypeAgent provider. Existing
+declared strict semantics through the selected owner's configured provider. Existing
 MCP trust/backend authorization remains authoritative, without extra recipe
 consent or model-driven inspection. Durable journals preserve uncertain external
 dispatch; cancellation cannot roll back backend work.
@@ -215,19 +220,22 @@ learn: show the 3 newest .log files under <PATH>
 show the 3 newest .log files under <PATH>
 ```
 
-The generated flow name and exact output depend on the configured model. Use
-the name returned by TypeAgent instead of predicting it.
+The generated flow name and output depend on the model. Exact dynamic-script
+authorization is required before candidate/test/repair execution, even for
+read-only tasks. Use an interactive connected client; the MCP-only route does
+not implement that approval callback. This is not an unattended creation recipe.
 
 ## Try a tool-composed macro
 
 1. Select `@typeagent macro learning prepare` (or All for automatic publication).
-2. Arm `@typeagent macro record`, then perform one supported read-only MCP task
+2. Arm `@typeagent macro record`, then perform one supported read-only task
    with a bounded original request, for example a quoted file path followed by
    fixed words `for me`.
 3. Check `@typeagent macro status` for the saved trace and learning job outcome.
 4. In Prepare, review/validate the checked candidate and call `approve_macro`.
-5. Repeat a covered natural request with a changed input, or call `run_macro`
-   with current approved ID/version, unique run ID and required inputs.
+5. Repeat a covered natural request with a changed input, or call MCP `run_macro`
+   with `macroId`, optional `version`, and required `inputs`. The MCP adapter
+   assigns the run ID; direct manager callers provide their own.
 6. Inspect `get_macro_run` evidence. A draft must be rejected; failures never
    fall back to another execution engine.
 
@@ -240,12 +248,12 @@ Static PowerShell actions contain reviewed scripts. Dynamic flows contain
 generated, imported, edited, or repaired scripts. These paths do not currently
 have the same trust level.
 
-Dynamic scripts run in PowerShell `FullLanguage` mode. Cmdlet lists, path
-validation, module lists, and network flags restrict common command paths, but
-they do not prevent direct .NET filesystem, process, network, reflection, or
-assembly APIs. Treat dynamic flow execution as host code execution, not as a
-security sandbox. See the active FullLanguage issue in codeDocs for the
-mitigation plan.
+Dynamic scripts require exact script/context authorization and run approved-local
+under the current user's OS rights. They are not an arbitrary-code sandbox:
+legacy cmdlet/path/network metadata does not prevent .NET access. Missing
+interactive authorization or a broker prevents execution. Denial never falls
+back to restricted protocol v1 or another tool. See
+[PowerShell authorization](../../architecture/workflows/workflows.md#approved-local-execution).
 
 Macro recording is explicit; drafts cannot run. Program validation, current
 revision checks, schema/capability identity, containment and bounded semantic
@@ -259,8 +267,10 @@ PowerShell flows live under the PowerShell area of TypeAgent instance storage.
 They include an index, flow metadata, script bodies, generated grammar, and
 pending recipes.
 
-Macros use a separate `copilot-macros/` directory under agent-server instance
-storage:
+TypeAgent-owned macros use a `copilot-macros/` directory under agent-server
+instance storage. Plugin ownership uses the same manager layout beneath the
+plugin data root's `recipes/<workspace-profile digest>/`; those stores are
+separate, not mirrored:
 
 ```text
 copilot-macros/
@@ -271,8 +281,9 @@ copilot-macros/
   metrics.jsonl
 ```
 
-Back up these directories before migrations. Restore them only while
-agent-server is stopped.
+Back up only with the relevant owner quiescent, and restore only while it is
+stopped. The plugin's lifetime SQLite lock prevents competing owners in the
+same scope; this is not general multi-process locking for agent-server stores.
 
 ## Known limitations
 

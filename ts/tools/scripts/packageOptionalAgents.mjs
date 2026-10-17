@@ -4,8 +4,7 @@
 
 /**
  * Package the optional agents (those omitted from a server profile) as
- * self-contained, installable bundles - Option 3 from
- * codeDocs .../2026-06-11_typeagent-plugin-agent-distribution.
+ * self-contained, installable bundles.
  *
  * The lean inbox profile (config.<profile>.json) drops some agents; this packs
  * each dropped agent so users can reinstall it on demand. Each agent is produced

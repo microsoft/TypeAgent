@@ -99,7 +99,13 @@ const ARCH_GROUPS = [
     {
         dir: "memory",
         name: "Memory",
-        files: ["memory.md"],
+        files: [
+            "memory.md",
+            "current-system.md",
+            "derived-views.md",
+            "view-maintenance.md",
+            "scenarios.md",
+        ],
     },
     {
         dir: "agents",

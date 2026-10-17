@@ -78,9 +78,13 @@ cancel those durable jobs explicitly.
 corpus, retained for 90 days. Unsupported services fail explicitly; history
 is not synthesized from session logs.
 
-Imported instructions remain source evidence. Derived Views are built explicitly
-through the memory Views service; importing a document does not detect procedure
-candidates, save procedures, review an edition, or grant execution permission.
+Imported instructions remain source evidence. With the default-enabled
+informational capability, committed index changes can schedule automatic
+Wiki/Projects and Topics work; explicit builds and maintenance use the same
+owning service. Importing does not detect saved-procedure candidates, save
+procedures, review an edition, or grant execution permission. See
+[the current-system map](../../../docs/architecture/memory/current-system.md)
+and [View maintenance](../../../docs/architecture/memory/view-maintenance.md).
 
 Corpus clearing, source replacement, and source forgetting use a preview token.
 Run the command once, inspect the preview, then repeat it with `--confirm
@@ -110,11 +114,12 @@ states, so a batch remains running while accepted jobs are indexing. Restored
 batches reconstruct their current state from those jobs. `--wait` also waits
 for terminal service job states before the import command returns.
 
-`ask` calls `MemoryService.answer`, which by default synthesizes the answer with
-KnowPro's answer generator over the retrieved evidence, and renders it with
-citation metadata. `ask --extractive` returns the ranked evidence snippets
-verbatim. `explain` shows the answer and citations retained from
-the latest session answer.
+`ask` calls `MemoryService.answer` and renders citation metadata. When
+informational support is enabled, non-extractive answers use indexed source
+fragments and the informational evidence-answer path; otherwise the service
+uses its corpus-index/KnowPro answer path. `ask --extractive` returns ranked
+evidence snippets. Neither branch silently substitutes an extractive success
+for synthesis failure. `explain` shows the latest session answer and citations.
 
 ## Host setup
 

@@ -1,11 +1,12 @@
 # Workflows — Architecture & Design
 
-> **Scope:** This document is the architecture reference for TypeAgent's
-> user-defined workflow system — PowerShell scripts, WebFlows, and TaskFlows
-> — covering definition formats, execution sandboxes, storage, the dynamic
-> schema/grammar API, and self-repair. For the grammar language and matching
-> algorithms that route user input to workflow actions, see `actionGrammar.md`.
-> For how matched completions propagate through the shell, see `completion.md`.
+> **Scope:** This entry point distinguishes provider-owned flows from
+> [checked program macros](./macros.md). The detailed sections below cover
+> PowerShell, WebFlow and TaskFlow formats, execution, storage and
+> provider-specific recovery. They are not the program-macro runtime or the
+> separate [workflow DSL/IR design](./README.md).
+> For routing and shell completion, see [Action grammar](../core/actionGrammar.md)
+> and [Completion](../core/completion.md).
 
 ## Overview
 
@@ -18,26 +19,34 @@ Workflows change this by enabling **end users to extend the system
 themselves**. A user demonstrates a task or describes it in their own words;
 a reasoning agent generalizes what it observed into a reusable script with
 parameters and grammar rules; and the resulting workflow becomes a first-class
-action that anyone can invoke.
+action that an authorized caller can invoke.
 
-### The core insight: saved workflows win
+<a id="the-core-insight-saved-workflows-win"></a>
 
-Once a task is captured as a workflow, execution is **deterministic and fast**
-— milliseconds instead of seconds. The LLM is used once to _create_ the
-workflow, not on every invocation. This is the fundamental value proposition:
-trade one-time LLM reasoning for unlimited fast reuse.
+### The core insight: reuse a checked procedure
+
+Saved procedures can avoid repeating model planning, but execution cost and
+latency depend on the host, tools and workload. TaskFlow scripts can call
+`queryLLM`; hybrid programs declare bounded semantic calls. Inputs, contracts,
+authorization and versions still matter on repeat. No universal millisecond,
+zero-model or "reuse forever" guarantee applies.
+
+| Family                                | Execution contract                                                                                    |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Provider-owned flows                  | Domain stores and executors for PowerShell, WebFlow and TaskFlow; detailed below                      |
+| [Checked program macros](./macros.md) | Shared manager/compiler and contained QuickJS runtime, hosted by TypeAgent or the opt-in plugin owner |
+| Copilot dev actions                   | Windows PowerShell first-refusal routing; not another macro executor                                  |
+| [Workflow DSL/IR](./README.md)        | Separate language/engine design and status; not the checked-program ABI                               |
 
 ### Three-phase lifecycle
 
-![lifecycle](../images/workflow_capture_run_repair.svg)
-
-The user-facing model is simple:
+This provider-flow summary is not a universal automatic-repair contract:
 
 | Phase       | What happens                                                                                                                          |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | **Capture** | User demonstrates or describes a task; reasoning agent writes code against a domain API; workflow registers via `reloadAgentSchema()` |
-| **Run**     | User utterance matches grammar; workflow executes deterministically                                                                   |
-| **Repair**  | If execution fails, reasoning agent rewrites the workflow in place                                                                    |
+| **Run**     | User utterance matches grammar; the provider applies its authorization and execution rules                                            |
+| **Repair**  | Provider-specific recovery; PowerShell requires an explicit request and fresh candidate authorization                                 |
 
 See [Common lifecycle](#common-lifecycle) for implementation details
 (five phases: Capture → Persist → Register → Execute → Feedback).
@@ -66,26 +75,29 @@ See [Common lifecycle](#common-lifecycle) for implementation details
 
 ### Workflow types
 
-![types](../images/workflow_types_architecture.svg)
+![Provider flows route to distinct PowerShell, WebFlow and TaskFlow executors.](../images/workflow_types_architecture.svg)
 
-| Aspect        | PowerShell                                            | WebFlow                                           | TaskFlow                                           | ExcelFlow                                        | ...            |
-| ------------- | ----------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------ | -------------- |
-| **Domain**    | OS / filesystem / processes                           | Web page interaction                              | Cross-agent workflows                              | Excel / spreadsheet automation                   | _User-defined_ |
-| **Language**  | PowerShell                                            | TypeScript                                        | TypeScript                                         | TypeScript                                       | —              |
-| **Sandbox**   | Restricted mode only; approved-local is not sandboxed | Frozen API + blocked identifiers (server-side)    | `new Function()` + frozen API + blocked globals    | `new Function()` + OfficeJS bridge               | —              |
-| **Execution** | `scriptHost.ps1` via child process                    | `new Function()` in Node.js with frozen API proxy | `executeTaskFlowScript()` with `TaskFlowScriptAPI` | `new Function()` in Node.js with OfficeJS bridge | —              |
-| **Scope**     | System-wide                                           | Per-site or global                                | Any agent combination                              | Per-workbook or global                           | —              |
-| **Platform**  | Windows only                                          | Any (browser required)                            | Any                                                | Any (Excel required)                             | Any            |
-|               |
+| Aspect                 | PowerShell                                                 | WebFlow                                                      | TaskFlow                                                     |
+| ---------------------- | ---------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| Domain                 | OS / filesystem / processes                                | Web page interaction                                         | Cross-agent workflows                                        |
+| Language               | PowerShell                                                 | TypeScript                                                   | TypeScript                                                   |
+| Validation / authority | Exact script/context authorization; current-user OS rights | Static checks and frozen API, not arbitrary-code containment | Static checks and frozen API, not arbitrary-code containment |
+| Execution              | Windows broker and `scriptHost.ps1`                        | Node `new Function()` with WebUtilsAPI                       | `executeTaskFlowScript()` with TaskFlowScriptAPI             |
+| Scope                  | Authorized local invocation                                | Per-site or global                                           | Supported agent combinations                                 |
+| Platform               | Windows                                                    | Browser required                                             | Provider-dependent                                           |
+
+In the provider sections, legacy names such as "sandbox" describe an API and
+validation surface, not arbitrary-code containment. Frozen bindings, blocked
+identifiers and cooperative timeouts are not the QuickJS program boundary.
 
 > **Design trade-off — why separate workflow types instead of one?**
 >
 > We could have a single unified workflow format that handles all domains.
 > We chose separate types because:
 >
-> 1. **Sandbox requirements differ** — PowerShell needs OS-level isolation
->    (constrained runspace); browser scripts need DOM access prevention;
->    cross-agent flows need dispatcher validation.
+> 1. **Authority differs** — PowerShell requires exact script authorization;
+>    browser flows use domain APIs; cross-agent flows use dispatcher validation.
+>    These mechanisms are not interchangeable containment guarantees.
 > 2. **Capture mechanisms differ** — PowerShell imports existing `.ps1` files;
 >    WebFlows record browser interactions; TaskFlows capture reasoning traces.
 > 3. **Execution substrates differ** — PowerShell runs in a child process;
@@ -98,7 +110,9 @@ See [Common lifecycle](#common-lifecycle) for implementation details
 
 ## Common lifecycle
 
-All workflow types share a five-phase lifecycle:
+The provider-owned flows below use this five-phase outline. Program macros
+instead require [independent checks and publication](./macros.md#learning-and-execution-are-separate)
+before a current approved revision is executable.
 
 ![types](../images/capture_persist_register_execute.svg)
 
@@ -126,7 +140,7 @@ How workflows are created depends on the workflow type and trigger:
 
 ### Phase 2 — Persist
 
-All workflows use **instance storage** (`~/.typeagent/profiles/<profile>/`) for
+These provider-owned flows use **instance storage** (`~/.typeagent/profiles/<profile>/`) for
 cross-session persistence. See [Storage and persistence](#storage-and-persistence)
 for the full layout.
 
@@ -954,7 +968,7 @@ for grammar matching.
 
 ## Storage and persistence
 
-All workflow stores use the `Storage` interface from `@typeagent/agent-sdk`
+The provider flow stores below use the `Storage` interface from `@typeagent/agent-sdk`
 backed by instance storage at `~/.typeagent/profiles/<profile>/`.
 
 ### PowerShell storage layout
@@ -1080,8 +1094,11 @@ The fallback context includes:
 - Error message from script execution
 - Hint to use `editWebFlow` to fix the script
 
-This mirrors PowerShell's self-repair mechanism, providing a consistent
-error recovery experience across all workflow types.
+This differs from PowerShell, which requires an explicit repair request and
+fresh authorization, and from checked program macros, which never replan an
+accepted failed invocation.
+
+![WebFlow can enter reasoning repair after a failed run and re-register the edited flow.](../images/workflow_capture_run_repair.svg)
 
 > **Design trade-off — why in-place editing instead of creating new workflows?**
 >
@@ -1399,15 +1416,14 @@ interface GrammarContent {
 
 ## Design principles
 
-1. **Saved workflows win** — Once a task is captured as a workflow,
-   execution is deterministic and fast — milliseconds instead of seconds.
-   The LLM is used once to _create_ the workflow, not on every invocation.
-   This is the fundamental value proposition: trade one-time reasoning for
-   unlimited fast reuse.
+1. **Reuse procedures, not recorded answers** — Saved code can avoid repeated
+   planning while consuming fresh inputs and tool results. Tool/network time,
+   explicit semantic calls and authorization still contribute to execution.
 
-2. **Capture once, reuse forever** — Scripts discovered during reasoning
-   become instantly available for future grammar matching, eliminating
-   repeated LLM calls for the same task.
+2. **Publish and invalidate deliberately** — Registration is provider-specific.
+   Program candidates must pass independent checks before publication; disabled
+   or superseded revisions cannot start another invocation. Changed contracts
+   may require new learning or an explicit repair rather than perpetual reuse.
 
 3. **Match the execution contract** — Each domain has its own
    security model. PowerShell approved-local execution uses authorization and
@@ -1454,10 +1470,10 @@ The dynamic schema API is designed to support additional workflow types:
 
 ### Capability roadmap
 
-| Capability                    | Description                                                                         | Status  |
-| ----------------------------- | ----------------------------------------------------------------------------------- | ------- |
-| **Workflow namespaces**       | Group workflows into named collections for better organization as the system scales | Planned |
-| **Confirmation gates**        | Require user confirmation before destructive operations (delete files, send emails) | Planned |
-| **Grammar overlap detection** | Detect when new workflow patterns conflict with existing rules before registration  | Planned |
-| **Workflow sharing**          | Export/import workflows between users or teams                                      | Planned |
-| **Version history**           | Track workflow edits with undo capability                                           | Planned |
+| Capability                        | Description                                                                                      | Status  |
+| --------------------------------- | ------------------------------------------------------------------------------------------------ | ------- |
+| **Workflow namespaces**           | Group workflows into named collections for better organization as the system scales              | Planned |
+| **Additional confirmation gates** | Provider-specific destructive-operation policies; PowerShell script authorization already exists | Planned |
+| **Grammar overlap detection**     | Detect when new workflow patterns conflict with existing rules before registration               | Planned |
+| **Workflow sharing**              | Export/import workflows between users or teams                                                   | Planned |
+| **Version history**               | Track workflow edits with undo capability                                                        | Planned |

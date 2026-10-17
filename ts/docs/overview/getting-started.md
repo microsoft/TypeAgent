@@ -57,7 +57,8 @@ agent — that includes:
 
 - a single personal-agent conversational interface with **voice** support;
 - dispatch of actions to an extensible set of agents, plus Q&A and conversation;
-- **conversational memory** based on Structured RAG;
+- **memory** combining retained evidence, Structured RAG recall and maintained
+  source-linked documents;
 - integration with the **TypeAgent Cache** to lower cost and latency.
 
 ```bash
@@ -85,7 +86,7 @@ browser extension, Android, and the web API.
 | Component                                            | What it explores                                                                                                                           |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | [Dispatcher](../architecture/core/dispatcher.md)     | Structured prompting + LLM to route a request to the agent whose typed contract best matches user intent — the core of the personal agent. |
-| [KnowPro / memory](../architecture/memory/memory.md) | Agent memory using Structured RAG (the `knowPro` package; see the [Packages](../packages/index.md) section).                               |
+| [KnowPro / memory](../architecture/memory/memory.md) | Retained sources/events, Structured RAG recall and editable Views; see the [current-system map](../architecture/memory/current-system.md). |
 | [Cache](../packages/index.md)                        | Using an LLM with structured prompting to cache action translation, minimizing trips to the LLM.                                           |
 
 ## Build your own agent

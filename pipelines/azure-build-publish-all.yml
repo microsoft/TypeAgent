@@ -14,9 +14,6 @@
 #   - azure-build-docker-container.yml — builds inside ACR, orthogonal
 #   - azure-docs-aggregation-signal.yml — documentation only
 #   - component-detection.yml        — security/compliance scan
-#
-# Design doc: codeDocs/TypeAgent/forAgent/projects/inProgress/
-#             2026-07-15_consolidated-build-pipeline/README.md
 
 trigger:
   branches:

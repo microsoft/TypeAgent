@@ -8,6 +8,8 @@ Only checked programs can be persisted, approved, or run. The former step replay
 engine, Copilot macro runner, adaptation bridge/RPCs, and execution switches have
 been removed. Development-only old macro records are discarded, not migrated.
 See the [cross-package plan](../../docs/plans/copilot-fastActions/PLAN.md).
+For the stable lifecycle, ownership and failure model, see
+[Checked program macros](../../docs/architecture/workflows/macros.md).
 
 ## Host-independent program contracts
 
@@ -290,11 +292,13 @@ The public coordinator API is:
 
 The four modes are `off` (default, no selected recording or preparation),
 `prepare` (stage a draft for explicit approval), `read-only` (auto-approve only
-when every MCP step's inspected descriptor explicitly has `readOnly: true`), and
-`all` (auto-approve valid procedures regardless of effects). Native or unknown
-tools are not classified as read-only. Recording and induction
-must be enabled for selected learning. The initial production broker rejects writes
-and native-only capabilities even in All mode. Manual recording without
+when every step's inspected descriptor explicitly has `readOnly: true`), and
+`all` (auto-approve valid procedures within the supported host contract).
+Plugin-native reads can be classified by its inspector; unknown effects cannot.
+Recording and induction must be enabled for selected learning. Both current
+production brokers reject writes even in All. The TypeAgent broker also rejects
+native-only capabilities; the plugin broker supports its documented native reads.
+Manual recording without
 `learning: true` retains its existing behavior. A preference change to Off
 cancels pending work; preference/flags are checked again before publication.
 Changing a learning preference does not revoke an already approved definition.
@@ -322,11 +326,13 @@ One worker runs at a time, with at most 32 pending and 1,000 retained jobs,
 100 calls/inputs per artifact, 256 KiB validated JSON values, depth 30, 20,000
 JSON nodes, six grammar/request variants, 16 MiB durable learning storage, and
 two attempts per model stage across restarts. Model stages have a 30-second
-deadline; metadata inspection and catalog refresh have 10-second deadlines.
+deadline except program authoring's 120-second deadline; metadata inspection and
+catalog refresh have 10-second deadlines.
 Failures are inspectable and persisted; a saved catalog whose refresh fails is
 reported as saved-but-not-refreshed, not success. Storage failures are surfaced
 on status reads. The service should configure one manager per storage directory;
-cross-process worker leases are not provided.
+native authoring requests have durable scoped leases, but the manager does not
+coordinate multiple mutation owners over a shared filesystem store.
 
 ### Private full-result evidence and derived item paths
 
@@ -396,7 +402,9 @@ and broker. A stored historical approval is audit evidence, not an execution rou
 
 ## Persistence
 
-`MacroManager` stores data under the supplied agent-server instance directory:
+`MacroManager` stores data under its supplied owner directory. TypeAgent supplies
+the agent-server instance directory; plugin ownership supplies its separate
+workspace/profile directory:
 
 ```text
 copilot-macros/
@@ -409,17 +417,25 @@ copilot-macros/
 
 Version and catalog writes use temporary files and rename where atomic
 replacement is required. Catalog mutations are serialized within one process;
-the package does not provide a cross-process storage lock.
+the manager itself does not provide a cross-process storage lock. The plugin host
+adds a lifetime SQLite writer lock for its workspace/profile. Do not run a second
+manager against a store while its owner is active; switching owners does not
+migrate or synchronize their data.
 
 ## Privacy and persisted data
 
-Trace persistence redacts values whose keys look like credentials and common
-inline token formats. Persisted run inputs, step results, and final results use
-the same redaction. Large run values are replaced with a bounded preview.
+Ordinary histories and inline projected evidence use redaction for
+credential-shaped keys and common token formats. That is not a guarantee that
+private persistence contains only previews: selected capture can retain complete
+original results and large-result sidecars as described in
+[Private full-result evidence](#private-full-result-evidence-and-derived-item-paths).
+Captured model-visible and raw values may differ; neither proves what a model
+semantically understood.
 
-This filtering is defense in depth, not a secret-management boundary. Tool
-outputs may contain sensitive values that do not match the current patterns.
-Callers should limit what they record and which tool results they persist.
+Filtering is defense in depth, not a secret-management or secure-erasure boundary.
+Limit capture and review local ACLs/retention. Forgetting removes an active macro
+while retaining immutable evidence and suppression history; it does not erase
+backups, upstream histories or external effects.
 
 ## API
 
