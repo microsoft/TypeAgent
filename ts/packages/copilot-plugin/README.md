@@ -697,6 +697,17 @@ checks the actual account/workspace binding. The native executable must be on
 PATH; `TYPEAGENT_RECIPE_CLI_PATH` or config `recipeInferenceCliPath` can select its
 executable path explicitly. No shell or bundled-SDK dependency fallback is used.
 
+The standalone inference facade refreshes tool/MCP registry generations between
+calls while preserving owner identity. It rejects workspace/account changes and
+generation changes during inference; child-only events do not invalidate the
+root. The lower-level static-bound adapter remains strict.
+
+`awaitingAuthor` is durable waiting, not readiness. New user work can preempt the
+owned child and leave its lease recoverable; Off/Cancel cancels pending learning
+and rejects stale replies. An unsupported child host fails explicitly, without
+a default-author fallback. Synchronous task replies alone are insufficient:
+the launcher correlates the exact completion event and retires that child.
+
 The copied distribution includes the real TypeScript libraries, QuickJS worker,
 WASM dependency closure, licenses and asset hashes. Programs still compile and
 run in QuickJS, never Node `eval`/`vm`. Symbolic repeats make zero model calls;
@@ -768,9 +779,8 @@ child API. [B lifecycle details](../copilot-macros/README.md#checkpoint-b-copilo
 describe context, leases and recovery. The previous TypeAgent-only compatibility
 client path has been removed.
 
-See [runtime limits](../copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs),
-[phase status](../../docs/plans/copilot-fastActions/STATUS.md), and the
-[historical host evidence](../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/HOST-CAPABILITIES-2026-10-15.md).
+See [runtime limits](../copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs) and
+[phase status](../../docs/plans/copilot-fastActions/STATUS.md).
 Macros are a tool surface in direct/MCP/dev modes, not another routing mode.
 
 ### Learn from one executed task
@@ -913,11 +923,13 @@ job data or create a manual draft to force a retry.
 
 ### Review and run a prepared program
 
-Use mixed MCP mode for lifecycle tools rather than asking `processCommand` to
-create or approve a macro. Selected learning creates the checked candidate.
+Use lifecycle MCP tools rather than asking `processCommand` to create or approve
+a macro. They use the selected owner in direct/MCP/dev modes; bypass disables
+them. Selected learning creates the checked candidate.
 Inspect the returned candidate/version, call `validate_macro`, then explicitly
 `approve_macro` in Prepare mode. Drafts cannot run. Call `run_macro` with the
-current approved macro ID/version, a unique run ID and declared inputs.
+current approved `macroId`, optional `version`, and declared `inputs`. The MCP
+adapter assigns a unique run ID; direct manager callers supply their own.
 `get_macro_run` returns sanitized durable evidence. There is no `preference`
 parameter, manual step-draft creation, or adapted-candidate submission tool.
 
