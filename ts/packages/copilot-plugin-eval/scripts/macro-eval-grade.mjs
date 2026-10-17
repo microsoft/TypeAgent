@@ -7,6 +7,11 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 import { isDeepStrictEqual } from "node:util";
+import { macroProtocolVersion } from "./macro-eval-plan.mjs";
+import {
+    gradeProgramEvidence,
+    programDisplayAnswer,
+} from "./macro-eval-program.mjs";
 
 export const nativeOrdinaryCallbackContract = "native-normal-hook-callback-v1";
 export const nativeSelectedSourceContract =
@@ -829,12 +834,16 @@ function evidenceErrors({
         errors.push("Explicit timestamped backend audit array is required");
     if (!isText(answer)) errors.push("Actual root answer is required");
     if (
-        !["grammar", "miss", "unknown", "ordinary-copilot"].includes(
-            routeEvidence?.route,
-        )
+        ![
+            "grammar",
+            "explicit-mcp",
+            "miss",
+            "unknown",
+            "ordinary-copilot",
+        ].includes(routeEvidence?.route)
     )
         errors.push(
-            "Explicit routeEvidence.route grammar, miss, unknown, or ordinary-copilot is required",
+            "Explicit routeEvidence.route grammar, explicit-mcp, miss, unknown, or ordinary-copilot is required",
         );
     errors.push(...ordinaryReceiptErrors(routeEvidence));
     if (
@@ -907,161 +916,6 @@ function rootTurnCompleted(events, answerIndex, allowSdkIdle = true) {
     return false;
 }
 
-function hostPhaseReport(entry) {
-    if (entry.type !== "session.info" || !isRootEvent(entry)) return undefined;
-    try {
-        const report = JSON.parse(entry.data?.message);
-        return report.kind === "typeagent-macro-phases" ? report : undefined;
-    } catch {
-        return undefined;
-    }
-}
-
-function validHostPhases(report, routeEvidence) {
-    if (
-        !isText(report.catalogValidation?.macroId) ||
-        !Number.isInteger(report.catalogValidation.version) ||
-        report.catalogValidation.version < 1 ||
-        !Array.isArray(report.phases) ||
-        !Number.isFinite(report.elapsedMs)
-    )
-        return false;
-    const expected = [
-        "host.dispatch",
-        "host.catalog-validated",
-        "subagent.started",
-        "procedure-tool.started",
-        "procedure-tool.completed",
-        "runner.turn.completed",
-        "subagent.completed",
-    ];
-    let previousElapsed = -1;
-    let expectedIndex = 0;
-    for (const entry of report.phases) {
-        if (
-            !entry ||
-            !isText(entry.phase) ||
-            !Number.isFinite(entry.elapsedMs) ||
-            entry.elapsedMs < 0 ||
-            entry.elapsedMs < previousElapsed ||
-            entry.elapsedMs > report.elapsedMs ||
-            entry.phase === "subagent.failed"
-        )
-            return false;
-        previousElapsed = entry.elapsedMs;
-        if (entry.phase === expected[expectedIndex]) expectedIndex++;
-    }
-    if (
-        routeEvidence.macroId !== undefined &&
-        routeEvidence.macroId !== report.catalogValidation.macroId
-    )
-        return false;
-    if (
-        routeEvidence.version !== undefined &&
-        routeEvidence.version !== report.catalogValidation.version
-    )
-        return false;
-    return (
-        expectedIndex === expected.length &&
-        report.phases.filter((entry) => entry.phase === "subagent.started")
-            .length === 1 &&
-        report.phases.filter((entry) => entry.phase === "subagent.completed")
-            .length === 1
-    );
-}
-
-function isHostRunner(entry) {
-    return [
-        "typeagent-macro-runner-host",
-        "typeagent:typeagent-macro-runner-host",
-    ].includes(entry.data?.agentName);
-}
-
-function hostChildAnswerCompleted(events, answerIndex, completionIndex) {
-    const answer = events[answerIndex];
-    if (!isTurnId(answer?.data?.turnId) || !hasNoPendingTools(answer))
-        return false;
-    return events.some(
-        (entry, index) =>
-            index > answerIndex &&
-            index < completionIndex &&
-            entry.type === "assistant.turn_end" &&
-            entry.agentId === answer.agentId &&
-            entry.data?.parentToolCallId === answer.data.parentToolCallId &&
-            entry.data?.turnId === answer.data.turnId &&
-            causallyLinked(events, answerIndex, index),
-    );
-}
-
-function completedHostChild(events, reportIndex, answer) {
-    const completionIndex = events.findLastIndex(
-        (entry, index) =>
-            index < reportIndex &&
-            entry.type === "subagent.completed" &&
-            isHostRunner(entry) &&
-            causallyLinked(events, index, reportIndex),
-    );
-    const completion = events[completionIndex];
-    if (
-        !isText(completion?.agentId) ||
-        !isText(completion.data?.toolCallId) ||
-        completion.data.cancelled === true
-    )
-        return false;
-    const starts = events.filter(
-        (entry, index) =>
-            index < completionIndex &&
-            entry.type === "subagent.started" &&
-            entry.agentId === completion.agentId &&
-            entry.data?.toolCallId === completion.data.toolCallId &&
-            isHostRunner(entry),
-    );
-    const childAnswerIndex = events.findLastIndex(
-        (entry, index) =>
-            index < completionIndex &&
-            entry.type === "assistant.message" &&
-            entry.agentId === completion.agentId &&
-            entry.data?.parentToolCallId === completion.data.toolCallId,
-    );
-    return (
-        starts.length === 1 &&
-        events[childAnswerIndex]?.data?.content === answer &&
-        causallyLinked(events, childAnswerIndex, completionIndex) &&
-        hostChildAnswerCompleted(events, childAnswerIndex, completionIndex)
-    );
-}
-
-function hostReportMatchesRootTurn(events, reportIndex, answerIndex) {
-    const messages = events
-        .slice(reportIndex + 1, answerIndex)
-        .filter(
-            (entry) =>
-                isRootEvent(entry) &&
-                ["user.message", "assistant.message"].includes(entry.type),
-        );
-    return (
-        messages.length === 1 &&
-        messages[0].type === "user.message" &&
-        isText(messages[0].data?.interactionId) &&
-        messages[0].data.interactionId ===
-            events[answerIndex].data?.interactionId
-    );
-}
-
-function nativeHostCompleted(events, answerIndex, answer, routeEvidence) {
-    return events.some((entry, index) => {
-        const report = hostPhaseReport(entry);
-        return (
-            index < answerIndex &&
-            report !== undefined &&
-            validHostPhases(report, routeEvidence) &&
-            completedHostChild(events, index, answer) &&
-            hostReportMatchesRootTurn(events, index, answerIndex) &&
-            causallyLinked(events, index, answerIndex)
-        );
-    });
-}
-
 function hasExecutionError(events) {
     return events.some(
         (entry) =>
@@ -1089,19 +943,10 @@ function gradeCompletion(events, answer, routeEvidence, check) {
         "root-answer-without-pending-tools",
         answerIndex >= 0 && hasNoPendingTools(events[answerIndex]),
     );
-    const hasHost = events.some(
-        (entry) =>
-            isHostRunner(entry) ||
-            (entry.type === "session.info" &&
-                isText(entry.data?.message) &&
-                entry.data.message.includes("typeagent-macro-phases")),
-    );
     check(
         "terminal-native-completion",
-        hasHost
-            ? nativeHostCompleted(events, answerIndex, answer, routeEvidence)
-            : rootTurnCompleted(events, answerIndex),
-        "Requires root turn completion or a successful causally correlated host child and phase report",
+        rootTurnCompleted(events, answerIndex),
+        "Requires actual root terminal completion; execution-planner children and old phase reports cannot certify completion",
     );
     check("no-session-error", !hasExecutionError(events));
 }
@@ -1680,11 +1525,17 @@ function selectedTraceShape(trace) {
 
 function selectedStoreBinding(source, expected) {
     const paths = nativePaths(expected.dataRoot);
+    const scope = {
+        workspaceId:
+            paths === path.win32
+                ? paths.resolve(expected.cwd).toLowerCase()
+                : paths.resolve(expected.cwd),
+        profileId: expected.profileId ?? "local-default",
+    };
     const root = paths.join(
-        expected.dataRoot,
-        "profiles",
-        `macro-eval-${expected.owner.slice(0, 8)}`,
-        "copilot-macros",
+        paths.dirname(expected.configPath),
+        "recipes",
+        sha256(JSON.stringify(scope)),
     );
     return (
         source.storeRoot === root &&
@@ -1904,8 +1755,8 @@ function selectedTraceCallMatches(call, start, events) {
     return (
         call.toolCallId === start.data.toolCallId &&
         call.name === start.data.toolName &&
-        call.mcpServerName === "macro-eval-docs" &&
-        start.data.mcpServerName === "macro-eval-docs" &&
+        call.mcpServerName === "eval-docs" &&
+        start.data.mcpServerName === "eval-docs" &&
         call.status === "completed" &&
         Object.hasOwn(call, "arguments") &&
         Object.hasOwn(call, "result") &&
@@ -2103,7 +1954,7 @@ function ordinaryCaptureBinding(receipt, start, end, check) {
 }
 
 function ordinaryToolOperation(entry) {
-    if (entry.data?.mcpServerName !== "macro-eval-docs") return undefined;
+    if (entry.data?.mcpServerName !== "eval-docs") return undefined;
     const name = entry.data?.mcpToolName ?? entry.data?.toolName;
     if (typeof name !== "string") return undefined;
     return name.match(/(?:^|-)(lookup_document|fetch_document)$/u)?.[1];
@@ -2223,7 +2074,7 @@ function gradeOrdinaryCandidate(input, check) {
 
 function grammarAttribution(route) {
     if (route === "grammar") return true;
-    if (route === "miss") return false;
+    if (route === "miss" || route === "explicit-mcp") return false;
     return null;
 }
 
@@ -2337,7 +2188,9 @@ function gradePositive(
         check(
             "route-execution-consistent",
             executionEvidence.wholeMacroInvocations ===
-                (routeEvidence.route === "grammar" ? 1 : 0),
+                (["grammar", "explicit-mcp"].includes(routeEvidence.route)
+                    ? 1
+                    : 0),
         );
 }
 
@@ -2415,6 +2268,14 @@ function trialSimilarityErrors(input, result) {
     }
 }
 
+function currentProtocolErrors(input) {
+    return input?.protocolVersion === macroProtocolVersion
+        ? []
+        : [
+              `Obsolete evidence contract: collect ${macroProtocolVersion} checked-program evidence; old host-runner reports cannot certify current execution.`,
+          ];
+}
+
 export function gradeDocumentTrial(input) {
     const {
         scenario,
@@ -2429,9 +2290,11 @@ export function gradeDocumentTrial(input) {
         status: "harness-invalid",
         taskCorrect: null,
         grammarHit: null,
+        explicitMcpReuse: routeEvidence?.route === "explicit-mcp",
         checks: [],
         errors: [],
     };
+    result.errors.push(...currentProtocolErrors(input));
     result.errors.push(...scenarioInputErrors(scenario));
     result.errors.push(...renderingContractErrors(input?.renderingContract));
     if (result.errors.length > 0) return result;
@@ -2490,6 +2353,7 @@ export function gradeDocumentTrial(input) {
         if (!passed) result.errors.push(detail ?? name);
     };
     gradeCompletion(events, answer, routeEvidence, check);
+    gradeProgramEvidence(input, check);
     const selected = gradeOrdinaryCandidate(input, check);
     if (scenario.kind === "negative")
         gradeNegative(
@@ -2504,7 +2368,7 @@ export function gradeDocumentTrial(input) {
         gradePositive(
             document,
             backendAudit,
-            answer,
+            programDisplayAnswer(input),
             executionEvidence,
             routeEvidence,
             check,

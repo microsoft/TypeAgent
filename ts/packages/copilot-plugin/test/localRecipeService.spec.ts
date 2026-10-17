@@ -18,7 +18,7 @@ const forbidden = jest.fn(async (): Promise<never> => {
 beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), "local-recipe-service-"));
     process.env.TYPEAGENT_PLUGIN_DATA = directory;
-    process.env.TYPEAGENT_RECIPE_OWNER = "plugin";
+    delete process.env.TYPEAGENT_RECIPE_OWNER;
     forbidden.mockClear();
     service = await createLocalRecipeService({
         cwd: directory,
@@ -28,6 +28,9 @@ beforeEach(async () => {
         },
         replayHost: { inspectTool: forbidden, callTool: forbidden },
         learning: () => ({
+            withAuthorQuery: () => {
+                throw new Error("An empty catalog cannot request authorship.");
+            },
             extract: forbidden,
             build: forbidden,
             generateGrammar: forbidden,
@@ -91,7 +94,7 @@ test("blocks reflected methods, malformed arguments, cross-session and cross-wor
     ).rejects.toThrow("another workspace");
     expect(forbidden).not.toHaveBeenCalled();
 });
-test("owner rollback stops new local admissions without mutating either catalog", async () => {
+test("disabling stops new local admissions without selecting another catalog", async () => {
     process.env.TYPEAGENT_RECIPE_OWNER = "off";
     await expect(service.dispatch("listMacros", [null])).rejects.toThrow(
         "inactive",
@@ -100,4 +103,65 @@ test("owner rollback stops new local admissions without mutating either catalog"
         connectToMacroOwner(directory, "native-session"),
     ).rejects.toThrow("disabled");
     expect(forbidden).not.toHaveBeenCalled();
+});
+
+test("disable during selected recording blocks finalization and author claims without fallback", async () => {
+    await service.connection.setMacroLearningPreference({
+        cwd: directory,
+        mode: "prepare",
+    });
+    const token = await service.connection.armMacroRecording({
+        sessionId: "native-session",
+        cwd: directory,
+        learning: true,
+    });
+    await service.connection.claimMacroRecording({
+        sessionId: "native-session",
+        cwd: directory,
+        promptHash: "a".repeat(64),
+    });
+    process.env.TYPEAGENT_RECIPE_OWNER = "off";
+    expect(() =>
+        service.authoringConnection.claimMacroAuthoringRequest({
+            sessionId: "native-session",
+            cwd: directory,
+            workerId: "worker",
+        }),
+    ).toThrow("inactive");
+    await expect(
+        service.dispatch("claimMacroRecording", [
+            {
+                sessionId: "native-session",
+                cwd: directory,
+                promptHash: "a".repeat(64),
+            },
+        ]),
+    ).rejects.toThrow("inactive");
+    await expect(
+        service.connection.finalizeMacroRecording({
+            tokenId: token.id,
+            trace: {
+                schemaVersion: 1,
+                sessionId: "native-session",
+                cwd: directory,
+                prompt: "read alpha",
+                response: "alpha",
+                startedAt: "2026-10-16T00:00:00.000Z",
+                completedAt: "2026-10-16T00:00:01.000Z",
+                toolCalls: [],
+            },
+        }),
+    ).rejects.toThrow("inactive");
+    expect(forbidden).not.toHaveBeenCalled();
+    delete process.env.TYPEAGENT_RECIPE_OWNER;
+    expect(
+        await service.connection.getMacroRecordingState("native-session"),
+    ).toMatchObject({
+        status: "claimed",
+        token: { id: token.id },
+    });
+    await service.connection.cancelMacroRecording("native-session");
+    expect(
+        await service.connection.getMacroRecordingState("native-session"),
+    ).toEqual({ status: "idle" });
 });

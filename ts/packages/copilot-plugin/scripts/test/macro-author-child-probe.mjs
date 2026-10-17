@@ -342,7 +342,7 @@ if (path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
             state,
             (error) => captureErrors.push(error),
             {
-                connectAgentServer: async () => ({
+                connectOwner: async () => ({
                     getMacroRecordingState: async () => recordingState,
                     finalizeMacroRecording: async (request) => {
                         finalizations.push(request);
@@ -359,12 +359,9 @@ if (path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
                     },
                     close: async () => {},
                 }),
-                insertToolHistory: async () => {},
-                insertTurnHistory: async () => {},
             },
             async () => {},
             async () => {},
-            true,
         );
         session.on((event) => {
             if (originalRecording) {

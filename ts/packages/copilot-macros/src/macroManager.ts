@@ -55,6 +55,7 @@ import type {
 } from "./contracts.js";
 import { readProgramJournal, runMacroProgram } from "./macroProgramRun.js";
 import type { JsonValue } from "./recipeContracts.js";
+import type { SealedRecipeAuthoringContext } from "./recipeAuthoring.js";
 import { redactTraceValue } from "./redaction.js";
 import { PrivateResultStore } from "./resultEvidence.js";
 import { assertMacroCapabilities } from "./resultPath.js";
@@ -321,12 +322,28 @@ export class MacroManager {
             traceId: string;
             createdAt: string;
         };
+        let envelope: SealedRecipeAuthoringContext | undefined;
         try {
             storedTrace = redactTraceValue({
                 ...(await this.retainTraceEvidence(traceId, request.trace)),
                 traceId,
                 createdAt,
             }) as typeof storedTrace;
+            if (token.learning) {
+                if (!request.childAuthoring)
+                    throw new Error(
+                        "A sealed child authoring capture is required; re-record the successful task.",
+                    );
+                envelope = sealMacroChildCapture(
+                    traceId,
+                    request.trace,
+                    token,
+                    request.childAuthoring,
+                    (await this.learning.getPreference(request.trace.cwd)).mode,
+                    storedTrace,
+                    this.authoringProfileId,
+                );
+            }
             if (
                 Buffer.byteLength(JSON.stringify(storedTrace, undefined, 2)) >
                 1024 * 1024
@@ -350,7 +367,7 @@ export class MacroManager {
         } catch (error) {
             this.failures.set(
                 token.sessionId,
-                "The selected interaction could not be stored.",
+                `The selected interaction could not be stored or queued for learning: ${redactTraceValue(error instanceof Error ? error.message : String(error))}`,
             );
             throw error;
         }
@@ -362,18 +379,6 @@ export class MacroManager {
         };
         try {
             if (token.learning) {
-                const envelope = request.childAuthoring
-                    ? sealMacroChildCapture(
-                          traceId,
-                          request.trace,
-                          token,
-                          request.childAuthoring,
-                          (await this.learning.getPreference(request.trace.cwd))
-                              .mode,
-                          storedTrace,
-                          this.authoringProfileId,
-                      )
-                    : undefined;
                 const job = await this.learning.prepare(
                     traceId,
                     true,

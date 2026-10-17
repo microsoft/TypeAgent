@@ -1,8 +1,8 @@
 # @typeagent/copilot-macros
 
 `@typeagent/copilot-macros` records, authors, validates, catalogs, matches, and
-executes checked code-first macros. Agent-server or the explicitly selected
-plugin-local owner owns its `MacroManager` and storage; the plugin exposes recording commands, lifecycle MCP tools, and the
+executes checked code-first macros. The plugin-local owner owns its
+`MacroManager` and storage; the plugin exposes recording commands, lifecycle MCP tools, and the
 [macro skill](../copilot-plugin/skills/typeagent-macros/SKILL.md).
 Only checked programs can be persisted, approved, or run. The former step replay
 engine, Copilot macro runner, adaptation bridge/RPCs, and execution switches have
@@ -59,8 +59,6 @@ fresh-result fixtures before sealing the same program artifact used at runtime.
 This is an authoring/validation path, not an alternate live executor.
 
 `macroSchema` exports the shared macro action-name and input-schema helpers.
-DefaultAgentProvider keeps configured TypeAgent wrappers around these portable
-factories, preserving the existing hosted A/B defaults.
 `matchMacroGrammarInputs(macro, request)` uses the same saved action grammar and
 NFA runtime with registered built-in conversions, selects the current macro's
 action name/version, and returns only valid typed parameter objects. Secret-input
@@ -91,22 +89,25 @@ superseded revisions cannot start a new invocation; in-flight evidence pins its
 revision and stops future calls without promising effect rollback. Credentials
 and session bindings do not belong in artifacts. Source-recording provenance is retained for audit, not as an executable fallback.
 
-## Checkpoint A: TypeAgent-hosted programs
+## Shared checked-program core
 
-Program authoring and execution are configured unconditionally by both server
-entry points. Restart agent-server and reload the built plugin after updating.
-Use the normal recording/status/run commands; no program feature flag is needed.
-The plugin-local owner reuses this same manager, authoring/compiler/runtime ABI
-and grammar matcher; it does not mirror programs into the experimental SQLite
-catalog. See [plugin ownership and rollback](../copilot-plugin/README.md#checkpoint-c-plugin-owned-recipes).
+The plugin-local owner uses this manager, authoring/compiler/runtime ABI and
+grammar matcher; it does not mirror programs into the experimental SQLite
+catalog. The server does not compose an alternate catalog or recording learner.
+Use the plugin's normal recording/status/run commands; no program feature flag
+or backend-owner fallback is needed. See [plugin ownership](../copilot-plugin/README.md).
 
 The manager accepts an authoring profile identity (default `typeagent`) so sealed
 captures/outbox claims remain scoped under plugin-local profiles. Native
-inspection is opt-in through `ReplayToolHost.supportsNativeTools`; existing
-TypeAgent hosts remain MCP-only. `close()` stops new runs, cancels active work,
+inspection is opt-in through `ReplayToolHost.supportsNativeTools`.
+`close()` stops new runs, cancels active work,
 waits for journals/catalog mutations, and leaves interrupted learning queued with
 its stage attempt refunded for a new owner. Cancellation is reserved before
 asynchronous route loading and may precede acceptance; it never rolls back effects.
+Equivalent active or successful recordings share a learning job. After a failed
+job, a fresh sealed child capture creates a new job with its own immutable
+provenance; resubmitting the same trace does not automatically retry it. The
+original failure remains inspectable, and disabled/forgotten work stays suppressed.
 
 The production author derives fixture expectations independently of candidate
 source, compiles TypeScript, executes the stored executable against strict
@@ -119,20 +120,21 @@ checks actual tool descriptors.
 Grammar and explicit program invocation resolve the current approved revision
 through the same manager path. They run stored code directly, not the planning
 runner or a legacy-step fallback. Symbolic execution uses no model. Hybrid
-execution calls only declared semantic functions through the configured TypeAgent
+execution calls only declared semantic functions through an injected typed
 provider, with strict schemas, bounded attempts, cancellation, and actual model/
-token evidence. `TYPEAGENT_MACRO_LEARNING_MODEL` selects the configured Copilot
-model for authoring and the approved `typeagent-default@1` semantic policy.
+token evidence. The source author query always uses the restricted Copilot child;
+independent verification and semantic policy configuration do not select another
+author.
 Declarations requiring custom source-ID/quotation provenance validators are not
 auto-published by the initial author: they fail validation before publication,
 rather than producing a ready program that cannot run.
 
-The initial adapter accepts **read-only MCP tools available to TypeAgent**.
-It validates schemas and pins the actual MCP descriptor fingerprint as well as
-the normalized runtime schema digest. Unsupported schema constraints, missing
-tools, native-only tools, and writes fail explicitly rather than silently
-substituting another execution path. Existing MCP trust and backend authorization
-remain authoritative. There is no step replay or runner fallback.
+Host adapters validate schemas and pin actual native or MCP descriptor identities
+as well as normalized runtime schema digests. Unsupported schema constraints,
+missing tools, and effects outside the host's supported policy fail explicitly
+rather than substituting another execution path. Optional TypeAgent business
+actions retain their MCP trust and backend authorization. There is no step replay
+or runner fallback.
 
 `recipeCompiler` performs TypeScript diagnostics and produces the checked
 executable. Execution verifies compiler/source/output identity using a bounded
@@ -168,7 +170,7 @@ authoring draft version.
 Grounded `MacroStep`, `ValueExpression`, execution-class and postcondition
 metadata remain as authoring/audit evidence. `replayable` means the captured tool
 was inspectable by TypeAgent; `agentRequired` denotes an unavailable capability.
-Neither selects an execution mode. Unsupported native-only capabilities fail
+Neither selects an execution mode. Unavailable capabilities fail
 program authoring; they cannot launch a runner.
 
 `induceMacroFromTrace` derives parameter bindings and observed result dependencies
@@ -178,9 +180,9 @@ author resolves supported requirements as checked code or bounded semantics.
 
 ## Natural-language action integration
 
-The [macro provider](../defaultAgentProvider/src/macroAgentProvider.ts) exposes
-current approved programs without secret inputs as typed, version-pinned actions.
-Learning stages and validates grammar before publication. Grammar and explicit
+The plugin-local owner exposes current approved programs without secret inputs
+through its grammar and explicit MCP routes. Learning stages and validates grammar
+before publication. Grammar and explicit
 `runMacro` calls use one program invocation path and reject stale approvals,
 disabled routes, duplicate run IDs, and invalid inputs. No model-led inspection,
 planning child, extra recipe-layer consent, or automatic execution retry is added.
@@ -210,21 +212,19 @@ scoped; verified redacted model-visible evidence is supplied in phase prompts,
 not fetched by giving the child filesystem or credential access.
 
 Native inherited-context isolation is not assumed. The independent,
-source-blind fixture verifier remains in TypeAgent, using its configured model
-provider. Its successful responses and completed build/grammar stages are
+source-blind fixture verifier uses its independently configured query provider.
+Its successful responses and completed build/grammar stages are
 checkpointed so a pause/restart does not regenerate the validation oracle or
-exhaust a restart budget. TypeAgent alone compiles, runs independent fixtures,
+exhaust a restart budget. The shared core compiles, runs independent fixtures,
 applies existing publication modes, stores, matches, and executes the program.
 Repeat-time symbolic/semantic behavior is unchanged.
 
 New user work preempts only the active author child. Off/Cancel stops pending
 work and aborts an active child; host shutdown leaves unanswered leases
 recoverable by a later compatible session. No work is promised while Copilot is
-closed. Contextual jobs never silently fall back to TypeAgent authoring. Clients
-omitting `childAuthoring` retain the named Checkpoint A compatibility path.
-This is still the read-only MCP scope of A, not plugin-local execution,
-standalone inference, arbitrary native tools, or a VS Code host compatibility
-claim.
+closed. All learning requires correlated `childAuthoring` and a sealed context;
+there is no backend, offline, or missing-envelope author fallback.
+Trace-only recordings remain nonlearning and cannot later be induced from logs.
 
 ## Durable learning
 
@@ -235,7 +235,10 @@ tools. The service supplies factual `extract`, generalized `build`, and checked
 `validateGrammar(macro, approved)` implementation rechecks the staged rules
 against the current approved catalog inside serialized approval and recovery.
 This validation must not generate rules or execute task tools. The injected
-runtime must not have task-execution capabilities. It must report unsupported
+runtime must implement `withAuthorQuery` to bind every author stage to the
+restricted child query. The independent verifier and declared typed semantic
+calls remain separate from that author query. The runtime must not have
+task-execution capabilities. It must report unsupported
 selection, synthesis, or full-output requirements in
 `MacroLearningBuild.unsupportedOutputs`; a structurally valid, warning-free
 procedure is not proof that it reproduces the complete answer. Grammar syntax,
@@ -267,7 +270,8 @@ duplicates do not count as variants.
 await manager.configureLearning(runtime);
 await manager.setMacroLearningPreference({ cwd, mode: "prepare" });
 const token = manager.armRecording({ sessionId, cwd, learning: true });
-// Claim and finalize the selected actual interaction normally.
+// Claim and finalize with childAuthoring from the actual root user,
+// token-bound success receipt, and final-answer event identities.
 // finalizeRecording returns learningJobId without waiting for model work.
 const job = await manager.getMacroLearningJob(summary.learningJobId!);
 ```
@@ -281,8 +285,9 @@ The public coordinator API is:
   durable workspace-scoped preferences with monotonically increasing revisions.
   Working directories are resolved and case-normalized for Windows. Load or set
   the preference before the synchronous selected `armRecording` call.
-- `prepareMacroLearning({traceId})`: enqueue a previously captured interaction
+- `prepareMacroLearning({traceId})`: reprocess a previously sealed child capture
   and return without waiting for extraction, building, or grammar generation.
+  Missing or mismatched sealed context requires re-recording.
 - `getMacroLearningJob(jobId)`: inspect persisted phase, macro reference, or error.
 - `await getRecordingState(sessionId)`: inspect recording state and, after a
   selected recording completes, its current learning job, phase, version, or
@@ -292,14 +297,13 @@ The public coordinator API is:
 
 The four modes are `off` (default, no selected recording or preparation),
 `prepare` (stage a draft for explicit approval), `read-only` (auto-approve only
-when every step's inspected descriptor explicitly has `readOnly: true`), and
-`all` (auto-approve valid procedures within the supported host contract).
-Plugin-native reads can be classified by its inspector; unknown effects cannot.
-Recording and induction must be enabled for selected learning. Both current
-production brokers reject writes even in All. The TypeAgent broker also rejects
-native-only capabilities; the plugin broker supports its documented native reads.
-Manual recording without
-`learning: true` retains its existing behavior. A preference change to Off
+when every supported step's inspected descriptor explicitly has `readOnly: true`), and
+`all` (auto-approve valid procedures within the host's supported effect policy).
+Uninspectable tools are not classified as read-only; native inspection requires an
+explicitly capable host. Recording and induction must be enabled for selected
+learning. Publication mode never overrides host authorization. Manual recording without
+`learning: true` stores a trace only; it never queues learning or fabricates child
+provenance. A preference change to Off
 cancels pending work; preference/flags are checked again before publication.
 Changing a learning preference does not revoke an already approved definition.
 
@@ -317,7 +321,10 @@ execute recorded steps on repeat. Grammar, request examples, workspace, job and
 publication preference persist with immutable versions for restart-safe routing.
 
 `prepareMacroLearning({traceId})` uses the same pipeline for an existing complete
-trace without rerunning the original task. There is no runner adaptation or
+trace with its genuine sealed child context, without rerunning the original task.
+Persisted jobs lacking valid child identity or their exact sealed context are
+marked failed with an explicit re-record diagnostic on load, not resumed.
+There is no runner adaptation or
 candidate-submission overload; record a new successful example for a new procedure.
 Disable/forget suppress equivalent learned observations from resurrecting a macro.
 

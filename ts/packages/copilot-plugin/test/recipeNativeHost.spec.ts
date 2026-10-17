@@ -144,6 +144,45 @@ describe("native recipe host", () => {
         },
     );
 
+    it("accepts the evaluator document provider without relaxing recursion denial", async () => {
+        const f = await setup();
+        f.tools.push({
+            name: "eval-docs-lookup_document",
+            description: "Read a synthetic document",
+            mcpServerName: "eval-docs",
+            mcpToolName: "lookup_document",
+            input_schema: f.schema,
+        });
+        const inspect = createNativeRecipeCapabilityInspector(
+            f.session,
+            f.binding,
+            {
+                readOnlyMcpTools: [
+                    {
+                        mcpServerName: "eval-docs",
+                        toolName: "lookup_document",
+                    },
+                ],
+            },
+        );
+        expect(
+            await inspect({
+                mcpServerName: "eval-docs",
+                toolName: "lookup_document",
+            }),
+        ).toMatchObject({
+            status: "available",
+            capability: { providerId: "eval-docs", effect: "read" },
+        });
+        expect(
+            await inspect({
+                mcpServerName: "typeagent-macros",
+                toolName: "run_macro",
+            }),
+        ).toMatchObject({ status: "unsupported" });
+        expect(f.execute).not.toHaveBeenCalled();
+    });
+
     it("requires exact preflight and validates input before native dispatch", async () => {
         const f = await setup();
         const changed: RecipeCapability = { ...f.capability, effect: "write" };

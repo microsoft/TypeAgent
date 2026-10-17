@@ -11,7 +11,6 @@ import {
     type AgentServerConnection,
 } from "@typeagent/agent-server-client";
 import type { DispatcherConnectOptions } from "@typeagent/agent-server-protocol";
-import type { MacroManager } from "@typeagent/copilot-macros";
 import type { LiveSkillCatalog } from "@typeagent/skill-catalog";
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-types";
 import type { ConversationManager } from "../src/conversationManager.js";
@@ -97,7 +96,6 @@ function fixture() {
     } as unknown as ConversationManager;
     const { handler } = createAgentServerConnectionHandler({
         conversationManager: manager,
-        macroManager: {} as MacroManager,
         skillCatalog: {} as LiveSkillCatalog,
         shutdown() {},
         getUserIdentity: () => ({

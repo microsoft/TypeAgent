@@ -1717,9 +1717,6 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      '@typeagent/copilot-macros':
-        specifier: workspace:*
-        version: link:../../copilot-macros
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
@@ -1748,9 +1745,6 @@ importers:
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
-      '@typeagent/agent-flows':
-        specifier: workspace:*
-        version: link:../../agent-flows
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
@@ -1778,9 +1772,6 @@ importers:
       '@typeagent/conversation-memory':
         specifier: workspace:*
         version: link:../../memory/conversation
-      '@typeagent/copilot-macros':
-        specifier: workspace:*
-        version: link:../../copilot-macros
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
@@ -4937,12 +4928,6 @@ importers:
       '@typeagent/copilot-plugin':
         specifier: workspace:*
         version: link:../copilot-plugin
-      agent-dispatcher:
-        specifier: workspace:*
-        version: link:../dispatcher/dispatcher
-      agent-server:
-        specifier: workspace:*
-        version: link:../agentServer/server
       prettier:
         specifier: ^3.5.3
         version: 3.5.3

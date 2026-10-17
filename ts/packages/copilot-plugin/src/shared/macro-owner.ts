@@ -1,12 +1,40 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { AgentServerConnection } from "@typeagent/agent-server-client";
+import type {
+    MacroManager,
+    RunMacroRequest,
+    RunMacroResponse,
+} from "@typeagent/copilot-macros";
 import { getRecipeOwner } from "./plugin-config.js";
 import {
     callLocalRecipe,
     resolveLocalRecipeWorkspace,
 } from "./recipe-transport.js";
+
+type ManagerMethodMap = {
+    getMacroLearningPreference: "getMacroLearningPreference";
+    setMacroLearningPreference: "setMacroLearningPreference";
+    getMacroLearningJob: "getMacroLearningJob";
+    cancelMacroLearningJob: "cancelMacroLearningJob";
+    armMacroRecording: "armRecording";
+    getMacroRecordingState: "getRecordingState";
+    claimMacroRecording: "claimRecording";
+    cancelMacroRecording: "cancelRecording";
+    failMacroRecording: "failRecording";
+    finalizeMacroRecording: "finalizeRecording";
+    listMacros: "listMacros";
+    searchMacros: "searchMacros";
+    inspectMacro: "inspectMacro";
+    getMacroRequirements: "getMacroRequirements";
+    validateMacro: "validateMacro";
+    approveMacro: "approveMacro";
+    disableMacro: "disableMacro";
+    deleteMacro: "deleteMacro";
+    runMacro: "runMacro";
+    cancelMacroRun: "cancelMacroRun";
+    getMacroRun: "getMacroRun";
+};
 
 export const macroOwnerMethods = [
     "getMacroLearningPreference",
@@ -30,12 +58,24 @@ export const macroOwnerMethods = [
     "runMacro",
     "cancelMacroRun",
     "getMacroRun",
-] as const satisfies readonly (keyof AgentServerConnection)[];
+] as const satisfies readonly (keyof ManagerMethodMap)[];
 type Method = (typeof macroOwnerMethods)[number];
-export type MacroOwnerConnection = Pick<
-    AgentServerConnection,
-    Method | "close"
->;
+export type MacroOwnerConnection = {
+    [K in Exclude<Method, "runMacro">]: (
+        ...args: Parameters<MacroManager[ManagerMethodMap[K]]>
+    ) => Promise<Awaited<ReturnType<MacroManager[ManagerMethodMap[K]]>>>;
+} & {
+    runMacro(request: RunMacroRequest): Promise<RunMacroResponse>;
+    close(): Promise<void>;
+};
+
+export type MacroAuthoringConnection = Pick<
+    MacroOwnerConnection,
+    "getMacroLearningPreference" | "getMacroLearningJob" | "close"
+> & {
+    claimMacroAuthoringRequest: MacroManager["claimMacroAuthoringRequest"];
+    submitMacroAuthoringResponse: MacroManager["submitMacroAuthoringResponse"];
+};
 
 export async function connectToMacroOwner(
     cwd?: string,
@@ -43,10 +83,6 @@ export async function connectToMacroOwner(
 ): Promise<MacroOwnerConnection> {
     const owner = getRecipeOwner();
     if (owner === "off") throw new Error("Recipe features are disabled.");
-    if (owner === "typeagent") {
-        const { connectToAgentServer } = await import("./typeagent-client.js");
-        return connectToAgentServer();
-    }
     if (!sessionId)
         throw new Error(
             "Local recipes require the actual native Copilot session.",
@@ -54,10 +90,10 @@ export async function connectToMacroOwner(
     const workspace = cwd ?? (await resolveLocalRecipeWorkspace(sessionId));
     const invoke = async <K extends Method>(
         method: K,
-        ...args: Parameters<AgentServerConnection[K]>
-    ): Promise<Awaited<ReturnType<AgentServerConnection[K]>>> =>
+        ...args: Parameters<MacroOwnerConnection[K]>
+    ): Promise<Awaited<ReturnType<MacroOwnerConnection[K]>>> =>
         (await callLocalRecipe(workspace, sessionId, method, args)) as Awaited<
-            ReturnType<AgentServerConnection[K]>
+            ReturnType<MacroOwnerConnection[K]>
         >;
     return {
         getMacroLearningPreference: (cwd) =>

@@ -88,7 +88,7 @@ export function recipeCapabilityFromTool(
 ): RecipeCapability {
     if (!descriptor.mcpServerName || !descriptor.inputSchema)
         throw new Error(
-            "Checkpoint A requires an available TypeAgent MCP capability with an actual input schema; native tools need a session broker.",
+            "TypeAgent recipes require an available MCP capability with an actual input schema; native tools need a session broker.",
         );
     const inputSchema = convertSchema(descriptor.inputSchema);
     return {
@@ -149,7 +149,7 @@ export function createTypeAgentRecipeHost(
                 return {
                     status: "unsupported",
                     message:
-                        "Checkpoint A currently supports read-only TypeAgent MCP tools; effects and native session tools are not enabled.",
+                        "The TypeAgent recipe host supports read-only MCP tools; effects and native session tools are not enabled.",
                 };
             const descriptor = await host.inspectTool(
                 requirement.providerId,

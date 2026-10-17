@@ -175,7 +175,6 @@ async function run() {
         path.join(data, "config.json"),
         JSON.stringify({
             mode: "direct",
-            recipeOwner: "plugin",
             recipeReadOnlyMcpTools: [
                 { mcpServerName: "checkpoint-c", toolName: "read" },
                 { mcpServerName: "checkpoint-c", toolName: "read_sentiment" },
@@ -199,7 +198,6 @@ async function run() {
         TEMP: directory,
         TMP: directory,
         TYPEAGENT_PLUGIN_DATA: data,
-        TYPEAGENT_RECIPE_OWNER: "plugin",
         TYPEAGENT_RECIPE_PROFILE_ID: "checkpoint-c-proof",
         TYPEAGENT_HOST: "127.0.0.1",
         TYPEAGENT_PORT: "1",
