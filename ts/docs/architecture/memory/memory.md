@@ -1,28 +1,26 @@
 # Memory architecture
 
-TypeAgent memory does two jobs. It lets you recall evidence for a question, and
-it keeps documents up to date as that evidence changes.
+TypeAgent memory lets you search saved conversations and documents, ask questions
+about them, and build documents that update when their sources change.
 
-A memory service stores your sources and events. KnowPro extracts structure from
-them so they can be searched. Editable documents called Views organize selected
-evidence, and they never replace it.
+The memory service stores sources and events. KnowPro indexes their content for
+search. Editable documents called Views collect selected evidence into wiki pages,
+project briefs, timelines and troubleshooting guides. Each View keeps references
+to its sources so you can check its claims.
 
-This page covers the concepts. The [current-system map](current-system.md) lists
-what is implemented and where. Being implemented does not mean a feature has been
-qualified for production or tested with live models.
+For implementation details, see [Current system](current-system.md). For test
+results and release readiness, see the
+[evidence ledger](https://github.com/microsoft/TypeAgent/blob/main/ts/docs/plans/memory-system/STATUS.md).
 
 ## How the pieces fit
 
-![Sources feed shared retained evidence and a KnowPro index. Query-time recall serves Chat/Search and agents/MCP clients; view builders produce maintained documents. A separate optional branch represents reviewed skills or macros.](diagrams/memory-overview.svg)
+![Sources feed shared retained evidence and a KnowPro index. Query-time recall serves Chat/Search and agents/MCP clients; View builders produce maintained documents.](diagrams/memory-overview.svg)
 
 [Full-size SVG](diagrams/memory-overview.svg)
 
-Read the diagram left to right: sources, shared memory, processing paths,
-consumers. It shows concepts, not a deployment layout or a list of connectors.
-
-"Procedures" in the diagram means stored instructional material, not a
-saved-procedure service. The optional Skills/Macros branch sits outside the
-memory service. Publishing a View never packages, approves or runs a macro.
+Sources feed both search and View generation. Instructional notes and guides are
+stored as ordinary sources; skills and macros are managed separately outside the
+memory service.
 
 ### What memory stores
 

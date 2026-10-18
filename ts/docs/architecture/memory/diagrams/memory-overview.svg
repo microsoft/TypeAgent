@@ -1,15 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1808" height="684" viewBox="0 0 1808 684" role="img" aria-labelledby="hybrid-title hybrid-desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1808" height="572" viewBox="0 0 1808 572" role="img" aria-labelledby="hybrid-title hybrid-desc">
   <title id="hybrid-title">Memory overview: sources, shared memory, recall and View builders, consumers</title>
-  <desc id="hybrid-desc">Sources feed two shared columns: retained evidence and the KnowPro index. Two processing paths read both. Query-time recall returns cited answers and passages to Chat and Search and to agents and MCP clients. View builders produce versioned wikis, project briefs, timelines and troubleshooting guides that keep human edits. A separate optional branch covers skills and macros: only eligible procedures can enter human review, and activation and runtime permission are decided separately.</desc>
+  <desc id="hybrid-desc">Sources feed two shared stores: retained evidence and the KnowPro index. Two processing paths read both. Query-time recall returns cited answers and passages to Chat and Search and to agents and MCP clients. View builders produce versioned wikis, project briefs, timelines and troubleshooting guides that preserve human edits.</desc>
   <defs>
     <marker id="arrow" markerWidth="11" markerHeight="11" refX="10" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
       <path d="M0 0 11 5.5 0 11z" fill="#5c7388"/>
     </marker>
     <marker id="post" markerWidth="11" markerHeight="11" refX="10" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
       <path d="M0 0 11 5.5 0 11z" fill="#6e947f"/>
-    </marker>
-    <marker id="optional" markerWidth="11" markerHeight="11" refX="10" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M0 0 11 5.5 0 11z" fill="#9a7844"/>
     </marker>
     <style>
       text { font-family: "Segoe UI", Arial, sans-serif; fill: #243744; }
@@ -21,10 +18,9 @@
       .tag { font-size: 15px; font-weight: 600; fill: #4e6474; }
       .edge { fill: none; stroke: #5c7388; stroke-width: 2.25; marker-end: url(#arrow); }
       .post { fill: none; stroke: #6e947f; stroke-width: 2; stroke-dasharray: 5 4; marker-end: url(#post); }
-      .opt { fill: none; stroke: #9a7844; stroke-width: 2; stroke-dasharray: 6 5; marker-end: url(#optional); }
     </style>
   </defs>
-  <rect width="1808" height="684" fill="#f7f6f3"/>
+  <rect width="1808" height="572" fill="#f7f6f3"/>
   <text x="24" y="40" class="cap">SOURCES</text>
   <text x="328" y="40" class="cap">SHARED MEMORY</text>
   <text x="936" y="40" class="cap">PROCESSING PATHS</text>
@@ -34,7 +30,7 @@
     <rect x="24" y="64" width="248" height="72" rx="14" fill="#fff" stroke="#d5e0d8"/>
     <path d="M44 82h16l7 7v20H44z M60 82v7h7 M50 98h12 M50 104h8" fill="none" stroke="#5f8a74" stroke-width="1.7"/>
     <text x="84" y="94" class="h">Documents</text>
-    <text x="84" y="118" class="small">PDF, Markdown</text>
+    <text x="84" y="118" class="small">Markdown, text, HTML</text>
   </g>
   <g data-card="conversations">
     <rect x="24" y="144" width="248" height="72" rx="14" fill="#fff" stroke="#d5dee8"/>
@@ -59,8 +55,8 @@
     <rect x="24" y="384" width="248" height="72" rx="14" fill="#fff" stroke="#e4d8c4"/>
     <rect x="44" y="402" width="18" height="22" rx="2" fill="none" stroke="#9a7844" stroke-width="1.7"/>
     <path d="M48 410h10 M48 416h10" stroke="#9a7844" stroke-width="1.7"/>
-    <text x="84" y="414" class="h">Procedures</text>
-    <text x="84" y="438" class="small">Versioned input</text>
+    <text x="84" y="414" class="h">Instruction docs</text>
+    <text x="84" y="438" class="small">Guides and notes</text>
   </g>
 
   <path d="M272 100C296 100 304 118 328 124" class="edge"/>
@@ -155,13 +151,5 @@
     <text x="1494" y="482" class="body">Troubleshooting guides</text>
     <line x1="1494" y1="504" x2="1756" y2="504" stroke="#d0e0d6"/>
     <text x="1494" y="532" class="tag">Versioned and edit-preserving</text>
-  </g>
-
-  <path d="M1722 546v80h-288" class="opt"/>
-  <text x="1520" y="610" class="small">eligible procedures only</text>
-  <g data-card="review">
-    <rect x="936" y="588" width="480" height="72" rx="14" fill="#fffaf3" stroke="#e4d3b6"/>
-    <text x="956" y="619" class="h">Skills/Macros</text>
-    <text x="956" y="645" class="small">Human review, then publish</text>
   </g>
 </svg>

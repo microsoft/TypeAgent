@@ -1,10 +1,9 @@
 # TypeAgent memory scenarios
 
-Audience: product engineers, agent authors, evaluators and demo owners. These
-journeys describe what is implemented. They are not a new live acceptance run.
-See [Current system](current-system.md) for routing, and the dated
-[implementation ledger](https://github.com/microsoft/TypeAgent/blob/main/ts/docs/plans/memory-system/STATUS.md)
-for evidence and remaining qualification.
+Use these workflows to find saved information, build a knowledge base, and
+maintain generated documents. [Current system](current-system.md) explains the
+implementation. The [implementation ledger](https://github.com/microsoft/TypeAgent/blob/main/ts/docs/plans/memory-system/STATUS.md)
+tracks test results and release readiness.
 
 ## Capability map
 
@@ -32,15 +31,16 @@ conversation removes its events and records a tombstone.
 
 ## Scenario 2: Build and manage a Markdown knowledge base
 
-1. Pick a corpus with `@memory corpus create` and `@memory corpus use`.
+1. Create a collection with `@memory corpus create`, then select it with
+   `@memory corpus use`. Commands call a collection a _corpus_.
 2. Submit files or folders with `@memory import`, then check the batch and job status.
 3. Query with `@memory search` or `ask`. `ask --extractive` returns snippets.
 4. Inspect source content, revisions and knowledge, and reopen citations with `explain`.
-5. Preview a replacement or a forget, then confirm the exact operation you saw.
+5. To replace or forget a source, preview the change and confirm that operation.
 
-Imports use one `content` pipeline and have no profiles. The trusted host enforces
-real paths, symlink and junction containment, globs, file and byte limits, and
-concurrency. MCP clients list their own files and submit the content.
+Imports use one `content` pipeline and have no profiles. The host validates paths,
+including symlinks and junctions, and enforces glob, file-size, byte and concurrency
+limits. MCP clients list their own files and submit the content.
 
 Indexing a source and the automatic derived work succeed or fail separately. A
 failed Wiki target doesn't invalidate a source that indexed correctly.
@@ -79,9 +79,8 @@ exact citations. Projects keep goals, owners, milestones and status dimensions
 separate, and shared vocabulary doesn't merge two initiatives. One substantial
 source can justify a page, but generated output isn't a complete inventory.
 
-The earlier saved-personal-procedure workflow no longer exists as a service API.
-Retained instruction documents and troubleshooting Views are guidance. They don't
-turn into skills or macros automatically.
+Instruction documents and troubleshooting Views provide guidance. To automate
+a task, use [macros](../workflows/macros.md) or a provider-owned flow separately.
 
 <a id="scenario-6-integrate-an-external-client"></a>
 
@@ -93,9 +92,9 @@ every client can discover its credentials automatically. A standalone owner need
 an explicitly configured store. Don't assume it shares a running profile, and
 don't open that profile at the same time.
 
-The native `@memory` agent, the runtime `@memory-mcp` agent and the separate
-workspace memory plugin each play a different role. None of them should
-reimplement retrieval or lifecycle logic that another already provides.
+Use the native `@memory` agent for local commands and the runtime `@memory-mcp`
+agent for MCP access to the same service. The workspace memory plugin has a
+separate store; it does not share the profile's memory.
 
 ## Scenario 7: Edit knowledge and refresh without losing intent
 
@@ -104,11 +103,12 @@ The View keeps its stable identity. After new indexed evidence arrives, check th
 updated page and its protected edit units. An explicit unlock lets maintenance
 revise a protected unit. An edit that truly overlaps stays a recoverable conflict.
 
-Try family update, rebuild, pause and resume, then reopen the collection to check
-that the state persisted. If the evidence is unchanged, the service shouldn't run
-synthesis just to produce a newer timestamp. Consolidating generated articles is
-guarded separately from your editorial saves, and navigating from an old ID differs
-from reading an exact historical revision. See [Maintenance](view-maintenance.md).
+Use family update and rebuild to request maintenance, or pause and resume to
+control automatic work. These settings persist when you reopen the collection.
+Unchanged evidence does not trigger synthesis. Automatic consolidation applies
+only to generated articles without human edits; old article IDs redirect to the
+canonical article, while exact historical reads remain available. See
+[Maintenance](view-maintenance.md).
 
 ## Scenario 8: Build a timeline or troubleshooting guide
 
@@ -117,8 +117,8 @@ also select canonical events and time bounds. Inspect the job's receipt for each
 target, the inventory and support results, the generated base and the exact
 citations. An empty or blocked checkpoint never yields an invented document.
 
-To keep a source scope current, preview the explicit maintenance before you admit
-the work. Future events aren't discovered dynamically. You can edit the narrative,
+To keep a source scope current, preview maintenance before you start it.
+Future events aren't discovered dynamically. You can edit the narrative,
 but you can't invent a source-owned event identity or time. Resolve conflicts
 explicitly. See [Derived Views](derived-views.md).
 

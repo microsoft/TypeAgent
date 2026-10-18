@@ -1,14 +1,14 @@
 # Derived Views: construction, edits and publication
 
-A View is an editable, versioned document built from retained evidence. It isn't
-a source of truth, and it can't be run as a procedure. One service handles builds,
-generated bases, edits and conflicts, history, maintenance, publication and
-search over derived content.
+A View is an editable, versioned document built from saved sources or events.
+Use it to collect evidence into a wiki page, project brief, timeline or
+troubleshooting guide. Check its citations against the original sources before
+relying on a generated claim. A View cannot execute a procedure.
 
 [Memory architecture](memory.md) describes the overall model. [View maintenance](view-maintenance.md)
 covers refresh and discovery.
 
-## Four kinds, two construction families
+## View kinds
 
 | Kind                  | Construction                              | Evidence and output                                                                                                              |
 | --------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -30,19 +30,18 @@ meaning is right. Wiki and Projects don't use the full-source inventory.
 Old inventory-backed Wiki bundles, `wiki-v1`, explicit-subject registries and the
 removed full-source project construction are not supported for compatibility.
 
-## Build and materialization
+## Building a View
 
 ![Indexed Wiki/Projects and selected full-evidence builders converge on exact snapshots, protected edit merging and guarded publication/indexing. Failures preserve current content.](diagrams/view-build-flow.png)
 
 [SVG](diagrams/view-build-flow.svg) · [Editable scene](diagrams/view-build-flow.excalidraw)
 
-A build freezes the definition, the evidence identities, the configured model
-and recipe, and the current target and head guards. Generation then runs outside
-the serialized write step. Before it saves, the service rechecks that the evidence
-is still eligible, that the target and definition versions haven't changed, and
-that the build wasn't cancelled or invalidated by privacy state. An old model
-result can't overwrite a concurrent edit or a source that has since been replaced
-or forgotten.
+A build records the definition, exact evidence revisions, model and recipe,
+and expected target versions. The model generates the document without holding
+the store's write lock. Before saving, the service checks those versions again
+and confirms that the evidence is still eligible and the build has not been
+cancelled. It rejects results invalidated by a concurrent edit, source replacement
+or privacy removal.
 
 `buildViews` returns a durable job with a result for each target. A job's state is
 `running`, `complete`, `partial`, `failed`, `cancelled` or `interrupted`. A target
@@ -90,20 +89,21 @@ and bounded UTF-16 ranges. Citations for full-evidence builds resolve to the
 retained original text. Timeline event citations also name the canonical event.
 Generation time is not the time an event occurred.
 
-Stable section IDs and typed relationships don't appear as graph labels. A
-source-backed assertion and a selector dependency mean different things. Three
-checks are separate: whether the citation identity is right, whether the cited
-text supports the claim, and whether the coverage is complete. Passing one doesn't
-pass the others. Don't count a generated View as independent evidence for the
-sources it was built from.
+Stable section IDs and typed relationships are stored separately from graph
+labels. Relationships distinguish a source-backed assertion from a dependency
+introduced by source selection.
+
+When reviewing a View, check that each citation resolves to the intended passage,
+that the passage supports the claim, and that important evidence is not missing.
+A generated View does not count as independent corroboration of its own sources.
 
 ## Explicit edits and conflicts
 
 The service authenticates human saves and applies optimistic head and version
 guards. It keeps the generated base separate from the current human text. A
-rebuild merges three things: the old generated base, the current human text and
-the new generation. Prose uses a bounded three-way merge. Relationships keep their
-semantic identities and explicit removals. A language model never picks the winner.
+rebuild uses a bounded three-way merge of the old generated base, your current
+text and the new generation. Relationships keep their semantic identities and
+explicit removals. The merge does not use a language model to choose between edits.
 
 For informational maintenance, deliberate human edit units are protected.
 `protectedTargets` is the service's authoritative list. An explicit unlock records
@@ -121,8 +121,8 @@ doesn't mean the meaning survived. See
 
 Publication policy is resolved in this order: a one-build override, then the
 saved View's override, then the corpus policy. An explicit `false` doesn't fall
-through to the next level. Auto-publication is on by default. That says nothing
-about the quality of what it publishes.
+through to the next level. Auto-publication is on by default; it does not mark
+the content as human-reviewed.
 
 Informational content doesn't need the full-source inventory proofs that
 timelines and troubleshooting guides use. Each path still enforces its own

@@ -1,16 +1,38 @@
 # Checked program macros
 
-A macro turns a successful interaction into a reusable, versioned program. TypeAgent
-only saves, approves or runs a program after it has been checked.
+A macro saves a successful task as a reusable program with named inputs. TypeAgent
+checks the program before saving it; only the current approved revision can run.
+
+## Using macros
+
+Enable learning with Prepare if you want to review each candidate before it is
+approved. Read-only can publish validated candidates automatically when all tool
+effects are classified as read-only. The preferences are described below.
+
+To use a saved macro:
+
+1. Find it with `search_macros` or `list_macros`.
+2. Check its inputs with `get_macro_requirements`. Use `inspect_macro` if you
+   want to review the program.
+3. Call `run_macro` with its `macroId` and `inputs`, and optionally a `version`
+   and `timeoutMs`. Dry runs are not supported.
+4. Inspect the returned outcome. If the reply is lost or uncertain, use
+   `get_macro_run` to check the run before doing anything else. Do not repeat the
+   task through another tool: the first run may already have had effects.
+
+In a configured host, a matching natural-language request can also run the current
+approved macro. See the [plugin setup guide](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/copilot-plugin/README.md#tool-composed-macros)
+for recording and learning commands.
+
+## Macros and other workflows
 
 Macros are different from [provider-owned flows](./workflows.md) and from the
 [workflow DSL and IR design](./README.md). Copilot dev actions route Windows
 PowerShell actions. They aren't a second macro executor.
 
-The old step-replay engine, planning runner, adaptation APIs and execution
-switches are gone. The recorded step and expression metadata is kept for authoring
-and audit, and nothing runs from it. TypeAgent discards old development-only
-records and doesn't migrate them.
+Recorded steps and expressions provide authoring and audit evidence. Execution
+uses the checked program, never a replay of those steps. Old development-only
+records are discarded without migration.
 
 ## Learning and execution are separate
 
@@ -18,8 +40,6 @@ records and doesn't migrate them.
 
 [Full SVG](./diagrams/macro-program-lifecycle.svg) ·
 [Editable scene](./diagrams/macro-program-lifecycle.excalidraw)
-
-Learning produces a program. Running a macro later doesn't repeat the learning.
 
 1. **Capture evidence.** For a native learning task, TypeAgent needs a
    token-bound root success receipt, followed by the final answer. An idle session
@@ -78,7 +98,7 @@ Clients that can't capture native context still use the TypeAgent-hosted
 compatibility authoring path. A failed contextual job never silently switches to
 that path.
 
-## One core, a selected owner
+## Choosing an owner
 
 ![TypeAgent-hosted and opt-in plugin-owned coordination use the same manager, compiler and contained runtime. Tools and model adapters remain outside the guest.](./diagrams/macro-runtime-ownership.png)
 
@@ -91,8 +111,8 @@ that path.
 | `plugin` (opt-in)     | The joined native extension owns one manager per workspace and profile. Hooks, commands and macro MCP tools talk over authenticated session-local IPC. | Native reads and explicitly classified read-only MCP tools. Restricted task children write the source. Verification and semantic functions run on a separate installed native CLI.                        |
 | `off`                 | Turns off recipe routing and learning. No other owner is chosen automatically.                                                                         | An accepted invocation is never repeated through another provider.                                                                                                                                        |
 
-Both owners share the same authoring, compiler and runtime contracts and the same
-publication rules. There are no forked engines and no mirrored catalogs.
+Both owners use the same authoring, compiler, runtime and publication rules.
+Each keeps its own catalog.
 
 The owner is chosen independently of three other settings:
 
@@ -153,9 +173,9 @@ capability and semantic adapters, never through ambient process APIs.
   through the configured provider. Results are schema-validated, calls can be
   cancelled, and model and token usage is recorded.
 
-Neither mode guarantees lower latency, a speedup or lower cost. Capture,
-verification and publication may call models, and tools, network and permissions
-can dominate the run time.
+Capture, verification and publication may call models. Run time also depends on
+tools, network access and permissions; measure the workload before assuming that
+a macro will be faster or cheaper.
 
 Before the program's first tool call, TypeAgent preflights every capability it
 declares. If preflight fails, no program tools run. That doesn't freeze external
@@ -182,12 +202,9 @@ certify the live interaction UI.
 
 ### Invoking and reconciling
 
-To find a macro when you don't know its reference, use `search_macros` or
-`list_macros`. Use `get_macro_requirements` to see its inputs. `inspect_macro` is
-for review and isn't required before running. The MCP `run_macro` tool takes
-`macroId`, optional `version`, `inputs` and `timeoutMs`, and its adapter assigns
-a unique run ID. Callers that use the manager directly supply their own run ID.
-The tool schema accepts `dryRun`, but the current program path rejects dry runs.
+The MCP adapter assigns a unique run ID to each `run_macro` call. Callers that
+use the manager directly must supply their own run ID. Although the tool schema
+accepts `dryRun`, the current program path rejects it before dispatch.
 
 Run journals separate dispatched, completed and uncertain work. Report the actual
 structured outcome, and use `get_macro_run` to reconcile. A failure, a denial, a

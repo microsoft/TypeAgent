@@ -1,10 +1,11 @@
 # TypeAgent memory agent
 
-`@typeagent/memory-agent` is the first-party AppAgent for the durable
-`@typeagent/memory-service`. The host must inject either a `MemoryService`
-directly as `AppAgentInitSettings.options`, or an options object containing
-`{ memoryServiceClient: MemoryService }`. This package does not create or own
-a memory store.
+Use `@memory` to import Markdown files, search saved content, ask questions with
+citations, and manage sources and ingestion jobs. The agent uses the host's
+`@typeagent/memory-service`; it does not create a separate store.
+
+Hosts must inject a `MemoryService` directly as `AppAgentInitSettings.options`,
+or pass `{ memoryServiceClient: MemoryService }`. See [Host setup](#host-setup).
 
 ## Role and relationship to the MCP server
 
@@ -40,13 +41,10 @@ TypeAgent user -> native @memory agent -> injected MemoryService
 External client -> memory MCP server   -> the same MemoryService
 ```
 
-The dynamically generated `@memory-mcp` agent is intentionally registered next
-to native `@memory`. This is a design decision, not an oversight: together with
-the Copilot CLI memory plugin (which has its own store and is deliberately not
-connected to the durable service), it is one arm of an experiment to learn
-which path makes an externally consumable MCP package easier to build and
-support. Native `@memory` remains the preferred TypeAgent interaction surface;
-do not remove or hide either agent until the experiment concludes.
+Native `@memory` is the preferred TypeAgent interface. The dynamically generated
+`@memory-mcp` agent is also registered so the project can compare native and MCP
+integration. Keep both available during that experiment. The Copilot CLI memory
+plugin has its own store and does not connect to the durable service.
 
 The agent must not independently implement knowledge extraction, indexing,
 revision semantics, retrieval ranking, deletion cleanup, or durable job state.
@@ -88,8 +86,9 @@ and [View maintenance](../../../docs/architecture/memory/view-maintenance.md).
 
 Corpus clearing, source replacement, and source forgetting use a preview token.
 Run the command once, inspect the preview, then repeat it with `--confirm
-<token>`. Tokens expire after five minutes; replacement confirmation also fails
-if the source revision or file content changed.
+<token>`. Clear and replacement tokens expire after five minutes; source-forget
+tokens expire after ten minutes. Replacement confirmation also fails if the
+source revision or file content changed.
 
 ## Markdown import
 

@@ -1,22 +1,23 @@
 # TypeAgent memory: current system
 
-Audience: maintainers, agent authors and engineers debugging an integration.
-Source review: October 16, 2026, TypeAgent `00748a4be`. This page maps the code
-and its tests. It is not a new live acceptance run.
+For maintainers, agent authors and engineers debugging an integration.
+Implementation references were checked on October 16, 2026 at TypeAgent
+`00748a4be`. Live acceptance results are tracked in the
+[implementation ledger](https://github.com/microsoft/TypeAgent/blob/main/ts/docs/plans/memory-system/STATUS.md).
 
 Read [Memory architecture](memory.md) first for the concepts, then
 [Derived Views](derived-views.md) for how documents are built and
 [Scenarios](scenarios.md) for user journeys.
 
-## Design rules
+## Service responsibilities
 
 1. KnowPro handles all content retrieval: structured matching, related terms and
    embeddings. There is no separate lexical or vector engine.
 2. Ingestion uses one model-driven `content` pipeline. There are no import presets.
-3. The service keeps sources, exact revisions, events, suppression and forget
-   state, and explicit human intent. Indexes are derived, but View edit history is not disposable.
-4. Producers supply content and provenance. The service does indexing, retrieval,
-   answers, derived documents and lifecycle.
+3. The service retains source revisions, events, suppression and forget state,
+   and human edits. Indexes can be rebuilt; View edit history must be preserved.
+4. Producers supply content and provenance. The service indexes that content,
+   answers queries, builds derived documents and manages their lifecycle.
 
 ## Runtime topology
 
@@ -58,8 +59,8 @@ flowchart TB
 The agent server creates one service under `<instanceDir>/memory`, starts the
 loopback host, and passes service facades to the consumers. Native commands call
 the service directly, without an HTTP or MCP round trip. The runtime `memory-mcp`
-agent uses the same service with credentials the host manages. That doesn't mean
-arbitrary external clients can discover the endpoint and token on their own.
+agent uses the same service with credentials the host manages. External clients
+need a configured endpoint and token.
 
 Within one corpus, document searches and knowledge reads can run at the same time.
 Writes and index preparation run alone. A queued writer blocks readers that
@@ -107,8 +108,8 @@ source synopses, revision assets, acquired batches, Changes receipts and derived
 Views. It has no saved-procedure CRUD or promotion.
 
 Source types include web, Markdown, text, HTML and VTT. Acquisition adapters
-convert other input formats before ingestion. A PDF label in a diagram is not a
-separate `SourceType`, and it doesn't mean every importer handles PDFs.
+convert other formats before ingestion. PDF support depends on the importer;
+PDF is not a separate `SourceType`.
 
 If a derived-index schema descriptor is missing or older, the service resets and
 rebuilds that scope. If it is malformed or newer, the service fails with an error.
@@ -163,8 +164,8 @@ When informational support is on, a non-extractive `answer` retrieves a bounded
 set of indexed fragments and calls `answerIndexedEvidence`. It then rechecks that
 each citation is still eligible before it returns. Otherwise the configured
 corpus-index answer path uses KnowPro answer support. If synthesis fails, the call
-returns an error and doesn't quietly fall back to snippets. Test adapters without
-answer support are not product fallbacks.
+returns an error. Request extractive results explicitly if you want snippets
+without synthesis.
 
 `dateFrom` and `dateTo` on source search filter by capture date before the result
 limit applies. A source with an unknown capture date doesn't get its indexing date
@@ -241,5 +242,5 @@ clearly separate from this service when you write about them.
 
 Focused tests cover the service, RPC and MCP, dispatcher and browser contracts.
 The [implementation ledger](https://github.com/microsoft/TypeAgent/blob/main/ts/docs/plans/memory-system/STATUS.md)
-links those tests and keeps them apart from live quality, restart and UI, and
-performance acceptance. This documentation update ran no live memory workload.
+links the tests and tracks live model quality, restart behavior, UI acceptance
+and performance separately.

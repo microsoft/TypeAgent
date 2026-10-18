@@ -1,14 +1,14 @@
 # Derived-view maintenance
 
-Maintenance keeps editable knowledge in line with the current evidence without
-throwing away what people have written. For how builds, citations, conflicts,
-publication and history work, see [Derived Views](derived-views.md).
+When sources change, maintenance updates the Views that depend on them and
+preserves your edits. Overlapping edits become conflicts you can review. See
+[Derived Views](derived-views.md) for builds, citations, publication and history.
 
 Views are on by default. A host can turn off all Views with
 `TYPEAGENT_MEMORY_VIEW_DRAFTS=false`, or just the informational Wiki and Projects
-with `TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS=false`. Rehearsal budgets exist for
-tests. They aren't a way to enable the product and aren't lifetime quotas.
-Provider request throttling and application scheduling are separate things.
+with `TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS=false`. Test rehearsal budgets limit
+individual test runs, not product availability or lifetime usage. Provider request
+throttling is configured separately from maintenance scheduling.
 
 ## Automatic and explicit work
 
@@ -17,8 +17,8 @@ Provider request throttling and application scheduling are separate things.
 [SVG](diagrams/view-maintenance.svg) · [Editable scene](diagrams/view-maintenance.excalidraw)
 
 After indexing, automatic informational work finds and refreshes subjects. At
-startup, and again every 30 seconds, a sweep repairs any dirty hints that were
-missed. The sweep doesn't promise that synthesis finishes within 30 seconds.
+startup, and every 30 seconds afterward, a sweep finds work missed by change
+notifications. This is a scheduling interval, not a synthesis deadline.
 
 While a durable bulk import is running, automatic Topics and Wiki/Projects work
 waits until the last active batch finishes. You can still start a build by hand.
@@ -42,18 +42,17 @@ Family operations `update`, `rebuild`, `pause` and `resume` use the existing job
 and View store. Pause is durable. Stable IDs don't depend on display titles. Saved
 selectors, aliases, exclusions, category and notes keep the editor's intent.
 
-A subject needs substantial local evidence to get a page. It doesn't need several
-sources, and there's no page quota. A passing mention of a service doesn't make an
-initiative. Matching on case, whitespace or alias can propose that two items are
-the same, but can't prove it. Explicit symbol names and project or episode scopes
-that don't fit together stay separate or are marked ambiguous.
+A subject needs substantial local evidence to get a page; one source can be
+enough. There is no page quota. A passing mention of a service is insufficient
+to identify a project. Matching names or aliases prompt a comparison, but the
+service keeps incompatible symbols, projects or episodes separate, or marks the
+match as ambiguous.
 
 Retrieval favors relevant indexed evidence, corrections and qualifications, and a
 mix of sources. It doesn't promise to find everything. Wiki pages state their
 limits in the body and summary. A project page keeps owners, milestones, incident
-closure, capacity qualification and overall project state apart. Who reviews
-something isn't the same as who is accountable for the service, and a rehearsal
-isn't a rollout.
+closure, capacity qualification and overall project state apart. It distinguishes
+a reviewer from a service owner and a rehearsal from a rollout.
 
 The service rejects old `wiki-v1` bundles, inventory-backed Wiki and Projects,
 and explicit-subject registries instead of migrating them. Old qualification
@@ -61,9 +60,8 @@ receipts don't become current contracts.
 
 ### Source overlap, admission and contribution
 
-When a new automatic candidate shares sources or revisions with existing eligible
-pages, the service compares them in a bounded way. Overlap suggests a comparison.
-It doesn't show that the two pages have the same purpose. Admission has four outcomes:
+When a new candidate shares sources or revisions with existing eligible pages,
+the service compares their content and purpose. It records one of four outcomes:
 
 - `distinct`: create a new independent page.
 - `covered`: the existing prose already explains the key distinctions.
@@ -78,11 +76,10 @@ used only to compare and merge, and it never counts as a new source.
 
 ## Editorial protection and consolidation
 
-Deliberate human edits are protected at edit units the service can identify
-reliably. The service exposes them as `protectedTargets`, and browser clients
-don't guess. An explicit unlock saves your intent without rewriting text right
-away, then schedules any eligible maintenance. An ordinary save doesn't trigger
-another synthesis pass.
+The service protects identifiable units of human-edited content and lists them
+in `protectedTargets`. Browser clients use that list. Unlocking a unit allows
+maintenance to revise it; the service saves the unlock before scheduling work.
+Saving an ordinary edit does not trigger synthesis.
 
 When a change matters, the service checks the merged prose for quantities and
 cohorts, scope, corrections and withdrawals, and other critical distinctions.
@@ -102,8 +99,9 @@ derived index is ready. Reading an old ID returns the canonical identity and
 anchor mappings, and historical reads are still available when requested. After
 a restart, committed effects resume without another synthesis. Pages that humans
 have edited are never retired automatically. Redirect cycles, deep ancestry and
-changed targets block the operation, so they can't produce a retry loop. Consolidation
-adds no new approval framework and doesn't merge entities authoritatively.
+changed targets block the operation, so they can't produce a retry loop.
+Consolidation does not establish that the entities mentioned in the articles
+are identical, and it does not add a separate approval process.
 
 ## Maintained Topics and source synopses
 
@@ -146,7 +144,7 @@ The View-capable service, RPC, MCP and the browser share these guarded operation
 
 - `updateViewMaintenance`: save an explicit scope, with head and version guards.
 - `planViewMaintenance`: preview targets without writing or synthesizing.
-- `maintainViews`: admit explicit targets or control a family.
+- `maintainViews`: start work on explicit targets or control a family.
 - `getViewMaintenance`: read a receipt and its current outcome.
 
 Example, in a host with an initialized View-capable service:

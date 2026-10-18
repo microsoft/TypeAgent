@@ -1,15 +1,18 @@
 # @typeagent/copilot-macros
 
-`@typeagent/copilot-macros` records, authors, validates, catalogs, matches, and
-executes checked code-first macros. Agent-server or the explicitly selected
-plugin-local owner owns its `MacroManager` and storage; the plugin exposes recording commands, lifecycle MCP tools, and the
-[macro skill](../copilot-plugin/skills/typeagent-macros/SKILL.md).
-Only checked programs can be persisted, approved, or run. The former step replay
-engine, Copilot macro runner, adaptation bridge/RPCs, and execution switches have
-been removed. Development-only old macro records are discarded, not migrated.
-See the [cross-package plan](../../docs/plans/copilot-fastActions/PLAN.md).
-For the stable lifecycle, ownership and failure model, see
+`@typeagent/copilot-macros` builds reusable programs from recorded tasks. It
+checks the source and executable, stores versioned programs, matches requests,
+and runs the current approved revision.
+
+Agent-server manages `MacroManager` and storage by default. You can instead
+select a plugin-local owner. The plugin exposes recording commands, lifecycle
+MCP tools, and the [macro skill](../copilot-plugin/skills/typeagent-macros/SKILL.md).
+For setup and everyday use, start with
 [Checked program macros](../../docs/architecture/workflows/macros.md).
+
+Execution uses checked programs, not recorded-step replay. Old development-only
+records are discarded without migration. The
+[cross-package plan](../../docs/plans/copilot-fastActions/PLAN.md) tracks the implementation work.
 
 ## Host-independent program contracts
 
@@ -56,7 +59,7 @@ The verifier sees the recording without a prior program, never candidate source.
 The candidate sees the independent specification, not the verifier's fixtures.
 The shared compiler and contained executor check observed and changed-input/
 fresh-result fixtures before sealing the same program artifact used at runtime.
-This is an authoring/validation path, not an alternate live executor.
+Validation uses the same compiled artifact that will run after publication.
 
 `macroSchema` exports the shared macro action-name and input-schema helpers.
 DefaultAgentProvider keeps configured TypeAgent wrappers around these portable
