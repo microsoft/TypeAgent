@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1808" height="684" viewBox="0 0 1808 684" role="img" aria-labelledby="hybrid-title hybrid-desc">
-  <title id="hybrid-title">R1 shared memory with G4 recall, builders and callers</title>
-  <desc id="hybrid-desc">The sources and paired retained-evidence and KnowPro-index columns retain R1's layout. Two simple G4-derived operation cards replace its step-heavy paths: query-time recall and view builders. Recall produces cited answers and passages for Chat and Search and agents and MCP clients. View builders preserve human edits and publish exact versioned wikis, briefs, timelines and troubleshooting guides for readers, authors and agents. Both paths read original evidence and the derived index. Only eligible procedures can enter packaging and human review and approval for skills or macros; activation and runtime permission remain separate.</desc>
+  <title id="hybrid-title">Memory overview: sources, shared memory, recall and View builders, consumers</title>
+  <desc id="hybrid-desc">Sources feed two shared columns: retained evidence and the KnowPro index. Two processing paths read both. Query-time recall returns cited answers and passages to Chat and Search and to agents and MCP clients. View builders produce versioned wikis, project briefs, timelines and troubleshooting guides that keep human edits. A separate optional branch covers skills and macros: only eligible procedures can enter human review, and activation and runtime permission are decided separately.</desc>
   <defs>
     <marker id="arrow" markerWidth="11" markerHeight="11" refX="10" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
       <path d="M0 0 11 5.5 0 11z" fill="#5c7388"/>
@@ -112,17 +112,17 @@
   <g data-card="recall">
     <rect x="936" y="64" width="298" height="164" rx="16" fill="#f4f7fb" stroke="#d3dee8"/>
     <text x="956" y="100" class="h22">Query-time recall</text>
-    <text x="956" y="132" class="body">Translate NL -> typed query</text>
+    <text x="956" y="132" class="body">Translate question to query</text>
     <text x="956" y="160" class="body">Search index + read passages</text>
-    <text x="956" y="188" class="body">Cite &amp; assemble response</text>
+    <text x="956" y="188" class="body">Cite and assemble response</text>
   </g>
   <g data-card="builders">
     <rect x="936" y="324" width="298" height="176" rx="16" fill="#f3f7f4" stroke="#d0e0d6"/>
     <text x="956" y="360" class="h22">View builders</text>
-    <text x="956" y="392" class="body">Inventory &amp; freeze inputs</text>
-    <text x="956" y="420" class="body">Build &amp; validate candidate</text>
-    <text x="956" y="448" class="body">Merge edits &amp; validate final</text>
-    <text x="956" y="476" class="body">Publish &amp; index exact version</text>
+    <text x="956" y="392" class="body">Inventory and freeze inputs</text>
+    <text x="956" y="420" class="body">Build and validate candidate</text>
+    <text x="956" y="448" class="body">Merge edits and validate final</text>
+    <text x="956" y="476" class="body">Publish and index exact version</text>
   </g>
 
   <path d="M1234 140H1470" class="edge"/>
@@ -137,24 +137,24 @@
     <text x="1494" y="104" class="h22">Query callers</text>
     <g data-card="chat">
       <rect x="1494" y="122" width="262" height="68" rx="12" fill="#f4f7fb" stroke="#d3dee8"/>
-      <text x="1512" y="151" class="h">Chat &amp; Search</text>
-      <text x="1512" y="177" class="small">Cited answers &amp; snippets</text>
+      <text x="1512" y="151" class="h">Chat and Search</text>
+      <text x="1512" y="177" class="small">Cited answers and snippets</text>
     </g>
     <g data-card="agents">
       <rect x="1494" y="204" width="262" height="74" rx="12" fill="#f4f7fb" stroke="#d3dee8"/>
-      <text x="1512" y="234" class="h">Agents &amp; MCP clients</text>
-      <text x="1512" y="260" class="small">Native reasoning &amp; external MCP</text>
+      <text x="1512" y="234" class="h">Agents and MCP clients</text>
+      <text x="1512" y="260" class="small">Native reasoning and external MCP</text>
     </g>
   </g>
   <g data-card="views">
     <rect x="1470" y="324" width="310" height="222" rx="16" fill="#fff" stroke="#d0e0d6"/>
     <text x="1494" y="364" class="h22">Maintained views</text>
-    <text x="1494" y="398" class="body">Wikis &amp; concept pages</text>
+    <text x="1494" y="398" class="body">Wikis and concept pages</text>
     <text x="1494" y="426" class="body">Project briefs</text>
     <text x="1494" y="454" class="body">Timelines</text>
     <text x="1494" y="482" class="body">Troubleshooting guides</text>
     <line x1="1494" y1="504" x2="1756" y2="504" stroke="#d0e0d6"/>
-    <text x="1494" y="532" class="tag">Versioned &amp; edit-preserving</text>
+    <text x="1494" y="532" class="tag">Versioned and edit-preserving</text>
   </g>
 
   <path d="M1722 546v80h-288" class="opt"/>
@@ -162,6 +162,6 @@
   <g data-card="review">
     <rect x="936" y="588" width="480" height="72" rx="14" fill="#fffaf3" stroke="#e4d3b6"/>
     <text x="956" y="619" class="h">Skills/Macros</text>
-    <text x="956" y="645" class="small">Human review -> Published artifact</text>
+    <text x="956" y="645" class="small">Human review, then publish</text>
   </g>
 </svg>

@@ -1,34 +1,34 @@
 # Derived Views: construction, edits and publication
 
-A View is an editable, versioned document derived from retained evidence.
-It is neither a new source of truth nor an executable procedure. The same
-service owns builds, generated bases, edits/conflicts, history, maintenance,
-publication and derived search.
+A View is an editable, versioned document built from retained evidence. It isn't
+a source of truth, and it can't be run as a procedure. One service handles builds,
+generated bases, edits and conflicts, history, maintenance, publication and
+search over derived content.
 
-See [Memory architecture](memory.md) for the system model and
-[View maintenance](view-maintenance.md) for refresh and discovery.
+[Memory architecture](memory.md) describes the overall model. [View maintenance](view-maintenance.md)
+covers refresh and discovery.
 
 ## Four kinds, two construction families
 
-| Kind                  | Construction                              | Evidence and output                                                                                                                   |
-| --------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Wiki                  | `informational-wiki-v1`                   | One independently identified page per record, bounded indexed citations, editorial category/note                                      |
-| Project brief         | `informational-project-summary-v1`        | Bounded indexed evidence for a scoped initiative; goals, owners, separate status dimensions, milestones, decisions, risks and context |
-| Timeline              | Full-evidence selected-record pipeline    | Exact source revisions and/or canonical events; distinct occurrence, learned, capture and generation times                            |
-| Troubleshooting guide | Full-evidence inventory/checking pipeline | Selected retained evidence, prerequisites, diagnostic path, guards, verification and recovery limits                                  |
+| Kind                  | Construction                              | Evidence and output                                                                                                              |
+| --------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Wiki                  | `informational-wiki-v1`                   | One independently identified page per record, bounded indexed citations, editorial category and note                             |
+| Project brief         | `informational-project-summary-v1`        | Bounded indexed evidence for one initiative: goals, owners, separate status dimensions, milestones, decisions, risks and context |
+| Timeline              | Full-evidence selected-record pipeline    | Exact source revisions and/or canonical events, with separate occurrence, learned, capture and generation times                  |
+| Troubleshooting guide | Full-evidence inventory/checking pipeline | Selected retained evidence, prerequisites, diagnostic path, guards, verification and recovery limits                             |
 
-Wiki/Projects discover useful subjects across a collection and retrieve exact
-indexed fragments; the user need not select every source. A single substantive
-source can justify a page. Output is bounded, not an exhaustive collection
-summary. Unknown ownership or project state must remain unknown.
+Wiki and Projects find useful subjects across a collection and retrieve exact
+indexed fragments, so you don't have to pick every source. One substantial source
+can justify a page. The output is bounded and doesn't summarize the whole
+collection. If an owner or project state is unknown, the page says so.
 
-Timeline/troubleshooting builders retain inventory, independent source checking,
-construction and final coverage/support checks over their selected eligible
-inputs. These model-based checks are not a semantic proof. Do not apply their
-full-source inventory contract to informational Wiki/Projects.
+Timeline and troubleshooting builders work only from the inputs you select. They
+take an inventory, check each source independently, build the document, and then
+check coverage and support. These checks use a model, so they don't prove the
+meaning is right. Wiki and Projects don't use the full-source inventory.
 
-Old inventory-backed Wiki bundles, `wiki-v1`, explicit-subject registries and
-removed full-source project construction are not compatibility APIs.
+Old inventory-backed Wiki bundles, `wiki-v1`, explicit-subject registries and the
+removed full-source project construction are not supported for compatibility.
 
 ## Build and materialization
 
@@ -36,23 +36,25 @@ removed full-source project construction are not compatibility APIs.
 
 [SVG](diagrams/view-build-flow.svg) · [Editable scene](diagrams/view-build-flow.excalidraw)
 
-A build freezes the definition, evidence identities, configured model/recipe and
-current target/head guards. Generation runs outside serialized writes. Before
-saving, the service rechecks evidence eligibility, target/definition versions,
-cancellation and privacy state. Concurrent edits or replaced/forgotten sources
-cannot be overwritten by an old model result.
+A build freezes the definition, the evidence identities, the configured model
+and recipe, and the current target and head guards. Generation then runs outside
+the serialized write step. Before it saves, the service rechecks that the evidence
+is still eligible, that the target and definition versions haven't changed, and
+that the build wasn't cancelled or invalidated by privacy state. An old model
+result can't overwrite a concurrent edit or a source that has since been replaced
+or forgotten.
 
-`buildViews` returns a durable job with per-target results. Job states include
-`running`, `complete`, `partial`, `failed`, `cancelled` and `interrupted`.
-Individual targets can be saved, merged, conflicted, blocked, stale or failed;
-job completion alone does not say that every target produced a useful document.
-Cancellation prevents future materialization without undoing already saved peers.
+`buildViews` returns a durable job with a result for each target. A job's state is
+`running`, `complete`, `partial`, `failed`, `cancelled` or `interrupted`. A target
+can be saved, merged, conflicted, blocked, stale or failed, so a complete job
+doesn't mean every target produced a useful document. Cancelling stops future
+saves but doesn't undo targets that already saved.
 
-### Minimal API example
+### Example
 
-The following TypeScript runs in a host with an initialized View-capable service
-named `views`. `corpusId` and `currentSources` must be real retained identities;
-the array contains `{ sourceId, revisionId }` entries, not file paths.
+This TypeScript runs in a host with an initialized View-capable service named
+`views`. `corpusId` and `currentSources` must be real retained identities. The
+array holds `{ sourceId, revisionId }` entries, not file paths.
 
 ```typescript
 const { head } = await views.listViews(corpusId);
@@ -74,69 +76,72 @@ const job = await views.buildViews({
 const progress = await views.getViewBuild({ corpusId, jobId: job.jobId });
 ```
 
-This creates a new guide target (`expectedVersion: 0`), not an overwrite request.
-`progress` is a `ViewBuildJob | undefined`, not just a Boolean success. Handle a
-missing receipt explicitly; otherwise inspect `state` and `results`. Do not
-publish a requested ID before a saved exact revision exists.
-For automatic Wiki/Projects, prefer the family operations in
-[Maintenance](view-maintenance.md#service-and-ui-controls).
+`expectedVersion: 0` asks for a new guide. It doesn't overwrite an existing one.
+`getViewBuild` returns a `ViewBuildJob` or `undefined`, so handle a missing
+receipt. Otherwise read `state` and `results`. Don't publish a View ID until a
+saved exact revision exists. For automatic Wiki and Projects, use the family
+operations in [Maintenance](view-maintenance.md#service-and-ui-controls).
 
 ## Exact citations and relationships
 
-Citations retain source/revision identity, locator and excerpt. Indexed
-informational locators encode block identity/hash and bounded UTF-16 ranges;
-full-evidence citations resolve retained original text. Timeline event citations
-also identify the canonical event. Generation time is not event occurrence time.
+A citation keeps the source and revision identity, a locator and an excerpt.
+Locators for indexed informational content encode the block identity, its hash
+and bounded UTF-16 ranges. Citations for full-evidence builds resolve to the
+retained original text. Timeline event citations also name the canonical event.
+Generation time is not the time an event occurred.
 
-Stable section IDs and typed relationships are not rendered graph labels.
-Source-backed assertions and selector dependencies have different meanings.
-Citation identity, claim support and relevant completeness need separate checks;
-one cannot substitute for another. Generated Views must not be counted again
-as independent evidence for the sources from which they were built.
+Stable section IDs and typed relationships don't appear as graph labels. A
+source-backed assertion and a selector dependency mean different things. Three
+checks are separate: whether the citation identity is right, whether the cited
+text supports the claim, and whether the coverage is complete. Passing one doesn't
+pass the others. Don't count a generated View as independent evidence for the
+sources it was built from.
 
 ## Explicit edits and conflicts
 
-Human saves are authenticated by the service, with optimistic head/version guards.
-Generated content retains its exact base separately from current human text.
-Rebuilds merge **old generated base / current human / new generation**. Prose
-uses bounded three-way merging; relationships retain semantic identities and
-explicit removals. An LLM does not choose a merge winner.
+The service authenticates human saves and applies optimistic head and version
+guards. It keeps the generated base separate from the current human text. A
+rebuild merges three things: the old generated base, the current human text and
+the new generation. Prose uses a bounded three-way merge. Relationships keep their
+semantic identities and explicit removals. A language model never picks the winner.
 
 For informational maintenance, deliberate human edit units are protected.
-`protectedTargets` is authoritative service state; explicit unlock records user
-intent before scheduling revision. Routine supported generated corrections can
-remain automatic. Privacy removal overrides protection.
+`protectedTargets` is the service's authoritative list. An explicit unlock records
+what the user wants before the service schedules a revision. Routine generated
+corrections can still happen automatically. Privacy removal overrides protection.
 
-Overlaps preserve current content and create durable comparisons. Conflict
-resolution requires exact current head/version/revision/input guards and an
-explicit human/generated/combined choice. The resulting actual prose is checked;
-a clean text merge is not semantic validation. See
+When edits overlap, the service keeps the current content and creates a durable
+comparison. To resolve a conflict you must supply the exact current head, version,
+revision and input guards, and choose the human text, the generated text or a
+combination. The service then checks the resulting prose. A clean text merge
+doesn't mean the meaning survived. See
 [Editorial maintenance](view-maintenance.md#editorial-protection-and-consolidation).
 
-## Publication and revision-matched search
+## Publication and search
 
-Publication policy precedence is **one-build override > saved View override >
-corpus policy**. Explicit `false` is not inheritance. Auto-publication defaults
-on, but enabled behavior is not live-quality qualification.
+Publication policy is resolved in this order: a one-build override, then the
+saved View's override, then the corpus policy. An explicit `false` doesn't fall
+through to the next level. Auto-publication is on by default. That says nothing
+about the quality of what it publishes.
 
-For informational content, publication does not require the full-source
-inventory proofs used by timeline/troubleshooting. Both paths still enforce
-their own validation, current evidence, target guards and conflict/privacy gates.
-Saving or reviewing an arbitrary unsourced draft does not manufacture a
-validated generated base.
+Informational content doesn't need the full-source inventory proofs that
+timelines and troubleshooting guides use. Each path still enforces its own
+validation, current evidence, target guards, and conflict and privacy gates.
+Saving or reviewing a draft that has no sources doesn't produce a validated
+generated base.
 
-`getViewPublication` returns separate `latestBuiltRevisionId`,
-`publishedRevisionId`, `indexedRevisionId`, `indexState` and reason fields.
-`indexState` is `absent`, `pending`, `failed` or `ready`. A publication commit
-can succeed while derivative indexing fails. `retryViewIndex` repairs the exact
-published revision without generating another document.
+`getViewPublication` returns `latestBuiltRevisionId`, `publishedRevisionId`,
+`indexedRevisionId`, `indexState` and reason fields. `indexState` is `absent`,
+`pending`, `failed` or `ready`. A publication can succeed while indexing it fails.
+`retryViewIndex` repairs the index for the exact published revision without
+generating a new document.
 
 `searchViews({ corpusId, query, freshness: "current" })` returns a
-`ViewSearchMatch[]`. Each match includes the exact View, score/snippet,
+`ViewSearchMatch[]`. Each match has the exact View, a score and snippet, the
 original evidence, `review: "unreviewed"`, `freshness: "current"` and
-`corroboration: "derived"`. Only eligible published revisions with matching ready
-indexes are returned; pending drafts, stale evidence and unresolved conflicts
-are not silently substituted into default retrieval.
+`corroboration: "derived"`. Only eligible published revisions with a ready index
+come back. Pending drafts, stale evidence and unresolved conflicts don't get
+substituted into default search.
 
 ## History and forgetting
 
@@ -144,27 +149,29 @@ are not silently substituted into default retrieval.
 
 [SVG](diagrams/view-history-boundary.svg) · [Editable scene](diagrams/view-history-boundary.excalidraw)
 
-`listViews` returns the current corpus `head`; `getView` reads a current or exact
-revision; `getViewHistory` returns `{ commitId, version }` entries. A View's
-revision ID is not the corpus commit ID. Private Git commits snapshot artifact
-state, not the KnowPro index or canonical source content.
+`listViews` returns the corpus's current `head`. `getView` reads the current
+revision or an exact one, and `getViewHistory` returns `{ commitId, version }`
+entries. A View's revision ID is different from the corpus commit ID. Private Git
+commits snapshot View state. They don't include the KnowPro index or the canonical
+source content.
 
-Authorized source forgetting is durably enrolled. Source/index/View/history/
-asset/batch/context cleanup must complete before corpus content reads reopen.
-Dependent builds, conflict payloads, uncited influence and private history
-cannot bypass forgetting through an older commit. Event forgetting also purges
-dependent timelines. Restart resumes unfinished cleanup; deletion of a visible
-file or ref alone is not this guarantee.
+Once source forgetting is authorized, the service records it durably. It must
+finish cleaning up the source, index, Views, history, assets, batches and context
+before corpus content reads open again. Dependent builds, conflict payloads,
+influence from uncited sources and private history can't get around forgetting by
+using an older commit. Forgetting an event also purges the timelines that depend
+on it. A restart resumes unfinished cleanup. Deleting a visible file or ref alone
+doesn't give you this guarantee.
 
-This is local managed removal, not secure erasure of SSD blocks, external
+This is managed local removal. It does not securely erase SSD blocks, external
 backups, screenshots or exported copies.
 
 ## Interfaces and verification
 
-In-process/RPC, MCP and browser transports route to the owning service.
-The native memory agent does not expose a command for every View operation.
-The private-store CLI is another exclusive owner: never open a running server's
-store with it.
+In-process, RPC, MCP and browser clients all route to the owning service. The
+native memory agent doesn't have a command for every View operation. The
+private-store CLI is another exclusive owner, so don't use it on the store of a
+running server.
 
 Contracts: [View types](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/src/viewTypes.ts),
 [store](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/src/viewStore.ts),
@@ -172,4 +179,4 @@ Contracts: [View types](https://github.com/microsoft/TypeAgent/blob/main/ts/pack
 Focused coverage: [builds](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/viewBuilds.spec.ts),
 [store](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/viewStore.spec.ts),
 [Wiki cleanup](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/wikiCleanup.spec.ts).
-Offline lifecycle checks are not live-model quality qualification.
+These offline lifecycle tests don't measure how well live models perform.

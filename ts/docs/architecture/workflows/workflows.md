@@ -25,11 +25,11 @@ action that an authorized caller can invoke.
 
 ### The core insight: reuse a checked procedure
 
-Saved procedures can avoid repeating model planning, but execution cost and
-latency depend on the host, tools and workload. TaskFlow scripts can call
-`queryLLM`; hybrid programs declare bounded semantic calls. Inputs, contracts,
-authorization and versions still matter on repeat. No universal millisecond,
-zero-model or "reuse forever" guarantee applies.
+A saved procedure can skip model planning on later runs. How fast and how cheap
+a run is depends on the host, the tools and the workload. TaskFlow scripts can
+call `queryLLM`, and hybrid programs declare bounded semantic calls. Inputs,
+contracts, authorization and versions still matter every time. Nothing here
+promises millisecond runs, zero model calls, or that a procedure keeps working forever.
 
 | Family                                | Execution contract                                                                                    |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -40,7 +40,7 @@ zero-model or "reuse forever" guarantee applies.
 
 ### Three-phase lifecycle
 
-This provider-flow summary is not a universal automatic-repair contract:
+This summary covers provider flows. Not every provider repairs itself automatically:
 
 | Phase       | What happens                                                                                                                          |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -86,9 +86,10 @@ See [Common lifecycle](#common-lifecycle) for implementation details
 | Scope                  | Authorized local invocation                                | Per-site or global                                           | Supported agent combinations                                 |
 | Platform               | Windows                                                    | Browser required                                             | Provider-dependent                                           |
 
-In the provider sections, legacy names such as "sandbox" describe an API and
-validation surface, not arbitrary-code containment. Frozen bindings, blocked
-identifiers and cooperative timeouts are not the QuickJS program boundary.
+In the provider sections, older terms such as "sandbox" refer to an API and a
+validation surface. They don't contain arbitrary code. Frozen bindings, blocked
+identifiers and cooperative timeouts are weaker than the QuickJS boundary that
+program macros use.
 
 > **Design trade-off — why separate workflow types instead of one?**
 >
@@ -1094,9 +1095,8 @@ The fallback context includes:
 - Error message from script execution
 - Hint to use `editWebFlow` to fix the script
 
-This differs from PowerShell, which requires an explicit repair request and
-fresh authorization, and from checked program macros, which never replan an
-accepted failed invocation.
+PowerShell works differently: it repairs only when you ask, and it needs fresh
+authorization. Checked program macros never replan after an accepted invocation fails.
 
 ![WebFlow can enter reasoning repair after a failed run and re-register the edited flow.](../images/workflow_capture_run_repair.svg)
 
@@ -1416,14 +1416,14 @@ interface GrammarContent {
 
 ## Design principles
 
-1. **Reuse procedures, not recorded answers** — Saved code can avoid repeated
-   planning while consuming fresh inputs and tool results. Tool/network time,
-   explicit semantic calls and authorization still contribute to execution.
+1. **Reuse procedures, not recorded answers** — Saved code skips repeated
+   planning and works on fresh inputs and tool results. Tool and network time,
+   declared semantic calls and authorization still add to the run time.
 
-2. **Publish and invalidate deliberately** — Registration is provider-specific.
-   Program candidates must pass independent checks before publication; disabled
-   or superseded revisions cannot start another invocation. Changed contracts
-   may require new learning or an explicit repair rather than perpetual reuse.
+2. **Publish and invalidate deliberately** — Registration depends on the provider.
+   Program candidates must pass independent checks before they are published.
+   A disabled or superseded revision can't start another invocation. If a contract
+   changes, you may need to learn the procedure again or repair it explicitly.
 
 3. **Match the execution contract** — Each domain has its own
    security model. PowerShell approved-local execution uses authorization and

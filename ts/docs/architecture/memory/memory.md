@@ -1,180 +1,181 @@
 # Memory architecture
 
-TypeAgent memory supports two user tasks: **recall evidence for a question**
-and **maintain useful documents as evidence changes**. A durable memory service
-retains sources and typed events, KnowPro extracts queryable structure, and
-editable derived Views organize selected evidence without replacing it.
+TypeAgent memory does two jobs. It lets you recall evidence for a question, and
+it keeps documents up to date as that evidence changes.
 
-This page explains the architecture. The [current-system map](current-system.md)
-records implementation boundaries; availability is not a claim of live-model
-quality or production qualification.
+A memory service stores your sources and events. KnowPro extracts structure from
+them so they can be searched. Editable documents called Views organize selected
+evidence, and they never replace it.
 
-## System model
+This page covers the concepts. The [current-system map](current-system.md) lists
+what is implemented and where. Being implemented does not mean a feature has been
+qualified for production or tested with live models.
+
+## How the pieces fit
 
 ![Sources feed shared retained evidence and a KnowPro index. Query-time recall serves Chat/Search and agents/MCP clients; view builders produce maintained documents. A separate optional branch represents reviewed skills or macros.](diagrams/memory-overview.svg)
 
 [Full-size SVG](diagrams/memory-overview.svg)
 
-Read left to right: **Sources -> Shared memory -> Processing paths -> Consumers**.
-The diagram is conceptual, not a deployment map or connector inventory.
-Its Procedures source means retained instructional material, not a saved-procedure
-service. The optional **Skills/Macros** branch is outside the current memory
-service: publication does not package, approve, activate or authorize execution.
-The generic builder summary is expanded into two construction families below;
-Wiki/Projects do not require exhaustive full-source inventory.
+Read the diagram left to right: sources, shared memory, processing paths,
+consumers. It shows concepts, not a deployment layout or a list of connectors.
 
-### Evidence, index and editable knowledge
+"Procedures" in the diagram means stored instructional material, not a
+saved-procedure service. The optional Skills/Macros branch sits outside the
+memory service. Publishing a View never packages, approves or runs a macro.
 
-| Representation                    | Responsibility                                                                                                               | Important boundary                                                        |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Retained sources and typed events | Identity, exact revisions, provenance, correction/suppression and forgetting                                                 | Retaining a user assertion or hypothesis does not make it true            |
-| KnowPro index                     | Extracted entities, topics, actions, typed relationships, postings and retrieval                                             | Derived and rebuildable; a graph sketch does not imply a graph database   |
-| Editable Views                    | Wiki pages, project briefs, timelines and troubleshooting guides with citations, generated bases, explicit edits and history | Generated content is not independent corroboration or execution authority |
-| Navigation projections            | Maintained Topics and revision-bound source synopses                                                                         | Useful for browsing; not substitutes for original citation evidence       |
+### What memory stores
+
+| Representation                    | What it does                                                                                                         | Limit                                                                    |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Retained sources and typed events | Keeps identity, exact revisions, provenance, corrections, suppression and forgetting                                 | Storing a user's claim or guess doesn't make it true                     |
+| KnowPro index                     | Holds extracted entities, topics, actions, relationships and postings, and runs retrieval                            | You can rebuild it from sources. It is not a graph database              |
+| Editable Views                    | Wiki pages, project briefs, timelines and troubleshooting guides, with citations, generated bases, edits and history | Generated text is not independent evidence and can't authorize execution |
+| Navigation projections            | Maintained Topics and per-revision source synopses                                                                   | Good for browsing. Cite the original source, not the synopsis            |
 
 ### Two processing paths
 
-**Recall** interprets a question at runtime, retrieves supporting passages, and
-returns snippets or a cited answer. Source search works independently of View
-construction. An answer may later be retained as conversation evidence; recall
-is request-time work, not a guarantee of zero persistent state.
+Recall happens at question time. TypeAgent interprets the question, retrieves
+supporting passages, and returns snippets or a cited answer. Searching sources
+works whether or not any View exists. The answer can itself be saved later as
+conversation evidence, so recall isn't guaranteed to leave no trace.
 
-**View construction** builds reusable, versioned documents. Wiki and Projects
-discover subjects and retrieve bounded indexed fragments. Timeline and
-troubleshooting builders retain a full-evidence inventory/checking path over
-their selected inputs. Both preserve exact evidence identities, recheck
-eligibility before committing, and retain explicit human edits or expose conflicts.
-See [Derived Views](derived-views.md).
+View construction produces reusable, versioned documents. Wiki and Projects find
+their own subjects and pull a bounded set of indexed fragments. Timeline and
+troubleshooting builders check the full evidence of the sources you select. Both
+kinds keep exact evidence identities, recheck eligibility before saving, and
+either keep your edits or report a conflict. See [Derived Views](derived-views.md).
 
-## Views by audience
+## Where to start
 
-| Reader                                    | Start here                                                                                                               |
+| If you are a...                           | Read                                                                                                                     |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Maintainer or integration author          | [Current system](current-system.md)                                                                                      |
-| View lifecycle or citation author         | [Derived Views](derived-views.md)                                                                                        |
-| Maintenance or editorial author           | [View maintenance](view-maintenance.md)                                                                                  |
+| Working on View lifecycle or citations    | [Derived Views](derived-views.md)                                                                                        |
+| Working on maintenance or editing         | [View maintenance](view-maintenance.md)                                                                                  |
 | Product engineer, evaluator or demo owner | [Memory scenarios](scenarios.md)                                                                                         |
 | Release planner                           | [Implementation evidence ledger](https://github.com/microsoft/TypeAgent/blob/main/ts/docs/plans/memory-system/STATUS.md) |
-| Structured RAG reader                     | [Structured RAG](#structured-rag) below                                                                                  |
+| Interested in Structured RAG              | [Structured RAG](#structured-rag), below                                                                                 |
 
-## Current capabilities
+## What works today
 
-### Conversation recall and discovery
+### Conversation recall
 
-In service-backed hosts, conversation memory is the profile event ledger.
-The dispatcher records typed turns/evidence/outcomes with authority labels.
-`@conversation find` locates names; `search`, `summarize` and historical `index`
-use the conversation service. Historical backfill imports user turns.
+When a memory service is available, the conversation memory is the profile's
+event ledger. The dispatcher records typed turns, evidence and outcomes, each
+with an authority label. `@conversation find` locates conversations by name.
+`search`, `summarize` and `index` use the conversation service, and `index`
+imports user turns from older history.
 
-Reasoning `search_memory` combines conversation recall and saved-document
-search. Do not infer a saved-procedure or derived-View search branch from
-service capabilities. The no-service legacy path and the separate workspace
-Copilot memory plugin remain explicit exceptions; see [Current system](current-system.md#conversation-memory).
+The reasoning tool `search_memory` combines conversation recall with saved-document
+search. It does not search saved procedures or derived Views. Two paths work
+differently: hosts without the service use the legacy path, and the Copilot
+memory plugin has its own workspace memory. Both are covered in
+[Current system](current-system.md#conversation-memory).
 
 ### Managed document memory
 
-Native `@memory`, browser clients and MCP use the service's corpus, source,
-revision, ingestion job, search, answer and management contracts. Native local
-folder import validates host paths before submitting content; MCP is
-content-oriented rather than an arbitrary client-filesystem reader.
+The native `@memory` agent, browser clients and MCP all use the same service
+contracts for corpora, sources, revisions, ingestion jobs, search, answers and
+management. `@memory` validates local folder paths before it submits content.
+MCP clients send content themselves because MCP can't read an arbitrary client
+filesystem.
 
-There is one model-driven `content` pipeline, not fast/balanced/deep presets.
-`ask` synthesizes from retrieved evidence; `--extractive` returns snippets.
-The configured answer path is described in
-[Search and answer semantics](current-system.md#search-and-answer-semantics).
+There is one model-driven `content` pipeline and no fast, balanced or deep
+presets. `ask` writes an answer from retrieved evidence, and `ask --extractive`
+returns snippets only. See [Search and answer semantics](current-system.md#search-and-answer-semantics).
 
-### Browser and web-activity memory
+### Browser and web activity
 
-The browser captures normalized page content and records visit/bookmark/capture/
-import activity separately. The Memory Hub exposes sources, revisions, knowledge,
-jobs, Views, Topics, editorial controls and source management. Source acquisition
-and revision assets are evidence capabilities, not procedure authoring.
+The browser saves normalized page content, and it records visits, bookmarks,
+captures and imports as separate events. The Memory Hub shows sources, revisions,
+knowledge, jobs, Views, Topics and editing controls. Capturing a source or its
+assets is about evidence. It doesn't author procedures.
 
 <a id="procedural-memory"></a>
 
-### Derived knowledge, not a saved-procedure store
+### Derived knowledge, not a procedure store
 
-The service exposes the four derived View kinds and their build, draft, history,
-maintenance, conflict, publication and search operations. It no longer exposes
-saved-procedure detection, CRUD, retrieval or promotion. Instruction-document
-and AgentEdition helpers remain available to independent artifact consumers;
-their existence does not create a procedure service.
+The service builds the four View kinds and handles their drafts, history,
+maintenance, conflicts, publication and search. It no longer detects, stores,
+retrieves or promotes saved procedures. Instruction-document and AgentEdition
+helpers still exist for other consumers, but they don't add a procedure service.
 
-## Enablement and maturity
+## Defaults and maturity
 
-Views and informational Wiki/Projects are enabled by default in configured
-hosts. `TYPEAGENT_MEMORY_VIEW_DRAFTS=false` disables Views;
-`TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS=false` disables informational maintenance.
-Missing providers and invalid settings fail explicitly, not with fabricated
-successful artifacts.
+Views and the informational Wiki and Projects families are on by default in
+configured hosts. Set `TYPEAGENT_MEMORY_VIEW_DRAFTS=false` to turn off Views, or
+`TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS=false` to turn off informational maintenance.
+If a provider is missing or a setting is invalid, the service reports an error
+instead of returning a made-up result.
 
-Source indexing, generated-document quality, UI acceptance and release readiness
-are different checks. Implementation and offline tests do not certify arbitrary
-corpora. Consult the dated [evidence ledger](https://github.com/microsoft/TypeAgent/blob/main/ts/docs/plans/memory-system/STATUS.md)
-instead of treating a default or historical trial as acceptance.
+Four things are checked separately: source indexing, quality of generated
+documents, UI acceptance and release readiness. Offline tests don't certify
+arbitrary corpora. Check the dated [evidence ledger](https://github.com/microsoft/TypeAgent/blob/main/ts/docs/plans/memory-system/STATUS.md)
+rather than assuming a default setting or an old trial means a feature is accepted.
 
 ## Storage and ownership
 
-One local owner manages the profile store. Sources/events are retained evidence;
-KnowPro indexes are derived. Editable View content, generated bases, conflicts,
-maintenance records and Topics state use the existing per-corpus View store and
-private Git history, not the product repository or a second source store.
+One local owner manages the profile store. Sources and events are the retained
+evidence, and KnowPro indexes are derived from them. Editable View content,
+generated bases, conflicts, maintenance records and Topics live in the per-corpus
+View store, backed by a private Git history. They don't live in the product
+repository or in a second source store.
 
-Source replacement, suppression and forgetting constrain current reads and
-late model writes. Authorized forgetting removes dependent local state and
-withholds reads until cleanup completes. It does not erase external exports,
-backups or physical media remnants. See [History and forgetting](derived-views.md#history-and-forgetting).
+Replacing, suppressing or forgetting a source limits what current reads can see
+and blocks late model writes. When forgetting is authorized, the service removes
+dependent local state and withholds reads until cleanup finishes. It can't erase
+external exports, backups or leftover data on the disk. See
+[History and forgetting](derived-views.md#history-and-forgetting).
 
-## Known boundaries
+## Known limits
 
-- Extraction, question interpretation and synthesis can lose or misread context.
-- A valid typed query is not proof of correct user intent; a resolvable citation
-  is not proof that its passage supports the generated claim.
-- Bounded Wiki/Projects output is not exhaustive coverage of a collection.
-- Published and derivative-index-ready are distinct states.
-- Human editorial protection is not approval; privacy removal overrides it.
-- Topic/graph association does not establish project or entity equivalence.
-- Remote synchronization, distributed ownership and enterprise governance are
-  not implied by the local service.
+- Extraction, question interpretation and answer synthesis can lose or misread context.
+- A valid typed query doesn't prove the system understood what you meant. A citation
+  that resolves doesn't prove the passage supports the generated claim.
+- Wiki and Projects output is bounded and may not cover everything in a collection.
+- "Published" and "ready for search" are separate states.
+- Edit protection keeps your text from being overwritten but isn't an approval.
+  Privacy removal overrides it.
+- A Topic or graph link between two items doesn't make them the same project or entity.
+- The local service doesn't provide remote sync, distributed ownership or enterprise governance.
 
 ## Structured RAG
 
-KnowPro pairs extracted structure with runtime query interpretation:
+KnowPro combines extracted structure with query interpretation at runtime:
 
 1. Extract entities, actions, facets, topics and source ranges from content.
-2. Index terms and semantic references that resolve back to original passages.
-3. Translate a natural-language question to a schema-validated query at runtime.
-4. Apply scopes, structured matching, ranking and configured related-term or
-   embedding-backed retrieval within KnowPro.
-5. Read relevant evidence and return snippets or synthesize a cited answer.
+2. Index terms and semantic references that point back to the original passages.
+3. Translate the natural-language question into a query that matches a schema.
+4. Apply scopes, structured matching and ranking, plus related-term or embedding
+   retrieval where configured.
+5. Read the relevant evidence and return snippets or a cited answer.
 
-For example, "Who rejected scaling, and why?" can constrain actor/action matching
-and then read the original passage for the reason. If extraction lost the
-rejection, translation chose only a general topic, or synthesis omitted the
-reason, the answer can still fail.
+Take "Who rejected scaling, and why?" The query can match on actor and action,
+then read the original passage for the reason. The answer can still be wrong if
+extraction missed the rejection, if translation picked only a general topic, or
+if synthesis dropped the reason.
 
-Structure enables inspectable constraints; it does not establish universal
-accuracy, latency, cost or retention superiority over vector retrieval.
-Related-term embeddings can participate in structured retrieval, not only a
-final fallback. Compare equivalent evidence, workloads and questions when
-measuring approaches.
+The structure makes the constraints easy to inspect. It doesn't prove better
+accuracy, latency, cost or retention than vector retrieval. Related-term embeddings
+take part in structured retrieval and not only as a last fallback. When you compare
+approaches, use the same evidence, workload and questions.
 
-## Implementations and interfaces
+## Code
 
 - [KnowPro](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/knowPro):
-  extraction, indexes and search primitives.
+  extraction, indexes and search.
 - [Memory service](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/memory/service):
   durable evidence, management, derived Views and maintenance.
 - [Memory MCP server](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/memory/mcp-server):
-  typed external transport over a service.
+  typed access for external clients.
 - [Memory agent](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/agents/memory):
-  native commands and local import over the injected service.
+  native commands and local import, using the injected service.
 - [Conversation memory](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/memory/conversation):
-  KnowPro-based library; distinguish library consumers from service-backed events.
+  a KnowPro-based library. Library users are not the same as the service-backed event ledger.
 
 ## Demos
 
-The [one-minute Structured RAG demonstration](https://youtu.be/jTHOt4O7YuM)
-and [ninety-second agent-memory demonstration](https://youtu.be/CWgrAEK123U)
-are historical examples, not current cross-workload benchmarks or acceptance
-receipts.
+The [one-minute Structured RAG demo](https://youtu.be/jTHOt4O7YuM) and the
+[ninety-second agent-memory demo](https://youtu.be/CWgrAEK123U) are older
+examples. They aren't current benchmarks or acceptance results.
