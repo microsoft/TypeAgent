@@ -2,29 +2,30 @@
 
 Shared workflow infrastructure for TypeAgent flow agents.
 
-## Why this package exists
+## Shared helpers
 
 PowerShell, TaskFlow and browser agents implement provider-owned flows with
 different languages and execution rules. They reuse helpers for validation,
 schema/grammar, parsing, names and persistence. This package also exposes the
 Automations inspection/management catalog; it is not a universal flow executor.
 
-`@typeagent/agent-flows` collects the **pure, agent-agnostic** parts of that machinery into one package so behavior stays uniform across agents and individual agents shrink to their domain-specific glue.
-
-**Architectural posture:**
+Providers supply their parameter types, validators and domain-specific options.
+The helpers handle the common operations:
 
 - **Keep helper dependencies small.** Pure helpers do not initialize models or
   dispatchers. Store/catalog exports also use agent-sdk storage types and local
   I/O; the package currently depends on agent-sdk, debug and TypeScript.
 - **Generic over caller types.** Parameter shapes differ between agents (Excel's `ExcelFlowParameter` has `range`/`sheetName`/`columnLetter`/…; PowerShell's is different again). Utilities take the caller's type as a generic and the caller supplies a type-narrowing validator.
-- **Curated data stays at the caller.** Things like alias dictionaries for common LLM hallucinations, reserved-action-name predicates, and dynamic-schema allow-lists are agent-specific and pass in as options — they're not baked into the library.
+- **Caller-supplied options.** Agents pass alias dictionaries, reserved-action-name predicates and dynamic-schema allow-lists to the helpers.
 
 ### Execution boundary
 
 The historical `sandbox` names below describe a restricted API surface, not
-hostile-code containment. The ordinary script helper uses `new Function`, frozen
-bindings and a cooperative timeout; it is not the worker-contained QuickJS
-runtime used by [checked program macros](../../docs/architecture/workflows/macros.md).
+hostile-code containment. The ordinary script helper uses `new Function` and frozen
+bindings. It races the script's promise against a timer but does not terminate
+the script on timeout. Synchronous code can block the timer; asynchronous work
+can continue after the caller receives a timeout. This differs from the
+worker-contained QuickJS runtime used by [checked program macros](../../docs/architecture/workflows/macros.md).
 PowerShell uses its own authorized Windows execution path, not this TypeScript
 executor. Shared helpers do not unify provider storage, permissions or recovery.
 

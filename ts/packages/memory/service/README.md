@@ -1,6 +1,14 @@
 # @typeagent/memory-service
 
-Transport-independent durable memory corpus service.
+`@typeagent/memory-service` stores source revisions and conversation events,
+indexes content with KnowPro, answers questions, and maintains editable documents
+called Views. Native agents, browser clients and MCP use the same service.
+
+Start with [Memory architecture](../../../docs/architecture/memory/memory.md) for
+the concepts, [Current system](../../../docs/architecture/memory/current-system.md)
+for host integration, or [Derived Views](../../../docs/architecture/memory/derived-views.md)
+for document construction and editing. The sections below describe service
+contracts and operational behavior.
 
 ## Offline test fixtures
 
@@ -17,18 +25,18 @@ included in these fixtures.
 
 ## Automatic maintenance foundation
 
-Wiki ordinary contributions identify relevant missing distinctions; irrelevant
-context does not require an invented assertion for every fragment. Covered
-suppression and contribution verification still require actual canonical prose,
-all supplied critical requirements, exact indexed citations and current revisions.
-Referential rejection receipts expose bounded reason codes/counts, never raw model
-responses. Technical rejections are not user approvals; actual ambiguity and human
-edit conflicts retain their separate decision reasons.
+When a Wiki candidate overlaps an existing page, the service checks the page's
+actual prose to decide whether the candidate adds useful evidence. Coverage and
+contribution checks require current revisions, exact indexed citations and all
+supplied critical requirements. Rejection receipts contain bounded reason codes
+and counts, not raw model responses. Technical failures, ambiguous matches and
+human edit conflicts have separate reasons.
 
 Informational jobs isolate target timeouts and request budgets. Completed targets
 remain committed while unchanged semantic rejections/conflicts are parked in
 existing results. Provider/materialization failures receive one automatic retry
-before being parked; changed evidence/recipe or explicit rebuild reopens admission.
+before being parked; changed evidence or recipe, or an explicit rebuild, makes
+the target eligible again.
 Target timeout is a technical failure, not cancellation of its peers or a user
 decision. Job cancellation remains explicit. Job completion and family checkpoint
 share the serialized write boundary so readers cannot observe a false-idle gap.
@@ -47,8 +55,9 @@ an unnecessary history commit.
 page context read during admission, including inputs not cited by the output.
 These dependencies participate in late-write/publication eligibility and privacy
 purge; ordinary retained inputs are also privacy dependencies even without citations.
-Human-authored drafts remain human; generated builds remain maintenance-authored.
-This foundation does not add an agent draft-save API or consolidation workflow.
+Human-authored drafts retain human authorship; generated builds record maintenance
+authorship. This maintenance path does not save agent-authored drafts or
+consolidate articles; consolidation is described separately below.
 
 Authorized source forgetting first durably enrolls removal in the source manifest.
 Until source/index/view/history/assets/batch/context cleanup completes, corpus content reads
@@ -95,8 +104,7 @@ context; changed or suppressed context regenerates the summary.
 Current eligible `relatedArticles` are a bounded original-source/revision-overlap
 navigation projection, not equivalence, redirects or corroborating evidence.
 Source eligibility, influence tracking and authorized removal override protection.
-No paragraph platform, second scheduler, new Inbox or historical consolidation
-is introduced; real-model quality qualification remains separate.
+Live model quality is evaluated separately from these lifecycle checks.
 
 ## Revision-bound source synopses
 

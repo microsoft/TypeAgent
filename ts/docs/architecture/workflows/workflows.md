@@ -1,35 +1,29 @@
-# Workflows — Architecture & Design
+# Provider-owned workflows
 
-> **Scope:** This entry point distinguishes provider-owned flows from
-> [checked program macros](./macros.md). The detailed sections below cover
-> PowerShell, WebFlow and TaskFlow formats, execution, storage and
-> provider-specific recovery. They are not the program-macro runtime or the
-> separate [workflow DSL/IR design](./README.md).
-> For routing and shell completion, see [Action grammar](../core/actionGrammar.md)
-> and [Completion](../core/completion.md).
+PowerShell, WebFlow and TaskFlow let you save tasks as parameterized scripts and
+invoke them through natural-language requests. Each provider stores and executes
+its own flows, with its own authorization and recovery rules.
+
+For the separately checked program runtime, see [Macros](./macros.md). The
+[workflow DSL/IR](./README.md) is a separate language and engine design.
+Routing and shell completion are covered in [Action grammar](../core/actionGrammar.md)
+and [Completion](../core/completion.md).
 
 ## Overview
 
-TypeAgent's action system is developer-authored: developers write actions,
-schemas, and grammar rules; natural-language requests dispatch reliably
-against that fixed surface. It works, but **every new capability requires
-a developer**.
-
-Workflows change this by enabling **end users to extend the system
-themselves**. A user demonstrates a task or describes it in their own words;
-a reasoning agent generalizes what it observed into a reusable script with
-parameters and grammar rules; and the resulting workflow becomes a first-class
-action that an authorized caller can invoke.
+To create a workflow, describe or demonstrate a task, import an existing script,
+or write a recipe. The provider saves the script with parameters and grammar
+patterns, then registers it as an action. You can run it again with new inputs
+without authoring a new built-in action.
 
 <a id="the-core-insight-saved-workflows-win"></a>
 
-### The core insight: reuse a checked procedure
+### Reusing a saved workflow
 
-Saved procedures can avoid repeating model planning, but execution cost and
-latency depend on the host, tools and workload. TaskFlow scripts can call
-`queryLLM`; hybrid programs declare bounded semantic calls. Inputs, contracts,
-authorization and versions still matter on repeat. No universal millisecond,
-zero-model or "reuse forever" guarantee applies.
+A saved workflow can skip model planning on later runs. TaskFlow scripts can
+still call `queryLLM`, and hybrid macros can make declared semantic calls.
+Performance depends on the host, tools and workload. Every invocation still
+checks inputs, contracts, authorization and versions.
 
 | Family                                | Execution contract                                                                                    |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -40,7 +34,7 @@ zero-model or "reuse forever" guarantee applies.
 
 ### Three-phase lifecycle
 
-This provider-flow summary is not a universal automatic-repair contract:
+This summary covers provider flows. Not every provider repairs itself automatically:
 
 | Phase       | What happens                                                                                                                          |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -58,7 +52,7 @@ See [Common lifecycle](#common-lifecycle) for implementation details
 | PowerShell scripts        | _"Show my running processes"_                    | Implemented |
 | Web browser automation    | _"Buy AAA batteries on Amazon"_                  | Implemented |
 | Cross-agent workflows     | _"Get top 10 K-pop songs and create a playlist"_ | Implemented |
-| Office macros             | _"Format this spreadsheet for quarterly review"_ | Planned     |
+| Office provider flows     | _"Format this spreadsheet for quarterly review"_ | Planned     |
 | Knowledge-base automation | _"Run the network troubleshooting guide"_        | Planned     |
 
 ### Key concepts
@@ -82,29 +76,21 @@ See [Common lifecycle](#common-lifecycle) for implementation details
 | Domain                 | OS / filesystem / processes                                | Web page interaction                                         | Cross-agent workflows                                        |
 | Language               | PowerShell                                                 | TypeScript                                                   | TypeScript                                                   |
 | Validation / authority | Exact script/context authorization; current-user OS rights | Static checks and frozen API, not arbitrary-code containment | Static checks and frozen API, not arbitrary-code containment |
-| Execution              | Windows broker and `scriptHost.ps1`                        | Node `new Function()` with WebUtilsAPI                       | `executeTaskFlowScript()` with TaskFlowScriptAPI             |
+| Execution              | Windows broker and `scriptHost.ps1`                        | Node `new Function()` with `WebFlowBrowserAPI`               | `executeTaskFlowScript()` with `TaskFlowScriptAPI`           |
 | Scope                  | Authorized local invocation                                | Per-site or global                                           | Supported agent combinations                                 |
 | Platform               | Windows                                                    | Browser required                                             | Provider-dependent                                           |
 
-In the provider sections, legacy names such as "sandbox" describe an API and
-validation surface, not arbitrary-code containment. Frozen bindings, blocked
-identifiers and cooperative timeouts are not the QuickJS program boundary.
+In the provider sections, "sandbox" names a restricted API and static validation,
+not containment for arbitrary code. The shared TypeScript executor races the
+script's promise against a timer. A timeout stops waiting for the result; it does
+not terminate the script. Synchronous code can block the timer, and asynchronous
+work may continue after a timeout. Checked program macros use a separate,
+worker-contained QuickJS runtime.
 
-> **Design trade-off — why separate workflow types instead of one?**
->
-> We could have a single unified workflow format that handles all domains.
-> We chose separate types because:
->
-> 1. **Authority differs** — PowerShell requires exact script authorization;
->    browser flows use domain APIs; cross-agent flows use dispatcher validation.
->    These mechanisms are not interchangeable containment guarantees.
-> 2. **Capture mechanisms differ** — PowerShell imports existing `.ps1` files;
->    WebFlows record browser interactions; TaskFlows capture reasoning traces.
-> 3. **Execution substrates differ** — PowerShell runs in a child process;
->    WebFlows proxy to the browser; TaskFlows call the dispatcher.
->
-> We derive common building blocks to handle storage, dynamic schema,
-> and grammar generation.
+Providers share storage helpers, schema generation and grammar generation.
+Authorization and execution remain provider-specific: PowerShell runs an
+authorized script in a child process, WebFlows call browser APIs, and TaskFlows
+call the dispatcher.
 
 ---
 
@@ -122,21 +108,18 @@ How workflows are created depends on the workflow type and trigger:
 
 | Flow type  | Trigger                       | Pipeline                                                                                                    |
 | ---------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| PowerShell | `@powershell import file.ps1` | `ScriptAnalyzer` sends script to LLM (Claude Sonnet), generates recipe                                      |
+| PowerShell | `@powershell import file.ps1` | `ScriptAnalyzer` sends the script to `copilot:gpt-5.6-sol` and generates a recipe                           |
 | PowerShell | `createPowerShellFlow` action | User or LLM provides script, parameters, patterns, sandbox directly                                         |
 | WebFlow    | `startGoalDrivenTask` action  | `BrowserReasoningAgent` navigates autonomously, trace captured, `scriptGenerator` produces parameterized JS |
 | WebFlow    | Extension recording           | User demonstrates task, `recordingNormalizer` + LLM generalizes to script                                   |
 | TaskFlow   | Manual authoring              | Developer writes `.recipe.json` files with embedded TypeScript scripts                                      |
 | TaskFlow   | Seed samples                  | Bundled `.recipe.json` files loaded on first activation                                                     |
 
-> **Note:** Automatic capture from reasoning traces is **fully implemented**.
-> The `ReasoningRecipeGenerator` extracts multi-agent action sequences
-> from successful reasoning traces and generates TaskFlow recipes. The
-> `ScriptRecipeGenerator` watches for PowerShell commands executed via
-> Bash during reasoning and generates PowerShell recipes. Both generators
-> run automatically after successful reasoning if enabled in config
-> (`execution.scriptReuse`). Users can trigger explicit recording with
-> `learn: [task]` or `remember how to [task]` prefixes.
+After successful reasoning, `ReasoningRecipeGenerator` extracts multi-agent
+action sequences into TaskFlow recipes. It does not check `execution.scriptReuse`.
+In Claude reasoning on Windows, that setting controls `ScriptRecipeGenerator`,
+which captures PowerShell commands executed via Bash and generates PowerShell recipes. Use
+`learn: [task]` or `remember how to [task]` to request explicit recording.
 
 ### Phase 2 — Persist
 
@@ -327,7 +310,7 @@ PowerShell supports two creation paths:
   User: "@powershell import ./cleanup.ps1"
      |
      v  ScriptAnalyzer reads .ps1 file (max 100 KB)
-     v  LLM (Claude Sonnet) analyzes script:
+    v  LLM (copilot:gpt-5.6-sol) analyzes script:
      v    - Infers parameters from param() block or hardcoded values
      v    - Generates grammar patterns (2-4 patterns)
      v    - Records module dependencies (not execution approval)
@@ -500,11 +483,11 @@ translates to a browser operation via the extension.
   +---------------------------+       +---------------------------+
 ```
 
-The `new Function()` constructor creates an isolated scope with only
-three named bindings: `browser` (frozen API proxy), `params` (frozen
-parameter object), and `console` (logging-only stub). The script has
-no access to `window`, `document`, `global`, `require`, or any other
-Node.js or browser globals.
+The executor supplies `browser` (a frozen API proxy), `params` (a frozen
+parameter object), and `console` (a logging-only stub). It shadows selected
+blocked identifiers with `undefined`. `new Function()` still runs in the host
+JavaScript environment; unshadowed globals remain available. These checks do
+not isolate untrusted code.
 
 ### Script executor
 
@@ -522,8 +505,8 @@ async function executeWebFlowScript(
 
 1. `Object.freeze()` is applied to the browser API, params, and a
    logging-only console stub.
-2. A `new Function()` is constructed with `browser`, `params`, and
-   `console` as the only accessible bindings:
+2. A `new Function()` receives `browser`, `params`, `console`, and the
+   blocked-identifier shadow bindings. The invocation has this shape:
    ```typescript
    const fn = new Function(
      ...Object.keys(sandbox),
@@ -531,7 +514,8 @@ async function executeWebFlowScript(
    );
    ```
 3. The function is invoked with the frozen sandbox values as arguments.
-4. A `Promise.race` enforces the timeout (default 180 seconds).
+4. A `Promise.race` limits the wait to 180 seconds by default. It does not
+   terminate the script or cancel pending browser operations.
 
 ### Script validation
 
@@ -539,7 +523,7 @@ Before execution, `scriptValidator.mts` performs TypeScript-compiler-based
 validation with an AST security walker:
 
 - Parses script through the TypeScript compiler
-- Walks AST to detect 27+ blocked identifiers:
+- The executor's blocked-identifier list includes:
   ```
   eval, Function, require, import, fetch, XMLHttpRequest, WebSocket,
   window, document, globalThis, self, setTimeout, setInterval,
@@ -550,21 +534,9 @@ validation with an AST security walker:
 - Blocks dangerous patterns: `new Function()`, dynamic `import()`,
   `with` statements, `__proto__`, `constructor.constructor` chains
 
-> **Design trade-off — why AST validation instead of true sandboxing?**
->
-> True sandboxing (e.g., V8 isolates, WebAssembly) would provide stronger
-> guarantees. We chose AST-based validation because:
->
-> 1. **Performance** — Creating V8 isolates has ~50ms overhead per
->    execution; AST scanning is <5ms.
-> 2. **API access** — Scripts need to call `browser.*` methods that cross
->    the sandbox boundary; true isolation would require complex serialization.
-> 3. **Debuggability** — `new Function()` errors include stack traces;
->    isolated contexts obscure failure locations.
->
-> We mitigate bypass risk by freezing the API object and running in
-> strict mode. The validation catches common dangerous patterns; the
-> frozen API limits what escaped code could do.
+Static validation catches specific unsafe constructs. Frozen bindings prevent
+changes to the API object, but neither mechanism contains code that bypasses
+validation. Use these flows only with code you trust to run in the server process.
 
 ### Browser API contract
 
@@ -578,10 +550,9 @@ Scripts interact with the browser through `WebFlowBrowserAPI`:
 | **LLM extraction**  | `extractComponent<T>(componentDef, userRequest?)`                                                                                                                                                |
 | **State checking**  | `checkPageState(expectedState)`, `queryContent(question)`                                                                                                                                        |
 
-The `extractComponent()` method is the bridge between scripts and LLM
-reasoning — it uses an LLM to find a UI component on the page by
-semantic description rather than hard-coded CSS selector, making scripts
-resilient to page layout changes.
+`extractComponent()` uses a model to find a UI component by description instead
+of a fixed CSS selector. This can tolerate some layout changes, but the model can
+still select the wrong component or fail to find it.
 
 ### Scope enforcement
 
@@ -608,8 +579,9 @@ Domain matching uses `String.endsWith()`:
 const allowed = scope.domains.some((d) => targetDomain.endsWith(d));
 ```
 
-This means `amazon.com` matches `www.amazon.com` and `api.amazon.com`
-but does not match `notamazon.com`. Dots in domains are replaced with
+This raw suffix test matches `www.amazon.com`, `api.amazon.com` and
+`notamazon.com` for an `amazon.com` scope. It does not check domain-label
+boundaries, so do not treat the scope as a security boundary. Dots in domains are replaced with
 underscores for storage paths (e.g., `amazon.com` → `amazon_com/`).
 
 ### Execution result
@@ -627,10 +599,10 @@ interface WebFlowResult {
 
 ## TaskFlow
 
-TaskFlow orchestrates multi-agent workflows through TypeScript scripts
-that call other TypeAgent actions via a sandboxed API. Unlike PowerShell
-(PS scripts) and WebFlow (browser JavaScript), TaskFlow scripts execute
-server-side in Node.js with access to all TypeAgent agents.
+TaskFlow runs TypeScript scripts in the TypeAgent server. Scripts call other
+agents through `TaskFlowScriptAPI`; the dispatcher validates and routes those
+actions. Like WebFlow, TaskFlow uses static checks and a restricted API rather
+than an isolated runtime.
 
 ### Capture paths
 
@@ -735,26 +707,30 @@ creates a restricted execution environment:
 
 1. **Validation**: Script is checked for blocked identifiers (eval, require, import, etc.)
 2. **Transpilation**: TypeScript script is transpiled to JavaScript
-3. **Sandbox creation**: `new Function()` is constructed with only three bindings:
+3. **API bindings**: `new Function()` receives the script API and inputs:
    - `api`: Frozen TaskFlowScriptAPI instance
    - `params`: Frozen parameter object
    - `console`: Log-only stub
-4. **Global shadowing**: All Node.js/browser globals are shadowed with `undefined`
-5. **Execution**: Function is invoked with timeout enforcement (300s default)
+4. **Global shadowing**: Selected blocked identifiers are shadowed with `undefined`.
+   This does not remove all host globals.
+5. **Execution**: The caller waits for the result or a timeout (300s default).
+   A timeout does not stop the script.
 
 ### Sandbox: blocked globals
 
 TaskFlow scripts execute with these restrictions:
 
-- **Blocked identifiers** (shadowed with `undefined`): `eval`, `Function`, `require`,
-  `import`, `fetch`, `XMLHttpRequest`, `process`, `Buffer`, `__dirname`, `__filename`,
+- **Shadowed identifiers** include `Function`, `require`,
+  `fetch`, `XMLHttpRequest`, `process`, `Buffer`, `__dirname`, `__filename`,
   `window`, `document`, `globalThis`, and others
-- **Available bindings**: Only `api`, `params`, and `console`
+- **Script API bindings**: `api`, `params`, and `console`
 - **Strict mode**: All code runs in `"use strict"`
 - **Frozen objects**: `api` and `params` are `Object.freeze()`d
 
-The validation performs regex-based scanning (not full AST parsing) for approximately
-20+ blocked identifiers.
+TaskFlow uses the shared TypeScript validator, including compiler diagnostics and
+an AST walk for unsafe constructs. The executor omits `eval` and `import` from
+its shadow parameters because they are invalid strict-mode parameter names;
+the validator checks direct `eval` calls and dynamic imports instead.
 
 ### Script example
 
@@ -833,21 +809,13 @@ types and grammar rules at runtime. This is the generic extension point
 that all three workflow systems use to register their workflows with the
 dispatcher.
 
-### Why this matters
+### Registration behavior
 
-Three properties make this system valuable:
-
-1. **The LLM is constrained** — The translator sees TypeScript union types
-   generated at runtime, so it can only produce valid workflow names and
-   parameter types. Hallucinated workflow names fail type validation.
-
-2. **Pickup is instant** — When a workflow is added or removed, the grammar
-   matcher absorbs new patterns immediately — no restart required. The
-   user can invoke a newly-captured workflow in the same session.
-
-3. **It's pluggable** — New domains (Excel, VS Code, database queries)
-   slot in without dispatcher changes. PowerShell, WebFlow, and TaskFlow
-   are just the first three implementations of this extension point.
+The translator receives generated TypeScript unions of workflow names and
+parameter types. Invalid names or inputs fail validation. After a provider
+reloads its schema and grammar, you can use the changed workflows in the same
+session without restarting. Other agents can implement the same callbacks to
+register their own dynamic actions.
 
 ### Agent-side callbacks
 
@@ -1094,9 +1062,8 @@ The fallback context includes:
 - Error message from script execution
 - Hint to use `editWebFlow` to fix the script
 
-This differs from PowerShell, which requires an explicit repair request and
-fresh authorization, and from checked program macros, which never replan an
-accepted failed invocation.
+PowerShell works differently: it repairs only when you ask, and it needs fresh
+authorization. Checked program macros never replan after an accepted invocation fails.
 
 ![WebFlow can enter reasoning repair after a failed run and re-register the edited flow.](../images/workflow_capture_run_repair.svg)
 
@@ -1416,14 +1383,14 @@ interface GrammarContent {
 
 ## Design principles
 
-1. **Reuse procedures, not recorded answers** — Saved code can avoid repeated
-   planning while consuming fresh inputs and tool results. Tool/network time,
-   explicit semantic calls and authorization still contribute to execution.
+1. **Reuse procedures, not recorded answers** — Saved code skips repeated
+   planning and works on fresh inputs and tool results. Tool and network time,
+   declared semantic calls and authorization still add to the run time.
 
-2. **Publish and invalidate deliberately** — Registration is provider-specific.
-   Program candidates must pass independent checks before publication; disabled
-   or superseded revisions cannot start another invocation. Changed contracts
-   may require new learning or an explicit repair rather than perpetual reuse.
+2. **Publish and invalidate deliberately** — Registration depends on the provider.
+   Program candidates must pass independent checks before they are published.
+   A disabled or superseded revision can't start another invocation. If a contract
+   changes, you may need to learn the procedure again or repair it explicitly.
 
 3. **Match the execution contract** — Each domain has its own
    security model. PowerShell approved-local execution uses authorization and
