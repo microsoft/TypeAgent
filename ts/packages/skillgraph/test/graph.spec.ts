@@ -6,7 +6,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SkillGraph } from "../src/graph.js";
-import { parseHelp, SpecStore } from "../src/specs.js";
+import { parseHelp, SpecStore } from "../src/specs/index.js";
 import { commandsFromCode } from "../src/shell.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
