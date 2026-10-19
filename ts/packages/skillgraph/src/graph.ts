@@ -39,9 +39,6 @@ const SKIP_DIRS = new Set([
     "_artifacts",
 ]);
 const SCRIPT_EXT = /\.(py|js|mjs|cjs|ts|mts|sh|bash|zsh|rb|pl)$/;
-/** Files that are never orphans. */
-const NOT_ORPHAN =
-    /^(SKILL\.md|LICENSE.*|README.*|AGENTS\.md|CLAUDE\.md|\..*|package(-lock)?\.json|pnpm-lock\.yaml|requirements.*\.txt|pyproject\.toml|tsconfig.*\.json|.*\.lock)$/i;
 /** Skill-root placeholders used in script paths, e.g. "{baseDir}/scripts/x.py". */
 const BASE_PLACEHOLDER =
     /^(?:\{baseDir\}|\$\{?CLAUDE_SKILL_DIR\}?|\$\{?SKILL_DIR\}?|<skill[-_ ]?dir>)\//;
@@ -241,20 +238,22 @@ export class SkillGraph {
             );
         }
 
-        // Orphans: files nothing links to, invokes, or names (info only —
+        // Orphans: unreferenced files beside referenced ones (info only —
         // scripts load assets through string literals we don't model).
+        // Only folders the docs already use count as skill content, e.g.
+        // scripts/old.py next to a linked scripts/fetch.py. Folders nothing
+        // references (crates/, tests/, the skill root itself) are other
+        // tooling's inputs, not skill content.
+        const usedDirs = new Set(
+            [...referenced]
+                .map((r) => path.dirname(r))
+                .filter((d) => d !== skill.dir),
+        );
         for (const f of files) {
-            if (referenced.has(f)) continue;
+            if (referenced.has(f) || !usedDirs.has(path.dirname(f))) continue;
             const base = path.basename(f);
-            if (NOT_ORPHAN.test(base)) continue;
+            if (base.startsWith(".")) continue;
             if (mentionText.some((t, i) => files[i] !== f && t.includes(base)))
-                continue;
-            // Test runners discover tests without a document linking to them.
-            if (
-                /(?:^|[/\\])tests?[/\\]|(?:[.]Tests[.]ps1|[.](?:spec|test)[.][cm]?[jt]s)$/.test(
-                    path.relative(skill.dir, f),
-                )
-            )
                 continue;
             res.diagnostics.push({
                 rule: "orphan",
@@ -346,6 +345,13 @@ export class SkillGraph {
             const target = rawPath
                 ? path.resolve(path.dirname(file), decodeURIComponent(rawPath))
                 : file;
+            // Links that climb out of the skill into a missing directory
+            // ("../../security/advisories/new") are site routes, not files.
+            if (
+                path.relative(skill.dir, target).startsWith("..") &&
+                !fs.existsSync(path.dirname(target))
+            )
+                continue;
             if (!fs.existsSync(target) && !this.overlays.has(target)) {
                 res.edges.push({
                     from: docId,
@@ -583,7 +589,7 @@ export class SkillGraph {
             version: spec.version,
             source: "ast",
         };
-        this.checkFlags(cmd, 0, spec, [spec], ref, file, res);
+        this.checkFlags(cmd, 0, spec, [spec], ref, file, res, new Set());
     }
 
     private toolCall(
@@ -758,7 +764,16 @@ export class SkillGraph {
         });
         if (leaf && !unwalked) {
             res.specs.set(`${id} ${words.join(" ")}`.trim(), leaf);
-            this.checkFlags(cmd, i, leaf, chain, specRef(leaf), at.file, res);
+            this.checkFlags(
+                cmd,
+                i,
+                leaf,
+                chain,
+                specRef(leaf),
+                at.file,
+                res,
+                pendingKeys,
+            );
         }
     }
 
@@ -771,6 +786,7 @@ export class SkillGraph {
         ref: SpecRef,
         file: string,
         res: BuildResult,
+        pendingKeys: Set<string>,
     ) {
         if (!leaf.flags.length || leaf.partial) return; // nothing (fully) known → nothing claimed
         const known = new Set(chain.flatMap((s) => s.flags.map((f) => f.name)));
@@ -788,6 +804,22 @@ export class SkillGraph {
             if (known.has(name) || UNIVERSAL_FLAGS.has(name)) continue;
             if (name.startsWith("--no-") && known.has(`--${name.slice(5)}`))
                 continue;
+            // Help hides some flags (clap `hide = true`: `tirith check --json`).
+            // Ask the binary: `tool sub --flag --help` printing the same help
+            // means the parser accepted the flag.
+            if (leaf.source === "help" && this.config.probe) {
+                const words = [...(leaf.probe?.slice(0, -1) ?? []), name];
+                const probed = this.store.get(cmd.tool, words);
+                if (probed === undefined) {
+                    const key = `${cmd.tool}|${words.join(" ")}`;
+                    if (!pendingKeys.has(key)) {
+                        pendingKeys.add(key);
+                        res.pending.push({ tool: cmd.tool, words });
+                    }
+                    continue;
+                }
+                if (probed && sameHelp(leaf, probed)) continue;
+            }
             const close = nearest(name, [...known]);
             res.diagnostics.push({
                 rule: "flag-unknown",

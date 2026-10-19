@@ -130,6 +130,8 @@ export function commandsFromCode(
     const consoleMode = CONSOLE_LANGS.has(lang);
     const out: Command[] = [];
     const lines = value.split("\n");
+    // A bash fence with `$ ` prompts is a transcript: unprompted lines are output.
+    const hasPrompts = lines.some((l) => /^\s*\$ /.test(l));
     let heredocEnd: string | undefined;
     let pending = "";
     let pendingLine = line;
@@ -146,8 +148,8 @@ export function commandsFromCode(
         if (prompt) {
             offset += prompt[0].length;
             text = text.slice(prompt[0].length);
-        } else if (consoleMode && !pending) {
-            continue; // console output line
+        } else if ((consoleMode || hasPrompts) && !pending) {
+            continue; // output line in a transcript
         }
         if (!pending) {
             pendingLine = line + i;

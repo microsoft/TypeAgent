@@ -142,6 +142,9 @@ const USAGE_SUBCOMMAND =
 /** Subcommand row: "  pr:   Manage…", "  ls, list   List…", "  ado [options] [tool]   Azure…". */
 const SUBCOMMAND_ROW =
     /^\s{2,}([a-z][\w-]*(?:,\s*[a-z][\w-]*)*)(?::?(?:\s{2,}\S|\s*$)|\s+[<[][^\n]*?\s{2,}\S)/;
+/** Unindented section header: "Commands:", "CORE COMMANDS", "Options". */
+const SECTION_HEADER = /^[A-Z][A-Za-z :&-]*:?$/;
+const COMMANDS_HEADER = /commands?:?$/i;
 /** Option row: "  -R, --repo string   Select…", "    --[no-]quiet". */
 const OPTION_ROW =
     /^\s*((?:-{1,2}(?:\[no-\])?[A-Za-z0-9][\w-]*(?:\[?[= ][<[]?[\w|.:,-]+[>\]]?\]?)?(?:,\s*|\s+|$))+)/;
@@ -164,9 +167,16 @@ export function parseHelp(text: string): {
     const flags = new Map<string, FlagDef>();
     const subcommands = new Set<string>();
     let optionRows = 0;
+    // Subcommand rows count only under a "Commands" header; rows under
+    // "Arguments:"/"Options" are positionals or examples (`cmd "message"`).
+    let inCommands = true;
     for (const raw of lines) {
         const line = raw.replace(/\s+$/, "");
         if (!line.trim()) continue;
+        if (SECTION_HEADER.test(line)) {
+            inCommands = COMMANDS_HEADER.test(line);
+            continue;
+        }
         const opt = OPTION_ROW.exec(line);
         if (opt) {
             optionRows++;
@@ -183,7 +193,7 @@ export function parseHelp(text: string): {
             }
             continue;
         }
-        if (expectsSubcommand) {
+        if (expectsSubcommand && inCommands) {
             const sub = SUBCOMMAND_ROW.exec(line);
             if (sub) for (const w of sub[1].split(/,\s*/)) subcommands.add(w);
         }

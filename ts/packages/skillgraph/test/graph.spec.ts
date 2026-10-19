@@ -6,7 +6,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SkillGraph } from "../src/graph.js";
-import { SpecStore } from "../src/specs.js";
+import { parseHelp, SpecStore } from "../src/specs.js";
 import { commandsFromCode } from "../src/shell.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -103,5 +103,21 @@ esac
                     d.rule === "orphan" && d.at.file.endsWith("old_fetch.py"),
             ),
         ).toBe(true);
+    });
+
+    it("reads help sections and transcripts without hardcoded tool lists", () => {
+        // Rows under "Arguments:"/"Options" are not subcommands (codex mcp add).
+        const help = parseHelp(
+            "Usage: x mcp add [OPTIONS] <NAME> -- <COMMAND>...\n\nArguments:\n  servers   Server names\n\nOptions:\n      --url <URL>  URL\n",
+        );
+        expect(help.subcommands).toEqual([]);
+        // `$ ` prompts mark a transcript: unprompted lines are output (tirith receipt).
+        const cmds = commandsFromCode(
+            "bash",
+            "$ tirith receipt last\n  Domains referenced: x.sh",
+            1,
+            1,
+        );
+        expect(cmds.map((c) => c.tool)).toEqual(["tirith"]);
     });
 });
