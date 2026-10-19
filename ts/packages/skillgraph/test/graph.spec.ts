@@ -119,5 +119,17 @@ esac
             1,
         );
         expect(cmds.map((c) => c.tool)).toEqual(["tirith"]);
+        // PowerShell: PS prompt, `&` call operator, backtick continuation,
+        // cmdlets skipped, `pwsh -File` unwrapped.
+        const ps = commandsFromCode(
+            "powershell",
+            "PS C:\\> & .\\scripts\\sync.ps1 -Name a `\n  -dry\nGet-ChildItem -Recurse\nPS> pwsh -NoProfile -File scripts/sync.ps1 -Nmae b",
+            1,
+            1,
+        );
+        expect(ps.map((c) => [c.tool, c.args])).toEqual([
+            ["./scripts/sync.ps1", ["-Name", "a", "-dry"]],
+            ["scripts/sync.ps1", ["-Nmae", "b"]],
+        ]);
     });
 });

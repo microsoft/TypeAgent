@@ -35,6 +35,26 @@ const JS_OPTION = /\.(?:option|requiredOption)\(\s*["'`]([^"'`]+)["'`]/g;
 const JS_YARGS = /\.option\(\s*["'`]([\w-]+)["'`]\s*,\s*\{/g;
 const JS_COMMAND = /\.command\(\s*["'`]([\w-]+)/g;
 const PARSE_ARGS_FLAG = /["'`](--[a-z][\w-]*)["'`]/g;
+/** PowerShell `param(...)` entries: `[string]$Name`, `[switch] $DryRun`. */
+const PS_PARAM_BLOCK = /\bparam\s*\(/i;
+const PS_PARAM = /\[[\w.\[\]]+\]\s*\$(\w+)/g;
+/** about_CommonParameters: added to every [CmdletBinding()] script. */
+const PS_COMMON_PARAMS = [
+    "Debug",
+    "ErrorAction",
+    "ErrorVariable",
+    "InformationAction",
+    "InformationVariable",
+    "OutBuffer",
+    "OutVariable",
+    "PipelineVariable",
+    "ProgressAction",
+    "Verbose",
+    "WarningAction",
+    "WarningVariable",
+    "WhatIf",
+    "Confirm",
+];
 const SH_FLAG =
     /^\s*(?:\|?\s*)?(-{1,2}[a-zA-Z][\w-]*)(?:\s*\|\s*-{1,2}[\w-]+)*\s*\)/gm;
 
@@ -59,7 +79,9 @@ export function scriptSpec(file: string): CliSpec | undefined {
               ? "js"
               : ext === ".sh" || /^#!.*(ba|z)?sh/.test(src)
                 ? "sh"
-                : undefined;
+                : ext === ".ps1" || /^#!.*pwsh/.test(src)
+                  ? "ps1"
+                  : undefined;
     let structured = false;
     if (lang === "py") {
         for (const m of src.matchAll(PY_FLAG)) {
@@ -94,6 +116,27 @@ export function scriptSpec(file: string): CliSpec | undefined {
                 add(`--${m[1]}`, m.index ?? 0);
             }
         }
+    } else if (lang === "ps1") {
+        // Script-level param block: the first `param(` up to its matching `)`.
+        const start = src.search(PS_PARAM_BLOCK);
+        if (start >= 0) {
+            let depth = 0;
+            let end = start;
+            for (let k = src.indexOf("(", start); k < src.length; k++) {
+                if (src[k] === "(") depth++;
+                else if (src[k] === ")" && --depth === 0) {
+                    end = k;
+                    break;
+                }
+            }
+            structured = true;
+            for (const m of src.slice(start, end).matchAll(PS_PARAM)) {
+                add(`-${m[1]}`, start + (m.index ?? 0));
+            }
+            if (/\[CmdletBinding\b/i.test(src)) {
+                for (const p of PS_COMMON_PARAMS) add(`-${p}`, start);
+            }
+        }
     } else if (lang === "sh") {
         for (const m of src.matchAll(SH_FLAG)) {
             structured = true;
@@ -121,6 +164,7 @@ export function scriptSpec(file: string): CliSpec | undefined {
         subcommands: [...subcommands],
         expectsSubcommand: false,
     };
+    if (lang === "ps1") spec.pwsh = true;
     if (summary) spec.summary = summary;
     // Local imports may parse argv too (kit/audit.mjs reads --audit): flags are a subset.
     if (/(?:from|require\()\s*["']\.\.?\//.test(src)) spec.partial = true;

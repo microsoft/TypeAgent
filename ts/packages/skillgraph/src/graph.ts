@@ -38,7 +38,7 @@ const SKIP_DIRS = new Set([
     "dist",
     "_artifacts",
 ]);
-const SCRIPT_EXT = /\.(py|js|mjs|cjs|ts|mts|sh|bash|zsh|rb|pl)$/;
+const SCRIPT_EXT = /\.(py|js|mjs|cjs|ts|mts|sh|bash|zsh|rb|pl|ps1)$/;
 /** Skill-root placeholders used in script paths, e.g. "{baseDir}/scripts/x.py". */
 const BASE_PLACEHOLDER =
     /^(?:\{baseDir\}|\$\{?CLAUDE_SKILL_DIR\}?|\$\{?SKILL_DIR\}?|<skill[-_ ]?dir>)\//;
@@ -791,13 +791,38 @@ export class SkillGraph {
         if (!leaf.flags.length || leaf.partial) return; // nothing (fully) known → nothing claimed
         const known = new Set(chain.flatMap((s) => s.flags.map((f) => f.name)));
         // Terse help that lists no long flags (BSD grep, npm) claims nothing about them.
-        if (![...known].some((n) => n.startsWith("--") && n !== "--help"))
+        if (
+            !leaf.pwsh &&
+            ![...known].some((n) => n.startsWith("--") && n !== "--help")
+        )
             return;
         for (let j = from; j < cmd.args.length; j++) {
             const a = cmd.args[j];
             if (PASSTHROUGH.has(a)) break;
             if (cmd.opaque.has(j) || !/^--?[A-Za-z]/.test(a)) continue;
             const name = a.split("=")[0];
+            if (leaf.pwsh) {
+                // `-dry` matches `-DryRun`: PowerShell binds unique prefixes, any case.
+                const n = name.split(":")[0].toLowerCase();
+                const hits = [...known].filter((k) =>
+                    k.toLowerCase().startsWith(n),
+                );
+                if (hits.length || UNIVERSAL_FLAGS.has(n)) continue;
+                const close = nearest(name, [...known]);
+                res.diagnostics.push({
+                    rule: "flag-unknown",
+                    severity: "error",
+                    at: {
+                        file,
+                        line: cmd.argLines[j],
+                        col: cmd.argCols[j],
+                        endCol: cmd.argCols[j] + name.length,
+                    },
+                    message: `${name} not defined by ${ref.tool}${close ? ` → did you mean ${close}?` : ""}`,
+                    spec: ref,
+                });
+                continue;
+            }
             if (!name.startsWith("--") && name.length > 2) continue; // -abc bundles
             // Help text often omits short flags (git log -n); only claim long ones.
             if (leaf.source === "help" && !name.startsWith("--")) continue;

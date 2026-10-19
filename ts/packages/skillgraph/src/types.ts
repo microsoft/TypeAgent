@@ -88,6 +88,8 @@ export interface CliSpec {
     expectsSubcommand: boolean;
     /** Help says it lists only some options (e.g. curl "--help all"). */
     partial?: boolean;
+    /** PowerShell parameters: `-Name`, case-insensitive, unique prefixes allowed. */
+    pwsh?: boolean;
     /** Hash of the help output; a child equal to its parent is not a real subcommand. */
     helpHash?: string;
 }
