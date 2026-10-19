@@ -344,7 +344,7 @@ test("collector resolves the actual plugin session/scope and reconciles only cur
 const config = {
     protocolVersion: macroProtocolVersion,
     scope: "synthetic-only",
-    workspace: "D:\\synthetic\\workspace",
+    workspace: path.resolve("synthetic", "workspace"),
     profileId: "synthetic-profile",
     sessionId: "actual-native-session",
     rootModel: "explicit-root-model",
