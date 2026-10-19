@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import type { CopilotToolMacro } from "../src/contracts.js";
 
 const jest = (
