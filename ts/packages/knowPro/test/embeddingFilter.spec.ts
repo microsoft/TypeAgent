@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { EmbeddingIndex } from "../src/fuzzyIndex.js";
 
 describe("filtered embedding search", () => {

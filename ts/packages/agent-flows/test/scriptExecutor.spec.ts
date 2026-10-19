@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { jest } from "@jest/globals";
 import { createScriptExecutor } from "../src/execution/scriptExecutor.js";
 
