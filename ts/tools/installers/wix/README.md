@@ -80,6 +80,13 @@ incorrect publisher identity, invalid signatures, and stale hashes block
 publication. The public `.cer` accompanies releases for explicit trust setup;
 receiving it does not automatically make it trusted.
 
+GitHub's packaging-only CI check explicitly sets
+`TYPEAGENT_SHELL_VALIDATION_ONLY=1` to validate unsigned builds without signing
+credentials. This mode disables publication and rejects release channels.
+It does not change installer/updater trust checks, and the protected signing
+script rejects this mode before retrieving credentials. Validation artifacts
+must not be distributed as releases.
+
 Existing unsigned shell installations may lack updater publisher checks.
 Migrate them by separately enrolling the approved public certificate and
 reinstalling with the updated, trusted `install-shell.ps1` and its adjacent

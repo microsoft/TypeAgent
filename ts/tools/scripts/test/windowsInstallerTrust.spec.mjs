@@ -36,7 +36,7 @@ function importFunctions(file) {
     `;
 }
 
-function runPowerShell(code) {
+function runPowerShell(code, expectedStatus = 0) {
     const result = spawnSync(
         path.join(
             process.env.SystemRoot,
@@ -67,7 +67,12 @@ function runPowerShell(code) {
         },
     );
     assert.ifError(result.error);
-    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.equal(
+        result.status,
+        expectedStatus,
+        `${result.stdout}\n${result.stderr}`,
+    );
+    return result;
 }
 
 function fixture(t) {
@@ -141,6 +146,100 @@ test("electron-builder validates the required Windows signing and publisher conf
     assert.ok(trustResource.filter.includes("verify-windows-package.ps1"));
     assert.ok(trustResource.filter.includes("windows-package-trust.json"));
 });
+
+test("unsigned validation packaging disables publication without weakening release signing", () => {
+    const configUrl = pathToFileURL(
+        path.join(
+            repo,
+            "ts",
+            "packages",
+            "shell",
+            "electron-builder.config.js",
+        ),
+    ).href;
+    const env = Object.fromEntries(
+        Object.entries(process.env).filter(
+            ([key]) =>
+                ![
+                    "typeagent_shell_validation_only",
+                    "electron_builder_channel",
+                    "electron_builder_arch",
+                ].includes(key.toLowerCase()),
+        ),
+    );
+    function loadConfig(overrides) {
+        return spawnSync(
+            process.execPath,
+            [
+                "--input-type=module",
+                "-e",
+                `import config from ${JSON.stringify(configUrl)}; console.log(JSON.stringify(config));`,
+            ],
+            { encoding: "utf8", env: { ...env, ...overrides } },
+        );
+    }
+    const validation = loadConfig({ TYPEAGENT_SHELL_VALIDATION_ONLY: "1" });
+    assert.ifError(validation.error);
+    assert.equal(validation.status, 0, validation.stderr);
+    const config = JSON.parse(validation.stdout);
+    assert.equal(config.forceCodeSigning, false);
+    assert.equal(config.publish, null);
+    assert.equal(config.win.verifyUpdateCodeSignature, true);
+    assert.equal(config.win.signtoolOptions.publisherName, policy.publisher);
+
+    const release = loadConfig({
+        ELECTRON_BUILDER_CHANNEL: "ci",
+        ELECTRON_BUILDER_ARCH: "x64",
+    });
+    assert.equal(release.status, 0, release.stderr);
+    const releaseConfig = JSON.parse(release.stdout);
+    assert.equal(releaseConfig.forceCodeSigning, windows);
+    assert.equal(releaseConfig.publish.channel, "ci-x64");
+
+    const invalid = loadConfig({
+        TYPEAGENT_SHELL_VALIDATION_ONLY: "1",
+        ELECTRON_BUILDER_CHANNEL: "ci",
+        ELECTRON_BUILDER_ARCH: "x64",
+    });
+    assert.notEqual(invalid.status, 0);
+    assert.match(invalid.stderr, /must not specify a release channel/);
+
+    const workflow = shellRequire("js-yaml").load(
+        readFileSync(
+            path.join(repo, ".github", "workflows", "build-package-shell.yml"),
+            "utf8",
+        ),
+    );
+    const packageStep = workflow.jobs.build_package_shell.steps.find(
+        (step) => step.name === "Package - shell",
+    );
+    assert.equal(packageStep.env.TYPEAGENT_SHELL_VALIDATION_ONLY, "1");
+});
+
+test(
+    "release packaging rejects validation mode before accessing signing credentials",
+    { skip: !windows },
+    () => {
+        const result = runPowerShell(
+            `
+        $env:TYPEAGENT_SHELL_VALIDATION_ONLY = '1'
+        function node { throw 'Signing credentials must not be accessed' }
+        & ${quote(path.join(scripts, "package-signed-shell.ps1"))} 2>&1 |
+            ForEach-Object { [Console]::Error.WriteLine($_.ToString()) }
+        exit $LASTEXITCODE
+    `,
+            1,
+        );
+        assert.match(
+            result.stderr.replace(/\s+/g, " "),
+            /Release signing must not use unsigned validation-only packaging/,
+        );
+        assert.doesNotMatch(
+            result.stderr,
+            /Signing credentials must not be accessed/,
+        );
+    },
+);
 
 test(
     "actual Windows signature API rejects an unsigned fixture",
@@ -470,3 +569,37 @@ test("MSI installs both shared trust files alongside the phased shell installer"
         assert.ok(wix.includes(`<File Id="${id}"`));
     }
 });
+
+test(
+    "MSI lifecycle candidate staging copies all shell trust dependencies",
+    { skip: !windows },
+    (t) => {
+        const { dir } = fixture(t);
+        runPowerShell(`
+        $repo = ${quote(repo)}
+        $stage = ${quote(dir)}
+        $ast = [Management.Automation.Language.Parser]::ParseFile(
+            ${quote(path.join(scripts, "test", "msiLifecycle", "build.ps1"))}, [ref]$null, [ref]$null)
+        $build = $ast.Find({
+            param($node)
+            $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+                $node.Name -eq 'Build-Package'
+        }, $false)
+        $branch = $build.Body.FindAll({
+            param($node)
+            $node -is [Management.Automation.Language.IfStatementAst] -and
+                $node.Clauses[0].Item1.Extent.Text -eq '$revision'
+        }, $false) | Select-Object -First 1
+        if ($null -eq $branch.ElseClause) { throw 'Candidate staging branch not found' }
+        foreach ($statement in $branch.ElseClause.Statements) {
+            . ([scriptblock]::Create($statement.Extent.Text))
+        }
+        foreach ($file in @('install-shell.ps1', 'windows-package-trust.ps1', 'windows-package-trust.json')) {
+            $source = Join-Path $repo "ts\\tools\\scripts\\$file"
+            $copy = Join-Path $stage "ts\\tools\\scripts\\$file"
+            if (-not (Test-Path -LiteralPath $copy)) { throw "Missing staged dependency: $file" }
+            if ((Get-FileHash $source).Hash -ne (Get-FileHash $copy).Hash) { throw "Incorrect staged dependency: $file" }
+        }
+    `);
+    },
+);

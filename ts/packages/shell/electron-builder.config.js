@@ -31,9 +31,15 @@ const url =
 const channel = process.env.ELECTRON_BUILDER_CHANNEL;
 const arch = process.env.ELECTRON_BUILDER_ARCH?.trim();
 const channelName = channel && arch ? `${channel}-${arch}` : undefined;
+const validationOnly = process.env.TYPEAGENT_SHELL_VALIDATION_ONLY === "1";
+if (validationOnly && channel) {
+    throw new Error(
+        "Unsigned validation-only shell packages must not specify a release channel.",
+    );
+}
 
 export default {
-    forceCodeSigning: process.platform === "win32",
+    forceCodeSigning: process.platform === "win32" && !validationOnly,
     extraMetadata: {
         name: fullName,
         author: {
@@ -136,11 +142,12 @@ export default {
         // electron-builder missed the `.so.42` suffix as binary files.
         asarUnpack: ["node_modules/@img/sharp-libvips-linux*/**/*"],
     },
-    publish: channelName
-        ? {
-              provider: "generic",
-              channel: channelName,
-              url,
-          }
-        : null,
+    publish:
+        !validationOnly && channelName
+            ? {
+                  provider: "generic",
+                  channel: channelName,
+                  url,
+              }
+            : null,
 };

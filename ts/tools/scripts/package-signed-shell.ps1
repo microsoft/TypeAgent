@@ -11,6 +11,9 @@ $oldLink = $env:CSC_LINK
 $oldPassword = $env:CSC_KEY_PASSWORD
 $certificate = $null
 try {
+    if ($env:TYPEAGENT_SHELL_VALIDATION_ONLY -eq "1") {
+        throw "Release signing must not use unsigned validation-only packaging."
+    }
     & node (Join-Path $PSScriptRoot "getCert.mjs") pull
     if ($LASTEXITCODE -ne 0) { throw "Could not retrieve the development signing certificate." }
     $passwordOutput = & node (Join-Path $PSScriptRoot "getCert.mjs") get-password

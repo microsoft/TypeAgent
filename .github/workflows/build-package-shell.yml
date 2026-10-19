@@ -92,6 +92,8 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         shell: bash
+        env:
+          TYPEAGENT_SHELL_VALIDATION_ONLY: "1"
         run: |
           for attempt in 1 2 3; do
             if pnpm run shell:package; then
