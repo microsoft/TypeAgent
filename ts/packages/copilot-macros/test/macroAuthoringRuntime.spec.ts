@@ -288,6 +288,12 @@ describe("portable authoring boundary", () => {
             expect(matchMacroGrammarInputs(approved, "read beta now")).toEqual([
                 { path: "beta" },
             ]);
+            expect(matchMacroGrammarInputs(approved, "read gamma now")).toEqual(
+                [{ path: "gamma" }],
+            );
+            expect(matchMacroGrammarInputs(approved, "read beta now")).toEqual([
+                { path: "beta" },
+            ]);
             expect(matchMacroGrammarInputs(macro, "read beta now")).toEqual([]);
             expect(
                 matchMacroGrammarInputs(approved, "delete beta now"),

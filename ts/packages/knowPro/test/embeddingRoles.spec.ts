@@ -154,4 +154,60 @@ describe("KnowPro embedding roles (synthetic/offline)", () => {
         await index.addTerms(["term"]);
         expect(index.getEmbedding("term")).toEqual([1, 0]);
     });
+
+    test("term additions deduplicate exact text across batches and reloads", async () => {
+        const settings = createTextEmbeddingIndexSettings(model(), 2);
+        const index = new TermEmbeddingIndex(settings);
+        expect(
+            (await index.addTerms(["one", "one", "two"])).numberCompleted,
+        ).toBe(3);
+        expect((await index.addTerms(["two", "three"])).numberCompleted).toBe(
+            2,
+        );
+        expect(calls).toEqual(["document:one,two", "document:three"]);
+        const restored = new TermEmbeddingIndex(settings, index.serialize());
+        await restored.addTerms(["one", "three"]);
+        expect(calls).toHaveLength(2);
+        restored.removeTerm("two");
+        expect(
+            restored.getEmbedding(
+                embeddingCacheKey("three", identity("document")),
+            ),
+        ).toEqual([1, 0]);
+        expect(
+            restored.getEmbedding(
+                embeddingCacheKey("two", identity("document")),
+            ),
+        ).toBeUndefined();
+        restored.clear();
+        expect(
+            restored.getEmbedding(
+                embeddingCacheKey("one", identity("document")),
+            ),
+        ).toBeUndefined();
+        await restored.addTerms(["one"]);
+        expect(restored.serialize().textItems).toEqual(["one"]);
+    });
+
+    test("partial vocabulary additions report the original completed prefix and retry missing terms", async () => {
+        const settings = createTextEmbeddingIndexSettings(model(), 2);
+        settings.batchSize = 1;
+        const index = new TermEmbeddingIndex(settings);
+        await index.addTerms(["existing"]);
+        const result = await index.addTerms(
+            ["existing", "one", "one", "two", "existing"],
+            { onEmbeddingsCreated: (_all, _batch, startAt) => startAt === 0 },
+        );
+        expect(result.numberCompleted).toBe(3);
+        expect(index.serialize().textItems).toEqual(["existing", "one"]);
+        expect(
+            (await index.addTerms(["one", "two", "existing"])).numberCompleted,
+        ).toBe(3);
+        expect(index.serialize().textItems).toEqual(["existing", "one", "two"]);
+        expect(calls).toEqual([
+            "document:existing",
+            "document:one",
+            "document:two",
+        ]);
+    });
 });

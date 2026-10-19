@@ -1910,8 +1910,9 @@ export class FileMemoryService
             );
         }
         const content = contentFor(request);
-        const contentHash = request.source.contentHash ?? hashContent(content);
-        if (contentHash !== hashContent(content)) {
+        const computedContentHash = hashContent(content);
+        const contentHash = request.source.contentHash ?? computedContentHash;
+        if (contentHash !== computedContentHash) {
             throw new Error("The supplied content hash does not match content");
         }
         const sourceId = request.source.sourceId ?? randomUUID();

@@ -163,6 +163,9 @@ export class ViewHistory<T> {
             const previous = head
                 ? (await git.readTree({ ...this.options(), oid: head })).tree
                 : [];
+            const previousByPath = new Map(
+                previous.map((entry) => [entry.path, entry]),
+            );
             const entries = [];
             for (const [name, text] of Object.entries({
                 "state.json": JSON.stringify(state),
@@ -172,9 +175,9 @@ export class ViewHistory<T> {
                     ...this.options(),
                     blob: Buffer.from(text, "utf8"),
                 });
-                const unchanged = previous.find(
-                    (entry) => entry.path === name && entry.oid === oid,
-                );
+                const previousEntry = previousByPath.get(name);
+                const unchanged =
+                    previousEntry?.oid === oid ? previousEntry : undefined;
                 entries.push(
                     unchanged ?? {
                         mode: "100644",
