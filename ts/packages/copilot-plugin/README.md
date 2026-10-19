@@ -944,7 +944,6 @@ The plugin-local matcher uses the current approved program's generated grammar
 and declared inputs. Drafts, disabled programs and stale versions cannot execute.
 Explicit lifecycle commands and macro MCP tools use the same owner and manager.
 
-
 ```text
 @typeagent recipe list
 ```
