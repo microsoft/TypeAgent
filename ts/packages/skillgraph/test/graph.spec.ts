@@ -111,14 +111,14 @@ esac
             "Usage: x mcp add [OPTIONS] <NAME> -- <COMMAND>...\n\nArguments:\n  servers   Server names\n\nOptions:\n      --url <URL>  URL\n",
         );
         expect(help.subcommands).toEqual([]);
-        // `$ ` prompts mark a transcript: unprompted lines are output (tirith receipt).
+        // `$ ` prompts mark a transcript: unprompted lines are output (mytool receipt).
         const cmds = commandsFromCode(
             "bash",
-            "$ tirith receipt last\n  Domains referenced: x.sh",
+            "$ mytool receipt last\n  Domains referenced: x.sh",
             1,
             1,
         );
-        expect(cmds.map((c) => c.tool)).toEqual(["tirith"]);
+        expect(cmds.map((c) => c.tool)).toEqual(["mytool"]);
         // PowerShell: PS prompt, `&` call operator, backtick continuation,
         // cmdlets skipped, `pwsh -File` unwrapped.
         const ps = commandsFromCode(

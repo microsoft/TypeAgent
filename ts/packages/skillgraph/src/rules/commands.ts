@@ -380,7 +380,7 @@ export function checkFlags(
         if (known.has(name) || UNIVERSAL_FLAGS.has(name)) continue;
         if (name.startsWith("--no-") && known.has(`--${name.slice(5)}`))
             continue;
-        // Help hides some flags (clap `hide = true`: `tirith check --json`).
+        // Help hides some flags (clap `hide = true`: `mytool check --json`).
         // Ask the binary: `tool sub --flag --help` printing the same help
         // means the parser accepted the flag.
         if (leaf.source === "help" && ctx.config.probe) {
