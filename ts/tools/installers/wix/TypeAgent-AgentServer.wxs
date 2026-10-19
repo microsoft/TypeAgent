@@ -253,6 +253,8 @@
       <ComponentRef Id="ResolveNodePs1Component" />
       <ComponentRef Id="RunServePs1Component" />
       <ComponentRef Id="InstallShellPs1Component" />
+      <ComponentRef Id="WindowsPackageTrustPs1Component" />
+      <ComponentRef Id="WindowsPackageTrustJsonComponent" />
       <ComponentRef Id="RegistryComponent" />
     </Feature>
 
@@ -319,6 +321,14 @@
       <Component Id="InstallShellPs1Component" Guid="*">
         <File Id="InstallShellPs1" Name="install-shell.ps1"
               Source="$(var.InstallerSourceDir)\..\..\scripts\install-shell.ps1" />
+      </Component>
+      <Component Id="WindowsPackageTrustPs1Component" Guid="*">
+        <File Id="WindowsPackageTrustPs1" Name="windows-package-trust.ps1"
+              Source="$(var.InstallerSourceDir)\..\..\scripts\windows-package-trust.ps1" />
+      </Component>
+      <Component Id="WindowsPackageTrustJsonComponent" Guid="*">
+        <File Id="WindowsPackageTrustJson" Name="windows-package-trust.json"
+              Source="$(var.InstallerSourceDir)\..\..\scripts\windows-package-trust.json" />
       </Component>
       <Component Id="ExtractPayloadPs1Component" Guid="*">
         <File Id="ExtractPayloadPs1" Name="extract-payload.ps1"

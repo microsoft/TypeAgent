@@ -5,8 +5,11 @@
 
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { createRequire } from "node:module";
 
 const configDir = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const windowsTrust = require("../../tools/scripts/windows-package-trust.json");
 
 // The browser extension is shipped as an unpacked resource. @typeagent/browser-extension
 // is only a devDependency of the shell (it is not needed at runtime beyond these
@@ -30,6 +33,7 @@ const arch = process.env.ELECTRON_BUILDER_ARCH?.trim();
 const channelName = channel && arch ? `${channel}-${arch}` : undefined;
 
 export default {
+    forceCodeSigning: process.platform === "win32",
     extraMetadata: {
         name: fullName,
         author: {
@@ -69,6 +73,15 @@ export default {
     // electron can't load the browser extension from the ASAR
     extraResources: [
         {
+            from: resolve(configDir, "../../tools/scripts"),
+            to: "windows-package-trust",
+            filter: [
+                "windows-package-trust.json",
+                "windows-package-trust.ps1",
+                "verify-windows-package.ps1",
+            ],
+        },
+        {
             from: browserExtensionDir,
             to: "browser-typeagent-extension",
         },
@@ -78,6 +91,12 @@ export default {
     npmRebuild: false,
     artifactName: name + "-${version}-${platform}-${arch}.${ext}",
     win: {
+        signtoolOptions: {
+            publisherName: windowsTrust.publisher,
+            signingHashAlgorithms: ["sha256"],
+            rfc3161TimeStampServer: "https://timestamp.digicert.com",
+        },
+        verifyUpdateCodeSignature: true,
         appId: `Microsoft.TypeAgentShell`,
         executableName: name,
         icon: "build/win/icon.png",

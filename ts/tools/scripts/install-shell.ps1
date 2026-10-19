@@ -58,6 +58,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "windows-package-trust.ps1")
 
 function Initialize-Log {
     param([string]$Path)
@@ -111,9 +112,14 @@ function Get-BlobFile {
 
     if ($Anonymous) {
         if (-not $BlobBaseUrl) { throw "No -BlobBaseUrl provided for anonymous download." }
+        $baseUri = [uri]$BlobBaseUrl
+        if (-not $baseUri.IsAbsoluteUri -or $baseUri.Scheme -ne "https" -or $baseUri.UserInfo -or $baseUri.Query -or $baseUri.Fragment) {
+            throw "-BlobBaseUrl must be an absolute HTTPS URL without credentials, query, or fragment."
+        }
         $url = "$($BlobBaseUrl.TrimEnd('/'))/$Name"
         Write-Log "Downloading (anonymous) $url"
-        Invoke-WebRequest -Uri $url -OutFile $Destination -UseBasicParsing
+        # Do not allow redirects to downgrade transport or select a different origin.
+        Invoke-WebRequest -Uri $url -OutFile $Destination -UseBasicParsing -MaximumRedirection 0 -ErrorAction Stop
         return
     }
 
@@ -234,10 +240,26 @@ function Get-PackagePathFromYml {
         Fail "Could not find 'path:' in metadata file $YmlPath."
     }
     $value = $match.Matches[0].Groups[1].Value.Trim().Trim("'`"")
-    if (-not $value) {
-        Fail "Empty 'path:' value in metadata file $YmlPath."
+    if ($value -notmatch '^typeagentshell-[A-Za-z0-9][A-Za-z0-9._-]*-win32-(x64|arm64)-setup\.exe$') {
+        throw "Unsafe or unexpected installer filename in metadata: $value"
     }
     return $value
+}
+
+function Assert-ShellMetadataHash {
+    param([string]$YmlPath, [string]$PackagePath)
+
+    $matches = @(Select-String -LiteralPath $YmlPath -Pattern '^sha512:\s*([A-Za-z0-9+/=]+)\s*$')
+    if ($matches.Count -ne 1) { throw "Expected exactly one top-level SHA512 in shell metadata." }
+    $expectedHash = $matches[0].Matches[0].Groups[1].Value
+    $hash = (Get-FileHash -LiteralPath $PackagePath -Algorithm SHA512).Hash
+    $hashBytes = New-Object byte[] 64
+    for ($i = 0; $i -lt 64; $i++) {
+        $hashBytes[$i] = [Convert]::ToByte($hash.Substring($i * 2, 2), 16)
+    }
+    if ([Convert]::ToBase64String($hashBytes) -cne $expectedHash) {
+        throw "Shell package does not match channel SHA512."
+    }
 }
 
 $dest = Join-Path $env:TEMP "typeagent-install-shell"
@@ -281,6 +303,9 @@ function Download-ShellPayload {
 
     Confirm-AgentServer
     $arch = Get-Arch
+    if ($Channel -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]*$') {
+        Fail "Invalid shell channel: $Channel"
+    }
     $channelArch = "$Channel-$arch"
     $ymlName = "$channelArch.yml"
     Write-Log "Downloading TypeAgent Shell (channel '$Channel', arch '$arch')"
@@ -335,6 +360,12 @@ function Download-ShellPayload {
                 }
             }
             if ($script:packagePath -and (Test-Path $script:packagePath)) {
+                $verified = Open-TypeAgentPackage -Path $script:packagePath
+                try {
+                    Assert-ShellMetadataHash -YmlPath $ymlPath -PackagePath $script:packagePath
+                } finally {
+                    $verified.Dispose()
+                }
                 $obtained = $true
                 Write-Log "Shell payload obtained via '$src'."
                 break
@@ -354,7 +385,7 @@ function Download-ShellPayload {
         Fail "Shell package not found after download: $packagePath"
     }
 
-    [pscustomobject]@{ packagePath = $packagePath } |
+    [pscustomobject]@{ packagePath = $packagePath; sha512 = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA512).Hash } |
         ConvertTo-Json |
         Set-Content -Path $statePath -Encoding utf8
     Write-Log "Shell download phase complete."
@@ -366,6 +397,11 @@ function Get-DownloadedShellPackage {
     }
     $state = Get-Content -Path $statePath -Raw | ConvertFrom-Json
     $packagePath = [string]$state.packagePath
+    $expectedDirectory = [IO.Path]::GetFullPath($dest).TrimEnd('\')
+    if (-not $packagePath -or [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($packagePath)) -ne $expectedDirectory -or
+        [IO.Path]::GetFileName($packagePath) -notmatch '^typeagentshell-[A-Za-z0-9][A-Za-z0-9._-]*-win32-(x64|arm64)-setup\.exe$') {
+        Fail "Saved shell package path is outside the expected download directory or has an invalid filename."
+    }
     if (-not $packagePath -or -not (Test-Path $packagePath)) {
         Fail "Downloaded Shell package is missing: $packagePath"
     }
@@ -374,8 +410,17 @@ function Get-DownloadedShellPackage {
 
 function Install-ShellPayload {
     $packagePath = Get-DownloadedShellPackage
-    Write-Log "Running silent install: $packagePath /S"
-    $proc = Start-Process -FilePath $packagePath -ArgumentList "/S" -Wait -PassThru
+    $lockedPackage = Open-TypeAgentPackage -Path $packagePath
+    try {
+        $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+        if (-not $state.sha512 -or (Get-FileHash -LiteralPath $packagePath -Algorithm SHA512).Hash -ne $state.sha512) {
+            throw "Shell package changed after Download; download it again."
+        }
+        Write-Log "Running silent install: $packagePath /S"
+        $proc = Start-Process -FilePath $packagePath -ArgumentList "/S" -Wait -PassThru
+    } finally {
+        $lockedPackage.Dispose()
+    }
     if ($proc.ExitCode -ne 0) {
         Fail "Shell installer exited with code $($proc.ExitCode)."
     }
@@ -437,6 +482,9 @@ try {
             Verify-ShellInstallation
         }
     }
+} catch {
+    Write-Log "ERROR: $($_.Exception.Message)"
+    exit 1
 } finally {
     if ($Phase -in @("All", "Verify")) {
         if (Test-Path $dest) {

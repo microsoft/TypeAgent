@@ -38,6 +38,69 @@ pipelines/
 
 ## Prerequisites
 
+### Shell installer and updater trust
+
+The optional Windows shell now requires a valid Authenticode signature from
+the independently pinned TypeAgent development certificate. Private-feed
+hosting and authenticated blob downloads remain supported; they do not replace
+publisher authentication. Unsigned installers are rejected, including during
+the MSI's separate Download and Install phases.
+
+The approved subject is `CN=dev.typeagent.microsoft.com`, with thumbprint
+`BCA67E6AD2E8B28CE5219EC68B019C099F57FFEE`. The policy lives in
+[`windows-package-trust.json`](../../scripts/windows-package-trust.json).
+Certificate renewal requires a reviewed policy update and distribution of the
+new public trust anchor before switching signing identities.
+
+Before installing or updating, obtain the public `.cer` from an approved
+administrator or release. Verify its thumbprint against the policy distributed
+with your trusted installation scripts, not against channel metadata. For the
+shell's current-user development trust:
+
+```powershell
+$cert = New-Object Security.Cryptography.X509Certificates.X509Certificate2(
+    (Resolve-Path '.\windows-package-trust.cer').Path)
+if ($cert.Thumbprint -ne 'BCA67E6AD2E8B28CE5219EC68B019C099F57FFEE' -or
+    $cert.Subject -ne 'CN=dev.typeagent.microsoft.com') {
+    throw 'Unexpected development signing certificate'
+}
+# Run only after explicitly approving this development trust anchor.
+Import-Certificate -FilePath '.\windows-package-trust.cer' -CertStoreLocation Cert:\CurrentUser\Root
+```
+
+Client trust setup uses **only a public certificate**, never a PFX or private
+key. The installer and updater never enroll certificates themselves. Pipeline
+agents temporarily trust only the pinned public certificate while signing or
+verifying; their temporary trust is removed afterward.
+
+Windows shell packaging signs the app and NSIS installer before generating
+update hashes/blockmaps. Publication rechecks signatures and final metadata
+before either blob or Universal Package upload. Missing signing access,
+incorrect publisher identity, invalid signatures, and stale hashes block
+publication. The public `.cer` accompanies releases for explicit trust setup;
+receiving it does not automatically make it trusted.
+
+Existing unsigned shell installations may lack updater publisher checks.
+Migrate them by separately enrolling the approved public certificate and
+reinstalling with the updated, trusted `install-shell.ps1` and its adjacent
+trust-policy files. Do not rely on an old unsigned application's automatic
+updater to establish the initial trust boundary.
+
+The legacy development AgentLauncher installer is separate from the MSI and
+shell. It now runs **non-elevated**, never imports certificates or uninstalls
+the existing package first, and requires an independently obtained signing
+thumbprint:
+
+```powershell
+.\Install.ps1 -ExpectedSignerThumbprint '<approved launcher certificate thumbprint>'
+```
+
+Its MSIX must already have a valid, trusted signature and the
+`TypeAgent.AgentLauncher` package identity. Its development publisher can
+differ from the shell's certificate. Establish any Windows-required MSIX trust
+separately through an administrator or managed deployment; the installer does
+not change machine-wide trust.
+
 ### On Your Development Machine
 
 1. **Node.js ≥ 22**
