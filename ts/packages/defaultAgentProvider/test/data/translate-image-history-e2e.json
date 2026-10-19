@@ -9,16 +9,15 @@
               "schemaName": "dispatcher.lookup",
               "actionName": "lookupAndAnswerConversation",
               "parameters": {
-                "originalRequest": "Tell me what images are in our chat history.",
-                "question": "What images are in our chat history?"
+                "originalRequest": "Tell me what images are in our chat history."
               }
             },
             "partial": true,
-            "alternates": {
-              "question": "What images are present in our chat history?"
+            "parameterPatterns": {
+              "question": "^(?:what|which) (?:images|pictures|photos)\\b.*\\b(?:our|the) chat history\\?$"
             }
           }
-        ]      
+        ]
       },
       "history": {
         "text": "There is a list of images in the chat history:\n - image\n - non-existent image\n - attachment__0.png",

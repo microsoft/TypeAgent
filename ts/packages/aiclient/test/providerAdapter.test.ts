@@ -7,7 +7,13 @@ loadConfigSync();
 
 import { getData } from "typechat";
 import { testIf } from "./testCore.js";
-import { ApiSettings, createChatModel, ModelType } from "../src/openai.js";
+import {
+    ApiSettings,
+    createChatModel,
+    getChatModelSettings,
+    hasChatModelEndpoint,
+    ModelType,
+} from "../src/openai.js";
 
 // One live integration test per wire-api. Each is skipped unless the
 // operator supplies a full endpoint URL + API key (and, for the
@@ -48,23 +54,15 @@ async function expectHello(settings: ApiSettings) {
 }
 
 describe("providerAdapter (live, one per wire-api)", () => {
-    // Default chat_completions path against Azure OpenAI. Uses the standard
-    // env-driven settings; wireApi omitted ⇒ chat_completions adapter.
+    // Resolve Luna settings through the normal Azure authentication path.
     testIf(
-        () =>
-            has(
-                "AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS",
-                "AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS",
-            ),
+        () => hasChatModelEndpoint("azure:GPT_6_LUNA"),
         "chat_completions completes",
         async () => {
-            const settings: ApiSettings = {
-                provider: "azure",
-                modelType: ModelType.Chat,
-                endpoint: env("AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS")!,
-                apiKey: env("AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS")!,
-                // wireApi omitted → default chat_completions.
-            };
+            const settings = getChatModelSettings("azure:GPT_6_LUNA");
+            expect(settings.wireApi ?? "chat_completions").toBe(
+                "chat_completions",
+            );
             await expectHello(settings);
         },
         testTimeout,

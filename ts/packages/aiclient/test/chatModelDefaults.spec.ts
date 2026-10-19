@@ -151,6 +151,56 @@ describe("Luna runtime chat defaults", () => {
                     },
                 },
             ];
+            test(`${provider} Luna normalizes settings changed after construction (stream=${stream})`, async () => {
+                const originalFetch = globalThis.fetch;
+                const bodies: Record<string, unknown>[] = [];
+                globalThis.fetch = async (_url, init) => {
+                    const body = JSON.parse(String(init?.body)) as Record<
+                        string,
+                        unknown
+                    >;
+                    bodies.push(body);
+                    const message = { content: "Blue light scatters." };
+                    return body.stream
+                        ? new Response(
+                              `data: ${JSON.stringify({
+                                  choices: [{ delta: message }],
+                              })}\n\ndata: [DONE]\n\n`,
+                              {
+                                  headers: {
+                                      "content-type": "text/event-stream",
+                                  },
+                              },
+                          )
+                        : new Response(
+                              JSON.stringify({ choices: [{ message }] }),
+                          );
+                };
+                try {
+                    const model = createChatModel(settings);
+                    model.completionSettings.temperature = 0;
+                    for (let attempt = 0; attempt < 2; attempt++) {
+                        let text = "";
+                        if (stream) {
+                            const result =
+                                await model.completeStream("sky blue");
+                            if (!result.success) throw Error(result.message);
+                            for await (const chunk of result.data)
+                                text += chunk;
+                        } else {
+                            const result = await model.complete("sky blue");
+                            if (!result.success) throw Error(result.message);
+                            text = result.data;
+                        }
+                        expect(text).toBe("Blue light scatters.");
+                    }
+                    expect(bodies).toHaveLength(2);
+                    for (const body of bodies) expect(body.temperature).toBe(1);
+                    expect(model.completionSettings.temperature).toBe(0);
+                } finally {
+                    globalThis.fetch = originalFetch;
+                }
+            });
             test.each(["gpt-4o", "gpt-4o-3", "gpt-4.1"])(
                 `${provider} %s omits inherited reasoning effort (stream=${stream})`,
                 async (modelName) => {

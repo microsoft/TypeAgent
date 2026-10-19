@@ -45,7 +45,8 @@ export function createHistoryContext(
         promptSections.unshift({
             content:
                 "The following is the chat history of requests and action results with the user, used for context to translate the current user request." +
-                "Do NOT translate actions from requests in the chat history unless the current user request refers to it.",
+                "Do NOT translate actions from requests in the chat history unless the current user request refers to it. " +
+                "When the current request refers to a previous action (for example, 'play that song again'), preserve its explicit identifying qualifiers, such as the album and artist, unless the user changes them.",
             role: "system",
         });
     }

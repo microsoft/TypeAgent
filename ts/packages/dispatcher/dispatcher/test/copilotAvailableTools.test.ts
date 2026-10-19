@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import fs from "node:fs";
 import { createRequire } from "node:module";
-import os from "node:os";
-import path from "node:path";
 
 // Jest's ESM VM lacks import.meta.resolve; use the SDK's CommonJS entry so its
 // bundled CLI resolver can use Node's native module resolution.
@@ -14,20 +11,18 @@ const { CopilotClient }: typeof import("@github/copilot-sdk") = createRequire(
 
 describe("installed Copilot runtime tool contract", () => {
     const client = new CopilotClient();
-    let workingDirectory: string;
-
     beforeAll(async () => {
-        workingDirectory = fs.mkdtempSync(
-            path.join(os.tmpdir(), "typeagent-tool-contract-"),
-        );
         await client.start();
-    });
+    }, 60_000);
+
+    test("lists native read and search tools for Luna", async () => {
+        const { tools } = await client.rpc.tools.list({ model: "gpt-6-luna" });
+        expect(tools.map((tool) => tool.name)).toEqual(
+            expect.arrayContaining(["view", "glob", "grep"]),
+        );
+    }, 60_000);
 
     afterAll(async () => {
-        try {
-            expect(await client.stop()).toEqual([]);
-        } finally {
-            fs.rmSync(workingDirectory, { recursive: true, force: true });
-        }
+        expect(await client.stop()).toEqual([]);
     });
 });

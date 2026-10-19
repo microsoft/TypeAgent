@@ -619,6 +619,9 @@ function createAzureOpenAIChatModel(
     ): ModelRequest {
         rejectCompletionLimits(completionSettings);
         let requestSettings = completionSettings!;
+        // Callers can mutate shared settings after model construction.
+        if (isLunaChatModel(settings))
+            requestSettings = { ...requestSettings, temperature: 1 };
         if (
             adapter.wireApi === "chat_completions" &&
             isLunaChatModel(settings) &&

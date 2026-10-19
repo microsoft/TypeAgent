@@ -41,9 +41,10 @@ describeIf(
                             translator,
                             cmd.namedArgs.query,
                         );
-                        expect(result.success).toBeTruthy();
                         if (!result.success) {
-                            return;
+                            throw new Error(
+                                `Search translation failed for '${cmd.namedArgs.query}': ${result.message}`,
+                            );
                         }
                         for (const searchQuery of result.data
                             .queryExpressions) {

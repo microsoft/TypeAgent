@@ -34,6 +34,7 @@ type ActionMatchWithAlternates = {
     action: TypeAgentAction;
     partial?: boolean;
     alternates?: Record<string, ParamValueType | ParamValueType[]>;
+    parameterPatterns?: Record<string, string>;
 };
 
 type OneActionMatch = SimpleActionMatch | ActionMatchWithAlternates;
@@ -555,6 +556,7 @@ function checkDuplicateOfPreviousAction(actions: TypeAgentAction[], i: number) {
 type PossibleMatch = {
     action: TypeAgentAction;
     partial: boolean;
+    parameterPatterns: Record<string, string> | undefined;
 };
 
 // This function validates the test data, to make sure the alternatives are valid.
@@ -584,11 +586,12 @@ function validateAlternatives(
 
 function expandAlternates(
     expectedMatch: ActionMatchWithAlternates,
-): { action: TypeAgentAction; partial: boolean }[] {
+): PossibleMatch[] {
     const expandedActions = [
         {
             action: structuredClone(expectedMatch.action),
             partial: expectedMatch.partial === true,
+            parameterPatterns: expectedMatch.parameterPatterns,
         },
     ];
     normalizeAction(expandedActions[0].action);
@@ -636,6 +639,13 @@ function checkPossibleMatch(
     } else {
         expect(actual).toEqual(possibleMatch.action);
     }
+    for (const [name, pattern] of Object.entries(
+        possibleMatch.parameterPatterns ?? {},
+    )) {
+        expect(getObjectProperty(actual.parameters, name)).toEqual(
+            expect.stringMatching(new RegExp(pattern, "i")),
+        );
+    }
 }
 
 // The translator may return a bare host (e.g. "jsbach.net") where the canonical
@@ -674,7 +684,7 @@ function normalizeUrlParams(action: TypeAgentAction) {
     }
 }
 
-function validateExpectedAction(
+export function validateExpectedAction(
     match: ActionMatchWithAlternates[],
     action: TypeAgentAction,
 ) {

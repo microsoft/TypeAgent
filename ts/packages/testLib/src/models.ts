@@ -34,7 +34,6 @@ export function createTestEmbeddingModel(): [TextEmbeddingModel, number] {
 export function createTestChatModel(testName: string = "string"): ChatModel {
     const model = openai.createChatModelDefault("UnitTest_" + testName);
     model.completionSettings.seed = 1234;
-    model.completionSettings.temperature = 0;
     return model;
 }
 
