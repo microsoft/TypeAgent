@@ -353,7 +353,7 @@ test("checkpoint rollback restores the last verified manifest and lockfile pair"
             ),
         );
 
-        pnpmInstall("--ignore-scripts");
+        pnpmInstall("--no-frozen-lockfile", "--ignore-scripts");
         git("init", "--quiet");
         git("config", "user.name", "checkpoint-test");
         git("config", "user.email", "checkpoint@example.com");
@@ -386,7 +386,7 @@ test("checkpoint rollback restores the last verified manifest and lockfile pair"
             join(directory, "pnpm-workspace.yaml"),
             "packages:\n  - packages/*\noverrides:\n  checkpoint-library: workspace:>=1.1.0 <2.0.0\n",
         );
-        pnpmInstall("--ignore-scripts");
+        pnpmInstall("--no-frozen-lockfile", "--ignore-scripts");
 
         const effectiveSpecifier = "workspace:>=1.1.0 <2.0.0";
         const updateSpecifier = "workspace:^1.1.0";
