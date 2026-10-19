@@ -85,7 +85,230 @@ const readSource = `async function execute(api, params) {
     return await api.tools.call("read", null);
 }`;
 
+function deferred() {
+    let resolve!: () => void;
+    const promise = new Promise<void>((finish) => {
+        resolve = finish;
+    });
+    return { promise, resolve };
+}
+
+async function within<T>(promise: Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<never>((_, reject) => {
+                timer = setTimeout(
+                    () => reject(new Error("Expected concurrent progress")),
+                    3_000,
+                );
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 describe("contained recipe executor", () => {
+    it("overlaps independent reads and correlates reversed replies", async () => {
+        const entered = deferred();
+        const secondFinished = deferred();
+        const releases = [deferred(), deferred()];
+        let calls = 0;
+        const context = execution(async () => {
+            const index = calls++;
+            if (calls === 2) entered.resolve();
+            await releases[index].promise;
+            if (index === 1) secondFinished.resolve();
+            return { status: "completed", value: `value-${index}` };
+        });
+        const run = executeRecipeProgram(
+            program(`async function execute(api, params) {
+            return (await Promise.all([api.tools.call("read", null), api.tools.call("read", null)])).join("|");
+        }`),
+            null,
+            context,
+        );
+        try {
+            await within(entered.promise);
+            releases[1].resolve();
+            await within(secondFinished.promise);
+            releases[0].resolve();
+            const result = await run;
+            expect(result.status).toBe("completed");
+            expect(result.output).toBe("value-0|value-1");
+            expect(result.completedCallIds).toEqual(["run:2", "run:1"]);
+        } finally {
+            releases.forEach((release) => release.resolve());
+            await run;
+        }
+    });
+
+    it("bounds active read calls and stops queued work after cancellation", async () => {
+        const entered = deferred();
+        const release = deferred();
+        const controller = new AbortController();
+        const signals: AbortSignal[] = [];
+        const context = execution(async (_capability, _input, call) => {
+            signals.push(call.signal);
+            if (signals.length === 4) entered.resolve();
+            await release.promise;
+            return { status: "completed", value: "late" };
+        });
+        context.signal = controller.signal;
+        const run = executeRecipeProgram(
+            program(`async function execute(api, params) {
+            return (await Promise.all(Array.from({length: 8}, () => api.tools.call("read", null)))).join("");
+        }`),
+            null,
+            context,
+        );
+        try {
+            await within(entered.promise);
+            expect(signals).toHaveLength(4);
+            controller.abort();
+            const result = await within(run);
+            expect(result.status).toBe("cancelled");
+            expect(result.completedCallIds).toEqual([]);
+            expect(signals.every((signal) => signal.aborted)).toBe(true);
+            release.resolve();
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            expect(signals).toHaveLength(4);
+            expect(result.completedCallIds).toEqual([]);
+        } finally {
+            controller.abort();
+            release.resolve();
+            await run;
+        }
+    });
+
+    it("keeps effectful calls serialized even when guest code starts them together", async () => {
+        const firstEntered = deferred();
+        const release = deferred();
+        let calls = 0;
+        const context = execution(async () => {
+            if (++calls === 1) {
+                firstEntered.resolve();
+                await release.promise;
+            }
+            return { status: "completed", value: "x" };
+        });
+        const run = executeRecipeProgram(
+            program(
+                `async function execute(api, params) {
+            return (await Promise.all([api.tools.call("read", null), api.tools.call("read", null)])).join("");
+        }`,
+                { capabilities: [{ ...capability, effect: "write" }] },
+            ),
+            null,
+            context,
+        );
+        try {
+            await within(firstEntered.promise);
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            expect(calls).toBe(1);
+        } finally {
+            release.resolve();
+        }
+        expect((await run).output).toBe("xx");
+        expect(calls).toBe(2);
+    });
+
+    it("runs semantic calls as barriers between read groups", async () => {
+        const firstEntered = deferred();
+        const firstRelease = deferred();
+        const semanticEntered = deferred();
+        const semanticRelease = deferred();
+        let reads = 0;
+        const context = execution(async () => {
+            if (++reads === 1) {
+                firstEntered.resolve();
+                await firstRelease.promise;
+            }
+            return { status: "completed", value: "read" };
+        });
+        context.host.invokeSemantic = async () => {
+            semanticEntered.resolve();
+            await semanticRelease.promise;
+            return {
+                status: "completed",
+                value: "semantic",
+                evidence: {
+                    functionId: "select",
+                    functionRevision: "1",
+                    resolvedModel: "actual",
+                    latencyMs: 1,
+                    validation: "passed",
+                    sourceIds: [],
+                },
+            };
+        };
+        const artifact = program(
+            `async function execute(api, params) {
+            return (await Promise.all([api.tools.call("read", null), api.semantic.call("select", null), api.tools.call("read", null)])).join("|");
+        }`,
+            {
+                execution: "hybrid",
+                semanticFunctions: semanticProgram().semanticFunctions.map(
+                    (definition) => ({
+                        ...definition,
+                        bounds: { ...definition.bounds, timeoutMs: 2_000 },
+                    }),
+                ),
+            },
+        );
+        const run = executeRecipeProgram(artifact, null, context);
+        try {
+            await within(firstEntered.promise);
+            expect(reads).toBe(1);
+            firstRelease.resolve();
+            await within(semanticEntered.promise);
+            expect(reads).toBe(1);
+            semanticRelease.resolve();
+            expect((await run).output).toBe("read|semantic|read");
+        } finally {
+            firstRelease.resolve();
+            semanticRelease.resolve();
+            await run;
+        }
+    });
+
+    it("preflights in bounded parallel batches and selects failures in declaration order", async () => {
+        const capabilities = Array.from({ length: 6 }, (_, index) => ({
+            ...capability,
+            id: `read-${index}`,
+            operation: `read-${index}`,
+        }));
+        const artifact = program(readSource, { capabilities });
+        let active = 0;
+        let maxActive = 0;
+        const entered: string[] = [];
+        const releases: Array<() => void> = [];
+        const context = execution();
+        context.host.inspectCapability = async (requirement) => {
+            entered.push(requirement.id);
+            maxActive = Math.max(maxActive, ++active);
+            await new Promise<void>((resolve) => releases.push(resolve));
+            active--;
+            return { status: "unavailable", message: requirement.id };
+        };
+        const run = executeRecipeProgram(artifact, null, context);
+        try {
+            for (let i = 0; i < 100 && entered.length < 4; i++)
+                await new Promise<void>((resolve) => setImmediate(resolve));
+            expect(entered).toEqual(["read-0", "read-1", "read-2", "read-3"]);
+            expect(maxActive).toBe(4);
+        } finally {
+            for (const release of releases.reverse()) release();
+        }
+        const result = await run;
+        expect(result.status).toBe("unavailable");
+        expect(result.message).toBe("read-0");
+        expect(entered).toHaveLength(4);
+        expect(result.completedCallIds).toEqual([]);
+    });
+
     it("executes fresh host calls on both runs and awaits durable checkpoints", async () => {
         let calls = 0;
         const events: string[] = [];

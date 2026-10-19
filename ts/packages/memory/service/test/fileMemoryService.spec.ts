@@ -37,6 +37,7 @@ class FakeCorpusIndex implements CorpusIndex {
     public blockNextRebuild = false;
     public blockNextAppend = false;
     public ignoreNextAbort = false;
+    public releaseIgnoredRebuild?: () => void;
     public answer?: NonNullable<CorpusIndex["answer"]>;
     public graph: MemoryKnowledgeGraph = {
         entities: [],
@@ -66,6 +67,7 @@ class FakeCorpusIndex implements CorpusIndex {
             await new Promise<void>((resolve, reject) => {
                 if (this.ignoreNextAbort) {
                     this.ignoreNextAbort = false;
+                    this.releaseIgnoredRebuild = resolve;
                     return;
                 }
                 if (signal.aborted) {
@@ -205,6 +207,7 @@ describe("FileMemoryService", () => {
     });
 
     afterEach(async () => {
+        index.releaseIgnoredRebuild?.();
         await service.close();
         await rm(rootDirectory, { recursive: true, force: true });
     });
@@ -742,10 +745,18 @@ describe("FileMemoryService", () => {
             ...event("verified", "conversation-2", "authority-turn"),
             metadata: { authority: "verified-observation" },
         });
-        const ledger = await readFile(
-            path.join(rootDirectory, corpusId, "events.jsonl"),
-            "utf8",
+        const eventSegments = path.join(
+            rootDirectory,
+            corpusId,
+            "event-segments",
         );
+        const ledger = (
+            await Promise.all(
+                (await readdir(eventSegments)).map((file) =>
+                    readFile(path.join(eventSegments, file), "utf8"),
+                ),
+            )
+        ).join("\n");
         expect(ledger).toContain('"recordType":"event-suppression"');
         expect(ledger).not.toContain("Private removed content");
         expect(ledger).not.toContain("Private retained content");
@@ -1796,7 +1807,7 @@ describe("FileMemoryService", () => {
         expect(index.documents).toHaveLength(0);
     });
 
-    test("cancels when an index rebuild does not observe the signal", async () => {
+    test("keeps cancellation pending until an abort-ignoring provider drains without publication", async () => {
         const corpus = await service.createCorpus("Engineering");
         index.blockNextRebuild = true;
         index.ignoreNextAbort = true;
@@ -1821,10 +1832,14 @@ describe("FileMemoryService", () => {
             await new Promise<void>((resolve) => setTimeout(resolve, 10));
         }
         await service.cancelJob(accepted.jobId);
-
+        expect((await service.getJob(accepted.jobId))?.state).toBe(
+            "cancelling",
+        );
+        index.releaseIgnoredRebuild!();
         expect((await waitForTerminalJob(service, accepted.jobId)).state).toBe(
             "cancelled",
         );
+        expect(await service.listSources(corpus.corpusId)).toEqual([]);
     });
 
     test("round trips deterministic procedure Markdown with free-form sections", () => {

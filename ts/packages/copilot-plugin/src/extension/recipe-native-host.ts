@@ -198,6 +198,9 @@ async function inspect(
     binding: RecipeBindingScope,
     step: Pick<MacroStep, "mcpServerName" | "toolName">,
     policy: NativeRecipeHostPolicy,
+    metadata: () => ReturnType<
+        NativeRecipeSession["rpc"]["tools"]["getCurrentMetadata"]
+    > = () => session.rpc.tools.getCurrentMetadata(),
 ): Promise<
     | (NativeRecipeCapabilityInspection & { nativeName?: string })
     | { status: "available"; capability: RecipeCapability; nativeName: string }
@@ -218,7 +221,17 @@ async function inspect(
     await session.rpc.tools.initializeAndValidate();
     // SDK 1.0.13 has no session.tools.list. This is its actual session-local
     // listing API; server.tools.list would omit MCP and extension schemas.
-    const { tools } = await session.rpc.tools.getCurrentMetadata();
+    const { tools } = await metadata();
+    if (
+        !sameNativeRecipeBinding(
+            binding,
+            await captureNativeRecipeBinding(session, binding.profileId),
+        )
+    )
+        return {
+            status: "unsupported",
+            message: "Native binding changed during discovery.",
+        };
     const matches = (tools ?? []).filter((tool) =>
         step.mcpServerName
             ? tool.mcpServerName === step.mcpServerName &&
@@ -428,13 +441,49 @@ export function createNativeRecipeHost(
 ): RecipeHost {
     const captured = structuredClone(binding);
     const rules = structuredClone(policy);
-    const approved = new Map<string, RecipeCapability>();
+    const approved = new Map<
+        string,
+        { capability: RecipeCapability; nativeName: string }
+    >();
     const current = () =>
         captureNativeRecipeBinding(session, captured.profileId);
+    let inventory:
+        | ReturnType<NativeRecipeSession["rpc"]["tools"]["getCurrentMetadata"]>
+        | undefined;
+    const metadata = () => {
+        if (!inventory) {
+            const pending = session.rpc.tools
+                .getCurrentMetadata()
+                .then((value) => structuredClone(value));
+            inventory = pending;
+            void pending.catch(() => {
+                if (inventory === pending) inventory = undefined;
+            });
+        }
+        return inventory;
+    };
     const host: RecipeHost = {
         async inspectCapability(requirement, scope) {
-            if (!sameNativeRecipeBinding(scope, captured))
+            if (
+                !sameNativeRecipeBinding(scope, captured) ||
+                !sameNativeRecipeBinding(captured, await current())
+            )
                 return { status: "unsupported", message: "Binding mismatch." };
+            const previous = approved.get(requirement.id);
+            if (previous) {
+                if (
+                    checkRecipeCapability(requirement, previous.capability)
+                        .length
+                )
+                    return {
+                        status: "unsupported",
+                        message: "Tool contract changed.",
+                    };
+                return {
+                    status: "available",
+                    capability: structuredClone(previous.capability),
+                };
+            }
             const result = await inspect(
                 session,
                 captured,
@@ -445,14 +494,23 @@ export function createNativeRecipeHost(
                         : {}),
                 },
                 rules,
+                metadata,
             );
             if (result.status !== "available") return result;
+            if (!result.nativeName)
+                return {
+                    status: "unsupported",
+                    message: "Missing native tool identity.",
+                };
             if (checkRecipeCapability(requirement, result.capability).length)
                 return {
                     status: "unsupported",
                     message: "Tool contract changed.",
                 };
-            approved.set(requirement.id, structuredClone(result.capability));
+            approved.set(requirement.id, {
+                capability: structuredClone(result.capability),
+                nativeName: result.nativeName,
+            });
             return { status: "available", capability: result.capability };
         },
         async invokeCapability(capability, input, context) {
@@ -461,31 +519,12 @@ export function createNativeRecipeHost(
             const preflight = approved.get(capability.id);
             if (
                 !preflight ||
-                checkRecipeCapability(capability, preflight).length ||
-                !sameNativeRecipeBinding(context.binding, captured)
-            )
-                return failure("unsupported", "Missing exact bound preflight.");
-            const result = await inspect(
-                session,
-                captured,
-                {
-                    toolName: capability.operation,
-                    ...(capability.transport === "mcp"
-                        ? { mcpServerName: capability.providerId }
-                        : {}),
-                },
-                rules,
-            );
-            if (
-                result.status !== "available" ||
-                !result.nativeName ||
-                checkRecipeCapability(capability, result.capability).length ||
+                checkRecipeCapability(capability, preflight.capability)
+                    .length ||
+                !sameNativeRecipeBinding(context.binding, captured) ||
                 !sameNativeRecipeBinding(captured, await current())
             )
-                return failure(
-                    "unsupported",
-                    "Binding or tool contract changed.",
-                );
+                return failure("unsupported", "Missing exact bound preflight.");
             if (
                 !structuredActionTool(
                     {
@@ -502,7 +541,7 @@ export function createNativeRecipeHost(
                 );
             const outcome = await boundedToolExecution(
                 session,
-                result.nativeName,
+                preflight.nativeName,
                 input,
                 context,
                 rules,

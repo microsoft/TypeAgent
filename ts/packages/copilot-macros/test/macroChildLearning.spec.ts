@@ -3,7 +3,6 @@
 
 import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import type {
     MacroLearningJob,
@@ -82,7 +81,7 @@ describe.each(["typeagent", "copilot-local"])(
         }
         beforeEach(async () => {
             directory = await mkdtemp(
-                path.join(os.tmpdir(), "child-learning-"),
+                path.join(process.cwd(), ".child-learning-"),
             );
             fallbackCalls = 0;
             manager = new MacroManager(
@@ -174,6 +173,41 @@ describe.each(["typeagent", "copilot-local"])(
             sessionId: "host",
             workerId: "worker",
             cwd: directory,
+        });
+
+        it("wakes bounded IPC waits on durable changes and reconciles missed hints after reconnect", async () => {
+            const waitingForChange = manager.claimMacroAuthoringRequest({
+                ...claim(),
+                observeOnly: true,
+                waitMs: 30_000,
+            });
+            const summary = await recorded();
+            await waitingForChange;
+            await waiting(summary.learningJobId!, "awaitingAuthor");
+            // No subscriber is present for this persisted request.
+            await manager.close();
+            manager = new MacroManager(directory, undefined, profileId);
+            await manager.configureLearning(runtime());
+            await waiting(summary.learningJobId!, "awaitingAuthor");
+            const request = await manager.claimMacroAuthoringRequest({
+                ...claim(),
+                waitMs: 30_000,
+            });
+            expect(request?.jobId).toBe(summary.learningJobId);
+            const cancellation = manager.claimMacroAuthoringRequest({
+                ...claim(),
+                observeOnly: true,
+                waitMs: 30_000,
+            });
+            await manager.cancelMacroLearningJob(summary.learningJobId!);
+            await cancellation;
+            expect(
+                (await manager.getMacroLearningJob(summary.learningJobId!))
+                    .status,
+            ).toBe("cancelled");
+            expect(
+                await manager.claimMacroAuthoringRequest(claim()),
+            ).toBeUndefined();
         });
 
         it("reports a mismatched receipt as failed learning, not a completed recording or default-author fallback", async () => {

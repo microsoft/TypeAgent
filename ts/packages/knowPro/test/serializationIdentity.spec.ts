@@ -65,6 +65,43 @@ describe("identity-aware conversation serialization", () => {
             new Float32Array([1, 0]),
         );
     });
+    test("segmented JSON retains vector identities and exact float32 data without a monolithic binary rewrite", async () => {
+        const directory = path.join(root, "segmented");
+        await writeConversationDataToFile(
+            data(),
+            directory,
+            "known",
+            { embeddingSize: 2 },
+            { message: identity },
+            true,
+        );
+        expect(await fs.readdir(directory)).not.toContain(
+            "known_embeddings.bin",
+        );
+        const loaded = await readConversationDataFromFile(
+            directory,
+            "known",
+            2,
+            { message: identity },
+        );
+        expect(loaded!.messageIndexData!.indexData!.embeddings[0]).toEqual(
+            new Float32Array([1, 0]),
+        );
+        await expect(
+            readConversationDataFromFile(directory, "known", 2, {
+                message: { ...identity, revision: "wrong" },
+            }),
+        ).rejects.toBeInstanceOf(PersistedEmbeddingIdentityError);
+        const text = await readConversationDataFromFile(
+            directory,
+            "known",
+            2,
+            undefined,
+            { loadEmbeddings: false },
+        );
+        expect(text!.messageIndexData!.indexData).toBeUndefined();
+        expect(text!.messages).toEqual(data().messages);
+    });
     test("strict reads reject missing vector artifact", async () => {
         await writeConversationDataToFile(
             data(),

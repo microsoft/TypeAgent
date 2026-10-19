@@ -12,10 +12,10 @@ import {
     type ReplayToolHost,
 } from "@typeagent/copilot-macros";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { macroProgramArtifact } from "./recipeCatalogFixtures.js";
+import { RevisionRecords } from "../src/revisionRecords.js";
 
 const cwd = "C:\\learning-workspace";
 const jest = (import.meta as ImportMeta & { jest: typeof globalThis.jest })
@@ -34,7 +34,9 @@ afterEach(async () => {
 });
 
 async function setup(mode: MacroLearningMode = "prepare", readOnly?: boolean) {
-    const directory = await mkdtemp(path.join(os.tmpdir(), "macro-learning-"));
+    const directory = await mkdtemp(
+        path.join(process.cwd(), ".macro-learning-"),
+    );
     directories.push(directory);
     const host: ReplayToolHost = {
         inspectTool: jest.fn(async (_server, toolName) => ({
@@ -49,6 +51,23 @@ async function setup(mode: MacroLearningMode = "prepare", readOnly?: boolean) {
     const manager = new MacroManager(directory, host);
     await manager.setMacroLearningPreference({ cwd, mode });
     return { directory, manager, host };
+}
+
+async function mutateStoredJob(
+    directory: string,
+    jobId: string,
+    mutate: (job: { status: string; attempts: Record<string, number> }) => void,
+) {
+    const records = new RevisionRecords(
+        path.join(directory, "copilot-macros", "learning.json"),
+    );
+    const state = await records.load();
+    const job = state.get(jobId) as {
+        status: string;
+        attempts: Record<string, number>;
+    };
+    mutate(job);
+    await records.commit(new Map([[jobId, job]]));
 }
 
 function recordedTrace(sessionId: string): RecordedInteractionTrace {
@@ -803,13 +822,10 @@ describe("durable macro learning", () => {
     it("recovers interrupted stages within a persisted attempt budget", async () => {
         const { manager, directory, host } = await setup("all");
         const summary = await capture(manager, { learning: true });
-        const file = path.join(directory, "copilot-macros", "learning.json");
-        const state = JSON.parse(await readFile(file, "utf8")) as {
-            jobs: Array<{ status: string; attempts: { extract: number } }>;
-        };
-        state.jobs[0].status = "extracting";
-        state.jobs[0].attempts = { extract: 1 };
-        await writeFile(file, JSON.stringify(state));
+        await mutateStoredJob(directory, summary.learningJobId!, (job) => {
+            job.status = "extracting";
+            job.attempts = { extract: 1 };
+        });
         const restarted = new MacroManager(directory, host);
         await restarted.configureLearning(runtime());
         expect((await terminal(restarted, summary.learningJobId!)).status).toBe(
@@ -959,19 +975,16 @@ describe("durable macro learning", () => {
             await manager.configureLearning(runtime());
             const summary = await capture(manager, { learning: true });
             const job = await terminal(manager, summary.learningJobId!);
-            const stateFile = path.join(
-                directory,
-                "copilot-macros",
-                "learning.json",
-            );
-            const state = JSON.parse(await readFile(stateFile, "utf8")) as {
-                jobs: Array<{ status: string }>;
-            };
-            state.jobs[0].status = "building";
-            await writeFile(stateFile, JSON.stringify(state));
-            await writeFile(
-                path.join(directory, "copilot-macros", "index.json"),
-                "[]",
+            await mutateStoredJob(directory, job.jobId, (stored) => {
+                stored.status = "building";
+            });
+            await rm(
+                path.join(
+                    directory,
+                    "copilot-macros",
+                    "catalog",
+                    `${job.macro!.macroId}.json`,
+                ),
             );
             const restarted = new MacroManager(directory, host);
             const learner = runtime();
@@ -1010,17 +1023,10 @@ describe("durable macro learning", () => {
     it("never exceeds the persisted per-stage restart budget", async () => {
         const { manager, host, directory } = await setup("all");
         const summary = await capture(manager, { learning: true });
-        const stateFile = path.join(
-            directory,
-            "copilot-macros",
-            "learning.json",
-        );
-        const state = JSON.parse(await readFile(stateFile, "utf8")) as {
-            jobs: Array<{ status: string; attempts: { extract: number } }>;
-        };
-        state.jobs[0].status = "extracting";
-        state.jobs[0].attempts = { extract: 2 };
-        await writeFile(stateFile, JSON.stringify(state));
+        await mutateStoredJob(directory, summary.learningJobId!, (job) => {
+            job.status = "extracting";
+            job.attempts = { extract: 2 };
+        });
         const restarted = new MacroManager(directory, host);
         const learner = runtime();
         await restarted.configureLearning(learner);

@@ -9,7 +9,6 @@ import {
     readdir,
     rename,
     rm,
-    stat,
     writeFile,
 } from "node:fs/promises";
 import path from "node:path";
@@ -58,6 +57,11 @@ import type { JsonValue } from "./recipeContracts.js";
 import { redactTraceValue } from "./redaction.js";
 import { PrivateResultStore } from "./resultEvidence.js";
 import { assertMacroCapabilities } from "./resultPath.js";
+import {
+    publishImmutable,
+    publishJson,
+    withRecordLock,
+} from "./revisionRecords.js";
 
 const defaultRecordingTtlMs = 10 * 60 * 1000;
 const maxPersistedRunValueBytes = 256 * 1024;
@@ -436,9 +440,7 @@ export class MacroManager {
         }
         return this.mutateCatalog(async () => {
             if (macro.learning) await this.learning.assertApproval(macro);
-            const latest = (await this.readCatalog()).find(
-                (item) => item.macroId === macro.macroId,
-            );
+            const latest = await this.readSummary(macro.macroId);
             const existing = await this.readVersionIfPresent(
                 macro.macroId,
                 macro.version,
@@ -639,9 +641,7 @@ export class MacroManager {
                 );
             }
 
-            const latest = (await this.readCatalog()).find(
-                (item) => item.macroId === macro.macroId,
-            );
+            const latest = await this.readSummary(macro.macroId);
             if (
                 latest &&
                 (latest.version > macro.version || latest.state === "disabled")
@@ -682,23 +682,32 @@ export class MacroManager {
     async deleteMacro(request: DeleteMacroRequest): Promise<void> {
         await this.mutateCatalog(async () => {
             this.validateMacroId(request.macroId);
-            const summary = (await this.readCatalog()).find(
-                (item) => item.macroId === request.macroId,
-            );
+            const summary = await this.readSummary(request.macroId);
             const current = summary
                 ? await this.inspectMacro(summary)
                 : await this.readVersionIfPresent(request.macroId, 1);
             if (current) await this.learning.suppress(current);
+            await publishJson(this.summaryPath(request.macroId), {
+                schemaVersion: 2,
+                summary: null,
+            });
             if (!current?.learning) {
                 await rm(path.join(this.rootDir, "macros", request.macroId), {
                     recursive: true,
                     force: true,
                 });
             }
-            const summaries = (await this.readCatalog()).filter(
-                (macro) => macro.macroId !== request.macroId,
+            const directory = path.dirname(this.summaryPath(request.macroId));
+            const staged = (await readdir(directory)).filter(
+                (file) =>
+                    file.startsWith(`${request.macroId}.json.`) &&
+                    file.endsWith(".tmp"),
             );
-            await this.writeJsonAtomic(this.catalogPath(), summaries);
+            await Promise.all(
+                staged.map((file) =>
+                    rm(path.join(directory, file), { force: true }),
+                ),
+            );
         });
     }
     async runMacro(
@@ -1010,39 +1019,77 @@ export class MacroManager {
         traceId: string,
     ): Promise<RecordedInteractionTrace> {
         this.validateMacroId(traceId);
-        const destination = path.join(
-            this.rootDir,
-            "traces",
-            `${traceId}.json`,
-        );
-        if ((await stat(destination)).size > 1024 * 1024) {
-            throw new Error(
-                "Recorded learning trace exceeds its 1 MiB storage limit.",
-            );
-        }
-        const trace = await this.readTrace(traceId);
         return new PrivateResultStore(this.rootDir).verifyLearningTrace(
             traceId,
-            trace,
         );
     }
 
     private async readCatalog(): Promise<MacroSummary[]> {
+        await this.assertCatalogFormat();
+        const directory = path.join(this.rootDir, "catalog");
+        const files = await readdir(directory).catch(
+            (error: NodeJS.ErrnoException) => {
+                if (error.code === "ENOENT") return [];
+                throw error;
+            },
+        );
+        const summaries = await Promise.all(
+            files
+                .filter((file) => /^[a-zA-Z0-9-]+\.json$/.test(file))
+                .map((file) => this.readSummary(file.slice(0, -5), false)),
+        );
+        return summaries.filter(
+            (summary): summary is MacroSummary => summary !== undefined,
+        );
+    }
+
+    private async readSummary(
+        macroId: string,
+        checkFormat = true,
+    ): Promise<MacroSummary | undefined> {
+        if (checkFormat) await this.assertCatalogFormat();
+        let pointer: { schemaVersion: number; summary: MacroSummary | null };
         try {
-            return JSON.parse(
-                await readFile(this.catalogPath(), "utf8"),
-            ) as MacroSummary[];
+            pointer = JSON.parse(
+                await readFile(this.summaryPath(macroId), "utf8"),
+            );
         } catch (error) {
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+            if ((error as NodeJS.ErrnoException).code === "ENOENT")
+                return undefined;
             throw error;
         }
+        if (
+            pointer?.schemaVersion !== 2 ||
+            !("summary" in pointer) ||
+            (pointer.summary !== null &&
+                (pointer.summary.macroId !== macroId ||
+                    !Number.isSafeInteger(pointer.summary.version) ||
+                    pointer.summary.version < 1 ||
+                    !["draft", "approved", "disabled"].includes(
+                        pointer.summary.state,
+                    )))
+        )
+            throw new Error(
+                "Incompatible macro catalog publication; explicitly reset/reimport the development store.",
+            );
+        return pointer.summary ?? undefined;
+    }
+
+    private async assertCatalogFormat(): Promise<void> {
+        // The former array is canonical, not a derived cache.
+        try {
+            await readFile(this.catalogPath(), "utf8");
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+            return;
+        }
+        throw new Error(
+            "Incompatible canonical macro catalog index.json; explicitly reset/reimport the development store. It was not deleted.",
+        );
     }
 
     private async upsertSummary(macro: CopilotToolMacro): Promise<void> {
-        const summaries = (await this.readCatalog()).filter(
-            (summary) => summary.macroId !== macro.macroId,
-        );
-        summaries.push({
+        const summary: MacroSummary = {
             macroId: macro.macroId,
             version: macro.version,
             name: macro.name,
@@ -1051,8 +1098,11 @@ export class MacroManager {
             executionClass: macro.executionClass,
             stepCount: macro.steps.length,
             updatedAt: macro.createdAt,
+        };
+        await publishJson(this.summaryPath(macro.macroId), {
+            schemaVersion: 2,
+            summary,
         });
-        await this.writeJsonAtomic(this.catalogPath(), summaries);
     }
 
     private async nextVersion(macroId: string): Promise<number> {
@@ -1074,11 +1124,7 @@ export class MacroManager {
 
     private async writeVersion(macro: CopilotToolMacro): Promise<void> {
         const destination = this.versionPath(macro.macroId, macro.version);
-        await mkdir(path.dirname(destination), { recursive: true });
-        await writeFile(destination, JSON.stringify(macro, undefined, 2), {
-            encoding: "utf8",
-            flag: "wx",
-        });
+        await publishImmutable(destination, JSON.stringify(macro));
     }
 
     private async readVersionIfPresent(
@@ -1097,19 +1143,6 @@ export class MacroManager {
         }
     }
 
-    private async writeJsonAtomic(
-        destination: string,
-        value: unknown,
-    ): Promise<void> {
-        await mkdir(path.dirname(destination), { recursive: true });
-        const temporary = `${destination}.${randomUUID()}.tmp`;
-        await writeFile(temporary, JSON.stringify(value, undefined, 2), {
-            encoding: "utf8",
-            flag: "wx",
-        });
-        await rename(temporary, destination);
-    }
-
     private async readJson<T>(
         filePath: string,
         notFoundMessage: string,
@@ -1126,15 +1159,17 @@ export class MacroManager {
 
     private async getLatestSummary(macroId: string): Promise<MacroSummary> {
         this.validateMacroId(macroId);
-        const summary = (await this.readCatalog()).find(
-            (macro) => macro.macroId === macroId,
-        );
+        const summary = await this.readSummary(macroId);
         if (!summary) throw new Error(`Macro not found: ${macroId}`);
         return summary;
     }
 
     private catalogPath(): string {
         return path.join(this.rootDir, "index.json");
+    }
+
+    private summaryPath(macroId: string): string {
+        return path.join(this.rootDir, "catalog", `${macroId}.json`);
     }
 
     private versionPath(macroId: string, version: number): string {
@@ -1226,11 +1261,7 @@ export class MacroManager {
                 : { result: redactTraceValue(boundedRun.result) }),
         }) as MacroRunRecord;
         const destination = this.runPath(run.runId);
-        await mkdir(path.dirname(destination), { recursive: true });
-        await writeFile(destination, JSON.stringify(sanitized, undefined, 2), {
-            encoding: "utf8",
-            flag: "wx",
-        });
+        await publishImmutable(destination, JSON.stringify(sanitized));
         return sanitized;
     }
 
@@ -1255,7 +1286,9 @@ export class MacroManager {
     }
 
     private serializeCatalog<T>(operation: () => Promise<T>): Promise<T> {
-        const result = this.catalogMutation.then(operation, operation);
+        const locked = () =>
+            withRecordLock(path.join(this.rootDir, "catalog-owner"), operation);
+        const result = this.catalogMutation.then(locked, locked);
         this.catalogMutation = result.then(
             () => undefined,
             () => undefined,

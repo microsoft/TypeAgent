@@ -149,6 +149,19 @@ See [History and forgetting](derived-views.md#history-and-forgetting).
 Coverage: [source acquisition](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/sourceAcquisition.spec.ts),
 [maintenance foundation](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/maintenanceFoundation.spec.ts).
 
+Durable acquired batches coalesce eligible distinct new sources into detached
+two-member generations, waiting at most 25 ms for the second durable admission.
+One compatible index copy/append and manifest publication serve both jobs;
+standalone ingestion and unsupported/replacement/asset/guarded cases retain
+singleton behavior. Each member keeps its own job, progress and retry identity.
+Cancellation or a stale generation discards the uncommitted candidate and retries
+unaffected members; clear cancels captured admissions. Forget/clear and close
+drain actual provider writes, even when a provider ignores abort. Physical batch
+reads and atomic publications are serialized per batch to avoid Windows
+read/rename contention without weakening durable reads.
+Coverage: [batch ingestion](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/batchIngestion.spec.ts),
+[KnowPro citation persistence](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/markdownPersistence.spec.ts).
+
 ## Search and answer semantics
 
 | Surface                         | Result                                                                          |
@@ -206,12 +219,77 @@ The service-owned store holds source manifests and revisions, event ledgers,
 ingestion jobs and derived index generations. Revision assets and acquired-batch
 state are stored separately from Views.
 
+Canonical document revision text is stored in corpus-local content-addressed
+JSON-string blobs under `revision-text`. Version-1 corpus manifests hold digest
+and byte-length references instead of inline content. New blobs are verified
+before atomic manifest replacement; existing immutable revision references do
+not rewrite retained text. Startup verifies referenced blobs and collects
+unreferenced blobs/staging files. Missing/corrupt canonical text is an error, not
+a reason to rebuild it from a derived index.
+
+Manifest references are the only retention authority. Shared text survives while
+another retained source/revision references it; forgetting the final reference
+physically removes the blob before reopening reads. Corpus clear now has a
+durable purge intent, like source forget, and restart finishes interrupted
+cleanup. Incompatible canonical formats require explicit reset/reimport; no
+canonical data is silently migrated or deleted. This removes text rewrite
+amplification, not metadata scaling or in-memory text retention. Atomic
+replacement does not establish power-loss durability.
+
+KnowPro derived generations publish small descriptors referencing shared
+immutable JSON nodes under their root's `.segments`. Copying a generation no
+longer copies all retained node payloads. Compatible retain-history replacements
+without acquired assets append only changed content and persist active revision
+eligibility; inactive knowledge/vector candidates are excluded before TopN.
+Historical reactivation retains message ordinals without re-extraction.
+Replace-without-history and unsupported custom indexes still rebuild. Explicit
+reindexing compacts inactive indexed revisions. Full hydration, JSON traversal,
+metadata work and linear vector search remain.
+
+Canonical events publish a versioned `events.jsonl` descriptor over immutable
+`event-segments` payloads, a monotonic sequence and independent eligibility
+revision. Cold single-event lookup reads its body plus suppression metadata,
+not all event bodies, but still scans filenames. Listing/search load the
+required event set. Appending an event incrementally extends a compatible
+derived index; deletion invalidates the old index even if a later append
+restores the previous count. Interrupted physical event/index purge withholds
+reads until recovery finishes. Older canonical event formats require explicit
+reset/reimport; derived indexes can be rebuilt.
+
+Explicit document reindexing captures the source revisions under a short corpus
+reservation, prepares a new generation outside the reservation, then publishes
+under a second reservation. Publication rejects a changed source or index
+generation instead of overwriting newer work. Readers keep using the committed
+generation while preparation runs; publication waits for existing readers.
+Document search repair follows the same detached path and coalesces concurrent
+readers' repair requests. Repair failures are returned to callers and can be
+retried. Other lock-held maintenance and mutation paths retain their existing
+index preparation behavior.
+
+Forgetting and clearing drain detached provider writes before purging their
+candidate directories. Close cancels publication and waits for those writes too.
+A provider that ignores cancellation can therefore delay cleanup; the service
+does not report successful cleanup while that provider could still restore
+removed files.
+
 Each corpus's `views` directory contains a private bare repository,
 `view-history.git`. Its committed snapshots hold typed Views, generated bases,
 edits, conflicts, publication and maintenance state, and Topics. The ref
 `refs/heads/typeagent-history` marks the commit boundary. Per-revision derived
 search indexes are kept apart from it, and the conversation registry and replay
 metadata are not a second content store.
+
+Full-fidelity per-View records in Git let history queries decode only the
+selected View's distinct version arrays, rather than every corpus snapshot.
+Ordering, revision filtering, editorial metadata and head guards are unchanged.
+Legacy derived records rebuild under lock once; Git metadata traversal still
+scales with commits. History privacy replacement removes the records and old
+object database together.
+
+Topic read I/O receipts use the actual committed state blob byte length. The
+Topic-only byte length is cached by corpus and commit, rather than serializing
+the full state again for every query. This changes neither the committed format
+nor Topic eligibility or continuation checks.
 
 See [View history](derived-views.md#history-and-forgetting) and the
 [service operational guide](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/README.md).

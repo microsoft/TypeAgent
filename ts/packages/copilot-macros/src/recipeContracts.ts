@@ -421,6 +421,10 @@ export interface RecipeRunResult extends RecipeRevisionRef {
     checkpoints: RecipeEffectCheckpoint[];
     completedCallIds: string[];
     semanticEvidence: RecipeSemanticEvidence[];
+    performance?: {
+        workerQueueMs: number;
+        workerReused: boolean;
+    };
     fallback: "never";
 }
 

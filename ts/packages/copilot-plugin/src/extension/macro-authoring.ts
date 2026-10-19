@@ -18,14 +18,14 @@ type AuthoringConnection = Pick<
     | "close"
 >;
 
-function waitForAuthoringPoll(signal: AbortSignal): Promise<void> {
+function waitForAuthoringReconnect(signal: AbortSignal): Promise<void> {
     return new Promise((resolve) => {
         const done = () => {
             clearTimeout(timer);
             signal.removeEventListener("abort", done);
             resolve();
         };
-        const timer = setTimeout(done, 1000);
+        const timer = setTimeout(done, 5_000);
         timer.unref();
         signal.addEventListener("abort", done, { once: true });
         if (signal.aborted) done();
@@ -35,8 +35,9 @@ function waitForAuthoringPoll(signal: AbortSignal): Promise<void> {
 async function callAuthoringBackend<T>(
     operation: () => Promise<T>,
     signal: AbortSignal,
+    timeoutMs = 10_000,
 ): Promise<T> {
-    const deadline = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
+    const deadline = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
     deadline.throwIfAborted();
     let interrupt!: () => void;
     const interrupted = new Promise<never>((_resolve, reject) => {
@@ -111,6 +112,21 @@ export class MacroAuthoringWorker {
     }
 
     private async drain(signal: AbortSignal): Promise<void> {
+        while (!signal.aborted && Date.now() < this.until) {
+            try {
+                await this.drainConnection(signal);
+                return;
+            } catch (error) {
+                if (signal.aborted) return;
+                this.options.report(
+                    `Copilot authoring connection interrupted; reconnecting for durable reconciliation: ${String(redactTraceValue(error instanceof Error ? error.message : String(error)))}`,
+                );
+                await waitForAuthoringReconnect(signal);
+            }
+        }
+    }
+
+    private async drainConnection(signal: AbortSignal): Promise<void> {
         const connection = await this.options.connect();
         try {
             if (
@@ -130,13 +146,14 @@ export class MacroAuthoringWorker {
                     cwd: this.options.cwd,
                     sessionId: this.options.sessionId,
                     workerId: this.workerId,
+                    waitMs: 30_000,
                 };
                 const request = await callAuthoringBackend(
                     () => connection.claimMacroAuthoringRequest(claim),
                     signal,
+                    35_000,
                 );
                 if (!request) {
-                    await waitForAuthoringPoll(signal);
                     continue;
                 }
                 const outcome = await this.author(request, connection, signal);
@@ -222,6 +239,22 @@ export class MacroAuthoringWorker {
     ): Promise<Error | undefined> {
         while (!signal.aborted) {
             try {
+                // Register the IPC wait before reading authority so a concurrent
+                // cancellation cannot fall between reconciliation and waiting.
+                const changed = callAuthoringBackend(
+                    () =>
+                        connection.claimMacroAuthoringRequest({
+                            cwd: this.options.cwd,
+                            sessionId: this.options.sessionId,
+                            workerId: this.workerId,
+                            observeOnly: true,
+                            waitMs: 30_000,
+                        }),
+                    signal,
+                    35_000,
+                );
+                // Cancellation can end monitoring before this wait resolves.
+                void changed.catch(() => {});
                 const [preference, job] = await callAuthoringBackend(
                     () =>
                         Promise.all([
@@ -244,11 +277,11 @@ export class MacroAuthoringWorker {
                     return new Error(
                         "Learning was disabled or the authoring job is no longer active.",
                     );
+                await changed;
             } catch (error) {
                 if (signal.aborted) return undefined;
                 throw error;
             }
-            await waitForAuthoringPoll(signal);
         }
         return undefined;
     }

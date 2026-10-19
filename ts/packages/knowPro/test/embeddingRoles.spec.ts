@@ -16,6 +16,11 @@ import {
 import { MessageTextIndex } from "../src/messageIndex.js";
 import { TermEmbeddingIndex } from "../src/relatedTermsIndex.js";
 import { TextToTextLocationIndex } from "../src/textLocationIndex.js";
+import { searchConversationByTextSimilarity } from "../src/search.js";
+import { IConversation, TextRange } from "../src/interfaces.js";
+import { createTestMessages } from "./testMessage.js";
+import { SemanticRefCollection } from "../src/storage.js";
+import { TermToSemanticRefIndex } from "../src/conversationIndex.js";
 
 describe("KnowPro embedding roles (synthetic/offline)", () => {
     let calls: string[];
@@ -109,6 +114,85 @@ describe("KnowPro embedding roles (synthetic/offline)", () => {
             1, 0,
         ]);
         expect(calls).toEqual(["query:search"]);
+    });
+
+    test("revision eligibility scopes vector candidates before TopN and intersects caller filters", async () => {
+        const index = new MessageTextIndex({
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(
+                model(),
+                2,
+            ),
+        });
+        index.deserialize({
+            messageCount: 4,
+            indexData: {
+                embeddings: [
+                    [1, 0],
+                    [0.8, 0.6],
+                    [1, 0],
+                    [0.6, 0.8],
+                ].map((vector) => new Float32Array(vector)),
+                textLocations: [0, 1, 2, 3].map((messageOrdinal) => ({
+                    messageOrdinal,
+                    chunkOrdinal: 0,
+                })),
+            },
+        });
+        const conversation: IConversation = {
+            nameTag: "eligibility",
+            tags: [],
+            messages: createTestMessages(4),
+            semanticRefs: new SemanticRefCollection(),
+            semanticRefIndex: new TermToSemanticRefIndex(),
+            secondaryIndexes: { messageIndex: index },
+        };
+        const range = (messageOrdinal: number): TextRange => ({
+            start: { messageOrdinal, chunkOrdinal: 0 },
+            end: { messageOrdinal: messageOrdinal + 1, chunkOrdinal: 0 },
+        });
+        const ranges = [range(1), range(3)];
+        const expected = index
+            .lookupByEmbedding(new Float32Array([1, 0]), undefined, 0)
+            .filter((match) => match.messageOrdinal % 2 === 1);
+        for (const limit of [1, 2, 10]) {
+            const result = await searchConversationByTextSimilarity(
+                conversation,
+                "query",
+                undefined,
+                {
+                    messageRangesInScope: ranges,
+                    maxMessageMatches: limit,
+                    thresholdScore: 0,
+                },
+            );
+            expect(result?.messageMatches).toEqual(expected.slice(0, limit));
+        }
+        const scoped = await searchConversationByTextSimilarity(
+            conversation,
+            "query",
+            {
+                textRangesInScope: [range(3)],
+            },
+            {
+                messageRangesInScope: ranges,
+                maxMessageMatches: 1,
+                thresholdScore: 0,
+            },
+        );
+        expect(scoped?.messageMatches).toEqual(
+            expected.filter((match) => match.messageOrdinal === 3),
+        );
+        const empty = await searchConversationByTextSimilarity(
+            conversation,
+            "query",
+            undefined,
+            {
+                messageRangesInScope: [],
+                maxMessageMatches: 1,
+                thresholdScore: 0,
+            },
+        );
+        expect(empty?.messageMatches).toEqual([]);
     });
 
     test("related terms use symmetric documents and never answer query-role cache keys", async () => {
