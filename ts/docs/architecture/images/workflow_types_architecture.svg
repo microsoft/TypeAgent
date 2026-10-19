@@ -7,8 +7,7 @@
   <title id="title">Provider-owned workflow execution</title>
   <desc id="desc">
     Grammar and typed actions route to PowerShell, WebFlow or TaskFlow. Each
-    provider retains its own execution and authorization rules. This diagram
-    does not describe the checked-program macro runtime.
+    provider uses its own execution and authorization rules.
   </desc>
   <defs>
     <marker
@@ -60,10 +59,10 @@
       <text x="155" y="232">Approved-local broker</text>
       <text x="155" y="259">Current-user OS rights</text>
       <text x="450" y="205">Static checks / frozen API</text>
-      <text x="450" y="232">Node Function + WebUtils</text>
+      <text x="450" y="232">Node Function, WebFlow API</text>
       <text x="450" y="259">Browser operations</text>
       <text x="745" y="205">Static checks / frozen API</text>
-      <text x="745" y="232">Node Function + TaskFlow API</text>
+      <text x="745" y="232">Node Function, TaskFlow API</text>
       <text x="745" y="259">Dispatcher actions</text>
     </g>
   </g>

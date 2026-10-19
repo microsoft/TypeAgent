@@ -1,15 +1,28 @@
 # @typeagent/memory-mcp-server
 
-Typed derived View tools expose explicit builds, drafts, exact revision history,
-guarded edits/conflict resolution, publication, maintenance and search. Source
-acquisition and revision assets remain independent evidence capabilities.
-Committed index changes can schedule automatic Wiki/Projects and Topics work
-when informational support is enabled. Ingestion does not detect saved-procedure
-candidates or grant review or execution permission. See
-[the current-system map](../../../docs/architecture/memory/current-system.md)
-and [View maintenance](../../../docs/architecture/memory/view-maintenance.md).
+MCP tools for importing content, searching sources, answering questions with
+citations, and managing memory. The server calls `MemoryService`; it does not
+implement a separate memory store or retrieval engine. Destructive tools use
+preview and confirmation and are annotated accordingly.
 
-Views are enabled by default. `TYPEAGENT_MEMORY_VIEW_DRAFTS=false` explicitly disables them; unset or `true` requires no user opt-in, and invalid values fail. Missing or unavailable model providers surface build errors without creating successful artifacts or bypassing validation.
+## Views and maintenance
+
+View tools build documents, read exact revisions and history, save guarded edits,
+resolve conflicts, publish, maintain and search derived content. Source
+acquisition and revision assets are managed separately. When informational support
+is enabled, committed index changes can schedule automatic Wiki, Projects and
+Topics maintenance. Importing instructions does not turn them into executable
+procedures.
+
+Views are enabled by default. Set `TYPEAGENT_MEMORY_VIEW_DRAFTS=false` to disable
+them. Invalid values cause an error. If a required model provider is unavailable,
+the build reports an error instead of saving a successful artifact.
+
+See [Current system](../../../docs/architecture/memory/current-system.md) for
+host setup and [View maintenance](../../../docs/architecture/memory/view-maintenance.md)
+for refresh behavior.
+
+## Tool details
 
 `memory_view_source_usage` returns paginated metadata for current derived Views
 that depend on a document source. It never enumerates legacy procedures,
@@ -27,12 +40,9 @@ before its result limit. Unknown capture dates are excluded, indexing dates
 are never substituted, and bounded-candidate incompleteness warnings are
 returned unchanged.
 
-MCP transport adapter for the TypeAgent memory service. It exposes the complete
-typed ingestion, search, synthesized or extractive grounded answers
-(`answerMode`), status, pagination,
-bounded content, derived knowledge, revision replacement, preview/confirm
-deletion, reindex, and filtered job management surface. Destructive tools are
-annotated accordingly.
+Answer tools support synthesized answers and extractive snippets through
+`answerMode`. Other tools expose ingestion status, paginated content and
+knowledge reads, revision replacement, reindexing, and filtered job management.
 
 ## Trademarks
 

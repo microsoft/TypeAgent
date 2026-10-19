@@ -9,7 +9,12 @@ engine, Copilot macro runner, adaptation bridge/RPCs, and execution switches hav
 been removed. Development-only old macro records are discarded, not migrated.
 See the [cross-package plan](../../docs/plans/copilot-fastActions/PLAN.md).
 For the stable lifecycle, ownership and failure model, see
+
 [Checked program macros](../../docs/architecture/workflows/macros.md).
+
+Execution uses checked programs, not recorded-step replay. Old development-only
+records are discarded without migration. The
+[cross-package plan](../../docs/plans/copilot-fastActions/PLAN.md) tracks the implementation work.
 
 ## Host-independent program contracts
 
@@ -56,7 +61,7 @@ The verifier sees the recording without a prior program, never candidate source.
 The candidate sees the independent specification, not the verifier's fixtures.
 The shared compiler and contained executor check observed and changed-input/
 fresh-result fixtures before sealing the same program artifact used at runtime.
-This is an authoring/validation path, not an alternate live executor.
+Validation uses the same compiled artifact that will run after publication.
 
 `macroSchema` exports the shared macro action-name and input-schema helpers.
 `matchMacroGrammarInputs(macro, request)` uses the same saved action grammar and

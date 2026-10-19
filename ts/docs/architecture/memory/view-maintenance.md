@@ -1,14 +1,14 @@
 # Derived-view maintenance
 
-Maintenance keeps editable knowledge aligned with eligible evidence without
-discarding human intent. Start with [Derived Views](derived-views.md) for build,
-citation, conflict, publication and history contracts.
+When sources change, maintenance updates the Views that depend on them and
+preserves your edits. Overlapping edits become conflicts you can review. See
+[Derived Views](derived-views.md) for builds, citations, publication and history.
 
-Views are default-on. Hosts can disable all Views with
-`TYPEAGENT_MEMORY_VIEW_DRAFTS=false`, or informational Wiki/Projects with
-`TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS=false`. Explicit rehearsal budgets are
-test controls, not product enablement or lifetime quotas. Provider request
-admission/throttling and application scheduling are separate.
+Views are on by default. A host can turn off all Views with
+`TYPEAGENT_MEMORY_VIEW_DRAFTS=false`, or just the informational Wiki and Projects
+with `TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS=false`. Test rehearsal budgets limit
+individual test runs, not product availability or lifetime usage. Provider request
+throttling is configured separately from maintenance scheduling.
 
 ## Automatic and explicit work
 
@@ -16,133 +16,138 @@ admission/throttling and application scheduling are separate.
 
 [SVG](diagrams/view-maintenance.svg) · [Editable scene](diagrams/view-maintenance.excalidraw)
 
-Automatic informational work discovers/refreshes subjects after indexing.
-Startup and a 30-second reconciliation sweep repair missed dirty hints.
-The sweep is not a promise that synthesis finishes every 30 seconds.
+After indexing, automatic informational work finds and refreshes subjects. At
+startup, and every 30 seconds afterward, a sweep finds work missed by change
+notifications. This is a scheduling interval, not a synthesis deadline.
 
-Durable acquired bulk imports defer automatic Topics and Wiki/Projects work
-until the final active batch settles. Explicit manual builds remain available.
-Privacy invalidation is never postponed until a synthesis schedule.
+While a durable bulk import is running, automatic Topics and Wiki/Projects work
+waits until the last active batch finishes. You can still start a build by hand.
+Privacy invalidation never waits for the synthesis schedule.
 
-Targets have bounded work/deadlines. Completed targets remain committed while
-technical failures, unchanged rejections and human conflicts are recorded
-separately. Provider/materialization failures receive one automatic retry before
-parking; changed evidence/recipe or explicit rebuild can reopen admission.
-Cancellation is explicit. Recovery finishes committed publication/index effects
-without repeating synthesis or inventing duplicate versions.
+Each target has a bounded amount of work and a deadline. Finished targets stay
+committed. Technical failures, unchanged-content rejections and human conflicts
+are recorded separately. A provider or materialization failure gets one automatic
+retry and is then parked. Changed evidence or recipe, or an explicit rebuild,
+reopens it. Cancelling is always explicit. Recovery finishes publication and
+index steps that were already committed. It doesn't repeat synthesis or create
+duplicate versions.
 
 ## Indexed Wiki and Projects
 
-`informational-wiki-v1` is the only operational Wiki construction contract;
+`informational-wiki-v1` is the only supported Wiki construction contract, and
 `informational-project-summary-v1` is the project contract. Both use bounded
-indexed fragments and exact citations, not full-source inventories.
+indexed fragments and exact citations, with no full-source inventory.
 
-Family `update`, `rebuild`, `pause` and `resume` use the existing job/View store.
-Pause is durable. Stable IDs are independent of display titles; saved selectors,
-aliases, exclusions, category and notes retain editorial intent.
+Family operations `update`, `rebuild`, `pause` and `resume` use the existing job
+and View store. Pause is durable. Stable IDs don't depend on display titles. Saved
+selectors, aliases, exclusions, category and notes keep the editor's intent.
 
-Discovery requires substantive local evidence, not multiple sources or a page
-quota. A service mention alone is not an initiative. Case/whitespace/alias
-normalization can nominate a match, but cannot prove identity. Explicit symbol
-names and incompatible project/episode scope remain distinct or ambiguous.
+A subject needs substantial local evidence to get a page; one source can be
+enough. There is no page quota. A passing mention of a service is insufficient
+to identify a project. Matching names or aliases prompt a comparison, but the
+service keeps incompatible symbols, projects or episodes separate, or marks the
+match as ambiguous.
 
-Bounded retrieval favors relevant indexed evidence, corrections/qualifications
-and source diversity; it does not guarantee exhaustiveness. Wiki limitations
-remain visible in body and summary. Project output keeps owners, milestones,
-incident closure, capacity qualification and overall project state separate.
-Review ownership is not accountable service ownership; rehearsal is not rollout.
+Retrieval favors relevant indexed evidence, corrections and qualifications, and a
+mix of sources. It doesn't promise to find everything. Wiki pages state their
+limits in the body and summary. A project page keeps owners, milestones, incident
+closure, capacity qualification and overall project state apart. It distinguishes
+a reviewer from a service owner and a rehearsal from a rollout.
 
-Old `wiki-v1` bundles, inventory-backed Wiki/Projects and explicit-subject
-registries are rejected, not silently migrated. Historical qualification receipts
-do not become current contracts.
+The service rejects old `wiki-v1` bundles, inventory-backed Wiki and Projects,
+and explicit-subject registries instead of migrating them. Old qualification
+receipts don't become current contracts.
 
-### Source-overlap Wiki admission and contribution
+### Source overlap, admission and contribution
 
-For new automatic candidates, actual source/revision overlap nominates bounded
-comparisons with current eligible pages; it does not establish equivalent purpose.
-Admission distinguishes:
+When a new candidate shares sources or revisions with existing eligible pages,
+the service compares their content and purpose. It records one of four outcomes:
 
-- `distinct`: create a useful independent page.
-- `covered`: actual canonical prose explains the essential distinctions.
-- `contribute`: refresh the same scoped purpose with missing evidence.
-- `ambiguous`: record possible destinations and block for explicit review.
+- `distinct`: create a new independent page.
+- `covered`: the existing prose already explains the key distinctions.
+- `contribute`: refresh the page with the same scoped purpose using the missing evidence.
+- `ambiguous`: record the possible destinations and wait for an explicit review.
 
-Citation overlap alone is not prose coverage. Contribution uses bounded original
-indexed evidence, preserves earlier qualifications, validates actual merged prose
-and binds only after the exact canonical revision is ready. Failures/conflicts
-do not falsely complete the candidate. Existing article prose is comparison or
-merge context, never new source truth.
+Shared citations alone don't show that the prose covers a topic. A contribution
+uses bounded original indexed evidence, keeps earlier qualifications, validates
+the merged prose and binds only once the exact canonical revision is ready. A
+failure or conflict doesn't mark the candidate complete. Existing article text is
+used only to compare and merge, and it never counts as a new source.
 
 ## Editorial protection and consolidation
 
-Deliberate human edits are protected at reliable edit units. The service exposes
-`protectedTargets`; browser clients do not guess those units. An explicit unlock
-save records intent without immediately rewriting text, then schedules eligible
-maintenance. Ordinary saves alone do not require another synthesis pass.
+The service protects identifiable units of human-edited content and lists them
+in `protectedTargets`. Browser clients use that list. Unlocking a unit allows
+maintenance to revise it; the service saves the unlock before scheduling work.
+Saving an ordinary edit does not trigger synthesis.
 
-Consequential changes check actual merged prose for quantities/cohorts, scope,
-correction/withdrawal and other critical distinctions. Unsupported output is a
-technical rejection, not a request for blanket approval. Genuine human overlap
-uses the existing recoverable conflict path.
+When a change matters, the service checks the merged prose for quantities and
+cohorts, scope, corrections and withdrawals, and other critical distinctions.
+Output without support is rejected as a technical failure and doesn't ask you for
+blanket approval. If a human edit really overlaps, the existing recoverable
+conflict path handles it.
 
-New-candidate contribution differs from consolidation of existing generated
-Wiki articles. Eligible generated, unprotected articles with no historical human
-edits can be consolidated when current original indexed evidence establishes
-one scoped purpose and consequential output checks pass. Shared infrastructure,
-vocabulary, source lists or topic parents only nominate comparison.
+Contributing a new candidate is different from consolidating existing generated
+articles. The service can consolidate generated articles that are unprotected,
+have no human edits in their history, and are shown by current original indexed
+evidence to have one scoped purpose, as long as the output checks pass. Shared
+infrastructure, vocabulary, source lists or topic parents only suggest a comparison.
 
-Consolidation preserves unique sections/excerpts/citations, commits canonical
-acceptance before redirect activation, and waits for exact derivative readiness.
-Old-ID reads carry canonical identity and anchor mappings; historical reads
-remain explicit. Restart resumes committed effects without another synthesis.
-Human-edited historical pages are not automatically retired. Redirect cycles/
-over-deep ancestry and changed targets block rather than create semantic retry
-loops. No new approval framework or authoritative entity merge follows.
+Consolidation keeps unique sections, excerpts and citations. It commits the
+canonical article before it turns on a redirect, then waits until the exact
+derived index is ready. Reading an old ID returns the canonical identity and
+anchor mappings, and historical reads are still available when requested. After
+a restart, committed effects resume without another synthesis. Pages that humans
+have edited are never retired automatically. Redirect cycles, deep ancestry and
+changed targets block the operation, so they can't produce a retry loop.
+Consolidation does not establish that the entities mentioned in the articles
+are identical, and it does not add a separate approval process.
 
 ## Maintained Topics and source synopses
 
-Topics are maintained navigation snapshots over eligible original indexed
-occurrences, with source/revision citations, parent/related associations,
-summaries and limits. `queryTopics` pages that projection; `rebuildTopics` uses
-existing maintenance jobs. Label/alias editorial authorship does not turn a
-generated summary into human-authored evidence.
+Topics are maintained navigation snapshots built from eligible original indexed
+occurrences. They have source and revision citations, parent and related links,
+summaries and limits. `queryTopics` pages through that projection, and
+`rebuildTopics` uses the existing maintenance jobs. Editing a Topic's label or
+alias doesn't make its generated summary human-authored evidence.
 
-Source synopses are exact-revision navigation previews with pending/ready/failed/
-unavailable status, freshness and fidelity limits. Failed synopsis work does not
-block source indexing/search. Neither Topics nor synopses are independent
-corroboration or authoritative project equivalence.
+Source synopses are previews of one exact revision. Their status is pending,
+ready, failed or unavailable, and they carry freshness and fidelity limits. A
+failed synopsis doesn't block indexing or search for the source. Neither Topics
+nor synopses count as independent corroboration, and neither proves that two
+projects are the same.
 
 ## Explicit timeline and troubleshooting maintenance
 
-These builders retain full-evidence inventory/checking and explicit definitions
-for continuing source membership:
+These builders keep the full-evidence inventory and checks. Their definitions say
+explicitly which sources continue to belong:
 
-| Scope              | Membership                                                   |
-| ------------------ | ------------------------------------------------------------ |
-| `pinned` or absent | Exact selected sources/events; no automatic advancement      |
-| `currentSources`   | Listed source IDs at current ready revisions                 |
-| `scopedSources`    | Source types, all required tags and exact `metadata.project` |
+| Scope              | Membership                                                         |
+| ------------------ | ------------------------------------------------------------------ |
+| `pinned` or absent | Exactly the selected sources and events, with no automatic advance |
+| `currentSources`   | The listed source IDs at their current ready revisions             |
+| `scopedSources`    | Source types, all required tags and the exact `metadata.project`   |
 
-Resolution enumerates membership, not a truncated relevance result. Missing,
-pending, inaccessible, empty or oversized scopes block explicitly. Canonical
-event selection and temporal bounds remain fixed; dynamic future-event scopes
-are not implemented.
+Resolution lists every member. It doesn't use a truncated relevance result. A
+scope that is missing, pending, inaccessible, empty or too large blocks with an
+explicit error. Canonical event selection and time bounds stay fixed. Dynamic
+scopes that pick up future events are not implemented.
 
-Accepted dependency fingerprints include eligible source content/metadata/
-pipeline, model, scope, temporal bounds and event evidence. Unchanged plans
-make no synthesis calls. Failed, stale, cancelled or conflicted work cannot
-advance an accepted checkpoint.
+An accepted checkpoint records a dependency fingerprint of eligible source content,
+metadata and pipeline, plus the model, scope, time bounds and event evidence. If
+nothing changed, the plan makes no synthesis calls. Failed, stale, cancelled or
+conflicted work can't advance a checkpoint.
 
 ## Service and UI controls
 
-The View-capable service, RPC, MCP and browser share guarded operations:
+The View-capable service, RPC, MCP and the browser share these guarded operations:
 
-- `updateViewMaintenance`: save explicit scope with head/version guards.
-- `planViewMaintenance`: preview targets without writes or synthesis.
-- `maintainViews`: admit explicit targets or control a family.
-- `getViewMaintenance`: read a receipt and current outcome.
+- `updateViewMaintenance`: save an explicit scope, with head and version guards.
+- `planViewMaintenance`: preview targets without writing or synthesizing.
+- `maintainViews`: start work on explicit targets or control a family.
+- `getViewMaintenance`: read a receipt and its current outcome.
 
-Example in a host with an initialized View-capable service:
+Example, in a host with an initialized View-capable service:
 
 ```typescript
 const { head } = await views.listViews(corpusId);
@@ -158,15 +163,15 @@ const receipt = await views.getViewMaintenance({
 });
 ```
 
-`result` contains `receiptId`, `plan` and an optional `job`. Do not assume every
-request generates a job; unchanged, paused or blocked outcomes remain explicit.
-`projects` and `topics` are separate families. Read the current head again before
-a subsequent mutation.
+`result` has a `receiptId`, a `plan` and an optional `job`. A request may not
+create a job. Unchanged, paused and blocked outcomes are reported explicitly.
+`projects` and `topics` are separate families. Read the head again before your
+next change.
 
-Memory Hub exposes family controls, explicit maintenance, editable content,
-protection/unlock, publication/index state and visible errors. Unsaved edits
-must not be replaced by polling. The private-store CLI offers the same
-maintenance operations, but must not be used against a running owner's store.
+The Memory Hub exposes family controls, explicit maintenance, editable content,
+protect and unlock, publication and index state, and error messages. Polling
+never replaces edits you haven't saved. The private-store CLI has the same
+maintenance operations, but don't point it at the store of a running owner.
 
 ## Verification and limits
 
@@ -179,6 +184,6 @@ Coverage: [maintenance](https://github.com/microsoft/TypeAgent/blob/main/ts/pack
 [batch deferral](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/batchMaintenance.spec.ts),
 [editorial updates](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/viewEditorial.spec.ts),
 [consolidation recovery](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/memory/service/test/wikiConsolidationRecovery.spec.ts).
-Offline tests establish lifecycle mechanics, not real-model semantic quality.
-Privacy removal and current evidence eligibility override all editorial and
+The offline tests check lifecycle mechanics, not how well real models write.
+Privacy removal and current evidence eligibility override every editing and
 scheduling state. See [History and forgetting](derived-views.md#history-and-forgetting).

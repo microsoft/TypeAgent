@@ -697,16 +697,18 @@ checks the actual account/workspace binding. The native executable must be on
 PATH; `TYPEAGENT_RECIPE_CLI_PATH` or config `recipeInferenceCliPath` can select its
 executable path explicitly. No shell or bundled-SDK dependency fallback is used.
 
-The standalone inference facade refreshes tool/MCP registry generations between
-calls while preserving owner identity. It rejects workspace/account changes and
-generation changes during inference; child-only events do not invalidate the
-root. The lower-level static-bound adapter remains strict.
+Between inference calls, the standalone facade can refresh its tool and MCP
+registries without changing owners. During a call, a registry-generation change
+causes an error, as does a workspace or account change. Child-session events
+alone do not invalidate the root session. The lower-level static-bound adapter
+requires its original registry binding.
 
-`awaitingAuthor` is durable waiting, not readiness. New user work can preempt the
-owned child and leave its lease recoverable; Off/Cancel cancels pending learning
-and rejects stale replies. An unsupported child host fails explicitly, without
-a default-author fallback. Synchronous task replies alone are insufficient:
-the launcher correlates the exact completion event and retires that child.
+`awaitingAuthor` means the job is waiting for a compatible author to finish a
+phase. New user work can interrupt the child; a later session can recover the
+job's lease. Off or Cancel cancels pending learning and rejects late replies.
+If the host cannot run the required child, the job reports an error. The launcher
+waits for the matching native completion event before accepting a task reply,
+then retires that child.
 
 The copied distribution includes the real TypeScript libraries, QuickJS worker,
 WASM dependency closure, licenses and asset hashes. Programs still compile and
@@ -923,21 +925,25 @@ job data or create a manual draft to force a retry.
 
 ### Review and run a prepared program
 
-Use lifecycle MCP tools rather than asking `processCommand` to create or approve
-a macro. They use the selected owner in direct/MCP/dev modes; bypass disables
-them. Selected learning creates the checked candidate.
-Inspect the returned candidate/version, call `validate_macro`, then explicitly
-`approve_macro` in Prepare mode. Drafts cannot run. Call `run_macro` with the
-current approved `macroId`, optional `version`, and declared `inputs`. The MCP
-adapter assigns a unique run ID; direct manager callers supply their own.
-`get_macro_run` returns sanitized durable evidence. There is no `preference`
-parameter, manual step-draft creation, or adapted-candidate submission tool.
+Use the lifecycle MCP tools in direct, MCP or dev mode. They call the selected
+owner; bypass disables them. After learning produces a candidate:
+
+1. Inspect its returned candidate and version, then call `validate_macro`.
+2. In Prepare mode, review it and call `approve_macro`. Drafts cannot run.
+3. Call `run_macro` with the approved `macroId`, declared `inputs`, and an
+   optional `version`. The MCP adapter assigns a unique run ID; direct manager
+   callers supply their own.
+4. Use `get_macro_run` to inspect sanitized, persisted run evidence.
+
+`processCommand` does not create or approve macros. The lifecycle tools have no
+`preference` parameter, manual step-draft creation or adapted-candidate submission.
 
 ### Route approved macros from natural language
 
 The plugin-local matcher uses the current approved program's generated grammar
 and declared inputs. Drafts, disabled programs and stale versions cannot execute.
 Explicit lifecycle commands and macro MCP tools use the same owner and manager.
+
 
 ```text
 @typeagent recipe list
