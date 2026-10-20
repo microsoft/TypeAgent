@@ -26,7 +26,7 @@ try {
         Remove-Item -LiteralPath $passwordFile -Force
     }
     $env:CSC_LINK = Join-Path $HOME ".typeagent\TypeAgent-Development-Certificate.pfx"
-    $certificate = New-Object Security.Cryptography.X509Certificates.X509Certificate2(
+    $certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
         $env:CSC_LINK, $env:CSC_KEY_PASSWORD,
         [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet)
     if ($certificate.Subject -ne $policy.publisher -or $certificate.Thumbprint -notin $policy.thumbprints) {

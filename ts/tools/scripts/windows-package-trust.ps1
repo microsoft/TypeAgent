@@ -36,7 +36,7 @@ function Use-TypeAgentBuildTrust {
     if ($Certificate.Subject -ne $policy.publisher -or $Certificate.Thumbprint -notin $policy.thumbprints) {
         throw "Build certificate does not match the independently pinned signing identity."
     }
-    $publicCertificate = New-Object Security.Cryptography.X509Certificates.X509Certificate2(
+    $publicCertificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
         $Certificate.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert))
     $store = New-Object Security.Cryptography.X509Certificates.X509Store("Root", "CurrentUser")
     $added = $false

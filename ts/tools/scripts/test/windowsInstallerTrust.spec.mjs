@@ -36,15 +36,19 @@ function importFunctions(file) {
     `;
 }
 
-function runPowerShell(code, expectedStatus = 0) {
+function runPowerShell(
+    code,
+    expectedStatus = 0,
+    executable = path.join(
+        process.env.SystemRoot,
+        "System32",
+        "WindowsPowerShell",
+        "v1.0",
+        "powershell.exe",
+    ),
+) {
     const result = spawnSync(
-        path.join(
-            process.env.SystemRoot,
-            "System32",
-            "WindowsPowerShell",
-            "v1.0",
-            "powershell.exe",
-        ),
+        executable,
         [
             "-NoProfile",
             "-NonInteractive",
@@ -89,6 +93,69 @@ function fixture(t) {
     writeFileSync(path.join(dir, "ci-x64.yml"), JSON.stringify(metadata));
     return { dir, metadata };
 }
+
+test(
+    "build trust converts certificate bytes and restores trust on success and failure",
+    { skip: !windows },
+    () => {
+        runPowerShell(
+            `
+        . ${quote(path.join(scripts, "windows-package-trust.ps1"))}
+        $rsa = [Security.Cryptography.RSA]::Create(2048)
+        $request = [Security.Cryptography.X509Certificates.CertificateRequest]::new(
+            'CN=TypeAgent-Test', $rsa, [Security.Cryptography.HashAlgorithmName]::SHA256,
+            [Security.Cryptography.RSASignaturePadding]::Pkcs1)
+        $certificate = $request.CreateSelfSigned(
+            [DateTimeOffset]::UtcNow.AddMinutes(-1), [DateTimeOffset]::UtcNow.AddMinutes(5))
+        try {
+            $script:testPolicy = @{
+                publisher = $certificate.Subject
+                thumbprints = @($certificate.Thumbprint)
+            } | ConvertTo-Json
+            function Get-Content { $script:testPolicy }
+            $script:added = 0
+            $script:removed = 0
+            $script:closed = 0
+            $script:actions = 0
+            $script:store = [pscustomobject]@{ Certificates = @() }
+            $script:store | Add-Member ScriptMethod Open { param($flags) }
+            $script:store | Add-Member ScriptMethod Add {
+                param($public)
+                if ($public.HasPrivateKey) { throw 'Private key reached trust store' }
+                if ($public.Thumbprint -ne $certificate.Thumbprint) { throw 'Certificate changed' }
+                $script:added++
+            }
+            $script:store | Add-Member ScriptMethod Remove { param($public) $script:removed++ }
+            $script:store | Add-Member ScriptMethod Close { $script:closed++ }
+            function New-Object {
+                param($TypeName, $ArgumentList)
+                if ($TypeName -eq 'Security.Cryptography.X509Certificates.X509Store') {
+                    return $script:store
+                }
+                Microsoft.PowerShell.Utility\\New-Object -TypeName $TypeName -ArgumentList $ArgumentList
+            }
+            Use-TypeAgentBuildTrust -Certificate $certificate -Action { $script:actions++ }
+            $failed = $false
+            try {
+                Use-TypeAgentBuildTrust -Certificate $certificate -Action { throw 'Expected action failure' }
+            } catch {
+                if ($_.Exception.Message -ne 'Expected action failure') { throw }
+                $failed = $true
+            }
+            if (-not $failed -or $script:actions -ne 1 -or $script:added -ne 2 -or
+                $script:removed -ne 2 -or $script:closed -ne 2) {
+                throw 'Temporary trust was not restored'
+            }
+        } finally {
+            $certificate.Dispose()
+            $rsa.Dispose()
+        }
+    `,
+            0,
+            "pwsh",
+        );
+    },
+);
 
 test("publication verifies final hashes, metadata and signatures", (t) => {
     const { dir, metadata } = fixture(t);

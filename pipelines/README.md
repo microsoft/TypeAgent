@@ -27,6 +27,16 @@ This folder contains Azure DevOps pipelines for the TypeAgent repo.
 | `include-install-pnpm.yml` | corepack enable + pnpm store configuration |
 | `include-update-package-version.yml` | Stamp prerelease version across all workspace packages |
 
+## Packaging regression checks
+
+From `ts`, run `node --test tools/scripts/test/optionalAgentInstallPolicy.spec.mjs tools/scripts/test/windowsInstallerTrust.spec.mjs`.
+The optional-agent check verifies that the temporary pnpm workspace explicitly
+disables `protobufjs` install scripts, matching the main workspace policy.
+On Windows, the trust checks exercise certificate-byte conversion and cleanup
+with a synthetic certificate and a mocked trust store; they do not modify
+certificate stores or retrieve signing secrets. PowerShell 7 (`pwsh`) is required
+for the synthetic-certificate check, matching the shell packaging pipeline.
+
 ## Pipeline variables (configure in ADO UI)
 
 The consolidated pipeline requires these variables to be set on the pipeline
