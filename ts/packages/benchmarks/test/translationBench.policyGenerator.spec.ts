@@ -28,12 +28,11 @@ import {
     tryClassifyActionParameterFieldHardcode,
     tryReusePriorFieldGraderDecision,
     type ParamSpec,
-} from "../src/translationBench/synthesizer/catalogGenerator/index.js";
-import { countEligibleTranslationBenchActions } from "../src/translationBench/synthesizer/eligibleActions.js";
+} from "../src/translationBench/synthesizer/index.js";
 import {
-    HARDCODED_NON_EVAL_ACTION_IDS,
-    getPackagedLlmJudgeExcludedActions,
-    clearPackagedLlmJudgeExcludedActionsCacheForTests,
+    clearPackagedActionEligibilityPolicyCacheForTests,
+    countEligibleTranslationBenchActions,
+    getPackagedScheduleExcludedActionIds,
 } from "../src/translationBench/synthesizer/eligibleActions.js";
 function objectSpec(
     fields: Record<string, { optional: boolean; spec: ParamSpec }>,
@@ -1490,18 +1489,55 @@ describe("eligible action coverage counting", () => {
         );
     });
 
-    it("excludes hardcoded non-eval actions from the packaged exclusion set", () => {
-        clearPackagedLlmJudgeExcludedActionsCacheForTests();
-        const excluded = getPackagedLlmJudgeExcludedActions();
-        for (const id of HARDCODED_NON_EVAL_ACTION_IDS) {
+    it("excludes policy removedActions (exact ids) from the packaged exclusion set", () => {
+        clearPackagedActionEligibilityPolicyCacheForTests();
+        // Catalog must include every exact removedActions id (fail-closed expand).
+        const exactRemoved = [
+            "browser.lookupAndAnswer.lookupAndAnswerInternet",
+            "browser.searchImageAction",
+            "chat.generateResponse",
+            "dispatcher.reasoning.reasoningAction",
+            "image.createImageAction",
+            "image.editImageAction",
+            "markdown.streamingUpdateDocument",
+            "markdown.updateDocument",
+            "photo.takePhoto",
+            "settings.adjustMultiMonitorLayoutAction",
+            "settings.dimBrightNessAction",
+            "video.createVideoAction",
+            "system.help.answerTypeAgentQuestion",
+            "utility.claudeTask",
+        ];
+        const bySchema = new Map<string, string[]>();
+        for (const id of exactRemoved) {
+            // schema may contain dots (e.g. browser.lookupAndAnswer)
+            const lastDot = id.lastIndexOf(".");
+            const schemaName = id.slice(0, lastDot);
+            const actionName = id.slice(lastDot + 1);
+            const list = bySchema.get(schemaName) ?? [];
+            list.push(actionName);
+            bySchema.set(schemaName, list);
+        }
+        // Keep one non-removed action that has llmAsAJudge fields in policy.
+        const browserTools = bySchema.get("browser") ?? [];
+        browserTools.push("executeAdHocScript");
+        bySchema.set("browser", browserTools);
+
+        const schemas = [...bySchema.entries()].map(([schemaName, names]) => ({
+            schemaName,
+            tools: names.map((name) => ({ function: { name } })),
+        }));
+        const excluded = getPackagedScheduleExcludedActionIds(schemas, {
+            allowMissingExactIds: true,
+            applyEligibleGoldAllowlist: false,
+        });
+        for (const id of exactRemoved) {
             expect(excluded.has(id)).toBe(true);
         }
-        expect(HARDCODED_NON_EVAL_ACTION_IDS.has("chat.generateResponse")).toBe(
-            true,
-        );
-        expect(HARDCODED_NON_EVAL_ACTION_IDS.has("utility.claudeTask")).toBe(
-            true,
-        );
+        // Freeform script action is human-removed (hard veto), not merely llmAsAJudge.
+        expect(excluded.has("browser.executeAdHocScript")).toBe(true);
+        // Allowlisted non-judge action remains schedulable under allowlist-off lattice.
+        expect(excluded.has("browser.openWebPage")).toBe(false);
     });
 });
 

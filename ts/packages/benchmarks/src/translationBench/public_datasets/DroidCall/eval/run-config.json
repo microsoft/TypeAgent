@@ -1,0 +1,34 @@
+{
+  "$schema": "../../../../config/config.schema.json",
+  "_note": "Model ids must be real gateway routes. Reasoning effort is NOT part of the model id; express it as `id#effort` in base.eval.models (e.g. azure/gpt-5.6-luna#none and azure/gpt-5.6-luna#low run the same route at two efforts). The models map keys are the bare base ids; tpmLimit + maxConcurrency are looked up by base id. concurrencyByModel is derived from tpmLimit*headroom, capped by maxConcurrency; a shared TPM limiter enforces tpmLimit. Valid efforts: minimal, low, medium, high, none, xhigh, max (omit to inherit the gateway default).",
+  "models": {
+    "azure/gpt-4.1": { "tpmLimit": 1000000, "maxConcurrency": 10 },
+    "azure/gpt-4.1-mini": { "tpmLimit": 2000000, "maxConcurrency": 20 },
+    "azure/gpt-5.4-nano": { "tpmLimit": 2000000, "maxConcurrency": 20 },
+    "azure/gpt-5.6-sol": { "tpmLimit": 1000000, "maxConcurrency": 8 },
+    "azure/gpt-5.6-terra": { "tpmLimit": 1000000, "maxConcurrency": 10 },
+    "azure/gpt-5.6-luna": { "tpmLimit": 1000000, "maxConcurrency": 10 },
+    "azure/gpt-4o": { "tpmLimit": 1000000, "maxConcurrency": 10 }
+  },
+  "base": {
+    "eval": {
+      "models": [
+        "azure/gpt-4.1",
+        "azure/gpt-4.1-mini",
+        "azure/gpt-5.4-nano",
+        "azure/gpt-5.6-sol",
+        "azure/gpt-5.6-terra",
+        "azure/gpt-5.6-luna#none",
+        "azure/gpt-5.6-luna#low",
+        "azure/gpt-4o"
+      ],
+      "modelConcurrency": 7,
+      "headroom": 0.85
+    }
+  },
+  "batches": {
+    "eval": {},
+    "eval_1000": { "eval": { "caseOrder": "any", "maxCases": 1000 } },
+    "eval_smoke": { "eval": { "maxCases": 20 } }
+  }
+}
