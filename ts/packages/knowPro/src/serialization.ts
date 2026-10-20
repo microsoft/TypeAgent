@@ -119,6 +119,7 @@ export async function readConversationDataFromFile(
     validateFileData(fileData, embeddingSize);
     if (options?.loadEmbeddings === false) {
         dropPersistedEmbeddings(fileData.jsonData);
+        fileData.binaryData = {};
         embeddingSize = undefined;
     }
     checkIdentities(fileData, expectedIdentities, embeddingSize);
@@ -136,6 +137,7 @@ export async function readConversationDataFromFile(
             `knowPro: persisted embeddings (size ${getStoredEmbeddingSize(fileData)}) are incompatible with the current embedding model (size ${embeddingSize ?? "none"}). Dropping stored vectors; affected indexes will rebuild.`,
         );
         dropPersistedEmbeddings(fileData.jsonData);
+        fileData.binaryData = {};
     }
     if (embeddingsCompatible && embeddingSize && embeddingSize > 0) {
         if (!fileData.binaryData.embeddings) {

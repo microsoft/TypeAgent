@@ -1029,6 +1029,7 @@ export class FileMemoryService
         {
             corpusId: string;
             sourceIds: Set<string>;
+            baseSourceIds: Set<string>;
             controller: AbortController;
             prepared: Promise<void>;
             jobIds?: string[];
@@ -7221,6 +7222,7 @@ export class FileMemoryService
                 this.detachedRebuilds.set(directory, {
                     corpusId,
                     sourceIds,
+                    baseSourceIds: sourceIds,
                     controller,
                     prepared,
                 });
@@ -7385,7 +7387,10 @@ export class FileMemoryService
                 directory === this.indexDirectory(corpusId, activeGeneration) ||
                 !(removal
                     ? preparation.sourceIds.has(removal.sourceId)
-                    : [...preparation.sourceIds].some((id) => !sources.has(id)))
+                    : this.corpora.get(corpusId)?.manifest.pendingCorpusClear ||
+                      [...preparation.baseSourceIds].some(
+                          (id) => !sources.has(id),
+                      ))
             )
                 continue;
             preparation.controller.abort(
@@ -7641,6 +7646,9 @@ export class FileMemoryService
             this.detachedRebuilds.set(directory, {
                 corpusId,
                 sourceIds,
+                baseSourceIds: new Set(
+                    runtime.manifest.sources.map((source) => source.sourceId),
+                ),
                 controller,
                 prepared,
                 jobIds: entries.map((entry) => entry.job.jobId),
@@ -7929,6 +7937,11 @@ export class FileMemoryService
                         corpusId: request.corpusId,
                         sourceIds: new Set(
                             candidateManifest.sources.map(
+                                (item) => item.sourceId,
+                            ),
+                        ),
+                        baseSourceIds: new Set(
+                            runtime.manifest.sources.map(
                                 (item) => item.sourceId,
                             ),
                         ),

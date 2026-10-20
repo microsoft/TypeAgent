@@ -238,8 +238,11 @@ replacement does not establish power-loss durability.
 
 KnowPro derived generations publish small descriptors referencing shared
 immutable JSON nodes under their root's `.segments`. Copying a generation no
-longer copies all retained node payloads. Compatible retain-history replacements
-without acquired assets append only changed content and persist active revision
+longer copies all retained node payloads. Message and related-term vectors live
+in those nodes rather than a monolithic binary file. Text-only loading discards
+segmented vectors along with their index metadata before identity validation.
+Compatible retain-history replacements without acquired assets append only
+changed content and persist active revision
 eligibility; inactive knowledge/vector candidates are excluded before TopN.
 Historical reactivation retains message ordinals without re-extraction.
 Replace-without-history and unsupported custom indexes still rebuild. Explicit
@@ -271,6 +274,12 @@ candidate directories. Close cancels publication and waits for those writes too.
 A provider that ignores cancellation can therefore delay cleanup; the service
 does not report successful cleanup while that provider could still restore
 removed files.
+
+Cleanup distinguishes sources captured from the committed corpus from new
+sources being ingested. A concurrent reindex retains an ingestion's detached
+generation until preparation finishes, then the ingestion fails its stale-index
+publication check. Forget still cancels any preparation containing the forgotten
+source, including an uncommitted addition, and clear cancels all preparations.
 
 Each corpus's `views` directory contains a private bare repository,
 `view-history.git`. Its committed snapshots hold typed Views, generated bases,

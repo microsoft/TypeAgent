@@ -96,7 +96,7 @@ describe("identity-aware conversation serialization", () => {
             directory,
             "known",
             2,
-            undefined,
+            { message: identity },
             { loadEmbeddings: false },
         );
         expect(text!.messageIndexData!.indexData).toBeUndefined();
