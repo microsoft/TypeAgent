@@ -39,6 +39,7 @@ jobs:
         id: metadata
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
+          github-token: ${{ github.token }}
           script: |
             const fs = require("node:fs");
             const path = require("node:path");
@@ -131,21 +132,28 @@ jobs:
             core.setOutput("default_branch", defaultBranch);
             core.setOutput("trusted_sha", trustedSha);
 
-      - name: Checkout trusted implementation
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ steps.metadata.outputs.trusted_sha }}
-          fetch-depth: 0
-          path: trusted
-          persist-credentials: false
-
-      - name: Verify trusted implementation revision
+      - name: Fetch and verify trusted implementation without credentials
         env:
           DEFAULT_BRANCH: ${{ steps.metadata.outputs.default_branch }}
+          GIT_CONFIG_GLOBAL: ${{ runner.temp }}/trusted-checkout-home/gitconfig
+          GIT_CONFIG_NOSYSTEM: "1"
+          GIT_TERMINAL_PROMPT: "0"
+          GCM_INTERACTIVE: "Never"
+          HOME: ${{ runner.temp }}/trusted-checkout-home
           REPOSITORY: ${{ github.repository }}
           TRUSTED_SHA: ${{ steps.metadata.outputs.trusted_sha }}
+          XDG_CONFIG_HOME: ${{ runner.temp }}/trusted-checkout-home/xdg
         run: |
           set -euo pipefail
+          mkdir -p "$HOME" "$XDG_CONFIG_HOME"
+          : > "$GIT_CONFIG_GLOBAL"
+          git -c credential.helper= -c credential.interactive=never \
+            -c core.hooksPath=/dev/null init trusted
+          git -C trusted remote add origin "https://github.com/${REPOSITORY}.git"
+          git -C trusted -c credential.helper= -c credential.interactive=never \
+            -c core.hooksPath=/dev/null fetch --no-tags origin \
+            "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+          git -C trusted -c core.hooksPath=/dev/null checkout --detach "$TRUSTED_SHA"
           test "$(git -C trusted rev-parse HEAD)" = "$TRUSTED_SHA"
           remote_sha="$(
             git -c credential.helper= -c credential.interactive=never \
@@ -155,29 +163,73 @@ jobs:
           test "$remote_sha" = "$TRUSTED_SHA"
           git -C trusted merge-base --is-ancestor "$TRUSTED_SHA" "$remote_sha"
 
+      - name: Verify trusted healer contract
+        id: healer-contract
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          script="trusted/ts/tools/scripts/heal-generated-files.mjs"
+          library="trusted/ts/tools/scripts/lib/generatedFileHealing.mjs"
+          if test -f "$script" && test -f "$library"; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          previously_deployed="$(
+            git -C trusted log --format=%H --all -- \
+              .github/workflows/heal-generated-files-finalize.yml
+          )"
+          if test "$EVENT_NAME" != "pull_request" || test -n "$previously_deployed"; then
+            echo "::error::The trusted default branch does not contain the secure generated-file healer."
+            exit 1
+          fi
+
+          # The rollout PR cannot execute its own healer without violating the
+          # default-branch trust boundary. It produces no artifact; once this
+          # workflow has landed, any missing trusted contract fails above.
+          echo "available=false" >> "$GITHUB_OUTPUT"
+
+      - name: Report secure healer bootstrap
+        if: steps.healer-contract.outputs.available != 'true'
+        run: |
+          echo "::notice::The secure healer is not yet present on the trusted default branch; candidate preparation begins after this workflow lands."
+          echo "Secure candidate preparation was not run because its trusted implementation is not yet on the default branch." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Install trusted pnpm
+        if: steps.healer-contract.outputs.available == 'true'
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           package_json_file: trusted/ts/package.json
 
       - name: Setup Node.js
+        if: steps.healer-contract.outputs.available == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
 
       - name: Prepare credential-free healing candidates
+        if: steps.healer-contract.outputs.available == 'true'
         env:
           METADATA_PATH: ${{ steps.metadata.outputs.path }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          node trusted/ts/tools/scripts/heal-generated-files.mjs prepare \
-            --metadata "$METADATA_PATH" \
-            --output "$RUNNER_TEMP/generated-file-healing" \
-            --repository-url "https://github.com/${REPOSITORY}.git" \
-            --pnpm "$(command -v pnpm)"
+          pnpm_path="$(command -v pnpm)"
+          mkdir -p "$RUNNER_TEMP/generated-file-healing-home"
+          env -i \
+            HOME="$RUNNER_TEMP/generated-file-healing-home" \
+            LANG="${LANG:-C.UTF-8}" \
+            PATH="$PATH" \
+            TMPDIR="$RUNNER_TEMP" \
+            node trusted/ts/tools/scripts/heal-generated-files.mjs prepare \
+              --metadata "$METADATA_PATH" \
+              --output "$RUNNER_TEMP/generated-file-healing" \
+              --repository-url "https://github.com/${REPOSITORY}.git" \
+              --pnpm "$pnpm_path"
 
       - name: Upload healing candidates
+        if: steps.healer-contract.outputs.available == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: generated-file-healing-${{ github.run_id }}

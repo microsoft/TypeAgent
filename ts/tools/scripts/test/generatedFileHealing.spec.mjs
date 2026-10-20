@@ -33,6 +33,10 @@ const FINALIZER_WORKFLOW = resolve(
     import.meta.dirname,
     "../../../../.github/workflows/heal-generated-files-finalize.yml",
 );
+const HEALER_SCRIPT = resolve(
+    import.meta.dirname,
+    "../heal-generated-files.mjs",
+);
 
 function run(command, args, options = {}) {
     const result = spawnSync(command, args, {
@@ -374,6 +378,67 @@ test("trusted healer prepares a candidate without exposing credentials or runnin
         assert.equal(audit.env.GH_TOKEN, undefined);
         assert.equal(audit.env.GITHUB_TOKEN, undefined);
         assert.equal(audit.env.TEST_SECRET, undefined);
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test("prepare CLI consumes metadata without invoking GitHub CLI or APIs", () => {
+    const fixture = createFixture();
+    try {
+        const metadataPath = join(fixture.root, "metadata.json");
+        const outputDirectory = join(fixture.root, "cli-artifact");
+        const auditPath = join(fixture.root, "cli-pnpm-audit.json");
+        const commandDirectory = join(fixture.root, "commands");
+        const ghMarker = join(fixture.markerDirectory, "gh");
+        const pnpmCommand = createFakePnpm(commandDirectory, auditPath);
+        const ghCommand = join(
+            commandDirectory,
+            process.platform === "win32" ? "gh.cmd" : "gh",
+        );
+        write(
+            ghCommand,
+            process.platform === "win32"
+                ? `@echo off\r\nnode -e "require('fs').writeFileSync(${JSON.stringify(ghMarker)}, 'ran')"\r\nexit /b 99\r\n`
+                : `#!/usr/bin/env node\nrequire("node:fs").writeFileSync(${JSON.stringify(ghMarker)}, "ran");\nprocess.exit(99);\n`,
+        );
+        chmodSync(ghCommand, 0o700);
+        write(metadataPath, packageJson(fixture.metadata));
+
+        run(
+            process.execPath,
+            [
+                HEALER_SCRIPT,
+                "prepare",
+                "--metadata",
+                metadataPath,
+                "--output",
+                outputDirectory,
+                "--repository-url",
+                fixture.remote,
+                "--pnpm",
+                pnpmCommand,
+            ],
+            {
+                env: {
+                    ...process.env,
+                    GH_TOKEN: "",
+                    GITHUB_API_URL: "https://invalid.example.test",
+                    GITHUB_TOKEN: "",
+                    PATH: `${commandDirectory}${process.platform === "win32" ? ";" : ":"}${process.env.PATH}`,
+                },
+            },
+        );
+
+        assert.equal(existsSync(ghMarker), false);
+        assert.equal(existsSync(join(outputDirectory, "summary.json")), true);
+        const source = readFileSync(HEALER_SCRIPT, "utf8");
+        const library = readFileSync(
+            resolve(import.meta.dirname, "../lib/generatedFileHealing.mjs"),
+            "utf8",
+        );
+        assert.doesNotMatch(source, /(["'])gh\1/);
+        assert.doesNotMatch(library, /(["'])gh\1/);
     } finally {
         fixture.cleanup();
     }
@@ -832,7 +897,7 @@ test("real pnpm heals an entirely local workspace without lifecycle markers", (t
     }
 });
 
-test("workflow split keeps untrusted preparation unprivileged and token use isolated", () => {
+test("workflow split keeps trusted preparation credential-free and token use isolated", () => {
     const producerText = readFileSync(PRODUCER_WORKFLOW, "utf8");
     const finalizerText = readFileSync(FINALIZER_WORKFLOW, "utf8");
     const producer = yaml.load(producerText);
@@ -845,6 +910,58 @@ test("workflow split keeps untrusted preparation unprivileged and token use isol
 
     assert.equal(producer.permissions.contents, "read");
     assert.equal(producer.permissions["pull-requests"], "read");
+    const metadataStep = producerSteps.find(
+        (step) =>
+            step.name === "Resolve trusted revision and pull request metadata",
+    );
+    const fetchStep = producerSteps.find(
+        (step) =>
+            step.name ===
+            "Fetch and verify trusted implementation without credentials",
+    );
+    const prepareStep = producerSteps.find(
+        (step) => step.name === "Prepare credential-free healing candidates",
+    );
+    const contractStep = producerSteps.find(
+        (step) => step.name === "Verify trusted healer contract",
+    );
+    const uploadStep = producerSteps.find(
+        (step) => step.name === "Upload healing candidates",
+    );
+    assert.equal(metadataStep.with["github-token"], "${{ github.token }}");
+    assert.doesNotMatch(JSON.stringify(fetchStep), /\$\{\{ github\.token \}\}/);
+    assert.match(fetchStep.run, /credential\.helper=/);
+    assert.match(
+        fetchStep.run,
+        /\+refs\/heads\/\$\{DEFAULT_BRANCH\}:refs\/remotes\/origin\/\$\{DEFAULT_BRANCH\}/,
+    );
+    assert.deepEqual(Object.keys(prepareStep.env).sort(), [
+        "METADATA_PATH",
+        "REPOSITORY",
+    ]);
+    assert.doesNotMatch(
+        JSON.stringify(prepareStep),
+        /\$\{\{ github\.token \}\}/,
+    );
+    assert.match(prepareStep.run, /env -i/);
+    assert.doesNotMatch(
+        prepareStep.run,
+        /\b(?:GH_TOKEN|GITHUB_TOKEN|GIT_ASKPASS|SSH_ASKPASS|GIT_CONFIG_COUNT)\b/,
+    );
+    assert.equal(
+        producerSteps.filter((step) =>
+            JSON.stringify(step).includes("${{ github.token }}"),
+        ).length,
+        1,
+    );
+    assert.equal(contractStep.if, undefined);
+    assert.match(contractStep.run, /previously_deployed/);
+    assert.match(contractStep.run, /EVENT_NAME.*pull_request/s);
+    assert.equal(
+        prepareStep.if,
+        "steps.healer-contract.outputs.available == 'true'",
+    );
+    assert.equal(uploadStep.if, prepareStep.if);
     assert.equal(
         producerSteps.some((step) =>
             String(step.uses ?? "").includes("create-github-app-token"),
@@ -887,7 +1004,7 @@ test("workflow split keeps untrusted preparation unprivileged and token use isol
         "HEAL_PUSH_TOKEN",
         "PLAN_PATH",
     ]);
-    assert.doesNotMatch(producerText, /GH_TOKEN|GITHUB_TOKEN/);
+    assert.doesNotMatch(producerText, /\b(?:GH_TOKEN|GITHUB_TOKEN)\b/);
     assert.doesNotMatch(finalizerText, /GH_TOKEN|GITHUB_TOKEN/);
     assert.match(finalizerText, /--force-with-lease|exact-head lease/);
     assert.match(producerText, /trusted\/ts\/package\.json/);
