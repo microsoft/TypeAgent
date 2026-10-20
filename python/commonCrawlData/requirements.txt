@@ -1,7 +1,8 @@
 azure-functions
 azure-functions-durable
-requests
-warcio
+requests==2.34.2
+urllib3==2.8.0
+warcio==1.8.1
 extruct
 w3lib
 pandas
