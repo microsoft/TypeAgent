@@ -1189,21 +1189,26 @@ export class MacroLearningEngine {
             ) {
                 throw new Error("Invalid durable learning state.");
             }
-            let rejected = false;
+            const rejected: StoredJob[] = [];
             for (const job of this.state.jobs) {
                 try {
                     if (!validAuthoringIdentity(job))
                         throw new Error("Missing child identity.");
                     await this.childAuthoring.assertContext(job);
                 } catch {
-                    job.status = "failed";
-                    job.error =
-                        "Unsupported learning job: sealed child context is missing or changed; re-record the successful task.";
-                    job.updatedAt = new Date().toISOString();
-                    rejected = true;
+                    rejected.push(job);
                 }
             }
-            if (rejected) await this.update(() => {});
+            if (rejected.length)
+                await this.update(() => {
+                    for (const job of rejected) {
+                        this.markChanged(job);
+                        job.status = "failed";
+                        job.error =
+                            "Unsupported learning job: sealed child context is missing or changed; re-record the successful task.";
+                        job.updatedAt = new Date().toISOString();
+                    }
+                });
 
             function validAuthoringIdentity(job: StoredJob): boolean {
                 const identity = job.authoring;

@@ -8,8 +8,10 @@ import {
     rmSync,
     readFileSync,
     readdirSync,
+    watchFile,
     unwatchFile,
 } from "node:fs";
+import { once } from "node:events";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
@@ -439,15 +441,18 @@ describe("owned control metadata", () => {
                 diagnosticTransitions: true,
             }),
         );
-        writeFileSync(
-            join(root, "plugin-data", "config.json"),
-            JSON.stringify({ mode: "bypass" }),
+        const configPath = join(root, "plugin-data", "config.json");
+        // A missing-file notification confirms the poller's initial stat completed.
+        const watcher = watchFile(
+            configPath,
+            { interval: 200, persistent: false },
+            () => {},
         );
+        const watching = once(watcher, "change", {
+            signal: AbortSignal.timeout(5000),
+        });
         monitorControlMetadata("mcp-agent");
-        writeFileSync(
-            join(root, "plugin-data", "config.json"),
-            JSON.stringify({ mode: "mcp", mcpRouting: "mixed" }),
-        );
+        await watching;
         const receiptFile = join(
             root,
             "data",
@@ -455,15 +460,21 @@ describe("owned control metadata", () => {
             `mcp-agent-${process.pid}.json`,
         );
         const readReceipt = () => JSON.parse(readFileSync(receiptFile, "utf8"));
-        const deadline = Date.now() + 5000;
-        let receipt = readReceipt();
-        while (receipt.effectiveMode !== "mcp" && Date.now() < deadline) {
-            await delay(20);
-            receipt = readReceipt();
+        for (const mode of ["bypass", "mcp"]) {
+            writeFileSync(
+                configPath,
+                JSON.stringify({ mode, mcpRouting: "mixed" }),
+            );
+            const deadline = Date.now() + 5000;
+            let receipt = readReceipt();
+            while (receipt.effectiveMode !== mode && Date.now() < deadline) {
+                await delay(20);
+                receipt = readReceipt();
+            }
+            expect(receipt.effectiveMode).toBe(mode);
+            expect(receipt.source.routing).toBe("mixed");
+            expect(receipt.source.request).toBeNull();
         }
-        expect(receipt.effectiveMode).toBe("mcp");
-        expect(receipt.source.routing).toBe("mixed");
-        expect(receipt.source.request).toBeNull();
     });
     it.each([
         "exact-docs",
