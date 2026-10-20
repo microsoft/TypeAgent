@@ -10,6 +10,7 @@ import {
     mkdtempSync,
     readFileSync,
     rmSync,
+    symlinkSync,
     writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -350,6 +351,63 @@ function verify(fixture, prepared) {
     return { plan, planPath };
 }
 
+function rewriteCandidateCommitMessage(fixture, prepared, message) {
+    const summaryPath = join(prepared.outputDirectory, "summary.json");
+    const summary = JSON.parse(readFileSync(summaryPath, "utf8"));
+    const candidate = summary.candidates[0];
+    const repositoryPath = join(fixture.root, "prepare", "repository.git");
+    const environment = {
+        ...process.env,
+        GIT_AUTHOR_NAME: "typeagent-bot",
+        GIT_AUTHOR_EMAIL: "typeagent-bot[bot]@users.noreply.github.com",
+        GIT_AUTHOR_DATE: candidate.preparedAt,
+        GIT_COMMITTER_NAME: "typeagent-bot",
+        GIT_COMMITTER_EMAIL: "typeagent-bot[bot]@users.noreply.github.com",
+        GIT_COMMITTER_DATE: candidate.preparedAt,
+    };
+    const candidateSha = run(
+        "git",
+        [
+            "-c",
+            "commit.gpgSign=false",
+            "-c",
+            "safe.bareRepository=all",
+            "-C",
+            repositoryPath,
+            "commit-tree",
+            candidate.treeSha,
+            "-p",
+            candidate.headSha,
+            "-p",
+            fixture.trustedSha,
+        ],
+        {
+            env: environment,
+            input: message,
+            stdio: ["pipe", "pipe", "pipe"],
+        },
+    );
+    git(
+        repositoryPath,
+        "update-ref",
+        `refs/heal/candidates/pr-${candidate.number}`,
+        candidateSha,
+    );
+    const bundlePath = join(prepared.outputDirectory, candidate.bundle);
+    rmSync(bundlePath);
+    git(
+        repositoryPath,
+        "bundle",
+        "create",
+        bundlePath,
+        `refs/heal/candidates/pr-${candidate.number}`,
+        `^${candidate.headSha}`,
+        `^${fixture.trustedSha}`,
+    );
+    candidate.candidateSha = candidateSha;
+    write(summaryPath, packageJson(summary));
+}
+
 test("trusted healer prepares a candidate without exposing credentials or running PR code", () => {
     const fixture = createFixture();
     try {
@@ -473,14 +531,18 @@ for (const [name, options, marker, expected] of [
     test(`rejects PR-controlled ${name} before candidate creation`, () => {
         const fixture = createFixture(options);
         try {
-            assert.throws(() => prepare(fixture), expected);
+            const prepared = prepare(fixture);
+            assert.equal(prepared.summary.candidates.length, 0);
+            assert.equal(prepared.summary.skipped.length, 1);
+            assert.equal(prepared.summary.skipped[0].status, "blocked");
+            assert.match(prepared.summary.skipped[0].reason, expected);
             assert.equal(
                 existsSync(join(fixture.markerDirectory, marker)),
                 false,
             );
             assert.equal(
                 existsSync(join(fixture.root, "artifact", "summary.json")),
-                false,
+                true,
             );
         } finally {
             fixture.cleanup();
@@ -488,10 +550,196 @@ for (const [name, options, marker, expected] of [
     });
 }
 
+test(
+    "literal backslash manifest paths cannot escape scratch through a symlink",
+    { skip: process.platform === "win32" },
+    () => {
+        const fixture = createFixture();
+        try {
+            const outsidePath = join(
+                fixture.root,
+                "outside-trusted-healer.mjs",
+            );
+            write(outsidePath, "trusted outside content\n");
+            git(fixture.source, "checkout", "feature");
+            write(
+                join(
+                    fixture.source,
+                    "ts",
+                    String.raw`00\..\..\worktree`,
+                    "payload",
+                    "package.json",
+                ),
+                packageJson({ name: "escape-payload", version: "1.0.0" }),
+            );
+            mkdirSync(join(fixture.source, "payload"), { recursive: true });
+            symlinkSync(
+                outsidePath,
+                join(fixture.source, "payload", "package.json"),
+            );
+            git(fixture.source, "add", "-A");
+            git(fixture.source, "commit", "-m", "add manifest escape");
+            git(fixture.source, "push", fixture.remote, "feature");
+            fixture.metadata.pullRequests[0].headSha = git(
+                fixture.source,
+                "rev-parse",
+                "HEAD",
+            );
+
+            const prepared = prepare(fixture);
+            assert.equal(prepared.summary.candidates.length, 0);
+            assert.equal(prepared.summary.skipped[0].status, "blocked");
+            assert.match(prepared.summary.skipped[0].reason, /backslash/);
+            assert.equal(
+                readFileSync(outsidePath, "utf8"),
+                "trusted outside content\n",
+            );
+            assert.equal(
+                git(
+                    fixture.source,
+                    "show",
+                    "main:ts/tools/scripts/heal-generated-files.mjs",
+                ),
+                'console.log("trusted healer");',
+            );
+        } finally {
+            fixture.cleanup();
+        }
+    },
+);
+
+test(
+    "symlinked package manifests are blocked before scratch copying",
+    { skip: process.platform === "win32" },
+    () => {
+        const fixture = createFixture();
+        try {
+            git(fixture.source, "checkout", "feature");
+            mkdirSync(join(fixture.source, "ts", "packages", "symlinked"), {
+                recursive: true,
+            });
+            symlinkSync(
+                "../app/package.json",
+                join(
+                    fixture.source,
+                    "ts",
+                    "packages",
+                    "symlinked",
+                    "package.json",
+                ),
+            );
+            git(fixture.source, "add", "-A");
+            git(fixture.source, "commit", "-m", "add symlink manifest");
+            git(fixture.source, "push", fixture.remote, "feature");
+            fixture.metadata.pullRequests[0].headSha = git(
+                fixture.source,
+                "rev-parse",
+                "HEAD",
+            );
+
+            const prepared = prepare(fixture);
+            assert.equal(prepared.summary.candidates.length, 0);
+            assert.equal(prepared.summary.skipped[0].status, "blocked");
+            assert.match(
+                prepared.summary.skipped[0].reason,
+                /not a regular file/,
+            );
+        } finally {
+            fixture.cleanup();
+        }
+    },
+);
+
+test("isolated repository configures the fixed bot identity before merging", () => {
+    const fixture = createFixture();
+    try {
+        const prepared = prepare(fixture);
+        assert.equal(prepared.summary.candidates.length, 1);
+        const repositoryPath = join(fixture.root, "prepare", "repository.git");
+        assert.equal(
+            git(repositoryPath, "config", "--local", "user.name"),
+            "typeagent-bot",
+        );
+        assert.equal(
+            git(repositoryPath, "config", "--local", "user.email"),
+            "typeagent-bot[bot]@users.noreply.github.com",
+        );
+        assert.equal(
+            readFileSync(
+                join(fixture.root, "prepare", "home", "gitconfig"),
+                "utf8",
+            ),
+            "",
+        );
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test("a blocked malicious PR does not prevent another PR candidate", () => {
+    const fixture = createFixture();
+    try {
+        git(fixture.source, "checkout", "feature");
+        git(fixture.source, "checkout", "-b", "malicious-feature");
+        write(
+            join(fixture.source, "ts", ".pnpmfile.cjs"),
+            `require("node:fs").writeFileSync(${JSON.stringify(join(fixture.markerDirectory, "mixed-pnpmfile"))}, "ran"); module.exports = {};\n`,
+        );
+        git(fixture.source, "add", "ts/.pnpmfile.cjs");
+        git(fixture.source, "commit", "-m", "add malicious pnpmfile");
+        git(fixture.source, "push", fixture.remote, "malicious-feature");
+        const maliciousHead = git(fixture.source, "rev-parse", "HEAD");
+        git(fixture.remote, "branch", "valid-feature-2", fixture.headSha);
+        fixture.metadata.pullRequests = [
+            fixture.metadata.pullRequests[0],
+            {
+                ...fixture.metadata.pullRequests[0],
+                number: 18,
+                headRefName: "malicious-feature",
+                headSha: maliciousHead,
+            },
+            {
+                ...fixture.metadata.pullRequests[0],
+                number: 19,
+                headRefName: "valid-feature-2",
+            },
+        ];
+
+        const prepared = prepare(fixture);
+        assert.deepEqual(
+            prepared.summary.candidates.map((candidate) => candidate.number),
+            [17, 19],
+        );
+        assert.deepEqual(
+            prepared.summary.skipped.map((candidate) => candidate.number),
+            [18],
+        );
+        assert.equal(prepared.summary.skipped[0].status, "blocked");
+        assert.match(
+            prepared.summary.skipped[0].reason,
+            /executable package-manager configuration/,
+        );
+        assert.equal(
+            existsSync(join(fixture.markerDirectory, "mixed-pnpmfile")),
+            false,
+        );
+        assert.equal(
+            existsSync(join(prepared.outputDirectory, "summary.json")),
+            true,
+        );
+    } finally {
+        fixture.cleanup();
+    }
+});
+
 test("valid candidate preserves the PR README and exact merge parents", () => {
     const fixture = createFixture();
     try {
         const prepared = prepare(fixture);
+        assert.equal(
+            prepared.summary.candidates[0].commitMessage,
+            `chore: heal generated file conflicts\n\nPR #17\nTrusted-Base: ${fixture.trustedSha}\n`,
+        );
         const { plan } = verify(fixture, prepared);
         const candidate = plan.candidates[0];
         const parents = git(
@@ -517,6 +765,60 @@ test("valid candidate preserves the PR README and exact merge parents", () => {
                 `${candidate.candidateSha}:ts/pnpm-lock.yaml`,
             ),
             /fixture-lib/,
+        );
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test("artifact metadata rejects commit message suffixes, newlines, and directives", () => {
+    const fixture = createFixture();
+    try {
+        const prepared = prepare(fixture);
+        const summaryPath = join(prepared.outputDirectory, "summary.json");
+        const original = JSON.parse(readFileSync(summaryPath, "utf8"));
+        const expected = original.candidates[0].commitMessage;
+        for (const [name, message] of [
+            ["suffix", `${expected}unexpected suffix\n`],
+            ["newline", `${expected}\n`],
+            ["directive", `${expected}[skip ci]\n`],
+        ]) {
+            const changed = structuredClone(original);
+            changed.candidates[0].commitMessage = message;
+            write(summaryPath, packageJson(changed));
+            assert.throws(
+                () =>
+                    verifyCandidateArtifact({
+                        artifactDirectory: prepared.outputDirectory,
+                        liveMetadata: fixture.metadata,
+                        expectedRunId: fixture.metadata.runId,
+                        repositoryUrl: fixture.remote,
+                        pnpmCommand: prepared.pnpmCommand,
+                        planPath: join(fixture.root, `${name}-plan.json`),
+                        workDirectory: join(fixture.root, `${name}-verify`),
+                    }),
+                /commit message is invalid/,
+            );
+        }
+        write(summaryPath, packageJson(original));
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test("commit verification rejects an object with a check-suppression directive", () => {
+    const fixture = createFixture();
+    try {
+        const prepared = prepare(fixture);
+        const expected = prepared.summary.candidates[0].commitMessage;
+        rewriteCandidateCommitMessage(
+            fixture,
+            prepared,
+            `${expected}[skip ci]\n`,
+        );
+        assert.throws(
+            () => verify(fixture, prepared),
+            /commit message for PR #17 is invalid/,
         );
     } finally {
         fixture.cleanup();

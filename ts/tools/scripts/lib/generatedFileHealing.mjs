@@ -4,17 +4,27 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import {
     chmodSync,
+    constants as fsConstants,
     copyFileSync,
     lstatSync,
     mkdirSync,
     mkdtempSync,
+    realpathSync,
     readFileSync,
     readdirSync,
     rmSync,
     writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import {
+    basename,
+    dirname,
+    isAbsolute,
+    join,
+    relative,
+    resolve,
+    sep,
+} from "node:path";
 
 export const ARTIFACT_VERSION = 1;
 export const LOCKFILE = "ts/pnpm-lock.yaml";
@@ -42,6 +52,17 @@ const BOT_EMAIL = "typeagent-bot[bot]@users.noreply.github.com";
 
 function fail(message) {
     throw new Error(message);
+}
+
+class CandidateBlockedError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "CandidateBlockedError";
+    }
+}
+
+function blockCandidate(message) {
+    throw new CandidateBlockedError(message);
 }
 
 function assert(condition, message) {
@@ -94,7 +115,21 @@ function normalizePrNumber(value) {
 }
 
 function normalizePath(path) {
-    return path.replaceAll("\\", "/");
+    assert(typeof path === "string" && path.length > 0, "Git path is invalid");
+    assert(!path.includes("\\"), `Git path contains a backslash: ${path}`);
+    assert(
+        path.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
+        `Git path contains an unsafe component: ${path}`,
+    );
+    return path;
+}
+
+function normalizeCandidatePath(path) {
+    try {
+        return normalizePath(path);
+    } catch (error) {
+        blockCandidate(error.message);
+    }
 }
 
 export function isAutogenReadme(path) {
@@ -386,6 +421,12 @@ function initRepository({
 }) {
     mkdirSync(directory, { recursive: true });
     git(null, ["init", "--bare", directory], { env: environment });
+    git(directory, ["config", "user.name", BOT_NAME], {
+        env: environment,
+    });
+    git(directory, ["config", "user.email", BOT_EMAIL], {
+        env: environment,
+    });
     git(directory, ["remote", "add", "origin", repositoryUrl], {
         env: environment,
     });
@@ -442,7 +483,7 @@ function changedPaths(repositoryPath, trustedSha, headSha, environment) {
             ],
             { env: environment },
         ),
-    );
+    ).map(normalizeCandidatePath);
 }
 
 function assertTrustedRootPackageFields(
@@ -463,10 +504,11 @@ function assertTrustedRootPackageFields(
         readGitFile(repositoryPath, headSha, "ts/package.json", environment),
     );
     for (const field of TRUSTED_ROOT_PACKAGE_FIELDS) {
-        assert(
-            deepEqual(trusted[field], head[field]),
-            `PR changes trusted package-manager field ts/package.json#${field}`,
-        );
+        if (!deepEqual(trusted[field], head[field])) {
+            blockCandidate(
+                `PR changes trusted package-manager field ts/package.json#${field}`,
+            );
+        }
     }
 }
 
@@ -482,10 +524,11 @@ function assertSafePackageManagerInputs(
         headSha,
         environment,
     ).find(isBlockedPackageManagerPath);
-    assert(
-        !blockedPath,
-        `PR changes executable package-manager configuration: ${blockedPath}`,
-    );
+    if (blockedPath) {
+        blockCandidate(
+            `PR changes executable package-manager configuration: ${blockedPath}`,
+        );
+    }
     assertTrustedRootPackageFields(
         repositoryPath,
         trustedSha,
@@ -495,6 +538,8 @@ function assertSafePackageManagerInputs(
 }
 
 function copyManifestInputs(worktree, scratchDirectory) {
+    const resolvedWorktree = realpathSync(worktree);
+    const resolvedScratch = realpathSync(scratchDirectory);
     const manifestOutput = run(
         "git",
         [
@@ -509,17 +554,67 @@ function copyManifestInputs(worktree, scratchDirectory) {
         ],
     );
     for (const path of zeroTerminated(manifestOutput)) {
-        const normalized = normalizePath(path);
-        assert(
-            normalized.startsWith("ts/") && normalized.endsWith("/package.json"),
-            `Unexpected manifest path: ${normalized}`,
-        );
-        const destination = join(
+        if (path.includes("\\")) {
+            blockCandidate(`Manifest path contains a backslash: ${path}`);
+        }
+        const components = path.split("/");
+        if (
+            components.some(
+                (part) => part === "" || part === "." || part === "..",
+            ) ||
+            components[0] !== "ts" ||
+            components.at(-1) !== "package.json"
+        ) {
+            blockCandidate(`Unexpected manifest path: ${path}`);
+        }
+        const source = join(worktree, ...components);
+        const sourceStat = lstatSync(source);
+        if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
+            blockCandidate(`Manifest source is not a regular file: ${path}`);
+        }
+        const resolvedSource = realpathSync(source);
+        const sourceRelative = relative(resolvedWorktree, resolvedSource);
+        if (
+            sourceRelative === "" ||
+            sourceRelative === ".." ||
+            sourceRelative.startsWith(`..${sep}`) ||
+            isAbsolute(sourceRelative)
+        ) {
+            blockCandidate(`Manifest source escapes the worktree: ${path}`);
+        }
+        const destination = resolve(
             scratchDirectory,
-            ...normalized.slice("ts/".length).split("/"),
+            ...components.slice(1),
         );
+        const destinationRelative = relative(resolvedScratch, destination);
+        if (
+            destinationRelative === "" ||
+            destinationRelative === ".." ||
+            destinationRelative.startsWith(`..${sep}`) ||
+            isAbsolute(destinationRelative)
+        ) {
+            blockCandidate(`Manifest destination escapes scratch: ${path}`);
+        }
         mkdirSync(dirname(destination), { recursive: true });
-        copyFileSync(join(worktree, ...normalized.split("/")), destination);
+        const resolvedParent = realpathSync(dirname(destination));
+        const parentRelative = relative(resolvedScratch, resolvedParent);
+        if (
+            parentRelative === ".." ||
+            parentRelative.startsWith(`..${sep}`) ||
+            isAbsolute(parentRelative)
+        ) {
+            blockCandidate(`Manifest destination parent escapes scratch: ${path}`);
+        }
+        copyFileSync(source, destination, fsConstants.COPYFILE_EXCL);
+        const destinationStat = lstatSync(destination);
+        if (
+            !destinationStat.isFile() ||
+            destinationStat.isSymbolicLink()
+        ) {
+            blockCandidate(
+                `Manifest destination is not a regular file: ${path}`,
+            );
+        }
     }
 }
 
@@ -621,7 +716,7 @@ function unmergedFiles(worktree, environment) {
         git(worktree, ["diff", "--name-only", "--diff-filter=U"], {
             env: environment,
         }),
-    );
+    ).map(normalizeCandidatePath);
 }
 
 function buildCandidateTree({
@@ -639,13 +734,14 @@ function buildCandidateTree({
         ["worktree", "add", "--detach", worktree, pr.headSha],
         { env: environment },
     );
+    let conflicts = [];
     try {
         const merge = tryGit(
             worktree,
             ["merge", "--no-ff", "--no-commit", trustedSha],
             { env: environment },
         );
-        const conflicts = unmergedFiles(worktree, environment);
+        conflicts = unmergedFiles(worktree, environment);
         if (merge.ok && conflicts.length === 0) {
             return {
                 status: "clean",
@@ -704,6 +800,11 @@ function buildCandidateTree({
             conflicts: [...conflicts].sort(),
             treeSha: git(worktree, ["write-tree"], { env: environment }),
         };
+    } catch (error) {
+        if (error instanceof CandidateBlockedError) {
+            error.conflicts = [...conflicts].sort();
+        }
+        throw error;
     } finally {
         tryGit(worktree, ["merge", "--abort"], { env: environment });
         tryGit(repositoryPath, ["worktree", "remove", "--force", worktree], {
@@ -729,7 +830,7 @@ function createCandidateCommit({
         GIT_COMMITTER_EMAIL: BOT_EMAIL,
         GIT_COMMITTER_DATE: preparedAt,
     };
-    const message = `${COMMIT_MESSAGE}\n\nPR #${pr.number}\nTrusted-Base: ${trustedSha}\n`;
+    const message = candidateCommitMessage(pr.number, trustedSha);
     const candidateSha = execFileSync(
         "git",
         [
@@ -758,6 +859,10 @@ function createCandidateCommit({
         { env: environment },
     );
     return { candidateSha, message };
+}
+
+function candidateCommitMessage(number, trustedSha) {
+    return `${COMMIT_MESSAGE}\n\nPR #${normalizePrNumber(number)}\nTrusted-Base: ${normalizeSha(trustedSha, "Trusted default-branch SHA")}\n`;
 }
 
 function createBundle({
@@ -836,14 +941,28 @@ export function prepareCandidateArtifact({
         const candidates = [];
         const skipped = [];
         for (const pr of validated.pullRequests) {
-            const result = buildCandidateTree({
-                repositoryPath,
-                pr,
-                trustedSha: validated.trustedSha,
-                pnpmCommand,
-                environment,
-                temporaryDirectory: join(temporaryRoot, `pr-${pr.number}`),
-            });
+            let result;
+            try {
+                result = buildCandidateTree({
+                    repositoryPath,
+                    pr,
+                    trustedSha: validated.trustedSha,
+                    pnpmCommand,
+                    environment,
+                    temporaryDirectory: join(temporaryRoot, `pr-${pr.number}`),
+                });
+            } catch (error) {
+                if (!(error instanceof CandidateBlockedError)) {
+                    throw error;
+                }
+                skipped.push({
+                    number: pr.number,
+                    status: "blocked",
+                    reason: error.message,
+                    conflicts: error.conflicts ?? [],
+                });
+                continue;
+            }
             if (result.status !== "candidate") {
                 skipped.push({
                     number: pr.number,
@@ -926,8 +1045,8 @@ function validateCandidateSummary(summary, expectedRunId) {
             "Candidate preparation timestamp does not match the artifact",
         );
         assert(
-            typeof candidate.commitMessage === "string" &&
-                candidate.commitMessage.startsWith(`${COMMIT_MESSAGE}\n`),
+            candidate.commitMessage ===
+                candidateCommitMessage(candidate.number, trustedSha),
             "Candidate commit message is invalid",
         );
     }
@@ -1040,13 +1159,23 @@ function verifyCommit({
             Date.parse(commitMetadata[5]) === Date.parse(candidate.preparedAt),
         `Candidate author metadata for PR #${candidate.number} is invalid`,
     );
-    const message = git(
-        repositoryPath,
-        ["show", "-s", "--format=%B", candidate.candidateSha],
+    const rawCommit = run(
+        "git",
+        [
+            "-C",
+            repositoryPath,
+            ...gitArguments(["cat-file", "commit", candidate.candidateSha]),
+        ],
         { env: environment },
     );
+    const messageStart = rawCommit.indexOf("\n\n");
     assert(
-        message.trimEnd() === candidate.commitMessage.trimEnd(),
+        messageStart !== -1,
+        `Candidate commit for PR #${candidate.number} has no message`,
+    );
+    assert(
+        rawCommit.slice(messageStart + 2) ===
+            candidateCommitMessage(candidate.number, trustedSha),
         `Candidate commit message for PR #${candidate.number} is invalid`,
     );
 }
@@ -1364,11 +1493,6 @@ export async function pushVerifiedPlan({
                     preparedAt: git(
                         validated.repositoryPath,
                         ["show", "-s", "--format=%aI", candidate.candidateSha],
-                        { env: environment },
-                    ),
-                    commitMessage: git(
-                        validated.repositoryPath,
-                        ["show", "-s", "--format=%B", candidate.candidateSha],
                         { env: environment },
                     ),
                 },
