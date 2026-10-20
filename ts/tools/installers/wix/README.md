@@ -217,6 +217,13 @@ package boundaries and a conventional production `node_modules` for debugging
 a repo-less deployment, but produces a substantially larger artifact and is not
 intended for MSI packaging.
 
+The bundled artifact validator and CI use a 10,000-file budget. The pinned
+Transformers.js embedding runtime and its dependencies intentionally remain
+external; adding them raised the October 2026 CI artifacts to 8,967-8,971 files,
+exceeding the previous 8,200-file CI budget. The new budget leaves bounded
+headroom without removing runtime files or disabling development-file,
+agent-runtime, native SQLite, or background-resource checks.
+
 ```powershell
 # From D:\repos\TypeAgent\ts
 $pnpmState = "$env:TEMP\typeagent-msi-stage\pnpm-state"
