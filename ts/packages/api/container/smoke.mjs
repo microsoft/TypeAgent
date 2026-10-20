@@ -25,7 +25,7 @@ import {
 
 const sentinels = [
     "graph-secret-sentinel",
-    "cosmos-key-sentinel",
+    "cosmosdb-connection-string-sentinel",
     "speech-key-sentinel",
     "unrelated-api-key-sentinel",
 ];
@@ -91,7 +91,11 @@ const vault = {
     [HOSTED_API_SECRET_NAME]: JSON.stringify(dedicatedTree),
     "typeagent-config": JSON.stringify({
         msGraph: { clientSecret: sentinels[0] },
-        cosmos: { apiKey: sentinels[1] },
+        storage: {
+            database: {
+                cosmosDbConnectionString: sentinels[1],
+            },
+        },
         speech: { apiKey: sentinels[2] },
         openAI: { apiKey: sentinels[3] },
     }),

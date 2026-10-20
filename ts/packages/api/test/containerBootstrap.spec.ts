@@ -98,6 +98,7 @@ describe("hosted API container bootstrap", () => {
         env.AZURE_OPENAI_ENDPOINT = "https://stale-sentinel.invalid";
         env.AWS_S3_BUCKET_NAME = "aws-bucket-sentinel";
         env.AZURE_STORAGE_ACCOUNT = "storage-account-sentinel";
+        env.COSMOSDB_ENDPOINT = "https://cosmosdb-routing-sentinel.invalid";
         env.WIKIPEDIA_ENDPOINT = "https://wikipedia-sentinel.invalid";
         fs.writeFileSync(
             env.TYPEAGENT_CONFIG_LOCAL,
@@ -106,7 +107,7 @@ describe("hosted API container bootstrap", () => {
 
         const unrelatedSentinels = [
             "graph-client-secret-sentinel",
-            "cosmos-key-sentinel",
+            "cosmosdb-connection-string-sentinel",
             "speech-key-sentinel",
             "unrelated-api-key-sentinel",
         ];
@@ -119,7 +120,11 @@ describe("hosted API container bootstrap", () => {
                     [HOSTED_API_SECRET_NAME]: JSON.stringify(hostedTree()),
                     "typeagent-config": JSON.stringify({
                         msGraph: { clientSecret: unrelatedSentinels[0] },
-                        cosmos: { apiKey: unrelatedSentinels[1] },
+                        storage: {
+                            database: {
+                                cosmosDbConnectionString: unrelatedSentinels[1],
+                            },
+                        },
                         speech: { apiKey: unrelatedSentinels[2] },
                         openAI: { apiKey: unrelatedSentinels[3] },
                     }),
@@ -143,6 +148,7 @@ describe("hosted API container bootstrap", () => {
         expect(env.AZURE_OPENAI_ENDPOINT).toBe(ALLOWED_ENDPOINT);
         expect(env.AWS_S3_BUCKET_NAME).toBeUndefined();
         expect(env.AZURE_STORAGE_ACCOUNT).toBeUndefined();
+        expect(env.COSMOSDB_ENDPOINT).toBeUndefined();
         expect(env.WIKIPEDIA_ENDPOINT).toBeUndefined();
         const runtime = serializedRuntime(env, config, logs);
         for (const sentinel of unrelatedSentinels) {
@@ -275,6 +281,41 @@ describe("hosted API container bootstrap", () => {
             }),
         ).rejects.toThrow(
             "Static credential environment variable 'OPENAI_API_KEY' is not allowed.",
+        );
+    });
+
+    test("rejects the Cosmos DB connection string without leaking it", async () => {
+        const root = createTempRoot();
+        roots.push(root);
+        const env = createEnvironment(root);
+        const sentinel = "cosmosdb-environment-credential-sentinel";
+        const previousProcessValue = process.env.COSMOSDB_CONNECTION_STRING;
+        const logs: string[] = [];
+        env.COSMOSDB_CONNECTION_STRING = sentinel;
+
+        let failure = "";
+        try {
+            await loadHostedApiRuntimeConfig({
+                env,
+                fetcher: async () => JSON.stringify(hostedTree()),
+                log: (message) => logs.push(message),
+                getUid: () => 10001,
+                platform: "win32",
+            });
+        } catch (error) {
+            failure = String(error);
+        }
+
+        expect(failure).toContain(
+            "Static credential environment variable 'COSMOSDB_CONNECTION_STRING' is not allowed.",
+        );
+        expect(failure).not.toContain(sentinel);
+        expect(logs.join("\n")).not.toContain(sentinel);
+        expect(process.env.COSMOSDB_CONNECTION_STRING).toBe(
+            previousProcessValue,
+        );
+        expect(fs.readdirSync(env.TYPEAGENT_USER_DATA_DIR as string)).toEqual(
+            [],
         );
     });
 

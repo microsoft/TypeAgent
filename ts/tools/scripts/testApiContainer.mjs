@@ -15,7 +15,7 @@ const tag = `typeagent-api-smoke-${process.pid}`;
 const smokeTag = `${tag}-runner`;
 const sentinels = [
     "graph-secret-sentinel",
-    "cosmos-key-sentinel",
+    "cosmosdb-connection-string-sentinel",
     "speech-key-sentinel",
     "unrelated-api-key-sentinel",
 ];
@@ -46,16 +46,8 @@ if (dockerInfo.status !== 0) {
 
 try {
     assert.equal(
-        run("docker", [
-            "build",
-            "--target",
-            "api",
-            "--tag",
-            tag,
-            "--file",
-            "Dockerfile",
-            ".",
-        ]).status,
+        run("docker", ["build", "--tag", tag, "--file", "Dockerfile", "."])
+            .status,
         0,
         "production image build failed",
     );
@@ -81,6 +73,34 @@ try {
     );
     assert.equal(imageUser.status, 0);
     assert.equal(imageUser.stdout.trim(), "typeagent");
+
+    const imageCommand = run(
+        "docker",
+        ["image", "inspect", "--format", "{{json .Config.Cmd}}", tag],
+        { capture: true },
+    );
+    assert.equal(imageCommand.status, 0);
+    assert.equal(
+        imageCommand.stdout.trim(),
+        '["/usr/local/bin/typeagent-api-start"]',
+    );
+    assert.notEqual(
+        run(
+            "docker",
+            [
+                "run",
+                "--rm",
+                "--entrypoint",
+                "test",
+                tag,
+                "-e",
+                "/prod/api/container/smoke.mjs",
+            ],
+            { capture: true },
+        ).status,
+        0,
+        "default production image must exclude the smoke harness",
+    );
 
     for (const sentinel of sentinels) {
         const fileScan = run(

@@ -107,5 +107,9 @@ USER typeagent
 CMD ["/usr/local/bin/typeagent-api-start"]
 
 FROM api AS api-smoke
-COPY packages/api/container/smoke.mjs /prod/api/container-smoke.mjs
-CMD ["node", "/prod/api/container-smoke.mjs"]
+COPY packages/api/container/smoke.mjs /prod/api/container/smoke.mjs
+CMD ["node", "/prod/api/container/smoke.mjs"]
+
+# Keep production as the final stage because the ACR deployment builds this
+# Dockerfile without an explicit --target.
+FROM api AS production
