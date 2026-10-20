@@ -424,6 +424,57 @@ export const AGENT_SERVER_DEFAULT_URL = `ws://localhost:${AGENT_SERVER_DEFAULT_P
  */
 export const AGENT_SERVER_DISCOVERY_NAME = "agent-server";
 
+export type DiscoveryRequestAuth = {
+    version: 1;
+    credentialId: string;
+    nonce: string;
+    issuedAt: number;
+    expiresAt: number;
+    proof: string;
+};
+
+export type DiscoveryResponseAuth = {
+    version: 1;
+    credentialId: string;
+    requestNonce: string;
+    serverNonce: string;
+    issuedAt: number;
+    expiresAt: number;
+    proof: string;
+};
+
+export type DiscoveryLookupRequest = {
+    agentName: string;
+    role?: string;
+    /**
+     * Hint that the request originates from a remote (non-loopback)
+     * client, so the server should answer with a tunnel `url` (when one
+     * is configured and live) rather than a localhost realm. Optional and
+     * backward compatible - omitted by local clients, which only ever
+     * need the port. See the dev-tunnel discovery design.
+     */
+    remote?: boolean;
+    /**
+     * Optional tuple-specific authentication. Hosts require this for
+     * protected tuples while leaving unrelated discovery compatible.
+     */
+    auth?: DiscoveryRequestAuth;
+};
+
+export type DiscoveryLookupResponse = {
+    port: number | null;
+    /**
+     * A fully-qualified WebSocket URL (e.g. a `wss://…devtunnels.ms`
+     * tunnel address) the caller should connect to instead of
+     * `ws://localhost:<port>`. Present only when the server resolved a
+     * live tunnel mapping for `port` and the request was remote-realm.
+     * Absent means callers fall back to the localhost realm using `port`.
+     */
+    url?: string;
+    /** Tuple-specific proof authenticating the response fields. */
+    auth?: DiscoveryResponseAuth;
+};
+
 /**
  * RPC surface for the discovery channel. Read-only on purpose: clients can
  * ask "where is agent X's role Y?" but cannot mutate the registrar — only
@@ -450,28 +501,9 @@ export type DiscoveryInvokeFunctions = {
      * defined value; callers should treat null as "no allocation found,
      * try again later" rather than a hard error.
      */
-    lookupPort: (param: {
-        agentName: string;
-        role?: string;
-        /**
-         * Hint that the request originates from a remote (non-loopback)
-         * client, so the server should answer with a tunnel `url` (when one
-         * is configured and live) rather than a localhost realm. Optional and
-         * backward compatible — omitted by local clients, which only ever
-         * need the port. See the dev-tunnel discovery design.
-         */
-        remote?: boolean;
-    }) => Promise<{
-        port: number | null;
-        /**
-         * A fully-qualified WebSocket URL (e.g. a `wss://…devtunnels.ms`
-         * tunnel address) the caller should connect to instead of
-         * `ws://localhost:<port>`. Present only when the server resolved a
-         * live tunnel mapping for `port` and the request was remote-realm.
-         * Absent → fall back to the localhost realm using `port`.
-         */
-        url?: string;
-    }>;
+    lookupPort: (
+        param: DiscoveryLookupRequest,
+    ) => Promise<DiscoveryLookupResponse>;
 };
 
 /**
@@ -503,15 +535,32 @@ export function createDiscoveryHandlers(
         port: number,
         remote?: boolean,
     ) => string | undefined | Promise<string | undefined>,
+    /**
+     * Optional tuple-specific response protector. It may reject the request
+     * or return a proof that is attached to the result. Unprotected tuples
+     * return undefined and retain the legacy response shape.
+     */
+    protectResponse?: (
+        request: DiscoveryLookupRequest,
+        response: DiscoveryLookupResponse,
+    ) =>
+        | DiscoveryResponseAuth
+        | undefined
+        | Promise<DiscoveryResponseAuth | undefined>,
 ): DiscoveryInvokeFunctions {
     return {
-        lookupPort: async ({ agentName, role, remote }) => {
+        lookupPort: async (request) => {
+            const { agentName, role, remote } = request;
             const port = lookup(agentName, role) ?? null;
+            let response: DiscoveryLookupResponse;
             if (port === null) {
-                return { port };
+                response = { port };
+            } else {
+                const url = await resolveUrl?.(agentName, port, remote);
+                response = url ? { port, url } : { port };
             }
-            const url = await resolveUrl?.(agentName, port, remote);
-            return url ? { port, url } : { port };
+            const auth = await protectResponse?.(request, response);
+            return auth === undefined ? response : { ...response, auth };
         },
     };
 }

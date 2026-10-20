@@ -3900,15 +3900,24 @@ importers:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
+      '@typeagent/agent-server-protocol':
+        specifier: workspace:*
+        version: link:../../agentServer/protocol
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@26.4.1)(ts-node@10.9.2(@types/node@26.4.1)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1

@@ -63,6 +63,7 @@
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.Security" />
   </ItemGroup>
 
   <ItemGroup>
@@ -73,6 +74,8 @@
       <DependentUpon>ChatToolWindowControl.xaml</DependentUpon>
     </Compile>
     <Compile Include="Bridge\AgentBridgeClient.cs" />
+    <Compile Include="Bridge\AuthenticatedBridgeConnection.cs" />
+    <Compile Include="Bridge\BridgeAuthentication.cs" />
     <Compile Include="Bridge\BridgeDiscovery.cs" />
     <Compile Include="Bridge\DTEActionExecutor.cs" />
   </ItemGroup>
