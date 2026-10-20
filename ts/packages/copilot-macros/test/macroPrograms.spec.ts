@@ -10,15 +10,15 @@ import {
 } from "@typeagent/copilot-macros";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { recipeArtifact } from "./recipeCatalogFixtures.js";
+import { childCapture } from "./childLearningFixtures.js";
 
 const cwd = "C:\\checkpoint-a";
 let directory: string;
 
 beforeEach(async () => {
-    directory = await mkdtemp(path.join(os.tmpdir(), "macro-programs-"));
+    directory = await mkdtemp(path.resolve(".macro-programs-"));
 });
 
 afterEach(async () => {
@@ -59,14 +59,22 @@ async function setup(mode: MacroLearningMode = "all") {
             },
         ],
     };
-    manager.armRecording({ sessionId: trace.sessionId });
+    manager.armRecording({ sessionId: trace.sessionId, learning: true, cwd });
     const token = manager.claimRecording({
         sessionId: trace.sessionId,
         cwd,
         promptHash: createHash("sha256").update(trace.prompt).digest("hex"),
     })!;
-    const saved = await manager.finalizeRecording({ tokenId: token.id, trace });
+    const saved = await manager.finalizeRecording({
+        tokenId: token.id,
+        trace,
+        childAuthoring: childCapture(trace, token.id),
+    });
     const learner: MacroLearningRuntime = {
+        withAuthorQuery(query) {
+            expect(query).toEqual(expect.any(Function));
+            return this;
+        },
         extract: async (_trace, traceId) => ({
             schemaVersion: 1,
             traceId,
@@ -106,17 +114,23 @@ async function setup(mode: MacroLearningMode = "all") {
                         {
                             request: "read alpha.txt",
                             input: { step_1_path: "alpha.txt" },
-                            evidenceIds: ["recorded"],
+                            evidenceIds: [
+                                "recorded",
+                                macro.learning!.authoring.contextDigest,
+                            ],
                         },
                     ],
                     negatives: ["delete file"],
                     collisionEvidenceIds: [],
                 },
                 provenance: {
-                    captureId: macro.sourceTraceId,
-                    taskId: macro.sourceTraceId,
-                    tokenId: macro.sourceTraceId,
-                    evidenceIds: ["recorded"],
+                    captureId: macro.learning!.authoring.captureId,
+                    taskId: macro.learning!.authoring.taskId,
+                    tokenId: macro.learning!.authoring.tokenId,
+                    evidenceIds: [
+                        "recorded",
+                        macro.learning!.authoring.contextDigest,
+                    ],
                     legacySource: {
                         macroId: macro.macroId,
                         version: macro.version,

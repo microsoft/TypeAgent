@@ -1,28 +1,25 @@
 # TypeAgent Plugin for GitHub Copilot CLI
 
-This plugin connects GitHub Copilot CLI to TypeAgent. It can route prompts to
-TypeAgent, expose TypeAgent through MCP, give registered PowerShell actions
-first refusal, and capture successful tool sequences as reusable macros.
+This plugin records successful Copilot tasks as child-authored checked programs,
+matches and runs them locally, and optionally exposes TypeAgent actions through
+MCP. Unmatched ordinary prompts remain with Copilot.
 
 ## How It Works
 
 ```text
 User prompt
   |
-  +-> direct: TypeAgent dispatcher -> handled response or fallthrough
+  +-> selected recording: Copilot task -> success receipt -> author child
+  |                                               -> checked publication
   |
-  +-> mcp delegate (default): Copilot calls typeagent-processCommand
+  +-> local grammar hit: checked program -> current tool results
   |
-  +-> mcp mixed: Copilot chooses whole-request delegation or owns the task
-  |              and prefers structured TypeAgent tools for operations
-  |              (native tools only when no suitable capability is available)
-  |
-  +-> dev: registered PowerShell action/flow
-  |           -> handled response
-  |         or PowerShell capability fallback
-  |           -> reuse/create/repair or fall through as not suitable
+  +-> miss: Copilot handles the prompt
   |
   +-> bypass: Copilot handles the prompt
+
+Explicit @typeagent run commands and optional structured action MCP tools
+remain available. They are not automatic recording or execution fallbacks.
 
 Registered alongside routing (calls are disabled in bypass mode):
   typeagent-workspace MCP tools
@@ -53,11 +50,11 @@ input and rejects config-path/mode disagreement before any service translation.
 The status getter remains read-only and reports disagreement instead of hiding
 it. Without admission, existing routing and permission behavior are unchanged.
 
-The native extension registers `onPreToolUse`; the plugin's `hooks.json` registers
-the separate compiled router for `userPromptSubmitted`. That router reads mode
-per request, bypasses ordinary Copilot requests, and claims selected recordings
-before MCP/dev/Direct dispatch. No stale native callback mode bug has been
-demonstrated. Actual native per-invocation receipts are still required.
+The plugin's `hooks.json` registers the compiled `userPromptSubmitted` router.
+It reads mode per request, claims selected recordings, then uses only the local
+recipe matcher. A miss stays with Copilot; bypass disables recipe admission.
+There is no PowerShell pre-tool redirect or alternate MCP/dev macro owner.
+Actual native per-invocation receipts are still required.
 
 An owned diagnostic admission can set `diagnosticTransitions: true` to exercise
 only registered local mode/status commands through the native SDK. Actual MCP
@@ -122,8 +119,9 @@ console. The launcher currently supports Windows only.
 This is a **controlled discovery session**: the normal initial-prompt routing
 hook uses bypass mode, while a separate `typeagent-e2e` MCP process uses MCP mode.
 Existing TypeAgent MCP registrations are disabled only for this CLI invocation.
-No global mode settings change. Default MCP delegate-policy user prompts still use
-`processCommand`; this launcher is not a routing optimization or benchmark.
+No global mode settings change. Intentional delegation can use `processCommand`;
+ordinary prompts do not automatically delegate. This launcher is not a routing
+optimization or benchmark.
 
 **How discovery is triggered:** in interactive mode, the startup check only lists
 MCP tools and calls `typeagent-getStatus`. It does not search actions or submit
@@ -453,7 +451,10 @@ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
 nvm install 22 && nvm use 22
 ```
 
-### 2. TypeAgent Server Running
+### 2. Optional TypeAgent Server
+
+Native-only recipes do not need TypeAgent. Start the server only for explicit
+TypeAgent commands or programs using the optional structured-action bridge.
 
 The plugin connects to TypeAgent at `ws://localhost:8999` by default.
 
@@ -520,7 +521,7 @@ copilot --version
 
 Expected: a valid GitHub Copilot CLI version.
 
-### Step 2: Start TypeAgent Server
+### Step 2: Start TypeAgent Server (optional)
 
 In a separate terminal (Windows or WSL):
 
@@ -577,17 +578,10 @@ and execution remain separate. Confirm `/typeagent-status` and
 
 ### Step 4: Test Routing
 
-**Action requests → TypeAgent:**
+**Ordinary requests:**
 
-```
-> schedule a meeting with John tomorrow at 2pm
-> send an email to alice@example.com about the project
-> play some jazz music
-> open browser and navigate to github.com
-> list my playlists
-```
-
-**Questions → Copilot LLM (fall-through):**
+An approved grammar match runs its checked program once. A miss stays with
+Copilot, regardless of the direct/MCP/dev setting.
 
 ```
 > what is the difference between var and let in JavaScript?
@@ -602,9 +596,10 @@ and execution remain separate. Confirm `/typeagent-status` and
 > @typeagent mode direct
 > @typeagent mode mcp
 > @typeagent mode dev
-> @typeagent powershell on
 > @typeagent run list the playlists
 ```
+
+The final command explicitly uses the optional TypeAgent server.
 
 ### Step 5: Verify the Plugin in Copilot CLI
 
@@ -618,16 +613,13 @@ Should show `typeagent` under the plugins section.
 
 ## Tool-Composed Macros
 
-See [Checked program macros](../../docs/architecture/workflows/macros.md) for
-the shared lifecycle and runtime. This section covers plugin setup and controls.
-
-Checkpoint A uses TypeAgent to record, author, validate, store, match, and run
-checked code-first programs. Checkpoint B moves selected native Copilot learning
-authorship into restricted children; TypeAgent retains validation and execution.
-Both server entry points configure the shared program runtime by default;
-there is no program rollout flag or legacy step/runner execution path.
-Restart agent-server and reload the built plugin after updating.
-Development-only old macros are discarded, not converted.
+The native plugin owns recording, child authorship, validation, storage,
+matching and checked-program execution through the shared portable core.
+The previous TypeAgent-owned catalog/lifecycle and backend/log-based author
+have been removed, including server/client recording RPCs. There is no owner
+rollback, program rollout flag or legacy step/runner execution path.
+Restart Copilot with the rebuilt plugin after updating. Re-record needed
+development scenarios; old catalogs are not imported or silently adopted.
 
 The `typeagent-macros` MCP server and [macro skill](./skills/typeagent-macros/SKILL.md)
 expose catalog review and direct program execution. Symbolic repeats make no model
@@ -635,21 +627,20 @@ calls; hybrid repeats invoke only declared bounded semantic functions.
 `inspect_macro` remains read-only explicit catalog/draft review, not a model-led
 execution prerequisite. All runs validate the current approved revision.
 
-The initial **TypeAgent-owned** broker supports read-only MCP tools available to TypeAgent.
-Native-only tools, writes, unsupported schemas and provenance requirements fail
-explicitly, without a runner or planner fallback. Existing MCP trust/backend
-permissions, schema checks, containment, cancellation, and uncertainty evidence
-remain enforced. There is no extra recipe-layer execution consent prompt.
+The broker supports native reads, explicitly classified read-only MCP tools and
+the optional structured TypeAgent action bridge described below. Writes,
+unsupported schemas and missing provenance fail explicitly, without a runner
+or planner fallback. Native/MCP authorization, schema checks, containment,
+cancellation and uncertainty evidence remain enforced.
 
-### Checkpoint C: plugin-owned recipes
+### Plugin-owned recipes
 
-Select `@typeagent recipe owner plugin` (or `/typeagent-recipe-owner plugin`),
-then close and restart the native Copilot session. `TYPEAGENT_RECIPE_OWNER`
-overrides the config's `recipeOwner`; the compatibility default is `typeagent`.
-Select `typeagent` and restart to restore B's backend path, or `off` to disable
-recipe routing and learning. Owner selection is stored separately from the
-legacy mode; `bypass` still disables hook/MCP routing.
-In plugin ownership, unmatched ordinary prompts go to native Copilot, not the
+No owner setting is required: the default and only enabled owner is `plugin`.
+`TYPEAGENT_RECIPE_OWNER` overrides config `recipeOwner`; supported values are
+`plugin` and `off`. Close and restart the native session after changing it.
+An obsolete explicit `typeagent` value is an actionable error, not a different
+catalog selection. `off` disables recipes; `bypass` disables hook/MCP routing.
+Unmatched ordinary prompts go to native Copilot, not the
 TypeAgent planner. Explicit TypeAgent commands/tools remain optional backend
 operations; they are not required by the local recipe path.
 
@@ -660,7 +651,7 @@ versions, cancellation and journals use the same implementation as A/B.
 NL matches and macro MCP tools use that owner, not a mirrored SQLite catalog.
 `recipe run <macroId> <version> [JSON inputs]` and NL matches both call the same
 `runMacro`. Old experimental SQLite data is left untouched and is not migrated.
-The TypeAgent and plugin rollout selections retain their own stored data.
+Old TypeAgent data remains untouched as evidence, with no live alternate owner.
 
 State lives under the plugin data root's `recipes/<workspace-profile digest>/`.
 `TYPEAGENT_RECIPE_PROFILE_ID` selects a profile (default `local-default`).
@@ -678,7 +669,6 @@ plugin's config, for example:
 ```json
 {
   "mode": "direct",
-  "recipeOwner": "plugin",
   "recipeReadOnlyMcpTools": [
     { "mcpServerName": "documents", "toolName": "read_document" }
   ]
@@ -695,7 +685,10 @@ not incompatible event/RPC transport envelopes. Missing optional tool output
 schemas do not invent contracts: independently evidenced program output subsets
 are checked at runtime and unsupported fresh shapes fail explicitly.
 
-Source authorship still uses B's tools-disabled task children. The independent
+Source authorship requires tools-disabled task children and sealed success
+context at every learning boundary, including direct preparation and restart.
+Missing context or persisted non-child jobs fail with re-record guidance;
+there is no offline/backend-author exception. The independent
 source-blind verifier and declared semantic calls instead use fresh tools-disabled
 sessions on a separate native CLI, with no inherited root context, ambient
 plugins/skills/MCP/config discovery, TypeAgent config, API keys or backend.
@@ -771,23 +764,22 @@ the final answer. Receipt, prompt hash, final output, and recording token must
 correlate. Failed/denied/aborted work cannot queue child authorship; ordinary idle
 events do not certify success. The original answer never waits for authoring.
 
-After durable finalization, a background worker services TypeAgent's scoped
+After durable finalization, a background worker services the local scoped
 authoring requests using tools-disabled native `task` children. Each phase gets
 explicit context, a bounded lifetime, and an exact correlated result. No business
 tools, recursive agents, blanket permission grants, model pin, or fallback author
-are added. Native context isolation is not assumed: the source-blind independent
-verifier stays in TypeAgent for owner `typeagent`. Owner `plugin` supplies the
-separate isolated native verifier described above; both use the same real
-compiler/fixtures and publication policy.
+are added. Native inherited-context isolation is not assumed: the plugin uses
+the separate source-blind isolated native verifier described above, with the
+shared compiler, fixtures and publication policy.
 
 New user tasks preempt authorship. Off/Cancel aborts the active child; closing the
 host leaves durable `awaitingAuthor` work for a later compatible session after
 lease expiry. Inspect `/typeagent-macro-status` for waiting/failure; no child
-authorship is promised while Copilot is closed. Reload the rebuilt plugin and restart agent-server.
+authorship is promised while Copilot is closed. Restart Copilot with the rebuilt plugin.
 The supported host seam is the pinned native CLI/SDK, not an unproved VS Code
 child API. [B lifecycle details](../copilot-macros/README.md#checkpoint-b-copilot-child-authorship)
-describe context, leases, recovery, and the explicit TypeAgent-only compatibility
-client path.
+describe context, leases and recovery. The previous TypeAgent-only compatibility
+client path has been removed.
 
 See [runtime limits](../copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs) and
 [phase status](../../docs/plans/copilot-fastActions/STATUS.md).
@@ -948,31 +940,20 @@ owner; bypass disables them. After learning produces a candidate:
 
 ### Route approved macros from natural language
 
-With TypeAgent ownership, agent-server publishes current approved macros as typed
-actions in the `macros` agent. The name and description identify the task;
-parameters define its inputs. The generated action identity pins the macro ID and
-approved version. Drafts, disabled macros, and macros with secret inputs are not
-published on this surface. Explicit macro lifecycle tools remain available.
-
-With plugin ownership, the local manager matches requests against its own catalog.
-Unmatched requests stay with native Copilot. An ambiguous match or a failed
-accepted invocation stays with the macro system to prevent duplicate execution.
-
-For a Direct-mode grammar demo:
+The plugin-local matcher uses the current approved program's generated grammar
+and declared inputs. Drafts, disabled programs and stale versions cannot execute.
+Explicit lifecycle commands and macro MCP tools use the same owner and manager.
 
 ```text
-@typeagent mode direct
-@typeagent run @config cache grammarSystem nfa
-@typeagent run @config match grammar on
-@typeagent run list approved macros
+@typeagent recipe list
 ```
 
 Ask for the approved procedure with concrete inputs. Successful recording/learning
 stages grammar before publication, so a covered request can match immediately.
-A grammar miss uses ordinary routing, not a guaranteed macro hit. Hits and explicit
+A grammar miss stays with Copilot, not a backend planner. Hits and explicit
 calls run the same current program; disabled/stale actions cannot execute.
 
-Accepted failures/cancellations are terminal in Direct mode, preventing duplicate
+Accepted failures/cancellations are terminal, preventing duplicate
 effects. No agent handoff or automatic retry follows a program failure. Approval,
 disable and deletion refresh schemas and reconcile stored routes.
 
@@ -988,14 +969,20 @@ remain configurable (enabled by default):
 
 Set either to `0`, `false`, or `off` before startup to disable that boundary.
 They do not revoke approved programs. Disable/forget the program to remove its route.
-Restart the affected server/plugin processes after changing startup settings.
+Restart Copilot after changing startup settings.
 
-Macro data is under the agent-server instance directory in `copilot-macros/`.
+Macro data is under the plugin data root in `recipes/<workspace-profile digest>/`.
 Runs, immutable versions, learning state, private evidence and program journals are
 separate. Journals retain dispatched/completed/uncertain evidence; automatic
 continuation is not implemented. Cancellation is not backend rollback.
-Back up data before deployment changes and restore only with agent-server stopped.
+Back up data before deployment changes and restore only with the local owner stopped.
 Do not restore old step-only test macros as runnable programs.
+
+The backend WorkIQ SDK original-retention recording experiment and its native
+lifecycle launcher are retired, not retained as a second authoring path.
+Old `TYPEAGENT_WORKIQ_SDK_ORIGINALS_POLICY` or `workiqOriginals` control admission
+fails explicitly. This does not remove ordinary read-only MCP classification or
+claim new WorkIQ retention/privacy parity.
 
 ---
 
@@ -1085,39 +1072,14 @@ that mode selection requires natural-language dispatch.
 
 ## Integration Modes
 
-The plugin supports three prompt-routing modes, plus bypass. These modes decide
-how the `userPromptSubmitted` hook routes a request; they do not select a
-different MCP tool catalog.
+Ordinary prompts use local checked-program matching followed by Copilot on a
+miss, in `direct`, `mcp` and `dev`. None of these modes selects a backend macro
+owner or author. `bypass` disables recipe hook/MCP routing.
 
-### Direct Mode (default)
-
-The hook connects directly to TypeAgent over WebSocket. When TypeAgent recognizes and handles the request, the hook returns `{ handled: true, responseContent: "..." }` — Copilot skips the LLM entirely.
-
-Copilot-selected typed calls use the persistent MCP structured bridge described
-above; this does not reinterpret or alter the user prompt hook.
-
-- **Pros:** Fast (~1-3s), no LLM tokens consumed
-- **Cons:** No streaming output, response is returned all at once
-
-### MCP Mode
-
-MCP mode has two routing policies. **Delegate** is the backward-compatible
-default: the hook instructs Copilot to call `typeagent-processCommand` with the
-original request and present the complete result. TypeAgent's MCP server streams
-progress notifications to the CLI timeline. Delegate policy does not steer
-subsequent Copilot-selected steps to discovery/direct calls; that guidance
-belongs only to mixed policy. Both policies retain the same structured tools
-and permission checks.
-
-**Mixed** lets Copilot judge whether to delegate the request intact or own the
-task. It does not classify prompts deterministically or force discovery first:
-
-- "Show my lists" or "Create a list and add these three items" delegates through
-  `processCommand`, even when TypeAgent performs several actions.
-- "Review this diff, identify missing tests, and track the resulting work in a
-  list" stays with Copilot for the review. TypeAgent steps Copilot selects use
-  `searchActions` and `executeAction` with concrete inputs.
-- Ordinary explanations and coding tasks need not invoke TypeAgent.
+The settings remain for explicit TypeAgent commands and MCP availability.
+`@typeagent run <request>` intentionally delegates to the TypeAgent dispatcher;
+structured discovery/execution tools remain separate optional capabilities.
+Selecting a mode does not inject automatic delegation or PowerShell guidance.
 
 ```text
 @typeagent mode mcp mixed
@@ -1137,12 +1099,9 @@ in the plugin config and are **shared by sessions using that config**, not
 session-local. `TYPEAGENT_MODE` still overrides the saved top-level mode; commands
 report when that prevents the selected mode from taking effect.
 
-Recording directives keep the exact natural-language path in both policies.
-`@typeagent run <request>` remains an explicit direct TypeAgent override.
-Mixed Windows PowerShell guidance follows the same ownership distinction rather
-than redirecting Copilot-selected steps back through `processCommand`.
-Confirmation, permission, and uncertain-execution handling are unchanged;
-switching policy never authorizes an action or retries it.
+Use `/typeagent-macro-record` to select one actual task for the child-authored
+pipeline. Changing mode never authorizes an action, switches catalogs, restores
+the previous learner or retries an uncertain operation.
 
 MCP tool titles identify the **actual route** in Copilot's tool cards:
 
@@ -1162,72 +1121,9 @@ such as `@typeagent run` do not produce MCP tool cards. Tool response envelopes
 remain unchanged. Restart an existing client after updating the plugin to reload
 tool titles.
 
-### Dev Mode
-
-Dev mode is supported on Windows. The hook asks TypeAgent to handle the
-PowerShell schema family first, including static `powershell.*` namespaces and
-registered dynamic flows.
-
-Ordinary requests use the `powershellCapabilityFallback` reasoning profile
-after a grammar or translation miss. That bounded fallback can reuse an
-existing flow, add a grammar pattern, create and test a new flow, repair one
-stale flow once, or report that the request is not suitable for PowerShell. A
-typed `notSuitable` result falls through to Copilot with the original prompt.
-
-Recording directives such as `learn:`, `record`, and `dev: learn:` are sent to
-the configured TypeAgent reasoning engine with a PowerShell flow recording
-profile.
-
-Calls to the broad TypeAgent agent-server MCP tools and the PowerShell pre-tool
-redirect are disabled in this mode. The tool definitions remain registered so
-mode changes take effect without restarting Copilot. The read-only
-`typeagent-workspace` MCP server remains available for deterministic macro
-steps. Once the hook returns a miss, the Copilot runtime handles the request
-with its normal tool set.
-
-- **Pros:** Reuses deterministic development actions without taking over normal
-  Copilot coding requests
-- **Cons:** Requires Windows, the PowerShell agent, and an agent-server version
-  that supports request-scoped schema selection and command dispositions
-
-Try a registered action:
-
-```text
-> @typeagent mode dev
-> show top 5 memory hogs
-```
-
-Flow creation can be requested with disposable read-only data:
-
-```text
-> learn: show the 3 newest .log files under <PATH>
-> @typeagent run list powershell flows
-> show the 3 newest .log files under <PATH>
-```
-
-The generated name and output can vary with the configured model. Dynamic
-PowerShell tests, generated candidates and repairs require the exact script's
-trusted interactive authorization before execution. Model-only MCP clients lack
-that callback and fail closed; this recipe is not a promise of unattended flow
-creation. Use an interactive connected client for dynamic script approval.
-Current-user approved-local execution is not an arbitrary-code sandbox; metadata
-does not prevent .NET access. A denial never falls back to another tool.
-
-**Switch modes:**
-
-```
-> @typeagent mode direct    # fastest, skips LLM
-> @typeagent mode mcp       # streaming, uses LLM
-> @typeagent mode mcp mixed # Copilot chooses delegation or orchestration
-> @typeagent mode dev       # PowerShell flows first, Copilot on misses
-```
-
-Or set permanently via environment variable before launching:
-
-```powershell
-$env:TYPEAGENT_MODE = "mcp"
-copilot --plugin-dir D:\repos\TypeAgent\ts\packages\copilot-plugin
-```
+The old automatic MCP redirect and dev PowerShell-first handlers were removed.
+Independent TypeAgent PowerShell flows can still be requested explicitly
+through the optional TypeAgent tools; they are not a macro fallback.
 
 ---
 
@@ -1238,10 +1134,7 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 ```json
 {
   "mode": "direct",
-  "mcpRouting": "delegate",
-  "powershell": {
-    "enabled": true
-  }
+  "mcpRouting": "delegate"
 }
 ```
 
@@ -1262,16 +1155,17 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 
 ### Hooks (`hooks.json`)
 
-| Hook                  | File             | Purpose                                       |
-| --------------------- | ---------------- | --------------------------------------------- |
-| `userPromptSubmitted` | `hook-router.js` | Route action requests to TypeAgent or Copilot |
+| Hook                  | File             | Purpose                                                            |
+| --------------------- | ---------------- | ------------------------------------------------------------------ |
+| `userPromptSubmitted` | `hook-router.js` | Select recording or match a local program; miss stays with Copilot |
 
 ### Extension (`extensions/typeagent/extension.mjs`)
 
 The plugin extension registers `/typeagent-status`, `/typeagent-mode`, and
 `/typeagent-macro-record`. It consumes typed Copilot session events to capture
-macro traces and TypeAgent history, injects PowerShell guidance with an
-`onPreToolUse` hook, and emits turn-completion state for the demo driver.
+task-scoped traces with real root success receipts, drives restricted author
+children and owns the local catalog. It emits turn-completion state for the demo
+driver; there is no backend history side channel or pre-tool redirect.
 
 In the source checkout this entry point imports the bundled extension under
 `dist/extensions/typeagent/`. Staging places the bundle directly at the same
@@ -1405,19 +1299,17 @@ Hooks write diagnostics to stderr (not visible in normal CLI output). To see the
 echo '{"sessionId":"test","timestamp":1234,"cwd":"C:\\temp","prompt":"list my playlists"}' | node D:\repos\TypeAgent\ts\packages\copilot-plugin\dist\hooks\hook-router.js
 ```
 
-### Test Hooks Directly (WSL)
+### Test Hooks and Packaging
 
-The `package.json` includes test scripts that simulate hook invocation:
+Run offline tests from this package after building:
 
-```bash
-cd /mnt/d/repos/TypeAgent/ts/packages/copilot-plugin
-
-# Test direct mode routing (TypeAgent server must be running)
-pnpm run test:direct
-
-# Test MCP redirect mode (no server needed — just checks prompt injection)
-pnpm run test:mcp-redirect
+```powershell
+pnpm run test:local
+pnpm run test:checkpoint-c-package
 ```
+
+The former direct/MCP redirect smoke scripts were removed: ordinary prompts
+now require the native local owner, not the previous automatic backend routes.
 
 ### Check TypeAgent Connection
 

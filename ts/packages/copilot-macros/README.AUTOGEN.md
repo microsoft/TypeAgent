@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4befd17de6f34536cf905ebb028b4e58ecfa8b2abd840b78ceed4e379616346e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7a02d5b2282eeb56a16414ffa0e54ace2fea0fa542a0c4793b6cbfe1b3275cfd -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/copilot-macros — AI-generated documentation
@@ -48,10 +48,8 @@ External: `@tootallnate/quickjs-emscripten`, `typescript`, `zod`
 
 ### Used by
 
-- [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
 - [@typeagent/copilot-plugin](../../packages/copilot-plugin/README.md)
 - [@typeagent/procedure-artifacts](../../packages/procedureArtifacts/README.md)
-- [agent-server](../../packages/agentServer/server/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 
 ### Files of interest
@@ -70,6 +68,6 @@ External: `@tootallnate/quickjs-emscripten`, `typescript`, `zod`
 
 ---
 
-_Auto-generated against commit `58e953183e0f84e370a28db042a185667f3054a1` on `2026-10-16T08:08:04.280Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-macros docs:verify-links` to spot-check._
+_Auto-generated against commit `b31d4f4e81c76a93c35bb43c24687b93d537f84d` on `2026-10-16T23:09:45.978Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-macros docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

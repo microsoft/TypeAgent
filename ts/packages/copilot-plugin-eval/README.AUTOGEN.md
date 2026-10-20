@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=76957f2ef1a2b36aaff562c9591e9b29df723407c09915b7eb081a463cb23829 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=9865dee4b951c5ce4b06bf66b2876e68f99a0a0ded6f8424ced887a8040f5632 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/copilot-plugin-eval — AI-generated documentation
@@ -27,8 +27,6 @@ _No public exports declared in `package.json`._
 Workspace:
 
 - [@typeagent/copilot-plugin](../../packages/copilot-plugin/README.md)
-- [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
-- [agent-server](../../packages/agentServer/server/README.md)
 
 External: _None at runtime._
 
@@ -38,6 +36,6 @@ _No tracked source files under `./src/`._
 
 ---
 
-_Auto-generated against commit `c4262a4a5f8520ce9c81061bb461b7d181d7a4af` on `2026-09-25T22:35:36.308Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-plugin-eval docs:verify-links` to spot-check._
+_Auto-generated against commit `b31d4f4e81c76a93c35bb43c24687b93d537f84d` on `2026-10-16T23:09:45.978Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-plugin-eval docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

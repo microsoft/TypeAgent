@@ -8,62 +8,58 @@ Progress, scoped evidence and remaining gates are in [STATUS.md](./STATUS.md).
 
 ## Program-only critical path
 
-Checkpoint A is the default TypeAgent-hosted read-only MCP program path, not an
-opt-in alongside step macros. Both server entry points configure the checked
-author, broker, semantic provider and contained executor unconditionally.
-Legacy step execution, macro runner profiles/bridge, adaptation APIs and execution
-flags are removed. Old test macros are discarded, not migrated.
+Plugin ownership is the default and sole enabled recipe implementation.
+The only owner settings are `plugin` and `off`; obsolete `typeagent` settings
+fail explicitly. Both TypeAgent server entry points no longer construct a
+macro owner/learner, expose its lifecycle RPCs or register server macro routes.
+There are no external compatibility clients to preserve.
 
-Checkpoint B adds token-bound root success receipts, sealed explicit context,
-durable scoped authoring leases, and tools-disabled native Copilot children for
-extraction/build/grammar/source. TypeAgent retains source-independent verification,
-compilation/fixtures, publication, matching, and execution. Its verifier responses
-are durably checkpointed across child waits/restarts; native inherited-context
-isolation is not assumed. The original answer does not wait for authoring.
-Off/Cancel/new user work cancels only the author child. Contextual jobs have no
-silent TypeAgent-author fallback; clients without contextual capture retain the
-named A compatibility path. See [B lifecycle](../../../packages/copilot-macros/README.md#checkpoint-b-copilot-child-authorship)
-and [verification status](./STATUS.md) for supported scope and live evidence.
+All learning requires token-bound root success receipts, sealed explicit
+context and tools-disabled native Copilot children. Shared-core admission,
+program provenance and persisted-job resume enforce that contract. Backend/
+log-based authorship and missing-child fallback are removed; obsolete jobs
+require re-recording. Explicit nonlearning trace capture cannot induce learning.
 
-Checkpoint C adds opt-in `plugin` ownership with explicit `typeagent` rollback
-and `off`. The joined native extension owns the same `MacroManager`, portable
-author/validator, shared action-grammar matcher and contained executor. Hooks,
-commands and macro MCP tools use bounded authenticated session-local IPC; there
-is no second artifact catalog or executor. A held SQLite writer lock prevents
-multiple native mutation owners of one workspace/profile and releases on crash.
-Unmatched requests stay in native Copilot. The independent verifier and bounded
-semantics use isolated sessions on a separate installed native CLI, not inherited
-author children or TypeAgent credentials. Copied compiler/worker assets are part
-of the distribution. See [owner setup](../../../packages/copilot-plugin/README.md#checkpoint-c-plugin-owned-recipes)
+The joined native extension owns the shared `MacroManager`, portable author/
+validator, action-grammar matcher and contained executor. Hooks, commands and
+macro MCP tools use authenticated session-local IPC and one workspace/profile
+catalog. A held SQLite writer lock prevents concurrent mutation owners.
+Unmatched requests stay with Copilot; accepted/uncertain runs never retry through
+another engine. The independent verifier and bounded semantics use isolated
+sessions on a separate installed native CLI. Compiler/worker assets are bundled.
+The optional TypeAgent structured-action bridge remains; it supplies capabilities,
+not another lifecycle or author. See [owner setup](../../../packages/copilot-plugin/README.md#plugin-owned-recipes)
 and [verification boundaries](./STATUS.md); CLI evidence never implies VS Code support.
 
-The program delivers A: TypeAgent recording/matching/execution; B: restricted Copilot child
-authorship with TypeAgent execution; C: plugin-local ownership/standalone operation.
-Native CLI B/C synthetic verification is recorded; VS Code, live upgrade and
-performance qualification remain open. See [status](./STATUS.md) and
+The [implementation plan](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/implementation-plan.md)
+delivered A/B/C incrementally. The repository-wide
+[cleanup plan](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/cleanup-implementation-plan.md)
+supersedes those temporary coexistence/rollback arrangements.
+The [historical host evidence](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/HOST-CAPABILITIES-2026-10-15.md) still informs B/C, not missing A runtime
+implementation. See [status](./STATUS.md) and
 [runtime boundaries](../../../packages/copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs).
 
 ## Purpose
 
-Copilot fast actions let TypeAgent reuse a known procedure instead of asking
-the Copilot model to plan the same work again. The area contains two related
-mechanisms:
-
-| Mechanism            | Entry point                                    | Fast path                                                                   | Learning or adaptation                                                  |
-| -------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Dev actions          | Copilot `userPromptSubmitted` hook in dev mode | A registered PowerShell namespace action or dynamic flow handles the prompt | PowerShell-specific reasoning may reuse, create, or repair a flow       |
-| Tool-composed macros | `typeagent-macros` MCP tools                   | An approved checked program runs in the contained executor                  | A selected recording authors and validates a program before publication |
-
-Both mechanisms store reusable procedures, but they have different routing,
-approval, execution, and platform rules. Approved macros are also published as
-typed actions by the `macros` agent in agent-server. They can use normal
-translation and learned grammar routing; macros are not a fourth plugin mode.
+Copilot fast actions reuse checked programs through local grammar matching or
+explicit macro commands/MCP tools, rather than replanning a known procedure.
+All routes resolve the same approved artifact. The previous automatic dev/
+PowerShell-first and MCP redirect hooks are removed. Independent TypeAgent
+flows remain available through explicit TypeAgent commands/tools, not as macro
+fallbacks. Server-side macro typed-action and runbook registrations are removed.
 
 For the common TypeAgent workflow lifecycle, dynamic schema and grammar API,
 and provider-specific flow formats, see
 [Workflows](../../architecture/workflows/workflows.md).
 
-## Goals
+## Historical design and delivery phases
+
+The remaining sections describe the earlier implementation sequence and its
+temporary APIs/modes. They are retained as design history, not supported
+compatibility paths. Current behavior is defined above, in the package READMEs
+and in the cleanup plan; do not restore old code to match historical examples.
+
+### Original goals
 
 - Handle known development actions before the Copilot agent loop.
 - Reuse successful procedures without repeated model planning.

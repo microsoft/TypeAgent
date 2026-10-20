@@ -423,19 +423,3 @@ export interface RecipeRunResult extends RecipeRevisionRef {
     semanticEvidence: RecipeSemanticEvidence[];
     fallback: "never";
 }
-
-export interface RecipeFeatureFlags {
-    programRouting: boolean;
-    contextualCapture: boolean;
-    hybridExecution: boolean;
-    effectfulExecution: boolean;
-    legacyRouting: boolean;
-}
-
-export interface RecipeMigration {
-    kind: "metadata_only" | "explicit_validated_program";
-    source: { macroId: string; version: number };
-    target?: RecipeRevisionRef;
-    preserveLegacy: true;
-    routingOwner: "legacy" | "program";
-}

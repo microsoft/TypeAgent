@@ -56,7 +56,7 @@ beforeEach(() => {
     mkdirSync(directory, { recursive: true });
     process.env.TYPEAGENT_PLUGIN_DATA = directory;
     delete process.env.TYPEAGENT_RECIPE_PROFILE_ID;
-    process.env.TYPEAGENT_RECIPE_OWNER = "plugin";
+    delete process.env.TYPEAGENT_RECIPE_OWNER;
 });
 afterEach(() => {
     rmSync(directory, { recursive: true, force: true });

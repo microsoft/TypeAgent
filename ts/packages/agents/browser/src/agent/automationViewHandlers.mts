@@ -88,13 +88,13 @@ export function createAutomationViewFunctions(
                     ? service.list()
                     : Promise.resolve<AutomationCatalog>({
                           items: [],
-                          providers: (
-                              ["powershell", "taskflow", "toolMacro"] as const
-                          ).map((kind) => ({
-                              kind,
-                              available: false,
-                              reason: CATALOG_UNAVAILABLE,
-                          })),
+                          providers: (["powershell", "taskflow"] as const).map(
+                              (kind) => ({
+                                  kind,
+                                  available: false,
+                                  reason: CATALOG_UNAVAILABLE,
+                              }),
+                          ),
                       }),
             ]);
             return {

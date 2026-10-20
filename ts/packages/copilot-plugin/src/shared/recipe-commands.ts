@@ -17,7 +17,7 @@ import { recipeOwnerSetting } from "./recipe-owner-command.js";
 
 const usage = [
     "Recipe commands (selected owner):",
-    "@typeagent recipe owner [plugin|typeagent|off]",
+    "@typeagent recipe owner [plugin|off]",
     "@typeagent recipe list",
     "@typeagent recipe inspect <recipeId> <revision>",
     "@typeagent recipe status",

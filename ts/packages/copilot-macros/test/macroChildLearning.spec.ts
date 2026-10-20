@@ -3,7 +3,6 @@
 
 import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import type {
     MacroLearningJob,
@@ -81,9 +80,7 @@ describe.each(["typeagent", "copilot-local"])(
             };
         }
         beforeEach(async () => {
-            directory = await mkdtemp(
-                path.join(os.tmpdir(), "child-learning-"),
-            );
+            directory = await mkdtemp(path.resolve(".child-learning-"));
             fallbackCalls = 0;
             manager = new MacroManager(
                 directory,
@@ -182,9 +179,7 @@ describe.each(["typeagent", "copilot-local"])(
             );
             expect(await manager.getRecordingState("source")).toMatchObject({
                 status: "failed",
-                error: expect.stringContaining(
-                    "could not be queued for learning",
-                ),
+                error: expect.stringContaining("queued for learning"),
             });
             expect(
                 await manager.claimMacroAuthoringRequest(claim()),

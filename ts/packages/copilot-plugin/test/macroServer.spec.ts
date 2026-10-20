@@ -2,23 +2,23 @@
 // Licensed under the MIT License.
 
 import { jest } from "@jest/globals";
-import type { AgentServerConnection } from "@typeagent/agent-server-client";
+import type { MacroOwnerConnection } from "../src/shared/macro-owner.js";
 import type {
     RunMacroRequest,
     RunMacroResponse,
 } from "@typeagent/copilot-macros";
 import { MacroCatalogAdapter } from "../src/mcp/macroServer.js";
 
-function connection(overrides: Partial<AgentServerConnection> = {}) {
+function connection(overrides: Partial<MacroOwnerConnection> = {}) {
     return {
         close: jest.fn(async () => {}),
         listMacros: jest.fn(async () => []),
         ...overrides,
-    } as unknown as AgentServerConnection;
+    } as MacroOwnerConnection;
 }
 
 describe("macro MCP catalog adapter", () => {
-    it("returns catalog data and closes its agent-server connection", async () => {
+    it("returns catalog data and closes its local owner connection", async () => {
         const client = connection({
             listMacros: jest.fn(async () => [
                 {

@@ -48,6 +48,7 @@ describe("macro work cancellation", () => {
         });
         const calls: string[] = [];
         const runtime: MacroLearningRuntime = {
+            withAuthorQuery: () => runtime,
             buildProgram: async () => {
                 throw new Error(
                     "Cancelled learning must not author a program.",
@@ -109,6 +110,13 @@ describe("macro work cancellation", () => {
             });
             const trace = await manager.finalizeRecording({
                 tokenId: token.id,
+                childAuthoring: {
+                    taskId: "session:root-user",
+                    firstEventId: "root-user",
+                    successEventId: "root-success-receipt",
+                    outputEventId: "root-final",
+                    recordingTokenId: token.id,
+                },
                 trace: {
                     schemaVersion: 1,
                     sessionId: "session",
@@ -182,6 +190,12 @@ describe("macro work cancellation", () => {
                 sessionId: "session",
                 mode: "all",
                 status,
+                authoring: {
+                    captureId: "trace",
+                    taskId: "task",
+                    tokenId: "token",
+                    contextDigest: "a".repeat(64),
+                },
                 createdAt: "2026-09-30T00:00:00.000Z",
                 updatedAt: "2026-09-30T00:00:00.000Z",
             };
