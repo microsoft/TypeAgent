@@ -36,6 +36,28 @@ On Windows, the trust checks exercise certificate-byte conversion and cleanup
 with a synthetic certificate and a mocked trust store; they do not modify
 certificate stores or retrieve signing secrets. PowerShell 7 (`pwsh`) is required
 for the synthetic-certificate check, matching the shell packaging pipeline.
+The checks also enforce machine-level build trust, cleanup after success and
+failure, preservation of pre-existing trust, and rejection of unpinned certificates.
+
+### Windows shell signing hangs after certificate retrieval
+
+Run `20261020.1` (build `139732`) stopped logging after writing the PFX and
+was canceled about 41 minutes later. The previous build-trust helper added the
+public certificate to `CurrentUser\Root`, which can display a native Windows
+trust-confirmation dialog even under PowerShell `-NonInteractive`.
+The log alone does not prove where it blocked, since there were no progress
+messages between certificate retrieval and packaging.
+
+Build and publication verification now temporarily trust only the policy-pinned
+public certificate in `LocalMachine\Root`, avoiding the per-user dialog.
+Both operations require an administrator Windows agent (as provided by
+`windows-latest`); store-access failures fail the task rather than falling back
+to interactive per-user trust. Existing matching trust is left unchanged, and
+certificates added by the helper are removed in `finally`, including when the
+package action fails. A forcibly terminated agent may not execute cleanup, so
+use disposable agents for these jobs. End-user installer trust is unchanged.
+Signing logs identify certificate retrieval, password retrieval, policy checking,
+trust-store access, packaging, verification, and trust cleanup separately.
 
 ## Pipeline variables (configure in ADO UI)
 

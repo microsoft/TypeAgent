@@ -95,7 +95,7 @@ function fixture(t) {
 }
 
 test(
-    "build trust converts certificate bytes and restores trust on success and failure",
+    "build trust uses prompt-free machine trust and restores it on success and failure",
     { skip: !windows },
     () => {
         runPowerShell(
@@ -117,8 +117,14 @@ test(
             $script:removed = 0
             $script:closed = 0
             $script:actions = 0
+            $script:stores = 0
             $script:store = [pscustomobject]@{ Certificates = @() }
-            $script:store | Add-Member ScriptMethod Open { param($flags) }
+            $script:store | Add-Member ScriptMethod Open {
+                param($flags)
+                if ($flags -ne [Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite) {
+                    throw 'Unexpected store flags'
+                }
+            }
             $script:store | Add-Member ScriptMethod Add {
                 param($public)
                 if ($public.HasPrivateKey) { throw 'Private key reached trust store' }
@@ -130,6 +136,11 @@ test(
             function New-Object {
                 param($TypeName, $ArgumentList)
                 if ($TypeName -eq 'Security.Cryptography.X509Certificates.X509Store') {
+                    if ($ArgumentList.Count -ne 2 -or $ArgumentList[0] -ne 'Root' -or
+                        $ArgumentList[1] -ne 'LocalMachine') {
+                        throw 'Build trust must avoid the CurrentUser Root confirmation dialog'
+                    }
+                    $script:stores++
                     return $script:store
                 }
                 Microsoft.PowerShell.Utility\\New-Object -TypeName $TypeName -ArgumentList $ArgumentList
@@ -145,6 +156,38 @@ test(
             if (-not $failed -or $script:actions -ne 1 -or $script:added -ne 2 -or
                 $script:removed -ne 2 -or $script:closed -ne 2) {
                 throw 'Temporary trust was not restored'
+            }
+            $script:store.Certificates = @($certificate)
+            Use-TypeAgentBuildTrust -Certificate $certificate -Action { $script:actions++ }
+            if ($script:actions -ne 2 -or $script:added -ne 2 -or
+                $script:removed -ne 2 -or $script:closed -ne 3) {
+                throw 'Pre-existing machine trust was modified'
+            }
+            $script:store | Add-Member ScriptMethod Open { throw 'Store access denied' } -Force
+            $failed = $false
+            try {
+                Use-TypeAgentBuildTrust -Certificate $certificate -Action { throw 'Action ran without trust' }
+            } catch {
+                if ($_.Exception.Message -notlike '*Store access denied*') { throw }
+                $failed = $true
+            }
+            if (-not $failed -or $script:added -ne 2 -or $script:removed -ne 2 -or
+                $script:closed -ne 4) {
+                throw 'Store access failure was not propagated and cleaned up'
+            }
+            $script:testPolicy = @{
+                publisher = $certificate.Subject
+                thumbprints = @('0' * 40)
+            } | ConvertTo-Json
+            $failed = $false
+            try {
+                Use-TypeAgentBuildTrust -Certificate $certificate -Action { throw 'Unpinned action ran' }
+            } catch {
+                if ($_.Exception.Message -ne 'Build certificate does not match the independently pinned signing identity.') { throw }
+                $failed = $true
+            }
+            if (-not $failed -or $script:stores -ne 4) {
+                throw 'Unpinned certificate reached the machine trust store'
             }
         } finally {
             $certificate.Dispose()
