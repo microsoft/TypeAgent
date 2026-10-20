@@ -73,6 +73,21 @@ and a synthetic code-signing certificate. The executable's CMS signature and the
 returned RFC 3161 timestamp signature and certificate chain verified successfully.
 This test did not retrieve development credentials or modify certificate stores.
 
+### Shell verification rejects builder-debug.yml
+
+Run `20261020.3` (build `139769`, log `137`) completed signing the shell and
+NSIS installer, then failed with `Unsafe installer path in builder-debug.yml`.
+The verifier had treated every `.yml` file in the build output as update-channel
+metadata, including electron-builder's diagnostic file.
+
+The shared build/publication verifier now excludes only `builder-debug.yml`
+from channel-metadata discovery. It still requires actual channel metadata and
+checks installer paths, final hashes, sizes, signatures, and unreferenced
+executables. Unexpected `.yml` files are still validated, not silently skipped.
+Publication download patterns already omit the builder diagnostic files.
+Regression checks cover mixed build output and rejection of diagnostic-only
+output, unexpected metadata, and extra executables.
+
 ## Pipeline variables (configure in ADO UI)
 
 The consolidated pipeline requires these variables to be set on the pipeline

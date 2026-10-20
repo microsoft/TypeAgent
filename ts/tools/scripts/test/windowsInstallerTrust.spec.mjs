@@ -225,6 +225,45 @@ test("publication verifies final hashes, metadata and signatures", (t) => {
     );
 });
 
+test("publication ignores builder diagnostics but still requires channel metadata", (t) => {
+    const { dir } = fixture(t);
+    writeFileSync(
+        path.join(dir, "builder-debug.yml"),
+        "x64:\n  target: nsis\n",
+    );
+    writeFileSync(
+        path.join(dir, "builder-effective-config.yaml"),
+        "win:\n  executableName: typeagentshell\n",
+    );
+    const verified = [];
+    assert.equal(
+        verifyShellArtifacts(dir, (file) => verified.push(file)),
+        1,
+    );
+    assert.deepEqual(verified, [path.join(dir, installer)]);
+    rmSync(path.join(dir, "ci-x64.yml"));
+    assert.throws(
+        () => verifyShellArtifacts(dir, () => {}),
+        /No shell channel metadata found/,
+    );
+});
+
+test("publication rejects unexpected YAML and unreferenced executables beside builder diagnostics", (t) => {
+    const { dir } = fixture(t);
+    writeFileSync(path.join(dir, "builder-debug.yml"), "x64: {}\n");
+    writeFileSync(path.join(dir, "unexpected.yml"), "path: ../outside.exe\n");
+    assert.throws(
+        () => verifyShellArtifacts(dir, () => {}),
+        /Unsafe installer path in unexpected\.yml/,
+    );
+    rmSync(path.join(dir, "unexpected.yml"));
+    writeFileSync(path.join(dir, "unexpected.exe"), "unsigned fixture");
+    assert.throws(
+        () => verifyShellArtifacts(dir, () => {}),
+        /Unreferenced executable in shell publication: unexpected\.exe/,
+    );
+});
+
 test("electron-builder validates the required Windows signing and publisher configuration", async () => {
     const builderRequire = createRequire(
         shellRequire.resolve("electron-builder"),
