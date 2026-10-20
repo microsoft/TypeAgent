@@ -3,10 +3,8 @@
 
 import { getUserDataDir } from "agent-dispatcher/helpers/data";
 import { readFileSync } from "node:fs";
-import {
-    initRuntimeConfigFromProcessEnv,
-    warmupCopilotFromConfig,
-} from "@typeagent/aiclient";
+import { setRuntimeConfig, warmupCopilotFromConfig } from "@typeagent/aiclient";
+import type { Config } from "@typeagent/config";
 import {
     TypeAgentAPIServerConfig,
     TypeAgentAPIWebServer,
@@ -43,12 +41,9 @@ export class TypeAgentServer {
     constructor(
         private readonly requestExit: (exitCode: number) => void,
         private readonly structuredLogs: boolean,
+        runtimeConfig: Config,
     ) {
-        // Build typed runtime Config from process.env (already populated
-        // by loadConfig in the entry point) so aiclient consumers can
-        // use the typed accessor; legacy callers still see the same
-        // values through process.env directly.
-        initRuntimeConfigFromProcessEnv();
+        setRuntimeConfig(runtimeConfig);
         // Pre-warm the Copilot CLI/session/endpoint when it's the active
         // provider (no-op otherwise). Kept in the host to avoid an aiclient
         // import cycle; fire-and-forget so startup is never blocked.

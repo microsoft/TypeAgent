@@ -1,24 +1,15 @@
-FROM node:22 AS base
+FROM node:22 AS runtime-base
 
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN npm install -g corepack@latest
-RUN corepack enable pnpm
-RUN corepack install -g pnpm@latest
-
-# dependencies
-RUN apt-get update
-RUN apt-get install -y libsecret-1-0
-RUN apt-get install -y libsecret-1-dev
-RUN apt install -y gnome-keyring
-RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
-
-# Install dependencies required for Chrome/Puppeteer
-RUN apt-get update && apt-get install -y \
+# Install runtime dependencies required by TypeAgent and Chrome/Puppeteer.
+# Azure CLI is deliberately excluded from this stage so it cannot persist in
+# the production image or leave a reusable account cache.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     gnupg \
     ca-certificates \
     procps \
+    libsecret-1-0 \
+    gnome-keyring \
     libxss1 \
     libgconf-2-4 \
     libatk1.0-0 \
@@ -37,14 +28,20 @@ RUN apt-get update && apt-get install -y \
     libxdamage1 \
     libxrandr2 \
     xdg-utils
-
-# Install Chrome for Puppeteer
 RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
     && apt-get install -y ./google-chrome-stable_current_amd64.deb \
-    && rm google-chrome-stable_current_amd64.deb
+    && rm google-chrome-stable_current_amd64.deb \
+    && rm -rf /var/lib/apt/lists/*
 
-# base only image
-FROM base AS build
+# Build-only image. Azure CLI remains available here for authenticated package
+# feeds, but this stage is not shipped.
+FROM runtime-base AS build
+ARG PNPM_VERSION=11.9.0
+RUN npm install --global "pnpm@${PNPM_VERSION}"
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl libsecret-1-dev \
+    && curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
+    && rm -rf /var/lib/apt/lists/*
 COPY ./ /usr/src/app
 WORKDIR /usr/src/app
 # onnxruntime-node's postinstall otherwise downloads the large CUDA/GPU
@@ -55,15 +52,14 @@ ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
 RUN pnpm install --frozen-lockfile
 RUN pnpm run -r build
 RUN pnpm deploy --legacy --filter=agent-api --prod /prod/api
-RUN pnpm deploy --legacy --filter=tools-scripts --prod /prod/tools
 
-# image with api and tool bits only 
-FROM base AS api
+# Image with API bits only.
+FROM runtime-base AS api
 # api bits
 COPY --from=build /prod/api/ /prod/api/
-COPY --from=build /prod/tools/ /prod/tools/
 # rendering bits
 COPY --from=build /usr/src/app/packages/shell/out/ /prod/shell/out/
+COPY packages/api/container/start.sh /usr/local/bin/typeagent-api-start
 WORKDIR /prod/api
 
 ######################################### BLOB STORAGE MOUNT ######################################### 
@@ -88,6 +84,11 @@ EXPOSE 80:3000
 # the network. In the container the published port is the whole point and the
 # container boundary is the isolation, so bind all interfaces here.
 ENV TYPEAGENT_API_HOST=0.0.0.0
+ENV TYPEAGENT_API_BOOTSTRAP=hosted-azure-managed-identity-v1
+ENV TYPEAGENT_API_CONFIG_SECRET=typeagent-api-hosted-config
+ENV TYPEAGENT_AZURE_AUTH_MODE=managed-identity
+ENV HOME=/home/typeagent
+ENV TYPEAGENT_USER_DATA_DIR=/home/typeagent/.typeagent
 
 # Browser clients are still gated on Origin, and a hosted deployment serves the
 # chat view from its own hostname rather than localhost. Set
@@ -95,15 +96,16 @@ ENV TYPEAGENT_API_HOST=0.0.0.0
 # e.g. TYPEAGENT_API_ALLOWED_ORIGINS=https://typeagent.example.com, or the
 # browser's dispatcher WebSocket will be refused with 403.
 
-# start actions
-# az login
-RUN echo az login --identity >> start.sh
-## mount blob storage locally
-#RUN echo blobfuse2 mount /mnt/blob --config-file=mount-blobfuse.yaml >> start.sh
-# run getKeys
-RUN echo node ../tools/scripts/getKeys.mjs >> start.sh
-# start API server
-RUN echo pnpm start >> start.sh
+RUN groupadd --gid 10001 typeagent \
+    && useradd --uid 10001 --gid typeagent --no-create-home \
+        --shell /usr/sbin/nologin typeagent \
+    && install -d -o root -g root -m 0555 /home/typeagent \
+    && install -d -o typeagent -g typeagent -m 0700 /home/typeagent/.typeagent \
+    && chmod 0555 /usr/local/bin/typeagent-api-start
 
-# run start script
-CMD ["bash", "start.sh"]
+USER typeagent
+CMD ["/usr/local/bin/typeagent-api-start"]
+
+FROM api AS api-smoke
+COPY packages/api/container/smoke.mjs /prod/api/container-smoke.mjs
+CMD ["node", "/prod/api/container-smoke.mjs"]

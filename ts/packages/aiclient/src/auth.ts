@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AccessToken, DefaultAzureCredential } from "@azure/identity";
+import {
+    AccessToken,
+    DefaultAzureCredential,
+    ManagedIdentityCredential,
+    type TokenCredential,
+} from "@azure/identity";
 import { Result, success, error } from "typechat";
 
 export interface AuthTokenProvider {
@@ -19,7 +24,7 @@ export function createAzureTokenProvider(
     scope: AzureTokenScopes,
     expirationBufferMs: number = 5 * 60 * 1000, // 5 minute buffer on renewal
 ): AuthTokenProvider {
-    const credential = new DefaultAzureCredential();
+    let credential: TokenCredential | undefined;
     let accessToken: AccessToken | undefined;
     let refreshPromise: Promise<Result<string>> | undefined;
     return {
@@ -37,10 +42,14 @@ export function createAzureTokenProvider(
 
     async function refreshToken(): Promise<Result<string>> {
         try {
+            credential ??= createDefaultCredential();
             const tokenResponse = await credential.getToken(scope);
+            if (tokenResponse === null) {
+                return error("Azure credential returned no access token.");
+            }
             tokenResponse.expiresOnTimestamp -= expirationBufferMs;
             accessToken = tokenResponse;
-            return success(accessToken.token);
+            return success(tokenResponse.token);
         } catch (e: any) {
             return error(e.toString());
         }
@@ -73,6 +82,17 @@ export function createAzureTokenProvider(
     }
 }
 
-export function createDefaultCredential(): DefaultAzureCredential {
-    return new DefaultAzureCredential();
+export function createDefaultCredential(): TokenCredential {
+    const authMode = process.env.TYPEAGENT_AZURE_AUTH_MODE?.trim();
+    if (authMode === undefined || authMode === "") {
+        return new DefaultAzureCredential();
+    }
+    if (authMode !== "managed-identity") {
+        throw new Error(`Unsupported TYPEAGENT_AZURE_AUTH_MODE '${authMode}'.`);
+    }
+    const clientId =
+        process.env.TYPEAGENT_API_MANAGED_IDENTITY_CLIENT_ID?.trim();
+    return clientId
+        ? new ManagedIdentityCredential(clientId)
+        : new ManagedIdentityCredential();
 }
