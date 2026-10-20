@@ -194,4 +194,4 @@ assert.deepEqual(
     "bootstrap must not persist configuration",
 );
 
-console.log("API container smoke passed.");
+process.stdout.write("API container smoke passed.\n");
