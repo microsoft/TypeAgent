@@ -9,15 +9,7 @@ import {
     type RecordedInteractionTrace,
 } from "@typeagent/copilot-macros";
 import { createHash } from "node:crypto";
-import {
-    mkdir,
-    mkdtemp,
-    readFile,
-    readdir,
-    rename,
-    rm,
-    rmdir,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rename, rm, rmdir } from "node:fs/promises";
 import path from "node:path";
 import { compileRecipeProgram } from "../src/recipeCompiler.js";
 import { RecipeExecutor } from "../src/recipeExecutor.js";
@@ -603,13 +595,17 @@ describe("TypeAgent program macro integration", () => {
 
     it("rejects a missing runtime without falling back", async () => {
         const { manager, ref } = await setup();
-        await expect(
-            manager.runMacro({
-                ...ref,
-                runId: "missing",
-                inputs: { step_1_path: "beta.txt" },
-            }),
-        ).rejects.toThrow("runtime is unavailable");
+        try {
+            await expect(
+                manager.runMacro({
+                    ...ref,
+                    runId: "missing",
+                    inputs: { step_1_path: "beta.txt" },
+                }),
+            ).rejects.toThrow("runtime is unavailable");
+        } finally {
+            await manager.close();
+        }
     });
 
     it("pins authoritative revisions and rejects duplicate run IDs", async () => {

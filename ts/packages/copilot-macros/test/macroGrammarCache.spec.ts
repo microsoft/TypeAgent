@@ -35,6 +35,12 @@ function macro(phrase: string): CopilotToolMacro {
         createdAt: "2026-10-18T00:00:00Z",
         warnings: [],
         learning: {
+            authoring: {
+                captureId: "fixture",
+                taskId: "fixture:root-user",
+                tokenId: "fixture-token",
+                contextDigest: "a".repeat(64),
+            },
             jobId: "fixture",
             cwd: ".",
             mode: "read-only",

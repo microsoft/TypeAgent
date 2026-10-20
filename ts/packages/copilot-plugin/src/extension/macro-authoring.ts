@@ -9,7 +9,7 @@ import type {
 import { randomUUID } from "node:crypto";
 import { redactTraceValue } from "@typeagent/copilot-macros";
 
-function waitForAuthoringPoll(signal: AbortSignal): Promise<void> {
+function waitForAuthoringReconnect(signal: AbortSignal): Promise<void> {
     return new Promise((resolve) => {
         const done = () => {
             clearTimeout(timer);
