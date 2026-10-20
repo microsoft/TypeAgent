@@ -431,10 +431,25 @@ describe("typed draft views: service, history, privacy and CLI", () => {
             expect(await restarted.read()).toEqual({
                 head: initial,
                 state: { value: "Original" },
+                stateBytes: Buffer.byteLength(
+                    JSON.stringify({ value: "Original" }),
+                ),
             });
             expect(await restarted.history()).toHaveLength(1);
         },
     );
+
+    test("an absent history has zero committed bytes, including an undefined empty state", async () => {
+        const history = new ViewHistory<undefined>(
+            path.join(root, "empty-history"),
+            () => undefined,
+        );
+        expect(await history.read()).toEqual({
+            head: null,
+            state: undefined,
+            stateBytes: 0,
+        });
+    });
 
     test.each(["purge-prepared", "purge-swapped"] as ViewHistoryFaultPoint[])(
         "interrupted %s stays quarantined until restart completes full object database removal",

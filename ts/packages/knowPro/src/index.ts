@@ -42,3 +42,4 @@ export * from "./storage.js";
 export * as dataFrame from "./dataFrame/index.js";
 
 export { createConversationFromData } from "./common.js";
+export * from "./segmentedJson.js";

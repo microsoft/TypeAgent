@@ -239,7 +239,7 @@ describe("portable authoring boundary", () => {
                 ],
             };
             const source =
-                'async function execute(api: RecipeApi, params: JsonValue): Promise<JsonValue> { return await api.tools.call("read", params); }';
+                'async function execute(api: RecipeApi, params: JsonValue): Promise<JsonValue> { if (Reflect.has(globalThis, "privateFixture")) throw Error("Leaked private fixture"); Reflect.set(globalThis, "privateFixture", params); return await api.tools.call("read", params); }';
             const sourceQuery = jest.fn(
                 async (_prompt: string, _signal: AbortSignal) =>
                     JSON.stringify({ source }),
@@ -299,6 +299,12 @@ describe("portable authoring boundary", () => {
                 "fresh beta body",
             );
             const approved = { ...macro, version: 2, program: artifact };
+            expect(matchMacroGrammarInputs(approved, "read beta now")).toEqual([
+                { path: "beta" },
+            ]);
+            expect(matchMacroGrammarInputs(approved, "read gamma now")).toEqual(
+                [{ path: "gamma" }],
+            );
             expect(matchMacroGrammarInputs(approved, "read beta now")).toEqual([
                 { path: "beta" },
             ]);

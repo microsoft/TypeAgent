@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { macroProgramArtifact } from "./recipeCatalogFixtures.js";
+import { RevisionRecords } from "../src/revisionRecords.js";
 import { childCapture } from "./childLearningFixtures.js";
 import { sealRecipeArtifact } from "../src/recipeCore.js";
 
@@ -58,6 +59,27 @@ async function setup(mode: MacroLearningMode = "prepare", readOnly?: boolean) {
     const manager = createManager(directory, host);
     await manager.setMacroLearningPreference({ cwd, mode });
     return { directory, manager, host };
+}
+
+type StoredTestJob = Omit<MacroLearningJob, "authoring"> & {
+    authoring?: MacroLearningJob["authoring"];
+    attempts: Record<string, number>;
+    draft?: unknown;
+};
+
+async function mutateStoredJob(
+    directory: string,
+    jobId: string,
+    mutate: (job: StoredTestJob) => void,
+) {
+    const records = new RevisionRecords(
+        path.join(directory, "copilot-macros", "learning.json"),
+    );
+    const state = await records.load();
+    const job = state.get(jobId) as StoredTestJob;
+    expect(job).toBeDefined();
+    mutate(job);
+    await records.commit(new Map([[jobId, job]]));
 }
 
 function recordedTrace(sessionId: string): RecordedInteractionTrace {
@@ -226,15 +248,14 @@ describe("durable macro learning", () => {
                 "copilot-macros",
                 "learning.json",
             );
-            const stored = JSON.parse(await readFile(filename, "utf8"));
-            const job = stored.jobs[0];
-            delete job.authoring;
-            job.status = status === "saved-catalog" ? "failed" : status;
-            if (status === "saved-catalog") {
-                job.draft = { old: true };
-                job.error = "catalog was saved";
-            }
-            await writeFile(filename, JSON.stringify(stored));
+            await mutateStoredJob(directory, summary.learningJobId!, (job) => {
+                delete job.authoring;
+                job.status = status === "saved-catalog" ? "failed" : status;
+                if (status === "saved-catalog") {
+                    job.draft = { old: true };
+                    job.error = "catalog was saved";
+                }
+            });
             const restarted = createManager(directory, host);
             const learner = runtime();
             await restarted.configureLearning(learner);
@@ -247,9 +268,8 @@ describe("durable macro learning", () => {
             expect(learner.extract).not.toHaveBeenCalled();
             expect(learner.build).not.toHaveBeenCalled();
             await restarted.close();
-            expect(
-                JSON.parse(await readFile(filename, "utf8")).jobs[0],
-            ).toMatchObject({
+            const persisted = await new RevisionRecords(filename).load();
+            expect(persisted.get(summary.learningJobId!)).toMatchObject({
                 status: "failed",
                 error: expect.stringContaining("re-record"),
             });
@@ -275,14 +295,13 @@ describe("durable macro learning", () => {
                     },
                 );
             } else {
-                const filename = path.join(
+                await mutateStoredJob(
                     directory,
-                    "copilot-macros",
-                    "learning.json",
+                    summary.learningJobId!,
+                    (job) => {
+                        job.authoring!.contextDigest = "0".repeat(64);
+                    },
                 );
-                const stored = JSON.parse(await readFile(filename, "utf8"));
-                stored.jobs[0].authoring.contextDigest = "0".repeat(64);
-                await writeFile(filename, JSON.stringify(stored));
             }
             const restarted = createManager(directory, host);
             const learner = runtime();
@@ -352,14 +371,9 @@ describe("durable macro learning", () => {
         const staged = await terminal(manager, summary.learningJobId!);
         expect(staged.status).toBe("needsReview");
         await manager.close();
-        const filename = path.join(
-            directory,
-            "copilot-macros",
-            "learning.json",
-        );
-        const stored = JSON.parse(await readFile(filename, "utf8"));
-        delete stored.jobs[0].authoring;
-        await writeFile(filename, JSON.stringify(stored));
+        await mutateStoredJob(directory, summary.learningJobId!, (job) => {
+            delete job.authoring;
+        });
         const restarted = createManager(directory, host);
         await restarted.configureLearning(runtime());
         await expect(restarted.approveMacro(staged.macro!)).rejects.toThrow(
@@ -1075,13 +1089,10 @@ describe("durable macro learning", () => {
     it("recovers interrupted stages within a persisted attempt budget", async () => {
         const { manager, directory, host } = await setup("all");
         const summary = await capture(manager, { learning: true });
-        const file = path.join(directory, "copilot-macros", "learning.json");
-        const state = JSON.parse(await readFile(file, "utf8")) as {
-            jobs: Array<{ status: string; attempts: { extract: number } }>;
-        };
-        state.jobs[0].status = "extracting";
-        state.jobs[0].attempts = { extract: 1 };
-        await writeFile(file, JSON.stringify(state));
+        await mutateStoredJob(directory, summary.learningJobId!, (job) => {
+            job.status = "extracting";
+            job.attempts = { extract: 1 };
+        });
         const restarted = createManager(directory, host);
         await restarted.configureLearning(runtime());
         expect((await terminal(restarted, summary.learningJobId!)).status).toBe(
@@ -1230,19 +1241,16 @@ describe("durable macro learning", () => {
             await manager.configureLearning(runtime());
             const summary = await capture(manager, { learning: true });
             const job = await terminal(manager, summary.learningJobId!);
-            const stateFile = path.join(
-                directory,
-                "copilot-macros",
-                "learning.json",
-            );
-            const state = JSON.parse(await readFile(stateFile, "utf8")) as {
-                jobs: Array<{ status: string }>;
-            };
-            state.jobs[0].status = "building";
-            await writeFile(stateFile, JSON.stringify(state));
-            await writeFile(
-                path.join(directory, "copilot-macros", "index.json"),
-                "[]",
+            await mutateStoredJob(directory, job.jobId, (stored) => {
+                stored.status = "building";
+            });
+            await rm(
+                path.join(
+                    directory,
+                    "copilot-macros",
+                    "catalog",
+                    `${job.macro!.macroId}.json`,
+                ),
             );
             const restarted = createManager(directory, host);
             const learner = runtime();
@@ -1281,17 +1289,10 @@ describe("durable macro learning", () => {
     it("never exceeds the persisted per-stage restart budget", async () => {
         const { manager, host, directory } = await setup("all");
         const summary = await capture(manager, { learning: true });
-        const stateFile = path.join(
-            directory,
-            "copilot-macros",
-            "learning.json",
-        );
-        const state = JSON.parse(await readFile(stateFile, "utf8")) as {
-            jobs: Array<{ status: string; attempts: { extract: number } }>;
-        };
-        state.jobs[0].status = "extracting";
-        state.jobs[0].attempts = { extract: 2 };
-        await writeFile(stateFile, JSON.stringify(state));
+        await mutateStoredJob(directory, summary.learningJobId!, (job) => {
+            job.status = "extracting";
+            job.attempts = { extract: 2 };
+        });
         const restarted = createManager(directory, host);
         const learner = runtime();
         await restarted.configureLearning(learner);

@@ -4,7 +4,7 @@
 import type { CopilotSession } from "@github/copilot-sdk";
 import { createMacroLearningRuntime } from "@typeagent/copilot-macros/macroAuthoringRuntime";
 import { createMacroProgramAuthor } from "@typeagent/copilot-macros/macroProgramAuthoring";
-import { executeRecipeProgram } from "@typeagent/copilot-macros/recipeExecutor";
+import { RecipeExecutor } from "@typeagent/copilot-macros/recipeExecutor";
 import { RecipeSemanticAdapter } from "@typeagent/copilot-macros/recipeSemantic";
 import {
     getRecipeInferenceCliPath,
@@ -101,6 +101,7 @@ export async function createPluginLocalRecipes(
             return result.capability;
         },
     });
+    const executor = new RecipeExecutor();
     try {
         const local = await createLocalRecipeService({
             cwd,
@@ -179,7 +180,7 @@ export async function createPluginLocalRecipes(
                         ),
                     );
                     try {
-                        return await executeRecipeProgram(
+                        return await executor.execute(
                             artifact,
                             input,
                             {
@@ -244,14 +245,14 @@ export async function createPluginLocalRecipes(
                         await local.close();
                     } finally {
                         recording.clear();
-                        await models.dispose();
+                        await Promise.all([executor.close(), models.dispose()]);
                     }
                 })();
                 return closing;
             },
         };
     } catch (error) {
-        await models.dispose();
+        await Promise.all([executor.close(), models.dispose()]);
         throw error;
     }
 }

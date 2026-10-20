@@ -9,23 +9,31 @@ import {
     type RecordedInteractionTrace,
 } from "@typeagent/copilot-macros";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rename, rm, rmdir } from "node:fs/promises";
 import path from "node:path";
+import { compileRecipeProgram } from "../src/recipeCompiler.js";
+import { RecipeExecutor } from "../src/recipeExecutor.js";
+import { recipeDigest, recipeSchemaDigest } from "../src/recipeCore.js";
+import type { RecipeHost } from "../src/recipeContracts.js";
 import { recipeArtifact } from "./recipeCatalogFixtures.js";
+import { readProgramJournal } from "../src/macroProgramRun.js";
 import { childCapture } from "./childLearningFixtures.js";
 
 const cwd = "C:\\checkpoint-a";
 let directory: string;
+let executor: RecipeExecutor;
 
 beforeEach(async () => {
     directory = await mkdtemp(path.resolve(".macro-programs-"));
+    executor = new RecipeExecutor({ maxWorkers: 2 });
 });
 
 afterEach(async () => {
+    await executor.close();
     await rm(directory, { recursive: true, force: true });
 });
 
-async function setup(mode: MacroLearningMode = "all") {
+async function setup(mode: MacroLearningMode = "all", source?: string) {
     const manager = new MacroManager(directory, {
         inspectTool: async (_server, toolName) => ({
             toolName,
@@ -100,6 +108,33 @@ async function setup(mode: MacroLearningMode = "all") {
         validateGrammar: () => {},
         buildProgram: async (macro) =>
             recipeArtifact(macro.macroId, macro.sourceTraceId, {
+                ...(source
+                    ? {
+                          source: {
+                              language: "typescript" as const,
+                              text: source,
+                              digest: recipeDigest(source),
+                          },
+                          executable: compileRecipeProgram(source),
+                          capabilities: [
+                              {
+                                  id: "read",
+                                  transport: "native" as const,
+                                  providerId: "test",
+                                  operation: "read",
+                                  contractVersion: "1",
+                                  inputSchema: { type: "null" as const },
+                                  outputSchema: { type: "string" as const },
+                                  schemaDigest: recipeSchemaDigest(
+                                      { type: "null" },
+                                      { type: "string" },
+                                  ),
+                                  compatibility: "exact" as const,
+                                  effect: "read" as const,
+                              },
+                          ],
+                      }
+                    : {}),
                 inputSchema: {
                     type: "object",
                     properties: { step_1_path: { type: "string" } },
@@ -149,6 +184,76 @@ async function setup(mode: MacroLearningMode = "all") {
     return { manager, ref: job.macro, job };
 }
 
+function realRuntime(
+    manager: MacroManager,
+    invoke: RecipeHost["invokeCapability"],
+) {
+    manager.configureProgramRuntime({
+        execute: (artifact, input, request) =>
+            executor.execute(
+                artifact,
+                input,
+                {
+                    runId: request.runId,
+                    signal: request.signal,
+                    binding: {
+                        workspaceId: "workspace",
+                        profileId: "profile",
+                        providerId: "test",
+                        accountId: "account",
+                        sessionId: "session",
+                        generation: "1",
+                    },
+                    host: {
+                        inspectCapability: async (capability) => ({
+                            status: "available",
+                            capability,
+                        }),
+                        invokeCapability: invoke,
+                        invokeSemantic: async () => ({
+                            status: "unsupported",
+                            code: "test",
+                            message: "No semantic calls",
+                        }),
+                    },
+                },
+                {
+                    onCheckpoint: request.onCheckpoint,
+                    timeoutMs: request.timeoutMs,
+                },
+            ),
+    });
+}
+
+function deferred() {
+    let resolve!: () => void;
+    const promise = new Promise<void>((finish) => {
+        resolve = finish;
+    });
+    return { promise, resolve };
+}
+
+async function within<T>(promise: Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<never>((_, reject) => {
+                timer = setTimeout(
+                    () => reject(new Error("Expected concurrent progress")),
+                    3_000,
+                );
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function journal(runId: string) {
+    return readProgramJournal(path.join(directory, "copilot-macros"), runId);
+}
+
 function fakeRuntime(): MacroProgramRuntime {
     let calls = 0;
     return {
@@ -160,18 +265,8 @@ function fakeRuntime(): MacroProgramRuntime {
                 phase: "dispatched" as const,
             };
             await context.onCheckpoint(checkpoint);
-            const journal = JSON.parse(
-                await readFile(
-                    path.join(
-                        directory,
-                        "copilot-macros",
-                        "program-runs",
-                        `${context.runId}.json`,
-                    ),
-                    "utf8",
-                ),
-            );
-            expect(journal.checkpoints[0].phase).toBe("dispatched");
+            const saved = await journal(context.runId);
+            expect(saved.checkpoints[0].phase).toBe("dispatched");
             calls++;
             const completed = { ...checkpoint, phase: "completed" as const };
             await context.onCheckpoint(completed);
@@ -192,6 +287,185 @@ function fakeRuntime(): MacroProgramRuntime {
 }
 
 describe("TypeAgent program macro integration", () => {
+    it("surfaces persistent journal publication failures without inventing durable completion", async () => {
+        const { manager, ref } = await setup(
+            "all",
+            `async function execute(api, params) {
+            const first = await api.tools.call("read", null);
+            return [first, await api.tools.call("read", null)].join("");
+        }`,
+        );
+        const runId = "failed-publication";
+        const destination = path.join(
+            directory,
+            "copilot-macros",
+            "program-runs",
+            `${runId}.json`,
+        );
+        const retained = `${destination}.retained`;
+        let calls = 0;
+        realRuntime(manager, async () => {
+            calls++;
+            await rename(destination, retained);
+            await mkdir(destination);
+            return { status: "completed", value: "fresh" };
+        });
+        try {
+            expect(
+                (
+                    await manager.runMacro({
+                        ...ref,
+                        runId,
+                        inputs: { step_1_path: "beta.txt" },
+                    })
+                ).status,
+            ).toBe("failed");
+            const record = await manager.getMacroRun(runId);
+            expect(record.program?.completedCallIds).toEqual([]);
+            expect(record.program?.checkpoints).toEqual([
+                expect.objectContaining({ phase: "dispatched" }),
+            ]);
+            expect(calls).toBe(1);
+            expect(
+                (await readdir(path.dirname(destination))).filter((name) =>
+                    name.endsWith(".tmp"),
+                ),
+            ).toEqual([]);
+        } finally {
+            await rmdir(destination);
+            await rename(retained, destination);
+            await manager.close();
+        }
+    });
+
+    it("overlaps real read calls only after durable dispatch and preserves reply identities across restart", async () => {
+        const { manager, ref } = await setup(
+            "all",
+            `async function execute(api, params) {
+            return (await Promise.all([api.tools.call("read", null), api.tools.call("read", null)])).join("|");
+        }`,
+        );
+        const entered = deferred();
+        const secondFinished = deferred();
+        const releases = [deferred(), deferred()];
+        let calls = 0;
+        realRuntime(manager, async (_capability, _input, call) => {
+            const index = calls++;
+            expect((await journal("parallel")).checkpoints).toContainEqual(
+                expect.objectContaining({
+                    callId: call.callId,
+                    phase: "dispatched",
+                }),
+            );
+            if (calls === 2) entered.resolve();
+            await releases[index].promise;
+            if (index === 1) secondFinished.resolve();
+            return { status: "completed", value: `value-${index}` };
+        });
+        const run = manager.runMacro({
+            ...ref,
+            runId: "parallel",
+            inputs: { step_1_path: "beta.txt" },
+        });
+        try {
+            await within(
+                Promise.race([
+                    entered.promise,
+                    run.then((response) => {
+                        throw new Error(
+                            `Run settled before overlap: ${JSON.stringify(response)}`,
+                        );
+                    }),
+                ]),
+            );
+            releases[1].resolve();
+            await within(secondFinished.promise);
+            releases[0].resolve();
+            expect((await run).status).toBe("completed");
+            const persisted = await new MacroManager(directory).getMacroRun(
+                "parallel",
+            );
+            expect(persisted.result).toBe("value-0|value-1");
+            expect(persisted.program?.completedCallIds).toEqual([
+                "parallel:2",
+                "parallel:1",
+            ]);
+            expect((await journal("parallel")).checkpoints).toEqual([
+                expect.objectContaining({
+                    callId: "parallel:1",
+                    phase: "completed",
+                }),
+                expect.objectContaining({
+                    callId: "parallel:2",
+                    phase: "completed",
+                }),
+            ]);
+        } finally {
+            releases.forEach((release) => release.resolve());
+            await run;
+            await manager.close();
+        }
+    });
+
+    it.each(["denied", "cancelled", "disabled"] as const)(
+        "stops unsent parallel reads after %s without accepting late outcomes",
+        async (terminal) => {
+            const { manager, ref } = await setup(
+                "all",
+                `async function execute(api, params) {
+                return (await Promise.all(Array.from({length: 8}, () => api.tools.call("read", null)))).join("");
+            }`,
+            );
+            const entered = deferred();
+            const releases = Array.from({ length: 4 }, () => deferred());
+            const signals: AbortSignal[] = [];
+            realRuntime(manager, async (_capability, _input, call) => {
+                const index = signals.length;
+                signals.push(call.signal);
+                if (signals.length === 4) entered.resolve();
+                await releases[index].promise;
+                if (terminal === "denied" && index === 0)
+                    return {
+                        status: "denied",
+                        code: "permission",
+                        message: "Denied",
+                    };
+                return { status: "completed", value: "fresh" };
+            });
+            const runId = `parallel-${terminal}`;
+            const run = manager.runMacro({
+                ...ref,
+                runId,
+                inputs: { step_1_path: "beta.txt" },
+            });
+            try {
+                await within(entered.promise);
+                if (terminal === "cancelled") manager.cancelMacroRun(runId);
+                else {
+                    if (terminal === "disabled")
+                        await manager.disableMacro(ref);
+                    releases[0].resolve();
+                }
+                const response = await within(run);
+                expect(response.status).not.toBe("completed");
+                expect(signals).toHaveLength(4);
+                expect(signals.every((signal) => signal.aborted)).toBe(true);
+                const persisted = await manager.getMacroRun(runId);
+                expect(persisted.program?.completedCallIds).toEqual(
+                    terminal === "disabled" ? [`${runId}:1`] : [],
+                );
+                const before = await journal(runId);
+                releases.forEach((release) => release.resolve());
+                await new Promise<void>((resolve) => setImmediate(resolve));
+                expect(await journal(runId)).toEqual(before);
+                expect(signals).toHaveLength(4);
+            } finally {
+                releases.forEach((release) => release.resolve());
+                await run;
+                await manager.close();
+            }
+        },
+    );
     it("publishes under All and runs fresh inputs without a runner or replay consent", async () => {
         const { manager, ref, job } = await setup();
         expect(job.status).toBe("ready");
@@ -321,13 +595,17 @@ describe("TypeAgent program macro integration", () => {
 
     it("rejects a missing runtime without falling back", async () => {
         const { manager, ref } = await setup();
-        await expect(
-            manager.runMacro({
-                ...ref,
-                runId: "missing",
-                inputs: { step_1_path: "beta.txt" },
-            }),
-        ).rejects.toThrow("runtime is unavailable");
+        try {
+            await expect(
+                manager.runMacro({
+                    ...ref,
+                    runId: "missing",
+                    inputs: { step_1_path: "beta.txt" },
+                }),
+            ).rejects.toThrow("runtime is unavailable");
+        } finally {
+            await manager.close();
+        }
     });
 
     it("pins authoritative revisions and rejects duplicate run IDs", async () => {

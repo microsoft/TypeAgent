@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { timelineTimestamp } from "../src/timeline.js";
@@ -76,6 +76,7 @@ const { createKnowProCorpusIndex } = await import(
 const { createDocMemorySettings } = await import(
     "@typeagent/conversation-memory"
 );
+const { readConversationDataFromFile } = await import("@typeagent/knowpro");
 const { viewHash } = await import("../src/viewMerge.js");
 const { ViewHistory } = await import("../src/viewHistory.js");
 
@@ -1417,8 +1418,17 @@ describe("timeline configured service pipeline", () => {
             viewHash("indexed-timeline"),
             viewHash(revisionId),
         );
+        const persisted = await readConversationDataFromFile(
+            directory,
+            "corpus",
+            offlineEmbedding.embeddingIdentity?.dimensions,
+        );
         expect(
-            (await stat(path.join(directory, "corpus_embeddings.bin"))).size,
+            persisted?.messageIndexData?.indexData?.embeddings.length,
+        ).toBeGreaterThan(0);
+        expect(
+            persisted?.relatedTermsIndexData?.textEmbeddingData?.embeddings
+                .length,
         ).toBeGreaterThan(0);
         await service.close();
         service = create();

@@ -200,6 +200,7 @@ describe("native recipe host", () => {
             ).status,
         ).toBe("unsupported");
         f.schema.required.push("new-field");
+        f.emit("session.tools_updated");
         expect(
             (
                 await f.host.invokeCapability(
@@ -335,9 +336,9 @@ describe("native recipe host", () => {
 
     it("bounds inspection and prevents a late preflight from dispatching after cancellation", async () => {
         const f = await setup();
-        const observed = deferred<{ tools: typeof f.tools }>();
+        const observed = deferred<typeof f.metadata>();
         const started = deferred<void>();
-        f.getCurrentMetadata.mockImplementation(() => {
+        f.snapshot.mockImplementation(() => {
             started.resolve();
             return observed.promise;
         });
@@ -353,9 +354,112 @@ describe("native recipe host", () => {
         await started.promise;
         controller.abort();
         expect((await call).status).toBe("execution_uncertain");
-        observed.resolve({ tools: f.tools });
+        observed.resolve(f.metadata);
         await new Promise((resolve) => setTimeout(resolve, 5));
         expect(f.execute).not.toHaveBeenCalled();
         expect(f.abort).not.toHaveBeenCalled();
+    });
+
+    it("reuses discovery within the bound host while retaining live binding checks", async () => {
+        const f = await setup();
+        const discoveries = f.getCurrentMetadata.mock.calls.length;
+        const bindings = f.snapshot.mock.calls.length;
+        for (let i = 0; i < 3; i++) {
+            expect(
+                (await f.host.inspectCapability(f.capability, f.binding))
+                    .status,
+            ).toBe("available");
+            expect(
+                (
+                    await f.host.invokeCapability(
+                        f.capability,
+                        { path: "x" },
+                        f.context,
+                    )
+                ).status,
+            ).toBe("completed");
+        }
+        expect(f.getCurrentMetadata).toHaveBeenCalledTimes(discoveries);
+        expect(f.snapshot.mock.calls.length).toBeGreaterThan(bindings);
+        f.emit("session.permissions_changed");
+        expect(
+            (
+                await f.host.invokeCapability(
+                    f.capability,
+                    { path: "x" },
+                    f.context,
+                )
+            ).status,
+        ).toBe("unsupported");
+        expect(f.execute).toHaveBeenCalledTimes(3);
+    });
+
+    it("retries failed discovery instead of caching an unavailable inventory", async () => {
+        const f = await setup();
+        const host = createNativeRecipeHost(f.session, f.binding, semantics);
+        f.getCurrentMetadata.mockRejectedValueOnce(
+            new Error("Discovery failed"),
+        );
+        await expect(
+            host.inspectCapability(f.capability, f.binding),
+        ).resolves.toEqual({
+            status: "unavailable",
+            message: "Error: Discovery failed",
+        });
+        expect(
+            (await host.inspectCapability(f.capability, f.binding)).status,
+        ).toBe("available");
+        expect(
+            (
+                await host.invokeCapability(
+                    f.capability,
+                    { path: "x" },
+                    f.context,
+                )
+            ).status,
+        ).toBe("completed");
+        expect(f.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps returned descriptors separate from the approved contract", async () => {
+        const f = await setup();
+        const inspection = await f.host.inspectCapability(
+            f.capability,
+            f.binding,
+        );
+        expect(inspection.status).toBe("available");
+        if (inspection.status !== "available")
+            throw new Error("Expected preflight");
+        inspection.capability.operation = "different";
+        expect(
+            (
+                await f.host.invokeCapability(
+                    f.capability,
+                    { path: "x" },
+                    f.context,
+                )
+            ).status,
+        ).toBe("completed");
+    });
+
+    it("rejects inventory captured across a generation change", async () => {
+        const f = await setup();
+        const host = createNativeRecipeHost(f.session, f.binding, semantics);
+        const observed = deferred<{ tools: typeof f.tools }>();
+        f.getCurrentMetadata.mockImplementation(() => observed.promise);
+        const inspection = host.inspectCapability(f.capability, f.binding);
+        f.emit("session.tools_updated");
+        observed.resolve({ tools: f.tools });
+        expect((await inspection).status).toBe("unsupported");
+        expect(
+            (
+                await host.invokeCapability(
+                    f.capability,
+                    { path: "x" },
+                    f.context,
+                )
+            ).status,
+        ).toBe("unsupported");
+        expect(f.execute).not.toHaveBeenCalled();
     });
 });
