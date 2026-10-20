@@ -9,7 +9,15 @@ import {
     type RecordedInteractionTrace,
 } from "@typeagent/copilot-macros";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, rmdir } from "node:fs/promises";
+import {
+    mkdir,
+    mkdtemp,
+    readFile,
+    readdir,
+    rename,
+    rm,
+    rmdir,
+} from "node:fs/promises";
 import path from "node:path";
 import { compileRecipeProgram } from "../src/recipeCompiler.js";
 import { RecipeExecutor } from "../src/recipeExecutor.js";
