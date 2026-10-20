@@ -916,13 +916,35 @@ function validMacroParameters(
     });
 }
 
+const compiledMacroGrammars = new Map<
+    string,
+    {
+        grammar: ReturnType<typeof loadGrammarRules>;
+        nfa: ReturnType<typeof compileGrammarToNFA>;
+    }
+>();
+const maxCompiledMacroGrammars = 128;
+
 function compileMacroGrammar(rules: string[]) {
+    const source = rules.join("\n");
+    const cached = compiledMacroGrammars.get(source);
+    if (cached) {
+        compiledMacroGrammars.delete(source);
+        compiledMacroGrammars.set(source, cached);
+        return cached;
+    }
     try {
-        const grammar = loadGrammarRules(
-            "learned-macros.agr",
-            rules.join("\n"),
-        );
-        return { grammar, nfa: compileGrammarToNFA(grammar, "macros") };
+        const grammar = loadGrammarRules("learned-macros.agr", source);
+        const compiled = {
+            grammar,
+            nfa: compileGrammarToNFA(grammar, "macros"),
+        };
+        compiledMacroGrammars.set(source, compiled);
+        if (compiledMacroGrammars.size > maxCompiledMacroGrammars) {
+            const oldest = compiledMacroGrammars.keys().next().value;
+            if (oldest !== undefined) compiledMacroGrammars.delete(oldest);
+        }
+        return compiled;
     } catch {
         throw new Error(
             "Macro grammar rejected (stage=compile; matchCount=unknown).",

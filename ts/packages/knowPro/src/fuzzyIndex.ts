@@ -168,8 +168,11 @@ export class EmbeddingIndex {
                 messageOrdinal < list.length;
                 ++messageOrdinal
             ) {
+                if (!predicate(messageOrdinal)) {
+                    continue;
+                }
                 const score: number = dotProduct(list[messageOrdinal], other);
-                if (score >= minScore && predicate(messageOrdinal)) {
+                if (score >= minScore) {
                     matches.push(messageOrdinal, score);
                 }
             }

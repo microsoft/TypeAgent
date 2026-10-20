@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
+import { RevisionRecords } from "./revisionRecords.js";
 import type {
     MacroAuthoringClaim,
     MacroAuthoringRequest,
@@ -194,6 +194,10 @@ export class MacroLearningEngine {
     private stopped = false;
     private readonly authoringWakeups = new Set<string>();
     private readonly childAuthoring: MacroChildAuthoring;
+    private readonly records: RevisionRecords;
+    private changedJobs: Set<string> | undefined;
+    private jobSnapshots: Map<string, StoredJob> | undefined;
+    private readonly changeWaiters = new Set<() => void>();
 
     constructor(
         private readonly rootDir: string,
@@ -204,7 +208,9 @@ export class MacroLearningEngine {
         this.childAuthoring = new MacroChildAuthoring(
             rootDir,
             authoringProfileId,
+            () => this.notifyAuthoring(),
         );
+        this.records = new RevisionRecords(this.statePath());
     }
 
     async configure(runtime: MacroLearningRuntime): Promise<void> {
@@ -234,6 +240,7 @@ export class MacroLearningEngine {
                         job.draft &&
                         job.error?.includes("catalog was saved"))
                 ) {
+                    this.markChanged(job);
                     job.status = "queued";
                 }
             }
@@ -243,6 +250,7 @@ export class MacroLearningEngine {
 
     async close(): Promise<void> {
         this.stopped = true;
+        this.notifyAuthoring();
         this.controller?.abort(new Error("The learning owner closed."));
         await this.worker;
         await this.mutation;
@@ -312,6 +320,7 @@ export class MacroLearningEngine {
                     activeStatuses.has(job.status) &&
                     job.macro?.state !== "approved"
                 ) {
+                    this.markChanged(job);
                     job.mode = preference.mode;
                     job.preferenceRevision = preference.revision;
                     if (preference.mode === "off") {
@@ -450,7 +459,41 @@ export class MacroLearningEngine {
         claim: MacroAuthoringClaim,
     ): Promise<MacroAuthoringRequest | undefined> {
         await this.load();
-        return this.childAuthoring.claim(claim, this.activeAuthorJobs());
+        if (this.stopped) return undefined;
+        if (claim.waitMs !== undefined && typeof claim.waitMs !== "number")
+            throw new Error("Invalid authoring notification wait.");
+        const waitMs = Math.min(Math.max(claim.waitMs ?? 0, 0), 30_000);
+        if (!Number.isFinite(waitMs))
+            throw new Error("Invalid authoring notification wait.");
+        if (this.changeWaiters.size >= 128)
+            throw new Error("Authoring notification wait capacity exceeded.");
+        let wake!: () => void;
+        const changed = new Promise<void>((resolve) => {
+            wake = resolve;
+        });
+        this.changeWaiters.add(wake);
+        const timer = setTimeout(wake, waitMs);
+        timer.unref();
+        try {
+            if (!claim.observeOnly) {
+                const request = await this.childAuthoring.claim(
+                    claim,
+                    this.activeAuthorJobs(),
+                );
+                if (request || !waitMs) return request;
+            }
+            if (!this.stopped) await changed;
+            // A disconnected waiter must not acquire a lease after it wakes.
+            // The connected host issues a fresh durable claim.
+            return undefined;
+        } finally {
+            clearTimeout(timer);
+            this.changeWaiters.delete(wake);
+        }
+    }
+
+    private notifyAuthoring(): void {
+        for (const wake of this.changeWaiters) wake();
     }
 
     async submitAuthoring(submission: MacroAuthoringSubmission): Promise<void> {
@@ -506,6 +549,7 @@ export class MacroLearningEngine {
             }
             for (const related of this.state!.jobs) {
                 if (related.jobId === macro.macroId) {
+                    this.markChanged(related);
                     if (!this.state!.suppressed.includes(related.fingerprint)) {
                         this.state!.suppressed.push(related.fingerprint);
                     }
@@ -1053,7 +1097,15 @@ export class MacroLearningEngine {
     private findJob(jobId: string): StoredJob {
         const job = this.state!.jobs.find((item) => item.jobId === jobId);
         if (!job) throw new Error(`Macro learning job not found: ${jobId}`);
+        this.markChanged(job);
         return job;
+    }
+
+    private markChanged(job: StoredJob): void {
+        if (!this.changedJobs || !this.jobSnapshots) return;
+        this.changedJobs.add(job.jobId);
+        if (!this.jobSnapshots.has(job.jobId))
+            this.jobSnapshots.set(job.jobId, structuredClone(job));
     }
 
     private publicJob(job: StoredJob): MacroLearningJob {
@@ -1073,96 +1125,104 @@ export class MacroLearningEngine {
 
     private async load(): Promise<void> {
         this.loading ??= (async () => {
-            try {
-                if ((await stat(this.statePath())).size > 16 * 1024 * 1024) {
-                    throw new Error(
-                        "Durable learning storage exceeds its 16 MiB limit.",
-                    );
+            const records = await this.records.load();
+            await this.records.purgeUnreferenced();
+            const metadata = records.get("$state") as
+                | Omit<LearningState, "jobs">
+                | undefined;
+            if (records.size && !metadata)
+                throw new Error(
+                    "Invalid durable learning publication: metadata is missing.",
+                );
+            this.state = metadata
+                ? {
+                      ...metadata,
+                      jobs: [...records.entries()]
+                          .filter(([id]) => id !== "$state")
+                          .map(([, job]) => job as StoredJob),
+                  }
+                : {
+                      schemaVersion: 1,
+                      preferences: [],
+                      jobs: [],
+                      suppressed: [],
+                      suppressedMacroIds: [],
+                  };
+            this.state.suppressedMacroIds ??= [];
+            if (
+                this.state.schemaVersion !== 1 ||
+                !Array.isArray(this.state.jobs) ||
+                !Array.isArray(this.state.preferences) ||
+                !Array.isArray(this.state.suppressed) ||
+                !Array.isArray(this.state.suppressedMacroIds) ||
+                this.state.jobs.length > 1_000 ||
+                this.state.preferences.length > 1_000 ||
+                this.state.preferences.some(
+                    (item) =>
+                        !modes.includes(item.mode) ||
+                        !Number.isSafeInteger(item.revision) ||
+                        item.revision < 0 ||
+                        typeof item.cwd !== "string",
+                ) ||
+                this.state.jobs.some(
+                    (job) =>
+                        typeof job.jobId !== "string" ||
+                        !/^[a-f0-9]{64}$/.test(job.jobId) ||
+                        !modes.includes(job.mode) ||
+                        ![
+                            "queued",
+                            "extracting",
+                            "building",
+                            "awaitingAuthor",
+                            "needsReview",
+                            "ready",
+                            "failed",
+                            "cancelled",
+                        ].includes(job.status) ||
+                        typeof job.traceId !== "string" ||
+                        typeof job.cwd !== "string" ||
+                        typeof job.fingerprint !== "string" ||
+                        (job.verifierAnswers !== undefined &&
+                            !validVerifierCache(job.verifierAnswers)) ||
+                        !job.attempts,
+                )
+            ) {
+                throw new Error("Invalid durable learning state.");
+            }
+            const rejected: StoredJob[] = [];
+            for (const job of this.state.jobs) {
+                try {
+                    if (!validAuthoringIdentity(job))
+                        throw new Error("Missing child identity.");
+                    await this.childAuthoring.assertContext(job);
+                } catch {
+                    rejected.push(job);
                 }
-                this.state = JSON.parse(
-                    await readFile(this.statePath(), "utf8"),
-                ) as LearningState;
-                this.state.suppressedMacroIds ??= [];
-                if (
-                    this.state.schemaVersion !== 1 ||
-                    !Array.isArray(this.state.jobs) ||
-                    !Array.isArray(this.state.preferences) ||
-                    !Array.isArray(this.state.suppressed) ||
-                    !Array.isArray(this.state.suppressedMacroIds) ||
-                    this.state.jobs.length > 1_000 ||
-                    this.state.preferences.length > 1_000 ||
-                    this.state.preferences.some(
-                        (item) =>
-                            !modes.includes(item.mode) ||
-                            !Number.isSafeInteger(item.revision) ||
-                            item.revision < 0 ||
-                            typeof item.cwd !== "string",
-                    ) ||
-                    this.state.jobs.some(
-                        (job) =>
-                            typeof job.jobId !== "string" ||
-                            !/^[a-f0-9]{64}$/.test(job.jobId) ||
-                            !modes.includes(job.mode) ||
-                            ![
-                                "queued",
-                                "extracting",
-                                "building",
-                                "awaitingAuthor",
-                                "needsReview",
-                                "ready",
-                                "failed",
-                                "cancelled",
-                            ].includes(job.status) ||
-                            typeof job.traceId !== "string" ||
-                            typeof job.cwd !== "string" ||
-                            typeof job.fingerprint !== "string" ||
-                            (job.verifierAnswers !== undefined &&
-                                !validVerifierCache(job.verifierAnswers)) ||
-                            !job.attempts,
-                    )
-                ) {
-                    throw new Error("Invalid durable learning state.");
-                }
-
-                function validAuthoringIdentity(job: StoredJob): boolean {
-                    const identity = job.authoring;
-                    return (
-                        !!identity &&
-                        identity.captureId === job.traceId &&
-                        /^[a-f0-9]{64}$/.test(identity.contextDigest) &&
-                        [identity.taskId, identity.tokenId].every(
-                            (value) =>
-                                typeof value === "string" &&
-                                value.length > 0 &&
-                                value.length <= 4096,
-                        )
-                    );
-                }
-                let rejected = false;
-                for (const job of this.state.jobs) {
-                    try {
-                        if (!validAuthoringIdentity(job))
-                            throw new Error("Missing child identity.");
-                        await this.childAuthoring.assertContext(job);
-                    } catch {
+            }
+            if (rejected.length)
+                await this.update(() => {
+                    for (const job of rejected) {
+                        this.markChanged(job);
                         job.status = "failed";
                         job.error =
                             "Unsupported learning job: sealed child context is missing or changed; re-record the successful task.";
                         job.updatedAt = new Date().toISOString();
-                        rejected = true;
                     }
-                }
-                if (rejected) await this.update(() => {});
-            } catch (error) {
-                if ((error as NodeJS.ErrnoException).code !== "ENOENT")
-                    throw error;
-                this.state = {
-                    schemaVersion: 1,
-                    preferences: [],
-                    jobs: [],
-                    suppressed: [],
-                    suppressedMacroIds: [],
-                };
+                });
+
+            function validAuthoringIdentity(job: StoredJob): boolean {
+                const identity = job.authoring;
+                return (
+                    !!identity &&
+                    identity.captureId === job.traceId &&
+                    /^[a-f0-9]{64}$/.test(identity.contextDigest) &&
+                    [identity.taskId, identity.tokenId].every(
+                        (value) =>
+                            typeof value === "string" &&
+                            value.length > 0 &&
+                            value.length <= 4096,
+                    )
+                );
             }
         })();
         await this.loading;
@@ -1170,30 +1230,35 @@ export class MacroLearningEngine {
 
     private update(operation: () => void): Promise<void> {
         const result = this.mutation.then(async () => {
-            const before = structuredClone(this.state!);
+            const { jobs, ...metadataBefore } = this.state!;
+            const before: LearningState = {
+                ...structuredClone(metadataBefore),
+                jobs: jobs.slice(),
+            };
             const references = new Map(
                 this.state!.jobs.map((job) => [job.jobId, job]),
             );
             try {
+                this.changedJobs = new Set();
+                this.jobSnapshots = new Map();
+                if (this.activeJobId) this.findJob(this.activeJobId);
                 operation();
-                const destination = this.statePath();
-                await mkdir(path.dirname(destination), { recursive: true });
-                const temporary = `${destination}.${randomUUID()}.tmp`;
-                const serialized = JSON.stringify(this.state);
-                if (Buffer.byteLength(serialized) > 16 * 1024 * 1024) {
-                    throw new Error(
-                        "Durable learning storage exceeds its 16 MiB limit.",
-                    );
-                }
-                await writeFile(temporary, serialized, {
-                    encoding: "utf8",
-                    flag: "wx",
-                });
-                await rename(temporary, destination);
+                const { jobs, ...metadata } = this.state!;
+                const changes = new Map<string, unknown>([
+                    ["$state", metadata],
+                ]);
+                for (const job of jobs)
+                    if (
+                        this.changedJobs.has(job.jobId) ||
+                        !references.has(job.jobId)
+                    )
+                        changes.set(job.jobId, job);
+                await this.records.commit(changes);
+                this.notifyAuthoring();
             } catch (error) {
-                before.jobs = before.jobs.map((snapshot) => {
-                    const original = references.get(snapshot.jobId);
-                    if (!original) return snapshot;
+                before.jobs = before.jobs.map((original) => {
+                    const snapshot = this.jobSnapshots!.get(original.jobId);
+                    if (!snapshot) return original;
                     for (const key of Object.keys(original)) {
                         Reflect.deleteProperty(original, key);
                     }
@@ -1201,6 +1266,9 @@ export class MacroLearningEngine {
                 });
                 this.state = before;
                 throw error;
+            } finally {
+                this.changedJobs = undefined;
+                this.jobSnapshots = undefined;
             }
         });
         this.mutation = result.then(

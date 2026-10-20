@@ -16,8 +16,9 @@ import { isInitiativeSubject } from "./initiativeDiscovery.js";
 import { indexedTopicOccurrence } from "./topicIncidence.js";
 import type { TopicOccurrence } from "./topicTypes.js";
 import { symbolicIdentity, usefulWikiSubject } from "./wikiGrouping.js";
-import { access } from "node:fs/promises";
+import { access, readFile, rm } from "node:fs/promises";
 import path from "node:path";
+import { writeRunbookJson } from "./durableRunbookJson.js";
 import {
     indexedTextHash,
     parseIndexedLocator,
@@ -135,6 +136,8 @@ function collectPostingScores(
     terms: string[],
     requested: Set<string>,
     typedQuery: boolean,
+    eligible: (ordinal: number) => boolean,
+    messageCount: number,
 ): { scores: Map<number, number>; typedSubjects: Map<string, Set<number>> } {
     const matches = new Map<number, Set<string>>();
     const typedSubjects = new Map<string, Set<number>>();
@@ -145,6 +148,7 @@ function collectPostingScores(
         for (const posting of memory.semanticRefIndex.lookupTerm(term)) {
             const ref = memory.semanticRefs.get(posting.semanticRefOrdinal);
             const start = ref.range.start.messageOrdinal;
+            if (!eligible(start)) continue;
             const end = ref.range.end
                 ? ref.range.end.messageOrdinal -
                   ((ref.range.end.chunkOrdinal ?? 0) === 0 ? 1 : 0)
@@ -182,7 +186,7 @@ function collectPostingScores(
                     score +
                     Math.log(
                         1 +
-                            memory.messages.length /
+                            messageCount /
                                 [...matches.values()].filter((set) =>
                                     set.has(word),
                                 ).length,
@@ -254,6 +258,99 @@ function parseSourceUri(
 
 export class KnowProCorpusIndex implements CorpusIndex {
     private memory: DocMemory | undefined;
+    private activeRevisions = new Map<string, string>();
+
+    private eligible(ordinal: number): boolean {
+        const source = parseSourceUri(
+            this.memory?.messages.get(ordinal)?.metadata.sourceUrl,
+        );
+        return (
+            source !== undefined &&
+            this.activeRevisions.get(source.sourceId) === source.revisionId
+        );
+    }
+
+    private eligibleRanges(sourceIds?: ReadonlySet<string>): kp.TextRange[] {
+        const ranges: kp.TextRange[] = [];
+        for (
+            let ordinal = 0;
+            this.memory && ordinal < this.memory.messages.length;
+            ordinal++
+        ) {
+            const source = parseSourceUri(
+                this.memory.messages.get(ordinal).metadata.sourceUrl,
+            );
+            if (
+                !this.eligible(ordinal) ||
+                (sourceIds && (!source || !sourceIds.has(source.sourceId)))
+            )
+                continue;
+            // TextRangeCollection looks up ranges by their starting message ordinal.
+            ranges.push({
+                start: { messageOrdinal: ordinal },
+                end: { messageOrdinal: ordinal + 1 },
+            });
+        }
+        return ranges;
+    }
+
+    private async saveEligibility(): Promise<void> {
+        await writeRunbookJson(
+            path.join(this.indexDirectory, "eligibility.json"),
+            `${JSON.stringify({
+                version: 1,
+                revisions: [...this.activeRevisions],
+            })}\n`,
+        );
+    }
+
+    private async loadEligibility(): Promise<void> {
+        this.activeRevisions.clear();
+        for (const [sourceId, messages] of this.sourceMessages)
+            if (messages.length)
+                this.activeRevisions.set(sourceId, messages.at(-1)!.revisionId);
+        let value: unknown;
+        try {
+            value = JSON.parse(
+                await readFile(
+                    path.join(this.indexDirectory, "eligibility.json"),
+                    "utf8",
+                ),
+            );
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+            throw error;
+        }
+        if (
+            !value ||
+            typeof value !== "object" ||
+            !("version" in value) ||
+            value.version !== 1 ||
+            !("revisions" in value) ||
+            !Array.isArray(value.revisions)
+        )
+            throw new Error(
+                "Invalid document revision eligibility; rebuild the derived index",
+            );
+        const active = new Map<string, string>();
+        for (const entry of value.revisions) {
+            if (
+                !Array.isArray(entry) ||
+                entry.length !== 2 ||
+                typeof entry[0] !== "string" ||
+                typeof entry[1] !== "string" ||
+                active.has(entry[0]) ||
+                !this.sourceMessages
+                    .get(entry[0])
+                    ?.some((message) => message.revisionId === entry[1])
+            )
+                throw new Error("Invalid document revision eligibility entry");
+            active.set(entry[0], entry[1]);
+        }
+        if (active.size !== this.sourceMessages.size)
+            throw new Error("Incomplete document revision eligibility");
+        this.activeRevisions = active;
+    }
     private sourceMessages = new Map<
         string,
         Array<{
@@ -314,6 +411,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 },
             );
             this.refreshSourceMessages(this.memory);
+            await this.loadEligibility();
             if (hasSemanticIndex && this.memory?.messages.length === 0) {
                 throw new Error(
                     `KnowPro semantic index has no messages: '${semanticIndexPath}'`,
@@ -379,6 +477,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         const symbols = new Set<string>();
         for (const posting of memory.semanticRefIndex.lookupTerm(term)) {
             const ref = memory.semanticRefs.get(posting.semanticRefOrdinal);
+            if (!this.eligible(ref.range.start.messageOrdinal)) continue;
             const subject =
                 ref.knowledgeType === "entity"
                     ? (ref.knowledge as EntityKnowledge).name
@@ -438,6 +537,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             const key = `${source.sourceId}:${source.revisionId}`;
             const blockOrdinal = ordinals.get(key) ?? 0;
             ordinals.set(key, blockOrdinal + 1);
+            if (!this.eligible(messageOrdinal)) continue;
             if (scores && !scores.has(messageOrdinal)) continue;
             yield {
                 ...source,
@@ -459,12 +559,21 @@ export class KnowProCorpusIndex implements CorpusIndex {
             terms,
             requested,
             request.query !== undefined,
+            (ordinal) => this.eligible(ordinal),
+            this.eligibleRanges().reduce(
+                (count, range) =>
+                    count +
+                    range.end!.messageOrdinal -
+                    range.start.messageOrdinal,
+                0,
+            ),
         );
         const followed = this.sourceFollowingScores(request, scores);
         if (request.query) {
             const options = kp.createLanguageSearchOptionsTypical();
             options.maxMessageMatches = 8;
             options.maxKnowledgeMatches = 12;
+            options.messageRangesInScope = this.eligibleRanges();
             const result = await memory.searchWithLanguage(
                 request.query ?? request.terms.join(" "),
                 options,
@@ -517,7 +626,11 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     const source = parseSourceUri(
                         memory.messages.get(ordinal).metadata.sourceUrl,
                     );
-                    if (source && entity.sourceIds.includes(source.sourceId))
+                    if (
+                        source &&
+                        this.eligible(ordinal) &&
+                        entity.sourceIds.includes(source.sourceId)
+                    )
                         preferred.add(ordinal);
                 }
             }
@@ -544,7 +657,11 @@ export class KnowProCorpusIndex implements CorpusIndex {
             if (!allowed.has(source.sourceId)) return [];
             const messages = (
                 this.sourceMessages.get(source.sourceId) ?? []
-            ).filter((entry) => entry.revisionId === source.revisionId);
+            ).filter(
+                (entry) =>
+                    entry.revisionId === source.revisionId &&
+                    this.eligible(entry.messageOrdinal),
+            );
             if (messages.some((entry) => scores.has(entry.messageOrdinal)))
                 return [];
             return messages.length ? [messages] : [];
@@ -619,6 +736,10 @@ export class KnowProCorpusIndex implements CorpusIndex {
         if (documents.length === 0) {
             await kp.removeConversationData(this.indexDirectory, indexBaseName);
             this.memory = undefined;
+            this.activeRevisions.clear();
+            await rm(path.join(this.indexDirectory, "eligibility.json"), {
+                force: true,
+            });
             this.refreshSourceMessages();
             await onProgress({
                 completed: parts.length,
@@ -693,10 +814,17 @@ export class KnowProCorpusIndex implements CorpusIndex {
             docPartCount: parts.length,
         });
         await kp.timeSearchStage("knowpro.index.persist", () =>
-            memory.writeToFile(this.indexDirectory, indexBaseName),
+            memory.writeToFile(this.indexDirectory, indexBaseName, true),
         );
         this.memory = memory;
         this.refreshSourceMessages(memory);
+        this.activeRevisions = new Map(
+            documents.map((document) => [
+                document.source.sourceId,
+                document.revision.revisionId,
+            ]),
+        );
+        await this.saveEligibility();
         await onProgress({
             completed: total,
             total,
@@ -792,9 +920,15 @@ export class KnowProCorpusIndex implements CorpusIndex {
             docPartCount: parts.length,
         });
         await kp.timeSearchStage("knowpro.index.persist", () =>
-            memory.writeToFile(this.indexDirectory, indexBaseName),
+            memory.writeToFile(this.indexDirectory, indexBaseName, true),
         );
         this.refreshSourceMessages(this.memory);
+        for (const document of documents)
+            this.activeRevisions.set(
+                document.source.sourceId,
+                document.revision.revisionId,
+            );
+        await this.saveEligibility();
         await onProgress({
             completed: total,
             total,
@@ -819,6 +953,31 @@ export class KnowProCorpusIndex implements CorpusIndex {
         );
     }
 
+    public async replace(
+        document: IndexedDocument,
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<void> {
+        await this.initialize();
+        signal.throwIfAborted();
+        if (
+            !this.sourceMessages
+                .get(document.source.sourceId)
+                ?.some(
+                    (message) =>
+                        message.revisionId === document.revision.revisionId,
+                )
+        ) {
+            await this.append([document], signal, onProgress);
+        } else {
+            this.activeRevisions.set(
+                document.source.sourceId,
+                document.revision.revisionId,
+            );
+            await this.saveEligibility();
+        }
+    }
+
     private async searchCore(
         query: string,
         limit: number,
@@ -830,6 +989,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             const options = kp.createLanguageSearchOptionsTypical();
             options.maxMessageMatches = limit;
             options.maxKnowledgeMatches = limit;
+            options.messageRangesInScope = this.eligibleRanges();
             const result = await kp.timeSearchStage(
                 "knowpro.index.languageSearch",
                 () =>
@@ -888,6 +1048,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             return { matches: [], whyNoAnswer: "The corpus has no index." };
         }
         const options = kp.createLanguageSearchOptionsTypical();
+        options.messageRangesInScope = this.eligibleRanges(sourceIds);
         options.maxMessageMatches = limit;
         options.maxKnowledgeMatches = limit;
         const searched = await memory.searchWithLanguage(query, options);
@@ -1054,6 +1215,8 @@ export class KnowProCorpusIndex implements CorpusIndex {
         >();
 
         for (const semanticRef of this.memory.semanticRefs ?? []) {
+            if (!this.eligible(semanticRef.range.start.messageOrdinal))
+                continue;
             const message = this.memory.messages.get(
                 semanticRef.range.start.messageOrdinal,
             );

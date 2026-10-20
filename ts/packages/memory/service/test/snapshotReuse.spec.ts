@@ -273,8 +273,8 @@ describe("operation-scoped committed view snapshots", () => {
                 corpusId,
                 viewId: target.viewId,
             });
-            const oldReads = reads;
-            expect(oldReads).toBeGreaterThan(1);
+            const historicalReads = reads;
+            expect(historicalReads).toBe(0);
             expect(versions).toEqual(historical.map((entry) => entry.version));
             expect(
                 automaticallyConsolidatable(
@@ -289,9 +289,9 @@ describe("operation-scoped committed view snapshots", () => {
                 ): Promise<Array<[ViewVersion, ViewVersion]>>;
             };
             const currentVersions = TypedViewStore.prototype.getViewVersions;
-            let oldPairs: Array<[ViewVersion, ViewVersion]>;
-            let oldNominationReads: number;
-            let oldNominationMs: number;
+            let historicalPairs: Array<[ViewVersion, ViewVersion]>;
+            let historicalNominationReads: number;
+            let historicalNominationMs: number;
             try {
                 TypedViewStore.prototype.getViewVersions = async function (
                     request,
@@ -302,16 +302,16 @@ describe("operation-scoped committed view snapshots", () => {
                 };
                 reads = 0;
                 const started = performance.now();
-                oldPairs = await nomination.readConsolidationPairs(
+                historicalPairs = await nomination.readConsolidationPairs(
                     corpusId,
                     target.viewId,
                 );
-                oldNominationMs = performance.now() - started;
-                oldNominationReads = reads;
+                historicalNominationMs = performance.now() - started;
+                historicalNominationReads = reads;
             } finally {
                 TypedViewStore.prototype.getViewVersions = currentVersions;
             }
-            expect(oldNominationReads).toBeGreaterThan(1);
+            expect(historicalNominationReads).toBe(1);
             const nominationMs: number[] = [];
             for (let attempt = 0; attempt < 2; attempt++) {
                 const operation = { count: 0 };
@@ -320,7 +320,7 @@ describe("operation-scoped committed view snapshots", () => {
                     nomination.readConsolidationPairs(corpusId, target.viewId),
                 );
                 nominationMs.push(performance.now() - started);
-                expect(pairs).toEqual(oldPairs);
+                expect(pairs).toEqual(historicalPairs);
                 expect(pairs.length).toBeGreaterThan(0);
                 expect(
                     pairs.some((pair) =>
@@ -337,9 +337,9 @@ describe("operation-scoped committed view snapshots", () => {
             console.warn(
                 JSON.stringify({
                     snapshotReuse: {
-                        oldHistoricalReads: oldReads,
-                        oldNominationReads,
-                        oldNominationMs,
+                        historicalReads,
+                        historicalNominationReads,
+                        historicalNominationMs,
                         nominationReads: 1,
                         nominationMs,
                     },

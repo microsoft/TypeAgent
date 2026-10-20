@@ -68,6 +68,86 @@ Restart and reconciliation resume enrollment without an expiring preview token.
 Privacy removal outranks human edit protection and cancels late model results.
 The preview token alone does not deny access or constitute durable removal.
 
+## Canonical revision text storage
+
+Corpus manifests use `storageVersion: 1`. Revision metadata contains a `text`
+reference with the SHA-256 digest and byte length of an immutable corpus-local
+`revision-text/<digest>.json` blob, not an inline `content` field. Each blob is a
+UTF-8 JSON string; escaping preserves exact UTF-16 content, including lone
+surrogates. Source hashes, citation coordinates and revision identities are
+unchanged. Text remains available in the owner's in-memory source snapshots.
+
+New blobs are staged, read back and digest/size verified before manifest
+publication. Existing immutable revision references are reused under the store's
+single-owner lock. Manifests publish using staged atomic replacement with bounded
+Windows retry, without moving the previous canonical file away first. This is a
+process-restart recovery protocol, not a multi-file transaction or proof of
+power-loss durability. Metadata serialization, source-count-dependent work and
+index-generation copies/rebuilds remain.
+
+Only committed manifest references retain blobs; there is no separately committed
+reference-count database. Replacement collects unreferenced text after commit,
+and startup collects abandoned blobs/staging files. Missing, corrupt or unsafe
+referenced blobs fail explicitly; derived indexes never reconstruct canonical
+text. Content is shared only within a corpus and only while another retained
+source/revision legitimately references it.
+
+Source forget physically purges last-reference text before clearing its existing
+durable removal intent. Corpus clear similarly records `pendingCorpusClear`,
+withholds corpus content reads/writes on cleanup failure, and resumes its
+event/index/asset/text cleanup at restart before reopening reads. Text-reference
+caches contain metadata only and evict removed references before deleting files.
+
+Older/unrecognized canonical manifest formats are rejected with explicit
+reset/reimport guidance, never silently migrated or deleted. Preserve the store
+and use its matching build to export needed data before explicitly resetting and
+reimporting. Existing derived-index rebuild rules are unchanged.
+
+## Incremental indexes and event segments
+
+KnowPro-backed derived generations now publish a small `corpus_data.json`
+descriptor over immutable content-addressed JSON nodes in the index root's
+`.segments` directory. Generation copies copy pointers and generation metadata,
+not retained node payloads. Related-term and message vectors have separate JSON
+lanes and reconstruct the same Float32Array values. Other KnowPro clients keep
+the existing serialization unless they explicitly opt in.
+
+An existing compatible source using `retainRevisionHistory`, without acquired
+assets, can replace its active revision by indexing only changed content.
+`eligibility.json` selects one retained revision per source. Message ordinals
+remain stable; knowledge, fragments, subjects and vector candidates exclude
+inactive revisions before ranking limits. Reactivating indexed historical
+content requires no provider extraction. Replacement without history and
+unsupported/custom indexes still rebuild, preserving physical removal behavior.
+Explicit reindexing compacts inactive indexed revisions from current canonical
+sources. Metadata serialization, full index hydration, in-memory JSON traversal,
+linear vector search and retained-history growth are not eliminated.
+
+Canonical `events.jsonl` is now a version-1 publication descriptor, not a
+concatenated log. Immutable JSONL event files live in `event-segments`; a
+filename-derived lookup selects individual event bodies without decoding all
+retained events. The pointer records monotonic sequence and independent
+eligibility revision; suppression/tombstone metadata lives in a referenced blob.
+Append publishes one event and a bounded pointer. Listing and search still load
+the required event set, and cold lookup scans filenames. Same-eligibility event
+index reconciliation extracts only the appended suffix. Deletion invalidates
+derived generations even when later append restores the prior event count.
+
+Forgetting retains a durable pending-purge descriptor until event payloads,
+obsolete suppression blobs and dependent indexes are physically removed.
+Recovery finishes that purge before reads resume. Generation descriptors retain
+shared JSON nodes; ordinary obsolete-node collection and explicit reindexing
+remove unreferenced data, while privacy cleanup drains writers and removes
+affected bytes before reopening reads. Canonical old/future event formats fail
+with explicit reset/reimport guidance; no store is automatically migrated or
+reset. These are process-restart recovery guarantees, not a power-loss
+transaction across files.
+
+Single-document cancellation, like shared-batch cancellation, remains
+`cancelling` until actual provider writes drain. An abort-ignoring provider can
+delay terminal cancellation, close or privacy cleanup; no terminal success is
+reported while it could restore removed bytes.
+
 ## Automatic editorial maintenance
 
 Wiki and Projects revise complete small targets through existing family jobs.
@@ -305,6 +385,27 @@ ingestion requests, with each document omitting `corpusId`. Acquisition remains
 host-owned. Limits are **50 documents / 8 MiB encoded request**, two active
 members per batch, at most four active batches; corpus commits retain their
 existing serialization.
+
+Eligible new-source members share a detached index generation in groups of at
+most **two**, with a **25 ms admission window** starting when the first job is
+durably accepted. This is not a provider-duration or queue-wait bound. An empty
+corpus rebuilds the pair together; a nonempty corpus copies its compatible
+generation once and appends both documents. Each member still has its own durable
+job, progress, cancellation and retry identity. Ordinary standalone ingestion is
+unchanged. Replacements, duplicate source IDs, revision guards, assets,
+unsupported append generations and budgeted rehearsals keep the singleton path.
+
+Shared provider/publication failures fail the affected jobs explicitly. Before
+publication, cancellation or a generation conflict discards the candidate and
+retries unaffected members through singleton ingestion; corpus clear cancels
+captured pre-clear admissions instead. Cleanup drains the actual provider
+promise, including providers that ignore abort, before removing private files.
+Committed sources retain the existing post-commit warning semantics.
+Physical batch reads, staged publications and purge deletion share a per-batch
+owner-local gate so rapid durable polling cannot hold a Windows file handle
+across replacement. Reads still come from disk, and publication errors remain
+errors rather than returning uncommitted in-memory state.
+
 `measureBatchImportBytes(request)` returns the exact UTF-8 byte length of the
 durable JSON encoding, including `Uint8Array` assets encoded as
 `{ batchAssetBytes: "<base64>" }`. `assertBatchImportRequest(request)` applies
@@ -910,6 +1011,13 @@ snapshot. Per-revision indexes remain outside Git under
 
 Source replacement marks dependent drafts stale without modifying historical revisions. Forget/clear quarantines history, creates a sanitized baseline, replaces the entire old Git object database (including unreachable blobs), and removes affected View search indexes before reopening reads. Interrupted privacy cleanup rejects reads until restart recovery finishes. No procedure state, settings or index is persisted or migrated by this service.
 
+Git commits also retain full-fidelity per-View version records. History queries
+decode only the selected View's distinct records, preserving history order,
+revision filtering, editorial metadata and head guards. Legacy derived records
+rebuild under the history lock; Git commit traversal remains linear. Privacy
+replacement of the history repository removes these records and unreachable
+blobs together, rather than leaving a second history outside the purge boundary.
+
 ### Runnable local CLI
 
 Build from `ts` with `pnpm exec fluid-build packages\memory\service -t build`
@@ -1109,10 +1217,11 @@ time, and event time. Events can link to durable document sources without
 copying source content. `searchEvents` lazily reconciles a separate per-corpus
 KnowPro content index of event projections with the log, including after
 restart. It uses structured knowledge and message search rather than lexical
-event scoring; a missing or outdated index is rebuilt, and model/indexing
-failures are reported instead of silently falling back. An outdated generation
-is physically removed before a rebuild, including when extraction subsequently
-fails, so searches cannot recover or use that generation. Ledger-backed event
+event scoring; a missing index is rebuilt and a compatible index appends only
+new events. Model/indexing failures are reported instead of silently falling
+back. An append failure preserves the previous publication for a later retry,
+but does not serve it as a successful up-to-date result. Eligibility changes
+physically purge old generations before subsequent search. Ledger-backed event
 ID tags restrict all requested provenance and date filters before KnowPro
 ranks and limits results. `authorities` filters by the producer-supplied
 `metadata.authority` label before ranking, and that label is also indexed as

@@ -18,6 +18,28 @@ describe("recipe program compiler", () => {
         expect(first.compiler.name).toBe("typescript");
     });
 
+    it("keeps recipe diagnostics and declarations isolated across warm compilations", () => {
+        const valid = `async function execute(api, params) {
+            const value: Map<string, number> = new Map();
+            value.set("entry", 1);
+            return value.get("entry") ?? 0;
+        }`;
+        const cold = compileRecipeProgram(valid);
+        expect(() =>
+            compileRecipeProgram(`async function execute(api, params) {
+            return value;
+        }`),
+        ).toThrow("Cannot find name 'value'");
+        expect(() =>
+            compileRecipeProgram(`async function execute(api, params) {
+            const value: Map<string, number> = new Map();
+            value.set("entry", "wrong");
+            return null;
+        }`),
+        ).toThrow();
+        expect(compileRecipeProgram(valid)).toEqual(cold);
+    });
+
     it.each([
         `async function execute(api, params) { const value: number = "wrong"; return value; }`,
         `async function execute(api, params) { return api.tools.missing("read", null); }`,

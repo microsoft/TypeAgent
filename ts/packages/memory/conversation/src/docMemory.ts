@@ -412,6 +412,7 @@ export class DocMemory
     public async writeToFile(
         dirPath: string,
         baseFileName: string,
+        segmented = false,
     ): Promise<void> {
         await this.prepareEmbeddings();
         const data = await this.serialize();
@@ -420,6 +421,7 @@ export class DocMemory
             this.settings.conversationSettings,
             dirPath,
             baseFileName,
+            segmented,
         );
     }
 

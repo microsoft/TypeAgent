@@ -67,6 +67,7 @@ export function createScriptExecutor(config: ScriptExecutorConfig): {
                 ...blockedGlobalsOverride,
             };
 
+            let timeoutId: ReturnType<typeof setTimeout> | undefined;
             try {
                 const fn = new Function(
                     ...Object.keys(sandbox),
@@ -77,7 +78,7 @@ export function createScriptExecutor(config: ScriptExecutorConfig): {
 
                 const timeout = options?.timeout ?? defaultTimeout;
                 const timeoutPromise = new Promise<never>((_, reject) => {
-                    setTimeout(
+                    timeoutId = setTimeout(
                         () => reject(new Error("Script execution timeout")),
                         timeout,
                     );
@@ -112,6 +113,8 @@ export function createScriptExecutor(config: ScriptExecutorConfig): {
                     error: errorMessage,
                     message: `Script execution failed: ${errorMessage}`,
                 };
+            } finally {
+                if (timeoutId !== undefined) clearTimeout(timeoutId);
             }
         },
     };

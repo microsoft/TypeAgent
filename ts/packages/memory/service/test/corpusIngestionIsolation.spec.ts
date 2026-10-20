@@ -220,6 +220,12 @@ describe("detached corpus ingestion preparation", () => {
         const accepted = await append(corpusId);
         await provider.entered;
         await service.reindexCorpus(corpusId);
+        expect((await service.getJob(accepted.jobId))?.state).toBe(
+            "building-indexes",
+        );
+        expect(await readdir(path.join(root, corpusId, "index"))).toHaveLength(
+            2,
+        );
         provider.release();
 
         const job = await waitForMemoryJob(service, accepted.jobId);

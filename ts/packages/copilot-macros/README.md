@@ -484,6 +484,12 @@ The focused specs cover definition and validation, contained program execution,
 catalog lifecycle, approval, persistence, cancellation, schema drift, and
 run-record sanitization.
 
+Persistence fixtures use `RevisionRecords` to load and commit learning jobs by
+job ID. `learning.json` is a revision manifest, not an inline `jobs` array;
+editing the manifest directly does not update its immutable job records.
+Restart validation persists rejected child contexts as failed job revisions,
+including the instruction to re-record the task.
+
 ## Limitations
 
 - Single-trace induction is deliberately narrow.

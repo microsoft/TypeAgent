@@ -15,6 +15,7 @@ import {
 import { createTopicSnapshot } from "../src/topicGeneration.js";
 import { indexedTopicOccurrence } from "../src/topicIncidence.js";
 import { TypedViewStore } from "../src/viewStore.js";
+import { ViewHistory } from "../src/viewHistory.js";
 import type { TopicOccurrence, TopicSnapshot } from "../src/topicTypes.js";
 import type { ViewBuildSnapshot } from "../src/viewTypes.js";
 
@@ -286,6 +287,83 @@ describe("complete scoped topic snapshots", () => {
 });
 
 describe("topic persistence in existing view history", () => {
+    test("Topic reads reuse commit byte sizes across queries, publication and restart", async () => {
+        const root = await mkdtemp(path.join(os.tmpdir(), "topic-byte-sizes-"));
+        try {
+            const history = new ViewHistory(
+                path.join(root, "test", "views"),
+                () => ({
+                    views: {},
+                    topics: undefined as TopicSnapshot | undefined,
+                }),
+            );
+            const state = {
+                views: {},
+                topics: createTopicSnapshot(
+                    input([occurrence("orders", "résumé review")]),
+                    "offline",
+                ),
+            };
+            const head = await history.commit(
+                null,
+                state,
+                {},
+                "fixture",
+                "Initial",
+            );
+            const expectedStateBytes = Buffer.byteLength(JSON.stringify(state));
+            const expectedSnapshotBytes = Buffer.byteLength(
+                JSON.stringify(state.topics),
+            );
+            for (const store of [
+                new TypedViewStore(root),
+                new TypedViewStore(root),
+            ]) {
+                const stringify = import.meta.jest.spyOn(JSON, "stringify");
+                try {
+                    for (let i = 0; i < 2; i++) {
+                        const page = await store.queryTopics({
+                            corpusId: "test",
+                        });
+                        expect(page.io.stateBytes).toBe(expectedStateBytes);
+                        expect(page.io.snapshotBytes).toBe(
+                            expectedSnapshotBytes,
+                        );
+                    }
+                    expect(
+                        stringify.mock.calls.filter(
+                            ([value]) =>
+                                value &&
+                                typeof value === "object" &&
+                                "views" in value,
+                        ),
+                    ).toHaveLength(0);
+                    expect(
+                        stringify.mock.calls.filter(
+                            ([value]) =>
+                                value &&
+                                typeof value === "object" &&
+                                "occurrences" in value,
+                        ),
+                    ).toHaveLength(1);
+                } finally {
+                    stringify.mockRestore();
+                }
+            }
+            const store = new TypedViewStore(root);
+            await store.queryTopics({ corpusId: "test" });
+            const changed = { ...state, topics: undefined };
+            await history.commit(head, changed, {}, "fixture", "Clear topics");
+            const page = await store.queryTopics({ corpusId: "test" });
+            expect(page.io.stateBytes).toBe(
+                Buffer.byteLength(JSON.stringify(changed)),
+            );
+            expect(page.io.snapshotBytes).toBe(4);
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+
     let directory: string;
     beforeEach(async () => {
         directory = await mkdtemp(path.join(os.tmpdir(), "memory-topics-"));

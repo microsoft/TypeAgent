@@ -757,6 +757,11 @@ export interface IndexedFragmentSelection {
 }
 
 export interface CorpusIndex {
+    replace?(
+        document: IndexedDocument,
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<void>;
     initialize(): Promise<void>;
     listSubjects?(
         offset: number,
