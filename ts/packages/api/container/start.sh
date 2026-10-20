@@ -2,7 +2,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-
 set -euo pipefail
 
 if [[ "$(id -u)" -eq 0 ]]; then
