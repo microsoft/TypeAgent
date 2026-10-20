@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { AgentServerConnection } from "@typeagent/agent-server-client";
+import type { MacroAuthoringConnection } from "../shared/macro-owner.js";
 import type {
     MacroAuthoringRequest,
     MacroAuthoringSubmission,
@@ -9,16 +9,7 @@ import type {
 import { randomUUID } from "node:crypto";
 import { redactTraceValue } from "@typeagent/copilot-macros";
 
-type AuthoringConnection = Pick<
-    AgentServerConnection,
-    | "claimMacroAuthoringRequest"
-    | "submitMacroAuthoringResponse"
-    | "getMacroLearningPreference"
-    | "getMacroLearningJob"
-    | "close"
->;
-
-function waitForAuthoringReconnect(signal: AbortSignal): Promise<void> {
+function waitForAuthoringPoll(signal: AbortSignal): Promise<void> {
     return new Promise((resolve) => {
         const done = () => {
             clearTimeout(timer);
@@ -54,7 +45,7 @@ async function callAuthoringBackend<T>(
 export interface MacroAuthoringWorkerOptions {
     sessionId: string;
     cwd: string;
-    connect(): Promise<AuthoringConnection>;
+    connect(): Promise<MacroAuthoringConnection>;
     launch(
         prompt: string,
         signal: AbortSignal,
@@ -179,7 +170,7 @@ export class MacroAuthoringWorker {
 
     private async author(
         request: MacroAuthoringRequest,
-        connection: AuthoringConnection,
+        connection: MacroAuthoringConnection,
         signal: AbortSignal,
     ): Promise<MacroAuthoringSubmission["outcome"] | undefined> {
         const child = new AbortController();
@@ -234,7 +225,7 @@ export class MacroAuthoringWorker {
 
     private async monitor(
         request: MacroAuthoringRequest,
-        connection: AuthoringConnection,
+        connection: MacroAuthoringConnection,
         signal: AbortSignal,
     ): Promise<Error | undefined> {
         while (!signal.aborted) {

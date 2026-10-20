@@ -21,7 +21,6 @@ const valueOptions = new Set([
     "--repetitions",
     "--seed",
     "--root-model",
-    "--runner-model",
     "--max-target-model-turns",
     "--max-duration-ms",
 ]);
@@ -29,13 +28,7 @@ const commandOptions = {
     plan: new Set([...valueOptions].filter((name) => name !== "--input")),
     grade: new Set(["--corpus", "--input", "--output"]),
     report: new Set(["--input", "--output"]),
-    native: new Set([
-        "--corpus",
-        "--input",
-        "--output",
-        "--console-helper-dir",
-        "--execute-live",
-    ]),
+    native: new Set(["--corpus", "--input", "--output", "--execute-live"]),
 };
 
 export function parseMacroArguments(argv) {
@@ -66,8 +59,6 @@ export function parseMacroArguments(argv) {
     if (command !== "plan" && !options["--input"])
         throw new Error("Required option: --input");
     if (command === "native") {
-        if (!options["--console-helper-dir"])
-            throw new Error("Required option: --console-helper-dir");
         if (
             options["--execute-live"] !== undefined &&
             !["true", "false"].includes(options["--execute-live"])
@@ -84,7 +75,6 @@ function planOptions(options) {
         repetitions: Number(options["--repetitions"]),
         seed: options["--seed"] === undefined ? NaN : Number(options["--seed"]),
         rootModel: options["--root-model"],
-        runnerModel: options["--runner-model"],
         maxTargetModelTurns: Number(options["--max-target-model-turns"]),
         maxDurationMs: Number(options["--max-duration-ms"]),
     };
@@ -128,11 +118,10 @@ export async function main(argv = process.argv.slice(2)) {
             "macro-eval.mjs plan|grade|report|native --output <new-path> [options]\n" +
                 "plan/grade/report and native preflight are offline; live native requires --execute-live true.\n" +
                 "plan: --corpus --mode --cases --repetitions --seed --root-model " +
-                "--runner-model --max-target-model-turns --max-duration-ms\n" +
+                "--max-target-model-turns --max-duration-ms\n" +
                 "grade: --corpus --input <native-evidence.json>\n" +
                 "report: --input <campaign.json>\n" +
-                "native: --corpus --input <native-config.json> --console-helper-dir <scripts> " +
-                "[--execute-live true] --output <fresh-owned-directory>\n",
+                "native: --corpus --input <plugin-native-config.json> [--execute-live true] --output <fresh-directory>; defaults to offline preflight.\n",
         );
         return;
     }
@@ -149,7 +138,6 @@ export async function main(argv = process.argv.slice(2)) {
                 corpus: loadScenarioCorpus(options["--corpus"]),
                 config: JSON.parse(fs.readFileSync(options["--input"], "utf8")),
                 output,
-                helperDirectory: options["--console-helper-dir"],
                 executeLive: options["--execute-live"] === "true",
                 signal: abort.signal,
             });

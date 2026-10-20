@@ -4,36 +4,6 @@
 import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 import type { AppAgentManifest } from "@typeagent/agent-sdk";
 import type {
-    ApproveMacroRequest,
-    ArmRecordingRequest,
-    ClaimRecordingRequest,
-    CopilotToolMacro,
-    DeleteMacroRequest,
-    DisableMacroRequest,
-    FinalizeRecordingRequest,
-    InspectMacroRequest,
-    ListMacrosRequest,
-    MacroLearningJob,
-    MacroAuthoringClaim,
-    MacroAuthoringRequest,
-    MacroAuthoringSubmission,
-    MacroLearningMode,
-    MacroLearningPreference,
-    MacroMatch,
-    MacroRequirements,
-    MacroRunRecord,
-    MacroSummary,
-    MacroValidationReport,
-    MacroVersionRef,
-    RecordingState,
-    RecordingToken,
-    RunMacroRequest,
-    RunMacroResponse,
-    SearchMacrosRequest,
-    TraceSummary,
-    ValidateMacroRequest,
-} from "@typeagent/copilot-macros";
-import type {
     PendingInteractionRequest,
     QueueSnapshot,
 } from "@typeagent/dispatcher-types";
@@ -51,39 +21,6 @@ import type {
 import type { RunbookHostCapabilities } from "./runbookCapabilities.js";
 
 export type { MacroDraftResult } from "@typeagent/procedure-artifacts";
-
-export type {
-    MacroAuthoringClaim,
-    MacroAuthoringRequest,
-    MacroAuthoringSubmission,
-    ApproveMacroRequest,
-    ArmRecordingRequest,
-    ClaimRecordingRequest,
-    CopilotToolMacro,
-    DeleteMacroRequest,
-    DisableMacroRequest,
-    FinalizeRecordingRequest,
-    InspectMacroRequest,
-    ListMacrosRequest,
-    MacroLearningJob,
-    MacroLearningMode,
-    MacroLearningPreference,
-    MacroMatch,
-    MacroRequirements,
-    MacroRunRecord,
-    MacroSummary,
-    MacroValidationReport,
-    MacroVersionRef,
-    RecordedInteractionTrace,
-    RecordedToolCall,
-    RecordingState,
-    RecordingToken,
-    RunMacroRequest,
-    RunMacroResponse,
-    SearchMacrosRequest,
-    TraceSummary,
-    ValidateMacroRequest,
-} from "@typeagent/copilot-macros";
 
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
@@ -294,55 +231,6 @@ export type AgentServerInvokeFunctions = {
     listBindingTargets: RunbookHostCapabilities["listBindingTargets"];
     checkBindingTargets: RunbookHostCapabilities["checkBindingTargets"];
     suggestBindings: RunbookHostCapabilities["suggestBindings"];
-    getMacroLearningPreference: (
-        cwd: string,
-    ) => Promise<MacroLearningPreference>;
-    setMacroLearningPreference: (request: {
-        cwd: string;
-        mode: MacroLearningMode;
-    }) => Promise<MacroLearningPreference>;
-    prepareMacroLearning: (request: {
-        traceId: string;
-    }) => Promise<MacroLearningJob>;
-    getMacroLearningJob: (jobId: string) => Promise<MacroLearningJob>;
-    claimMacroAuthoringRequest: (
-        claim: MacroAuthoringClaim,
-    ) => Promise<MacroAuthoringRequest | undefined>;
-    submitMacroAuthoringResponse: (
-        submission: MacroAuthoringSubmission,
-    ) => Promise<void>;
-    cancelMacroLearningJob: (jobId: string) => Promise<MacroLearningJob>;
-    armMacroRecording: (
-        request: ArmRecordingRequest,
-    ) => Promise<RecordingToken>;
-    getMacroRecordingState: (sessionId: string) => Promise<RecordingState>;
-    claimMacroRecording: (
-        request: ClaimRecordingRequest,
-    ) => Promise<RecordingToken | undefined>;
-    cancelMacroRecording: (sessionId: string) => Promise<void>;
-    failMacroRecording: (
-        sessionId: string,
-        tokenId: string,
-        error: string,
-    ) => Promise<void>;
-    finalizeMacroRecording: (
-        request: FinalizeRecordingRequest,
-    ) => Promise<TraceSummary>;
-    listMacros: (request?: ListMacrosRequest) => Promise<MacroSummary[]>;
-    searchMacros: (request: SearchMacrosRequest) => Promise<MacroMatch[]>;
-    inspectMacro: (request: InspectMacroRequest) => Promise<CopilotToolMacro>;
-    getMacroRequirements: (
-        request: InspectMacroRequest,
-    ) => Promise<MacroRequirements>;
-    validateMacro: (
-        request: ValidateMacroRequest,
-    ) => Promise<MacroValidationReport>;
-    approveMacro: (request: ApproveMacroRequest) => Promise<MacroVersionRef>;
-    disableMacro: (request: DisableMacroRequest) => Promise<MacroVersionRef>;
-    deleteMacro: (request: DeleteMacroRequest) => Promise<void>;
-    runMacro: (request: RunMacroRequest) => Promise<RunMacroResponse>;
-    cancelMacroRun: (runId: string) => Promise<void>;
-    getMacroRun: (runId: string) => Promise<MacroRunRecord>;
     listSkills: (request?: ListSkillsRequest) => Promise<CatalogEntry[]>;
     searchSkills: (
         request: SearchSkillsRequest,

@@ -101,6 +101,12 @@ describe("durable Copilot authoring worker", () => {
             sessionId: "source",
             mode,
             status,
+            authoring: {
+                captureId: envelope.context.capture.captureId,
+                taskId: envelope.context.capture.taskId,
+                tokenId: envelope.context.capture.tokenId,
+                contextDigest: envelope.digest,
+            },
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         });

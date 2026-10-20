@@ -24,7 +24,7 @@ import {
     MacroChildAuthoring,
 } from "./macroChildAuthoring.js";
 import type { SealedRecipeAuthoringContext } from "./recipeAuthoring.js";
-import { induceMacroFromTrace } from "./macroDefinition.js";
+import { induceMacroFromTrace, validateMacro } from "./macroDefinition.js";
 import { getMacroFeatures } from "./macroFeatures.js";
 import {
     parseMacroExecutionRecipe,
@@ -38,6 +38,7 @@ import {
     learningValuesEqual,
 } from "./macroLearningValidation.js";
 import { validateRecipeArtifact } from "./recipeValidation.js";
+import type { RecipeArtifact } from "./recipeContracts.js";
 import { redactTraceValue } from "./redaction.js";
 import {
     cloneVerifiedLearningTrace,
@@ -136,6 +137,51 @@ function digest(value: unknown): string {
         .digest("hex");
 }
 
+function assertCaptureTrace(
+    envelope: SealedRecipeAuthoringContext,
+    traceId: string,
+    trace: RecordedInteractionTrace,
+    profileId: string,
+): void {
+    const { capture, outputs } = envelope.context;
+    if (
+        capture.captureId !== traceId ||
+        capture.scope.workspaceId !== normalizeCwd(trace.cwd) ||
+        capture.scope.profileId !== profileId ||
+        capture.sessionId !== trace.sessionId ||
+        capture.request !== trace.prompt ||
+        !learningValuesEqual(
+            capture.calls.map((call) => call.callId),
+            trace.toolCalls.map((call) => call.toolCallId),
+        ) ||
+        !outputs.some((output) =>
+            learningValuesEqual(output.evidence.modelVisible, trace.response),
+        )
+    )
+        throw new Error(
+            "Child capture does not match its recorded trace/workspace.",
+        );
+}
+
+function assertChildProgram(
+    program: RecipeArtifact,
+    job: MacroLearningJob,
+): void {
+    const invalid = validateRecipeArtifact(program);
+    if (
+        invalid.length ||
+        program.recipeId !== job.jobId ||
+        program.provenance.legacySource?.macroId !== job.jobId ||
+        program.provenance.captureId !== job.authoring.captureId ||
+        program.provenance.taskId !== job.authoring.taskId ||
+        program.provenance.tokenId !== job.authoring.tokenId ||
+        !program.provenance.evidenceIds.includes(job.authoring.contextDigest)
+    )
+        throw new Error(
+            `Recorded program validation failed: ${invalid.map((issue) => issue.message).join("; ") || "macro identity mismatch"}`,
+        );
+}
+
 export class MacroLearningEngine {
     private state?: LearningState;
     private loading?: Promise<void>;
@@ -157,7 +203,7 @@ export class MacroLearningEngine {
         private readonly rootDir: string,
         private readonly catalog: LearningCatalog,
         private readonly replayHost?: ReplayToolHost,
-        authoringProfileId = "typeagent",
+        private readonly authoringProfileId = "typeagent",
     ) {
         this.childAuthoring = new MacroChildAuthoring(
             rootDir,
@@ -178,6 +224,7 @@ export class MacroLearningEngine {
             typeof runtime.buildProgram !== "function" ||
             typeof runtime.extract !== "function" ||
             typeof runtime.build !== "function" ||
+            typeof runtime.withAuthorQuery !== "function" ||
             typeof runtime.generateGrammar !== "function" ||
             typeof runtime.validateGrammar !== "function"
         ) {
@@ -297,16 +344,16 @@ export class MacroLearningEngine {
         await this.load();
         const trace = await this.catalog.readTrace(traceId);
         const cwd = normalizeCwd(trace.cwd);
-        if (envelope) {
-            if (
-                envelope.context.capture.captureId !== traceId ||
-                envelope.context.capture.scope.workspaceId !== cwd
-            )
-                throw new Error(
-                    "Child capture does not match its recorded trace/workspace.",
-                );
-            await this.childAuthoring.contexts.put(envelope);
-        }
+        envelope ??= await this.childAuthoring.contexts.get(
+            { workspaceId: cwd, profileId: this.authoringProfileId },
+            traceId,
+        );
+        if (!envelope)
+            throw new Error(
+                "A sealed child authoring capture is required; re-record the successful task.",
+            );
+        assertCaptureTrace(envelope, traceId, trace, this.authoringProfileId);
+        await this.childAuthoring.contexts.put(envelope);
         let sourceError: string | undefined;
         try {
             assertLearningTrace(trace);
@@ -332,7 +379,8 @@ export class MacroLearningEngine {
         await this.update(() => {
             const existing = this.state!.jobs.find(
                 (item) =>
-                    item.fingerprint === fingerprint ||
+                    (item.fingerprint === fingerprint &&
+                        item.status !== "failed") ||
                     (item.traceId === traceId && item.cwd === cwd),
             );
             if (existing) {
@@ -365,16 +413,12 @@ export class MacroLearningEngine {
                 createdAt: now,
                 updatedAt: now,
                 ...(sourceError ? { error: sourceError.slice(0, 2_000) } : {}),
-                ...(envelope
-                    ? {
-                          authoring: {
-                              captureId: traceId,
-                              contextDigest: envelope.digest,
-                              taskId: envelope.context.capture.taskId,
-                              tokenId: envelope.context.capture.tokenId,
-                          },
-                      }
-                    : {}),
+                authoring: {
+                    captureId: traceId,
+                    contextDigest: envelope.digest,
+                    taskId: envelope.context.capture.taskId,
+                    tokenId: envelope.context.capture.tokenId,
+                },
             };
             this.state!.jobs.push(job);
             if (selectedRecording) {
@@ -404,7 +448,6 @@ export class MacroLearningEngine {
         return new Set(
             this.state!.jobs.filter(
                 (job) =>
-                    job.authoring &&
                     activeStatuses.has(job.status) &&
                     this.preference(job.cwd).mode !== "off" &&
                     !this.state!.suppressed.includes(job.fingerprint),
@@ -536,6 +579,11 @@ export class MacroLearningEngine {
         if (!macro.learning) return undefined;
         await this.load();
         const job = this.findJob(macro.learning.jobId);
+        await this.childAuthoring.assertContext(job);
+        if (!learningValuesEqual(macro.learning.authoring, job.authoring))
+            throw new Error(
+                "Learning approval does not match its sealed child identity; re-record the successful task.",
+            );
         this.check(job);
         if (!job.draft || !learningValuesEqual(macro, job.draft)) {
             throw new Error(
@@ -596,8 +644,7 @@ export class MacroLearningEngine {
             job.updatedAt = new Date().toISOString();
             delete job.error;
         });
-        if (this.findJob(macro.learning.jobId).authoring)
-            await this.childAuthoring.forget(macro.learning.jobId);
+        await this.childAuthoring.forget(macro.learning.jobId);
     }
 
     async approvalSaved(macro: CopilotToolMacro): Promise<void> {
@@ -743,14 +790,19 @@ export class MacroLearningEngine {
     }
 
     private async process(job: StoredJob): Promise<void> {
-        const runtime = job.authoring
-            ? this.runtime!.withAuthorQuery?.(
-                  (prompt, signal) =>
-                      this.childAuthoring.query(job, prompt, signal),
-                  (prompt, execute) =>
-                      this.cacheVerifierQuery(job, prompt, execute),
-              )
-            : this.runtime;
+        const envelope = await this.childAuthoring.assertContext(job);
+        const trace = await this.catalog.readTrace(job.traceId);
+        assertCaptureTrace(
+            envelope,
+            job.traceId,
+            trace,
+            this.authoringProfileId,
+        );
+        assertLearningTrace(trace);
+        const runtime = this.runtime!.withAuthorQuery(
+            (prompt, signal) => this.childAuthoring.query(job, prompt, signal),
+            (prompt, execute) => this.cacheVerifierQuery(job, prompt, execute),
+        );
         if (!runtime)
             throw new Error(
                 "The configured runtime cannot use a Copilot authoring child.",
@@ -765,7 +817,12 @@ export class MacroLearningEngine {
             if (
                 !existing.learning ||
                 existing.learning.jobId !== job.jobId ||
-                existing.state !== "approved"
+                existing.state !== "approved" ||
+                !learningValuesEqual(
+                    existing.learning.authoring,
+                    job.authoring,
+                ) ||
+                !validateMacro(existing).valid
             ) {
                 throw new Error(
                     "Learning publication conflicts with an existing immutable version.",
@@ -782,8 +839,6 @@ export class MacroLearningEngine {
             return;
         }
         this.check(job);
-        const trace = await this.catalog.readTrace(job.traceId);
-        assertLearningTrace(trace);
         if (!job.recipe) {
             await this.update(() => {
                 job.status = "extracting";
@@ -907,9 +962,7 @@ export class MacroLearningEngine {
                 grammarRules: rules,
                 exampleInputs: baseline.build.exampleInputs,
                 requests: baseline.build.requests,
-                ...(job.authoring
-                    ? { authoring: structuredClone(job.authoring) }
-                    : {}),
+                authoring: structuredClone(job.authoring),
             };
             {
                 const program = await this.stage(job, "program", (signal) =>
@@ -919,15 +972,7 @@ export class MacroLearningEngine {
                         signal,
                     ),
                 );
-                const invalid = validateRecipeArtifact(program);
-                if (
-                    invalid.length ||
-                    program.recipeId !== macroId ||
-                    program.provenance.legacySource?.macroId !== macroId
-                )
-                    throw new Error(
-                        `Recorded program validation failed: ${invalid.map((issue) => issue.message).join("; ") || "macro identity mismatch"}`,
-                    );
+                assertChildProgram(program, job);
                 baseline.draft.executionKind = "program";
                 baseline.draft.program = program;
             }
@@ -939,6 +984,10 @@ export class MacroLearningEngine {
             });
         }
         this.check(job);
+        if (!learningValuesEqual(job.draft!.learning?.authoring, job.authoring))
+            throw new Error(
+                "Learning draft does not match its sealed child identity.",
+            );
         const ref = await this.catalog.saveDraft(structuredClone(job.draft!));
         await this.update(() => {
             job.macro = ref;
@@ -1133,8 +1182,6 @@ export class MacroLearningEngine {
                         typeof job.traceId !== "string" ||
                         typeof job.cwd !== "string" ||
                         typeof job.fingerprint !== "string" ||
-                        (job.authoring !== undefined &&
-                            !validAuthoringIdentity(job)) ||
                         (job.verifierAnswers !== undefined &&
                             !validVerifierCache(job.verifierAnswers)) ||
                         !job.attempts,
@@ -1142,6 +1189,21 @@ export class MacroLearningEngine {
             ) {
                 throw new Error("Invalid durable learning state.");
             }
+            let rejected = false;
+            for (const job of this.state.jobs) {
+                try {
+                    if (!validAuthoringIdentity(job))
+                        throw new Error("Missing child identity.");
+                    await this.childAuthoring.assertContext(job);
+                } catch {
+                    job.status = "failed";
+                    job.error =
+                        "Unsupported learning job: sealed child context is missing or changed; re-record the successful task.";
+                    job.updatedAt = new Date().toISOString();
+                    rejected = true;
+                }
+            }
+            if (rejected) await this.update(() => {});
 
             function validAuthoringIdentity(job: StoredJob): boolean {
                 const identity = job.authoring;

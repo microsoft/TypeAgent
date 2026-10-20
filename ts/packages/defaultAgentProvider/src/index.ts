@@ -21,25 +21,6 @@ export {
     type GeneratedAgentTranslatorOptions,
 } from "./generatedAgentTranslator.js";
 export {
-    createMacroAppAgentProvider,
-    getMacroActionName,
-    macroAgentName,
-} from "./macroAgentProvider.js";
-export {
-    createSyntheticMacroLearningDiagnostics,
-    nativeSyntheticBuildResponseDiagnosticContract,
-    nativeSyntheticGrammarDiagnosticContract,
-    syntheticMacroBuildResponsePolicyKind,
-} from "./macroLearningDiagnostics.js";
-export {
-    createMacroLearningRuntime,
-    replayMacroGrammarDiagnostic,
-    validateMacroGrammar,
-    type MacroGrammarTuple,
-    type MacroLearningQuery,
-} from "./macroLearningRuntime.js";
-export { configureCheckpointAPrograms } from "./macroProgramRuntime.js";
-export {
     JsonlMcpAuditSink,
     sanitizeMcpAuditEvent,
     type McpAuditEvent,

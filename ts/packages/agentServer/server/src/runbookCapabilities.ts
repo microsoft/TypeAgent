@@ -6,7 +6,6 @@ import type {
     RunbookSkillLifecycle,
     RunbookSkillMutation,
 } from "@typeagent/agent-server-protocol";
-import type { MacroManager } from "@typeagent/copilot-macros";
 import {
     allowedSkillTransitions,
     type LiveSkillCatalog,
@@ -20,7 +19,6 @@ import { rankRunbookBindings } from "./runbookBindingSuggestions.js";
 
 export type RunbookHostSources = {
     skillCatalog: LiveSkillCatalog;
-    macroManager: MacroManager;
     readMcpCatalogs?: () => Promise<RegisteredMcpToolCatalog[]>;
 };
 
@@ -122,11 +120,8 @@ async function mutateSkill(
 export function createRunbookHostCapabilities(
     sources: RunbookHostSources,
 ): RunbookHostCapabilities {
-    const { skillCatalog, macroManager } = sources;
-    const bindings = createRunbookBindingCatalog(
-        macroManager,
-        sources.readMcpCatalogs,
-    );
+    const { skillCatalog } = sources;
+    const bindings = createRunbookBindingCatalog(sources.readMcpCatalogs);
     return {
         async listSkills(request) {
             const { start, end } = pageBounds(request);

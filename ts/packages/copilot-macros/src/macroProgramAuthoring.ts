@@ -238,6 +238,18 @@ function sameJson(left: unknown, right: unknown): boolean {
 
 function assertRecording(context: MacroProgramAuthoringContext): void {
     const { macro, trace } = context;
+    const identity = macro.learning?.authoring;
+    if (
+        !identity ||
+        identity.captureId !== macro.sourceTraceId ||
+        !identity.taskId ||
+        !identity.tokenId ||
+        identity.tokenId.startsWith("legacy:") ||
+        !/^[a-f0-9]{64}$/.test(identity.contextDigest)
+    )
+        throw new Error(
+            "Program authoring requires sealed child identity; re-record the successful task.",
+        );
     if (
         !macro.sourceTraceId ||
         !macro.macroId ||
@@ -605,7 +617,7 @@ function constructArtifact(
         `${macro.sourceTraceId}:response`,
         ...trace.toolCalls.map((call) => call.toolCallId),
         ...plan.fixtures.map((fixture) => fixture.id),
-        ...(authoring ? [authoring.contextDigest] : []),
+        authoring.contextDigest,
     ];
     const capabilities = [
         ...new Map(
@@ -673,9 +685,9 @@ function constructArtifact(
             collisionEvidenceIds: [],
         },
         provenance: {
-            captureId: authoring?.captureId ?? macro.sourceTraceId,
-            taskId: authoring?.taskId ?? macro.learning!.jobId,
-            tokenId: authoring?.tokenId ?? `legacy:${macro.sourceTraceId}`,
+            captureId: authoring.captureId,
+            taskId: authoring.taskId,
+            tokenId: authoring.tokenId,
             evidenceIds,
             legacySource: { macroId: macro.macroId, version: macro.version },
         },

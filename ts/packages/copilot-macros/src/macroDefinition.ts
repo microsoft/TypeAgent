@@ -426,7 +426,20 @@ export function validateMacro(
         if (
             errors.length ||
             macro.program.recipeId !== macro.macroId ||
-            macro.program.provenance.legacySource?.macroId !== macro.macroId
+            macro.program.provenance.legacySource?.macroId !== macro.macroId ||
+            (macro.learning !== undefined &&
+                (!macro.learning.authoring ||
+                    macro.learning.authoring.captureId !==
+                        macro.sourceTraceId ||
+                    macro.program.provenance.captureId !==
+                        macro.learning.authoring.captureId ||
+                    macro.program.provenance.taskId !==
+                        macro.learning.authoring.taskId ||
+                    macro.program.provenance.tokenId !==
+                        macro.learning.authoring.tokenId ||
+                    !macro.program.provenance.evidenceIds.includes(
+                        macro.learning.authoring.contextDigest,
+                    )))
         ) {
             issues.push({
                 severity: "error",

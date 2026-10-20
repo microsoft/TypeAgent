@@ -55,7 +55,9 @@ function Build-Package([string]$name, [string]$version, [string]$revision, [stri
         $tools = Join-Path $stage 'ts\tools'
         New-Item -ItemType Directory -Path (Join-Path $tools 'scripts') -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $repo 'ts\tools\installers') -Destination $tools -Recurse
-        Copy-Item -LiteralPath (Join-Path $repo 'ts\tools\scripts\install-shell.ps1') -Destination (Join-Path $tools 'scripts')
+        foreach ($file in @('install-shell.ps1', 'windows-package-trust.ps1', 'windows-package-trust.json')) {
+            Copy-Item -LiteralPath (Join-Path $repo "ts\tools\scripts\$file") -Destination (Join-Path $tools 'scripts')
+        }
     }
     $source = Join-Path $stage 'ts\tools\installers\wix'
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'run-serve.ps1') -Destination (Join-Path $source 'run-serve.ps1') -Force

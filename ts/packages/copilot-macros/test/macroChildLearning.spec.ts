@@ -80,9 +80,7 @@ describe.each(["typeagent", "copilot-local"])(
             };
         }
         beforeEach(async () => {
-            directory = await mkdtemp(
-                path.join(process.cwd(), ".child-learning-"),
-            );
+            directory = await mkdtemp(path.resolve(".child-learning-"));
             fallbackCalls = 0;
             manager = new MacroManager(
                 directory,
@@ -216,9 +214,7 @@ describe.each(["typeagent", "copilot-local"])(
             );
             expect(await manager.getRecordingState("source")).toMatchObject({
                 status: "failed",
-                error: expect.stringContaining(
-                    "could not be queued for learning",
-                ),
+                error: expect.stringContaining("queued for learning"),
             });
             expect(
                 await manager.claimMacroAuthoringRequest(claim()),

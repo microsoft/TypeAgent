@@ -20,10 +20,9 @@ function createDependencies(
     claimed: boolean | "child",
 ): RoutePromptDependencies {
     return {
+        recipeOwner: () => "plugin",
         claimRecording: jest.fn(async () => claimed),
-        direct: jest.fn(async () => ({ handled: true })),
-        mcp: jest.fn(() => ({ modifiedPrompt: "mcp" })),
-        dev: jest.fn(async () => ({ handled: true })),
+        localRecipes: jest.fn(async () => ({})),
     };
 }
 
@@ -43,9 +42,6 @@ describe("macro recording routing override", () => {
             ),
         ).resolves.toEqual({});
         expect(dependencies.localRecipes).toHaveBeenCalledTimes(1);
-        expect(dependencies.direct).not.toHaveBeenCalled();
-        expect(dependencies.mcp).not.toHaveBeenCalled();
-        expect(dependencies.dev).not.toHaveBeenCalled();
     });
     it("off bypasses recipe recording and both execution owners", async () => {
         const dependencies = {
@@ -61,7 +57,7 @@ describe("macro recording routing override", () => {
             ),
         ).resolves.toEqual({});
         expect(dependencies.claimRecording).not.toHaveBeenCalled();
-        expect(dependencies.direct).not.toHaveBeenCalled();
+        expect(dependencies.localRecipes).not.toHaveBeenCalled();
     });
     it("requests an explicit success receipt only for selected child learning and leaves original task ownership in Copilot", async () => {
         const dependencies = createDependencies("child");
@@ -79,9 +75,7 @@ describe("macro recording routing override", () => {
         );
         expect(output.additionalContext).toContain("do not rerun the task");
         expect(output.modifiedPrompt).toBeUndefined();
-        expect(dependencies.direct).not.toHaveBeenCalled();
-        expect(dependencies.dev).not.toHaveBeenCalled();
-        expect(dependencies.mcp).not.toHaveBeenCalled();
+        expect(dependencies.localRecipes).not.toHaveBeenCalled();
     });
     it.each([
         "list the playlists",
@@ -90,7 +84,7 @@ describe("macro recording routing override", () => {
         "record: create a playlist",
         "dev: learn: create a playlist",
         'keep "quotes", 東京 and\nnewlines',
-    ])("keeps the exact Direct user prompt: %s", async (prompt) => {
+    ])("keeps the exact user prompt for local matching: %s", async (prompt) => {
         const dependencies = createDependencies(false);
         const request = { ...input, prompt };
         await routePrompt(
@@ -99,9 +93,10 @@ describe("macro recording routing override", () => {
             new AbortController().signal,
             dependencies,
         );
-        expect(dependencies.direct).toHaveBeenCalledWith(request);
-        expect(dependencies.mcp).not.toHaveBeenCalled();
-        expect(dependencies.dev).not.toHaveBeenCalled();
+        expect(dependencies.localRecipes).toHaveBeenCalledWith(
+            request,
+            expect.any(AbortSignal),
+        );
     });
     it.each(["direct", "mcp", "dev"] as const)(
         "falls through one claimed interaction in %s mode",
@@ -117,9 +112,7 @@ describe("macro recording routing override", () => {
                 ),
             ).resolves.toEqual({});
             expect(dependencies.claimRecording).toHaveBeenCalledTimes(1);
-            expect(dependencies.direct).not.toHaveBeenCalled();
-            expect(dependencies.mcp).not.toHaveBeenCalled();
-            expect(dependencies.dev).not.toHaveBeenCalled();
+            expect(dependencies.localRecipes).not.toHaveBeenCalled();
         },
     );
 
@@ -139,6 +132,19 @@ describe("macro recording routing override", () => {
 });
 
 describe("@typeagent command routing", () => {
+    it("rejects retired redirect settings without forwarding them to TypeAgent", async () => {
+        const direct = jest.fn(async () => ({ handled: true }));
+        const output = await handleSlashCommand(
+            {
+                ...input,
+                prompt: "@typeagent powershell on",
+            },
+            { direct },
+        );
+        expect(output?.responseContent).toContain("setting has been removed");
+        expect(output?.handled).toBe(true);
+        expect(direct).not.toHaveBeenCalled();
+    });
     it("forces handling for @typeagent run", async () => {
         const direct = jest.fn(async () => ({ handled: true }));
         const runInput = {

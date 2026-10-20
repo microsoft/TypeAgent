@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -33,8 +34,12 @@ function fixture(root) {
         "dist/mcp/server.js":
             'import { createRequire as __cr } from "module"; const require = __cr(import.meta.url); import { status } from "../shared/status.js"; console.log(status);',
         "dist/extensions/typeagent/extension.mjs":
-            "export default function extension() {}",
-        "agents/runner.agent.md": "runner guidance",
+            'import { readFileSync } from "node:fs"; console.log(readFileSync(new URL("../../assets/runtime.txt", import.meta.url), "utf8"));',
+        "extensions/typeagent/extension.mjs":
+            'import "../../dist/extensions/typeagent/extension.mjs";',
+        "dist/recipe-runtime/typescript/lib.es2021.d.ts":
+            "interface StagedCompilerLibrary {}",
+        "agents/author.agent.md": "restricted author guidance",
         "skills/macro/SKILL.md": "macro guidance",
     };
     for (const [relative, content] of Object.entries(files)) {
@@ -63,7 +68,10 @@ test("canonical staging bundles router/direct/shared/MCP closure, retains assets
             () => verifyNativeStagedManifest(out, extension),
             /mismatch/,
         );
-        fs.copyFileSync(extension, target);
+        fs.copyFileSync(
+            path.join(sourceRoot, "extensions/typeagent/extension.mjs"),
+            target,
+        );
         fs.appendFileSync(
             path.join(sourceRoot, "dist/shared/status.js"),
             "\n// drift",
@@ -84,6 +92,24 @@ test("canonical staging bundles router/direct/shared/MCP closure, retains assets
             );
         assert.equal(
             fs.readFileSync(path.join(out, "dist/assets/runtime.txt"), "utf8"),
+            "unbundled asset",
+        );
+        assert.equal(
+            fs.readFileSync(
+                path.join(
+                    out,
+                    "dist/recipe-runtime/typescript/lib.es2021.d.ts",
+                ),
+                "utf8",
+            ),
+            "interface StagedCompilerLibrary {}",
+        );
+        assert.equal(
+            execFileSync(
+                process.execPath,
+                [path.join(out, "extensions/typeagent/extension.mjs")],
+                { encoding: "utf8", cwd: root },
+            ).trim(),
             "unbundled asset",
         );
         const manifest = JSON.parse(
@@ -108,7 +134,7 @@ test("canonical staging bundles router/direct/shared/MCP closure, retains assets
                 path.join(out, "extensions/typeagent/extension.mjs"),
                 "utf8",
             ),
-            "export default function extension() {}",
+            'import "../../dist/extensions/typeagent/extension.mjs";',
         );
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
@@ -153,6 +179,31 @@ test("current compiled product stages and all four real MCP modes initialize wit
                 "typeagent",
                 "extension.mjs",
             ),
+        );
+        const runtime = path.join(out, "dist", "recipe-runtime");
+        const assets = JSON.parse(
+            fs.readFileSync(path.join(runtime, "assets.json"), "utf8"),
+        );
+        for (const asset of assets.assets) {
+            const bytes = fs.readFileSync(path.join(out, "dist", asset.path));
+            assert.equal(bytes.length, asset.bytes, asset.path);
+            assert.equal(
+                createHash("sha256").update(bytes).digest("hex"),
+                asset.sha256,
+                asset.path,
+            );
+        }
+        execFileSync(
+            process.execPath,
+            [
+                "--input-type=module",
+                "--eval",
+                `import {pathToFileURL} from "node:url";
+const api = await import(pathToFileURL(process.argv[1]));
+api.compileRecipeProgram("async function execute(api: RecipeApi, params: JsonValue): Promise<JsonValue> { return params; }");`,
+                path.join(runtime, "index.mjs"),
+            ],
+            { cwd: root, encoding: "utf8", timeout: 15_000 },
         );
         const status = JSON.parse(
             execFileSync(
