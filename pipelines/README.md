@@ -59,6 +59,20 @@ use disposable agents for these jobs. End-user installer trust is unchanged.
 Signing logs identify certificate retrieval, password retrieval, policy checking,
 trust-store access, packaging, verification, and trust cleanup separately.
 
+### Windows shell signing rejects the timestamp URL
+
+Run `20261020.2` (build `139753`) reached SignTool but failed with
+`Invalid Timestamp URL: https://timestamp.digicert.com`. Electron-builder's
+bundled `winCodeSign-2.6.0` SignTool rejects that HTTPS timestamp URL.
+The shell uses `http://timestamp.digicert.com`, matching MSI signing, while
+retaining RFC 3161 timestamping, SHA-256, and required code signing.
+The packaging regression checks pin this compatible endpoint.
+Local validation reproduced the HTTPS rejection with the same bundled SignTool,
+then successfully signed a disposable executable using the configured HTTP URL
+and a synthetic code-signing certificate. The executable's CMS signature and the
+returned RFC 3161 timestamp signature and certificate chain verified successfully.
+This test did not retrieve development credentials or modify certificate stores.
+
 ## Pipeline variables (configure in ADO UI)
 
 The consolidated pipeline requires these variables to be set on the pipeline

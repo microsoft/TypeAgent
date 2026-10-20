@@ -250,6 +250,10 @@ test("electron-builder validates the required Windows signing and publisher conf
     assert.deepEqual(config.win.signtoolOptions.signingHashAlgorithms, [
         "sha256",
     ]);
+    assert.equal(
+        config.win.signtoolOptions.rfc3161TimeStampServer,
+        "http://timestamp.digicert.com",
+    );
     const trustResource = config.extraResources.find(
         (resource) => resource.to === "windows-package-trust",
     );

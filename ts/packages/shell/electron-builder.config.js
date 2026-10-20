@@ -100,7 +100,7 @@ export default {
         signtoolOptions: {
             publisherName: windowsTrust.publisher,
             signingHashAlgorithms: ["sha256"],
-            rfc3161TimeStampServer: "https://timestamp.digicert.com",
+            rfc3161TimeStampServer: "http://timestamp.digicert.com",
         },
         verifyUpdateCodeSignature: true,
         appId: `Microsoft.TypeAgentShell`,
