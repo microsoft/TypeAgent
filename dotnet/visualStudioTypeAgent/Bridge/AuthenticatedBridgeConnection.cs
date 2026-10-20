@@ -104,13 +104,16 @@ internal sealed class AuthenticatedBridgeRequestProcessor
 internal static class AuthenticatedBridgeConnection
 {
     private const int MaxMessageBytes = 1024 * 1024;
+    private static readonly TimeSpan DefaultAuthenticationTimeout =
+        TimeSpan.FromSeconds(5);
 
     public static async Task RunAsync(
         Uri uri,
         BridgeCredential credential,
         string clientInstanceId,
         IBridgeActionExecutor executor,
-        CancellationToken cancellation)
+        CancellationToken cancellation,
+        TimeSpan? authenticationTimeout = null)
     {
         using var ws = new ClientWebSocket();
         await ws.ConnectAsync(uri, cancellation).ConfigureAwait(false);
@@ -123,7 +126,34 @@ internal static class AuthenticatedBridgeConnection
             clientHello.Message.ToString(Formatting.None),
             cancellation).ConfigureAwait(false);
 
-        string serverHelloText = await ReceiveTextAsync(ws, cancellation).ConfigureAwait(false);
+        TimeSpan timeout = authenticationTimeout ?? DefaultAuthenticationTimeout;
+        if (timeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(authenticationTimeout),
+                "Authentication timeout must be positive");
+        }
+
+        string serverHelloText;
+        using (var authenticationCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellation))
+        {
+            authenticationCancellation.CancelAfter(timeout);
+            try
+            {
+                serverHelloText = await ReceiveTextAsync(
+                    ws,
+                    authenticationCancellation.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException ex)
+                when (!cancellation.IsCancellationRequested)
+            {
+                await CloseForPolicyViolationAsync(ws).ConfigureAwait(false);
+                throw new InvalidOperationException(
+                    "Bridge peer authentication timed out",
+                    ex);
+            }
+        }
         AuthenticatedBridgeSession? session = BridgeAuthentication.VerifyServerHello(
             credential,
             clientHello,

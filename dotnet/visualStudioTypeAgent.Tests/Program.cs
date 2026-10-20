@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -13,6 +17,7 @@ using Newtonsoft.Json.Linq;
 internal static class Program
 {
     private static int _assertions;
+    private static readonly string[] HeaderSeparators = { "\r\n" };
 
     public static async Task<int> Main()
     {
@@ -27,6 +32,7 @@ internal static class Program
             }
             TestDiscoveryAuthentication();
             AuthenticatedBridgeSession session = TestMutualHandshake();
+            await TestAuthenticationTimeoutIsRetryableAsync();
             await TestExecutorGatingAsync(session);
             Console.WriteLine($"Visual Studio bridge authentication tests passed ({_assertions} assertions).");
             return 0;
@@ -122,7 +128,7 @@ internal static class Program
     private static AuthenticatedBridgeSession TestMutualHandshake()
     {
         BridgeCredential credential = CreateCredential(0x31);
-        const long now = 1_800_000_000_000;
+        long now = BridgeAuthentication.CurrentUnixMilliseconds();
         const string clientInstanceId = "1234567890abcdef1234567890abcdef";
         ClientHelloContext clientHello = BridgeAuthentication.CreateClientHello(
             credential,
@@ -171,8 +177,155 @@ internal static class Program
         return session!;
     }
 
+    private static async Task TestAuthenticationTimeoutIsRetryableAsync()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        using var serverCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        Task server = RunSilentWebSocketServerAsync(
+            listener,
+            expectedConnections: 2,
+            serverCancellation.Token);
+        try
+        {
+            int retryableFailures = 0;
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                try
+                {
+                    await AuthenticatedBridgeConnection.RunAsync(
+                        new Uri($"ws://127.0.0.1:{port}"),
+                        CreateCredential(0x31),
+                        BridgeAuthentication.CreateClientInstanceId(),
+                        new RecordingExecutor(),
+                        CancellationToken.None,
+                        TimeSpan.FromMilliseconds(100));
+                    throw new InvalidOperationException(
+                        "Assertion failed: A silent peer must not authenticate");
+                }
+                catch (InvalidOperationException ex)
+                    when (ex.Message.Contains(
+                        "authentication timed out",
+                        StringComparison.Ordinal))
+                {
+                    retryableFailures++;
+                }
+                catch (OperationCanceledException ex)
+                {
+                    throw new InvalidOperationException(
+                        "Assertion failed: Authentication timeout must be retryable",
+                        ex);
+                }
+            }
+            Assert(
+                retryableFailures == 2,
+                "A silent peer must time out as a retryable authentication failure");
+        }
+        finally
+        {
+            listener.Stop();
+            serverCancellation.Cancel();
+            try
+            {
+                await server;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (SocketException)
+            {
+            }
+        }
+    }
+
+    private static async Task RunSilentWebSocketServerAsync(
+        TcpListener listener,
+        int expectedConnections,
+        CancellationToken cancellation)
+    {
+        var connections = new List<Task>();
+        for (int i = 0; i < expectedConnections; i++)
+        {
+            TcpClient client = await listener
+                .AcceptTcpClientAsync(cancellation)
+                .ConfigureAwait(false);
+            connections.Add(
+                CompleteWebSocketHandshakeAndStaySilentAsync(client, cancellation));
+        }
+        await Task.WhenAll(connections).ConfigureAwait(false);
+    }
+
+    private static async Task CompleteWebSocketHandshakeAndStaySilentAsync(
+        TcpClient client,
+        CancellationToken cancellation)
+    {
+        using (client)
+        using (NetworkStream stream = client.GetStream())
+        {
+            string headers = await ReadHttpHeadersAsync(stream, cancellation)
+                .ConfigureAwait(false);
+            string? webSocketKey = null;
+            foreach (string line in headers.Split(HeaderSeparators, StringSplitOptions.None))
+            {
+                const string keyHeader = "Sec-WebSocket-Key:";
+                if (line.StartsWith(keyHeader, StringComparison.OrdinalIgnoreCase))
+                {
+                    webSocketKey = line.Substring(keyHeader.Length).Trim();
+                    break;
+                }
+            }
+            if (string.IsNullOrEmpty(webSocketKey))
+            {
+                throw new InvalidOperationException("WebSocket key was missing");
+            }
+
+            byte[] acceptInput = Encoding.ASCII.GetBytes(
+                webSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+#pragma warning disable CA5350 // RFC 6455 requires SHA-1 for Sec-WebSocket-Accept.
+            string accept = Convert.ToBase64String(SHA1.HashData(acceptInput));
+#pragma warning restore CA5350
+            byte[] response = Encoding.ASCII.GetBytes(
+                "HTTP/1.1 101 Switching Protocols\r\n"
+                + "Upgrade: websocket\r\n"
+                + "Connection: Upgrade\r\n"
+                + $"Sec-WebSocket-Accept: {accept}\r\n\r\n");
+            await stream.WriteAsync(response.AsMemory(), cancellation)
+                .ConfigureAwait(false);
+            await stream.FlushAsync(cancellation).ConfigureAwait(false);
+            await Task.Delay(500, cancellation).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<string> ReadHttpHeadersAsync(
+        NetworkStream stream,
+        CancellationToken cancellation)
+    {
+        var headers = new StringBuilder();
+        var buffer = new byte[1024];
+        while (!headers.ToString().Contains("\r\n\r\n", StringComparison.Ordinal))
+        {
+            int count = await stream
+                .ReadAsync(buffer.AsMemory(), cancellation)
+                .ConfigureAwait(false);
+            if (count == 0)
+            {
+                throw new IOException("WebSocket peer closed during handshake");
+            }
+            headers.Append(Encoding.ASCII.GetString(buffer, 0, count));
+            if (headers.Length > 16 * 1024)
+            {
+                throw new InvalidOperationException("WebSocket headers exceeded the size limit");
+            }
+        }
+        return headers.ToString();
+    }
+
     private static async Task TestExecutorGatingAsync(AuthenticatedBridgeSession session)
     {
+        Assert(
+            session.ExpiresAt > BridgeAuthentication.CurrentUnixMilliseconds(),
+            "The valid-action fixture must use a live authentication session");
         var executor = new RecordingExecutor();
         var processor = new AuthenticatedBridgeRequestProcessor(session, executor);
         const string requestId = "00112233445566778899aabbccddeeff";

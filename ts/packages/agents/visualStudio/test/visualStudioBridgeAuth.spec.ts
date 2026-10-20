@@ -266,6 +266,29 @@ describe("Visual Studio bridge authentication", () => {
         await expect(resultPromise).resolves.toEqual({ path: "safe.cs" });
     });
 
+    it("ignores authenticated late responses without disrupting live requests", async () => {
+        bridge = await VisualStudioBridge.start(0, {
+            credential,
+            sendTimeoutMs: 50,
+        });
+        const client = await connectAuthenticated(bridge, credential);
+        clients.push(client.ws);
+
+        const timedOutResult = bridge.send("getActiveFile", {});
+        const timedOutRequest = await receiveRequest(client);
+        await expect(timedOutResult).rejects.toThrow("timed out");
+
+        const liveResult = bridge.send("getSolutionInfo", {});
+        const liveRequest = await receiveRequest(client);
+        sendResponse(client, timedOutRequest.id, { late: true });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(client.ws.readyState).toBe(WebSocket.OPEN);
+        expect(bridge.getConnectedCount()).toBe(1);
+
+        sendResponse(client, liveRequest.id, { name: "safe" });
+        await expect(liveResult).resolves.toEqual({ name: "safe" });
+    });
+
     it("negotiates a fresh session after reconnect and keeps newest-client routing", async () => {
         bridge = await VisualStudioBridge.start(0, { credential });
         const first = await connectAuthenticated(bridge, credential);
@@ -332,6 +355,29 @@ describe("Visual Studio bridge authentication", () => {
         const nativeClient = await connectAuthenticated(bridge, credential);
         clients.push(nativeClient.ws);
         expect(bridge.getConnectedCount()).toBe(1);
+    });
+
+    it("stops handshaking sockets without allowing post-stop authentication", async () => {
+        bridge = await VisualStudioBridge.start(0, { credential });
+        const handshaking = new WebSocket(`ws://127.0.0.1:${bridge.port}`);
+        clients.push(handshaking);
+        await waitForOpen(handshaking);
+        const closed = waitForClose(handshaking);
+
+        const stopPromise = bridge.stop();
+        handshaking.send(
+            JSON.stringify(
+                createVisualStudioClientHello(
+                    credential,
+                    randomBytes(16).toString("hex"),
+                ),
+            ),
+            () => {},
+        );
+        await stopPromise;
+        await closed;
+        expect(bridge.getConnectedCount()).toBe(0);
+        bridge = undefined;
     });
 });
 

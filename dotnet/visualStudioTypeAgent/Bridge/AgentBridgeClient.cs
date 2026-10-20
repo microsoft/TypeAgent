@@ -78,7 +78,7 @@ internal sealed class AgentBridgeClient : IDisposable
                         linked.Token).ConfigureAwait(false);
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (linked.IsCancellationRequested)
             {
                 return;
             }

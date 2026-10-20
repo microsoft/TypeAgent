@@ -78,6 +78,8 @@ export class VisualStudioBridge {
         }
     >();
     private readonly sendTimeoutMs: number;
+    private stopped = false;
+    private stopPromise: Promise<void> | undefined;
 
     /**
      * Invoked on every client connect/disconnect with the current count
@@ -204,6 +206,10 @@ export class VisualStudioBridge {
 
     private setupHandlers(): void {
         this.wss.on("connection", (ws: WebSocket) => {
+            if (this.stopped) {
+                ws.terminate();
+                return;
+            }
             let client: AuthenticatedClient | undefined;
             let sessionExpiryTimer: NodeJS.Timeout | undefined;
             const handshakeTimer = setTimeout(() => {
@@ -213,6 +219,10 @@ export class VisualStudioBridge {
                 }
             }, 5_000);
             ws.on("message", (data: RawData) => {
+                if (this.stopped) {
+                    ws.terminate();
+                    return;
+                }
                 try {
                     const value: unknown = JSON.parse(data.toString());
                     if (client === undefined) {
@@ -226,6 +236,10 @@ export class VisualStudioBridge {
                                 "Rejecting host plugin: authentication failed",
                             );
                             ws.close(1008, "Authentication failed");
+                            return;
+                        }
+                        if (this.stopped || ws.readyState !== WebSocket.OPEN) {
+                            ws.terminate();
                             return;
                         }
                         clearTimeout(handshakeTimer);
@@ -321,8 +335,11 @@ export class VisualStudioBridge {
         }
         client.receiveSequence = verified.frame.sequence;
         const entry = this.pending.get(verified.frame.id);
+        if (entry === undefined) {
+            debug("Ignoring host plugin response with no live request");
+            return;
+        }
         if (
-            entry === undefined ||
             entry.clientId !== client.clientId ||
             entry.sessionId !== client.sessionId ||
             entry.ws !== client.ws
@@ -402,17 +419,25 @@ export class VisualStudioBridge {
      * synchronous return would race the new bind into EADDRINUSE.
      */
     async stop(): Promise<void> {
+        if (this.stopPromise !== undefined) {
+            return this.stopPromise;
+        }
         debug("Closing VisualStudioBridge");
-        for (const client of this.clients.values()) {
-            if (client.ws.readyState === WebSocket.OPEN) {
-                client.ws.close();
+        this.stopped = true;
+        for (const ws of this.wss.clients) {
+            if (ws.readyState !== WebSocket.CLOSED) {
+                ws.terminate();
             }
         }
         this.clients.clear();
+        this.emitClientCount();
         // Reject any in-flight sends before the server closes; otherwise
         // callers awaiting `send()` hang forever after a manual disable.
         this.failPending(new Error("VisualStudioBridge stopped"));
-        return new Promise((resolve) => this.wss.close(() => resolve()));
+        this.stopPromise = new Promise((resolve) =>
+            this.wss.close(() => resolve()),
+        );
+        return this.stopPromise;
     }
 
     async send(actionName: string, parameters: unknown): Promise<unknown> {
