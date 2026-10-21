@@ -39,12 +39,7 @@ const HEALER_SCRIPT = resolve(
     "../heal-generated-files.mjs",
 );
 
-function run(command, args, options = {}) {
-    const result = spawnSync(command, args, {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-        ...options,
-    });
+function checkedOutput(command, args, result) {
     assert.ifError(result.error);
     assert.equal(
         result.status,
@@ -54,8 +49,44 @@ function run(command, args, options = {}) {
     return result.stdout.trim();
 }
 
+function runGit(args, options = {}) {
+    const result = spawnSync("git", args, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        ...options,
+    });
+    return checkedOutput("git", args, result);
+}
+
+function runNode(args, options = {}) {
+    const result = spawnSync(process.execPath, args, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        ...options,
+    });
+    return checkedOutput(process.execPath, args, result);
+}
+
+function locatePnpmWithWhich() {
+    const args = ["pnpm"];
+    const result = spawnSync("which", args, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+    });
+    return checkedOutput("which", args, result);
+}
+
+function locatePnpmWithWhere() {
+    const args = ["pnpm"];
+    const result = spawnSync("where.exe", args, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+    });
+    return checkedOutput("where.exe", args, result);
+}
+
 function git(repository, ...args) {
-    return run("git", [
+    return runGit([
         "-c",
         "core.hooksPath=/dev/null",
         "-c",
@@ -130,7 +161,7 @@ writeFileSync(
 
 function resolveStandalonePnpmCommand() {
     if (process.platform !== "win32") {
-        return run("sh", ["-c", "command -v pnpm"]);
+        return locatePnpmWithWhich();
     }
     const candidates = [];
     if (process.env.PNPM_HOME) {
@@ -145,7 +176,7 @@ function resolveStandalonePnpmCommand() {
             ),
         );
     }
-    for (const command of run("where.exe", ["pnpm"]).split(/\r?\n/)) {
+    for (const command of locatePnpmWithWhere().split(/\r?\n/)) {
         candidates.push(
             resolve(
                 dirname(command),
@@ -321,7 +352,7 @@ function createFixture(options = {}) {
     git(source, "commit", "-m", "trusted main");
     const trustedSha = git(source, "rev-parse", "HEAD");
 
-    run("git", ["clone", "--bare", source, remote]);
+    runGit(["clone", "--bare", source, remote]);
     git(remote, "symbolic-ref", "HEAD", "refs/heads/main");
     const metadata = {
         repository: REPOSITORY,
@@ -412,6 +443,18 @@ function verify(fixture, prepared) {
     return { plan, planPath };
 }
 
+function assertGeneratedSymlinkBlocked(reason, generatedPath, trustedSha) {
+    if (/non-regular Git mode|regular filesystem file/.test(reason)) {
+        return;
+    }
+    assert.ok(
+        reason.includes(
+            `Conflicts beyond generated files: ${generatedPath}~${trustedSha}`,
+        ),
+        `Unexpected generated-symlink rejection: ${reason}`,
+    );
+}
+
 function rewriteCandidateCommitMessage(fixture, prepared, message) {
     const summaryPath = join(prepared.outputDirectory, "summary.json");
     const summary = JSON.parse(readFileSync(summaryPath, "utf8"));
@@ -426,8 +469,7 @@ function rewriteCandidateCommitMessage(fixture, prepared, message) {
         GIT_COMMITTER_EMAIL: "typeagent-bot[bot]@users.noreply.github.com",
         GIT_COMMITTER_DATE: candidate.preparedAt,
     };
-    const candidateSha = run(
-        "git",
+    const candidateSha = runGit(
         [
             "-c",
             "commit.gpgSign=false",
@@ -473,15 +515,14 @@ function createForgedCandidateArtifact(fixture, path) {
     const artifactDirectory = join(fixture.root, "forged-artifact");
     const repositoryPath = join(fixture.root, "forged-repository.git");
     const preparedAt = "2026-10-20T20:00:00.000Z";
-    run("git", ["clone", "--bare", fixture.remote, repositoryPath]);
+    runGit(["clone", "--bare", fixture.remote, repositoryPath]);
     const treeSha = git(
         repositoryPath,
         "rev-parse",
         `${fixture.metadata.pullRequests[0].headSha}^{tree}`,
     );
     const message = `chore: heal generated file conflicts\n\nPR #17\nTrusted-Base: ${fixture.trustedSha}\n`;
-    const candidateSha = run(
-        "git",
+    const candidateSha = runGit(
         [
             "-c",
             "commit.gpgSign=false",
@@ -592,7 +633,10 @@ test("prepare CLI consumes metadata without invoking GitHub CLI or APIs", () => 
         const metadataPath = join(fixture.root, "metadata.json");
         const outputDirectory = join(fixture.root, "cli-artifact");
         const auditPath = join(fixture.root, "cli-pnpm-audit.json");
-        const commandDirectory = join(fixture.root, "commands");
+        const commandDirectory = join(
+            fixture.root,
+            "commands with spaces [literal]",
+        );
         const ghMarker = join(fixture.markerDirectory, "gh");
         const pnpmCommand = createFakePnpm(commandDirectory, auditPath);
         const ghCommand = join(
@@ -608,8 +652,7 @@ test("prepare CLI consumes metadata without invoking GitHub CLI or APIs", () => 
         chmodSync(ghCommand, 0o700);
         write(metadataPath, packageJson(fixture.metadata));
 
-        run(
-            process.execPath,
+        runNode(
             [
                 HEALER_SCRIPT,
                 "prepare",
@@ -828,13 +871,20 @@ for (const generatedPath of [
                 const prepared = prepare(fixture);
                 assert.equal(prepared.summary.candidates.length, 0);
                 assert.equal(prepared.summary.skipped.length, 1);
-                assert.match(
+                assertGeneratedSymlinkBlocked(
                     prepared.summary.skipped[0].reason,
-                    /non-regular Git mode|regular filesystem file/,
+                    generatedPath,
+                    fixture.trustedSha,
                 );
                 assert.equal(
                     readFileSync(outsidePath, "utf8"),
                     "outside trusted content\n",
+                );
+                assert.equal(
+                    existsSync(
+                        join(fixture.root, "prepare", "pr-17", "worktree"),
+                    ),
+                    false,
                 );
             } finally {
                 fixture.cleanup();
@@ -887,13 +937,25 @@ test(
             });
             assert.equal(plan.candidates.length, 0);
             assert.equal(plan.skipped.length, 1);
-            assert.match(
+            assertGeneratedSymlinkBlocked(
                 plan.skipped[0].reason,
-                /non-regular Git mode|regular filesystem file/,
+                "ts/pnpm-lock.yaml",
+                fixture.trustedSha,
             );
             assert.equal(
                 readFileSync(outsidePath, "utf8"),
                 "outside trusted content\n",
+            );
+            assert.equal(
+                existsSync(
+                    join(
+                        fixture.root,
+                        "forged-verify",
+                        "expected-pr-17",
+                        "worktree",
+                    ),
+                ),
+                false,
             );
         } finally {
             fixture.cleanup();
