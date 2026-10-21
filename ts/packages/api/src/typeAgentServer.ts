@@ -26,6 +26,10 @@ import { AzureStorageProvider } from "./storageProviders/azureStorageProvider.js
 import { AWSStorageProvider } from "./storageProviders/awsStorageProvider.js";
 import { WebDispatcher, createWebDispatcher } from "./webDispatcher.js";
 import registerDebug from "debug";
+import {
+    validateHostedApiAgentCapabilities,
+    type ApiAgentProfile,
+} from "./hostedAgentProfile.js";
 
 const debug = registerDebug("typeagent:webserver:api");
 registerDebug.enable("typeagent:webserver:*");
@@ -42,7 +46,11 @@ export class TypeAgentServer {
         private readonly requestExit: (exitCode: number) => void,
         private readonly structuredLogs: boolean,
         runtimeConfig: Config,
+        private readonly agentProfile: ApiAgentProfile = "default",
     ) {
+        if (agentProfile === "hosted") {
+            validateHostedApiAgentCapabilities(runtimeConfig);
+        }
         setRuntimeConfig(runtimeConfig);
         // Pre-warm the Copilot CLI/session/endpoint when it's the active
         // provider (no-op otherwise). Kept in the host to avoid an aiclient
@@ -81,7 +89,10 @@ export class TypeAgentServer {
             sw.stop("Downloaded Session Backup");
         }
 
-        this.webDispatcher = await createWebDispatcher(this.structuredLogs);
+        this.webDispatcher = await createWebDispatcher(
+            this.structuredLogs,
+            this.agentProfile,
+        );
         debug("Web Dispatcher created.");
 
         // web server

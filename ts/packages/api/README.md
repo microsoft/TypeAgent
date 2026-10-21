@@ -57,7 +57,11 @@ managed identity. It does not run `getKeys`, load the shared
 Set `TYPEAGENT_API_CONFIG_VAULT` to the vault containing the dedicated
 `typeagent-api-hosted-config` secret. The secret must contain only the hosted
 profile below; static API keys and unrelated agent credentials are rejected.
-`embedding` is optional, but `gpt_6_luna` is required:
+Vault names must be Azure Key Vault resource names, and model endpoints must
+use the default HTTPS port on an Azure OpenAI or Azure AI Services hostname
+(`*.openai.azure.com`, `*.cognitiveservices.azure.com`, or
+`*.services.ai.azure.com`). `embedding` is optional, but `gpt_6_luna` is
+required:
 
 ```yaml
 profile: hosted-azure-managed-identity-v1
@@ -87,6 +91,11 @@ possible; otherwise scope the role assignment to the secret resource rather
 than granting access to the broad shared configuration vault. For a
 user-assigned identity, set `TYPEAGENT_API_MANAGED_IDENTITY_CLIENT_ID`; do not
 inject an Azure client secret or an Azure CLI cache.
+
+The hosted API registers only `chat`, `greeting`, `list`, `settings`, and
+`timer`. It does not advertise the broader desktop, browser, media, external
+service, installed-agent, or MCP capabilities that require credentials or
+models outside this least-privilege profile.
 
 The image sets `TYPEAGENT_API_HOST=0.0.0.0` because the published port is the
 point there and the container is the isolation boundary. Set

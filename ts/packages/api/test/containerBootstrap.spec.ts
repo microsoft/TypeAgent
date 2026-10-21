@@ -188,6 +188,61 @@ describe("hosted API container bootstrap", () => {
         );
     });
 
+    test.each([
+        "https://attacker.example/vault",
+        "api-vault/secret",
+        "api.vault",
+        "api-vault:443",
+        "api vault",
+        "-api-vault",
+        "api--vault",
+    ])("rejects invalid Key Vault resource name %s", async (vaultName) => {
+        const root = createTempRoot();
+        roots.push(root);
+        const env = createEnvironment(root);
+        env.TYPEAGENT_API_CONFIG_VAULT = vaultName;
+        let requested = false;
+
+        await expect(
+            loadHostedApiRuntimeConfig({
+                env,
+                fetcher: async () => {
+                    requested = true;
+                    return JSON.stringify(hostedTree());
+                },
+                getUid: () => 10001,
+                platform: "win32",
+            }),
+        ).rejects.toThrow(
+            "TYPEAGENT_API_CONFIG_VAULT must be a valid Azure Key Vault resource name.",
+        );
+        expect(requested).toBe(false);
+    });
+
+    test("rejects an attacker-controlled model endpoint", async () => {
+        const root = createTempRoot();
+        roots.push(root);
+        const env = createEnvironment(root);
+        const tree = hostedTree();
+        const azure = tree.azureOpenAI as ConfigTree;
+        const deployments = azure.deployments as ConfigTree;
+        const chat = deployments.gpt_6_luna as ConfigTree;
+        const endpoints = chat.endpoints as ConfigTree[];
+        endpoints[0].endpoint =
+            "https://attacker.example/openai/deployments/gpt-6-luna/chat/completions";
+
+        await expect(
+            loadHostedApiRuntimeConfig({
+                env,
+                fetcher: async () => JSON.stringify(tree),
+                getUid: () => 10001,
+                platform: "win32",
+            }),
+        ).rejects.toThrow(
+            "azureOpenAI.deployments.gpt_6_luna.endpoints.0.endpoint must use a supported Azure OpenAI or Azure AI Services hostname.",
+        );
+    });
+
     test("shared vault and legacy files never override the dedicated source", async () => {
         const root = createTempRoot();
         roots.push(root);
@@ -242,6 +297,22 @@ describe("hosted API container bootstrap", () => {
         expect(env.AZURE_CLIENT_ID).toBe("dedicated-client-id");
     });
 
+    test("scrubs an ambient Azure client ID when no dedicated identity is selected", async () => {
+        const root = createTempRoot();
+        roots.push(root);
+        const env = createEnvironment(root);
+        env.AZURE_CLIENT_ID = "ambient-client-id";
+
+        await loadHostedApiRuntimeConfig({
+            env,
+            fetcher: async () => JSON.stringify(hostedTree()),
+            getUid: () => 10001,
+            platform: "win32",
+        });
+
+        expect(env.AZURE_CLIENT_ID).toBeUndefined();
+    });
+
     test("rejects secret-shaped fields without logging their values", async () => {
         const root = createTempRoot();
         roots.push(root);
@@ -282,6 +353,7 @@ describe("hosted API container bootstrap", () => {
         ).rejects.toThrow(
             "Static credential environment variable 'OPENAI_API_KEY' is not allowed.",
         );
+        expect(env.OPENAI_API_KEY).toBeUndefined();
     });
 
     test("rejects the Cosmos DB connection string without leaking it", async () => {
@@ -311,6 +383,7 @@ describe("hosted API container bootstrap", () => {
         );
         expect(failure).not.toContain(sentinel);
         expect(logs.join("\n")).not.toContain(sentinel);
+        expect(env.COSMOSDB_CONNECTION_STRING).toBeUndefined();
         expect(process.env.COSMOSDB_CONNECTION_STRING).toBe(
             previousProcessValue,
         );
@@ -322,25 +395,79 @@ describe("hosted API container bootstrap", () => {
     test.each([
         "AWS_SECRET_ACCESS_KEY",
         "AZURE_STORAGE_CONNECTION_STRING",
+        "CUSTOMCONNSTR_DATABASE",
+        "DISCORD_BOT_TOKEN",
+        "MYSQLCONNSTR_DATABASE",
         "MONGODB_CONNECTION_STRING",
+        "POSTGRESQLCONNSTR_DATABASE",
+        "SPOTIFY_APP_CLISEC",
+        "SQLAZURECONNSTR_DATABASE",
+        "SQLCONNSTR_DATABASE",
         "WIKIPEDIA_CLIENT_SECRET",
     ])("rejects unrelated static credential %s", async (key) => {
         const root = createTempRoot();
         roots.push(root);
         const env = createEnvironment(root);
-        env[key] = "unrelated-static-credential-sentinel";
+        const sentinel = `unrelated-${key.toLowerCase()}-sentinel`;
+        const logs: string[] = [];
+        env[key] = sentinel;
 
-        await expect(
-            loadHostedApiRuntimeConfig({
+        let failure = "";
+        try {
+            await loadHostedApiRuntimeConfig({
                 env,
                 fetcher: async () => JSON.stringify(hostedTree()),
+                log: (message) => logs.push(message),
                 getUid: () => 10001,
                 platform: "win32",
-            }),
-        ).rejects.toThrow(
+            });
+        } catch (error) {
+            failure = String(error);
+        }
+        expect(failure).toContain(
             `Static credential environment variable '${key}' is not allowed.`,
         );
+        expect(failure).not.toContain(sentinel);
+        expect(logs.join("\n")).not.toContain(sentinel);
+        expect(env[key]).toBeUndefined();
+        expect(fs.readdirSync(env.TYPEAGENT_USER_DATA_DIR as string)).toEqual(
+            [],
+        );
     });
+
+    test.each(["discordBotToken", "CUSTOMCONNSTR_DATABASE"])(
+        "rejects credential-shaped configuration field %s",
+        async (field) => {
+            const root = createTempRoot();
+            roots.push(root);
+            const env = createEnvironment(root);
+            const sentinel = "configuration-credential-sentinel";
+            const unsafe = hostedTree({ [field]: sentinel });
+            const logs: string[] = [];
+
+            let failure = "";
+            try {
+                await loadHostedApiRuntimeConfig({
+                    env,
+                    fetcher: async () => JSON.stringify(unsafe),
+                    log: (message) => logs.push(message),
+                    getUid: () => 10001,
+                    platform: "win32",
+                });
+            } catch (error) {
+                failure = String(error);
+            }
+
+            expect(failure).toContain(
+                `Static credential field '${field}' is not allowed.`,
+            );
+            expect(failure).not.toContain(sentinel);
+            expect(logs.join("\n")).not.toContain(sentinel);
+            expect(
+                fs.readdirSync(env.TYPEAGENT_USER_DATA_DIR as string),
+            ).toEqual([]);
+        },
+    );
 
     test("sanitizes malformed dedicated secret errors", async () => {
         const root = createTempRoot();

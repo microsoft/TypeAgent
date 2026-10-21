@@ -10,6 +10,10 @@ import { spawnSync } from "node:child_process";
 import { once } from "node:events";
 import WebSocket from "ws";
 import {
+    createDispatcher,
+    DefaultIndexingServiceRegistry,
+} from "agent-dispatcher";
+import {
     HOSTED_API_PROFILE,
     HOSTED_API_SECRET_NAME,
     loadHostedApiRuntimeConfig,
@@ -17,6 +21,11 @@ import {
 import { startAfterBootstrap } from "../dist/startup.js";
 import { TypeAgentAPIWebServer } from "../dist/webServer.js";
 import { TypeAgentAPIWebSocketServer } from "../dist/webSocketServer.js";
+import {
+    HOSTED_API_AGENT_NAMES,
+    loadHostedApiAgentProviders,
+    validateHostedApiAgentCapabilities,
+} from "../dist/hostedAgentProfile.js";
 import {
     azureApiSettingsFromConfig,
     openai,
@@ -106,12 +115,52 @@ const runtimeConfig = await loadHostedApiRuntimeConfig({
         requests.push(`${vaultName}/${secretName}`);
         return vault[secretName] ?? null;
     },
-    allowLoopbackHttp: true,
+    endpointValidator: (url, fieldPath) => {
+        assert.equal(fieldPath.includes("gpt_6_luna"), true);
+        assert.equal(url.protocol, "http:");
+        assert.equal(url.hostname, "127.0.0.1");
+    },
 });
 assert.deepEqual(requests, [
     `${process.env.TYPEAGENT_API_CONFIG_VAULT}/${HOSTED_API_SECRET_NAME}`,
 ]);
 setRuntimeConfig(runtimeConfig);
+validateHostedApiAgentCapabilities(runtimeConfig);
+const hostedProviders = await loadHostedApiAgentProviders();
+const hostedAgentNames = hostedProviders
+    .flatMap((provider) => provider.getAppAgentNames())
+    .sort();
+assert.deepEqual(hostedAgentNames, [...HOSTED_API_AGENT_NAMES].sort());
+for (const unsupported of [
+    "browser",
+    "discord",
+    "image",
+    "mcpfilesystem",
+    "photo",
+    "video",
+]) {
+    assert.equal(hostedAgentNames.includes(unsupported), false);
+}
+for (const supported of ["chat", "list", "timer"]) {
+    assert.equal(hostedAgentNames.includes(supported), true);
+}
+const hostedDispatcher = await createDispatcher("api-container-smoke", {
+    appAgentProviders: hostedProviders,
+    agents: hostedAgentNames,
+    indexingServiceRegistry: new DefaultIndexingServiceRegistry(),
+});
+const registeredAgentNames = (await hostedDispatcher.getStatus()).agents
+    .map((agent) => agent.name)
+    .sort();
+const registeredAppAgentNames = registeredAgentNames.filter(
+    (name) =>
+        name !== "dispatcher" &&
+        !name.startsWith("dispatcher.") &&
+        name !== "system" &&
+        !name.startsWith("system."),
+);
+assert.deepEqual(registeredAppAgentNames, hostedAgentNames);
+await hostedDispatcher.close();
 
 const settings = azureApiSettingsFromConfig(
     runtimeConfig,

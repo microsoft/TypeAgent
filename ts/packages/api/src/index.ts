@@ -4,6 +4,7 @@
 import { TypeAgentServer } from "./typeAgentServer.js";
 import { loadApiRuntimeConfig } from "./containerBootstrap.js";
 import { startAfterBootstrap } from "./startup.js";
+import { resolveApiAgentProfile } from "./hostedAgentProfile.js";
 import { otel } from "@typeagent/telemetry";
 import registerDebug from "debug";
 
@@ -60,6 +61,7 @@ async function main(): Promise<void> {
             },
             telemetryConfig.structuredLogs === true,
             runtimeConfig,
+            resolveApiAgentProfile(process.env),
         );
 
         await typeAgentServer.start();

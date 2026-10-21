@@ -13,7 +13,7 @@ import {
     fetchKeyVaultConfig,
     flatten,
     loadConfig,
-    shouldRedact,
+    SIMPLE_CONFIG_MAPPING_LIST,
     type Config,
     type ConfigTree,
     type FlatEnv,
@@ -26,6 +26,10 @@ export const HOSTED_API_SECRET_NAME = "typeagent-api-hosted-config";
 const HOSTED_DEPLOYMENTS = new Set(["gpt_6_luna", "embedding"]);
 const REQUIRED_DEPLOYMENT = "gpt_6_luna";
 const LEGACY_CONFIG_FILES = [".env", "config.local.yaml"];
+const AZURE_KEY_VAULT_NAME_PATTERN = /^[a-z][a-z0-9-]{1,22}[a-z0-9]$/;
+const AZURE_KEY_VAULT_SECRET_NAME_PATTERN = /^[a-z0-9-]{1,127}$/i;
+const AZURE_AI_HOSTNAME_PATTERN =
+    /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.(?:openai\.azure\.com|cognitiveservices\.azure\.com|services\.ai\.azure\.com)$/;
 
 const SCRUBBED_ENV_PREFIXES = [
     "AWS_",
@@ -50,6 +54,14 @@ const SCRUBBED_ENV_PREFIXES = [
     "WIKIPEDIA_",
 ];
 
+const APP_SERVICE_CONNECTION_PREFIXES = [
+    "CUSTOMCONNSTR_",
+    "MYSQLCONNSTR_",
+    "POSTGRESQLCONNSTR_",
+    "SQLAZURECONNSTR_",
+    "SQLCONNSTR_",
+];
+
 const STATIC_CREDENTIAL_NAMES = new Set([
     "AZURE_CLIENT_CERTIFICATE_PASSWORD",
     "AZURE_CLIENT_CERTIFICATE_PATH",
@@ -59,26 +71,30 @@ const STATIC_CREDENTIAL_NAMES = new Set([
     "AZURE_USERNAME",
 ]);
 
-const CREDENTIAL_ENV_PREFIXES = [
-    "AWS_",
-    "AZURE_AI_SEARCH_",
-    "AZURE_COSMOS_",
-    "AZURE_MAPS_",
-    "AZURE_OPENAI_",
-    "AZURE_SPEECH_",
-    "AZURE_STORAGE_",
-    "BING_",
-    "COSMOS_",
-    "COSMOSDB_",
-    "GOOGLE_",
-    "MONGODB_",
-    "MSGRAPH_",
-    "MS_GRAPH_",
-    "OPENAI_",
-    "SPEECH_",
-    "SPOTIFY_",
-    "WIKIPEDIA_",
-];
+const SAFE_HOSTED_ENVIRONMENT_NAMES = new Set([
+    "IDENTITY_ENDPOINT",
+    "IDENTITY_HEADER",
+    "IDENTITY_SERVER_THUMBPRINT",
+    "IMDS_ENDPOINT",
+    "MSI_ENDPOINT",
+    "MSI_SECRET",
+    "TYPEAGENT_API_BOOTSTRAP",
+    "TYPEAGENT_API_CONFIG_SECRET",
+    "TYPEAGENT_API_CONFIG_VAULT",
+    "TYPEAGENT_API_MANAGED_IDENTITY_CLIENT_ID",
+    "TYPEAGENT_AZURE_AUTH_MODE",
+]);
+
+const REPOSITORY_CREDENTIAL_ENVIRONMENT_NAMES = new Set(
+    SIMPLE_CONFIG_MAPPING_LIST.filter(
+        (mapping) =>
+            mapping.valueKind === "auth" ||
+            hasCredentialName(mapping.envVar) ||
+            hasCredentialName(mapping.configPath),
+    ).map((mapping) => mapping.envVar),
+);
+
+export type HostedEndpointValidator = (url: URL, fieldPath: string) => void;
 
 export interface HostedApiBootstrapOptions {
     readonly env?: NodeJS.ProcessEnv;
@@ -87,7 +103,8 @@ export interface HostedApiBootstrapOptions {
     readonly log?: (message: string) => void;
     readonly getUid?: () => number | undefined;
     readonly platform?: NodeJS.Platform;
-    readonly allowLoopbackHttp?: boolean;
+    /** @internal Test-only endpoint policy for local mocked services. */
+    readonly endpointValidator?: HostedEndpointValidator;
 }
 
 /**
@@ -128,12 +145,12 @@ export async function loadHostedApiRuntimeConfig(
     prepareRuntime(env, options);
     rejectStaticCredentialEnvironment(env);
 
-    const vaultName = requiredEnvironmentValue(
-        env,
-        "TYPEAGENT_API_CONFIG_VAULT",
+    const vaultName = validateKeyVaultName(
+        requiredEnvironmentValue(env, "TYPEAGENT_API_CONFIG_VAULT"),
     );
-    const secretName =
-        env.TYPEAGENT_API_CONFIG_SECRET?.trim() || HOSTED_API_SECRET_NAME;
+    const secretName = validateKeyVaultSecretName(
+        env.TYPEAGENT_API_CONFIG_SECRET?.trim() || HOSTED_API_SECRET_NAME,
+    );
     const clientId = env.TYPEAGENT_API_MANAGED_IDENTITY_CLIENT_ID?.trim();
     const credential =
         options.credential ??
@@ -163,9 +180,10 @@ export async function loadHostedApiRuntimeConfig(
         );
     }
 
+    rejectCredentialFields(tree);
     const selected = selectHostedApiConfig(
         tree,
-        options.allowLoopbackHttp ?? false,
+        options.endpointValidator ?? validateProductionEndpoint,
     );
     const flat = flatten(selected);
     const config = buildConfig(flat);
@@ -251,7 +269,7 @@ function prepareRuntime(
 
 function selectHostedApiConfig(
     tree: ConfigTree,
-    allowLoopbackHttp: boolean,
+    endpointValidator: HostedEndpointValidator,
 ): ConfigTree {
     const root = expectRecord(tree, "<root>");
     rejectUnknownFields(
@@ -307,7 +325,7 @@ function selectHostedApiConfig(
         selectedDeployments[name] = selectDeployment(
             value,
             `azureOpenAI.deployments.${name}`,
-            allowLoopbackHttp,
+            endpointValidator,
         );
     }
 
@@ -355,7 +373,7 @@ function selectHostedApiConfig(
 function selectDeployment(
     value: unknown,
     fieldPath: string,
-    allowLoopbackHttp: boolean,
+    endpointValidator: HostedEndpointValidator,
 ): ConfigTree {
     const deployment = expectRecord(value, fieldPath);
     rejectUnknownFields(
@@ -375,7 +393,7 @@ function selectDeployment(
             selectEndpoint(
                 endpoint,
                 `${fieldPath}.endpoints.${index}`,
-                allowLoopbackHttp,
+                endpointValidator,
             ),
         ),
     };
@@ -391,7 +409,7 @@ function selectDeployment(
 function selectEndpoint(
     value: unknown,
     fieldPath: string,
-    allowLoopbackHttp: boolean,
+    endpointValidator: HostedEndpointValidator,
 ): ConfigTree {
     const endpoint = expectRecord(value, fieldPath);
     rejectUnknownFields(
@@ -412,7 +430,7 @@ function selectEndpoint(
         endpoint.endpoint,
         `${fieldPath}.endpoint`,
     );
-    validateEndpointUrl(endpointUrl, fieldPath, allowLoopbackHttp);
+    validateEndpointUrl(endpointUrl, fieldPath, endpointValidator);
     const selected: ConfigTree = {
         endpoint: endpointUrl,
         region: expectString(endpoint.region, `${fieldPath}.region`),
@@ -465,20 +483,13 @@ function selectEndpoint(
 function validateEndpointUrl(
     value: string,
     fieldPath: string,
-    allowLoopbackHttp: boolean,
+    endpointValidator: HostedEndpointValidator,
 ): void {
     let url: URL;
     try {
         url = new URL(value);
     } catch {
         throw new Error(`${fieldPath}.endpoint must be an absolute URL.`);
-    }
-    const loopback =
-        url.hostname === "127.0.0.1" ||
-        url.hostname === "::1" ||
-        url.hostname === "localhost";
-    if (url.protocol !== "https:" && !(allowLoopbackHttp && loopback)) {
-        throw new Error(`${fieldPath}.endpoint must use HTTPS.`);
     }
     if (url.username !== "" || url.password !== "") {
         throw new Error(`${fieldPath}.endpoint must not contain credentials.`);
@@ -489,6 +500,23 @@ function validateEndpointUrl(
                 `${fieldPath}.endpoint must not contain credential query parameters.`,
             );
         }
+    }
+    endpointValidator(url, fieldPath);
+}
+
+function validateProductionEndpoint(url: URL, fieldPath: string): void {
+    if (url.protocol !== "https:") {
+        throw new Error(`${fieldPath}.endpoint must use HTTPS.`);
+    }
+    if (url.port !== "") {
+        throw new Error(
+            `${fieldPath}.endpoint must use the default HTTPS port.`,
+        );
+    }
+    if (!AZURE_AI_HOSTNAME_PATTERN.test(url.hostname)) {
+        throw new Error(
+            `${fieldPath}.endpoint must use a supported Azure OpenAI or Azure AI Services hostname.`,
+        );
     }
 }
 
@@ -525,43 +553,42 @@ function validateRuntimeConfig(config: Config): void {
 }
 
 function rejectStaticCredentialEnvironment(env: NodeJS.ProcessEnv): void {
+    const rejected: string[] = [];
     for (const [key, value] of Object.entries(env)) {
         if (value === undefined || value.trim() === "") {
             continue;
         }
-        if (
-            STATIC_CREDENTIAL_NAMES.has(key) ||
-            isStaticCredentialVariable(key, value)
-        ) {
-            throw new Error(
-                `Static credential environment variable '${key}' is not allowed.`,
-            );
+        if (isSafeHostedEnvironmentVariable(key, value)) {
+            continue;
         }
+        if (isCredentialVariableName(key)) {
+            delete env[key];
+            rejected.push(key);
+        }
+    }
+    if (rejected.length !== 0) {
+        throw new Error(
+            `Static credential environment variable '${rejected[0]}' is not allowed.`,
+        );
     }
 }
 
-function isStaticCredentialVariable(key: string, value: string): boolean {
-    if (!CREDENTIAL_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) {
-        return false;
-    }
-    if (
-        key.startsWith("AZURE_OPENAI_API_KEY") &&
-        value.toLowerCase() === "identity"
-    ) {
-        return false;
-    }
+function isSafeHostedEnvironmentVariable(key: string, value: string): boolean {
     return (
-        shouldRedact(key, value) ||
-        /(API_?KEY|ACCESS_?KEY|ACCOUNT_?KEY|SECRET|PASSWORD|PASSWD|TOKEN|CREDENTIAL|CERTIFICATE|CONNECTION_?STRING|_SAS(?:_|$))/i.test(
-            key,
-        )
+        SAFE_HOSTED_ENVIRONMENT_NAMES.has(key) ||
+        (key === "AZURE_OPENAI_API_KEY" && value.toLowerCase() === "identity")
     );
 }
 
 function scrubLegacyConfiguration(env: NodeJS.ProcessEnv): void {
     for (const key of Object.keys(env)) {
+        const value = env[key] ?? "";
+        if (isSafeHostedEnvironmentVariable(key, value)) {
+            continue;
+        }
         if (
             SCRUBBED_ENV_PREFIXES.some((prefix) => key.startsWith(prefix)) ||
+            isCredentialVariableName(key) ||
             key === "TYPEAGENT_DEFAULT_EMBEDDING_MODEL" ||
             key === "TYPEAGENT_DOTENV" ||
             key === "TYPEAGENT_MODEL_PROVIDER" ||
@@ -571,6 +598,55 @@ function scrubLegacyConfiguration(env: NodeJS.ProcessEnv): void {
         ) {
             delete env[key];
         }
+    }
+}
+
+function isCredentialVariableName(key: string): boolean {
+    return (
+        STATIC_CREDENTIAL_NAMES.has(key) ||
+        REPOSITORY_CREDENTIAL_ENVIRONMENT_NAMES.has(key) ||
+        APP_SERVICE_CONNECTION_PREFIXES.some((prefix) =>
+            key.startsWith(prefix),
+        ) ||
+        hasCredentialName(key)
+    );
+}
+
+function hasCredentialName(name: string): boolean {
+    const normalized = name
+        .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+        .replace(/[^a-z0-9]+/gi, "_")
+        .toUpperCase();
+    return /(?:^|_)(?:API_KEY|ACCESS_KEY|ACCOUNT_KEY|PRIVATE_KEY|KEY|SECRET|PASSWORD|PASSWD|TOKEN|CREDENTIAL|CONNECTION_STRING|SAS)(?:_|$)/.test(
+        normalized,
+    );
+}
+
+function rejectCredentialFields(value: unknown, fieldPath = "<root>"): void {
+    if (Array.isArray(value)) {
+        value.forEach((entry, index) =>
+            rejectCredentialFields(entry, `${fieldPath}.${index}`),
+        );
+        return;
+    }
+    if (value === null || typeof value !== "object") {
+        return;
+    }
+    for (const [key, child] of Object.entries(
+        value as Record<string, unknown>,
+    )) {
+        const pathName = fieldPath === "<root>" ? key : `${fieldPath}.${key}`;
+        if (
+            APP_SERVICE_CONNECTION_PREFIXES.some((prefix) =>
+                key.toUpperCase().startsWith(prefix),
+            ) ||
+            hasCredentialName(key)
+        ) {
+            throw new Error(
+                `Static credential field '${pathName}' is not allowed.`,
+            );
+        }
+        rejectCredentialFields(child, pathName);
     }
 }
 
@@ -584,17 +660,35 @@ function rejectUnknownFields(
             continue;
         }
         const pathName = fieldPath === "<root>" ? key : `${fieldPath}.${key}`;
-        if (
-            /(api.?key|secret|token|password|credential|connection.?string)/i.test(
-                key,
-            )
-        ) {
+        if (hasCredentialName(key)) {
             throw new Error(
                 `Static credential field '${pathName}' is not allowed.`,
             );
         }
         throw new Error(`Unsupported hosted API field '${pathName}'.`);
     }
+}
+
+function validateKeyVaultName(value: string): string {
+    const normalized = value.toLowerCase();
+    if (
+        !AZURE_KEY_VAULT_NAME_PATTERN.test(normalized) ||
+        normalized.includes("--")
+    ) {
+        throw new Error(
+            "TYPEAGENT_API_CONFIG_VAULT must be a valid Azure Key Vault resource name.",
+        );
+    }
+    return normalized;
+}
+
+function validateKeyVaultSecretName(value: string): string {
+    if (!AZURE_KEY_VAULT_SECRET_NAME_PATTERN.test(value)) {
+        throw new Error(
+            "TYPEAGENT_API_CONFIG_SECRET must be a valid Azure Key Vault secret name.",
+        );
+    }
+    return value;
 }
 
 function requiredEnvironmentValue(
