@@ -90,6 +90,7 @@ jobs:
             az account show --query "{subscription:name, id:id}" -o table
             az acr run \
               --registry "$(containerRegistry)" \
-              --file "$(buildDirectory)/acr-build.yaml" \
-              --set "imageName=$(imageName)" "imageTag=$(imageTag)" \
+              --file acr-build.yaml \
+              --set "imageName=$(imageName)" \
+              --set "imageTag=$(imageTag)" \
               "$(buildDirectory)"
