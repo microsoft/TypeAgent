@@ -14,7 +14,7 @@ import {
     writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import test from "node:test";
 import yaml from "js-yaml";
 import {
@@ -119,6 +119,44 @@ writeFileSync(
     );
     chmodSync(script, 0o700);
     return script;
+}
+
+function resolveStandalonePnpmCommand() {
+    if (process.platform !== "win32") {
+        return run("sh", ["-c", "command -v pnpm"]);
+    }
+    const candidates = [];
+    if (process.env.PNPM_HOME) {
+        candidates.push(
+            resolve(process.env.PNPM_HOME, "..", "pnpm", "bin", "pnpm.cjs"),
+            resolve(
+                process.env.PNPM_HOME,
+                "node_modules",
+                "pnpm",
+                "bin",
+                "pnpm.cjs",
+            ),
+        );
+    }
+    for (const command of run("where.exe", ["pnpm"]).split(/\r?\n/)) {
+        candidates.push(
+            resolve(
+                dirname(command),
+                "node_modules",
+                "pnpm",
+                "bin",
+                "pnpm.cjs",
+            ),
+        );
+        if (dirname(command).endsWith(`${sep}.bin`)) {
+            candidates.push(
+                resolve(dirname(command), "..", "pnpm", "bin", "pnpm.cjs"),
+            );
+        }
+    }
+    const command = candidates.find(existsSync);
+    assert.ok(command, "Unable to locate the standalone pnpm entrypoint");
+    return command;
 }
 
 function createFixture(options = {}) {
@@ -1151,21 +1189,7 @@ test("real pnpm heals an entirely local workspace without lifecycle markers", (t
         );
 
         const outputDirectory = join(fixture.root, "real-artifact");
-        const pnpmCommand =
-            process.platform === "win32"
-                ? join(
-                      dirname(
-                          run("where.exe", ["pnpm"])
-                              .split(/\r?\n/)
-                              .filter((path) => path.endsWith("pnpm.cmd"))
-                              .at(-1),
-                      ),
-                      "node_modules",
-                      "pnpm",
-                      "bin",
-                      "pnpm.cjs",
-                  )
-                : run("sh", ["-c", "command -v pnpm"]);
+        const pnpmCommand = resolveStandalonePnpmCommand();
         const summary = prepareCandidateArtifact({
             metadata: fixture.metadata,
             outputDirectory,
