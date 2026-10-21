@@ -211,6 +211,26 @@ test("live supervisor validates a separately authorized fixed bound and cannot r
         workAllowanceMs: 2100000,
     };
     validateLiveSpec(baseline19);
+    validateLiveSpec({
+        ...baseline19,
+        resume: true,
+        previousReceiptPath: path.join(
+            baseline19.runDirectory,
+            "attempt-before-resume-test",
+            "live-preflight.json",
+        ),
+    });
+    assert.throws(() =>
+        validateLiveSpec({
+            ...baseline19,
+            resume: true,
+            previousReceiptPath: path.resolve(
+                baseline19.runDirectory,
+                "..",
+                "foreign.json",
+            ),
+        }),
+    );
     assert.throws(() =>
         validateLiveSpec({ ...baseline19, workAllowanceMs: 1200000 }),
     );

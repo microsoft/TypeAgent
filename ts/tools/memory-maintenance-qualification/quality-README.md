@@ -356,10 +356,87 @@ Full eligible drain and enabled-path unchanged cold-reopen zero-call checks are
 required before a clean-family claim; a partial run is not success. Actual
 semantic review and the independent artifact benchmark remain separate gates.
 
-Live qualification currently requires a fresh isolated store (`resume: false`).
-The watchdog's generic resume support and the offline harness's same-store resume
-do not make this live workflow resumable. Safe live continuation would need to
-reconcile persisted sources, revisions and jobs with the saved operation ledger,
-including any import interrupted before its completion was recorded. Do not
-rerun the fresh-store timeline against a partial store or skip sources solely
-from the completed-operation count.
+### Resuming a bounded baseline19 run
+
+Add `--resume $ownedRunDirectory` to the same authorized baseline19 command.
+This reopens the existing isolated store; it does not create another corpus.
+Each invocation gets its own 30-minute work/preflight allowance plus a five-minute
+cleanup reserve. There is no automatic loop across invocations.
+
+Resume requires the same physical product/fixture roots, fixture-plan hash,
+compiled checkpoint, model/config dependency checkpoint and configured provider
+identity. The owner/receipt IDs must match and both previous owned process IDs
+must be absent. An exclusive run lock prevents concurrent invocations.
+Prior receipts, preflight captures, admission and termination records are archived
+before new inference. A stale lock from an outer-process crash requires explicit
+ownership inspection; it is never silently deleted.
+
+Completed operations must be an exact plan prefix. Actual latest mapped revisions
+must still be ready and hash-identical. Recovery handles an acknowledged prefix,
+a ready commit whose ledger acknowledgement was interrupted, and an existing
+in-flight ingestion job. A failed/interrupted source can be explicitly retried on
+the same source ID with a new retained revision and recorded predecessor; it is
+not duplicated as another source. New admission is persisted before waiting.
+Unexpected sources, duplicate canonical identities, changed completed content or
+real product/role failures stop the run rather than being treated as progress.
+
+This continuation scope is **baseline19 only** and admits bounded interruptions,
+not automatic retries of a blocked view target. The full temporal/human-edit/
+forget timeline still requires a fresh run. Successful source ingestion does not
+by itself certify maintained-view drain or the cold-reopen checks.
+
+## Executing the full LongMemEval suite
+
+`longmemeval-live.mjs` runs real production ingestion, retrieval and synthesized
+answers, followed by model judging. It is separate from the offline preparation
+CLI and requires `--authorized-live-benchmark`.
+
+```powershell
+if (Test-Path $PROFILE) { . $PROFILE }
+node tools\memory-maintenance-qualification\longmemeval-live.mjs --product (Get-Location).Path --dataset $officialCleanedDataset --judge-source $pinnedOfficialJudgeSource --output $ownedArtifactRoot --authorized-live-benchmark
+# Later, explicitly authorize one more bounded invocation:
+node tools\memory-maintenance-qualification\longmemeval-live.mjs --product (Get-Location).Path --dataset $officialCleanedDataset --judge-source $pinnedOfficialJudgeSource --output $ownedArtifactRoot --authorized-live-benchmark --resume $ownedBenchmarkRun
+```
+
+The pinned cleaned S dataset contains all 500 questions (SHA-256
+`d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442`,
+Hugging Face revision `98d7416c24c778c2fee6e6f3006e7a073259d48f`).
+The seed `typeagent-longmemeval-full-2026-10-20` freezes an answer-independent
+full-suite order. Construction contains only original session dates, roles,
+turn text and positions. Official cleaned data has repeated IDs and empty turns;
+both are preserved rather than deduplicated or replaced. The diagnostic adapter
+also accepts the cleaned filenames.
+
+The explicitly selected full-suite `historyPolicy: "official-supplied"` retains
+all official history, auditing timestamps after the question rather than changing
+the dataset. The pinned S export has 1,475 such sessions across 76 questions,
+all on the question's calendar day. The diagnostic default remains strict
+timestamp cutoff validation. Question text/date are supplied only at reading;
+reference answers and evidence annotations are used only for evaluation.
+
+The measured arm is **document-backed conversation memory**, one Markdown source
+per original session position, using production KnowPro ingestion/search/answer.
+Navigation synopses and maintained views are explicitly disabled for this arm.
+It is not a measurement of native conversation-event ingestion or wiki quality.
+Evidence-session recall among 20 search matches is recorded separately from
+answer accuracy and is not relabeled as another system's recall@20 protocol.
+
+Judge templates are loaded verbatim from the pinned official evaluator source
+(SHA-256 `ecce9c4c79dc89d99534ac17b383a5cbb5b9f0c69ee98adaf0684742e3d95251`).
+The actual judge uses the normal configured model/default generation settings,
+**not an assumed `gpt-4o-2024-08-06` official judge**. Its actual provider model is
+recorded. Invalid judge responses fail explicitly; no automatic positive labels
+or invented independent-human approvals are supplied.
+
+Each invocation has a 35-minute total cap with five minutes reserved for cleanup.
+Fetches and job waits share the work deadline. Completed histories and saved
+hypotheses are reusable across explicit resume invocations; a failed non-budget
+case requires review before retry. Corpus identity, dataset/plan, compiled and
+model dependencies, benchmark implementation and configuration are frozen.
+
+Local outputs include the manifest, resumable state, hypotheses, per-attempt
+receipts, observed provider usage and scorecard. Missing questions stay missing.
+Full-schedule accuracy is `null` until all 500 are judged; observed-prefix accuracy
+is labeled incomplete, never a full-suite leaderboard score. Dollar cost remains
+unknown without verified pricing. Official reference answers do not require us
+to invent human approval for the unrelated, still-provisional local artifact gold.

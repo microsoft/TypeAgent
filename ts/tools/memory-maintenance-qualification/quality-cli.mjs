@@ -336,10 +336,10 @@ if (
 ) {
     main().then(
         (result) =>
-            console.log(
-                typeof result === "string"
+            process.stdout.write(
+                (typeof result === "string"
                     ? result
-                    : JSON.stringify(result, null, 2),
+                    : JSON.stringify(result, null, 2)) + "\n",
             ),
         (error) => {
             console.error(error.message);

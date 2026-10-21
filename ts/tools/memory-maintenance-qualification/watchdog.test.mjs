@@ -22,6 +22,17 @@ test("baseline19 watchdog includes startup and preflight in the exact thirty-fiv
     );
 });
 
+test("a separately validated benchmark total allowance also includes startup", () => {
+    assert.equal(
+        workerDeadline(
+            { spawnedEpochMs: 1000, totalAllowanceMs: 2100000 },
+            { workDeadlineEpochMs: 2160000 },
+            121000,
+        ),
+        2101000,
+    );
+});
+
 async function createRun(t, mode, extra = {}) {
     const runDirectory = await mkdtemp(
         path.join(process.cwd(), "qualification-watchdog-refactor-"),

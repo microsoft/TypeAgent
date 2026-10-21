@@ -137,6 +137,65 @@ function qedFixture() {
     };
 }
 
+test("full cleaned LongMemEval preparation retains all 500 cases and isolates official gold", () => {
+    const { rows, plan } = lmeFixture();
+    const fullRows = Array.from({ length: 500 }, (_, index) => ({
+        ...rows[index % rows.length],
+        question_id: `full-${index}${rows[index % rows.length].question_id.endsWith("_abs") ? "_abs" : ""}`,
+    }));
+    const fullPlan = {
+        ...plan,
+        scope: "full500",
+        provenance: { ...plan.provenance, path: "longmemeval_s_cleaned.json" },
+    };
+    const result = prepareLongMemEval(fullRows, fullPlan);
+    assert.equal(result.construction.length, 500);
+    assert.equal(result.evaluatorOnly.references.length, 500);
+    assert.equal(
+        result.manifest.benchmark,
+        "LongMemEval full 500-question suite",
+    );
+    assert.equal(
+        Object.values(result.manifest.quotas).reduce((a, b) => a + b, 0),
+        500,
+    );
+    assert.ok(
+        !JSON.stringify(result.construction).includes(
+            "EVALUATOR_REFERENCE_SENTINEL",
+        ),
+    );
+    assert.deepEqual(
+        result.manifest,
+        prepareLongMemEval([...fullRows].reverse(), fullPlan).manifest,
+    );
+    assert.throws(
+        () => prepareLongMemEval(fullRows.slice(1), fullPlan),
+        /all 500/,
+    );
+    const repeated = structuredClone(fullRows);
+    repeated[0].haystack_session_ids[1] = repeated[0].haystack_session_ids[0];
+    repeated[0].haystack_sessions[0][0].content = "";
+    const packet = prepareLongMemEval(repeated, fullPlan).construction.find(
+        (row) => row.id === repeated[0].question_id,
+    );
+    assert.equal(packet.sessions.length, 2);
+    assert.equal(packet.sessions[0].id, packet.sessions[1].id);
+    assert.notEqual(packet.sessions[0].position, packet.sessions[1].position);
+    assert.equal(packet.sessions[0].turns[0].content, "");
+    const conflicts = structuredClone(fullRows);
+    conflicts[0].question_date = "2024/02/27 (Tue) 00:00";
+    assert.throws(
+        () => prepareLongMemEval(conflicts, fullPlan),
+        /Future-message/,
+    );
+    const officialHistory = prepareLongMemEval(conflicts, {
+        ...fullPlan,
+        historyPolicy: "official-supplied",
+    });
+    assert.equal(officialHistory.manifest.timestampConflicts.length, 2);
+    assert.equal(officialHistory.construction.length, 500);
+});
+
 test("LongMemEval selects a deterministic 50-question seven-stratum diagnostic", () => {
     const f = lmeFixture();
     const prepared = prepareLongMemEval(f.rows, f.plan);

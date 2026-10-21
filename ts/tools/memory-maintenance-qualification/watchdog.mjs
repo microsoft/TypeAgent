@@ -164,8 +164,11 @@ async function readAdmission(
 
 export function workerDeadline(spec, admission, startupDeadlineEpochMs) {
     const deadline = admission?.workDeadlineEpochMs ?? startupDeadlineEpochMs;
-    return spec.sourceScope === "baseline19"
-        ? Math.min(deadline, spec.spawnedEpochMs + spec.workAllowanceMs)
+    const total =
+        spec.totalAllowanceMs ??
+        (spec.sourceScope === "baseline19" ? spec.workAllowanceMs : undefined);
+    return total !== undefined
+        ? Math.min(deadline, spec.spawnedEpochMs + total)
         : deadline;
 }
 

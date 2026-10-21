@@ -25,6 +25,7 @@ import {
     liveAllowances,
 } from "./live-stages.mjs";
 import { reviewPacket } from "./evaluate.mjs";
+import { prepareLiveResume, withLiveRunLock } from "./live-resume.mjs";
 
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 
@@ -37,7 +38,18 @@ export function validateLiveSpec(spec) {
     assert.equal(spec.startupAllowanceMs, 120000);
     assert.equal(spec.workAllowanceMs, liveAllowances(spec).workAllowanceMs);
     assert.equal(spec.nativeProfile, false);
-    assert.equal(spec.resume, false);
+    assert.equal(typeof spec.resume, "boolean");
+    if (spec.resume) {
+        assert.equal(spec.mode, "live-configured-timeline");
+        assert.equal(spec.sourceScope, "baseline19");
+        assert.ok(path.isAbsolute(spec.previousReceiptPath));
+        assert.ok(
+            path
+                .relative(spec.runDirectory, spec.previousReceiptPath)
+                .startsWith("attempt-before-resume-"),
+            "Resume receipt must be archived inside the owned run",
+        );
+    }
     assert.ok(
         spec.captureSynopsis === undefined ||
             typeof spec.captureSynopsis === "boolean",
@@ -176,17 +188,33 @@ export async function captureSynopsisAttempt(runDirectory, prompt, complete) {
 }
 
 export async function preflight(spec) {
+    const previous = spec.resume
+        ? JSON.parse(await readFile(spec.previousReceiptPath, "utf8"))
+        : undefined;
     const receipt = {
+        ...previous,
         mode: "LIVE_CONFIGURED_PREFLIGHT",
         startedEpochMs: Date.now(),
         outcome: "IN_PROGRESS",
         productFrozen: true,
-        roleCalls: [],
+        roleCalls: previous?.roleCalls ?? [],
         schemaOutputs:
             "Actual production source-synopsis parser, never fabricated",
         secretsRecorded: false,
-        providerRequests: [],
+        providerRequests: previous?.providerRequests ?? [],
     };
+    delete receipt.error;
+    delete receipt.finishedEpochMs;
+    delete receipt.elapsedMs;
+    if (previous) {
+        receipt.resumes = [
+            ...(previous.resumes ?? []),
+            {
+                startedEpochMs: receipt.startedEpochMs,
+                previousReceiptPath: spec.previousReceiptPath,
+            },
+        ];
+    }
     receipt.pid = process.pid;
     receipt.receiptId = spec.receiptId;
     const persist = () =>
@@ -223,6 +251,13 @@ export async function preflight(spec) {
         receipt.compiledLiveContract =
             "All concrete imports/exports/public APIs verified before expensive role calls";
         configured = await configuredLiveOptions(load, spec.authorization);
+        if (previous)
+            for (const [key, value] of Object.entries(configured.identity))
+                assert.deepEqual(
+                    previous.providerIdentity[key],
+                    value,
+                    "Configured provider identity changed",
+                );
         receipt.providerIdentity = configured.identity;
         assert.equal(
             configured.identity.provider,
@@ -246,7 +281,10 @@ export async function preflight(spec) {
             synopsis: "production configuredSourceSynopsisModel complete/fits",
         };
         const plan = await loadPlan(spec.fixtureRoot);
-        receipt.planHash = sha(JSON.stringify(plan));
+        const planHash = sha(JSON.stringify(plan));
+        if (previous)
+            assert.equal(previous.planHash, planHash, "Fixture plan changed");
+        receipt.planHash = planHash;
         const entry = plan[0];
         const original = await readFile(entry.file, "utf8");
         assert.equal(sha(original), entry.sha256);
@@ -403,6 +441,7 @@ if (
             "authorized-live-timeline": { type: "boolean" },
             baseline19: { type: "boolean" },
             "capture-synopsis": { type: "boolean" },
+            resume: { type: "string" },
             spec: { type: "string" },
         },
     });
@@ -444,14 +483,17 @@ if (
         );
         for (const key of ["product", "fixtures", "output", "checkpoint"])
             assert.ok(values[key] && path.isAbsolute(values[key]));
-        const runDirectory = await mkdtemp(
-            path.join(await realpath(values.output), "memory-live-luna-"),
-        );
-        const receiptId = randomUUID();
-        await writeJson(path.join(runDirectory, "ownership.json"), {
-            receiptId,
-            runDirectory,
-        });
+        const runDirectory = values.resume
+            ? await realpath(values.resume)
+            : await mkdtemp(
+                  path.join(await realpath(values.output), "memory-live-luna-"),
+              );
+        let receiptId = randomUUID();
+        if (!values.resume)
+            await writeJson(path.join(runDirectory, "ownership.json"), {
+                receiptId,
+                runDirectory,
+            });
         const spec = {
             receiptId,
             mode: values["authorized-live-timeline"]
@@ -478,13 +520,20 @@ if (
                 sourceScope: values.baseline19 ? "baseline19" : undefined,
             }).workAllowanceMs,
             nativeProfile: false,
-            resume: false,
+            resume: !!values.resume,
         };
-        const termination = await supervise(
-            spec,
-            path.join(import.meta.dirname, "live-qualification.mjs"),
-            validateLiveSpec,
-        );
+        const termination = await withLiveRunLock(runDirectory, async () => {
+            if (spec.resume) {
+                const recovered = await prepareLiveResume(spec);
+                receiptId = recovered.receiptId;
+                Object.assign(spec, recovered);
+            }
+            return supervise(
+                spec,
+                path.join(import.meta.dirname, "live-qualification.mjs"),
+                validateLiveSpec,
+            );
+        });
         process.stdout.write(
             JSON.stringify({ runDirectory, ...termination }) + "\n",
         );

@@ -62,24 +62,45 @@ function ranked(rows, seed, idKey) {
 export function prepareLongMemEval(rows, plan) {
     provenance(plan.provenance, publicPins.longMemEval);
     text(plan.seed, "selection seed");
+    const cleaned = plan.provenance.path
+        .split(/[\\/]/)
+        .at(-1)
+        .endsWith("_cleaned.json");
     check(
         [
             "longmemeval_s.json",
             "longmemeval_m.json",
+            "longmemeval_s_cleaned.json",
+            "longmemeval_m_cleaned.json",
             "longmemeval_oracle.json",
         ].includes(plan.provenance.path.split(/[\\/]/).at(-1)),
         "Unknown official LongMemEval variant",
     );
     unique(rows, "question_id", "LongMemEval questions");
+    const full = plan.scope === "full500";
+    check(plan.scope === undefined || full, "Unknown LongMemEval scope");
+    const suppliedHistory = plan.historyPolicy === "official-supplied";
     check(
-        Object.keys(plan.quotas).length === lmeCategories.length &&
-            lmeCategories.every(
-                (c) =>
-                    Number.isSafeInteger(plan.quotas[c]) && plan.quotas[c] > 0,
-            ) &&
-            Object.values(plan.quotas).reduce((a, b) => a + b, 0) === 50,
-        "Require 50 preregistered questions across all seven strata",
+        plan.historyPolicy === undefined || (suppliedHistory && full),
+        "Official-supplied history policy requires explicit full-suite scope",
     );
+    const timestampConflicts = [];
+    if (full)
+        check(
+            rows.length === 500,
+            "Full LongMemEval requires all 500 questions",
+        );
+    else
+        check(
+            Object.keys(plan.quotas).length === lmeCategories.length &&
+                lmeCategories.every(
+                    (c) =>
+                        Number.isSafeInteger(plan.quotas[c]) &&
+                        plan.quotas[c] > 0,
+                ) &&
+                Object.values(plan.quotas).reduce((a, b) => a + b, 0) === 50,
+            "Require 50 preregistered questions across all seven strata",
+        );
     for (const row of rows) {
         check(
             lmeCategories.slice(0, -1).includes(row.question_type),
@@ -95,7 +116,7 @@ export function prepareLongMemEval(rows, plan) {
         check(
             Array.isArray(ids) &&
                 ids.length > 0 &&
-                new Set(ids).size === ids.length &&
+                (cleaned || new Set(ids).size === ids.length) &&
                 ids.every((id) => typeof id === "string" && id.length > 0),
             "Invalid/duplicate session IDs",
         );
@@ -114,10 +135,18 @@ export function prepareLongMemEval(rows, plan) {
             "Unknown/duplicate answer session",
         );
         row.haystack_sessions.forEach((turns, index) => {
-            check(
-                officialTime(row.haystack_dates[index]) <= cutoff,
-                "Future-message leakage: history exceeds official question cutoff",
-            );
+            const sessionTime = officialTime(row.haystack_dates[index]);
+            if (suppliedHistory && sessionTime > cutoff)
+                timestampConflicts.push({
+                    questionId: row.question_id,
+                    sessionPosition: index,
+                    millisecondsAfterQuestion: sessionTime - cutoff,
+                });
+            else
+                check(
+                    sessionTime <= cutoff,
+                    "Future-message leakage: history exceeds official question cutoff",
+                );
             check(
                 Array.isArray(turns) && turns.length > 0,
                 "Empty/invalid official session",
@@ -127,7 +156,12 @@ export function prepareLongMemEval(rows, plan) {
                     ["user", "assistant"].includes(turn.role),
                     "Unknown history role",
                 );
-                text(turn.content, "turn content");
+                if (cleaned)
+                    check(
+                        typeof turn.content === "string",
+                        "Official cleaned turn content must be a string",
+                    );
+                else text(turn.content, "turn content");
                 check(
                     turn.has_answer === undefined ||
                         typeof turn.has_answer === "boolean",
@@ -138,24 +172,35 @@ export function prepareLongMemEval(rows, plan) {
     }
     const category = (row) =>
         row.question_id.endsWith("_abs") ? "abstention" : row.question_type;
-    const selected = lmeCategories.flatMap((name) => {
-        const available = ranked(
-            rows.filter((r) => category(r) === name),
-            plan.seed,
-            "question_id",
-        );
-        check(
-            available.length >= plan.quotas[name],
-            `Insufficient LongMemEval stratum: ${name}`,
-        );
-        return available.slice(0, plan.quotas[name]);
-    });
+    const selected = full
+        ? ranked(rows, plan.seed, "question_id")
+        : lmeCategories.flatMap((name) => {
+              const available = ranked(
+                  rows.filter((r) => category(r) === name),
+                  plan.seed,
+                  "question_id",
+              );
+              check(
+                  available.length >= plan.quotas[name],
+                  `Insufficient LongMemEval stratum: ${name}`,
+              );
+              return available.slice(0, plan.quotas[name]);
+          });
     const manifest = {
         schemaVersion: 1,
-        benchmark: "LongMemEval adapted 50-question diagnostic",
+        benchmark: full
+            ? "LongMemEval full 500-question suite"
+            : "LongMemEval adapted 50-question diagnostic",
         provenance: clone(plan.provenance),
         seed: plan.seed,
-        quotas: clone(plan.quotas),
+        quotas: full
+            ? Object.fromEntries(
+                  lmeCategories.map((name) => [
+                      name,
+                      selected.filter((row) => category(row) === name).length,
+                  ]),
+              )
+            : clone(plan.quotas),
         originalRowHashes: selected.map((r) => ({
             id: r.question_id,
             sha256: identity(r),
@@ -163,8 +208,16 @@ export function prepareLongMemEval(rows, plan) {
         })),
         constructionPolicy:
             "Original session order, dates, roles and text; no answer labels, questions or references in construction",
-        datePolicy:
-            "Compare timezone-free official dates as UTC for cutoff validation; retain original timestamp strings",
+        datePolicy: suppliedHistory
+            ? "Preserve every officially supplied history session; audit timestamps after the question instead of filtering; retain original strings"
+            : "Compare timezone-free official dates as UTC for cutoff validation; retain original timestamp strings",
+        timestampConflicts: timestampConflicts.sort(
+            (a, b) =>
+                a.questionId.localeCompare(b.questionId) ||
+                a.sessionPosition - b.sessionPosition,
+        ),
+        sessionIdentityPolicy:
+            "Retain official IDs and original positions; cleaned exports may repeat an ID, so never deduplicate histories",
     };
     return {
         manifest: { ...manifest, sha256: identity(manifest) },
@@ -173,6 +226,7 @@ export function prepareLongMemEval(rows, plan) {
             cutoff: r.question_date,
             sessions: r.haystack_session_ids.map((id, index) => ({
                 id,
+                position: index,
                 date: r.haystack_dates[index],
                 turns: r.haystack_sessions[index].map((t) => ({
                     role: t.role,
@@ -247,7 +301,10 @@ export function summarizeLongMemEvalLabels(prepared, labels) {
         missing: items.filter((r) => !rows.has(r.id)).length,
     });
     return {
-        scope: "Adapted diagnostic, not official full-suite performance; absent scores count in scheduled denominator",
+        scope:
+            expected.length === 500
+                ? "Full 500-question schedule; report dataset revision and actual judge model; absent scores count in scheduled denominator"
+                : "Adapted diagnostic, not official full-suite performance; absent scores count in scheduled denominator",
         total: summarize(expected),
         categories: Object.fromEntries(
             lmeCategories.map((c) => [

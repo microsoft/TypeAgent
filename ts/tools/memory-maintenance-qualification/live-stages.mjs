@@ -17,6 +17,10 @@ import {
     writeJson,
 } from "./harness.mjs";
 import { measureProgress } from "./evaluate.mjs";
+import {
+    reconcileLiveSource,
+    validateLiveResumeSources,
+} from "./live-resume.mjs";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -348,11 +352,13 @@ export async function runLiveStages(
         () => phase,
     );
     receipt.store = store;
-    receipt.operations = [];
-    receipt.mappings = {};
-    receipt.stages = {};
-    receipt.actions = {};
-    receipt.checks = [];
+    if (!spec.resume) {
+        receipt.operations = [];
+        receipt.mappings = {};
+        receipt.stages = {};
+        receipt.actions = {};
+        receipt.checks = [];
+    }
     receipt.pending = baselineOnly
         ? [
               "Independent baseline19 semantic review pending",
@@ -644,14 +650,153 @@ export async function runLiveStages(
             content,
             ...extra,
         });
+    const applyPhaseActions = async (snapshot) => {
+        if (phase === "initial") {
+            const lease = snapshot.views.find(
+                (view) =>
+                    view.definition.wiki?.query?.toLowerCase() === "lease",
+            );
+            if (lease?.content.sections?.length) {
+                const content = structuredClone(lease.content);
+                content.title = "My deliberate isolated lease review";
+                content.sections[0].details.note =
+                    "Personal synthetic review annotation";
+                const accepted = await save(lease, content);
+                receipt.actions.protection = recordOwnedFixtureProtection(
+                    accepted.version,
+                    content.sections[0].id,
+                    editorialProtection,
+                );
+            } else
+                receipt.pending.push(
+                    "C7 fixture page not naturally discovered; no topic/page injection",
+                );
+        }
+        if (phase === "t1") {
+            receipt.actions.naturalCanonical = await readCanonicalQualification(
+                service,
+                receipt.corpusId,
+            );
+            if (receipt.actions.protection) {
+                const current = await service.getView({
+                    corpusId: receipt.corpusId,
+                    viewId: receipt.actions.protection.viewId,
+                });
+                assert.equal(
+                    current.content.title,
+                    receipt.actions.protection.title,
+                );
+                assert.equal(
+                    current.content.sections.find(
+                        (section) =>
+                            section.id ===
+                            receipt.actions.protection.noteSectionId,
+                    )?.details.note,
+                    receipt.actions.protection.note,
+                );
+                const unlocked = (
+                    await save(current, current.content, {
+                        unlockProtection: ["title"],
+                    })
+                ).version;
+                assert.ok(!editorialProtection(unlocked).includes("title"));
+                assert.ok(
+                    editorialProtection(unlocked).includes(
+                        `section:${receipt.actions.protection.noteSectionId}:note`,
+                    ),
+                );
+                receipt.actions.postUnlockStatus = await service.listViews(
+                    receipt.corpusId,
+                );
+            }
+        }
+    };
+    const applyPhaseSources = async (selectedPlan, applied) => {
+        for (const entry of selectedPlan.filter(
+            (entry) => entry.phase === phase,
+        )) {
+            if (selectedPlan.indexOf(entry) < applied) continue;
+            check();
+            const text = await readFile(entry.file, "utf8");
+            assert.equal(hash(text), entry.sha256, "Original fixture changed");
+            const source = {
+                sourceType: "markdown",
+                title: path.basename(entry.file, ".md"),
+                canonicalUri: entry.canonicalUri,
+                text,
+            };
+            const admitted = await reconcileLiveSource(
+                service,
+                receipt.corpusId,
+                entry,
+                receipt.mappings[entry.sourceKey],
+                source,
+                spec.resume,
+            );
+            receipt.inFlight = {
+                phase,
+                sourceKey: entry.sourceKey,
+                fixtureSha256: entry.sha256,
+                ...admitted,
+            };
+            await persist();
+            const job = admitted.jobId
+                ? await waitForMemoryJob(service, admitted.jobId, {
+                      signal: AbortSignal.timeout(
+                          Math.max(1, deadline - Date.now() - cleanupReserveMs),
+                      ),
+                      pollIntervalMs: 100,
+                  })
+                : admitted;
+            if (job.state !== "complete") {
+                receipt.ingestionFailure = {
+                    state: job.state,
+                    error: safeFailure(
+                        new Error(job.error ?? "Unknown ingestion failure"),
+                    ),
+                };
+                throw new Error("Actual production ingestion failed");
+            }
+            receipt.operations.push({
+                phase,
+                sourceKey: entry.sourceKey,
+                fixtureSha256: entry.sha256,
+                ...admitted,
+                state: job.state,
+            });
+            receipt.mappings[entry.sourceKey] = {
+                sourceId: admitted.sourceId,
+                revisionId: admitted.revisionId,
+            };
+            delete receipt.inFlight;
+            delete receipt.ingestionFailure;
+            applied++;
+            await persist();
+        }
+        return applied;
+    };
     try {
         service = open();
         await service.initialize();
-        receipt.corpusId = (
-            await service.createCorpus(
-                "Isolated actual Luna maintenance qualification",
-            )
-        ).corpusId;
+        if (!spec.resume) {
+            receipt.corpusId = (
+                await service.createCorpus(
+                    "Isolated actual Luna maintenance qualification",
+                )
+            ).corpusId;
+            await persist();
+        }
+        const selectedPlan = plan.filter((entry) =>
+            livePhases(spec).includes(entry.phase),
+        );
+        let applied = spec.resume
+            ? await validateLiveResumeSources(
+                  service,
+                  receipt.corpusId,
+                  selectedPlan,
+                  receipt,
+              )
+            : 0;
         const admittedEpochMs = Date.now();
         deadline = baselineOnly
             ? Math.min(
@@ -672,63 +817,11 @@ export async function runLiveStages(
             ),
         });
         for (phase of livePhases(spec)) {
+            if (receipt.stages[phase]) continue;
             receipt.phase = phase;
             for (const family of ["wiki", "projects", "topics"])
                 await control(family, "pause");
-            for (const entry of plan.filter((entry) => entry.phase === phase)) {
-                check();
-                const text = await readFile(entry.file, "utf8");
-                assert.equal(
-                    hash(text),
-                    entry.sha256,
-                    "Original fixture changed",
-                );
-                const source = {
-                    sourceType: "markdown",
-                    title: path.basename(entry.file, ".md"),
-                    canonicalUri: entry.canonicalUri,
-                    text,
-                };
-                const prior = receipt.mappings[entry.sourceKey];
-                const admitted = prior
-                    ? await service.replaceSource({
-                          corpusId: receipt.corpusId,
-                          sourceId: prior.sourceId,
-                          expectedActiveRevisionId: prior.revisionId,
-                          source,
-                      })
-                    : await service.ingestDocument({
-                          corpusId: receipt.corpusId,
-                          source,
-                      });
-                const job = await waitForMemoryJob(service, admitted.jobId, {
-                    signal: AbortSignal.timeout(
-                        Math.max(1, deadline - Date.now() - cleanupReserveMs),
-                    ),
-                    pollIntervalMs: 100,
-                });
-                receipt.operations.push({
-                    phase,
-                    sourceKey: entry.sourceKey,
-                    fixtureSha256: entry.sha256,
-                    ...admitted,
-                    state: job.state,
-                });
-                receipt.mappings[entry.sourceKey] = {
-                    sourceId: admitted.sourceId,
-                    revisionId: admitted.revisionId,
-                };
-                if (job.state !== "complete") {
-                    receipt.ingestionFailure = {
-                        state: job.state,
-                        error: safeFailure(
-                            new Error(job.error ?? "Unknown ingestion failure"),
-                        ),
-                    };
-                    throw new Error("Actual production ingestion failed");
-                }
-                await persist();
-            }
+            applied = await applyPhaseSources(selectedPlan, applied);
             if (baselineOnly && phase !== "correction") continue;
             if (baselineOnly)
                 assert.equal(
@@ -740,63 +833,7 @@ export async function runLiveStages(
                 await control(family, "resume");
             await settled();
             const snapshot = await capture(phase);
-            if (phase === "initial") {
-                const lease = snapshot.views.find(
-                    (view) =>
-                        view.definition.wiki?.query?.toLowerCase() === "lease",
-                );
-                if (lease?.content.sections?.length) {
-                    const content = structuredClone(lease.content);
-                    content.title = "My deliberate isolated lease review";
-                    content.sections[0].details.note =
-                        "Personal synthetic review annotation";
-                    const accepted = await save(lease, content);
-                    receipt.actions.protection = recordOwnedFixtureProtection(
-                        accepted.version,
-                        content.sections[0].id,
-                        editorialProtection,
-                    );
-                } else
-                    receipt.pending.push(
-                        "C7 fixture page not naturally discovered; no topic/page injection",
-                    );
-            }
-            if (phase === "t1") {
-                receipt.actions.naturalCanonical =
-                    await readCanonicalQualification(service, receipt.corpusId);
-                if (receipt.actions.protection) {
-                    const current = await service.getView({
-                        corpusId: receipt.corpusId,
-                        viewId: receipt.actions.protection.viewId,
-                    });
-                    assert.equal(
-                        current.content.title,
-                        receipt.actions.protection.title,
-                    );
-                    assert.equal(
-                        current.content.sections.find(
-                            (section) =>
-                                section.id ===
-                                receipt.actions.protection.noteSectionId,
-                        )?.details.note,
-                        receipt.actions.protection.note,
-                    );
-                    const unlocked = (
-                        await save(current, current.content, {
-                            unlockProtection: ["title"],
-                        })
-                    ).version;
-                    assert.ok(!editorialProtection(unlocked).includes("title"));
-                    assert.ok(
-                        editorialProtection(unlocked).includes(
-                            `section:${receipt.actions.protection.noteSectionId}:note`,
-                        ),
-                    );
-                    receipt.actions.postUnlockStatus = await service.listViews(
-                        receipt.corpusId,
-                    );
-                }
-            }
+            await applyPhaseActions(snapshot);
             await persist();
         }
         if (!baselineOnly) {
@@ -820,8 +857,12 @@ export async function runLiveStages(
             await settled();
             await capture(phase);
         }
-        receipt.actions.restarts = [];
-        for (let attempt = 0; attempt < 2; attempt++) {
+        receipt.actions.restarts ??= [];
+        for (
+            let attempt = receipt.actions.restarts.length;
+            attempt < 2;
+            attempt++
+        ) {
             const before = (
                 await service.listViews(receipt.corpusId)
             ).views.map(({ viewId, revisionId }) => ({ viewId, revisionId }));
@@ -850,6 +891,7 @@ export async function runLiveStages(
                 unchangedViewRevisions: true,
                 extraProviderCalls: 0,
             });
+            await persist();
         }
         receipt.outcome = baselineOnly
             ? "LIVE_BASELINE19_MECHANISMS_COMPLETED_INDEPENDENT_SEMANTIC_REVIEW_PENDING"
