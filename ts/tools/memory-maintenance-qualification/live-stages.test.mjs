@@ -11,7 +11,43 @@ import {
     observedRoles,
     unexpectedTargets,
     loadLiveContract,
+    livePhases,
+    liveAllowances,
 } from "./live-stages.mjs";
+
+test("baseline19 permits thirty minutes from spawn plus five minutes for cleanup without extending other scopes", () => {
+    const baseline = liveAllowances({ sourceScope: "baseline19" });
+    assert.equal(baseline.workAllowanceMs, 35 * 60 * 1000);
+    assert.equal(baseline.cleanupReserveMs, 5 * 60 * 1000);
+    assert.equal(
+        baseline.workAllowanceMs - baseline.cleanupReserveMs,
+        30 * 60 * 1000,
+    );
+    assert.deepEqual(liveAllowances({}), {
+        workAllowanceMs: 1200000,
+        cleanupReserveMs: 120000,
+    });
+});
+
+test("baseline19 qualification excludes temporal extensions and uses all three original delta batches", () => {
+    assert.deepEqual(livePhases({ sourceScope: "baseline19" }), [
+        "baseline",
+        "meeting-orders",
+        "correction",
+    ]);
+    assert.deepEqual(livePhases({}), [
+        "baseline",
+        "meeting-orders",
+        "correction",
+        "initial",
+        "t1",
+        "t2",
+    ]);
+    assert.throws(
+        () => livePhases({ sourceScope: "unknown" }),
+        /Unsupported live source scope/,
+    );
+});
 
 test("actual fresh compiled live imports/public APIs and production job handle completion are available", async () => {
     const productRoot = fileURLToPath(new URL("../../", import.meta.url));

@@ -23,6 +23,20 @@ snapshot; actual qualification runs still require an explicit fixture root.
 No generated memory stores, recordings, provider responses or run receipts are
 included in these fixtures.
 
+### Memory quality evaluation
+
+The [offline quality tools](../../../tools/memory-maintenance-qualification/quality-README.md)
+prepare frozen artifact bundles, a category-stratified LongMemEval diagnostic,
+and BenchmarkQED/AP-news inputs with separate construction and evaluator packets.
+Run their deterministic checks from the TypeScript workspace with
+`pnpm run test:memory-quality`; they are also included in `test:local`.
+These checks do not run production inference or certify factual quality.
+The authored artifact pilot requires independent human review before scoring.
+
+Project status rendering keeps capacity review pending distinct from a supported
+blocked condition. A `pendingOwnerReview` enum alone does not establish blockage;
+any actual blocker and its scope must remain in evidence-backed section prose.
+
 ## Automatic maintenance foundation
 
 When a Wiki candidate overlaps an existing page, the service checks the page's
@@ -210,6 +224,16 @@ provider output capacity against the context window; explicit opt-in request
 budgets remain enforced locally. Required evidence, character bounds and
 governing qualifications are still validated, and overlong or invalid fields
 are rejected rather than silently shortened.
+
+Recipe `source-synopsis-v3` resolves exact evidence quotes to retained UTF-16
+coordinates in the host. Models may omit offsets instead of computing character
+counts. Existing exact supplied ranges remain valid and can disambiguate repeated
+quotes; otherwise a quote must have exactly one eligible occurrence. Section
+evidence is restricted to that supplied section, and composition can select only
+evidence supplied by its input summaries. Missing, invented, or ambiguous quotes
+fail explicitly. Quotes and source line endings are never normalized or matched
+approximately. Persisted evidence keeps the same coordinate shape; the recipe
+change invalidates older semantic fingerprints.
 
 All memory synthesis, topic, indexed-answer and hub-answer calls now omit
 optional OpenAI completion limits. Their prompts express approximate final-JSON

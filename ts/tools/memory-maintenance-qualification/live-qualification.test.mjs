@@ -4,12 +4,78 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import path from "node:path";
 import {
     configuredLiveOptions,
     safeFailure,
     validateLiveSpec,
+    captureSynopsisAttempt,
 } from "./live-qualification.mjs";
 import { snapshotCompiledCheckpoint } from "./harness.mjs";
+
+test("baseline19 synopsis capture preserves returned output before parser rejection without logging its contents", async (t) => {
+    const directory = await mkdtemp(
+        path.join(process.cwd(), "qualification-synopsis-capture-"),
+    );
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const prompt = "Synthetic source prompt, retained only in owned artifacts";
+    const output = '{"preview":"controlled incomplete schema"}';
+    let calls = 0;
+    assert.equal(
+        await captureSynopsisAttempt(directory, prompt, async () => {
+            calls++;
+            return output;
+        }),
+        output,
+    );
+    assert.equal(calls, 1);
+    assert.deepEqual(
+        JSON.parse(
+            await readFile(
+                path.join(directory, "baseline19-synopsis-input.json"),
+                "utf8",
+            ),
+        ),
+        { prompt },
+    );
+    assert.deepEqual(
+        JSON.parse(
+            await readFile(
+                path.join(directory, "baseline19-synopsis-output.json"),
+                "utf8",
+            ),
+        ),
+        { output },
+    );
+    const known = safeFailure(
+        new Error("Invalid synopsis output fields or bounds"),
+    );
+    assert.equal(known.category, "Invalid synopsis output fields or bounds");
+    assert.ok(!JSON.stringify(known).includes(prompt));
+    assert.equal(
+        safeFailure(new Error(`Private unexpected detail ${output}`)).category,
+        "UNEXPECTED_FAILURE",
+    );
+});
+
+test("baseline19 synopsis capture propagates provider failure without manufacturing output", async (t) => {
+    const directory = await mkdtemp(
+        path.join(process.cwd(), "qualification-synopsis-capture-"),
+    );
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const failure = new Error("Controlled provider failure");
+    await assert.rejects(
+        captureSynopsisAttempt(directory, "Synthetic input", async () => {
+            throw failure;
+        }),
+        (error) => error === failure,
+    );
+    await assert.rejects(
+        readFile(path.join(directory, "baseline19-synopsis-output.json")),
+        { code: "ENOENT" },
+    );
+});
 
 test("live configured loader keeps the existing authorization gate before role creation", async () => {
     const seen = [];
@@ -138,6 +204,19 @@ test("live supervisor validates a separately authorized fixed bound and cannot r
         expectedCheckpoint,
     };
     validateLiveSpec(spec);
+    const baseline19 = {
+        ...spec,
+        mode: "live-configured-timeline",
+        sourceScope: "baseline19",
+        workAllowanceMs: 2100000,
+    };
+    validateLiveSpec(baseline19);
+    assert.throws(() =>
+        validateLiveSpec({ ...baseline19, workAllowanceMs: 1200000 }),
+    );
+    assert.throws(() =>
+        validateLiveSpec({ ...baseline19, workAllowanceMs: 2100001 }),
+    );
     for (const change of [
         { mode: "offline" },
         { workAllowanceMs: 1200001 },

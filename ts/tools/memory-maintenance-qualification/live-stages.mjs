@@ -30,6 +30,20 @@ const phases = [
 ];
 const roles = new AsyncLocalStorage();
 
+export function liveAllowances(spec) {
+    return spec.sourceScope === "baseline19"
+        ? { workAllowanceMs: 2100000, cleanupReserveMs: 300000 }
+        : { workAllowanceMs: 1200000, cleanupReserveMs: 120000 };
+}
+
+export function livePhases(spec) {
+    assert.ok(
+        spec.sourceScope === undefined || spec.sourceScope === "baseline19",
+        "Unsupported live source scope",
+    );
+    return spec.sourceScope === "baseline19" ? phases.slice(0, 3) : [...phases];
+}
+
 export function observedRoles(model, prefix, receipt) {
     return Object.fromEntries(
         Object.entries(model).map(([name, value]) => [
@@ -278,6 +292,9 @@ export async function runLiveStages(
         viewHash,
     } = await loadLiveContract(load);
     const plan = await loadPlan(spec.fixtureRoot);
+    const baselineOnly = spec.sourceScope === "baseline19";
+    const { cleanupReserveMs } = liveAllowances(spec);
+    receipt.sourceScope = baselineOnly ? "baseline19" : "full-timeline";
     const store = path.join(spec.runDirectory, "isolated-store");
     const indexes = new Map();
     const options = { ...configured.options };
@@ -336,17 +353,22 @@ export async function runLiveStages(
     receipt.stages = {};
     receipt.actions = {};
     receipt.checks = [];
-    receipt.pending = [
-        "Independent live C1-C11 semantic review pending",
-        "Offline canonical crash recovery is not live semantic proof",
-    ];
+    receipt.pending = baselineOnly
+        ? [
+              "Independent baseline19 semantic review pending",
+              "Temporal extension, protected-edit and forget live cases not exercised",
+          ]
+        : [
+              "Independent live C1-C11 semantic review pending",
+              "Offline canonical crash recovery is not live semantic proof",
+          ];
     const check = () => {
         assert.equal(
             snapshots.summary.violations.length,
             0,
             "Operation read hydration exceeded exactmax1",
         );
-        if (Date.now() >= deadline - 120000)
+        if (Date.now() >= deadline - cleanupReserveMs)
             throw Object.assign(
                 new Error(
                     "Live work budget exhausted; reserving supported close",
@@ -420,6 +442,14 @@ export async function runLiveStages(
                 receipt.actions.conflictResolution?.jobId,
             );
             if (failures.length) {
+                if (baselineOnly)
+                    await writeJson(
+                        path.join(
+                            spec.runDirectory,
+                            "baseline19-terminal-jobs.json",
+                        ),
+                        current.jobs,
+                    );
                 receipt.failedTargets = failures.map(
                     ({ reason, ...result }) => ({
                         ...result,
@@ -623,12 +653,17 @@ export async function runLiveStages(
             )
         ).corpusId;
         const admittedEpochMs = Date.now();
-        deadline = admittedEpochMs + spec.workAllowanceMs;
+        deadline = baselineOnly
+            ? Math.min(
+                  admittedEpochMs + spec.workAllowanceMs,
+                  spec.spawnedEpochMs + spec.workAllowanceMs,
+              )
+            : admittedEpochMs + spec.workAllowanceMs;
         await writeJson(path.join(spec.runDirectory, "admitted.json"), {
             receiptId: spec.receiptId,
             workerPid: process.pid,
             admittedEpochMs,
-            workDeadlineEpochMs: deadline,
+            workDeadlineEpochMs: admittedEpochMs + spec.workAllowanceMs,
             checkpointExpectationHash: checkpointExpectationHash(
                 spec.expectedCheckpoint,
             ),
@@ -636,7 +671,7 @@ export async function runLiveStages(
                 JSON.stringify(spec.expectedCheckpoint.hashes),
             ),
         });
-        for (phase of phases) {
+        for (phase of livePhases(spec)) {
             receipt.phase = phase;
             for (const family of ["wiki", "projects", "topics"])
                 await control(family, "pause");
@@ -668,7 +703,7 @@ export async function runLiveStages(
                       });
                 const job = await waitForMemoryJob(service, admitted.jobId, {
                     signal: AbortSignal.timeout(
-                        Math.max(1, deadline - Date.now() - 120000),
+                        Math.max(1, deadline - Date.now() - cleanupReserveMs),
                     ),
                     pollIntervalMs: 100,
                 });
@@ -694,6 +729,13 @@ export async function runLiveStages(
                 }
                 await persist();
             }
+            if (baselineOnly && phase !== "correction") continue;
+            if (baselineOnly)
+                assert.equal(
+                    (await service.listSources(receipt.corpusId)).length,
+                    19,
+                    "Baseline qualification requires all 19 active sources",
+                );
             for (const family of ["wiki", "projects", "topics"])
                 await control(family, "resume");
             await settled();
@@ -757,25 +799,27 @@ export async function runLiveStages(
             }
             await persist();
         }
-        phase = "t2-forgotten";
-        const temporary = receipt.mappings["sb-temporary-handoff"];
-        const preview = await service.previewForgetSource(
-            receipt.corpusId,
-            temporary.sourceId,
-        );
-        receipt.actions.forget = await service.forgetSource({
-            corpusId: receipt.corpusId,
-            sourceId: temporary.sourceId,
-            confirmationToken: preview.confirmationToken,
-        });
-        await assert.rejects(
-            service.getSourceContent({
+        if (!baselineOnly) {
+            phase = "t2-forgotten";
+            const temporary = receipt.mappings["sb-temporary-handoff"];
+            const preview = await service.previewForgetSource(
+                receipt.corpusId,
+                temporary.sourceId,
+            );
+            receipt.actions.forget = await service.forgetSource({
                 corpusId: receipt.corpusId,
                 sourceId: temporary.sourceId,
-            }),
-        );
-        await settled();
-        await capture(phase);
+                confirmationToken: preview.confirmationToken,
+            });
+            await assert.rejects(
+                service.getSourceContent({
+                    corpusId: receipt.corpusId,
+                    sourceId: temporary.sourceId,
+                }),
+            );
+            await settled();
+            await capture(phase);
+        }
         receipt.actions.restarts = [];
         for (let attempt = 0; attempt < 2; attempt++) {
             const before = (
@@ -807,8 +851,9 @@ export async function runLiveStages(
                 extraProviderCalls: 0,
             });
         }
-        receipt.outcome =
-            "LIVE_TIMELINE_MECHANISMS_COMPLETED_INDEPENDENT_SEMANTIC_REVIEW_PENDING";
+        receipt.outcome = baselineOnly
+            ? "LIVE_BASELINE19_MECHANISMS_COMPLETED_INDEPENDENT_SEMANTIC_REVIEW_PENDING"
+            : "LIVE_TIMELINE_MECHANISMS_COMPLETED_INDEPENDENT_SEMANTIC_REVIEW_PENDING";
     } catch (error) {
         receipt.outcome = classifyStoppedRun(error, receipt.providerRequests);
         receipt.error = safeFailure(error);

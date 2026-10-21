@@ -243,6 +243,157 @@ describe("source synopsis orchestration", () => {
         expect(output.evidence[0].excerpt).toBe(content);
     });
 
+    test("captured live exact quote survives incorrect model arithmetic without changing original CRLF coordinates", async () => {
+        const content = (
+            await readFile(
+                new URL(
+                    "../../test/fixtures/memoryDemo/memory-import-second-brain/content-only/baseline/document-001.md",
+                    import.meta.url,
+                ),
+                "utf8",
+            )
+        )
+            .replace(/\r?\n/g, "\r\n")
+            .slice(0, 1024);
+        const excerpt =
+            "Explain checkout latency, preserve the investigation trajectory across analyst\r\nhandoffs, and establish evidence requirements for safe future diagnosis.";
+        expect(content.indexOf(excerpt)).toBe(290);
+        expect(content.slice(290, 443)).not.toBe(excerpt);
+        const model = new DeterministicModel();
+        model.complete = async () =>
+            JSON.stringify({
+                preview: "Retained project purpose.",
+                overview: excerpt,
+                qualifications: [],
+                contrasts: [],
+                limitations: [],
+                evidence: [{ start: 290, end: 443, excerpt }],
+            });
+        const output = await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
+        );
+        expect(output.evidence).toEqual([
+            {
+                coordinateSpace: "retained-utf16",
+                start: 290,
+                end: 442,
+                excerpt,
+            },
+        ]);
+    });
+
+    test("host resolves an exact unique Unicode quote without model-generated offsets", async () => {
+        const excerpt = "A 😀 qualification.";
+        const content = `# Context\r\n\r\n${excerpt}\r\n`;
+        const model = new DeterministicModel();
+        model.complete = async () =>
+            JSON.stringify({
+                preview: excerpt,
+                overview: excerpt,
+                qualifications: [],
+                contrasts: [],
+                limitations: [],
+                evidence: [{ excerpt }],
+            });
+        const output = await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
+        );
+        const evidence = output.evidence[0];
+        expect(evidence.start).toBe(content.indexOf(excerpt));
+        expect(evidence.end).toBe(evidence.start + excerpt.length);
+        expect(content.slice(evidence.start, evidence.end)).toBe(excerpt);
+    });
+
+    test("ambiguous quotes require exact disambiguating original ranges", async () => {
+        const excerpt = "Repeated evidence.";
+        const content = `${excerpt}\r\n${excerpt}`;
+        const model = new DeterministicModel();
+        let evidence: Array<{ excerpt: string; start?: number; end?: number }> =
+            [{ excerpt }];
+        model.complete = async () =>
+            JSON.stringify({
+                preview: excerpt,
+                overview: excerpt,
+                qualifications: [],
+                contrasts: [],
+                limitations: [],
+                evidence,
+            });
+        await expect(
+            generateSourceSynopsis(
+                source,
+                revision,
+                content,
+                model,
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow("ambiguous");
+        const start = content.lastIndexOf(excerpt);
+        evidence = [{ excerpt, start, end: start + excerpt.length }];
+        const output = await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
+        );
+        expect(output.evidence[0].start).toBe(start);
+    });
+
+    test("an exact quote elsewhere in the source is not evidence for an unsupplied section", async () => {
+        const excerpt = "Evidence from the final section only.";
+        const content = `${"Earlier context. ".repeat(600)}\n\n${excerpt}`;
+        const model = new DeterministicModel(7000);
+        model.complete = async () =>
+            JSON.stringify({
+                preview: excerpt,
+                overview: excerpt,
+                qualifications: [],
+                contrasts: [],
+                limitations: [],
+                evidence: [{ excerpt }],
+            });
+        await expect(
+            generateSourceSynopsis(
+                source,
+                revision,
+                content,
+                model,
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow("exact supplied retained");
+    });
+
+    test("composition cannot introduce an original quote absent from supplied summary evidence", async () => {
+        const excerpt = "Original but not selected in any summary.";
+        const content = `${"a ".repeat(500)}${excerpt}${" b".repeat(7000)}`;
+        const model = new DeterministicModel(7000);
+        const complete = model.complete.bind(model);
+        model.complete = async (prompt) => {
+            const output = JSON.parse(await complete(prompt));
+            if (prompt.includes('"summaries":'))
+                output.evidence = [{ excerpt }];
+            return JSON.stringify(output);
+        };
+        await expect(
+            generateSourceSynopsis(
+                source,
+                revision,
+                content,
+                model,
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow("exact supplied retained");
+    });
+
     test("non-leading-pipe tables retain repeated structural headers separately from original CRLF/Unicode ranges", async () => {
         const content =
             "# Scope\r\n\r\nMetric | Value\r\n--- | ---\r\nLease | " +

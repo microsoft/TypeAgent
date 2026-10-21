@@ -21,6 +21,8 @@ import {
     loadLiveContract,
     observeProvider,
     runLiveStages,
+    livePhases,
+    liveAllowances,
 } from "./live-stages.mjs";
 import { reviewPacket } from "./evaluate.mjs";
 
@@ -33,9 +35,21 @@ export function validateLiveSpec(spec) {
         ),
     );
     assert.equal(spec.startupAllowanceMs, 120000);
-    assert.equal(spec.workAllowanceMs, 1200000);
+    assert.equal(spec.workAllowanceMs, liveAllowances(spec).workAllowanceMs);
     assert.equal(spec.nativeProfile, false);
     assert.equal(spec.resume, false);
+    assert.ok(
+        spec.captureSynopsis === undefined ||
+            typeof spec.captureSynopsis === "boolean",
+        "Synopsis capture must be explicitly boolean",
+    );
+    livePhases(spec);
+    if (spec.sourceScope !== undefined)
+        assert.equal(
+            spec.mode,
+            "live-configured-timeline",
+            "A source scope requires actual maintenance qualification",
+        );
     assert.equal(spec.authorization?.verifiedP6, true);
     assert.equal(spec.authorization?.verifiedOfflinePreflight, true);
     assert.equal(spec.authorization?.coordinatorHandoff, true);
@@ -114,6 +128,16 @@ export function safeFailure(error) {
         "Source synopsis requires configured model request constraints",
         "Configured informational view capability is disabled",
         "Configured roles require a separate verified coordinator handoff",
+        "Invalid synopsis output object",
+        "Invalid synopsis output fields or bounds",
+        "Invalid synopsis evidence",
+        "Synopsis evidence is not an exact supplied retained UTF-16 range",
+        "Synopsis evidence is ambiguous without an exact supplied range",
+        "Synopsis requires original retained evidence",
+        "Synopsis composition dropped a supplied governing qualification or contrast",
+        "Source synopsis requires configured provider output capacity for uncapped requests",
+        "Configured synopsis request capacity cannot fit bounded structural input",
+        "Configured synopsis capacity cannot compose adjacent summaries without truncation",
     ];
     return {
         name: error?.name ?? "Error",
@@ -137,6 +161,18 @@ export function safeFailure(error) {
             ),
         ].map((match) => match[1]),
     };
+}
+
+export async function captureSynopsisAttempt(runDirectory, prompt, complete) {
+    await writeJson(path.join(runDirectory, "baseline19-synopsis-input.json"), {
+        prompt,
+    });
+    const output = await complete();
+    await writeJson(
+        path.join(runDirectory, "baseline19-synopsis-output.json"),
+        { output },
+    );
+    return output;
 }
 
 export async function preflight(spec) {
@@ -234,7 +270,15 @@ export async function preflight(spec) {
                 providerStarted = true;
                 const started = performance.now();
                 try {
-                    const value = await model.complete(prompt, signal);
+                    const value =
+                        spec.captureSynopsis ||
+                        spec.sourceScope === "baseline19"
+                            ? await captureSynopsisAttempt(
+                                  spec.runDirectory,
+                                  prompt,
+                                  () => model.complete(prompt, signal),
+                              )
+                            : await model.complete(prompt, signal);
                     receipt.roleCalls.push({
                         role: "sourceSynopsis",
                         milliseconds: performance.now() - started,
@@ -357,6 +401,8 @@ if (
             checkpoint: { type: "string" },
             "authorized-live-preflight": { type: "boolean" },
             "authorized-live-timeline": { type: "boolean" },
+            baseline19: { type: "boolean" },
+            "capture-synopsis": { type: "boolean" },
             spec: { type: "string" },
         },
     });
@@ -385,7 +431,8 @@ if (
         );
         process.exitCode =
             result.outcome.startsWith("PASS_") ||
-            result.outcome.startsWith("LIVE_TIMELINE_")
+            result.outcome.startsWith("LIVE_TIMELINE_") ||
+            result.outcome.startsWith("LIVE_BASELINE19_")
                 ? 0
                 : 1;
     } else {
@@ -410,6 +457,8 @@ if (
             mode: values["authorized-live-timeline"]
                 ? "live-configured-timeline"
                 : "live-configured-preflight",
+            ...(values.baseline19 ? { sourceScope: "baseline19" } : {}),
+            ...(values["capture-synopsis"] ? { captureSynopsis: true } : {}),
             productRoot: values.product,
             fixtureRoot: values.fixtures,
             runDirectory,
@@ -425,7 +474,9 @@ if (
                 coordinatorHandoff: true,
             },
             startupAllowanceMs: 120000,
-            workAllowanceMs: 1200000,
+            workAllowanceMs: liveAllowances({
+                sourceScope: values.baseline19 ? "baseline19" : undefined,
+            }).workAllowanceMs,
             nativeProfile: false,
             resume: false,
         };

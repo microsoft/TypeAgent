@@ -5,7 +5,22 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { alive, supervise } from "./watchdog.mjs";
+import { alive, supervise, workerDeadline } from "./watchdog.mjs";
+
+test("baseline19 watchdog includes startup and preflight in the exact thirty-five-minute cap", () => {
+    const spec = {
+        sourceScope: "baseline19",
+        spawnedEpochMs: 1000,
+        workAllowanceMs: 2100000,
+    };
+    const admission = { workDeadlineEpochMs: 2160000 };
+    assert.equal(workerDeadline(spec, admission, 121000), 2101000);
+    assert.equal(workerDeadline(spec, undefined, 121000), 121000);
+    assert.equal(
+        workerDeadline({ ...spec, sourceScope: undefined }, admission, 121000),
+        2160000,
+    );
+});
 
 async function createRun(t, mode, extra = {}) {
     const runDirectory = await mkdtemp(

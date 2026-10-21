@@ -162,6 +162,13 @@ async function readAdmission(
     return candidate;
 }
 
+export function workerDeadline(spec, admission, startupDeadlineEpochMs) {
+    const deadline = admission?.workDeadlineEpochMs ?? startupDeadlineEpochMs;
+    return spec.sourceScope === "baseline19"
+        ? Math.min(deadline, spec.spawnedEpochMs + spec.workAllowanceMs)
+        : deadline;
+}
+
 async function waitForWorker(spec, runDirectory, execution, termination) {
     let admission;
     while (!execution.exit && !execution.spawnError) {
@@ -175,9 +182,11 @@ async function waitForWorker(spec, runDirectory, execution, termination) {
                 termination,
             );
         }
-        const deadline =
-            admission?.workDeadlineEpochMs ??
-            termination.startupDeadlineEpochMs;
+        const deadline = workerDeadline(
+            spec,
+            admission,
+            termination.startupDeadlineEpochMs,
+        );
         if (now >= deadline) {
             termination.outcome = admission
                 ? "BOUNDED_WORK_INCOMPLETE"
