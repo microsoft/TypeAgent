@@ -2,16 +2,21 @@
 // Licensed under the MIT License.
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
     chmodSync,
+    closeSync,
     constants as fsConstants,
     copyFileSync,
+    fstatSync,
     lstatSync,
     mkdirSync,
     mkdtempSync,
+    openSync,
     realpathSync,
     readFileSync,
     readdirSync,
+    renameSync,
     rmSync,
     writeFileSync,
 } from "node:fs";
@@ -30,8 +35,7 @@ export const ARTIFACT_VERSION = 1;
 export const LOCKFILE = "ts/pnpm-lock.yaml";
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
-const AUTOGEN_README_PATTERN =
-    /^ts\/packages\/.+\/README\.AUTOGEN\.md$/;
+const AUTOGEN_README_PATTERN = /^ts\/packages\/.+\/README\.AUTOGEN\.md$/;
 const BLOCKED_PACKAGE_MANAGER_PATHS = [
     /(^|\/)\.npmrc$/,
     /(^|\/)\.pnpmrc$/,
@@ -39,6 +43,10 @@ const BLOCKED_PACKAGE_MANAGER_PATHS = [
     /^ts\/pnpm-workspace\.yaml$/,
     /^ts\/patches\//,
     /^ts\/\.pnpm\//,
+];
+const BLOCKED_MERGE_BEHAVIOR_PATHS = [
+    /(^|\/)\.gitattributes$/,
+    /^\.gitmodules$/,
 ];
 const TRUSTED_ROOT_PACKAGE_FIELDS = [
     "packageManager",
@@ -54,15 +62,66 @@ function fail(message) {
     throw new Error(message);
 }
 
-class CandidateBlockedError extends Error {
+class RepositoryFatalError extends Error {
     constructor(message) {
         super(message);
-        this.name = "CandidateBlockedError";
+        this.name = "RepositoryFatalError";
+    }
+}
+
+class CandidateOutcomeError extends Error {
+    constructor(status, message) {
+        super(message);
+        this.name = "CandidateOutcomeError";
+        this.status = status;
     }
 }
 
 function blockCandidate(message) {
-    throw new CandidateBlockedError(message);
+    throw new CandidateOutcomeError("blocked", message);
+}
+
+function retryCandidate(message) {
+    throw new CandidateOutcomeError("retryable", message);
+}
+
+function fatalRepository(message) {
+    throw new RepositoryFatalError(message);
+}
+
+function isInfrastructureFailure(error) {
+    return new Set([
+        "EACCES",
+        "EBUSY",
+        "EIO",
+        "EMFILE",
+        "ENFILE",
+        "ENOMEM",
+        "ENOSPC",
+        "EPERM",
+        "EROFS",
+    ]).has(error?.code);
+}
+
+function candidateOutcome(number, error, fallbackStatus = "retryable") {
+    if (
+        error instanceof RepositoryFatalError ||
+        isInfrastructureFailure(error)
+    ) {
+        throw error;
+    }
+    return {
+        number,
+        status:
+            error instanceof CandidateOutcomeError
+                ? error.status
+                : fallbackStatus,
+        reason: error.message,
+        conflicts:
+            error instanceof CandidateOutcomeError
+                ? (error.conflicts ?? [])
+                : [],
+    };
 }
 
 function assert(condition, message) {
@@ -100,7 +159,9 @@ function normalizeRef(value, label) {
             !value.includes("..") &&
             !value.includes("@{") &&
             !/[~^:?*[\\\x00-\x20\x7f]/.test(value) &&
-            !value.split("/").some((part) => part === "" || part.endsWith(".lock")),
+            !value
+                .split("/")
+                .some((part) => part === "" || part.endsWith(".lock")),
         `${label} is not a safe Git branch name`,
     );
     return value;
@@ -118,7 +179,9 @@ function normalizePath(path) {
     assert(typeof path === "string" && path.length > 0, "Git path is invalid");
     assert(!path.includes("\\"), `Git path contains a backslash: ${path}`);
     assert(
-        path.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
+        path
+            .split("/")
+            .every((part) => part !== "" && part !== "." && part !== ".."),
         `Git path contains an unsafe component: ${path}`,
     );
     return path;
@@ -185,6 +248,11 @@ function run(command, args, options = {}) {
         ...options,
     });
     if (result.error) {
+        if (result.error.code === "ENOENT") {
+            fatalRepository(
+                `Trusted pnpm executable is unavailable: ${command}`,
+            );
+        }
         throw result.error;
     }
     if (result.status !== 0) {
@@ -230,6 +298,7 @@ function createIsolatedEnvironment(baseEnvironment, home) {
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_CONFIG_GLOBAL: globalConfig,
         GIT_TERMINAL_PROMPT: "0",
+        GIT_ATTR_NOSYSTEM: "1",
         GCM_INTERACTIVE: "Never",
         NPM_CONFIG_USERCONFIG: npmConfig,
         npm_config_userconfig: npmConfig,
@@ -324,6 +393,7 @@ function validatePullRequest(pr, repository, defaultBranch, trustedSha) {
         state: pr.state,
         isCrossRepository: pr.isCrossRepository,
         headRepository: normalizeRepository(pr.headRepository),
+        baseRepository: normalizeRepository(pr.baseRepository),
         headRefName: normalizeRef(pr.headRefName, "Pull request head ref"),
         headSha: normalizeSha(pr.headSha, "Pull request head SHA"),
         baseRefName: normalizeRef(pr.baseRefName, "Pull request base ref"),
@@ -339,16 +409,16 @@ function validatePullRequest(pr, repository, defaultBranch, trustedSha) {
         `PR #${normalized.number} head repository does not match ${repository}`,
     );
     assert(
+        normalized.baseRepository === repository,
+        `PR #${normalized.number} base repository does not match ${repository}`,
+    );
+    assert(
         normalized.baseRefName === defaultBranch,
         `PR #${normalized.number} targets ${normalized.baseRefName}, not ${defaultBranch}`,
     );
     assert(
         normalized.headRefName !== defaultBranch,
         `PR #${normalized.number} head ref must not be the default branch`,
-    );
-    assert(
-        normalized.baseSha === trustedSha,
-        `PR #${normalized.number} base SHA does not match the trusted default revision`,
     );
     assert(
         normalized.headSha !== trustedSha,
@@ -372,7 +442,10 @@ export function validateMetadata(metadata) {
         typeof metadata.runId === "string" && /^\d+$/.test(metadata.runId),
         "Workflow run ID is invalid",
     );
-    assert(Array.isArray(metadata.pullRequests), "Pull request list is invalid");
+    assert(
+        Array.isArray(metadata.pullRequests),
+        "Pull request list is invalid",
+    );
     const pullRequests = metadata.pullRequests.map((pr) =>
         validatePullRequest(pr, repository, defaultBranch, trustedSha),
     );
@@ -401,10 +474,10 @@ function validateMatchingPullRequest(expected, actual) {
         "state",
         "isCrossRepository",
         "headRepository",
+        "baseRepository",
         "headRefName",
         "headSha",
         "baseRefName",
-        "baseSha",
     ]) {
         assert(
             actual[field] === expected[field],
@@ -413,12 +486,7 @@ function validateMatchingPullRequest(expected, actual) {
     }
 }
 
-function initRepository({
-    directory,
-    repositoryUrl,
-    metadata,
-    environment,
-}) {
+function initRepository({ directory, repositoryUrl, metadata, environment }) {
     mkdirSync(directory, { recursive: true });
     git(null, ["init", "--bare", directory], { env: environment });
     git(directory, ["config", "user.name", BOT_NAME], {
@@ -431,55 +499,82 @@ function initRepository({
         env: environment,
     });
 
-    const refspecs = [
-        `+refs/heads/${metadata.defaultBranch}:refs/heal/default`,
-        ...metadata.pullRequests.map(
-            (pr) =>
-                `+refs/heads/${pr.headRefName}:refs/heal/heads/pr-${pr.number}`,
-        ),
-    ];
-    git(directory, ["fetch", "--no-tags", "origin", ...refspecs], {
-        env: environment,
-    });
+    git(
+        directory,
+        [
+            "fetch",
+            "--no-tags",
+            "origin",
+            `+refs/heads/${metadata.defaultBranch}:refs/heal/default`,
+        ],
+        { env: environment },
+    );
 
     const fetchedDefault = git(
         directory,
         ["rev-parse", "refs/heal/default^{commit}"],
         { env: environment },
     );
-    assert(
-        fetchedDefault === metadata.trustedSha,
-        `Default branch moved from trusted SHA ${metadata.trustedSha} to ${fetchedDefault}`,
-    );
+    if (fetchedDefault !== metadata.trustedSha) {
+        fatalRepository(
+            `Default branch moved from trusted SHA ${metadata.trustedSha} to ${fetchedDefault}`,
+        );
+    }
     git(
         directory,
         ["merge-base", "--is-ancestor", metadata.trustedSha, fetchedDefault],
         { env: environment },
     );
 
-    for (const pr of metadata.pullRequests) {
-        const fetchedHead = git(
-            directory,
-            ["rev-parse", `refs/heal/heads/pr-${pr.number}^{commit}`],
-            { env: environment },
-        );
-        assert(
-            fetchedHead === pr.headSha,
-            `PR #${pr.number} head moved from ${pr.headSha} to ${fetchedHead}`,
-        );
-    }
     git(directory, ["fsck", "--strict"], { env: environment });
 }
 
+function fetchPullRequest(repositoryPath, pr, environment) {
+    const target = `refs/heal/heads/pr-${pr.number}`;
+    tryGit(repositoryPath, ["update-ref", "-d", target], {
+        env: environment,
+    });
+    const fetched = tryGit(
+        repositoryPath,
+        [
+            "fetch",
+            "--no-tags",
+            "origin",
+            `+refs/heads/${pr.headRefName}:${target}`,
+        ],
+        { env: environment },
+    );
+    if (!fetched.ok) {
+        retryCandidate(
+            `PR #${pr.number} head ${pr.headRefName} could not be fetched: ${fetched.output.trim()}`,
+        );
+    }
+    const fetchedHead = git(
+        repositoryPath,
+        ["rev-parse", `${target}^{commit}`],
+        { env: environment },
+    );
+    if (fetchedHead !== pr.headSha) {
+        retryCandidate(
+            `PR #${pr.number} head moved from ${pr.headSha} to ${fetchedHead}`,
+        );
+    }
+}
+
 function changedPaths(repositoryPath, trustedSha, headSha, environment) {
-    return lines(
-        git(
-            repositoryPath,
+    return zeroTerminated(
+        run(
+            "git",
             [
-                "diff",
-                "--name-only",
-                `${trustedSha}...${headSha}`,
-                "--",
+                "-C",
+                repositoryPath,
+                ...gitArguments([
+                    "diff",
+                    "--name-only",
+                    "-z",
+                    `${trustedSha}...${headSha}`,
+                    "--",
+                ]),
             ],
             { env: environment },
         ),
@@ -493,12 +588,7 @@ function assertTrustedRootPackageFields(
     environment,
 ) {
     const trusted = JSON.parse(
-        readGitFile(
-            repositoryPath,
-            trustedSha,
-            "ts/package.json",
-            environment,
-        ),
+        readGitFile(repositoryPath, trustedSha, "ts/package.json", environment),
     );
     const head = JSON.parse(
         readGitFile(repositoryPath, headSha, "ts/package.json", environment),
@@ -537,22 +627,183 @@ function assertSafePackageManagerInputs(
     );
 }
 
-function copyManifestInputs(worktree, scratchDirectory) {
-    const resolvedWorktree = realpathSync(worktree);
-    const resolvedScratch = realpathSync(scratchDirectory);
-    const manifestOutput = run(
+function assertTrustedMergeBehavior(
+    repositoryPath,
+    trustedSha,
+    headSha,
+    environment,
+) {
+    const changed = zeroTerminated(
+        run(
+            "git",
+            [
+                "-C",
+                repositoryPath,
+                ...gitArguments([
+                    "diff",
+                    "--name-only",
+                    "-z",
+                    trustedSha,
+                    headSha,
+                    "--",
+                ]),
+            ],
+            { env: environment },
+        ),
+    ).map(normalizeCandidatePath);
+    const blockedPath = changed.find((path) =>
+        BLOCKED_MERGE_BEHAVIOR_PATHS.some((pattern) => pattern.test(path)),
+    );
+    if (blockedPath) {
+        blockCandidate(
+            `PR merge behavior differs from the trusted revision: ${blockedPath}`,
+        );
+    }
+}
+
+function isRegularGitMode(mode) {
+    return mode === "100644" || mode === "100755";
+}
+
+function indexEntries(worktree, path, environment) {
+    const output = run(
         "git",
         [
             "-C",
             worktree,
-            ...gitArguments([
-                "ls-files",
-                "-z",
-                "--",
-                ":(glob)ts/**/package.json",
-            ]),
+            ...gitArguments(["ls-files", "--stage", "-z", "--", path]),
         ],
+        { env: environment },
     );
+    return zeroTerminated(output).map((entry) => {
+        const match = /^(\d{6}) ([0-9a-f]+) ([0-3])\t(.*)$/.exec(entry);
+        assert(match, `Invalid index entry for ${path}`);
+        return {
+            mode: match[1],
+            stage: Number(match[3]),
+            path: match[4],
+        };
+    });
+}
+
+function assertRegularGeneratedConflict(worktree, path, environment) {
+    const entries = indexEntries(worktree, path, environment);
+    if (
+        entries.length === 0 ||
+        entries.some(
+            (entry) => entry.path !== path || !isRegularGitMode(entry.mode),
+        )
+    ) {
+        blockCandidate(`Generated path has a non-regular Git mode: ${path}`);
+    }
+    const ours = entries.find((entry) => entry.stage === 2);
+    if (!ours) {
+        blockCandidate(`Generated path has no PR-side conflict entry: ${path}`);
+    }
+    return ours.mode;
+}
+
+function containedRegularPath(root, path) {
+    const normalized = normalizeCandidatePath(path);
+    const rootPath = realpathSync(root);
+    const destination = resolve(root, ...normalized.split("/"));
+    const relativeDestination = relative(rootPath, destination);
+    if (
+        relativeDestination === "" ||
+        relativeDestination === ".." ||
+        relativeDestination.startsWith(`..${sep}`) ||
+        isAbsolute(relativeDestination)
+    ) {
+        blockCandidate(`Generated path escapes the worktree: ${path}`);
+    }
+    const parent = realpathSync(dirname(destination));
+    const relativeParent = relative(rootPath, parent);
+    if (
+        relativeParent === ".." ||
+        relativeParent.startsWith(`..${sep}`) ||
+        isAbsolute(relativeParent)
+    ) {
+        blockCandidate(`Generated path parent escapes the worktree: ${path}`);
+    }
+    const stat = lstatSync(destination);
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+        blockCandidate(
+            `Generated path is not a regular filesystem file: ${path}`,
+        );
+    }
+    return { destination, parent };
+}
+
+function atomicReplaceGeneratedFile({
+    worktree,
+    path,
+    content,
+    sourcePath,
+    gitMode,
+}) {
+    const { destination, parent } = containedRegularPath(worktree, path);
+    if (sourcePath) {
+        const sourceStat = lstatSync(sourcePath);
+        if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
+            blockCandidate(
+                `Generated source is not a regular file: ${sourcePath}`,
+            );
+        }
+    }
+    const temporaryPath = join(
+        parent,
+        `.${basename(destination)}.heal-${randomUUID()}.tmp`,
+    );
+    let descriptor;
+    try {
+        descriptor = openSync(temporaryPath, "wx", 0o600);
+        const bytes = sourcePath
+            ? readFileSync(sourcePath)
+            : Buffer.from(content);
+        writeFileSync(descriptor, bytes);
+        const temporaryStat = fstatSync(descriptor);
+        if (!temporaryStat.isFile()) {
+            blockCandidate(`Generated temporary path is not regular: ${path}`);
+        }
+        closeSync(descriptor);
+        descriptor = undefined;
+        chmodSync(temporaryPath, gitMode === "100755" ? 0o755 : 0o644);
+        renameSync(temporaryPath, destination);
+    } finally {
+        if (descriptor !== undefined) {
+            closeSync(descriptor);
+        }
+        rmSync(temporaryPath, { force: true });
+    }
+    const finalPath = containedRegularPath(worktree, path);
+    assert(
+        realpathSync(finalPath.destination) === finalPath.destination,
+        `Generated path did not resolve to the expected file: ${path}`,
+    );
+}
+
+function stageGeneratedFile(worktree, path, expectedMode, environment) {
+    git(worktree, ["add", "--", path], { env: environment });
+    const entries = indexEntries(worktree, path, environment);
+    if (
+        entries.length !== 1 ||
+        entries[0].stage !== 0 ||
+        entries[0].path !== path ||
+        entries[0].mode !== expectedMode ||
+        !isRegularGitMode(entries[0].mode)
+    ) {
+        blockCandidate(`Generated path staged with an unsafe mode: ${path}`);
+    }
+}
+
+function copyManifestInputs(worktree, scratchDirectory) {
+    const resolvedWorktree = realpathSync(worktree);
+    const resolvedScratch = realpathSync(scratchDirectory);
+    const manifestOutput = run("git", [
+        "-C",
+        worktree,
+        ...gitArguments(["ls-files", "-z", "--", ":(glob)ts/**/package.json"]),
+    ]);
     for (const path of zeroTerminated(manifestOutput)) {
         if (path.includes("\\")) {
             blockCandidate(`Manifest path contains a backslash: ${path}`);
@@ -582,10 +833,7 @@ function copyManifestInputs(worktree, scratchDirectory) {
         ) {
             blockCandidate(`Manifest source escapes the worktree: ${path}`);
         }
-        const destination = resolve(
-            scratchDirectory,
-            ...components.slice(1),
-        );
+        const destination = resolve(scratchDirectory, ...components.slice(1));
         const destinationRelative = relative(resolvedScratch, destination);
         if (
             destinationRelative === "" ||
@@ -603,14 +851,13 @@ function copyManifestInputs(worktree, scratchDirectory) {
             parentRelative.startsWith(`..${sep}`) ||
             isAbsolute(parentRelative)
         ) {
-            blockCandidate(`Manifest destination parent escapes scratch: ${path}`);
+            blockCandidate(
+                `Manifest destination parent escapes scratch: ${path}`,
+            );
         }
         copyFileSync(source, destination, fsConstants.COPYFILE_EXCL);
         const destinationStat = lstatSync(destination);
-        if (
-            !destinationStat.isFile() ||
-            destinationStat.isSymbolicLink()
-        ) {
+        if (!destinationStat.isFile() || destinationStat.isSymbolicLink()) {
             blockCandidate(
                 `Manifest destination is not a regular file: ${path}`,
             );
@@ -645,11 +892,7 @@ function writeTrustedPackageManagerInputs({
     );
 }
 
-function runPnpm({
-    pnpmCommand,
-    scratchDirectory,
-    environment,
-}) {
+function runPnpm({ pnpmCommand, scratchDirectory, environment }) {
     const command = resolve(pnpmCommand);
     const pnpmArgs = [
         "install",
@@ -660,9 +903,7 @@ function runPnpm({
     ];
     const isNodeScript = /\.[cm]?js$/i.test(command);
     const executable = isNodeScript ? process.execPath : command;
-    const args = isNodeScript
-        ? [command, ...pnpmArgs]
-        : pnpmArgs;
+    const args = isNodeScript ? [command, ...pnpmArgs] : pnpmArgs;
     const result = spawnSync(executable, args, {
         cwd: scratchDirectory,
         env: environment,
@@ -705,17 +946,25 @@ function regenerateLockfile({
         lstatSync(generatedLockfile).isFile(),
         "pnpm did not generate pnpm-lock.yaml",
     );
-    copyFileSync(
-        generatedLockfile,
-        join(worktree, ...LOCKFILE.split("/")),
-    );
+    return generatedLockfile;
 }
 
 function unmergedFiles(worktree, environment) {
-    return lines(
-        git(worktree, ["diff", "--name-only", "--diff-filter=U"], {
-            env: environment,
-        }),
+    return zeroTerminated(
+        run(
+            "git",
+            [
+                "-C",
+                worktree,
+                ...gitArguments([
+                    "diff",
+                    "--name-only",
+                    "--diff-filter=U",
+                    "-z",
+                ]),
+            ],
+            { env: environment },
+        ),
     ).map(normalizeCandidatePath);
 }
 
@@ -729,13 +978,17 @@ function buildCandidateTree({
 }) {
     mkdirSync(temporaryDirectory, { recursive: true });
     const worktree = join(temporaryDirectory, "worktree");
-    git(
-        repositoryPath,
-        ["worktree", "add", "--detach", worktree, pr.headSha],
-        { env: environment },
-    );
+    git(repositoryPath, ["worktree", "add", "--detach", worktree, pr.headSha], {
+        env: environment,
+    });
     let conflicts = [];
     try {
+        assertTrustedMergeBehavior(
+            repositoryPath,
+            trustedSha,
+            pr.headSha,
+            environment,
+        );
         const merge = tryGit(
             worktree,
             ["merge", "--no-ff", "--no-commit", trustedSha],
@@ -764,19 +1017,37 @@ function buildCandidateTree({
         }
 
         for (const path of conflicts.filter(isAutogenReadme)) {
-            git(worktree, ["checkout", "--ours", "--", path], {
-                env: environment,
+            const mode = assertRegularGeneratedConflict(
+                worktree,
+                path,
+                environment,
+            );
+            const content = run(
+                "git",
+                ["-C", worktree, ...gitArguments(["show", `:2:${path}`])],
+                { env: environment },
+            );
+            atomicReplaceGeneratedFile({
+                worktree,
+                path,
+                content,
+                gitMode: mode,
             });
-            git(worktree, ["add", "--", path], { env: environment });
+            stageGeneratedFile(worktree, path, mode, environment);
         }
         if (conflicts.includes(LOCKFILE)) {
+            const mode = assertRegularGeneratedConflict(
+                worktree,
+                LOCKFILE,
+                environment,
+            );
             assertSafePackageManagerInputs(
                 repositoryPath,
                 trustedSha,
                 pr.headSha,
                 environment,
             );
-            regenerateLockfile({
+            const generatedLockfile = regenerateLockfile({
                 repositoryPath,
                 worktree,
                 trustedSha,
@@ -784,7 +1055,13 @@ function buildCandidateTree({
                 environment,
                 temporaryDirectory,
             });
-            git(worktree, ["add", "--", LOCKFILE], { env: environment });
+            atomicReplaceGeneratedFile({
+                worktree,
+                path: LOCKFILE,
+                sourcePath: generatedLockfile,
+                gitMode: mode,
+            });
+            stageGeneratedFile(worktree, LOCKFILE, mode, environment);
         }
 
         const remaining = unmergedFiles(worktree, environment);
@@ -801,7 +1078,7 @@ function buildCandidateTree({
             treeSha: git(worktree, ["write-tree"], { env: environment }),
         };
     } catch (error) {
-        if (error instanceof CandidateBlockedError) {
+        if (error instanceof CandidateOutcomeError) {
             error.conflicts = [...conflicts].sort();
         }
         throw error;
@@ -892,8 +1169,7 @@ function createBundle({
     );
     assert(
         heads.length === 1 &&
-            heads[0] ===
-                `${candidateSha} refs/heal/candidates/pr-${pr.number}`,
+            heads[0] === `${candidateSha} refs/heal/candidates/pr-${pr.number}`,
         `Candidate bundle for PR #${pr.number} has unexpected heads`,
     );
 }
@@ -917,8 +1193,7 @@ export function prepareCandidateArtifact({
         "An absolute pnpm command is required",
     );
     const temporaryRoot =
-        workDirectory ??
-        mkdtempSync(join(tmpdir(), "typeagent-heal-prepare-"));
+        workDirectory ?? mkdtempSync(join(tmpdir(), "typeagent-heal-prepare-"));
     const ownsTemporaryRoot = workDirectory === undefined;
     const environment = createIsolatedEnvironment(
         baseEnvironment,
@@ -941,9 +1216,9 @@ export function prepareCandidateArtifact({
         const candidates = [];
         const skipped = [];
         for (const pr of validated.pullRequests) {
-            let result;
             try {
-                result = buildCandidateTree({
+                fetchPullRequest(repositoryPath, pr, environment);
+                const result = buildCandidateTree({
                     repositoryPath,
                     pr,
                     trustedSha: validated.trustedSha,
@@ -951,54 +1226,46 @@ export function prepareCandidateArtifact({
                     environment,
                     temporaryDirectory: join(temporaryRoot, `pr-${pr.number}`),
                 });
-            } catch (error) {
-                if (!(error instanceof CandidateBlockedError)) {
-                    throw error;
+                if (result.status !== "candidate") {
+                    skipped.push({
+                        number: pr.number,
+                        status: result.status,
+                        reason: result.reason,
+                        conflicts: result.conflicts ?? [],
+                    });
+                    continue;
                 }
-                skipped.push({
-                    number: pr.number,
-                    status: "blocked",
-                    reason: error.message,
-                    conflicts: error.conflicts ?? [],
+                const commit = createCandidateCommit({
+                    repositoryPath,
+                    pr,
+                    trustedSha: validated.trustedSha,
+                    treeSha: result.treeSha,
+                    preparedAt,
+                    environment,
                 });
-                continue;
-            }
-            if (result.status !== "candidate") {
-                skipped.push({
-                    number: pr.number,
-                    status: result.status,
-                    reason: result.reason,
-                    conflicts: result.conflicts ?? [],
+                const bundleName = `pr-${pr.number}.bundle`;
+                createBundle({
+                    repositoryPath,
+                    pr,
+                    trustedSha: validated.trustedSha,
+                    candidateSha: commit.candidateSha,
+                    bundlePath: join(outputDirectory, bundleName),
+                    environment,
                 });
-                continue;
+                candidates.push({
+                    ...pr,
+                    candidateSha: commit.candidateSha,
+                    treeSha: result.treeSha,
+                    conflicts: result.conflicts,
+                    bundle: bundleName,
+                    commitMessage: commit.message,
+                    preparedAt,
+                });
+            } catch (error) {
+                skipped.push(candidateOutcome(pr.number, error));
             }
-            const commit = createCandidateCommit({
-                repositoryPath,
-                pr,
-                trustedSha: validated.trustedSha,
-                treeSha: result.treeSha,
-                preparedAt,
-                environment,
-            });
-            const bundleName = `pr-${pr.number}.bundle`;
-            createBundle({
-                repositoryPath,
-                pr,
-                trustedSha: validated.trustedSha,
-                candidateSha: commit.candidateSha,
-                bundlePath: join(outputDirectory, bundleName),
-                environment,
-            });
-            candidates.push({
-                ...pr,
-                candidateSha: commit.candidateSha,
-                treeSha: result.treeSha,
-                conflicts: result.conflicts,
-                bundle: bundleName,
-                commitMessage: commit.message,
-                preparedAt,
-            });
         }
+        git(repositoryPath, ["fsck", "--strict"], { env: environment });
         const summary = {
             version: ARTIFACT_VERSION,
             repository: validated.repository,
@@ -1025,10 +1292,7 @@ function validateCandidateSummary(summary, expectedRunId) {
         summary.defaultBranch,
         "Artifact default branch",
     );
-    const trustedSha = normalizeSha(
-        summary.trustedSha,
-        "Artifact trusted SHA",
-    );
+    const trustedSha = normalizeSha(summary.trustedSha, "Artifact trusted SHA");
     assert(
         summary.producerRunId === expectedRunId,
         "Artifact producer run ID does not match workflow_run",
@@ -1038,7 +1302,10 @@ function validateCandidateSummary(summary, expectedRunId) {
             Number.isFinite(Date.parse(summary.preparedAt)),
         "Artifact preparation timestamp is invalid",
     );
-    assert(Array.isArray(summary.candidates), "Artifact candidates are invalid");
+    assert(
+        Array.isArray(summary.candidates),
+        "Artifact candidates are invalid",
+    );
     for (const candidate of summary.candidates) {
         assert(
             candidate.preparedAt === summary.preparedAt,
@@ -1062,10 +1329,7 @@ function validateCandidateSummary(summary, expectedRunId) {
                 defaultBranch,
                 trustedSha,
             ),
-            candidateSha: normalizeSha(
-                candidate.candidateSha,
-                "Candidate SHA",
-            ),
+            candidateSha: normalizeSha(candidate.candidateSha, "Candidate SHA"),
             treeSha: normalizeSha(candidate.treeSha, "Candidate tree SHA"),
             conflicts: Array.isArray(candidate.conflicts)
                 ? candidate.conflicts.map(normalizePath).sort()
@@ -1101,12 +1365,7 @@ function validateArtifactFiles(artifactDirectory, summary) {
     }
 }
 
-function verifyCommit({
-    repositoryPath,
-    candidate,
-    trustedSha,
-    environment,
-}) {
+function verifyCommit({ repositoryPath, candidate, trustedSha, environment }) {
     const type = git(
         repositoryPath,
         ["cat-file", "-t", candidate.candidateSha],
@@ -1155,7 +1414,8 @@ function verifyCommit({
             commitMetadata[1] === BOT_EMAIL &&
             commitMetadata[3] === BOT_NAME &&
             commitMetadata[4] === BOT_EMAIL &&
-            Date.parse(commitMetadata[2]) === Date.parse(candidate.preparedAt) &&
+            Date.parse(commitMetadata[2]) ===
+                Date.parse(candidate.preparedAt) &&
             Date.parse(commitMetadata[5]) === Date.parse(candidate.preparedAt),
         `Candidate author metadata for PR #${candidate.number} is invalid`,
     );
@@ -1246,27 +1506,22 @@ export function verifyCandidateArtifact({
         readJson(join(artifactDirectory, "summary.json"), "summary.json"),
         expectedRunId,
     );
-    assert(
-        summary.repository === live.repository &&
-            summary.defaultBranch === live.defaultBranch &&
-            summary.trustedSha === live.trustedSha,
-        "Artifact trusted repository revision is no longer current",
-    );
+    if (
+        summary.repository !== live.repository ||
+        summary.defaultBranch !== live.defaultBranch ||
+        summary.trustedSha !== live.trustedSha
+    ) {
+        fatalRepository(
+            "Artifact trusted repository revision is no longer current",
+        );
+    }
     validateArtifactFiles(artifactDirectory, summary);
 
     const liveByNumber = new Map(
         live.pullRequests.map((pr) => [pr.number, pr]),
     );
-    const pullRequests = summary.candidates.map((candidate) => {
-        const current = liveByNumber.get(candidate.number);
-        assert(current, `PR #${candidate.number} is no longer open`);
-        validateMatchingPullRequest(candidate, current);
-        return current;
-    });
-    const repositoryMetadata = { ...live, pullRequests };
     const temporaryRoot =
-        workDirectory ??
-        mkdtempSync(join(tmpdir(), "typeagent-heal-verify-"));
+        workDirectory ?? mkdtempSync(join(tmpdir(), "typeagent-heal-verify-"));
     const environment = createIsolatedEnvironment(
         baseEnvironment,
         join(temporaryRoot, "home"),
@@ -1276,50 +1531,66 @@ export function verifyCandidateArtifact({
         initRepository({
             directory: repositoryPath,
             repositoryUrl,
-            metadata: repositoryMetadata,
+            metadata: live,
             environment,
         });
+        const verifiedCandidates = [];
+        const skipped = [];
         for (const candidate of summary.candidates) {
-            assert(
-                candidate.conflicts.length > 0 &&
-                    candidate.conflicts.every(isResolvableConflict),
-                `Candidate conflicts for PR #${candidate.number} are invalid`,
-            );
-            importCandidateBundle({
-                repositoryPath,
-                artifactDirectory,
-                candidate,
-                environment,
-            });
-            verifyCommit({
-                repositoryPath,
-                candidate,
-                trustedSha: summary.trustedSha,
-                environment,
-            });
-            const expected = buildCandidateTree({
-                repositoryPath,
-                pr: candidate,
-                trustedSha: summary.trustedSha,
-                pnpmCommand,
-                environment,
-                temporaryDirectory: join(
-                    temporaryRoot,
-                    `expected-pr-${candidate.number}`,
-                ),
-            });
-            assert(
-                expected.status === "candidate",
-                `PR #${candidate.number} no longer produces a healing candidate`,
-            );
-            assert(
-                deepEqual(expected.conflicts, candidate.conflicts),
-                `Candidate conflict set for PR #${candidate.number} changed`,
-            );
-            assert(
-                expected.treeSha === candidate.treeSha,
-                `Candidate tree for PR #${candidate.number} does not match trusted reconstruction`,
-            );
+            try {
+                const current = liveByNumber.get(candidate.number);
+                if (!current) {
+                    retryCandidate(`PR #${candidate.number} is no longer open`);
+                }
+                validateMatchingPullRequest(candidate, current);
+                fetchPullRequest(repositoryPath, current, environment);
+                assert(
+                    candidate.conflicts.length > 0 &&
+                        candidate.conflicts.every(isResolvableConflict),
+                    `Candidate conflicts for PR #${candidate.number} are invalid`,
+                );
+                importCandidateBundle({
+                    repositoryPath,
+                    artifactDirectory,
+                    candidate,
+                    environment,
+                });
+                verifyCommit({
+                    repositoryPath,
+                    candidate,
+                    trustedSha: summary.trustedSha,
+                    environment,
+                });
+                const expected = buildCandidateTree({
+                    repositoryPath,
+                    pr: current,
+                    trustedSha: summary.trustedSha,
+                    pnpmCommand,
+                    environment,
+                    temporaryDirectory: join(
+                        temporaryRoot,
+                        `expected-pr-${candidate.number}`,
+                    ),
+                });
+                if (expected.status !== "candidate") {
+                    retryCandidate(
+                        `PR #${candidate.number} no longer produces a healing candidate: ${expected.reason}`,
+                    );
+                }
+                if (!deepEqual(expected.conflicts, candidate.conflicts)) {
+                    retryCandidate(
+                        `Candidate conflict set for PR #${candidate.number} changed`,
+                    );
+                }
+                if (expected.treeSha !== candidate.treeSha) {
+                    retryCandidate(
+                        `Candidate tree for PR #${candidate.number} does not match trusted reconstruction`,
+                    );
+                }
+                verifiedCandidates.push(candidate);
+            } catch (error) {
+                skipped.push(candidateOutcome(candidate.number, error));
+            }
         }
         git(repositoryPath, ["fsck", "--strict"], { env: environment });
         const plan = {
@@ -1329,18 +1600,20 @@ export function verifyCandidateArtifact({
             trustedSha: live.trustedSha,
             repositoryUrl,
             repositoryPath,
-            candidates: summary.candidates.map((candidate) => ({
+            candidates: verifiedCandidates.map((candidate) => ({
                 number: candidate.number,
                 headRefName: candidate.headRefName,
                 headSha: candidate.headSha,
                 baseRefName: candidate.baseRefName,
                 baseSha: candidate.baseSha,
                 headRepository: candidate.headRepository,
+                baseRepository: candidate.baseRepository,
                 isCrossRepository: candidate.isCrossRepository,
                 state: candidate.state,
                 candidateSha: candidate.candidateSha,
                 treeSha: candidate.treeSha,
             })),
+            skipped,
         };
         writeJson(planPath, plan);
         return plan;
@@ -1363,11 +1636,16 @@ function validatePushPlan(plan) {
         "Verified bare repository is missing",
     );
     assert(Array.isArray(plan.candidates), "Push plan candidates are invalid");
+    assert(
+        plan.skipped === undefined || Array.isArray(plan.skipped),
+        "Push plan skipped outcomes are invalid",
+    );
     return {
         ...plan,
         repository,
         defaultBranch,
         trustedSha,
+        skipped: plan.skipped ?? [],
         candidates: plan.candidates.map((candidate) => ({
             ...validatePullRequest(
                 candidate,
@@ -1375,10 +1653,7 @@ function validatePushPlan(plan) {
                 defaultBranch,
                 trustedSha,
             ),
-            candidateSha: normalizeSha(
-                candidate.candidateSha,
-                "Candidate SHA",
-            ),
+            candidateSha: normalizeSha(candidate.candidateSha, "Candidate SHA"),
             treeSha: normalizeSha(candidate.treeSha, "Candidate tree SHA"),
         })),
     };
@@ -1408,7 +1683,10 @@ export function createGitHubApi({
     fetchImpl = fetch,
 }) {
     normalizeRepository(repository);
-    assert(typeof token === "string" && token.length > 0, "App token is missing");
+    assert(
+        typeof token === "string" && token.length > 0,
+        "App token is missing",
+    );
     async function request(path) {
         const response = await fetchImpl(`${apiUrl}${path}`, {
             headers: {
@@ -1449,6 +1727,7 @@ export function createGitHubApi({
                 isCrossRepository:
                     data.head.repo?.full_name !== data.base.repo?.full_name,
                 headRepository: data.head.repo?.full_name,
+                baseRepository: data.base.repo?.full_name,
                 headRefName: data.head.ref,
                 headSha: data.head.sha,
                 baseRefName: data.base.ref,
@@ -1467,69 +1746,106 @@ export async function pushVerifiedPlan({
 }) {
     const validated = validatePushPlan(plan);
     const liveRepository = await api.getRepository();
-    assert(
-        liveRepository.repository === validated.repository &&
-            liveRepository.defaultBranch === validated.defaultBranch &&
-            liveRepository.trustedSha === validated.trustedSha,
-        "Repository default branch changed after final verification",
-    );
+    if (
+        liveRepository.repository !== validated.repository ||
+        liveRepository.defaultBranch !== validated.defaultBranch ||
+        liveRepository.trustedSha !== validated.trustedSha
+    ) {
+        fatalRepository(
+            "Repository default branch changed after final verification",
+        );
+    }
 
     const pushHome = mkdtempSync(join(tmpdir(), "typeagent-heal-push-"));
     const environment = createIsolatedEnvironment(baseEnvironment, pushHome);
     const askPass = push ? null : createAskPass(pushHome);
+    const pushed = [];
+    const skipped = [...validated.skipped];
     try {
-        for (const candidate of validated.candidates) {
-            const livePr = validatePullRequest(
-                await api.getPullRequest(candidate.number),
-                validated.repository,
-                validated.defaultBranch,
-                validated.trustedSha,
+        if (!push && validated.candidates.length > 0) {
+            if (typeof token !== "string" || token.length === 0) {
+                fatalRepository("App token is missing");
+            }
+            git(
+                validated.repositoryPath,
+                ["remote", "set-url", "origin", validated.repositoryUrl],
+                { env: environment },
             );
-            validateMatchingPullRequest(candidate, livePr);
-            verifyCommit({
-                repositoryPath: validated.repositoryPath,
-                candidate: {
-                    ...candidate,
-                    preparedAt: git(
-                        validated.repositoryPath,
-                        ["show", "-s", "--format=%aI", candidate.candidateSha],
-                        { env: environment },
-                    ),
-                },
-                trustedSha: validated.trustedSha,
-                environment,
-            });
-            const pushArgs = [
-                "--porcelain",
-                "--no-verify",
-                `--force-with-lease=refs/heads/${candidate.headRefName}:${candidate.headSha}`,
-                "origin",
-                `${candidate.candidateSha}:refs/heads/${candidate.headRefName}`,
-            ];
-            if (push) {
-                await push({
+        }
+        for (const candidate of validated.candidates) {
+            try {
+                const livePr = validatePullRequest(
+                    await api.getPullRequest(candidate.number),
+                    validated.repository,
+                    validated.defaultBranch,
+                    validated.trustedSha,
+                );
+                validateMatchingPullRequest(candidate, livePr);
+                verifyCommit({
                     repositoryPath: validated.repositoryPath,
-                    candidate,
-                    args: pushArgs,
+                    candidate: {
+                        ...candidate,
+                        preparedAt: git(
+                            validated.repositoryPath,
+                            [
+                                "show",
+                                "-s",
+                                "--format=%aI",
+                                candidate.candidateSha,
+                            ],
+                            { env: environment },
+                        ),
+                    },
+                    trustedSha: validated.trustedSha,
                     environment,
                 });
-            } else {
-                assert(
-                    typeof token === "string" && token.length > 0,
-                    "App token is missing",
-                );
-                git(validated.repositoryPath, ["remote", "set-url", "origin", validated.repositoryUrl], {
-                    env: environment,
-                });
-                git(validated.repositoryPath, ["push", ...pushArgs], {
-                    env: {
-                        ...environment,
-                        GIT_ASKPASS: askPass,
-                        HEAL_PUSH_TOKEN: token,
-                    },
-                });
+                const pushArgs = [
+                    "--porcelain",
+                    "--no-verify",
+                    `--force-with-lease=refs/heads/${candidate.headRefName}:${candidate.headSha}`,
+                    "origin",
+                    `${candidate.candidateSha}:refs/heads/${candidate.headRefName}`,
+                ];
+                if (push) {
+                    await push({
+                        repositoryPath: validated.repositoryPath,
+                        candidate,
+                        args: pushArgs,
+                        environment,
+                    });
+                } else {
+                    const pushResult = tryGit(
+                        validated.repositoryPath,
+                        ["push", ...pushArgs],
+                        {
+                            env: {
+                                ...environment,
+                                GIT_ASKPASS: askPass,
+                                HEAL_PUSH_TOKEN: token,
+                            },
+                        },
+                    );
+                    if (!pushResult.ok) {
+                        if (
+                            /authentication failed|could not read username|permission denied|http 40[13]/i.test(
+                                pushResult.output,
+                            )
+                        ) {
+                            fatalRepository(
+                                `App-authenticated push failed: ${pushResult.output.trim()}`,
+                            );
+                        }
+                        retryCandidate(
+                            `Push for PR #${candidate.number} failed: ${pushResult.output.trim()}`,
+                        );
+                    }
+                }
+                pushed.push(candidate.number);
+            } catch (error) {
+                skipped.push(candidateOutcome(candidate.number, error));
             }
         }
+        return { pushed, skipped };
     } finally {
         rmSync(pushHome, { recursive: true, force: true });
     }

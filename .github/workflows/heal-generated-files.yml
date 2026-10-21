@@ -117,6 +117,7 @@ jobs:
                 isCrossRepository:
                   pullRequest.head.repo?.full_name !== pullRequest.base.repo?.full_name,
                 headRepository: pullRequest.head.repo?.full_name,
+                baseRepository: pullRequest.base.repo?.full_name,
                 headRefName: pullRequest.head.ref,
                 headSha: pullRequest.head.sha,
                 baseRefName: pullRequest.base.ref,

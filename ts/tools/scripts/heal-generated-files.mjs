@@ -82,8 +82,10 @@ async function main() {
             token,
             apiUrl: process.env.GITHUB_API_URL,
         });
-        await pushVerifiedPlan({ plan, api, token });
-        console.log(`[heal] pushed ${plan.candidates.length} candidate(s)`);
+        const result = await pushVerifiedPlan({ plan, api, token });
+        console.log(
+            `[heal] pushed ${result.pushed.length} candidate(s); skipped ${result.skipped.length}`,
+        );
         return;
     }
     throw new Error(`Unknown command: ${command ?? "(missing)"}`);

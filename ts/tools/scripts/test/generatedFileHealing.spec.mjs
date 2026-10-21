@@ -14,7 +14,7 @@ import {
     writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import test from "node:test";
 import yaml from "js-yaml";
 import {
@@ -77,7 +77,7 @@ function packageJson(value) {
     return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function createFakePnpm(directory, auditPath) {
+function createFakePnpm(directory, auditPath, options = {}) {
     const script = join(directory, "fake-pnpm.mjs");
     write(
         script,
@@ -111,6 +111,13 @@ writeFileSync(${JSON.stringify(auditPath)}, JSON.stringify(visible, null, 2));
 const packages = manifests(process.cwd())
   .map((pkg) => ({ name: pkg.name, dependencies: pkg.dependencies ?? {} }))
   .sort((left, right) => String(left.name).localeCompare(String(right.name)));
+if (
+  ${JSON.stringify(options.failPackageName ?? null)} &&
+  packages.some((pkg) => pkg.name === ${JSON.stringify(options.failPackageName ?? null)})
+) {
+  process.stderr.write("inert pnpm failure\\n");
+  process.exit(2);
+}
 writeFileSync(
   join(process.cwd(), "pnpm-lock.yaml"),
   "lockfileVersion: '9.0'\\n# " + JSON.stringify(packages) + "\\n",
@@ -221,11 +228,12 @@ function createFixture(options = {}) {
         join(source, "ts", "tools", "scripts", "heal-generated-files.mjs"),
         'console.log("trusted healer");\n',
     );
-    if (options.nonGeneratedConflict) {
+    if (options.nonGeneratedConflict || options.maliciousMergeAttributes) {
         write(join(source, "ts", "packages", "app", "source.ts"), "base\n");
     }
     git(source, "add", "-A");
     git(source, "commit", "-m", "base");
+    const historicalBaseSha = git(source, "rev-parse", "HEAD");
 
     git(source, "checkout", "-b", "feature");
     write(join(source, "ts", "pnpm-lock.yaml"), "lockfileVersion: pr\n");
@@ -282,6 +290,16 @@ function createFixture(options = {}) {
             "pull request\n",
         );
     }
+    if (options.maliciousMergeAttributes) {
+        write(
+            join(source, ".gitattributes"),
+            "ts/packages/app/source.ts merge=union\n",
+        );
+        write(
+            join(source, "ts", "packages", "app", "source.ts"),
+            "pull request\n",
+        );
+    }
     git(source, "add", "-A");
     git(source, "commit", "-m", "pull request");
     const headSha = git(source, "rev-parse", "HEAD");
@@ -294,6 +312,9 @@ function createFixture(options = {}) {
     );
     write(join(source, "main-only.txt"), "main\n");
     if (options.nonGeneratedConflict) {
+        write(join(source, "ts", "packages", "app", "source.ts"), "main\n");
+    }
+    if (options.maliciousMergeAttributes) {
         write(join(source, "ts", "packages", "app", "source.ts"), "main\n");
     }
     git(source, "add", "-A");
@@ -313,10 +334,11 @@ function createFixture(options = {}) {
                 state: "open",
                 isCrossRepository: false,
                 headRepository: REPOSITORY,
+                baseRepository: REPOSITORY,
                 headRefName: "feature",
                 headSha,
                 baseRefName: "main",
-                baseSha: trustedSha,
+                baseSha: historicalBaseSha,
             },
         ],
     };
@@ -327,6 +349,7 @@ function createFixture(options = {}) {
         markerDirectory,
         metadata,
         trustedSha,
+        historicalBaseSha,
         headSha,
         cleanup() {
             rmSync(root, { recursive: true, force: true });
@@ -444,6 +467,90 @@ function rewriteCandidateCommitMessage(fixture, prepared, message) {
     );
     candidate.candidateSha = candidateSha;
     write(summaryPath, packageJson(summary));
+}
+
+function createForgedCandidateArtifact(fixture, path) {
+    const artifactDirectory = join(fixture.root, "forged-artifact");
+    const repositoryPath = join(fixture.root, "forged-repository.git");
+    const preparedAt = "2026-10-20T20:00:00.000Z";
+    run("git", ["clone", "--bare", fixture.remote, repositoryPath]);
+    const treeSha = git(
+        repositoryPath,
+        "rev-parse",
+        `${fixture.metadata.pullRequests[0].headSha}^{tree}`,
+    );
+    const message = `chore: heal generated file conflicts\n\nPR #17\nTrusted-Base: ${fixture.trustedSha}\n`;
+    const candidateSha = run(
+        "git",
+        [
+            "-c",
+            "commit.gpgSign=false",
+            "-c",
+            "safe.bareRepository=all",
+            "-C",
+            repositoryPath,
+            "commit-tree",
+            treeSha,
+            "-p",
+            fixture.metadata.pullRequests[0].headSha,
+            "-p",
+            fixture.trustedSha,
+        ],
+        {
+            env: {
+                ...process.env,
+                GIT_AUTHOR_NAME: "typeagent-bot",
+                GIT_AUTHOR_EMAIL: "typeagent-bot[bot]@users.noreply.github.com",
+                GIT_AUTHOR_DATE: preparedAt,
+                GIT_COMMITTER_NAME: "typeagent-bot",
+                GIT_COMMITTER_EMAIL:
+                    "typeagent-bot[bot]@users.noreply.github.com",
+                GIT_COMMITTER_DATE: preparedAt,
+            },
+            input: message,
+            stdio: ["pipe", "pipe", "pipe"],
+        },
+    );
+    git(
+        repositoryPath,
+        "update-ref",
+        "refs/heal/candidates/pr-17",
+        candidateSha,
+    );
+    mkdirSync(artifactDirectory, { recursive: true });
+    git(
+        repositoryPath,
+        "bundle",
+        "create",
+        join(artifactDirectory, "pr-17.bundle"),
+        "refs/heal/candidates/pr-17",
+        `^${fixture.metadata.pullRequests[0].headSha}`,
+        `^${fixture.trustedSha}`,
+    );
+    write(
+        join(artifactDirectory, "summary.json"),
+        packageJson({
+            version: 1,
+            repository: REPOSITORY,
+            defaultBranch: "main",
+            trustedSha: fixture.trustedSha,
+            producerRunId: fixture.metadata.runId,
+            preparedAt,
+            candidates: [
+                {
+                    ...fixture.metadata.pullRequests[0],
+                    candidateSha,
+                    treeSha,
+                    conflicts: [path],
+                    bundle: "pr-17.bundle",
+                    commitMessage: message,
+                    preparedAt,
+                },
+            ],
+            skipped: [],
+        }),
+    );
+    return artifactDirectory;
 }
 
 test("trusted healer prepares a candidate without exposing credentials or running PR code", () => {
@@ -688,6 +795,112 @@ test(
     },
 );
 
+for (const generatedPath of [
+    "ts/pnpm-lock.yaml",
+    "ts/packages/app/README.AUTOGEN.md",
+]) {
+    test(
+        `generated symlink ${generatedPath} cannot overwrite an outside file during preparation`,
+        { skip: process.platform === "win32" },
+        () => {
+            const fixture = createFixture();
+            try {
+                const outsidePath = join(
+                    fixture.root,
+                    `${basename(generatedPath)}-outside`,
+                );
+                write(outsidePath, "outside trusted content\n");
+                git(fixture.source, "checkout", "feature");
+                rmSync(join(fixture.source, ...generatedPath.split("/")));
+                symlinkSync(
+                    outsidePath,
+                    join(fixture.source, ...generatedPath.split("/")),
+                );
+                git(fixture.source, "add", "-A");
+                git(fixture.source, "commit", "-m", "symlink generated file");
+                git(fixture.source, "push", fixture.remote, "feature");
+                fixture.metadata.pullRequests[0].headSha = git(
+                    fixture.source,
+                    "rev-parse",
+                    "HEAD",
+                );
+
+                const prepared = prepare(fixture);
+                assert.equal(prepared.summary.candidates.length, 0);
+                assert.equal(prepared.summary.skipped.length, 1);
+                assert.match(
+                    prepared.summary.skipped[0].reason,
+                    /non-regular Git mode|regular filesystem file/,
+                );
+                assert.equal(
+                    readFileSync(outsidePath, "utf8"),
+                    "outside trusted content\n",
+                );
+            } finally {
+                fixture.cleanup();
+            }
+        },
+    );
+}
+
+test(
+    "privileged reconstruction blocks a forged generated symlink candidate",
+    { skip: process.platform === "win32" },
+    () => {
+        const fixture = createFixture();
+        try {
+            const outsidePath = join(
+                fixture.root,
+                "privileged-reconstruction-outside",
+            );
+            write(outsidePath, "outside trusted content\n");
+            git(fixture.source, "checkout", "feature");
+            rmSync(join(fixture.source, "ts", "pnpm-lock.yaml"));
+            symlinkSync(
+                outsidePath,
+                join(fixture.source, "ts", "pnpm-lock.yaml"),
+            );
+            git(fixture.source, "add", "-A");
+            git(fixture.source, "commit", "-m", "symlink lockfile");
+            git(fixture.source, "push", fixture.remote, "feature");
+            fixture.metadata.pullRequests[0].headSha = git(
+                fixture.source,
+                "rev-parse",
+                "HEAD",
+            );
+            const artifactDirectory = createForgedCandidateArtifact(
+                fixture,
+                "ts/pnpm-lock.yaml",
+            );
+
+            const plan = verifyCandidateArtifact({
+                artifactDirectory,
+                liveMetadata: fixture.metadata,
+                expectedRunId: fixture.metadata.runId,
+                repositoryUrl: fixture.remote,
+                pnpmCommand: createFakePnpm(
+                    join(fixture.root, "forged-tools"),
+                    join(fixture.root, "forged-audit"),
+                ),
+                planPath: join(fixture.root, "forged-plan.json"),
+                workDirectory: join(fixture.root, "forged-verify"),
+            });
+            assert.equal(plan.candidates.length, 0);
+            assert.equal(plan.skipped.length, 1);
+            assert.match(
+                plan.skipped[0].reason,
+                /non-regular Git mode|regular filesystem file/,
+            );
+            assert.equal(
+                readFileSync(outsidePath, "utf8"),
+                "outside trusted content\n",
+            );
+        } finally {
+            fixture.cleanup();
+        }
+    },
+);
+
 test("isolated repository configures the fixed bot identity before merging", () => {
     const fixture = createFixture();
     try {
@@ -770,9 +983,106 @@ test("a blocked malicious PR does not prevent another PR candidate", () => {
     }
 });
 
+test("deleted heads, malformed manifests, and pnpm failures do not abort a scan", () => {
+    const fixture = createFixture();
+    try {
+        git(fixture.remote, "branch", "valid-feature-2", fixture.headSha);
+
+        git(fixture.source, "checkout", "-B", "invalid-json", "feature");
+        write(
+            join(fixture.source, "ts", "packages", "app", "package.json"),
+            "{ invalid json\n",
+        );
+        git(fixture.source, "add", "-A");
+        git(fixture.source, "commit", "-m", "invalid manifest");
+        git(fixture.source, "push", fixture.remote, "invalid-json");
+        const invalidJsonHead = git(fixture.source, "rev-parse", "HEAD");
+
+        git(fixture.source, "checkout", "-B", "pnpm-failure", "feature");
+        const appPath = join(
+            fixture.source,
+            "ts",
+            "packages",
+            "app",
+            "package.json",
+        );
+        const app = JSON.parse(readFileSync(appPath, "utf8"));
+        app.name = "trigger-pnpm-failure";
+        write(appPath, packageJson(app));
+        git(fixture.source, "add", "-A");
+        git(fixture.source, "commit", "-m", "trigger pnpm failure");
+        git(fixture.source, "push", fixture.remote, "pnpm-failure");
+        const pnpmFailureHead = git(fixture.source, "rev-parse", "HEAD");
+
+        const original = fixture.metadata.pullRequests[0];
+        fixture.metadata.pullRequests = [
+            {
+                ...original,
+                number: 18,
+                headRefName: "deleted-feature",
+            },
+            {
+                ...original,
+                number: 19,
+                headRefName: "invalid-json",
+                headSha: invalidJsonHead,
+            },
+            {
+                ...original,
+                number: 20,
+                headRefName: "pnpm-failure",
+                headSha: pnpmFailureHead,
+            },
+            original,
+            {
+                ...original,
+                number: 21,
+                headRefName: "valid-feature-2",
+            },
+        ];
+        const outputDirectory = join(fixture.root, "isolated-artifact");
+        const summary = prepareCandidateArtifact({
+            metadata: fixture.metadata,
+            outputDirectory,
+            repositoryUrl: fixture.remote,
+            pnpmCommand: createFakePnpm(
+                join(fixture.root, "isolated-tools"),
+                join(fixture.root, "isolated-audit"),
+                { failPackageName: "trigger-pnpm-failure" },
+            ),
+            workDirectory: join(fixture.root, "isolated-prepare"),
+        });
+
+        assert.deepEqual(
+            summary.candidates.map((candidate) => candidate.number),
+            [17, 21],
+        );
+        assert.deepEqual(
+            summary.skipped.map((candidate) => candidate.number),
+            [18, 19, 20],
+        );
+        assert.ok(
+            summary.skipped.every(
+                (candidate) => candidate.status === "retryable",
+            ),
+        );
+        assert.match(summary.skipped[0].reason, /could not be fetched/);
+        assert.match(summary.skipped[1].reason, /JSON|failed with exit code/);
+        assert.match(summary.skipped[2].reason, /failed with exit code/);
+        assert.equal(existsSync(join(outputDirectory, "summary.json")), true);
+    } finally {
+        fixture.cleanup();
+    }
+});
+
 test("valid candidate preserves the PR README and exact merge parents", () => {
     const fixture = createFixture();
     try {
+        assert.notEqual(fixture.historicalBaseSha, fixture.trustedSha);
+        assert.equal(
+            fixture.metadata.pullRequests[0].baseSha,
+            fixture.historicalBaseSha,
+        );
         const prepared = prepare(fixture);
         assert.equal(
             prepared.summary.candidates[0].commitMessage,
@@ -804,6 +1114,47 @@ test("valid candidate preserves the PR README and exact merge parents", () => {
             ),
             /fixture-lib/,
         );
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test("finalization accepts a historical PR base SHA distinct from trusted main", () => {
+    const fixture = createFixture();
+    try {
+        const prepared = prepare(fixture);
+        const liveMetadata = {
+            ...fixture.metadata,
+            pullRequests: [
+                {
+                    ...fixture.metadata.pullRequests[0],
+                    baseSha: "3".repeat(40),
+                },
+            ],
+        };
+        const plan = verifyCandidateArtifact({
+            artifactDirectory: prepared.outputDirectory,
+            liveMetadata,
+            expectedRunId: fixture.metadata.runId,
+            repositoryUrl: fixture.remote,
+            pnpmCommand: prepared.pnpmCommand,
+            planPath: join(fixture.root, "historical-base-plan.json"),
+            workDirectory: join(fixture.root, "historical-base-verify"),
+        });
+
+        assert.deepEqual(
+            plan.candidates.map((candidate) => candidate.number),
+            [17],
+        );
+        assert.equal(plan.skipped.length, 0);
+        const parents = git(
+            plan.repositoryPath,
+            "show",
+            "-s",
+            "--format=%P",
+            plan.candidates[0].candidateSha,
+        ).split(" ");
+        assert.deepEqual(parents, [fixture.headSha, fixture.trustedSha]);
     } finally {
         fixture.cleanup();
     }
@@ -854,8 +1205,11 @@ test("commit verification rejects an object with a check-suppression directive",
             prepared,
             `${expected}[skip ci]\n`,
         );
-        assert.throws(
-            () => verify(fixture, prepared),
+        const { plan } = verify(fixture, prepared);
+        assert.equal(plan.candidates.length, 0);
+        assert.equal(plan.skipped.length, 1);
+        assert.match(
+            plan.skipped[0].reason,
             /commit message for PR #17 is invalid/,
         );
     } finally {
@@ -936,18 +1290,88 @@ test("exact-head lease rejects a race after final verification", async () => {
                 return fixture.metadata.pullRequests[0];
             },
         };
-        await assert.rejects(
-            () =>
-                pushVerifiedPlan({
-                    plan,
-                    api,
-                    token: "inert-test-token",
-                }),
+        const result = await pushVerifiedPlan({
+            plan,
+            api,
+            token: "inert-test-token",
+        });
+        assert.deepEqual(result.pushed, []);
+        assert.equal(result.skipped.length, 1);
+        assert.match(
+            result.skipped[0].reason,
             /stale info|failed with exit code/,
         );
         assert.equal(
             git(fixture.remote, "rev-parse", "refs/heads/feature"),
             movedHead,
+        );
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test("one raced push does not prevent another verified candidate from advancing", async () => {
+    const fixture = createFixture();
+    try {
+        git(fixture.remote, "branch", "feature-race", fixture.headSha);
+        git(fixture.remote, "branch", "feature-valid", fixture.headSha);
+        const original = fixture.metadata.pullRequests[0];
+        fixture.metadata.pullRequests = [
+            {
+                ...original,
+                number: 18,
+                headRefName: "feature-race",
+            },
+            {
+                ...original,
+                number: 19,
+                headRefName: "feature-valid",
+            },
+        ];
+        const prepared = prepare(fixture);
+        const { plan } = verify(fixture, prepared);
+
+        git(fixture.source, "checkout", "-B", "feature-race", "feature");
+        write(join(fixture.source, "race.txt"), "moved\n");
+        git(fixture.source, "add", "race.txt");
+        git(fixture.source, "commit", "-m", "race candidate");
+        git(fixture.source, "push", fixture.remote, "feature-race");
+        const movedRace = git(
+            fixture.remote,
+            "rev-parse",
+            "refs/heads/feature-race",
+        );
+        const api = {
+            async getRepository() {
+                return {
+                    repository: REPOSITORY,
+                    defaultBranch: "main",
+                    trustedSha: fixture.trustedSha,
+                };
+            },
+            async getPullRequest(number) {
+                return fixture.metadata.pullRequests.find(
+                    (pr) => pr.number === number,
+                );
+            },
+        };
+        const result = await pushVerifiedPlan({
+            plan,
+            api,
+            token: "inert-test-token",
+        });
+
+        assert.deepEqual(result.pushed, [19]);
+        assert.equal(result.skipped.length, 1);
+        assert.equal(result.skipped[0].number, 18);
+        assert.equal(
+            git(fixture.remote, "rev-parse", "refs/heads/feature-race"),
+            movedRace,
+        );
+        assert.equal(
+            git(fixture.remote, "rev-parse", "refs/heads/feature-valid"),
+            plan.candidates.find((candidate) => candidate.number === 19)
+                .candidateSha,
         );
     } finally {
         fixture.cleanup();
@@ -968,8 +1392,8 @@ test("final API revalidation rejects changed PR identity without updating a ref"
             { state: "closed" },
             { isCrossRepository: true },
             { headRepository: "attacker/fork" },
+            { baseRepository: "attacker/fork" },
             { baseRefName: "release" },
-            { baseSha: "3".repeat(40) },
             { headRefName: "renamed" },
             { headSha: "4".repeat(40) },
         ];
@@ -989,13 +1413,13 @@ test("final API revalidation rejects changed PR identity without updating a ref"
                     };
                 },
             };
-            await assert.rejects(() =>
-                pushVerifiedPlan({
-                    plan,
-                    api,
-                    token: "inert-test-token",
-                }),
-            );
+            const result = await pushVerifiedPlan({
+                plan,
+                api,
+                token: "inert-test-token",
+            });
+            assert.deepEqual(result.pushed, []);
+            assert.equal(result.skipped.length, 1);
             assert.equal(
                 git(fixture.remote, "rev-parse", "refs/heads/feature"),
                 expectedHead,
@@ -1013,6 +1437,26 @@ test("non-generated conflicts produce no candidate and update no ref", () => {
         assert.equal(prepared.summary.candidates.length, 0);
         assert.equal(prepared.summary.skipped[0].status, "blocked");
         assert.match(prepared.summary.skipped[0].reason, /source\.ts/);
+        assert.equal(
+            git(fixture.remote, "rev-parse", "refs/heads/feature"),
+            fixture.headSha,
+        );
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test("PR-controlled merge attributes cannot hide a non-generated conflict", () => {
+    const fixture = createFixture({ maliciousMergeAttributes: true });
+    try {
+        const prepared = prepare(fixture);
+        assert.equal(prepared.summary.candidates.length, 0);
+        assert.equal(prepared.summary.skipped.length, 1);
+        assert.equal(prepared.summary.skipped[0].status, "blocked");
+        assert.match(
+            prepared.summary.skipped[0].reason,
+            /merge behavior differs.*\.gitattributes/,
+        );
         assert.equal(
             git(fixture.remote, "rev-parse", "refs/heads/feature"),
             fixture.headSha,
@@ -1078,6 +1522,11 @@ for (const [name, mutate, expected] of [
         /head repository/,
     ],
     [
+        "wrong base repository",
+        (pr) => ({ ...pr, baseRepository: "attacker/fork" }),
+        /base repository/,
+    ],
+    [
         "wrong base",
         (pr) => ({ ...pr, baseRefName: "release" }),
         /targets release/,
@@ -1102,20 +1551,19 @@ for (const [name, mutate, expected] of [
                 pullRequests: [mutate(fixture.metadata.pullRequests[0])],
             };
             if (name === "moved head" || name === "renamed head") {
-                assert.throws(
-                    () =>
-                        prepareCandidateArtifact({
-                            metadata,
-                            outputDirectory: join(fixture.root, "bad-artifact"),
-                            repositoryUrl: fixture.remote,
-                            pnpmCommand: createFakePnpm(
-                                join(fixture.root, "bad-tools"),
-                                join(fixture.root, "bad-audit"),
-                            ),
-                            workDirectory: join(fixture.root, "bad-work"),
-                        }),
-                    expected,
-                );
+                const summary = prepareCandidateArtifact({
+                    metadata,
+                    outputDirectory: join(fixture.root, "bad-artifact"),
+                    repositoryUrl: fixture.remote,
+                    pnpmCommand: createFakePnpm(
+                        join(fixture.root, "bad-tools"),
+                        join(fixture.root, "bad-audit"),
+                    ),
+                    workDirectory: join(fixture.root, "bad-work"),
+                });
+                assert.equal(summary.candidates.length, 0);
+                assert.equal(summary.skipped.length, 1);
+                assert.match(summary.skipped[0].reason, expected);
             } else {
                 assert.throws(() => validateMetadata(metadata), expected);
             }
@@ -1138,19 +1586,66 @@ test("artifact verification rejects stale live PR metadata", () => {
                 },
             ],
         };
-        assert.throws(
-            () =>
-                verifyCandidateArtifact({
-                    artifactDirectory: prepared.outputDirectory,
-                    liveMetadata: stale,
-                    expectedRunId: fixture.metadata.runId,
-                    repositoryUrl: fixture.remote,
-                    pnpmCommand: prepared.pnpmCommand,
-                    planPath: join(fixture.root, "stale-plan.json"),
-                    workDirectory: join(fixture.root, "stale-verify"),
-                }),
-            /headSha changed/,
+        const plan = verifyCandidateArtifact({
+            artifactDirectory: prepared.outputDirectory,
+            liveMetadata: stale,
+            expectedRunId: fixture.metadata.runId,
+            repositoryUrl: fixture.remote,
+            pnpmCommand: prepared.pnpmCommand,
+            planPath: join(fixture.root, "stale-plan.json"),
+            workDirectory: join(fixture.root, "stale-verify"),
+        });
+        assert.equal(plan.candidates.length, 0);
+        assert.equal(plan.skipped.length, 1);
+        assert.match(plan.skipped[0].reason, /headSha changed/);
+    } finally {
+        fixture.cleanup();
+    }
+});
+
+test("one stale artifact candidate does not prevent another from finalizing", () => {
+    const fixture = createFixture();
+    try {
+        git(fixture.remote, "branch", "valid-feature-2", fixture.headSha);
+        const original = fixture.metadata.pullRequests[0];
+        fixture.metadata.pullRequests = [
+            original,
+            {
+                ...original,
+                number: 18,
+                headRefName: "valid-feature-2",
+            },
+        ];
+        const prepared = prepare(fixture);
+        const liveMetadata = {
+            ...fixture.metadata,
+            pullRequests: [
+                {
+                    ...original,
+                    headSha: "2".repeat(40),
+                },
+                fixture.metadata.pullRequests[1],
+            ],
+        };
+        const plan = verifyCandidateArtifact({
+            artifactDirectory: prepared.outputDirectory,
+            liveMetadata,
+            expectedRunId: fixture.metadata.runId,
+            repositoryUrl: fixture.remote,
+            pnpmCommand: prepared.pnpmCommand,
+            planPath: join(fixture.root, "mixed-stale-plan.json"),
+            workDirectory: join(fixture.root, "mixed-stale-verify"),
+        });
+
+        assert.deepEqual(
+            plan.candidates.map((candidate) => candidate.number),
+            [18],
         );
+        assert.deepEqual(
+            plan.skipped.map((candidate) => candidate.number),
+            [17],
+        );
+        assert.match(plan.skipped[0].reason, /headSha changed/);
     } finally {
         fixture.cleanup();
     }
@@ -1335,4 +1830,6 @@ test("workflow split keeps trusted preparation credential-free and token use iso
     assert.match(finalizerText, /--force-with-lease|exact-head lease/);
     assert.match(producerText, /trusted\/ts\/package\.json/);
     assert.match(finalizerText, /trusted\/ts\/package\.json/);
+    assert.match(producerText, /baseRepository/);
+    assert.match(finalizerText, /baseRepository/);
 });
