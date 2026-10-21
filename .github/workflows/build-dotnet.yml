@@ -101,10 +101,7 @@ jobs:
       - name: Build Visual Studio bridge TypeScript
         if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
         working-directory: ts
-        run: |
-          pnpm --filter @typeagent/websocket-utils run tsc
-          pnpm --filter @typeagent/agent-server-protocol run tsc
-          pnpm --filter @typeagent/visualstudio-agent run tsc
+        run: pnpm exec fluid-build "@typeagent/visualstudio-agent" -t tsc --dep
       - name: Test Visual Studio bridge TypeScript authentication
         if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
         working-directory: ts
