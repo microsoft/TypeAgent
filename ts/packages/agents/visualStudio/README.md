@@ -104,7 +104,7 @@ fallback to a well-known port. Knobs:
 
 - Visual Studio 2022 (or later) with the **Visual Studio extension development**
   workload installed
-- Node.js ≥ 20 and pnpm ≥ 10
+- Node.js ≥ 22 and pnpm ≥ 10
 
 ## Build
 
@@ -114,15 +114,15 @@ The agent itself builds with the rest of the monorepo:
 pnpm run build visualStudio
 ```
 
-The VSIX host has its own two-stage build (WebView2 bundle + MSBuild). See
-[host/README.md](host/README.md#build).
+The VSIX MSBuild project builds and packages the WebView2 bundle automatically.
+See [host/README.md](host/README.md#build).
 
 ## Run
 
 1. Start the TypeAgent agent-server.
 2. Ensure `visualstudio-agent` is enabled in your dispatcher config.
 3. Launch Visual Studio with the VSIX installed.
-4. **View → Other Windows → TypeAgent Chat**.
+4. **View → TypeAgent Chat**.
 
 The chat panel connects to `ws://localhost:8999`. Once connected, the C# bridge
 discovers the agent's action port via that same WS (via the discovery channel)
@@ -138,10 +138,11 @@ packages/agents/visualStudio/
 │   ├── visualStudioSchema.agr         # Grammar rules
 │   └── visualStudioManifest.json
 ├── host/
-│   ├── csharp/                        # VSIX project (.NET / WPF)
 │   └── webview/                       # WebView2 chat content (TS + Vite)
 ├── package.json
 └── README.md
+
+dotnet/visualStudioTypeAgent/           # VSIX project (.NET / WPF)
 ```
 
 ## API Limitations

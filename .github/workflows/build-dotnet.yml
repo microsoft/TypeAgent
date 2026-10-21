@@ -94,7 +94,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         working-directory: dotnet
         run: msbuild.exe typeagent/TypeAgent.sln /p:platform="Any CPU" /p:configuration="${{ matrix.configuration }}"
-      - name: Build Visual Studio solution and VSIX
+      - name: Build Visual Studio solution, WebView, and VSIX
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         working-directory: dotnet
         run: msbuild.exe visualStudioTypeAgent/VisualStudioTypeAgent.sln /restore /p:platform="Any CPU" /p:configuration="${{ matrix.configuration }}" /p:DeployExtension=false

@@ -30,6 +30,9 @@
     <StartArguments>/rootsuffix Exp</StartArguments>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
+    <TypeAgentTsWorkspace>$(MSBuildProjectDirectory)\..\..\ts</TypeAgentTsWorkspace>
+    <VisualStudioWebViewDirectory>$(TypeAgentTsWorkspace)\packages\agents\visualStudio\host\webview</VisualStudioWebViewDirectory>
+    <VisualStudioWebViewDistDirectory>$(VisualStudioWebViewDirectory)\dist</VisualStudioWebViewDistDirectory>
   </PropertyGroup>
 
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -91,16 +94,31 @@
     <None Include="source.extension.vsixmanifest">
       <SubType>Designer</SubType>
     </None>
+    <None Include="VerifyVsixContents.ps1" />
     <VSCTCompile Include="TypeAgentPackage.vsct">
       <ResourceName>Menus.ctmenu</ResourceName>
     </VSCTCompile>
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="webview-content\**\*">
-      <IncludeInVSIX>true</IncludeInVSIX>
-    </Content>
-  </ItemGroup>
+  <Target Name="BuildVisualStudioWebView" BeforeTargets="GetVsixSourceItems">
+    <Exec WorkingDirectory="$(TypeAgentTsWorkspace)"
+          Command="pnpm exec fluid-build visualstudio-extension-webview -t build --dep" />
+    <ItemGroup>
+      <_VisualStudioWebViewJavaScript Include="$(VisualStudioWebViewDistDirectory)\assets\*.js" />
+    </ItemGroup>
+    <Error Condition="!Exists('$(VisualStudioWebViewDistDirectory)\index.html')"
+           Text="The Visual Studio WebView build did not produce index.html." />
+    <Error Condition="'@(_VisualStudioWebViewJavaScript)' == ''"
+           Text="The Visual Studio WebView build did not produce a JavaScript bundle." />
+    <ItemGroup>
+      <VSIXSourceItem Include="$(VisualStudioWebViewDistDirectory)\index.html">
+        <VSIXSubPath>webview-content</VSIXSubPath>
+      </VSIXSourceItem>
+      <VSIXSourceItem Include="$(VisualStudioWebViewDistDirectory)\assets\*">
+        <VSIXSubPath>webview-content\assets</VSIXSubPath>
+      </VSIXSourceItem>
+    </ItemGroup>
+  </Target>
 
   <!-- VSSDK auto-skips Newtonsoft.Json from the VSIX assuming VS provides it
        via PrivateAssemblies, but those aren't on the VSIX assembly probe
@@ -118,6 +136,13 @@
                                  '%(Filename)' == 'Microsoft.NET.StringTools' Or
                                  '%(Filename)' == 'Microsoft.VisualStudio.Linux.ConnectionManager.Store'" />
     </ItemGroup>
+  </Target>
+
+  <Target Name="VerifyVisualStudioWebViewInVsix"
+          AfterTargets="CreateVsixContainer"
+          Condition="'$(CreateVsixContainer)' == 'true'">
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)"
+          Command="powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\VerifyVsixContents.ps1&quot; -VsixPath &quot;$(TargetVsixContainer)&quot;" />
   </Target>
 
   <ItemGroup>
