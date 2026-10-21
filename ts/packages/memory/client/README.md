@@ -1,5 +1,28 @@
 # @typeagent/memory-client
 
+## Explicit agent-session imports
+
+Both clients and the RPC facade expose optional `importAgentSession`,
+`getAgentSessionImport`, `cancelAgentSessionImport`, and `searchAgentMemories`
+capabilities. Unsupported services reject explicitly. Import requests contain
+JSONL content, never local paths, and must select `agent-session-jsonl` or
+`copilot-session-jsonl`. `agentSessionProtocol` exports strict schemas and tool
+names; chunks are limited to 512 KiB UTF-8 and 1,000 lines.
+
+Submit chunks sequentially with the last receipt's `cursor` as `expectedCursor`
+and a content-bound `idempotencyKey` per chunk. Poll `getAgentSessionImport`
+until the receipt is no longer `running` before submitting another chunk.
+Retry the exact request and key after a lost response. An older completed key
+returns the current receipt, not a historical receipt: retain that chunk's
+original `expectedCursor` during full-file replay, and validate every earlier
+key rather than skipping content because a final receipt exists.
+`final: true` seals the
+session. Unknown import reads return `undefined` (`null` on the MCP wire).
+Search preserves scope, evidence, influence sources, supersession, conflicts,
+and warnings; diagnostic memories do not grant execution authority.
+Capabilities may advertise `features.agentSessionImportTypes`.
+Ordinary document ingestion is unchanged.
+
 `listChanges({ corpusId, pageSize?, continuationToken? })` reads the canonical
 metadata-only, 90-day changes receipts as `MemoryPage<MemoryChangeReceipt>`.
 Both in-process and MCP clients expose this operation; unsupported services

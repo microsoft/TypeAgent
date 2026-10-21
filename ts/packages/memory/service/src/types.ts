@@ -3,6 +3,13 @@
 
 import type { AgentEdition } from "./agentEdition.js";
 import type {
+    AgentMemorySearchRequest,
+    AgentMemorySearchResult,
+    AgentSessionImportReceipt,
+    AgentSessionImportRequest,
+    AgentSessionReadRequest,
+} from "./agentSessionTypes.js";
+import type {
     MemoryBatchImport,
     MemoryBatchImportLookup,
     MemoryBatchImportRequest,
@@ -559,6 +566,7 @@ export interface MemoryServiceCapabilities {
         management: boolean;
         groundedAnswer: boolean;
         sourceSynopses?: boolean;
+        agentSessionImportTypes?: AgentSessionImportRequest["importType"][];
     };
     warnings: string[];
 }
@@ -602,6 +610,18 @@ export interface ProcedureVersion {
 export interface MemoryService {
     initialize?(): Promise<void>;
     close?(): Promise<void>;
+    importAgentSession?(
+        request: AgentSessionImportRequest,
+    ): Promise<AgentSessionImportReceipt>;
+    getAgentSessionImport?(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt | undefined>;
+    cancelAgentSessionImport?(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt>;
+    searchAgentMemories?(
+        request: AgentMemorySearchRequest,
+    ): Promise<AgentMemorySearchResult>;
     createCorpus(name: string, description?: string): Promise<MemoryCorpus>;
     listCorpora(): Promise<MemoryCorpus[]>;
     getCorpus(corpusId: string): Promise<MemoryCorpusStatus | undefined>;
