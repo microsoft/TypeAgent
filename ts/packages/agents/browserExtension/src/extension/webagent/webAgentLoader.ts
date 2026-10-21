@@ -103,8 +103,7 @@ function createUIActions(): UIActions {
     };
 }
 
-// Agents are registered dynamically via site-specific scripts (sites/crossword.ts, etc.)
-// injected only on matching URLs by the extension manifest.
+// Site scripts register agents; DOM-specific agents also check their supported engine.
 const registeredAgents: WebAgent[] = [];
 
 let activeAgent: WebAgent | null = null;
@@ -187,9 +186,9 @@ async function activateAgentForUrl(url: string): Promise<void> {
         `[WebAgentLoader] Registered agents: ${registeredAgents.map((a) => a.name).join(", ")}`,
     );
 
-    const matchingAgent = registeredAgents.find((agent) =>
-        matchesUrl(url, agent.urlPatterns),
-    );
+    const matchingAgent =
+        registeredAgents.find((agent) => agent.matchesDocument?.()) ??
+        registeredAgents.find((agent) => matchesUrl(url, agent.urlPatterns));
 
     if (matchingAgent && matchingAgent !== activeAgent) {
         console.log(
@@ -299,13 +298,12 @@ export function registerWebAgent(agent: WebAgent): void {
     if (!registeredAgents.some((a) => a.name === agent.name)) {
         console.log(`[WebAgentLoader] Adding new WebAgent: ${agent.name}`);
         registeredAgents.push(agent);
-
-        if (matchesUrl(window.location.href, agent.urlPatterns)) {
-            console.log(
-                `[WebAgentLoader] URL matches, activating ${agent.name}`,
-            );
-            activateAgentForUrl(window.location.href);
-        }
+    }
+    if (
+        matchesUrl(window.location.href, agent.urlPatterns) ||
+        agent.matchesDocument?.()
+    ) {
+        activateAgentForUrl(window.location.href);
     } else {
         console.log(
             `[WebAgentLoader] WebAgent ${agent.name} already registered`,

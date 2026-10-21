@@ -2,24 +2,19 @@
 // Licensed under the MIT License.
 
 import { createChromeRpcClient } from "./chromeRpcClient";
+import {
+    DEFAULT_EXTENSION_SETTINGS as DEFAULT_SETTINGS,
+    type ExtensionSettings,
+} from "../serviceWorker/storage";
+import {
+    isCrosswordMode,
+    type CrosswordDecisionCapabilities,
+} from "@typeagent/browser-control-rpc/crosswordDecisionTypes";
 
 let chromeRpcSingleton: ReturnType<typeof createChromeRpcClient> | undefined;
 function getChromeRpc() {
     if (!chromeRpcSingleton) chromeRpcSingleton = createChromeRpcClient();
     return chromeRpcSingleton;
-}
-
-interface ExtensionSettings {
-    agentServerHost: string;
-    defaultExtractionMode: "content";
-    maxConcurrentExtractions: number;
-    qualityThreshold: number;
-    enableIntelligentAnalysis: boolean;
-    autoDiscovery: boolean;
-    autoDiscoveryMode: "scope" | "content";
-    excludeSensitiveSites: boolean;
-    autoOpenChatPanel: boolean;
-    caseInsensitiveWindowTitleMatching: boolean;
 }
 
 interface AIModelStatus {
@@ -29,22 +24,10 @@ interface AIModelStatus {
     lastChecked?: string;
 }
 
-const DEFAULT_SETTINGS: ExtensionSettings = {
-    agentServerHost: "",
-    defaultExtractionMode: "content",
-    maxConcurrentExtractions: 3,
-    qualityThreshold: 0.3,
-    enableIntelligentAnalysis: true,
-    autoDiscovery: true,
-    autoDiscoveryMode: "content",
-    excludeSensitiveSites: true,
-    autoOpenChatPanel: true,
-    caseInsensitiveWindowTitleMatching: true,
-};
-
-class EnhancedOptionsPage {
+export class EnhancedOptionsPage {
     private settings: ExtensionSettings = { ...DEFAULT_SETTINGS };
     private aiStatus: AIModelStatus = { available: false };
+    private crosswordCapabilities?: CrosswordDecisionCapabilities;
 
     constructor() {
         this.initializeEventListeners();
@@ -52,7 +35,10 @@ class EnhancedOptionsPage {
 
     async initialize() {
         await this.loadSavedSettings();
-        await this.checkAIModelStatus();
+        await Promise.all([
+            this.checkAIModelStatus(),
+            this.checkCrosswordDecisionCapabilities(),
+        ]);
         this.updateRangeDisplays();
         this.updateAIStatusDisplay();
     }
@@ -63,6 +49,11 @@ class EnhancedOptionsPage {
             "optionsForm",
         ) as HTMLFormElement;
         optionsForm.addEventListener("submit", (e) => this.saveOptions(e));
+        document
+            .getElementById("crosswordMode")
+            ?.addEventListener("change", () =>
+                this.updateCrosswordDecisionStatus(),
+            );
 
         // Range inputs
         const concurrencyRange = document.getElementById(
@@ -96,12 +87,32 @@ class EnhancedOptionsPage {
     private async loadSavedSettings() {
         try {
             const saved = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+            if (!isCrosswordMode(saved.crosswordMode)) {
+                console.warn(
+                    "Invalid crossword mode; resetting to Generative.",
+                );
+                saved.crosswordMode = DEFAULT_SETTINGS.crosswordMode;
+                await chrome.storage.sync.set({
+                    crosswordMode: saved.crosswordMode,
+                });
+                this.showStatus(
+                    "Invalid Crossword Mode was reset to Generative.",
+                    "warning",
+                );
+                await this.notifySettingsUpdated({
+                    ...DEFAULT_SETTINGS,
+                    ...saved,
+                });
+            }
             if (saved.defaultExtractionMode !== "content") {
                 throw new Error(
                     "Unsupported extraction mode. Reset settings to use 'content'.",
                 );
             }
             this.settings = { ...DEFAULT_SETTINGS, ...saved };
+            document.querySelector<HTMLInputElement>(
+                `input[name="crosswordMode"][value="${this.settings.crosswordMode}"]`,
+            )!.checked = true;
 
             // Update form fields
             (
@@ -154,6 +165,48 @@ class EnhancedOptionsPage {
             console.error("Error loading settings:", error);
             this.showStatus("Error loading settings", "danger");
         }
+    }
+
+    private async checkCrosswordDecisionCapabilities() {
+        try {
+            const { rpc } = getChromeRpc();
+            this.crosswordCapabilities = (await rpc.invoke(
+                "getCrosswordDecisionCapabilities",
+            )) as CrosswordDecisionCapabilities;
+        } catch (error) {
+            console.warn(
+                "Could not check crossword decision capabilities:",
+                error,
+            );
+            this.crosswordCapabilities = {
+                available: false,
+                configGeneration: "unavailable",
+            };
+        }
+        this.updateCrosswordDecisionStatus();
+    }
+
+    private updateCrosswordDecisionStatus() {
+        const status = document.getElementById("crosswordDecisionStatus")!;
+        const capabilities = this.crosswordCapabilities;
+        const selectedMode = this.getSelectedCrosswordMode();
+        status.className = `alert alert-${capabilities?.available ? "success" : "warning"}`;
+        const availability = capabilities?.available
+            ? "Crossword Decision available."
+            : `Crossword Decision unavailable.${selectedMode === "decision" ? " Decision remains selected; crossword actions will not fall back to Generative." : " Generative is unaffected."}`;
+        const details = [
+            capabilities?.provider ? `Provider: ${capabilities.provider}` : "",
+            capabilities?.model ? `Model: ${capabilities.model}` : "",
+        ]
+            .filter(Boolean)
+            .join(" · ");
+        status.textContent = `${availability}${details ? ` ${details}` : ""}`;
+    }
+
+    private getSelectedCrosswordMode() {
+        return document.querySelector<HTMLInputElement>(
+            'input[name="crosswordMode"]:checked',
+        )?.value;
     }
 
     private async checkAIModelStatus() {
@@ -220,6 +273,11 @@ class EnhancedOptionsPage {
 
     private async saveOptions(e: Event) {
         e.preventDefault();
+        const crosswordMode = this.getSelectedCrosswordMode();
+        if (!isCrosswordMode(crosswordMode)) {
+            this.showStatus("Please select a valid Crossword Mode.", "warning");
+            return;
+        }
 
         // Validate WebSocket URL — blank means "use default agent-server
         // URL" (the service worker falls back to AGENT_SERVER_DEFAULT_URL).
@@ -239,6 +297,7 @@ class EnhancedOptionsPage {
 
         // Update settings
         this.settings.agentServerHost = agentServerHost;
+        this.settings.crosswordMode = crosswordMode;
 
         // Auto-discovery settings
         const autoDiscoveryEl = document.getElementById(
@@ -277,14 +336,8 @@ class EnhancedOptionsPage {
 
         try {
             await chrome.storage.sync.set(this.settings);
+            await this.notifySettingsUpdated(this.settings);
             this.showStatus("Settings saved successfully!", "success");
-
-            // Notify background script of settings change
-            const { rpc } = getChromeRpc();
-            (rpc as any).invoke("settingsUpdated", {
-                type: "settingsUpdated",
-                settings: this.settings,
-            });
         } catch (error) {
             console.error("Error saving settings:", error);
             this.showStatus("Error saving settings", "danger");
@@ -295,15 +348,29 @@ class EnhancedOptionsPage {
         if (
             confirm("Are you sure you want to reset all settings to defaults?")
         ) {
-            this.settings = { ...DEFAULT_SETTINGS };
-            await chrome.storage.sync.set(this.settings);
-            await this.loadSavedSettings();
-            this.updateRangeDisplays();
-            this.showStatus("Settings reset to defaults", "info");
+            try {
+                this.settings = { ...DEFAULT_SETTINGS };
+                await chrome.storage.sync.set(this.settings);
+                await this.notifySettingsUpdated(this.settings);
+                await this.loadSavedSettings();
+                this.updateRangeDisplays();
+                this.updateCrosswordDecisionStatus();
+                this.showStatus("Settings reset to defaults", "info");
+            } catch (error) {
+                console.error("Error resetting settings:", error);
+                this.showStatus("Error resetting settings", "danger");
+            }
         }
     }
 
     private exportSettings() {
+        if (!isCrosswordMode(this.settings.crosswordMode)) {
+            this.showStatus(
+                "Invalid Crossword Mode. Reload settings before exporting.",
+                "warning",
+            );
+            return;
+        }
         const exportData = {
             ...this.settings,
             exportDate: new Date().toISOString(),
@@ -324,6 +391,13 @@ class EnhancedOptionsPage {
         URL.revokeObjectURL(url);
 
         this.showStatus("Settings exported successfully", "success");
+    }
+
+    private async notifySettingsUpdated(settings: ExtensionSettings) {
+        const { rpc } = getChromeRpc();
+        await rpc.invoke("settingsUpdated", {
+            settings,
+        });
     }
 
     private showStatus(

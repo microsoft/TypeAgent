@@ -5,7 +5,11 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { stopCopilotClient } from "@typeagent/aiclient";
 import { loadRuntimeConfigSync } from "@typeagent/config";
-import { createCopilotDecisionClient } from "../decision.mjs";
+import {
+    createVariantDecisionClient,
+    decisionProviderOptions,
+    requestedDecisionModel,
+} from "../decision.mjs";
 import {
     cases as fixtureCases,
     getEligibleMcpTools,
@@ -226,6 +230,7 @@ export async function run(argv = process.argv.slice(2), options = {}) {
     const { values } = parseArgs({
         args: argv,
         options: {
+            ...decisionProviderOptions,
             live: { type: "boolean", default: false },
             "dry-run": { type: "boolean", default: false },
             limit: { type: "string" },
@@ -237,7 +242,7 @@ export async function run(argv = process.argv.slice(2), options = {}) {
 
     if (values.help) {
         process.stdout.write(
-            "Usage: node ts/examples/decision/mcp/main.mjs [--live] [--limit <n>] [--cli-path <path>]\n",
+            "Usage: node ts/examples/decision/mcp/main.mjs [--live] [--provider copilot|azure] [--model <model/deployment>] [--region <Azure region>] [--limit <n>] [--cli-path <path>]\n",
         );
         process.stdout.write(
             "Default offline/dry-run makes zero network calls.\n",
@@ -272,9 +277,9 @@ export async function run(argv = process.argv.slice(2), options = {}) {
                 ),
                 populateProcessEnv: false,
             }).config;
-        client = createCopilotDecisionClient(
+        client = createVariantDecisionClient(
             config,
-            { model: DECISION_MODEL, cliPath: values["cli-path"] },
+            values,
             options.endpointProvider,
         );
     }
@@ -456,7 +461,7 @@ export async function run(argv = process.argv.slice(2), options = {}) {
                 decisionSource: client
                     ? options.client || options.endpointProvider
                         ? "mock"
-                        : "copilot:gpt-6-luna-decisions"
+                        : `${values.provider}:${requestedDecisionModel(values)}`
                     : "not-run",
                 query: item.query,
                 expected: item.expected,

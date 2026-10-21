@@ -4,6 +4,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { openBrowser, startFixture, verifyShopping } from "./browser.mjs";
 import { decisionObserve, explicitAct, observeHost } from "./observer.mjs";
+import { decisionProviderOptions } from "../decision.mjs";
 
 export function offlineClient(match) {
     return {
@@ -41,17 +42,14 @@ export async function decisionClient(values) {
             close: async () => {},
         };
     const { loadRuntimeConfigSync } = await import("@typeagent/config");
-    const { createCopilotDecisionClient } = await import("../decision.mjs");
+    const { createVariantDecisionClient } = await import("../decision.mjs");
     const { stopCopilotClient } = await import("@typeagent/aiclient");
     const { config } = loadRuntimeConfigSync({
         workspaceRoot: fileURLToPath(new URL("../../../", import.meta.url)),
         populateProcessEnv: false,
     });
     return {
-        client: createCopilotDecisionClient(config, {
-            model: values.model,
-            cliPath: values["cli-path"],
-        }),
+        client: createVariantDecisionClient(config, values),
         close: stopCopilotClient,
     };
 }
@@ -60,11 +58,11 @@ export function options(args = process.argv.slice(2)) {
     const { values } = parseArgs({
         args,
         options: {
+            ...decisionProviderOptions,
             live: { type: "boolean", default: false },
             "dry-run": { type: "boolean", default: false },
             limit: { type: "string", default: "2" },
             "cli-path": { type: "string" },
-            model: { type: "string", default: "gpt-6-luna-decisions" },
             variant: { type: "string", default: "host" },
             "native-model": { type: "string" },
             "record-dir": { type: "string" },
@@ -204,6 +202,10 @@ export async function runShopping(values = options()) {
                 : "offline-fixture-selector",
             variant: values.variant,
             automation: "playwright",
+            decisionProvider: values.live
+                ? (values.provider ?? "copilot")
+                : undefined,
+            requestedDecisionModel: values.model,
             explicitActModelCalls: 0,
             cases,
             selectorCalls: decisionCalls,

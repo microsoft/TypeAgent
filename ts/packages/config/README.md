@@ -51,6 +51,33 @@ Carried on `AZURE_OPENAI_POOL_*`; does not affect pool routing.
 
 ## Usage
 
+### Native decision configuration
+
+```yaml
+decision:
+  provider: inherit # inherit | azure | copilot
+  azure:
+    deploymentKey: decision_1
+    deploymentName: decision-1
+  copilot:
+    model: gpt-6-luna-decisions
+```
+
+These fields round-trip through `buildConfig`, `configToEnv`, and YAML serialization.
+Flat names are `TYPEAGENT_DECISION_PROVIDER`,
+`TYPEAGENT_DECISION_AZURE_DEPLOYMENT_KEY`,
+`TYPEAGENT_DECISION_AZURE_DEPLOYMENT_NAME`, and
+`TYPEAGENT_DECISION_COPILOT_MODEL`. Unsupported decision providers and empty names
+are rejected. The Azure deployment key references the existing
+`azureOpenAI.deployments` endpoint/auth pool; it is not the wire model name.
+Use HTTPS native systemone endpoints serving the configured wire deployment name.
+
+`inherit` follows the active in-memory provider override, then the explicitly
+supplied config's `modelProvider`, then Azure. Explicit factory or decision provider
+selection takes precedence. Inherited OpenAI/Ollama reports unavailable.
+Request constraints may use `azure:decision:<deploymentKey>` or
+`copilot:decision:<model>` keys, independently of chat constraints.
+
 ```ts
 import { loadConfig } from "@typeagent/config";
 

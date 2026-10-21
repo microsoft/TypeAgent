@@ -29,20 +29,40 @@ export const PROVIDER_MODES: readonly ProviderMode[] = [
 ] as const;
 
 let active: ProviderMode | undefined;
+let configured: ProviderMode | undefined;
+let overrideGeneration = 0;
+
+export function getProviderOverrideGeneration(): number {
+    return overrideGeneration;
+}
+
+export function setConfiguredModelProvider(
+    mode: ProviderMode | undefined,
+): void {
+    configured = mode;
+}
 
 export function getActiveModelProvider(): ProviderMode | undefined {
     if (active !== undefined) {
         return active;
     }
-    const configured =
+    if (configured !== undefined) return configured;
+
+    const environmentProvider =
         process.env.TYPEAGENT_MODEL_PROVIDER?.trim().toLowerCase();
-    return configured !== undefined &&
-        (PROVIDER_MODES as readonly string[]).includes(configured)
-        ? (configured as ProviderMode)
+    return environmentProvider !== undefined &&
+        (PROVIDER_MODES as readonly string[]).includes(environmentProvider)
+        ? (environmentProvider as ProviderMode)
         : undefined;
 }
 
+/** Explicit in-memory override only; does not consult ambient process config. */
+export function getModelProviderOverride(): ProviderMode | undefined {
+    return active;
+}
+
 export function setActiveModelProvider(mode: ProviderMode | undefined): void {
+    if (active !== mode) overrideGeneration++;
     active = mode;
 }
 

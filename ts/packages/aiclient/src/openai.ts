@@ -487,6 +487,9 @@ export function createChatModel(
             : getChatModelPool(endpoint);
     const settings = pool.members[0].settings;
 
+    if (settings.modelType === ModelType.Decision)
+        throw new Error("Native decisions cannot be used as chat models");
+
     if (
         settings.requestConstraints?.outputTokens !== undefined &&
         completionSettings?.max_completion_tokens === undefined &&

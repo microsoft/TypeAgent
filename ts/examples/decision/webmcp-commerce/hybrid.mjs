@@ -5,15 +5,19 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { stopCopilotClient } from "@typeagent/aiclient";
 import { loadRuntimeConfigSync } from "@typeagent/config";
-import { createCopilotDecisionClient } from "../decision.mjs";
+import {
+    createVariantDecisionClient,
+    decisionProviderOptions,
+    requestedDecisionModel,
+} from "../decision.mjs";
 import { cases } from "./fixtures.mjs";
-import { DECISION_MODEL } from "./main.mjs";
 import { runGenOnly, runHybridCase } from "./runner.mjs";
 
 export async function run(argv = process.argv.slice(2), options = {}) {
     const { values } = parseArgs({
         args: argv,
         options: {
+            ...decisionProviderOptions,
             live: { type: "boolean", default: false },
             limit: { type: "string" },
             "cli-path": { type: "string" },
@@ -26,7 +30,7 @@ export async function run(argv = process.argv.slice(2), options = {}) {
     const write = options.write ?? ((line) => process.stdout.write(line));
     if (values.help) {
         write(
-            "Usage: node ts/examples/decision/webmcp-commerce/hybrid.mjs [--live] [--limit 1] [--cli-path <path>] [--chat-model <model>]\n",
+            "Usage: node ts/examples/decision/webmcp-commerce/hybrid.mjs [--live] [--provider copilot|azure] [--model <model/deployment>] [--region <Azure region>] [--limit 1] [--cli-path <path>] [--chat-model <model>]\n",
         );
         return finish({ modelCalls: 0, exitCode: 0, results: [] });
     }
@@ -77,14 +81,7 @@ export async function run(argv = process.argv.slice(2), options = {}) {
         let decisionClient = options.decisionClient;
         if (!decisionClient) {
             started = true;
-            decisionClient = createCopilotDecisionClient(
-                loadConfig(options),
-                {
-                    model: DECISION_MODEL,
-                    cliPath: values["cli-path"],
-                },
-                options.endpointProvider,
-            );
+            decisionClient = createLiveDecisionClient(values, options);
         }
         const observed = [];
         const planner = [];
@@ -122,10 +119,22 @@ export async function run(argv = process.argv.slice(2), options = {}) {
         write(`${JSON.stringify(results.at(-1))}\n`);
     }
     if (started) stopCopilotClient();
-    return summarizeResults(results, values.live);
+    return summarizeResults(results, values.live, values);
 }
 
-function summarizeResults(results, live) {
+function createLiveDecisionClient(values, options) {
+    return createVariantDecisionClient(
+        loadConfig(options),
+        {
+            ...values,
+            "cli-path":
+                values.provider === "azure" ? undefined : values["cli-path"],
+        },
+        options.endpointProvider,
+    );
+}
+
+function summarizeResults(results, live, values) {
     const modelCalls = results.reduce(
         (total, result) =>
             total + (result.plannerCalls ?? 0) + (result.decisionCalls ?? 0),
@@ -140,6 +149,9 @@ function summarizeResults(results, live) {
               : 0,
         results,
         mode: live ? "live" : "offline",
+        decisionSource: live
+            ? `${values.provider}:${requestedDecisionModel(values)}`
+            : "not-run",
     });
 }
 

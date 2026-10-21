@@ -6,6 +6,111 @@ This is an isolated experiment, not a change to dispatcher behavior.
 
 ## Latest Results
 
+The **2026-10-14 provider comparison** completed 46 live jobs: the same 15
+applicable scenarios against Copilot Luna, Azure Decision-1 East US and Azure
+Decision-1 Sweden Central, plus one `gpt-5-mini` generative-only control.
+The 458 planned case records are not 458 inference calls. Both configured native
+Azure URLs are correct without a deployment path segment; the deployment belongs
+in the request's `model` field. Local config was not changed.
+
+The [full comparison report](../../../../codeDocs/TypeAgent/forAgent/investigations/completed/2026/2026-10-14_decision-model-provider-comparison.md)
+contains all scenario outcomes, exact failure IDs, timing caveats, source-grounded
+integration recommendations and reproduction details. Raw source-hashed evidence
+and generated metrics remain locally under `results/2026-10-14-provider-comparison-124108/`.
+
+| Experiment                         | Copilot Luna              | Decision-1 East US           | Decision-1 Sweden Central         |
+| ---------------------------------- | ------------------------- | ---------------------------- | --------------------------------- |
+| MCP flat, validated label matches  | 31/32; one failure        | 31/32                        | 31/32                             |
+| Dispatcher flat                    | 24/26                     | 24/26                        | 24/26                             |
+| Retrieval informative mean NDCG    | 0.9982                    | 0.9964                       | 0.9964                            |
+| Verification choice                | 22/24                     | 22/24                        | 22/24                             |
+| Workflow including the no-fit gate | 15/24; one refusal        | 12/24                        | 11/24                             |
+| Shopping / hybrid shopping         | Both 2/2 verified         | Same                         | Same                              |
+| Realistic Crossword 2              | All four scenarios passed | Same                         | Same                              |
+| Legacy crossword                   | 2/2 verified              | 2/2 verified                 | Read passed; fill safely declined |
+| Read-only commerce                 | No-fit                    | Search executed; no mutation | Search executed; no mutation      |
+| Hybrid commerce                    | Fit-gate abstention       | Same                         | Same                              |
+
+Failures that return no-fit are not counted as correct labeled abstentions.
+Three jobs exited nonzero, but even zero exits can contain semantic misses or
+safe abstentions. No prompts or thresholds were retuned. All realistic crossing
+conflicts were rejected by the host, and all browser executor-model counts were
+zero. Shopping hybrids made no chat calls, so live fallback was not exercised.
+No new videos were recorded and old recordings are not Decision-1 evidence.
+
+Next investigate **read-only shadow selection in live TypeAgent**, preserving
+clarification, eligibility, typed translation, approvals and host execution.
+Reranking warrants a separate actual-baseline comparison. Missing-evidence false
+confirmations and weak workflow results block automatic adoption. These are
+single-pass development observations, not calibration or speedup benchmarks.
+
+Run the small [comparison collector](compare-providers.mjs) from the repo root:
+
+```powershell
+if (Test-Path $PROFILE) { . $PROFILE }
+node ts/examples/decision/compare-providers.mjs --live --dry-run
+$output = Join-Path 'ts/examples/decision/results' ('provider-comparison-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+node ts/examples/decision/compare-providers.mjs --live --output-dir $output --chat-model gpt-5-mini
+```
+
+Use an authenticated installed Copilot CLI and the configured Azure identity.
+Add `--cli-path` only when necessary. The directory must be fresh. The collector
+continues after failed jobs and preserves their evidence without rerunning them;
+inspect case outcomes rather than treating its completion as an all-pass signal.
+Each individual decision/hybrid runner accepts `--provider azure --model <actual-deployment-name>
+--region <configured-region>`; commerce retains its existing single-live-case cap.
+
+Final verification passed **110 offline tests**, the affected build, pinned
+formatting, and report YAML/local-link checks. Scoped scans covered all 59
+source/test files, including the untracked collector: only five existing
+`main.mjs` no-console findings and four existing over-budget functions remain.
+Circular/debt checks passed, but Git-based changed-source gates do not adequately
+cover these MJS edits; they are not a substitute for the offline suite and
+explicit scoped scans. No files were staged or committed.
+
+### Crossword Integration Plan
+
+The [detailed browser Decision-mode design](../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-14_crossword-decision-mode/README.md)
+proposes native Azure/Copilot support in AI Client, a Generative/Decision extension
+option, and host-owned clue selectors chosen through bounded candidate IDs.
+It recommends on-demand matching with validated cached bindings first, then
+focused comparisons of batched clue filtering and number/direction indexing.
+The first implementation is now available in the working tree: AI Client exposes
+native `createDecisionModel`, the extension has an opt-in Crossword Mode setting,
+and the isolated collector resolves issued candidate IDs on demand. Generative
+remains the default. Standard rectangular Exolve entry has DOM-based focus,
+crossing and rendered-cell readback checks; unsupported layouts fail explicitly.
+The existing Generative entry loop remains a separately labeled legacy baseline.
+
+The example clients now delegate transport and answer validation to the public
+AI Client API. Their two-argument `decide(state, questions)` wrapper and existing
+provider/region CLI flags remain available; production does not import examples.
+Original provider-comparison evidence is unchanged.
+
+Run a small native-contract smoke using only existing credentials:
+
+```powershell
+if (Test-Path $PROFILE) { . $PROFILE }
+Set-Location '<repos-root>\TypeAgent\ts'
+node .\examples\decision\smoke.mjs --live
+```
+
+It sends three questions about synthetic text to Copilot and the configured
+Azure East US/Sweden Central decision pools. It acquires no new credentials and
+prints model identity, outcome and whole-call timing, not endpoint headers.
+This is API availability evidence, not an extension end-to-end or latency benchmark.
+Joined local Chromium/native-provider scenarios found unstable crossword fit
+acceptance: East US passed once, then all three lanes rejected valid fixture
+requests below the unchanged 0.8 pilot gate. The implementation fails safely,
+but reliable live crossword acceptance remains a rollout blocker. See the
+design's validation log before treating Decision mode as production-ready.
+
+For offline regressions on Node 24, use `--test-isolation=none
+--test-concurrency=1` when combining the example tests: the existing MCP test's
+stdout interception otherwise conflicts with the test runner's child-process IPC.
+
+### Historical Collection
+
 The local 2026-10-13 live collection (`results/2026-10-13/`) ran all 12
 supported lanes: 147 planned cases, 298 decision-call attempts and 3 chat-call
 attempts. Raw outputs, a source-hashed manifest, per-variant metrics and mismatch
@@ -95,8 +200,10 @@ pnpm --filter decision-model-example start --cli-path $copilotPath
 ```
 
 For `--provider azure`, `--config-key` defaults to `decision_1`, the key in
-`config.local.yaml`. `--model` is the **actual Azure deployment name**, defaulting
-to `microsoft-decision-1`; change it if you named your deployment differently.
+`config.local.yaml`. `--model` is the **actual Azure deployment name**, or may be
+supplied through `AZURE_DECISION_DEPLOYMENT`; no underlying model ID is guessed.
+Both East US and Sweden Central now use `decision-1`. Sweden was renamed after
+the comparison collection; its historical evidence retains the original casing.
 The systemone URL does not include the deployment name, so it cannot be inferred
 from the configured endpoint. `--region` applies only to Azure and pins a
 configured region; otherwise AI Client uses the regional pool and rotates on
@@ -284,8 +391,9 @@ No production integration is proposed until this evaluation is complete.
 
 Three parallel implementation workstreams produced seven independently runnable
 pilots. Each defaults to offline execution, owns its fixtures and output, and
-reuses the existing decision client. There is no central runner or production
-integration. Offline heuristics and injected test clients are explicitly labeled;
+reuses the existing decision client. They remain independently runnable; the new
+bounded comparison collector only invokes them. There is no production integration.
+Offline heuristics and injected test clients are explicitly labeled;
 they are not decision-model benchmark results.
 
 | Priority | Pilot                                                   | Initial live outcome                                                                                                       |

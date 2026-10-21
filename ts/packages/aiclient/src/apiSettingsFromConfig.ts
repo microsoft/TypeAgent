@@ -108,17 +108,20 @@ export function getDeployment(
  *
  * Mirrors `azureApiSettingsFromEnv` exactly; identity auth gets the
  * shared Azure token provider attached.
+ * Pool discovery supplies its exact endpoint to distinguish PTU/PAYG members
+ * in the same region instead of reselecting the first regional match.
  */
 export function azureApiSettingsFromConfig(
     config: Config,
     modelType: ModelType,
     deploymentName?: string,
     region?: Region,
+    endpointOverride?: DeploymentEndpoint,
 ): AzureApiSettings {
     const ao = config.azureOpenAI;
 
-    let endpoint: DeploymentEndpoint | undefined;
-    if (deploymentName !== undefined) {
+    let endpoint: DeploymentEndpoint | undefined = endpointOverride;
+    if (endpoint === undefined && deploymentName !== undefined) {
         endpoint = getDeploymentEndpoint(config, deploymentName, region);
     }
 
@@ -140,6 +143,8 @@ export function azureApiSettingsFromConfig(
                 break;
             case ModelType.Video:
                 endpoint = ao.defaultVideo;
+                break;
+            case ModelType.Decision:
                 break;
         }
     }
@@ -191,6 +196,8 @@ export function openAIApiSettingsFromConfig(
     config: Config,
     modelType: ModelType,
 ): OpenAIApiSettings {
+    if (modelType === ModelType.Decision)
+        throw new Error("OpenAI does not support native decisions");
     const oai = config.openAI;
     if (!oai) {
         throw new Error("No OpenAI configuration available");

@@ -2,6 +2,11 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { catalog, cases } from "./fixtures.mjs";
 import { lexicalBaseline, route } from "./router.mjs";
+import {
+    createVariantDecisionClient,
+    decisionProviderOptions,
+    requestedDecisionModel,
+} from "../decision.mjs";
 
 export const variants = ["decisionChoice", "retrievalDecision", "hierarchical"];
 
@@ -9,6 +14,7 @@ export async function run(argv = process.argv.slice(2), options = {}) {
     const { values } = parseArgs({
         args: argv,
         options: {
+            ...decisionProviderOptions,
             live: { type: "boolean", default: false },
             "dry-run": { type: "boolean", default: false },
             limit: { type: "string" },
@@ -19,7 +25,7 @@ export async function run(argv = process.argv.slice(2), options = {}) {
     const log = options.log ?? ((line) => process.stdout.write(`${line}\n`));
     if (values.help) {
         log(
-            "Usage: node ts/examples/decision/dispatcher/main.mjs [--dry-run | --live] [--limit 1..26] [--cli-path <executable>]",
+            "Usage: node ts/examples/decision/dispatcher/main.mjs [--dry-run | --live] [--provider copilot|azure] [--model <model/deployment>] [--region <Azure region>] [--limit 1..26] [--cli-path <executable>]",
         );
         return 0;
     }
@@ -41,19 +47,13 @@ export async function run(argv = process.argv.slice(2), options = {}) {
         if (options.client) client = options.client;
         else {
             const { loadRuntimeConfigSync } = await import("@typeagent/config");
-            const { createCopilotDecisionClient } = await import(
-                "../decision.mjs"
-            );
             const { config } = loadRuntimeConfigSync({
                 workspaceRoot: fileURLToPath(
                     new URL("../../../", import.meta.url),
                 ),
                 populateProcessEnv: false,
             });
-            client = createCopilotDecisionClient(config, {
-                model: "gpt-6-luna-decisions",
-                cliPath: values["cli-path"],
-            });
+            client = createVariantDecisionClient(config, values);
         }
     }
     let failures = 0;
@@ -93,7 +93,7 @@ export async function run(argv = process.argv.slice(2), options = {}) {
             decisionSource: client
                 ? options.client
                     ? "mock"
-                    : "copilot:gpt-6-luna-decisions"
+                    : `${values.provider}:${requestedDecisionModel(values)}`
                 : "not-run",
         }),
     );

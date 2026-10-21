@@ -103,6 +103,10 @@ export async function runCrossword(values = options()) {
                 ? "live-decisions-local-fixture"
                 : "offline-fixture-selector",
             automation: "playwright",
+            decisionProvider: values.live
+                ? (values.provider ?? "copilot")
+                : undefined,
+            requestedDecisionModel: values.model,
             explicitActModelCalls: 0,
             cases,
             selectorCalls: decisionCalls,

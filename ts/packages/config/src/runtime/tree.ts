@@ -510,6 +510,7 @@ export function configToTree(config: Config): ConfigTree {
         if (Object.keys(c).length > 0) tree.copilot = c;
     }
 
+    if (config.decision) tree.decision = decisionToTree(config.decision);
     if (config.embedding) {
         const e: ConfigTree = {};
         if (config.embedding.provider !== undefined)
@@ -524,6 +525,22 @@ export function configToTree(config: Config): ConfigTree {
         if (Object.keys(e).length > 0) tree.embedding = e;
     }
 
+    return tree;
+}
+
+function decisionToTree(decision: NonNullable<Config["decision"]>): ConfigTree {
+    const tree: ConfigTree = {};
+    if (decision.provider !== undefined) tree.provider = decision.provider;
+    if (decision.azure) {
+        const azure: ConfigTree = {};
+        if (decision.azure.deploymentKey !== undefined)
+            azure.deploymentKey = decision.azure.deploymentKey;
+        if (decision.azure.deploymentName !== undefined)
+            azure.deploymentName = decision.azure.deploymentName;
+        tree.azure = azure;
+    }
+    if (decision.copilot?.model !== undefined)
+        tree.copilot = { model: decision.copilot.model };
     return tree;
 }
 
@@ -548,6 +565,7 @@ const TYPED_SECTION_KEYS = new Set([
     "copilot",
     "modelProvider",
     "embedding",
+    "decision",
     "modelRequestConstraints",
 ]);
 
@@ -1036,6 +1054,38 @@ function emitModelProvider(node: unknown, out: FlatEnv): void {
     out.TYPEAGENT_MODEL_PROVIDER = node;
 }
 
+function emitDecision(node: unknown, out: FlatEnv): void {
+    const d = asObject(node, "decision");
+    if (d.provider !== undefined)
+        out.TYPEAGENT_DECISION_PROVIDER = asString(
+            d.provider,
+            "decision.provider",
+        );
+    if (d.azure !== undefined) {
+        const a = asObject(d.azure, "decision.azure");
+        if (a.deploymentKey !== undefined)
+            out.TYPEAGENT_DECISION_AZURE_DEPLOYMENT_KEY = asString(
+                a.deploymentKey,
+                "decision.azure.deploymentKey",
+            );
+        if (a.deploymentName !== undefined)
+            out.TYPEAGENT_DECISION_AZURE_DEPLOYMENT_NAME = asString(
+                a.deploymentName,
+                "decision.azure.deploymentName",
+            );
+    }
+    if (d.copilot !== undefined) {
+        const c = asObject(d.copilot, "decision.copilot");
+        if (c.model !== undefined)
+            out.TYPEAGENT_DECISION_COPILOT_MODEL = asString(
+                c.model,
+                "decision.copilot.model",
+            );
+    }
+    // Flat env and YAML must reject the same invalid provider/model values.
+    buildConfig(out);
+}
+
 function emitEmbedding(node: unknown, out: FlatEnv): void {
     const e = asObject(node, "embedding");
     if (e.provider !== undefined)
@@ -1126,6 +1176,9 @@ export function typedSectionToFlat(
 ): FlatEnv {
     const out: FlatEnv = {};
     switch (key) {
+        case "decision":
+            emitDecision(node, out);
+            break;
         case "modelRequestConstraints":
             return modelRequestConstraintsToFlat(node);
         case "azureOpenAI":

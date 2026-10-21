@@ -199,9 +199,6 @@ test("mocked live choice records probabilities and rejects unknown actions", asy
     assert.equal(failed, 1);
     const failure = JSON.parse(lines.at(-1));
     assert.equal(failure.variants.choice.actual, null);
-    assert.match(
-        failure.variants.choice.failure,
-        /Unsupported choice|Invalid answer type|probability/,
-    );
+    assert.match(failure.variants.choice.failure, /invalid_response/);
     assert.equal(failure.variants.rules.executed, false);
 });

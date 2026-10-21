@@ -30,6 +30,7 @@ import type {
     MemoryEvent,
     MemoryEventListRequest,
 } from "@typeagent/memory-service";
+import type { CrosswordDecisionCapabilities } from "./crosswordDecisionTypes.js";
 
 // =============================================
 // Agent-side operations (forwarded via WebSocket)
@@ -649,6 +650,7 @@ export type ExtensionLocalInvokeFunctions = {
     getViewHostUrl(): Promise<{ url?: string }>;
 
     // Settings
+    getCrosswordDecisionCapabilities(): Promise<CrosswordDecisionCapabilities>;
     settingsUpdated(params: { settings: any }): Promise<{ success: boolean }>;
     autoIndexSettingChanged(params: {
         enabled: boolean;

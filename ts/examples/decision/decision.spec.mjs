@@ -1,12 +1,18 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildConfig } from "@typeagent/config";
+import { collect, comparisonJobs } from "./compare-providers.mjs";
 import {
     buildCopilotDecisionRequest,
     createCopilotDecisionClient,
     createDecisionClient,
+    createVariantDecisionClient,
     median,
     normalizeCopilotAnswers,
+    requestedDecisionModel,
     validateAnswers,
 } from "./decision.mjs";
 
@@ -150,7 +156,7 @@ test("rejects refusals, duplicate names, and invalid native distributions", () =
     const questions = { flag: { type: "noul" } };
     assert.throws(
         () => normalizeCopilotAnswers({}, questions),
-        /answers array/,
+        /invalid_response/,
     );
     assert.throws(
         () =>
@@ -158,7 +164,7 @@ test("rejects refusals, duplicate names, and invalid native distributions", () =
                 { answers: [{ name: "flag", type: "refusal" }] },
                 questions,
             ),
-        /refused question/,
+        /refused/,
     );
     assert.throws(
         () =>
@@ -170,7 +176,7 @@ test("rejects refusals, duplicate names, and invalid native distributions", () =
                 },
                 questions,
             ),
-        /answer names/,
+        /invalid_response/,
     );
     assert.throws(
         () =>
@@ -183,7 +189,7 @@ test("rejects refusals, duplicate names, and invalid native distributions", () =
                 },
                 questions,
             ),
-        /answer names/,
+        /invalid_response/,
     );
     assert.throws(
         () =>
@@ -195,7 +201,7 @@ test("rejects refusals, duplicate names, and invalid native distributions", () =
                 },
                 questions,
             ),
-        /numerical answer/,
+        /invalid_response/,
     );
     assert.throws(
         () =>
@@ -220,7 +226,19 @@ test("rejects refusals, duplicate names, and invalid native distributions", () =
                     },
                 },
             ),
-        /probability distribution/,
+        /invalid_response/,
+    );
+});
+
+test("requested model metadata preserves deployment names and Copilot defaults", () => {
+    assert.equal(requestedDecisionModel(), "gpt-6-luna-decisions");
+    assert.equal(
+        requestedDecisionModel({ provider: "azure", model: "Decision-1" }),
+        "Decision-1",
+    );
+    assert.equal(
+        requestedDecisionModel({ model: "explicit-copilot-model" }),
+        "explicit-copilot-model",
     );
 });
 
@@ -252,10 +270,10 @@ test("accepts all three decision primitives", () => {
 });
 
 test("rejects missing, mismatched, unknown and out-of-range answers", () => {
-    assert.throws(() => validateAnswers({}, {}), /no answers/);
+    assert.throws(() => validateAnswers({}, {}), /invalid_response/);
     assert.throws(
         () => validateAnswers({ answers: {} }, { flag: { type: "noul" } }),
-        /answer type/,
+        /invalid_response/,
     );
     assert.throws(
         () =>
@@ -263,7 +281,7 @@ test("rejects missing, mismatched, unknown and out-of-range answers", () => {
                 { answers: { flag: { type: "choice", choice: "other" } } },
                 { flag: { type: "choice", criteria: { known: "Known" } } },
             ),
-        /Unsupported choice/,
+        /invalid_response/,
     );
     for (const value of [-1, 2, NaN, "0.5"]) {
         assert.throws(
@@ -272,7 +290,7 @@ test("rejects missing, mismatched, unknown and out-of-range answers", () => {
                     { answers: { flag: { type: "noul", noul: value } } },
                     { flag: { type: "noul" } },
                 ),
-            /numerical answer/,
+            /invalid_response/,
         );
     }
 });
@@ -294,6 +312,73 @@ test("computes the median without mutating input", () => {
     assert.equal(median(values), 25);
     assert.equal(median([30, 10, 20]), 20);
     assert.deepEqual(values, [30, 10, 20, 40]);
+});
+
+test("provider variants reject incompatible flags and never substitute chat", () => {
+    assert.throws(
+        () => createVariantDecisionClient({}, { provider: "chat" }),
+        /copilot or azure/,
+    );
+    assert.throws(
+        () => createVariantDecisionClient({}, { region: "eastus" }),
+        /only to Azure/,
+    );
+    assert.throws(
+        () =>
+            createVariantDecisionClient(
+                {},
+                { provider: "azure", "cli-path": "copilot" },
+            ),
+        /only to Copilot/,
+    );
+    assert.throws(
+        () => createVariantDecisionClient({}, { provider: "azure", model: "" }),
+        /deployment name/,
+    );
+    assert.throws(
+        () =>
+            createVariantDecisionClient(
+                { azureOpenAI: { deployments: new Map() } },
+                { provider: "azure", model: "decision-1" },
+            ),
+        /No deployment configured/,
+    );
+});
+
+test("provider comparison covers frozen scenarios and keeps chat-only control separate", async () => {
+    const jobs = comparisonJobs({ live: true, "cli-path": "copilot.exe" });
+    assert.equal(jobs.length, 46);
+    for (const id of ["copilot", "azure-eastus", "azure-swedencentral"]) {
+        const group = jobs.filter((job) => job.id.startsWith(id + "-"));
+        assert.equal(group.length, 15);
+        assert.equal(
+            group.filter((job) => job.scenario.startsWith("crossword-2-"))
+                .length,
+            4,
+        );
+        for (const job of group) {
+            if (job.provider === "azure") {
+                assert.equal(job.model, "decision-1");
+                assert.equal(
+                    job.args[job.args.indexOf("--model") + 1],
+                    "decision-1",
+                );
+            }
+            assert.equal(job.args.includes("--record-dir"), false);
+            assert.equal(
+                job.args.includes("--cli-path"),
+                job.provider === "copilot" || job.scenario.endsWith("hybrid"),
+            );
+        }
+    }
+    assert.equal(
+        jobs.filter((job) => job.scenario === "shopping-generative").length,
+        1,
+    );
+    const preview = await collect({ live: true, "dry-run": true });
+    assert.equal(preview.jobs.length, 46);
+    assert.ok(preview.plannedCases > 400);
+    await assert.rejects(collect({}), /fresh directory/);
 });
 
 test("rejects incomplete and invalid probability distributions", () => {
@@ -323,7 +408,7 @@ test("rejects incomplete and invalid probability distributions", () => {
                     },
                     questions,
                 ),
-            /probability distribution/,
+            /invalid_response/,
         );
     }
     assert.throws(
@@ -332,7 +417,7 @@ test("rejects incomplete and invalid probability distributions", () => {
                 { answers: { severity: { type: "score", score: 3 } } },
                 { severity: { type: "score", criteria: ["Minor", "Major"] } },
             ),
-        /numerical answer/,
+        /invalid_response/,
     );
 });
 
@@ -440,6 +525,15 @@ test("Azure Decision-1 preserves native question maps, structured state, and all
         "deployed-decision-instance",
         "eastus",
     );
-    assert.deepEqual(await client.decide(state, questions), response);
+    const result = await client.decide(state, questions);
+    assert.deepEqual(result.answers, response.answers);
+    assert.equal(result.provider, "azure");
+    assert.equal(result.requestedModel, "deployed-decision-instance");
+    assert.equal(result.reportedModel, response.model);
+    assert.deepEqual(result.usage, {
+        prompt_tokens: 100,
+        completion_tokens: 10,
+        total_tokens: 110,
+    });
     assert.equal(requests, 1);
 });

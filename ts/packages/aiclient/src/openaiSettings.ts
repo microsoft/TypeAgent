@@ -29,6 +29,8 @@ export function openAIApiSettingsFromEnv(
     endpointName?: string,
     requireEndpoint: boolean = false,
 ): OpenAIApiSettings {
+    if (modelType === ModelType.Decision)
+        throw new Error("OpenAI does not support native decisions");
     env ??= process.env;
     return {
         provider: "openai",

@@ -44,6 +44,7 @@ export interface PageReadyOptions {
 export interface WebAgent {
     name: string;
     urlPatterns: RegExp[];
+    matchesDocument?(): boolean;
 
     initialize(context: WebAgentContext): Promise<void>;
 

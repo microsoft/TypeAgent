@@ -15,6 +15,7 @@ import {
     registrationStorage,
 } from "../../contentScript/webAgentStorage";
 import { extractCrosswordSchema } from "../webAgentRpc";
+import { crosswordBridge, getCrosswordMode } from "./decisionBridge";
 
 declare global {
     interface Window {
@@ -93,6 +94,7 @@ export class CrosswordWebAgent implements WebAgent {
     private observerState: CrosswordObserverState | null = null;
     private context: WebAgentContext | null = null;
     private registered = false;
+    private legacyLoading: Promise<void> | null = null;
 
     async initialize(context: WebAgentContext): Promise<void> {
         const initStart = performance.now();
@@ -118,6 +120,33 @@ export class CrosswordWebAgent implements WebAgent {
             `[CrosswordWebAgent] Early registration done in ${regElapsed}ms`,
         );
 
+        let mode: "generative" | "decision";
+        try {
+            mode = await getCrosswordMode();
+        } catch (error) {
+            await context.notify(
+                "Crossword mode is unavailable; no resolver fallback was attempted.",
+                notificationId,
+            );
+            throw error;
+        }
+        if (mode === "decision") {
+            await context.notify(
+                "Crossword Decision mode is ready on demand (uncalibrated local pilot). Unsupported layouts or unavailable decisions are reported without fallback.",
+                notificationId,
+            );
+            return;
+        }
+        await this.loadGenerative(url, notificationId, initStart);
+    }
+
+    private async loadGenerative(
+        url: string,
+        notificationId: string,
+        initStart: number,
+    ): Promise<void> {
+        const context = this.context;
+        if (!context) throw new Error("Crossword context not available");
         const cacheStart = performance.now();
         this.schema = crosswordSchemaStorage.get(url);
         const cacheElapsed = (performance.now() - cacheStart).toFixed(0);
@@ -163,7 +192,7 @@ export class CrosswordWebAgent implements WebAgent {
             );
 
             await context.notify(
-                `The crossword is fully loaded and ready for interaction with ${acrossCount} across and ${downCount} down clues. Try asking questions like "What is the clue for 1 across?" or "Enter 'Foo' in the answer for 2 down."`,
+                `The crossword is fully loaded and ready for interaction with ${acrossCount} across and ${downCount} down clues (Generative mode, legacy entry baseline without verified grid readback). Try asking questions like "What is the clue for 1 across?" or "Enter 'Foo' in the answer for 2 down."`,
                 notificationId,
             );
 
@@ -289,7 +318,7 @@ export class CrosswordWebAgent implements WebAgent {
                         }
                         case "getClueValue": {
                             const params = action.parameters;
-                            const clueText = webAgent.executeGetClueValue(
+                            const clueText = await webAgent.executeGetClueValue(
                                 params.clueNumber,
                                 params.clueDirection,
                             );
@@ -311,6 +340,9 @@ export class CrosswordWebAgent implements WebAgent {
                         `[CrosswordWebAgent] executeAction error:`,
                         error,
                     );
+                    await webAgent.context?.notify(
+                        `Crossword action failed: ${error instanceof Error ? error.message : "unknown error"}`,
+                    );
                     throw error;
                 }
             },
@@ -322,6 +354,16 @@ export class CrosswordWebAgent implements WebAgent {
         clueNumber: number,
         clueDirection: "across" | "down",
     ): Promise<void> {
+        if ((await getCrosswordMode()) === "decision") {
+            this.disconnectObserver();
+            await crosswordBridge("enterText", {
+                value,
+                clueNumber,
+                clueDirection,
+            });
+            return;
+        }
+        await this.ensureGenerative();
         if (!this.schema || !this.context) {
             throw new Error("Crossword schema not available");
         }
@@ -345,10 +387,20 @@ export class CrosswordWebAgent implements WebAgent {
         );
     }
 
-    private executeGetClueValue(
+    private async executeGetClueValue(
         clueNumber: number,
         clueDirection: "across" | "down",
-    ): string {
+    ): Promise<string> {
+        if ((await getCrosswordMode()) === "decision") {
+            this.disconnectObserver();
+            return (
+                await crosswordBridge<{ text: string }>("readClue", {
+                    clueNumber,
+                    clueDirection,
+                })
+            ).text;
+        }
+        await this.ensureGenerative();
         if (!this.schema) {
             throw new Error("Crossword schema not available");
         }
@@ -359,6 +411,18 @@ export class CrosswordWebAgent implements WebAgent {
         }
 
         return clue.text;
+    }
+
+    private async ensureGenerative(): Promise<void> {
+        if (this.schema || !this.context) return;
+        this.legacyLoading ??= this.loadGenerative(
+            this.context.getCurrentUrl(),
+            `crossword-${Date.now()}`,
+            performance.now(),
+        ).finally(() => {
+            this.legacyLoading = null;
+        });
+        await this.legacyLoading;
     }
 
     private setupMutationObserver(): void {
@@ -485,6 +549,10 @@ export class CrosswordWebAgent implements WebAgent {
 
     private async refreshSchemaOnly(): Promise<void> {
         if (!this.context) return;
+        if ((await getCrosswordMode()) === "decision") {
+            this.disconnectObserver();
+            return;
+        }
 
         const url = this.context.getCurrentUrl();
         crosswordSchemaStorage.remove(url);

@@ -176,6 +176,7 @@ export function buildConfig(flat: FlatEnv): Config {
     const copilot = buildCopilot(remaining);
     const modelProvider = buildModelProvider(remaining);
     const embedding = buildEmbedding(remaining);
+    const decision = buildDecision(remaining);
     const requestConstraints = popString(
         remaining,
         MODEL_REQUEST_CONSTRAINTS_KEY,
@@ -198,6 +199,7 @@ export function buildConfig(flat: FlatEnv): Config {
         ...(copilot ? { copilot } : {}),
         ...(modelProvider !== undefined ? { modelProvider } : {}),
         ...(embedding ? { embedding } : {}),
+        ...(decision ? { decision } : {}),
         ...(requestConstraints !== undefined
             ? {
                   modelRequestConstraints: parseModelRequestConstraints(
@@ -861,6 +863,52 @@ function buildAzureAISearch(flat: Map<string, string>) {
         if (value !== undefined) out[key] = value;
     }
     return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function buildDecision(flat: Map<string, string>): Config["decision"] {
+    const provider = popString(flat, "TYPEAGENT_DECISION_PROVIDER");
+    const deploymentKey = popString(
+        flat,
+        "TYPEAGENT_DECISION_AZURE_DEPLOYMENT_KEY",
+    );
+    const deploymentName = popString(
+        flat,
+        "TYPEAGENT_DECISION_AZURE_DEPLOYMENT_NAME",
+    );
+    const model = popString(flat, "TYPEAGENT_DECISION_COPILOT_MODEL");
+    if (
+        [provider, deploymentKey, deploymentName, model].every(
+            (v) => v === undefined,
+        )
+    )
+        return undefined;
+    if (
+        provider !== undefined &&
+        provider !== "inherit" &&
+        provider !== "azure" &&
+        provider !== "copilot"
+    )
+        throw new Error("decision.provider must be inherit, azure or copilot");
+    for (const value of [deploymentKey, deploymentName, model]) {
+        if (value !== undefined && !value.trim())
+            throw new Error(
+                "Decision model and deployment names must not be empty",
+            );
+    }
+    return {
+        ...(provider !== undefined ? { provider } : {}),
+        ...(deploymentKey !== undefined || deploymentName !== undefined
+            ? {
+                  azure: {
+                      ...(deploymentKey !== undefined ? { deploymentKey } : {}),
+                      ...(deploymentName !== undefined
+                          ? { deploymentName }
+                          : {}),
+                  },
+              }
+            : {}),
+        ...(model !== undefined ? { copilot: { model } } : {}),
+    };
 }
 
 function buildModelProvider(

@@ -14,3 +14,11 @@ azureOpenAI:
 reasoning:
   timeoutMs: 1200000
   copilotModel: gpt-6-sol
+
+decision:
+  provider: inherit
+  azure:
+    deploymentKey: decision_1
+    deploymentName: decision-1
+  copilot:
+    model: gpt-6-luna-decisions

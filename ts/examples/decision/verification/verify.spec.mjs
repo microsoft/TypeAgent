@@ -229,9 +229,6 @@ test("mocked live call records native probabilities and rejects unknown choices"
     assert.equal(failed, 1);
     const failure = JSON.parse(lines.at(-1));
     assert.equal(failure.variants.choice.actual, null);
-    assert.match(
-        failure.variants.choice.failure,
-        /Unsupported choice|Invalid answer type|probability/,
-    );
+    assert.match(failure.variants.choice.failure, /invalid_response/);
     assert.equal(failure.variants.deterministic.actual, "matched");
 });

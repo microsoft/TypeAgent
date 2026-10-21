@@ -7,6 +7,7 @@ import { openBrowser } from "../web-shopping/browser.mjs";
 import { decisionClient } from "../web-shopping/run.mjs";
 import { createCrosswordActions } from "./crossword.mjs";
 import { startCrosswordFixture, revision } from "./fixture.mjs";
+import { decisionProviderOptions } from "../decision.mjs";
 
 export const scenarios = {
     read: [
@@ -36,13 +37,13 @@ export function options(args = process.argv.slice(2)) {
     const { values } = parseArgs({
         args,
         options: {
+            ...decisionProviderOptions,
             scenario: { type: "string", default: "crossing" },
             live: { type: "boolean", default: false },
             "dry-run": { type: "boolean", default: false },
             "record-dir": { type: "string" },
             demo: { type: "boolean", default: false },
             "cli-path": { type: "string" },
-            model: { type: "string", default: "gpt-6-luna-decisions" },
         },
     });
     if (!Object.hasOwn(scenarios, values.scenario))
@@ -167,6 +168,10 @@ export async function runCrossword(values = options()) {
         const report = {
             lane: "crossword-2",
             scenario: values.scenario,
+            decisionProvider: values.live
+                ? (values.provider ?? "copilot")
+                : undefined,
+            requestedDecisionModel: values.model,
             status:
                 cases.length === steps.length &&
                 cases.every((item) => item.status !== "failed_closed")

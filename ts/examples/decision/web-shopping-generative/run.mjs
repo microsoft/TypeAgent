@@ -4,7 +4,11 @@ import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { stopCopilotClient } from "@typeagent/aiclient";
 import { createGenerativeClient, getConfig } from "../generative/client.mjs";
-import { createCopilotDecisionClient } from "../decision.mjs";
+import {
+    createVariantDecisionClient,
+    decisionProviderOptions,
+    requestedDecisionModel,
+} from "../decision.mjs";
 import {
     openBrowser,
     startFixture,
@@ -23,6 +27,7 @@ export function options(args = process.argv.slice(2)) {
     const { values } = parseArgs({
         args,
         options: {
+            ...decisionProviderOptions,
             live: { type: "boolean", default: false },
             "dry-run": { type: "boolean", default: false },
             limit: { type: "string", default: "2" },
@@ -30,7 +35,6 @@ export function options(args = process.argv.slice(2)) {
             "chat-model": { type: "string" },
             "decision-model": {
                 type: "string",
-                default: "gpt-6-luna-decisions",
             },
             "record-dir": { type: "string" },
             demo: { type: "boolean", default: false },
@@ -114,9 +118,13 @@ function createClients(values, hybrid) {
             cliPath: values["cli-path"],
         }),
         decision: hybrid
-            ? createCopilotDecisionClient(config, {
-                  model: values["decision-model"],
-                  cliPath: values["cli-path"],
+            ? createVariantDecisionClient(config, {
+                  ...values,
+                  model: values["decision-model"] ?? values.model,
+                  "cli-path":
+                      values.provider === "azure"
+                          ? undefined
+                          : values["cli-path"],
               })
             : undefined,
     };
@@ -134,10 +142,6 @@ export async function runDemo(
         lane: `shopping-${kind}`,
         ...reportMode(values, kind),
         benchmark: false,
-        requestedDecisionModel:
-            kind === "hybrid" && values.live
-                ? values["decision-model"]
-                : undefined,
         status: "passed",
         selectorCalls: 0,
         decisionModelCalls: 0,
@@ -274,6 +278,17 @@ export async function runDemo(
 
 function reportMode(values, kind) {
     return {
+        decisionProvider:
+            kind === "hybrid" && values.live
+                ? (values.provider ?? "copilot")
+                : undefined,
+        requestedDecisionModel:
+            kind === "hybrid" && values.live
+                ? requestedDecisionModel({
+                      ...values,
+                      model: values["decision-model"] ?? values.model,
+                  })
+                : undefined,
         mode: values.live
             ? "live-models-local-fixture"
             : values["dry-run"]

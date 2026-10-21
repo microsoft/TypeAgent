@@ -176,9 +176,6 @@ test("mocked live ranking records probabilities and explicit score failures", as
     assert.equal(failed, 1);
     const failure = JSON.parse(lines.at(-1));
     assert.equal(failure.variants.decision.actual, null);
-    assert.match(
-        failure.variants.decision.failure,
-        /numerical answer|probability|Score/,
-    );
+    assert.match(failure.variants.decision.failure, /invalid_response/);
     assert.ok(failure.variants.fixtureOrder.actual.order.length > 0);
 });

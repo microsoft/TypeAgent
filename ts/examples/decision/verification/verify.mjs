@@ -3,7 +3,10 @@ import { pathToFileURL } from "node:url";
 import { fileURLToPath } from "node:url";
 import { stopCopilotClient } from "@typeagent/aiclient";
 import { loadRuntimeConfigSync } from "@typeagent/config";
-import { createCopilotDecisionClient } from "../decision.mjs";
+import {
+    createVariantDecisionClient,
+    decisionProviderOptions,
+} from "../decision.mjs";
 import { cases as fixtureCases } from "./fixtures.mjs";
 
 export const VERDICTS = ["matched", "not-matched", "insufficient"];
@@ -228,6 +231,7 @@ export async function run(argv = process.argv.slice(2), options = {}) {
     const { values } = parseArgs({
         args: argv,
         options: {
+            ...decisionProviderOptions,
             live: { type: "boolean", default: false },
             limit: { type: "string" },
             "cli-path": { type: "string" },
@@ -237,7 +241,7 @@ export async function run(argv = process.argv.slice(2), options = {}) {
     });
     if (values.help) {
         process.stdout.write(
-            "Offline by default. --live --limit <n> --cli-path <Copilot executable> calls gpt-6-luna-decisions. Advisory JSONL only.\n",
+            "Offline by default. --live --provider copilot|azure --model <model/deployment> --region <Azure region> --limit <n>. Advisory JSONL only.\n",
         );
         return 0;
     }
@@ -259,9 +263,9 @@ export async function run(argv = process.argv.slice(2), options = {}) {
                 ),
                 populateProcessEnv: false,
             }).config;
-        client = createCopilotDecisionClient(
+        client = createVariantDecisionClient(
             config,
-            { model: DECISION_MODEL, cliPath: values["cli-path"] },
+            values,
             options.endpointProvider,
         );
     }

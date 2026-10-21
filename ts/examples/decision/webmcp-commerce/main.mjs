@@ -5,7 +5,10 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { stopCopilotClient } from "@typeagent/aiclient";
 import { loadRuntimeConfigSync } from "@typeagent/config";
-import { createCopilotDecisionClient } from "../decision.mjs";
+import {
+    createVariantDecisionClient,
+    decisionProviderOptions,
+} from "../decision.mjs";
 import { cases } from "./fixtures.mjs";
 import { runDecisionCase } from "./runner.mjs";
 import { deniedTools, eligibleTools } from "./schema.mjs";
@@ -16,6 +19,7 @@ export async function run(argv = process.argv.slice(2), options = {}) {
     const { values } = parseArgs({
         args: argv,
         options: {
+            ...decisionProviderOptions,
             live: { type: "boolean", default: false },
             limit: { type: "string" },
             "cli-path": { type: "string" },
@@ -26,7 +30,7 @@ export async function run(argv = process.argv.slice(2), options = {}) {
     const write = options.write ?? ((line) => process.stdout.write(line));
     if (values.help) {
         write(
-            "Usage: node ts/examples/decision/webmcp-commerce/main.mjs [--live] [--limit <n>] [--cli-path <path>]\n",
+            "Usage: node ts/examples/decision/webmcp-commerce/main.mjs [--live] [--provider copilot|azure] [--model <model/deployment>] [--region <Azure region>] [--limit <n>] [--cli-path <path>]\n",
         );
         return summary({ modelCalls: 0, exitCode: 0, results: [] });
     }
@@ -43,9 +47,9 @@ export async function run(argv = process.argv.slice(2), options = {}) {
         } else {
             const config = loadConfig(options);
             started = true;
-            client = createCopilotDecisionClient(
+            client = createVariantDecisionClient(
                 config,
-                { model: DECISION_MODEL, cliPath: values["cli-path"] },
+                values,
                 options.endpointProvider,
             );
         }
@@ -82,6 +86,9 @@ export async function run(argv = process.argv.slice(2), options = {}) {
             : 0,
         results,
         mode: values.live ? "live" : "offline",
+        decisionSource: values.live
+            ? `${values.provider}:${values.model ?? (values.provider === "azure" ? process.env.AZURE_DECISION_DEPLOYMENT : DECISION_MODEL)}`
+            : "not-run",
         eligible: eligibleTools().map((tool) => tool.name),
         deniedBeforeModel: deniedTools().map((tool) => tool.name),
     });

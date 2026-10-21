@@ -77,6 +77,10 @@ export function azureApiSettingsFromEnv(
     let settings: AzureApiSettings | undefined;
 
     switch (modelType) {
+        case ModelType.Decision:
+            throw new Error(
+                "Native decisions require typed deployment configuration",
+            );
         case ModelType.Chat:
             settings = azureChatApiSettingsFromEnv(env, endpointName);
             break;

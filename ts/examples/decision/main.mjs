@@ -2,11 +2,7 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { stopCopilotClient } from "@typeagent/aiclient";
 import { loadRuntimeConfigSync } from "@typeagent/config";
-import {
-    createCopilotDecisionClient,
-    createDecisionClient,
-    median,
-} from "./decision.mjs";
+import { createVariantDecisionClient, median } from "./decision.mjs";
 
 const team = {
     type: "choice",
@@ -98,12 +94,14 @@ async function main() {
             sample: { type: "string", default: "all" },
             repeat: { type: "string", default: "1" },
             "dry-run": { type: "boolean", default: false },
+            jsonl: { type: "boolean", default: false },
             help: { type: "boolean", default: false },
         },
     });
+    const indent = values.jsonl ? undefined : 2;
     if (values.help) {
         console.log(
-            "Options: --provider copilot|azure --model <model ID or Azure deployment name> --cli-path <Copilot executable> --config-key decision_1 --region <Azure region> --sample all|support|noul|score|combined|typeagent --repeat <count> --dry-run",
+            "Options: --provider copilot|azure --model <model ID or Azure deployment name> --cli-path <Copilot executable> --config-key decision_1 --region <Azure region> --sample all|support|noul|score|combined|typeagent --repeat <count> --dry-run --jsonl",
         );
         return;
     }
@@ -132,19 +130,8 @@ async function main() {
         values.model ??
         (values.provider === "copilot"
             ? "gpt-6-luna-decisions"
-            : "microsoft-decision-1");
-    const client =
-        values.provider === "copilot"
-            ? createCopilotDecisionClient(config, {
-                  model,
-                  cliPath: values["cli-path"],
-              })
-            : createDecisionClient(
-                  config,
-                  values["config-key"],
-                  model,
-                  values.region,
-              );
+            : process.env.AZURE_DECISION_DEPLOYMENT);
+    const client = createVariantDecisionClient(config, { ...values, model });
     console.log(
         JSON.stringify(
             {
@@ -157,11 +144,11 @@ async function main() {
                 endpoints: client.endpoints,
             },
             null,
-            2,
+            indent,
         ),
     );
     if (values["dry-run"]) {
-        console.log(JSON.stringify(selected, null, 2));
+        console.log(JSON.stringify(selected, null, indent));
         return;
     }
     const latencies = [];
@@ -192,7 +179,7 @@ async function main() {
                         response,
                     },
                     null,
-                    2,
+                    indent,
                 ),
             );
         }
@@ -205,7 +192,7 @@ async function main() {
                 supportAccuracy: labeled ? correct / labeled : undefined,
             },
             null,
-            2,
+            indent,
         ),
     );
 }

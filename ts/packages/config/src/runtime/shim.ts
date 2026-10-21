@@ -265,6 +265,19 @@ export function configToEnv(config: Config): EnvOutput {
             );
     }
 
+    if (config.decision) {
+        const d = config.decision;
+        if (d.provider !== undefined)
+            out.TYPEAGENT_DECISION_PROVIDER = d.provider;
+        if (d.azure?.deploymentKey !== undefined)
+            out.TYPEAGENT_DECISION_AZURE_DEPLOYMENT_KEY = d.azure.deploymentKey;
+        if (d.azure?.deploymentName !== undefined)
+            out.TYPEAGENT_DECISION_AZURE_DEPLOYMENT_NAME =
+                d.azure.deploymentName;
+        if (d.copilot?.model !== undefined)
+            out.TYPEAGENT_DECISION_COPILOT_MODEL = d.copilot.model;
+    }
+
     // Extra: untyped passthrough. Last so it can override typed values
     // for keys we haven't migrated yet (the user wrote them explicitly).
     for (const [k, v] of config.extra) {

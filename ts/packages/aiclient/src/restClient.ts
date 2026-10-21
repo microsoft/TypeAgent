@@ -289,6 +289,7 @@ async function callFetch(
     timeout?: number,
     throttler?: FetchThrottler,
     requestConstraints?: ModelRequestConstraints,
+    onAttempt?: () => void,
 ) {
     const safeOptions = redactRequestBody(options);
     const send = bindRequestBudgetScope(() => {
@@ -304,6 +305,7 @@ async function callFetch(
             );
         }
         reserveSerializedRequest(safeOptions);
+        onAttempt?.();
         return fetchWithTimeout(url, safeOptions, timeout);
     });
     return throttler ? throttler(send) : send();
@@ -395,6 +397,7 @@ export async function fetchWithRetry(
     timeout?: number,
     throttler?: FetchThrottler,
     requestConstraints?: ModelRequestConstraints,
+    onAttempt?: () => void,
 ) {
     retryMaxAttempts ??= 3;
     retryPauseMs ??= 1000;
@@ -416,6 +419,7 @@ export async function fetchWithRetry(
                 timeout,
                 throttler,
                 requestConstraints,
+                onAttempt,
             );
             if (result === undefined) {
                 throw noResponseError();
@@ -632,8 +636,19 @@ function isTransientHttpError(code: number): boolean {
     return false;
 }
 
-function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (signal?.aborted) return reject(toAbortError(signal.reason));
+        const onAbort = () => {
+            clearTimeout(timer);
+            reject(toAbortError(signal?.reason));
+        };
+        const timer = setTimeout(() => {
+            signal?.removeEventListener("abort", onAbort);
+            resolve();
+        }, ms);
+        signal?.addEventListener("abort", onAbort, { once: true });
+    });
 }
 
 function isAbortError(e: unknown): e is Error {
@@ -681,6 +696,7 @@ export type PoolCallOptions = {
     overallBudgetMs?: number | undefined;
     retryPauseMs?: number | undefined;
     signal?: AbortSignal | undefined;
+    onAttempt?: ((member: EndpointPoolMember) => void) | undefined;
 };
 
 // code-complexity-allow: endpoint-pool retry/cooldown flow needs explicit per-status handling.
@@ -719,9 +735,15 @@ async function fetchWithPool(
             init,
             settings.maxRetryAttempts,
             settings.retryPauseMs,
-            settings.timeout,
+            options?.overallBudgetMs !== undefined
+                ? Math.min(
+                      settings.timeout ?? options.overallBudgetMs,
+                      options.overallBudgetMs,
+                  )
+                : settings.timeout,
             settings.throttler,
             settings.requestConstraints,
+            () => options?.onAttempt?.(member),
         );
     }
 
@@ -762,7 +784,7 @@ async function fetchWithPool(
             debugPool(
                 `pool ${pool.modelKey} all cooling; sleeping ${wait}ms for ${pick.member.suffix || "<bare>"}`,
             );
-            await sleep(wait);
+            await sleep(wait, options?.signal);
             continue;
         }
 
@@ -808,6 +830,7 @@ async function fetchWithPool(
                 perAttemptTimeout,
                 member.settings.throttler,
                 member.settings.requestConstraints,
+                () => options?.onAttempt?.(member),
             );
         } catch (e: any) {
             // If the caller's abort signal fired, propagate immediately

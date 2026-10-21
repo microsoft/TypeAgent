@@ -19,7 +19,7 @@ export interface RequestBudgetLimits {
 
 export interface RequestBudgetReceipt {
     attempt: number;
-    kind: "chat" | "embedding";
+    kind: "chat" | "embedding" | "decision";
     inputTokens: number;
     outputTokens: number;
     safetyTokens: number;
@@ -64,21 +64,14 @@ export class RequestBudget {
             throw new RequestAdmissionError(
                 "Budgeted inference requires a serialized JSON object",
             );
-        const kind =
-            "messages" in body ||
-            "instructions" in body ||
-            "max_output_tokens" in body
-                ? "chat"
-                : "input" in body
-                  ? "embedding"
-                  : undefined;
+        const kind = requestKind(body);
         if (!kind)
             throw new RequestAdmissionError(
                 "Unsupported budgeted inference wire request",
             );
         const elapsedMs = performance.now() - this.started;
         const inputTokens = this.limits.countTokens(serialized);
-        const output = kind === "embedding" ? 0 : outputReservation(body);
+        const output = requestOutputReservation(body, kind);
         if (
             !Number.isSafeInteger(inputTokens) ||
             inputTokens < 0 ||
@@ -89,7 +82,7 @@ export class RequestBudget {
                       this.limits.inputTokens)
                     : this.limits.inputTokens) ||
             output > this.limits.outputTokens ||
-            (kind === "chat" &&
+            (kind !== "embedding" &&
                 this.limits.contextTokens !== undefined &&
                 inputTokens + output + this.limits.safetyTokens >
                     this.limits.contextTokens)
@@ -98,7 +91,7 @@ export class RequestBudget {
                 "Serialized inference request exceeds configured context, output or elapsed budget",
             );
         if (
-            (kind === "chat" && this.chats >= this.limits.chatAttempts) ||
+            (kind !== "embedding" && this.chats >= this.limits.chatAttempts) ||
             (kind === "embedding" &&
                 this.embeddings >= this.limits.embeddingAttempts) ||
             this.reserved + inputTokens + output > this.limits.reservedTokens
@@ -121,10 +114,80 @@ export class RequestBudget {
 
     public commit(receipt: RequestBudgetReceipt): void {
         this.reserved += receipt.inputTokens + receipt.outputTokens;
-        if (receipt.kind === "chat") this.chats++;
+        if (receipt.kind !== "embedding") this.chats++;
         else this.embeddings++;
         this.receipts.push(receipt);
     }
+}
+
+/** Conservative fixed-shape output reservation for native decision answers. */
+export function decisionOutputReservation(body: object): number {
+    const questions = "questions" in body ? body.questions : undefined;
+    if (!questions || typeof questions !== "object")
+        throw new RequestAdmissionError("Decision questions are required");
+    const entries = Array.isArray(questions)
+        ? questions.map((question) => [question.name, question])
+        : Object.entries(questions);
+    let bound = 64;
+    for (const [name, question] of entries) {
+        if (!question || typeof question !== "object")
+            throw new RequestAdmissionError("Invalid decision question");
+        const labels = decisionLabels(question);
+        bound += 128 + Buffer.byteLength(JSON.stringify(name), "utf8") * 2;
+        for (const label of labels)
+            bound += 64 + Buffer.byteLength(JSON.stringify(label), "utf8") * 2;
+    }
+    return bound;
+}
+
+function decisionLabels(question: Record<string, unknown>): string[] {
+    if (question.type === "score")
+        return decisionArray(question.criteria ?? question.levels ?? []).map(
+            (_: unknown, index: number) => String(index),
+        );
+    if (question.type === "choice")
+        return question.choices
+            ? decisionArray(question.choices).map((entry: unknown) => {
+                  if (
+                      !entry ||
+                      typeof entry !== "object" ||
+                      !("value" in entry) ||
+                      typeof entry.value !== "string"
+                  )
+                      throw new RequestAdmissionError(
+                          "Invalid decision choice",
+                      );
+                  return entry.value;
+              })
+            : Object.keys(question.criteria ?? {});
+    return [];
+}
+
+function decisionArray(value: unknown): unknown[] {
+    if (!Array.isArray(value))
+        throw new RequestAdmissionError("Invalid decision criteria");
+    return value;
+}
+
+function requestKind(body: object): RequestBudgetReceipt["kind"] | undefined {
+    if (
+        "messages" in body ||
+        "instructions" in body ||
+        "max_output_tokens" in body
+    )
+        return "chat";
+    if ("questions" in body) return "decision";
+    return "input" in body ? "embedding" : undefined;
+}
+
+function requestOutputReservation(
+    body: object,
+    kind: RequestBudgetReceipt["kind"],
+): number {
+    if (kind === "embedding") return 0;
+    return kind === "decision"
+        ? decisionOutputReservation(body)
+        : outputReservation(body);
 }
 
 export function outputReservation(body: object): number {

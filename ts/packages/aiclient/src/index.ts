@@ -3,6 +3,7 @@
 
 export * from "./common.js";
 export * from "./models.js";
+export * from "./decisionModels.js";
 export {
     instrumentChatModel,
     resetLlmClassificationDiagnostics,
@@ -66,6 +67,7 @@ export {
     getRuntimeConfig,
     setRuntimeConfig,
     initRuntimeConfigFromProcessEnv,
+    getRuntimeConfigGeneration,
 } from "./runtimeConfig.js";
 export {
     createLocalEmbeddingModel,

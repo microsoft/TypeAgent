@@ -1,6 +1,74 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import {
+    isCrosswordMode,
+    type CrosswordMode,
+} from "@typeagent/browser-control-rpc/crosswordDecisionTypes";
+
+export interface ExtensionSettings {
+    agentServerHost: string;
+    defaultExtractionMode: "content";
+    crosswordMode: CrosswordMode;
+    maxConcurrentExtractions: number;
+    qualityThreshold: number;
+    enableIntelligentAnalysis: boolean;
+    autoDiscovery: boolean;
+    autoDiscoveryMode: "scope" | "content";
+    excludeSensitiveSites: boolean;
+    autoOpenChatPanel: boolean;
+    caseInsensitiveWindowTitleMatching: boolean;
+}
+
+export const DEFAULT_EXTENSION_SETTINGS: ExtensionSettings = {
+    agentServerHost: "",
+    defaultExtractionMode: "content",
+    crosswordMode: "generative",
+    maxConcurrentExtractions: 3,
+    qualityThreshold: 0.3,
+    enableIntelligentAnalysis: true,
+    autoDiscovery: true,
+    autoDiscoveryMode: "content",
+    excludeSensitiveSites: true,
+    autoOpenChatPanel: true,
+    caseInsensitiveWindowTitleMatching: true,
+};
+
+export async function getCrosswordMode(): Promise<CrosswordMode> {
+    const { crosswordMode } = await chrome.storage.sync.get("crosswordMode");
+    if (isCrosswordMode(crosswordMode)) {
+        return crosswordMode;
+    }
+    if (crosswordMode !== undefined) {
+        console.warn("Invalid crossword mode; resetting to Generative.");
+        await chrome.storage.sync.set({ crosswordMode: "generative" });
+    }
+    return "generative";
+}
+
+export async function notifyCrosswordModeChanged(
+    mode: CrosswordMode,
+): Promise<void> {
+    const tabs = await chrome.tabs.query({
+        url: ["http://*/*", "https://*/*"],
+    });
+    await Promise.all(
+        tabs
+            .filter((tab) => tab.id !== undefined)
+            .map(async (tab) => {
+                try {
+                    // Omitting frameId delivers to every content-script frame.
+                    await chrome.tabs.sendMessage(tab.id!, {
+                        type: "crosswordModeChanged",
+                        mode,
+                    });
+                } catch {
+                    // Tabs without a content-script receiver need no update.
+                }
+            }),
+    );
+}
+
 /**
  * Saves recorded actions to storage
  * @param recordedActions The recorded actions
