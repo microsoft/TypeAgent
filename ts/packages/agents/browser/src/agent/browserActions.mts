@@ -31,8 +31,8 @@ import type { GraphCache } from "./knowledge/types/knowledgeTypes.mjs";
 export type BrowserAgentInitOptions = {
     browserControl?: BrowserControl;
     memoryServiceClient?: MemoryService;
-    // Where the Automations page finds flows and macros owned by other
-    // agents. Supplied by the agent server.
+    // Where the Automations page finds flows owned by other agents.
+    // Supplied by the agent server.
     automations?: AutomationCatalogSources;
 };
 

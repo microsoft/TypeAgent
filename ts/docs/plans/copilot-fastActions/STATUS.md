@@ -10,24 +10,78 @@ _Last updated: 2026-10-16._
 
 ## Plugin-first program path
 
-| Capability                     | Implementation/default                                                                       | Evidence and remaining boundary                                                                          |
-| ------------------------------ | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Checked program core           | Shared manager, authoring, compiler, publication, grammar matcher and QuickJS worker runtime | Offline suites exercise contracts and containment; not a second engine per owner                         |
-| TypeAgent-hosted A             | Implemented and default                                                                      | Read-only TypeAgent MCP broker; configured verifier/semantic provider                                    |
-| Native child authoring B       | Implemented for selected native learning                                                     | Root receipt, sealed context, durable leases and restricted children; native CLI synthetic proof         |
-| Plugin-owned C                 | Implemented, opt-in `recipeOwner: "plugin"`                                                  | Authenticated IPC, workspace/profile writer lock and copied standalone symbolic/hybrid proof             |
-| Optional TypeAgent action host | Composed into C's existing host                                                              | Real Dispatcher with synthetic read-only data and native MCP reuse; not production-service certification |
-| Copilot dev actions            | Windows PowerShell first-refusal routing                                                     | Dynamic scripts still need trusted interactive authorization; model-only MCP clients fail closed         |
-| Other flow providers / catalog | Existing provider stores and Automations aggregation                                         | No universal executor or plugin/server catalog synchronization                                           |
+The repository-wide cleanup makes plugin ownership the default and only enabled
+owner. Child-authored learning is required throughout the shared core; backend/
+offline authorship, server lifecycle RPCs/owner composition and rollback are
+removed. Automatic dev/PowerShell-first and MCP redirect hooks are removed;
+explicit TypeAgent commands and the optional structured-action bridge remain.
+Old owner settings and non-child jobs fail explicitly; re-record needed tasks.
+The backend WorkIQ original-retention experiment is retired rather than retained
+as a second implementation. No new retention parity or VS Code claim is made.
 
-Owner `typeagent` remains the compatibility default; `plugin` and `off` are
-explicit selections requiring native-session restart. Owner, routing mode and
-learning preference are independent. Both current program brokers reject writes.
-Only the TypeAgent-owned initial broker rejects all native-only tools: C supports
-native reads and exact classified read-only MCP identities under native permission,
-hooks and content exclusions.
+The A/B/C evidence below predates this cleanup. It proves the staged foundations,
+not a new-default live release. Cleanup build/test results and any remaining
+validation gates are tracked in the
+[cleanup plan](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/cleanup-implementation-plan.md).
 
-## Revised critical path and simplification
+Cleanup offline validation passed the full workspace build, 429 core tests,
+488 plugin tests plus final affected-suite regression checks, 263 evaluation
+tests, 257 focused backend/provider tests, 15 launcher/layout tests and the
+copied-package contained-execution proof. Formatting and all four repository
+ratchets passed. These are offline checks, not a new live model/native recording
+or certification of the new-default release.
+
+| Area                                                         | State                                         | Evidence / remaining gate                                                                                             |
+| ------------------------------------------------------------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Shared recipe contracts and fake host (P1)                   | offline baseline tested                       | `copilot-macros/recipeCore` and `/recipeTesting`; program-only execution                                              |
+| Lean grammar runtime (P1)                                    | tested                                        | `action-grammar/runtime` excludes generation/config/model initialization                                              |
+| Host capability spike (P0)                                   | native child and C adapters proved            | CLI 1.0.97 / SDK 1.0.13: restricted children, exact tool invocation and separate-CLI isolated inference; not VS Code  |
+| Isolated MCP bundle startup (P7 preparation)                 | tested                                        | Four copied-bundle selectors initialize/list tools without checkout, TypeAgent config or backend connection           |
+| Catalog, authoring, semantic and optional TypeAgent adapters | offline components tested                     | Durable cross-process catalog/context storage, local commands and strict adapters; not live saved-program execution   |
+| TypeAgent-hosted Checkpoint A                                | superseded; owner/learner removed             | Historical compiler/executor proof retained; shared implementation survives in plugin                                 |
+| Copilot child authorship (B)                                 | required shared contract                      | Root success receipt, sealed context, durable leases and independent verification; historical B native evidence below |
+| Standalone symbolic/hybrid release (P7/C)                    | plugin now default; cleanup live gate pending | Prior copied production plugin proof remains historical; no new-default live, VS Code or performance certification    |
+
+The optional TypeAgent program adapter is now composed into the plugin-owned
+executable host. Stable read-only action identities replace recorded protocol
+scopes; all dependencies are preflighted before the first program dispatch.
+Existing MCP tools run through native permissions without an extension-owned
+backend connection. Offline integration tests cover mixed execution, missing and
+changed dependencies, fresh scopes, structured statuses, actual-user fixture
+continuation/cancellation, and lost replies without retry.
+
+Native mixed recording, restricted authoring, approved publication and MCP reuse
+have passed against an isolated real Dispatcher with synthetic read-only data.
+The retained 256.3-second OBS recording has decoded readable request/result
+frames and a fully decoded silent audio track. The final repeat made exactly one
+root `run_macro` call and one fresh Vega backend action, with two read checkpoints,
+zero semantic calls and no fallback. See the
+[P6 validation report](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/typeagent-bridge-native-validation.md)
+for the exact proof and failure history.
+
+Live testing fixed Copilot's plugin-directory MCP working directory through
+private session/profile workspace registration, clarified strict child builder
+output fields, and removed a duplicate discovery that exceeded the inspection
+deadline. Final validation passed the full workspace build, 415 core tests,
+521 plugin tests and 15 layout/launcher tests, plus the four ratchets and actual
+working-tree lint/complexity checks. Live interaction UI, rich forms/proposals,
+writes and VS Code remain separate gates; no performance claim is made.
+
+Final validation of these foundations passed the full workspace build,
+379 macro tests, 409 plugin tests, 33 focused grammar tests, and 15
+extension-layout/launcher tests. Copied hook commands and MCP catalogs make
+no TypeAgent connection attempt. New recipe/probe functions meet the 25/30
+complexity budgets; working-tree checks found no new lint violations.
+
+Earlier foundation checks were supplemented with working-tree reports and
+tests when ratchets returned no-op results. The final C checks enumerate changed
+sources, including new files, and pass all four ratchets with no new violations
+or cycles. No performance gate is claimed complete.
+
+## Historical critical path and simplification
+
+The following records the A/B/C delivery sequence. Its backend ownership and
+compatibility arrangements are superseded by the repository-wide cleanup above.
 
 A/B/C describe delivered increments, not three executable macro formats:
 

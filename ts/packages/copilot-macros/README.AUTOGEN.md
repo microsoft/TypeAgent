@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4befd17de6f34536cf905ebb028b4e58ecfa8b2abd840b78ceed4e379616346e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d8c1cefd673a898cde1cfccd35875ff8191363bb2f286381ec95215f42d73197 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/copilot-macros — AI-generated documentation
@@ -48,10 +48,8 @@ External: `@tootallnate/quickjs-emscripten`, `typescript`, `zod`
 
 ### Used by
 
-- [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
 - [@typeagent/copilot-plugin](../../packages/copilot-plugin/README.md)
 - [@typeagent/procedure-artifacts](../../packages/procedureArtifacts/README.md)
-- [agent-server](../../packages/agentServer/server/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 
 ### Files of interest
@@ -66,10 +64,10 @@ External: `@tootallnate/quickjs-emscripten`, `typescript`, `zod`
 - [./src/macroExpressions.ts](./src/macroExpressions.ts)
 - [./src/macroFeatures.ts](./src/macroFeatures.ts)
 - [./src/macroLearning.ts](./src/macroLearning.ts)
-- _…and 29 more under `./src/`._
+- _…and 31 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `58e953183e0f84e370a28db042a185667f3054a1` on `2026-10-16T08:08:04.280Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-macros docs:verify-links` to spot-check._
+_Auto-generated against commit `6c5d8dc89190a3602376bdb4cc9d4b87930587ac` on `2026-10-20T17:40:06.178Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-macros docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

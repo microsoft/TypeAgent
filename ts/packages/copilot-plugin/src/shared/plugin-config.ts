@@ -8,16 +8,13 @@ import type { SkillSelection } from "../extension/skill-session.js";
 
 export type Mode = "direct" | "mcp" | "dev" | "bypass";
 export type McpRouting = "delegate" | "mixed";
-export type RecipeOwner = "typeagent" | "plugin" | "off";
+export type RecipeOwner = "plugin" | "off";
 
 export interface PluginConfig {
     mode: Mode;
     mcpRouting?: McpRouting;
     /** Public server conversation id, never a structured resume capability. */
     conversationId?: string;
-    powershell?: {
-        enabled?: boolean;
-    };
     /** Catalog revisions to expose to this Copilot session. */
     selectedSkills?: SkillSelection[];
     recipeOwner?: RecipeOwner;
@@ -39,12 +36,17 @@ export function getConfigPath(): string {
 }
 
 export function getRecipeOwner(): RecipeOwner {
+    const environment = process.env.TYPEAGENT_RECIPE_OWNER;
+    const configured =
+        environment === undefined ? readConfig()?.recipeOwner : undefined;
     const value =
-        process.env.TYPEAGENT_RECIPE_OWNER ??
-        readConfig()?.recipeOwner ??
-        "typeagent";
-    if (value !== "typeagent" && value !== "plugin" && value !== "off")
-        throw new Error("Recipe owner must be typeagent, plugin, or off.");
+        environment ?? (configured === undefined ? "plugin" : configured);
+    if (value === "typeagent")
+        throw new Error(
+            "The TypeAgent recipe owner has been removed. Remove the obsolete recipeOwner/TYPEAGENT_RECIPE_OWNER setting, restart Copilot, and re-record tasks in the plugin catalog.",
+        );
+    if (value !== "plugin" && value !== "off")
+        throw new Error("Recipe owner must be plugin or off.");
     return value;
 }
 
@@ -94,9 +96,23 @@ export function getRecipeInferenceCliPath(): string | undefined {
 
 export function readConfig(): PluginConfig | undefined {
     try {
-        return JSON.parse(readFileSync(getConfigPath(), "utf-8"));
-    } catch {
-        return undefined;
+        const value: unknown = JSON.parse(
+            readFileSync(getConfigPath(), "utf-8"),
+        );
+        if (!value || typeof value !== "object" || Array.isArray(value))
+            throw new Error("Plugin configuration must be a JSON object.");
+        return value as PluginConfig;
+    } catch (error) {
+        if (
+            typeof error === "object" &&
+            error !== null &&
+            "code" in error &&
+            error.code === "ENOENT"
+        )
+            return undefined;
+        throw new Error(
+            `Unable to read plugin configuration: ${error instanceof Error ? error.message : String(error)}`,
+        );
     }
 }
 
@@ -126,10 +142,6 @@ export function getMode(): Mode {
         return configMode;
     }
     return "direct";
-}
-
-export function isPowerShellGuidanceEnabled(): boolean {
-    return readConfig()?.powershell?.enabled ?? true;
 }
 
 export function getMcpRouting(): McpRouting {

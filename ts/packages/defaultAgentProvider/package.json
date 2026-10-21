@@ -36,7 +36,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/client": "^2.3.1",
     "@modelcontextprotocol/server-filesystem": "2026.1.14",
     "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-schema": "workspace:*",
@@ -83,7 +83,7 @@
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "dispatcher-node-providers": "workspace:*",
-    "exifreader": "^4.39.0",
+    "exifreader": "^4.50.0",
     "file-size": "^1.0.0",
     "glob": "^13.0.0",
     "greeting-agent": "workspace:*",

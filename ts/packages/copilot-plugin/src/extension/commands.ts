@@ -2,11 +2,7 @@
 // Licensed under the MIT License.
 
 import type { CommandDefinition } from "@github/copilot-sdk";
-import {
-    getConfigPath,
-    getModeLabel,
-    readConfig,
-} from "../shared/plugin-config.js";
+import { getConfigPath, getModeLabel } from "../shared/plugin-config.js";
 import {
     getModeDescription,
     handleModeSetting,
@@ -68,14 +64,13 @@ function controlStatus(): string {
 }
 
 function statusText(): string {
-    const config = readConfig();
     const host = process.env.TYPEAGENT_HOST || "localhost";
     const port = process.env.TYPEAGENT_PORT || "8999";
     return [
         "TypeAgent configuration",
         `Mode: ${getModeLabel()}`,
         `Routing: ${getModeDescription()}`,
-        `TypeAgent PowerShell: ${(config?.powershell?.enabled ?? true) ? "on" : "off"}`,
+        "Ordinary prompts: local recipes, then Copilot",
         `Server: ws://${host}:${port}`,
         `Config: ${getConfigPath()}`,
         "Mode settings are shared by sessions using this config.",
@@ -90,7 +85,7 @@ export function createExtensionCommands(
         {
             name: "typeagent-recipe-owner",
             description:
-                "Show or select recipe ownership: plugin, typeagent, off; restart after changing",
+                "Show or enable/disable local recipes: plugin, off; restart after changing",
             handler: async ({ args }) => log(recipeOwnerSetting(args)),
         },
         {
@@ -104,7 +99,7 @@ export function createExtensionCommands(
         {
             name: "typeagent-mode",
             description:
-                "Show or set TypeAgent mode: direct, mcp [delegate|mixed], dev, bypass. MCP preserves saved policy; default delegate uses processCommand, mixed prefers TypeAgent discovery/execution for Copilot-selected operations. Native tools are fallback only for capability gaps.",
+                "Show or set explicit TypeAgent mode: direct, mcp [delegate|mixed], dev, bypass. Ordinary prompts use local recipes, then Copilot; bypass disables recipe routing.",
             handler: async ({ args }) => {
                 await log(handleModeSetting(args, "/typeagent-mode"));
             },

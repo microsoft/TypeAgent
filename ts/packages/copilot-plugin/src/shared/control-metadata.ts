@@ -85,7 +85,12 @@ function admittedOwner(
         ownedRoot: string;
         configPath: string;
         expectedMode?: Mode;
+        workiqOriginals?: unknown;
     } = JSON.parse(readFileSync(admissionFile, "utf8"));
+    if (admission.workiqOriginals !== undefined)
+        throw new Error(
+            "Backend WorkIQ original-retention recording was removed. Create a fresh plugin-owned recording session without workiqOriginals admission.",
+        );
     const root = realpathSync(dirname(dataRoot));
     const ownerFile = join(root, "evaluation-owner.json");
     if (lstatSync(ownerFile).isSymbolicLink() || !lstatSync(ownerFile).isFile())

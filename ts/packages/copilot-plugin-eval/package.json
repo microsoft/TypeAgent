@@ -12,7 +12,7 @@
   "author": "Microsoft",
   "type": "module",
   "scripts": {
-    "build": "node --check scripts/ghcp-eval.mjs && node --check scripts/ghcp-eval-preflight.mjs && node --check scripts/ghcp-credit-probe.mjs && node --check scripts/macro-eval.mjs && node --check scripts/macro-eval-native.mjs && node --check scripts/macro-eval-native-approved.mjs && node --check scripts/macro-eval-native-bridge.mjs && node --check scripts/macro-eval-native-callback.mjs && node --check scripts/macro-eval-native-hook.mjs && node --check scripts/macro-eval-corpus.mjs && node --check scripts/macro-eval-fixture.mjs && node --check scripts/macro-eval-grade.mjs && node --check scripts/macro-eval-plan.mjs && node --check scripts/macro-eval-report.mjs && node --check scripts/macro-eval-workiq-evidence.mjs && node --check scripts/macro-eval-workiq-adapter.mjs && node --check scripts/macro-eval-workiq-native.mjs && node --check scripts/macro-eval-workiq-controller.mjs && node --check scripts/native-workiq-lifecycle.mjs && node --check scripts/native-workiq-projection.mjs && node --check scripts/native-workiq-pilot.mjs && node --check scripts/native-workiq-service-module-observer.mjs && node --check scripts/workiq-lookup-binding-metadata-probe.mjs",
+    "build": "node --check scripts/ghcp-eval.mjs && node --check scripts/ghcp-eval-preflight.mjs && node --check scripts/ghcp-credit-probe.mjs && node --check scripts/macro-eval.mjs && node --check scripts/macro-eval-native.mjs && node --check scripts/macro-eval-native-driver.mjs && node --check scripts/macro-eval-local-owner.mjs && node --check scripts/macro-eval-program.mjs && node --check scripts/macro-eval-native-bridge.mjs && node --check scripts/macro-eval-native-callback.mjs && node --check scripts/macro-eval-native-hook.mjs && node --check scripts/macro-eval-corpus.mjs && node --check scripts/macro-eval-fixture.mjs && node --check scripts/macro-eval-grade.mjs && node --check scripts/macro-eval-plan.mjs && node --check scripts/macro-eval-report.mjs && node --check scripts/macro-eval-workiq-evidence.mjs",
     "macro-eval": "node scripts/macro-eval.mjs",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
@@ -23,8 +23,6 @@
     "@github/copilot-sdk": "1.0.13",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@typeagent/copilot-plugin": "workspace:*",
-    "agent-dispatcher": "workspace:*",
-    "agent-server": "workspace:*",
     "prettier": "^3.5.3"
   }
 }

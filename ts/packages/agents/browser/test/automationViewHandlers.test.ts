@@ -6,6 +6,10 @@ import type {
     AutomationDetail,
     AutomationSummary,
 } from "@typeagent/agent-flows/catalog";
+import { createAutomationCatalogService } from "@typeagent/agent-flows/catalog";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
     createAutomationViewFunctions,
     type WebFlowSource,
@@ -50,6 +54,74 @@ function catalogService(
 }
 
 describe("automation view functions", () => {
+    test("loads WebFlows, TaskFlows and scripts through the real flow-only catalog", async () => {
+        const instanceDir = await mkdtemp(
+            path.join(os.tmpdir(), "automation-view-"),
+        );
+        try {
+            for (const kind of ["powershell", "taskflow"]) {
+                const root = path.join(instanceDir, kind);
+                await mkdir(root);
+                await writeFile(
+                    path.join(root, "index.json"),
+                    JSON.stringify({
+                        flows: {
+                            example: {
+                                actionName: "example",
+                                displayName: "Example",
+                                description: "Recorded TypeAgent flow",
+                                parameters: [],
+                                enabled: true,
+                                usageCount: 0,
+                                created: "2026-10-16T00:00:00Z",
+                                updated: "2026-10-16T00:00:00Z",
+                                source: "recording",
+                                flowPath: "example.flow.json",
+                                scriptPath: "example.txt",
+                            },
+                        },
+                    }),
+                );
+                await writeFile(
+                    path.join(root, "example.flow.json"),
+                    JSON.stringify({ grammarPatterns: [] }),
+                );
+                await writeFile(
+                    path.join(root, "example.txt"),
+                    `${kind} recorded body`,
+                );
+            }
+            const service = createAutomationCatalogService({ instanceDir });
+            const functions = createAutomationViewFunctions(
+                webFlows(),
+                () => service,
+            );
+            const result = await functions.listAutomations({});
+            expect(result.items.map((item) => item.id)).toEqual([
+                "webflow:searchAmazon",
+                "powershell:example",
+                "taskflow:example",
+            ]);
+            expect(result.providers).toEqual([
+                { kind: "webflow", available: true },
+                { kind: "powershell", available: true },
+                { kind: "taskflow", available: true },
+            ]);
+            for (const kind of ["powershell", "taskflow"]) {
+                const detail = await functions.getAutomation({
+                    id: `${kind}:example`,
+                });
+                expect(detail.body?.text).toBe(`${kind} recorded body`);
+            }
+            expect(
+                (await functions.getAutomation({ id: "webflow:searchAmazon" }))
+                    .body?.text,
+            ).toBe("return 1;");
+        } finally {
+            await rm(instanceDir, { recursive: true, force: true });
+        }
+    });
+
     test("merges web macros with the catalog and keeps provider status", async () => {
         const functions = createAutomationViewFunctions(webFlows(), () =>
             catalogService(),

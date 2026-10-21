@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { RevisionRecords, withRecordLock } from "./revisionRecords.js";
 import type {
     MacroAuthoringClaim,
     MacroAuthoringRequest,
@@ -57,10 +57,7 @@ function normalizeCwd(cwd: string): string {
     return path.resolve(cwd).toLowerCase();
 }
 
-function parseRequests(text: string): StoredRequest[] {
-    if (Buffer.byteLength(text) > maxStateBytes)
-        throw new Error("Child authoring storage exceeds its limit.");
-    const value: unknown = JSON.parse(text);
+function parseRequests(value: unknown): StoredRequest[] {
     if (!Array.isArray(value) || value.length > 512)
         throw new Error("Malformed child authoring storage.");
     for (const item of value) {
@@ -118,54 +115,82 @@ export class MacroChildAuthoring {
     private loading?: Promise<void>;
     private mutation: Promise<void> = Promise.resolve();
     private readonly file: string;
+    private readonly records: RevisionRecords;
+    private changedRequest: string | undefined;
 
     constructor(
-        private readonly directory: string,
+        directory: string,
         private readonly profileId = "typeagent",
+        private readonly notify: () => void = () => {},
     ) {
         this.contexts = new DurableRecipeAuthoringContextStore(directory);
         this.file = path.join(directory, "child-authoring.json");
+        this.records = new RevisionRecords(this.file);
     }
 
     private async load(): Promise<void> {
         this.loading ??= (async () => {
-            try {
-                this.requests = parseRequests(
-                    await readFile(this.file, "utf8"),
-                );
-            } catch (error) {
-                if ((error as NodeJS.ErrnoException).code !== "ENOENT")
-                    throw error;
-                this.requests = [];
-            }
+            this.requests = parseRequests([
+                ...(await this.records.load()).values(),
+            ]);
+            await this.records.purgeUnreferenced();
         })();
         await this.loading;
     }
 
-    private async update<T>(operation: () => T): Promise<T> {
+    private async update<T>(
+        operation: () => T,
+        changedId?: string,
+    ): Promise<T> {
         await this.load();
-        const work = this.mutation.then(async () => {
-            const previous = structuredClone(this.requests!);
-            try {
-                const result = operation();
-                const serialized = JSON.stringify(this.requests);
-                if (
-                    Buffer.byteLength(serialized) > maxStateBytes ||
-                    this.requests!.length > 512
-                )
-                    throw new Error(
-                        "Child authoring storage capacity exceeded.",
-                    );
-                await mkdir(this.directory, { recursive: true });
-                const temporary = `${this.file}.${randomUUID()}.tmp`;
-                await writeFile(temporary, serialized, { flag: "wx" });
-                await rename(temporary, this.file);
-                return result;
-            } catch (error) {
-                this.requests = previous;
-                throw error;
-            }
-        });
+        const work = this.mutation.then(() =>
+            withRecordLock(`${this.file}.owner`, async () => {
+                this.requests = parseRequests([
+                    ...(await this.records.load()).values(),
+                ]);
+                const previous = this.requests!.map((request) => ({
+                    ...request,
+                }));
+                try {
+                    this.changedRequest = changedId;
+                    const result = operation();
+                    if (this.requests!.length > 512)
+                        throw new Error(
+                            "Child authoring storage capacity exceeded.",
+                        );
+                    const changes = new Map<string, unknown | undefined>();
+                    for (const request of this.requests!)
+                        if (
+                            request.requestId === this.changedRequest ||
+                            !previous.some(
+                                (item) => item.requestId === request.requestId,
+                            )
+                        ) {
+                            if (
+                                Buffer.byteLength(JSON.stringify(request)) >
+                                maxStateBytes
+                            )
+                                throw new Error(
+                                    "Child authoring storage capacity exceeded.",
+                                );
+                            changes.set(request.requestId, request);
+                        }
+                    for (const request of previous)
+                        if (
+                            !this.requests!.some(
+                                (item) => item.requestId === request.requestId,
+                            )
+                        )
+                            changes.set(request.requestId, undefined);
+                    await this.records.commit(changes);
+                    if (changes.size) this.notify();
+                    return result;
+                } catch (error) {
+                    this.requests = previous;
+                    throw error;
+                }
+            }),
+        );
         this.mutation = work.then(
             () => {},
             () => {},
@@ -179,21 +204,7 @@ export class MacroChildAuthoring {
         signal: AbortSignal,
     ): Promise<string> {
         signal.throwIfAborted();
-        if (!job.authoring)
-            throw new Error("A sealed child authoring capture is required.");
-        const envelope = await this.contexts.get(
-            { workspaceId: job.cwd, profileId: this.profileId },
-            job.authoring.captureId,
-        );
-        if (
-            !envelope ||
-            envelope.digest !== job.authoring.contextDigest ||
-            envelope.context.capture.taskId !== job.authoring.taskId ||
-            envelope.context.capture.tokenId !== job.authoring.tokenId
-        )
-            throw new Error(
-                "The sealed Copilot authoring context is missing or changed.",
-            );
+        const envelope = await this.assertContext(job);
         boundedText(prompt);
         if (redactTraceValue(prompt) !== prompt)
             throw new Error(
@@ -212,7 +223,7 @@ export class MacroChildAuthoring {
                     requestId,
                     jobId: job.jobId,
                     cwd: job.cwd,
-                    captureId: job.authoring!.captureId,
+                    captureId: job.authoring.captureId,
                     contextDigest: envelope.digest,
                     prompt,
                     promptDigest,
@@ -220,7 +231,7 @@ export class MacroChildAuthoring {
                 this.requests!.push(request);
             }
             return structuredClone(request);
-        });
+        }, requestId);
         signal.throwIfAborted();
         if (!request.outcome) throw new MacroAuthoringPending();
         if (request.outcome.status === "failed")
@@ -228,6 +239,29 @@ export class MacroChildAuthoring {
                 `Copilot authoring failed: ${request.outcome.error}`,
             );
         return request.outcome.text;
+    }
+
+    async assertContext(job: MacroLearningJob) {
+        if (!job.authoring)
+            throw new Error(
+                "A sealed child authoring capture is required; re-record the successful task.",
+            );
+        const envelope = await this.contexts.get(
+            { workspaceId: job.cwd, profileId: this.profileId },
+            job.authoring.captureId,
+        );
+        if (
+            !envelope ||
+            envelope.digest !== job.authoring.contextDigest ||
+            envelope.context.capture.taskId !== job.authoring.taskId ||
+            envelope.context.capture.tokenId !== job.authoring.tokenId ||
+            envelope.context.capture.sessionId !== job.sessionId ||
+            job.authoring.captureId !== job.traceId
+        )
+            throw new Error(
+                "The sealed Copilot authoring context is missing or changed; re-record the successful task.",
+            );
+        return envelope;
     }
 
     async claim(
@@ -244,10 +278,10 @@ export class MacroChildAuthoring {
             (!item.lease || Date.parse(item.lease.expiresAt) <= Date.now());
         await this.load();
         await this.mutation;
-        if (!this.requests!.some(eligible)) return undefined;
         const request = await this.update(() => {
             const request = this.requests!.find(eligible);
             if (!request) return undefined;
+            this.changedRequest = request.requestId;
             request.lease = {
                 id: randomUUID(),
                 workerId: claim.workerId,
@@ -312,7 +346,7 @@ export class MacroChildAuthoring {
                 request.outcome = structuredClone(submission.outcome);
             }
             return request.jobId;
-        });
+        }, submission.requestId);
     }
 
     async forget(jobId: string): Promise<void> {
@@ -320,6 +354,10 @@ export class MacroChildAuthoring {
             this.requests = this.requests!.filter(
                 (item) => item.jobId !== jobId,
             );
+        });
+        await withRecordLock(`${this.file}.owner`, async () => {
+            await this.records.load();
+            await this.records.purgeUnreferenced();
         });
     }
 }

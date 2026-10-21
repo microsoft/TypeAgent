@@ -183,11 +183,19 @@ export class TypedViewStore {
         private readonly actor = "local-owner",
     ) {}
 
+    private readonly topicSizes = new Map<
+        string,
+        { head: string | null; bytes: number }
+    >();
+
     private history(corpusId: string): ViewHistory<ViewStoreState> {
         validateIdentifier("corpus ID", corpusId);
-        return new ViewHistory(this.viewDirectory(corpusId), () => ({
-            views: {},
-        }));
+        return new ViewHistory(
+            this.viewDirectory(corpusId),
+            () => ({ views: {} }),
+            undefined,
+            (state: ViewStoreState) => state.views,
+        );
     }
 
     public async withReadSnapshot<T>(
@@ -259,7 +267,9 @@ export class TypedViewStore {
         eligibleFingerprint?: string,
     ): Promise<TopicQueryPage> {
         const started = performance.now();
-        const { state } = await this.history(request.corpusId).read();
+        const { head, state, stateBytes } = await this.history(
+            request.corpusId,
+        ).read();
         if (state.topics) validateTopicSnapshot(state.topics);
         const withheld =
             state.topics &&
@@ -282,11 +292,17 @@ export class TypedViewStore {
                 ...page.limits,
                 `Topic family failure: ${state.topicFamily.error}`,
             ];
+        let size = this.topicSizes.get(request.corpusId);
+        if (!size || size.head !== head) {
+            size = {
+                head,
+                bytes: Buffer.byteLength(JSON.stringify(state.topics ?? null)),
+            };
+            this.topicSizes.set(request.corpusId, size);
+        }
         page.io = {
-            stateBytes: Buffer.byteLength(JSON.stringify(state)),
-            snapshotBytes: Buffer.byteLength(
-                JSON.stringify(state.topics ?? null),
-            ),
+            stateBytes,
+            snapshotBytes: size.bytes,
             elapsedMs: performance.now() - started,
         };
         return page;
@@ -1494,13 +1510,19 @@ export class TypedViewStore {
         request: ViewReadRequest,
     ): Promise<ViewHistoryEntry[]> {
         assertViewIdentifier("view ID", request.viewId);
+        const scope = this.readOperation.getStore();
+        const head =
+            scope?.active && scope.corpusId === request.corpusId
+                ? (await scope.snapshot).head
+                : undefined;
         const commits = (
-            await this.history(request.corpusId).history()
+            await this.history(request.corpusId).historyForRecord<
+                ViewVersion[]
+            >(request.viewId, head)
         ).reverse();
         const seen = new Set<string>();
-        const entries = commits.flatMap(({ commitId, state }) => {
-            const versions = viewVersions(state, request.viewId);
-            return versions.flatMap((version) => {
+        const entries = commits.flatMap(({ commitId, record }) => {
+            return (record ?? []).flatMap((version) => {
                 if (seen.has(version.revisionId)) return [];
                 seen.add(version.revisionId);
                 return [{ commitId, version }];
