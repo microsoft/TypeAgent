@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
     CopilotToolMacro,
@@ -25,27 +24,31 @@ export interface MacroProgramJournal {
     checkpoints: RecipeEffectCheckpoint[];
 }
 
-async function saveJournal(
+async function appendCheckpoint(
     destination: string,
-    journal: MacroProgramJournal,
-    create: boolean,
+    checkpoint: RecipeEffectCheckpoint,
 ) {
-    await mkdir(path.dirname(destination), { recursive: true });
-    if (create) {
-        await writeFile(destination, JSON.stringify(journal), {
-            encoding: "utf8",
-            flag: "wx",
-            flush: true,
-        });
-        return;
+    // Never recreate a missing journal or replace the exclusive run claim.
+    const handle = await open(destination, "r+");
+    try {
+        const bytes = Buffer.from(`${JSON.stringify({ checkpoint })}\n`);
+        const size = (await handle.stat()).size;
+        let written = 0;
+        while (written < bytes.length) {
+            const result = await handle.write(
+                bytes,
+                written,
+                bytes.length - written,
+                size + written,
+            );
+            if (!result.bytesWritten)
+                throw new Error("Program journal append made no progress.");
+            written += result.bytesWritten;
+        }
+        await handle.sync();
+    } finally {
+        await handle.close();
     }
-    const temporary = `${destination}.${randomUUID()}.tmp`;
-    await writeFile(temporary, JSON.stringify(journal), {
-        encoding: "utf8",
-        flag: "wx",
-        flush: true,
-    });
-    await rename(temporary, destination);
 }
 
 export function programJournalPath(rootDir: string, runId: string) {
@@ -53,9 +56,41 @@ export function programJournalPath(rootDir: string, runId: string) {
 }
 
 export async function readProgramJournal(rootDir: string, runId: string) {
-    return JSON.parse(
-        await readFile(programJournalPath(rootDir, runId), "utf8"),
-    ) as MacroProgramJournal;
+    const lines = (
+        await readFile(programJournalPath(rootDir, runId), "utf8")
+    ).split("\n");
+    const header = JSON.parse(lines.shift()!);
+    if (
+        header.schemaVersion !== 2 ||
+        header.runId !== runId ||
+        typeof header.macroId !== "string" ||
+        !Number.isSafeInteger(header.version) ||
+        typeof header.startedAt !== "string"
+    )
+        throw new Error(
+            "Incompatible canonical program journal; explicitly reset/reimport the development store. It was not deleted.",
+        );
+    const journal: MacroProgramJournal = { ...header, checkpoints: [] };
+    const checkpoints = new Map<string, RecipeEffectCheckpoint>();
+    // An interrupted final append is not a durable acknowledgement.
+    lines.pop();
+    for (const line of lines) {
+        const { checkpoint } = JSON.parse(line);
+        if (
+            !checkpoint ||
+            typeof checkpoint.callId !== "string" ||
+            ![
+                "not_dispatched",
+                "dispatched",
+                "completed",
+                "uncertain",
+            ].includes(checkpoint.phase)
+        )
+            throw new Error("Invalid durable program checkpoint.");
+        checkpoints.set(checkpoint.callId, checkpoint);
+    }
+    journal.checkpoints = [...checkpoints.values()];
+    return journal;
 }
 
 export async function runMacroProgram(
@@ -82,8 +117,18 @@ export async function runMacroProgram(
         checkpoints: [],
     };
     const destination = programJournalPath(rootDir, request.runId);
-    await saveJournal(destination, journal, true);
+    await mkdir(path.dirname(destination), { recursive: true });
+    await writeFile(
+        destination,
+        `${JSON.stringify({ ...journal, schemaVersion: 2 })}\n`,
+        {
+            encoding: "utf8",
+            flag: "wx",
+            flush: true,
+        },
+    );
     let checkpointMutation = Promise.resolve();
+    const checkpointIndexes = new Map<string, number>();
     let result: RecipeRunResult;
     try {
         result = await runtime.execute(artifact, input as JsonValue, {
@@ -95,24 +140,26 @@ export async function runMacroProgram(
                 60_000,
             ),
             onCheckpoint: (checkpoint) => {
+                const saved = structuredClone(checkpoint);
                 checkpointMutation = checkpointMutation.then(async () => {
-                    if (checkpoint.phase === "dispatched") {
+                    if (saved.phase === "dispatched") {
                         signal.throwIfAborted();
                         await assertCurrent();
                     }
-                    const index = journal.checkpoints.findIndex(
-                        (value) => value.callId === checkpoint.callId,
-                    );
-                    if (index === -1)
-                        journal.checkpoints.push(structuredClone(checkpoint));
-                    else
-                        journal.checkpoints[index] =
-                            structuredClone(checkpoint);
-                    await saveJournal(destination, journal, false);
+                    await appendCheckpoint(destination, saved);
+                    const index = checkpointIndexes.get(saved.callId);
+                    if (index === undefined) {
+                        checkpointIndexes.set(
+                            saved.callId,
+                            journal.checkpoints.length,
+                        );
+                        journal.checkpoints.push(saved);
+                    } else journal.checkpoints[index] = saved;
                 });
                 return checkpointMutation;
             },
         });
+        await checkpointMutation;
         if (
             !result.accepted ||
             result.runId !== request.runId ||

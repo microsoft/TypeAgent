@@ -4,6 +4,7 @@
 import { jest } from "@jest/globals";
 import type {
     MacroAuthoringRequest,
+    MacroAuthoringClaim,
     MacroAuthoringSubmission,
     MacroLearningJob,
     MacroLearningMode,
@@ -87,6 +88,12 @@ describe("durable Copilot authoring worker", () => {
     ) {
         let mode: MacroLearningMode = "all";
         let status: MacroLearningJob["status"] = "awaitingAuthor";
+        const notifications = new Set<() => void>();
+        let disconnect: ((error: Error) => void) | undefined;
+        const notify = () => {
+            for (const resolve of notifications) resolve();
+            notifications.clear();
+        };
         const job = (): MacroLearningJob => ({
             jobId: "job",
             traceId: "capture",
@@ -104,7 +111,20 @@ describe("durable Copilot authoring worker", () => {
             updatedAt: new Date().toISOString(),
         });
         const connection = {
-            claimMacroAuthoringRequest: jest.fn(async () => requests.shift()),
+            claimMacroAuthoringRequest: jest.fn(
+                async (claim: MacroAuthoringClaim) => {
+                    const request = claim.observeOnly
+                        ? undefined
+                        : requests.shift();
+                    if (request) return request;
+                    return new Promise<MacroAuthoringRequest | undefined>(
+                        (resolve, reject) => {
+                            notifications.add(() => resolve(undefined));
+                            disconnect = reject;
+                        },
+                    );
+                },
+            ),
             submitMacroAuthoringResponse: jest.fn(
                 async (_submission: MacroAuthoringSubmission) => {},
             ),
@@ -124,10 +144,11 @@ describe("durable Copilot authoring worker", () => {
                 })),
         );
         const report = jest.fn<(message: string) => void>();
+        const connect = jest.fn(async () => connection);
         worker = new MacroAuthoringWorker({
             cwd,
             sessionId: "host",
-            connect: async () => connection,
+            connect,
             launch: start,
             report,
         });
@@ -135,11 +156,17 @@ describe("durable Copilot authoring worker", () => {
             connection,
             start,
             report,
+            connect,
+            enqueue: (request: MacroAuthoringRequest) => requests.push(request),
+            notify,
+            disconnect: () => disconnect?.(new Error("IPC disconnected")),
             setOff: () => {
                 mode = "off";
+                notify();
             },
             cancel: () => {
                 status = "cancelled";
+                notify();
             },
         };
     }
@@ -249,6 +276,46 @@ describe("durable Copilot authoring worker", () => {
             expect.objectContaining({
                 outcome: { status: "failed", error: "unsupported child host" },
             }),
+        );
+    });
+
+    it("does not poll a quiet owner every second and reconciles a wakeup against durable claims", async () => {
+        jest.useFakeTimers();
+        const fixture = setup(undefined, []);
+        worker!.kick();
+        await settle();
+        await jest.advanceTimersByTimeAsync(20_000);
+        expect(
+            fixture.connection.claimMacroAuthoringRequest,
+        ).toHaveBeenCalledTimes(1);
+        expect(
+            fixture.connection.getMacroLearningPreference,
+        ).toHaveBeenCalledTimes(1);
+        fixture.enqueue(request("late"));
+        fixture.notify();
+        await settle();
+        expect(fixture.start).toHaveBeenCalledTimes(1);
+        expect(
+            fixture.connection.submitMacroAuthoringResponse,
+        ).toHaveBeenCalledWith(expect.objectContaining({ requestId: "late" }));
+    });
+
+    it("reconciles durable work at reconnect even when its notification was missed", async () => {
+        jest.useFakeTimers();
+        const fixture = setup(undefined, []);
+        worker!.kick();
+        await settle();
+        fixture.disconnect();
+        await settle();
+        fixture.enqueue(request("missed"));
+        await jest.advanceTimersByTimeAsync(5_000);
+        await settle();
+        expect(fixture.connect).toHaveBeenCalledTimes(2);
+        expect(fixture.start).toHaveBeenCalledTimes(1);
+        expect(
+            fixture.connection.submitMacroAuthoringResponse,
+        ).toHaveBeenCalledWith(
+            expect.objectContaining({ requestId: "missed" }),
         );
     });
 });

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
     MacroLearningJob,
@@ -13,6 +13,7 @@ import {
     MacroChildAuthoring,
 } from "../src/macroChildAuthoring.js";
 import { sealMacroChildCapture } from "../src/macroChildCapture.js";
+import { RevisionRecords } from "../src/revisionRecords.js";
 
 const jest = (import.meta as ImportMeta & { jest: typeof globalThis.jest })
     .jest;
@@ -244,9 +245,11 @@ describe("durable scoped Copilot authoring exchange", () => {
             broker.query(job, "question", signal()),
         ).rejects.toBeInstanceOf(MacroAuthoringPending);
         const file = path.join(directory, "child-authoring.json");
-        const saved = JSON.parse(await readFile(file, "utf8"));
-        saved[0].prompt = "modified";
-        await writeFile(file, JSON.stringify(saved));
+        const records = new RevisionRecords(file);
+        const saved = await records.load();
+        const [id, request] = [...saved.entries()][0];
+        (request as { prompt: string }).prompt = "modified";
+        await records.commit(new Map([[id, request]]));
         await expect(
             new MacroChildAuthoring(directory).claim(claim(), active),
         ).rejects.toThrow("digest mismatch");
@@ -260,6 +263,131 @@ describe("durable scoped Copilot authoring exchange", () => {
                 signal(),
             ),
         ).rejects.toThrow("missing or changed");
+    });
+
+    it("arbitrates independent owners' competing leases and rejects the losing submission", async () => {
+        await expect(
+            broker.query(job, "competing question", signal()),
+        ).rejects.toBeInstanceOf(MacroAuthoringPending);
+        const other = new MacroChildAuthoring(directory);
+        const claims = await Promise.all([
+            broker.claim(claim(), active),
+            other.claim({ ...claim(), workerId: "other" }, active),
+        ]);
+        expect(claims.filter(Boolean)).toHaveLength(1);
+        const winner = claims.find(Boolean)!;
+        await expect(
+            other.submit(
+                {
+                    ...claim(),
+                    workerId: claims[0] ? "other" : "worker",
+                    ...winner,
+                    outcome: {
+                        status: "completed",
+                        text: "answer",
+                        childId: "child",
+                    },
+                },
+                active,
+            ),
+        ).rejects.toThrow("scoped lease");
+    });
+
+    it("does not wake idle IPC claimers on empty or already leased scans", async () => {
+        let notifications = 0;
+        const notifying = new MacroChildAuthoring(
+            directory,
+            "typeagent",
+            () => {
+                notifications++;
+            },
+        );
+        expect(await notifying.claim(claim(), active)).toBeUndefined();
+        expect(notifications).toBe(0);
+        await expect(
+            notifying.query(job, "notification question", signal()),
+        ).rejects.toBeInstanceOf(MacroAuthoringPending);
+        expect(notifications).toBe(1);
+        expect(await notifying.claim(claim(), active)).toBeDefined();
+        expect(notifications).toBe(2);
+        expect(await notifying.claim(claim(), active)).toBeUndefined();
+        expect(notifications).toBe(2);
+    });
+
+    it("rejects missing immutable request payloads instead of treating a damaged canonical store as empty", async () => {
+        await expect(
+            broker.query(job, "retained request", signal()),
+        ).rejects.toBeInstanceOf(MacroAuthoringPending);
+        const file = path.join(directory, "child-authoring.json");
+        const pointer = await readFile(file, "utf8");
+        const digest = Object.values(JSON.parse(pointer).records)[0] as string;
+        await rm(path.join(`${file}.records`, `${digest}.json`));
+        await expect(
+            new MacroChildAuthoring(directory).claim(claim(), active),
+        ).rejects.toMatchObject({ code: "ENOENT" });
+        expect(await readFile(file, "utf8")).toBe(pointer);
+    });
+
+    it("purges every obsolete request revision and orphan payload on forget", async () => {
+        const prompt = "private uniquely retained authoring prompt";
+        await expect(
+            broker.query(job, prompt, signal()),
+        ).rejects.toBeInstanceOf(MacroAuthoringPending);
+        const request = (await broker.claim(claim(), active))!;
+        await broker.submit(
+            {
+                ...claim(),
+                ...request,
+                outcome: {
+                    status: "completed",
+                    text: "private answer",
+                    childId: "child",
+                },
+            },
+            active,
+        );
+        await broker.forget(job.jobId);
+        const files = await readdir(
+            path.join(directory, "child-authoring.json.records"),
+        );
+        const bytes = await Promise.all(
+            files.map((file) =>
+                readFile(
+                    path.join(directory, "child-authoring.json.records", file),
+                    "utf8",
+                ),
+            ),
+        );
+        expect(bytes.join("")).not.toContain(prompt);
+        expect(bytes.join("")).not.toContain("private answer");
+        expect(
+            await new MacroChildAuthoring(directory).claim(claim(), active),
+        ).toBeUndefined();
+    });
+
+    it("finishes privacy cleanup after interruption between forget publication and payload purge", async () => {
+        await expect(
+            broker.query(job, "private interrupted purge", signal()),
+        ).rejects.toBeInstanceOf(MacroAuthoringPending);
+        const file = path.join(directory, "child-authoring.json");
+        const records = new RevisionRecords(file);
+        const retained = await records.load();
+        const digest = JSON.parse(await readFile(file, "utf8")).records[
+            [...retained.keys()][0]
+        ] as string;
+        const staging = path.join(
+            `${file}.records`,
+            `${digest}.json.00000000-0000-0000-0000-000000000000.tmp`,
+        );
+        await writeFile(staging, "private interrupted staged payload");
+        await records.commit(
+            new Map([...retained.keys()].map((id) => [id, undefined])),
+        );
+        expect((await readdir(`${file}.records`)).length).toBeGreaterThan(0);
+        expect(
+            await new MacroChildAuthoring(directory).claim(claim(), active),
+        ).toBeUndefined();
+        expect(await readdir(`${file}.records`)).toEqual([]);
     });
 
     it("rejects cancelled, secret-bearing and oversized requests before dispatch", async () => {

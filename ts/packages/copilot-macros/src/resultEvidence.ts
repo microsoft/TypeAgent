@@ -321,9 +321,9 @@ export class PrivateResultStore {
 
     async verifyLearningTrace(
         traceId: string,
-        trace: RecordedInteractionTrace,
+        trace?: RecordedInteractionTrace,
     ): Promise<RecordedInteractionTrace> {
-        verifiedLearningTraces.delete(trace);
+        if (trace) verifiedLearningTraces.delete(trace);
         if (!/^[a-zA-Z0-9-]+$/.test(traceId))
             throw new ResultEvidenceError(
                 "invalidReference",
@@ -333,12 +333,30 @@ export class PrivateResultStore {
         const sourceTrace: RecordedInteractionTrace = JSON.parse(
             bytes.toString("utf8"),
         );
+        trace ??= sourceTrace;
         if (JSON.stringify(sourceTrace) !== JSON.stringify(trace))
             throw new ResultEvidenceError(
                 "evidenceIntegrity",
                 "Learning trace does not match its physical source.",
             );
         assertLearningTraceIdentity(sourceTrace);
+        const hasEvidence = sourceTrace.toolCalls.some(
+            (call) => call.resultArtifact || call.modelResultArtifact,
+        );
+        if (
+            (sourceTrace.schemaVersion === 1 &&
+                (hasEvidence || sourceTrace.capabilities !== undefined)) ||
+            (sourceTrace.schemaVersion === 2 &&
+                (!hasEvidence ||
+                    sourceTrace.capabilities?.length !== 1 ||
+                    sourceTrace.capabilities[0] !==
+                        "private-result-evidence-v1")) ||
+            (sourceTrace.schemaVersion !== 1 && sourceTrace.schemaVersion !== 2)
+        )
+            throw new ResultEvidenceError(
+                "evidenceIntegrity",
+                "Unsupported recorded trace schema or capabilities.",
+            );
         const originals: unknown[] = [];
         for (const call of sourceTrace.toolCalls) {
             let original = call.result;

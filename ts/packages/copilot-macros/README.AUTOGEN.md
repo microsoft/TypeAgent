@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7a02d5b2282eeb56a16414ffa0e54ace2fea0fa542a0c4793b6cbfe1b3275cfd -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d8c1cefd673a898cde1cfccd35875ff8191363bb2f286381ec95215f42d73197 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/copilot-macros — AI-generated documentation
@@ -64,10 +64,10 @@ External: `@tootallnate/quickjs-emscripten`, `typescript`, `zod`
 - [./src/macroExpressions.ts](./src/macroExpressions.ts)
 - [./src/macroFeatures.ts](./src/macroFeatures.ts)
 - [./src/macroLearning.ts](./src/macroLearning.ts)
-- _…and 29 more under `./src/`._
+- _…and 31 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `b31d4f4e81c76a93c35bb43c24687b93d537f84d` on `2026-10-16T23:09:45.978Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-macros docs:verify-links` to spot-check._
+_Auto-generated against commit `6c5d8dc89190a3602376bdb4cc9d4b87930587ac` on `2026-10-20T17:40:06.178Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-macros docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

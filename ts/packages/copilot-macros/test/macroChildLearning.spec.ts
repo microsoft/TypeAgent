@@ -173,6 +173,41 @@ describe.each(["typeagent", "copilot-local"])(
             cwd: directory,
         });
 
+        it("wakes bounded IPC waits on durable changes and reconciles missed hints after reconnect", async () => {
+            const waitingForChange = manager.claimMacroAuthoringRequest({
+                ...claim(),
+                observeOnly: true,
+                waitMs: 30_000,
+            });
+            const summary = await recorded();
+            await waitingForChange;
+            await waiting(summary.learningJobId!, "awaitingAuthor");
+            // No subscriber is present for this persisted request.
+            await manager.close();
+            manager = new MacroManager(directory, undefined, profileId);
+            await manager.configureLearning(runtime());
+            await waiting(summary.learningJobId!, "awaitingAuthor");
+            const request = await manager.claimMacroAuthoringRequest({
+                ...claim(),
+                waitMs: 30_000,
+            });
+            expect(request?.jobId).toBe(summary.learningJobId);
+            const cancellation = manager.claimMacroAuthoringRequest({
+                ...claim(),
+                observeOnly: true,
+                waitMs: 30_000,
+            });
+            await manager.cancelMacroLearningJob(summary.learningJobId!);
+            await cancellation;
+            expect(
+                (await manager.getMacroLearningJob(summary.learningJobId!))
+                    .status,
+            ).toBe("cancelled");
+            expect(
+                await manager.claimMacroAuthoringRequest(claim()),
+            ).toBeUndefined();
+        });
+
         it("reports a mismatched receipt as failed learning, not a completed recording or default-author fallback", async () => {
             await expect(recorded("another-recording")).rejects.toThrow(
                 "does not correlate",

@@ -83,6 +83,9 @@ export interface MacroAuthoringClaim {
     cwd: string;
     sessionId: string;
     workerId: string;
+    /** Durable reconciliation happens before and after this bounded IPC wait. */
+    waitMs?: number;
+    observeOnly?: boolean;
 }
 
 export interface MacroAuthoringRequest {
