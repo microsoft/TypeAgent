@@ -18,11 +18,16 @@ internal static class Program
 {
     private static int _assertions;
     private static readonly string[] HeaderSeparators = { "\r\n" };
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
 
-    public static async Task<int> Main()
+    public static async Task<int> Main(string[] args)
     {
         try
         {
+            if (args.Length > 0)
+            {
+                return RunInteropCommand(args);
+            }
             if (Environment.GetEnvironmentVariable("TYPEAGENT_VS_TEST_LOAD_CREDENTIAL") == "1")
             {
                 BridgeCredential storedCredential = BridgeAuthentication.LoadCredential();
@@ -30,6 +35,7 @@ internal static class Program
                     storedCredential.Secret.Length == 32,
                     "The C# client must load the TypeScript-provisioned credential");
             }
+            TestCredentialPathResolution();
             TestDiscoveryAuthentication();
             AuthenticatedBridgeSession session = TestMutualHandshake();
             await TestAuthenticationTimeoutIsRetryableAsync();
@@ -41,6 +47,300 @@ internal static class Program
         {
             Console.Error.WriteLine(ex);
             return 1;
+        }
+    }
+
+    private static int RunInteropCommand(string[] args)
+    {
+        switch (args[0])
+        {
+            case "write-interop-request" when args.Length == 2:
+                WriteInteropRequest(args[1]);
+                return 0;
+            case "verify-interop-response" when args.Length == 4:
+                VerifyInteropResponse(args[1], args[2], args[3]);
+                return 0;
+            default:
+                throw new InvalidOperationException(
+                    "Usage: write-interop-request <path> | verify-interop-response <request> <response> <output>");
+        }
+    }
+
+    private static void WriteInteropRequest(string outputPath)
+    {
+        BridgeCredential credential = CreateCredential(0x53);
+        long now = BridgeAuthentication.CurrentUnixMilliseconds();
+        DiscoveryAuthContext discovery = BridgeAuthentication.CreateDiscoveryRequest(
+            credential,
+            BridgeAuthentication.VisualStudioAgentName,
+            BridgeAuthentication.VisualStudioAgentRole,
+            now);
+        ClientHelloContext clientHello = BridgeAuthentication.CreateClientHello(
+            credential,
+            BridgeAuthentication.CreateClientInstanceId(),
+            now);
+
+        string? originalOverride = Environment.GetEnvironmentVariable(
+            BridgeAuthentication.CredentialPathOverrideEnvironmentVariable);
+        string? originalGeneral = Environment.GetEnvironmentVariable(
+            "TYPEAGENT_USER_DATA_DIR");
+        string fallbackPath;
+        string canonicalOverrideInput = Path.Combine(
+            Path.GetDirectoryName(Path.GetFullPath(outputPath))
+                ?? throw new InvalidOperationException("Interop output path has no directory"),
+            "credential-root",
+            "..",
+            "bridge-credential.json");
+        string canonicalOverridePath;
+        try
+        {
+            Environment.SetEnvironmentVariable(
+                BridgeAuthentication.CredentialPathOverrideEnvironmentVariable,
+                null);
+            Environment.SetEnvironmentVariable(
+                "TYPEAGENT_USER_DATA_DIR",
+                Path.Combine(Path.GetTempPath(), "csharp-only-user-data"));
+            fallbackPath = BridgeAuthentication.GetCredentialPath();
+            Environment.SetEnvironmentVariable(
+                BridgeAuthentication.CredentialPathOverrideEnvironmentVariable,
+                canonicalOverrideInput);
+            canonicalOverridePath = BridgeAuthentication.GetCredentialPath();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(
+                BridgeAuthentication.CredentialPathOverrideEnvironmentVariable,
+                originalOverride);
+            Environment.SetEnvironmentVariable(
+                "TYPEAGENT_USER_DATA_DIR",
+                originalGeneral);
+        }
+
+        var request = new JObject
+        {
+            ["credential"] = new JObject
+            {
+                ["version"] = BridgeAuthentication.ProtocolVersion,
+                ["credentialId"] = credential.CredentialId,
+                ["secret"] = Hex(credential.Secret),
+            },
+            ["now"] = now,
+            ["fallbackCredentialPath"] = fallbackPath,
+            ["canonicalOverrideInput"] = canonicalOverrideInput,
+            ["canonicalOverridePath"] = canonicalOverridePath,
+            ["discovery"] = new JObject
+            {
+                ["agentName"] = BridgeAuthentication.VisualStudioAgentName,
+                ["role"] = BridgeAuthentication.VisualStudioAgentRole,
+                ["auth"] = discovery.Auth,
+            },
+            ["clientHello"] = clientHello.Message,
+        };
+        File.WriteAllText(
+            outputPath,
+            request.ToString(Newtonsoft.Json.Formatting.Indented),
+            Utf8NoBom);
+    }
+
+    private static void VerifyInteropResponse(
+        string requestPath,
+        string responsePath,
+        string outputPath)
+    {
+        var request = JObject.Parse(File.ReadAllText(requestPath, Encoding.UTF8));
+        var response = JObject.Parse(File.ReadAllText(responsePath, Encoding.UTF8));
+        JObject credentialValue = RequireObject(request, "credential");
+        var credential = new BridgeCredential(
+            RequireString(credentialValue, "credentialId"),
+            ParseHex(RequireString(credentialValue, "secret")));
+        long now = request.Value<long?>("now")
+            ?? throw new InvalidOperationException("Interop request timestamp was missing");
+
+        JObject discoveryValue = RequireObject(request, "discovery");
+        JObject discoveryAuth = RequireObject(discoveryValue, "auth");
+        var discoveryContext = new DiscoveryAuthContext(
+            discoveryAuth,
+            RequireString(discoveryAuth, "nonce"));
+        JObject discoveryResponse = RequireObject(response, "discoveryResponse");
+        int? port = discoveryResponse.Value<int?>("port");
+        string? url = discoveryResponse.Value<string>("url");
+        Assert(
+            BridgeAuthentication.VerifyDiscoveryResponse(
+                credential,
+                discoveryContext,
+                RequireString(discoveryValue, "agentName"),
+                RequireString(discoveryValue, "role"),
+                port,
+                url,
+                RequireObject(discoveryResponse, "auth"),
+                now),
+            "C# must verify the TypeScript discovery response");
+
+        JObject clientHelloValue = RequireObject(request, "clientHello");
+        var clientHello = new ClientHelloContext(
+            clientHelloValue,
+            RequireString(clientHelloValue, "clientInstanceId"),
+            RequireString(clientHelloValue, "clientNonce"));
+        AuthenticatedBridgeSession session =
+            BridgeAuthentication.VerifyServerHello(
+                credential,
+                clientHello,
+                RequireObject(response, "serverHello"),
+                now)
+            ?? throw new InvalidOperationException(
+                "C# rejected the TypeScript server hello");
+        VerifiedSecureFrame requestFrame =
+            BridgeAuthentication.VerifySecureFrame(
+                RequireObject(response, "requestFrame"),
+                session,
+                1,
+                "request",
+                session.ServerToClientKey,
+                now)
+            ?? throw new InvalidOperationException(
+                "C# rejected the TypeScript request frame");
+        Assert(
+            requestFrame.Payload.Value<string>("actionName") == "getActiveFile",
+            "C# must decode the TypeScript request payload");
+
+        var responsePayload = new JObject
+        {
+            ["id"] = requestFrame.Id,
+            ["success"] = true,
+            ["result"] = new JObject
+            {
+                ["source"] = "csharp",
+            },
+        };
+        JObject responseFrame = BridgeAuthentication.CreateSecureFrame(
+            session.SessionId,
+            1,
+            "response",
+            requestFrame.Id,
+            responsePayload,
+            session.ClientToServerKey);
+        File.WriteAllText(
+            outputPath,
+            new JObject { ["responseFrame"] = responseFrame }.ToString(
+                Newtonsoft.Json.Formatting.Indented),
+            Utf8NoBom);
+    }
+
+    private static JObject RequireObject(JObject value, string propertyName) =>
+        value[propertyName] as JObject
+        ?? throw new InvalidOperationException(
+            $"Interop property '{propertyName}' was missing");
+
+    private static string RequireString(JObject value, string propertyName) =>
+        value.Value<string>(propertyName)
+        ?? throw new InvalidOperationException(
+            $"Interop property '{propertyName}' was missing");
+
+    private static byte[] ParseHex(string value)
+    {
+        if (value.Length % 2 != 0)
+        {
+            throw new InvalidOperationException("Interop hex value was malformed");
+        }
+        var bytes = new byte[value.Length / 2];
+        for (int i = 0; i < bytes.Length; i++)
+        {
+            bytes[i] = byte.Parse(
+                value.Substring(i * 2, 2),
+                NumberStyles.HexNumber,
+                CultureInfo.InvariantCulture);
+        }
+        return bytes;
+    }
+
+    private static void TestCredentialPathResolution()
+    {
+        const string generalUserDataEnvironmentVariable = "TYPEAGENT_USER_DATA_DIR";
+        string? originalOverride = Environment.GetEnvironmentVariable(
+            BridgeAuthentication.CredentialPathOverrideEnvironmentVariable);
+        string? originalGeneralUserData = Environment.GetEnvironmentVariable(
+            generalUserDataEnvironmentVariable);
+        string originalWorkingDirectory = Directory.GetCurrentDirectory();
+        string temporaryDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"typeagent-vs-path-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(temporaryDirectory);
+        try
+        {
+            Environment.SetEnvironmentVariable(
+                BridgeAuthentication.CredentialPathOverrideEnvironmentVariable,
+                null);
+            string fallback = BridgeAuthentication.GetCredentialPath();
+            string expectedFallback = Path.GetFullPath(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".typeagent",
+                "visual-studio",
+                "bridge-credential.json"));
+            Assert(
+                string.Equals(fallback, expectedFallback, StringComparison.OrdinalIgnoreCase),
+                "The C# credential fallback must use the stable per-user path");
+
+            Environment.SetEnvironmentVariable(
+                generalUserDataEnvironmentVariable,
+                Path.Combine(temporaryDirectory, "different-process-user-data"));
+            Assert(
+                string.Equals(
+                    BridgeAuthentication.GetCredentialPath(),
+                    fallback,
+                    StringComparison.OrdinalIgnoreCase),
+                "The general user-data override must not affect the bridge credential");
+
+            foreach (string invalid in new[]
+            {
+                "   ",
+                @"relative\bridge-credential.json",
+            })
+            {
+                Environment.SetEnvironmentVariable(
+                    BridgeAuthentication.CredentialPathOverrideEnvironmentVariable,
+                    invalid);
+                AssertThrowsInvalidOperation(
+                    BridgeAuthentication.GetCredentialPath,
+                    "Invalid bridge credential overrides must fail closed");
+            }
+
+            string otherWorkingDirectory = Path.Combine(
+                temporaryDirectory,
+                "working-directory");
+            Directory.CreateDirectory(otherWorkingDirectory);
+            string overridePath = Path.Combine(
+                temporaryDirectory,
+                "credential-root",
+                "..",
+                "bridge-credential.json");
+            string expectedOverride = Path.GetFullPath(overridePath);
+            Environment.SetEnvironmentVariable(
+                BridgeAuthentication.CredentialPathOverrideEnvironmentVariable,
+                overridePath);
+            Assert(
+                string.Equals(
+                    BridgeAuthentication.GetCredentialPath(),
+                    expectedOverride,
+                    StringComparison.OrdinalIgnoreCase),
+                "The dedicated credential override must be canonicalized");
+            Directory.SetCurrentDirectory(otherWorkingDirectory);
+            Assert(
+                string.Equals(
+                    BridgeAuthentication.GetCredentialPath(),
+                    expectedOverride,
+                    StringComparison.OrdinalIgnoreCase),
+                "An absolute credential override must not depend on the working directory");
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(originalWorkingDirectory);
+            Environment.SetEnvironmentVariable(
+                BridgeAuthentication.CredentialPathOverrideEnvironmentVariable,
+                originalOverride);
+            Environment.SetEnvironmentVariable(
+                generalUserDataEnvironmentVariable,
+                originalGeneralUserData);
+            Directory.Delete(temporaryDirectory, recursive: true);
         }
     }
 
@@ -493,6 +793,25 @@ internal static class Program
         if (!condition)
         {
             throw new InvalidOperationException($"Assertion failed: {message}");
+        }
+    }
+
+    private static void AssertThrowsInvalidOperation(
+        Func<string> action,
+        string message)
+    {
+        try
+        {
+            action();
+            throw new InvalidOperationException($"Assertion failed: {message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Assert(
+                !ex.Message.StartsWith(
+                    "Assertion failed:",
+                    StringComparison.Ordinal),
+                message);
         }
     }
 

@@ -15,6 +15,8 @@ import * as path from "node:path";
 export const VISUAL_STUDIO_AGENT_NAME = "visualStudio";
 export const VISUAL_STUDIO_AGENT_ROLE = "default";
 export const VISUAL_STUDIO_BRIDGE_AUTH_VERSION = 1;
+export const VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV =
+    "TYPEAGENT_VS_BRIDGE_CREDENTIAL_PATH";
 
 const AUTH_WINDOW_MS = 15_000;
 const MAX_AUTH_WINDOW_MS = 30_000;
@@ -102,13 +104,13 @@ type StoredCredential = {
     secret: string;
 };
 
-type DiscoveryRequest = {
+export type VisualStudioDiscoveryRequest = {
     agentName: string;
     role?: string;
     auth?: VisualStudioDiscoveryRequestAuth;
 };
 
-type DiscoveryResponse = {
+export type VisualStudioDiscoveryResponse = {
     port: number | null;
     url?: string;
 };
@@ -138,10 +140,39 @@ class ReplayCache {
 const discoveryReplayCache = new ReplayCache();
 
 export function getVisualStudioBridgeCredentialPath(): string {
-    const userDataDir =
-        process.env["TYPEAGENT_USER_DATA_DIR"] ??
-        path.join(os.homedir(), ".typeagent");
-    return path.join(userDataDir, "visual-studio", "bridge-credential.json");
+    const override = process.env[VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV];
+    if (override !== undefined) {
+        return canonicalizeCredentialPathOverride(override);
+    }
+    return path.resolve(
+        os.homedir(),
+        ".typeagent",
+        "visual-studio",
+        "bridge-credential.json",
+    );
+}
+
+function canonicalizeCredentialPathOverride(value: string): string {
+    if (
+        value.length === 0 ||
+        value.trim() !== value ||
+        value.includes("\0") ||
+        !path.isAbsolute(value) ||
+        (process.platform === "win32" && !isFullyQualifiedWindowsPath(value))
+    ) {
+        throw new Error(
+            `${VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV} must be a canonicalizable absolute path without surrounding whitespace`,
+        );
+    }
+    return path.resolve(value);
+}
+
+function isFullyQualifiedWindowsPath(value: string): boolean {
+    return (
+        /^[a-zA-Z]:[\\/]/.test(value) ||
+        value.startsWith("\\\\") ||
+        value.startsWith("//")
+    );
 }
 
 export function clearVisualStudioBridgeCredentialCacheForTests(): void {
@@ -497,27 +528,49 @@ export function createVisualStudioDiscoveryRequestAuth(
 }
 
 export async function protectVisualStudioDiscoveryResponse(
-    request: DiscoveryRequest,
-    response: DiscoveryResponse,
+    request: VisualStudioDiscoveryRequest,
+    response: VisualStudioDiscoveryResponse,
     now: number = Date.now(),
 ): Promise<VisualStudioDiscoveryResponseAuth | undefined> {
     if (!isProtectedVisualStudioTuple(request.agentName, request.role)) {
         return undefined;
     }
     const credential = await loadOrCreateVisualStudioBridgeCredential();
+    const accepted = acceptVisualStudioDiscoveryRequest(
+        credential,
+        request,
+        response,
+        discoveryReplayCache,
+        now,
+    );
+    if (accepted === undefined) {
+        throw new Error("Discovery authentication failed");
+    }
+    return accepted;
+}
+
+export function acceptVisualStudioDiscoveryRequest(
+    credential: VisualStudioBridgeCredential,
+    request: VisualStudioDiscoveryRequest,
+    response: VisualStudioDiscoveryResponse,
+    replayCache: {
+        consume: (key: string, expiresAt: number, now: number) => boolean;
+    },
+    now: number = Date.now(),
+): VisualStudioDiscoveryResponseAuth | undefined {
     const auth = request.auth;
     if (
+        !isProtectedVisualStudioTuple(request.agentName, request.role) ||
         auth === undefined ||
         !verifyDiscoveryRequest(credential, request, auth, now) ||
-        !discoveryReplayCache.consume(
+        !replayCache.consume(
             `${auth.credentialId}:${auth.nonce}`,
             auth.expiresAt,
             now,
         )
     ) {
-        throw new Error("Discovery authentication failed");
+        return undefined;
     }
-
     const serverNonce = randomBytes(32).toString("hex");
     const expiresAt = now + AUTH_WINDOW_MS;
     return {
@@ -550,7 +603,7 @@ export function verifyVisualStudioDiscoveryResponse(
         role?: string;
         auth: VisualStudioDiscoveryRequestAuth;
     },
-    response: DiscoveryResponse & {
+    response: VisualStudioDiscoveryResponse & {
         auth?: VisualStudioDiscoveryResponseAuth;
     },
     now: number = Date.now(),
@@ -586,7 +639,7 @@ export function verifyVisualStudioDiscoveryResponse(
 
 function verifyDiscoveryRequest(
     credential: VisualStudioBridgeCredential,
-    request: DiscoveryRequest,
+    request: VisualStudioDiscoveryRequest,
     auth: VisualStudioDiscoveryRequestAuth,
     now: number,
 ): boolean {

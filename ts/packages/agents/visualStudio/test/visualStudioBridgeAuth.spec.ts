@@ -11,8 +11,10 @@ import {
     createVisualStudioClientHello,
     createVisualStudioDiscoveryRequestAuth,
     createVisualStudioSecureFrame,
+    getVisualStudioBridgeCredentialPath,
     loadOrCreateVisualStudioBridgeCredential,
     protectVisualStudioDiscoveryResponse,
+    VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV,
     verifyVisualStudioDiscoveryResponse,
     verifyVisualStudioSecureFrame,
     verifyVisualStudioServerHello,
@@ -383,23 +385,29 @@ describe("Visual Studio bridge authentication", () => {
 
 describe("Visual Studio discovery authentication", () => {
     let userDataDirectory: string;
-    let originalUserDataDirectory: string | undefined;
+    let originalCredentialPath: string | undefined;
 
     beforeAll(async () => {
-        originalUserDataDirectory = process.env["TYPEAGENT_USER_DATA_DIR"];
+        originalCredentialPath =
+            process.env[VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV];
         userDataDirectory = await fs.mkdtemp(
             path.join(os.tmpdir(), "typeagent-vs-auth-"),
         );
-        process.env["TYPEAGENT_USER_DATA_DIR"] = userDataDirectory;
+        process.env[VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV] = path.join(
+            userDataDirectory,
+            "visual-studio",
+            "bridge-credential.json",
+        );
         clearVisualStudioBridgeCredentialCacheForTests();
     });
 
     afterAll(async () => {
         clearVisualStudioBridgeCredentialCacheForTests();
-        if (originalUserDataDirectory === undefined) {
-            delete process.env["TYPEAGENT_USER_DATA_DIR"];
+        if (originalCredentialPath === undefined) {
+            delete process.env[VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV];
         } else {
-            process.env["TYPEAGENT_USER_DATA_DIR"] = originalUserDataDirectory;
+            process.env[VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV] =
+                originalCredentialPath;
         }
         await fs.rm(userDataDirectory, { recursive: true, force: true });
     });
@@ -509,5 +517,86 @@ describe("Visual Studio discovery authentication", () => {
                 auth: replayed,
             }),
         ).rejects.toThrow("Discovery authentication failed");
+    });
+});
+
+describe("Visual Studio bridge credential path", () => {
+    const generalUserDataEnvironmentVariable = "TYPEAGENT_USER_DATA_DIR";
+    let originalCredentialPath: string | undefined;
+    let originalUserDataDirectory: string | undefined;
+    let originalWorkingDirectory: string;
+    let temporaryDirectory: string;
+
+    beforeAll(async () => {
+        originalCredentialPath =
+            process.env[VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV];
+        originalUserDataDirectory =
+            process.env[generalUserDataEnvironmentVariable];
+        originalWorkingDirectory = process.cwd();
+        temporaryDirectory = await fs.mkdtemp(
+            path.join(os.tmpdir(), "typeagent-vs-path-"),
+        );
+    });
+
+    afterEach(() => {
+        process.chdir(originalWorkingDirectory);
+        delete process.env[VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV];
+        delete process.env[generalUserDataEnvironmentVariable];
+    });
+
+    afterAll(async () => {
+        if (originalCredentialPath !== undefined) {
+            process.env[VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV] =
+                originalCredentialPath;
+        }
+        if (originalUserDataDirectory !== undefined) {
+            process.env[generalUserDataEnvironmentVariable] =
+                originalUserDataDirectory;
+        }
+        await fs.rm(temporaryDirectory, { recursive: true, force: true });
+    });
+
+    it("uses the stable fallback regardless of the general user-data override", () => {
+        const expected = path.resolve(
+            os.homedir(),
+            ".typeagent",
+            "visual-studio",
+            "bridge-credential.json",
+        );
+        process.env[generalUserDataEnvironmentVariable] = path.join(
+            temporaryDirectory,
+            "different-process-user-data",
+        );
+        expect(getVisualStudioBridgeCredentialPath()).toBe(expected);
+    });
+
+    it.each(["", "   ", "relative/bridge-credential.json"])(
+        "rejects an invalid dedicated override %p",
+        (value) => {
+            process.env[VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV] = value;
+            expect(() => getVisualStudioBridgeCredentialPath()).toThrow(
+                "must be a canonicalizable absolute path",
+            );
+        },
+    );
+
+    it("canonicalizes an absolute override independently of the working directory", async () => {
+        const otherWorkingDirectory = path.join(
+            temporaryDirectory,
+            "working-directory",
+        );
+        await fs.mkdir(otherWorkingDirectory);
+        const override = path.join(
+            temporaryDirectory,
+            "credential-root",
+            "..",
+            "bridge-credential.json",
+        );
+        const expected = path.resolve(override);
+        process.env[VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV] = override;
+
+        expect(getVisualStudioBridgeCredentialPath()).toBe(expected);
+        process.chdir(otherWorkingDirectory);
+        expect(getVisualStudioBridgeCredentialPath()).toBe(expected);
     });
 });

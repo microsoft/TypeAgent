@@ -93,6 +93,8 @@ internal static class BridgeAuthentication
     public const int ProtocolVersion = 1;
     public const string VisualStudioAgentName = "visualStudio";
     public const string VisualStudioAgentRole = "default";
+    public const string CredentialPathOverrideEnvironmentVariable =
+        "TYPEAGENT_VS_BRIDGE_CREDENTIAL_PATH";
 
     private const long AuthWindowMilliseconds = 15_000;
     private const long MaxAuthWindowMilliseconds = 30_000;
@@ -409,16 +411,66 @@ internal static class BridgeAuthentication
     public static long CurrentUnixMilliseconds() =>
         DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-    private static string GetCredentialPath()
+    internal static string GetCredentialPath()
     {
-        string? userDataDirectory = Environment.GetEnvironmentVariable("TYPEAGENT_USER_DATA_DIR");
-        if (string.IsNullOrWhiteSpace(userDataDirectory))
+        string? overridePath = Environment.GetEnvironmentVariable(
+            CredentialPathOverrideEnvironmentVariable);
+        if (overridePath is not null)
         {
-            userDataDirectory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".typeagent");
+            return CanonicalizeCredentialPathOverride(overridePath);
         }
-        return Path.Combine(userDataDirectory, "visual-studio", "bridge-credential.json");
+
+        string userProfile = Environment.GetFolderPath(
+            Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrWhiteSpace(userProfile))
+        {
+            throw new InvalidOperationException(
+                "Current user profile path is unavailable");
+        }
+        return Path.GetFullPath(Path.Combine(
+            userProfile,
+            ".typeagent",
+            "visual-studio",
+            "bridge-credential.json"));
+    }
+
+    private static string CanonicalizeCredentialPathOverride(string value)
+    {
+        if (value.Length == 0
+            || !string.Equals(value, value.Trim(), StringComparison.Ordinal)
+            || value.Contains('\0')
+            || !IsFullyQualifiedPath(value))
+        {
+            throw new InvalidOperationException(
+                $"{CredentialPathOverrideEnvironmentVariable} must be a canonicalizable absolute path without surrounding whitespace");
+        }
+        try
+        {
+            return Path.GetFullPath(value);
+        }
+        catch (Exception ex)
+            when (ex is ArgumentException
+                || ex is NotSupportedException
+                || ex is PathTooLongException)
+        {
+            throw new InvalidOperationException(
+                $"{CredentialPathOverrideEnvironmentVariable} is invalid",
+                ex);
+        }
+    }
+
+    private static bool IsFullyQualifiedPath(string value)
+    {
+        if (value.StartsWith(@"\\", StringComparison.Ordinal)
+            || value.StartsWith("//", StringComparison.Ordinal))
+        {
+            return true;
+        }
+        return value.Length >= 3
+            && char.IsLetter(value[0])
+            && value[1] == ':'
+            && (value[2] == Path.DirectorySeparatorChar
+                || value[2] == Path.AltDirectorySeparatorChar);
     }
 
     private static void ValidatePrivatePath(string targetPath, bool isDirectory)

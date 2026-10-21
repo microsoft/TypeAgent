@@ -53,8 +53,13 @@ Two WebSocket channels:
 ### Authentication
 
 The TypeScript host provisions a 256-bit per-user credential at
-`~/.typeagent/visual-studio/bridge-credential.json` (or under
-`TYPEAGENT_USER_DATA_DIR`). On Windows, the directory and file use protected,
+`~/.typeagent/visual-studio/bridge-credential.json`. This security credential
+is intentionally independent of the general `TYPEAGENT_USER_DATA_DIR`
+setting so the TypeScript and Visual Studio processes cannot silently select
+different files. `TYPEAGENT_VS_BRIDGE_CREDENTIAL_PATH` can override the file
+location for diagnostics and tests, but it must be a fully qualified path
+without surrounding whitespace; both runtimes canonicalize it and fail
+closed on invalid values. On Windows, the directory and file use protected,
 non-inheriting ACLs that grant access only to the current user and Local
 System. The bridge fails closed if the credential is missing, malformed, has
 an unexpected owner, is a reparse point, or grants another principal access.
@@ -76,11 +81,12 @@ default 8999). If discovery is unreachable or the agent isn't yet
 registered, the reconnect loop simply retries — there is no silent
 fallback to a well-known port. Knobs:
 
-| Env var                                   | Default                   | Purpose                                                                                                         |
-| ----------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `AGENT_SERVER_PORT`                       | `8999`                    | Where the dispatcher's discovery channel is hosted.                                                             |
-| `TYPEAGENT_VS_BRIDGE_PORT` _(C# host)_    | _(unset → use discovery)_ | Pin the C# host to dial a specific bridge port; bypasses discovery only. Peer authentication remains mandatory. |
-| `VISUALSTUDIO_BRIDGE_PORT` _(agent-side)_ | _(unset → OS-assigned)_   | Pin the agent's bridge to a specific port when debugging.                                                       |
+| Env var                                   | Default                                             | Purpose                                                                                                         |
+| ----------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `AGENT_SERVER_PORT`                       | `8999`                                              | Where the dispatcher's discovery channel is hosted.                                                             |
+| `TYPEAGENT_VS_BRIDGE_CREDENTIAL_PATH`     | `~/.typeagent/visual-studio/bridge-credential.json` | Fully qualified shared credential file path; invalid values fail closed.                                        |
+| `TYPEAGENT_VS_BRIDGE_PORT` _(C# host)_    | _(unset → use discovery)_                           | Pin the C# host to dial a specific bridge port; bypasses discovery only. Peer authentication remains mandatory. |
+| `VISUALSTUDIO_BRIDGE_PORT` _(agent-side)_ | _(unset → OS-assigned)_                             | Pin the agent's bridge to a specific port when debugging.                                                       |
 
 ## Action Categories
 
