@@ -46,7 +46,36 @@ Two WebSocket channels:
   `WebSocketServer`; the C# host connects as a client and dispatches
   incoming actions through EnvDTE. The actual port is published to the
   agent-server's `PortRegistrar` under `(visualStudio, default)` and
-  discovered by `AgentBridgeClient` on every connect attempt.
+  discovered by `AgentBridgeClient` on every connect attempt. The discovery
+  result and action channel are authenticated before a port is trusted or an
+  EnvDTE action is dispatched.
+
+The action bridge carries only structured Visual Studio action frames and
+compact EnvDTE results. Chat messages, images, and other attachments use the
+separate dispatcher/WebView connection. Action-bridge messages are capped at
+1 MiB to bound buffering from a connected peer.
+
+### Authentication
+
+The TypeScript host provisions a 256-bit per-user credential at
+`~/.typeagent/visual-studio/bridge-credential.json`. This security credential
+is intentionally independent of the general `TYPEAGENT_USER_DATA_DIR`
+setting so the TypeScript and Visual Studio processes cannot silently select
+different files. `TYPEAGENT_VS_BRIDGE_CREDENTIAL_PATH` can override the file
+location for diagnostics and tests, but it must be a fully qualified path
+without surrounding whitespace; both runtimes canonicalize it and fail
+closed on invalid values. On Windows, the directory and file use protected,
+non-inheriting ACLs that grant access only to the current user and Local
+System. The bridge fails closed if the credential is missing, malformed, has
+an unexpected owner, is a reparse point, or grants another principal access.
+
+Discovery requests and responses use short-lived nonces and HMAC proofs bound
+to `(visualStudio, default)` and the returned port. The action bridge then
+performs a mutual nonce handshake, derives fresh directional session keys, and
+protects every request and response with a session ID, monotonic sequence
+number, and HMAC. Reconnects always negotiate a new session. A response is
+accepted only from the authenticated socket and session that received its
+request.
 
 ### Port discovery
 
@@ -57,11 +86,12 @@ default 8999). If discovery is unreachable or the agent isn't yet
 registered, the reconnect loop simply retries — there is no silent
 fallback to a well-known port. Knobs:
 
-| Env var                                   | Default                   | Purpose                                                                                          |
-| ----------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------ |
-| `AGENT_SERVER_PORT`                       | `8999`                    | Where the dispatcher's discovery channel is hosted.                                              |
-| `TYPEAGENT_VS_BRIDGE_PORT` _(C# host)_    | _(unset → use discovery)_ | Pin the C# host to dial a specific bridge port; bypasses discovery. Useful for manual debugging. |
-| `VISUALSTUDIO_BRIDGE_PORT` _(agent-side)_ | _(unset → OS-assigned)_   | Pin the agent's bridge to a specific port when debugging.                                        |
+| Env var                                   | Default                                             | Purpose                                                                                                         |
+| ----------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `AGENT_SERVER_PORT`                       | `8999`                                              | Where the dispatcher's discovery channel is hosted.                                                             |
+| `TYPEAGENT_VS_BRIDGE_CREDENTIAL_PATH`     | `~/.typeagent/visual-studio/bridge-credential.json` | Fully qualified shared credential file path; invalid values fail closed.                                        |
+| `TYPEAGENT_VS_BRIDGE_PORT` _(C# host)_    | _(unset → use discovery)_                           | Pin the C# host to dial a specific bridge port; bypasses discovery only. Peer authentication remains mandatory. |
+| `VISUALSTUDIO_BRIDGE_PORT` _(agent-side)_ | _(unset → OS-assigned)_                             | Pin the agent's bridge to a specific port when debugging.                                                       |
 
 ## Action Categories
 
@@ -79,7 +109,7 @@ fallback to a well-known port. Knobs:
 
 - Visual Studio 2022 (or later) with the **Visual Studio extension development**
   workload installed
-- Node.js ≥ 20 and pnpm ≥ 10
+- Node.js ≥ 22 and pnpm ≥ 10
 
 ## Build
 
@@ -89,15 +119,15 @@ The agent itself builds with the rest of the monorepo:
 pnpm run build visualStudio
 ```
 
-The VSIX host has its own two-stage build (WebView2 bundle + MSBuild). See
-[host/README.md](host/README.md#build).
+The VSIX MSBuild project builds and packages the WebView2 bundle automatically.
+See [host/README.md](host/README.md#build).
 
 ## Run
 
 1. Start the TypeAgent agent-server.
 2. Ensure `visualstudio-agent` is enabled in your dispatcher config.
 3. Launch Visual Studio with the VSIX installed.
-4. **View → Other Windows → TypeAgent Chat**.
+4. **View → TypeAgent Chat**.
 
 The chat panel connects to `ws://localhost:8999`. Once connected, the C# bridge
 discovers the agent's action port via that same WS (via the discovery channel)
@@ -113,10 +143,11 @@ packages/agents/visualStudio/
 │   ├── visualStudioSchema.agr         # Grammar rules
 │   └── visualStudioManifest.json
 ├── host/
-│   ├── csharp/                        # VSIX project (.NET / WPF)
 │   └── webview/                       # WebView2 chat content (TS + Vite)
 ├── package.json
 └── README.md
+
+dotnet/visualStudioTypeAgent/           # VSIX project (.NET / WPF)
 ```
 
 ## API Limitations
@@ -155,7 +186,8 @@ Any use of third-party trademarks or logos are subject to those third-party's po
   `[TypeAgent] Bridge…` lines indicating whether discovery succeeded and
   which port was used. To bypass discovery for diagnostics (e.g. dial a
   manually-launched bridge), set `TYPEAGENT_VS_BRIDGE_PORT` to the port
-  you want to dial.
+  you want to dial. The manually launched bridge must use the same protected
+  per-user credential; there is no unauthenticated override.
 - **Action ran but did nothing visible.** Check the Visual Studio **Output**
   window and the agent-server logs; EnvDTE silently no-ops on some commands
   when the relevant context (e.g. an active document, an active debug session)
@@ -190,11 +222,6 @@ model can react to build/error output instead of running blind), then
 
 ### Infrastructure
 
-- **Bridge reliability.** `bridge.send()` has no request timeout — a hung host
-  stalls `executeAction` indefinitely. Also no reconnect on host disconnect,
-  and only a single client is tracked at a time (last-connection-wins).
-- **Tests.** No `*.spec.ts` exist for the agent; bridge framing and error
-  paths are good first targets.
 - **Schema-side validation.** Parameters like `line` are typed as `string` and
   parsed in the host — push numeric types into the schema so the dispatcher
   rejects bad input before it reaches EnvDTE.

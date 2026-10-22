@@ -7,6 +7,7 @@ import {
     runWithSearchTiming,
     timeSearchStage,
     collectJsonSegments,
+    clearJsonSegmentCache,
     jsonSegmentDirectory,
 } from "@typeagent/knowpro";
 import { createHash, randomUUID } from "node:crypto";
@@ -30,6 +31,16 @@ import {
 import { CorpusAccess } from "./corpusAccess.js";
 import { EventSegmentStore } from "./eventSegmentStore.js";
 import { BoundedIngestionGroup } from "./boundedIngestionGroup.js";
+import { AgentSessionStore } from "./agentSessionStore.js";
+import { configuredAgentSessionModel } from "./agentSessionDistillation.js";
+import type {
+    AgentMemorySearchRequest,
+    AgentMemorySearchResult,
+    AgentSessionDistillationModel,
+    AgentSessionImportReceipt,
+    AgentSessionImportRequest,
+    AgentSessionReadRequest,
+} from "./agentSessionTypes.js";
 import {
     RevisionTextStore,
     type RevisionTextFaultPoint,
@@ -433,6 +444,8 @@ interface PreparedCorpusIndex {
 }
 
 export interface FileMemoryServiceOptions {
+    agentSessionImports?: boolean;
+    agentSessionDistillationModel?: AgentSessionDistillationModel;
     revisionTextCheckpoint?: (point: RevisionTextFaultPoint) => Promise<void>;
     sourceSynopses?: boolean;
     sourceSynopsisModel?: SourceSynopsisModel;
@@ -517,33 +530,6 @@ function applyKnowledgeSuppressions(
                 : [{ ...relationship, sourceIds }];
         }),
     };
-}
-
-function raceWithAbort<T>(
-    operation: Promise<T>,
-    signal: AbortSignal,
-): Promise<T> {
-    if (signal.aborted) {
-        void operation.catch(() => undefined);
-        return Promise.reject(
-            signal.reason ?? new Error("Operation cancelled"),
-        );
-    }
-    return new Promise<T>((resolve, reject) => {
-        const abort = () =>
-            reject(signal.reason ?? new Error("Operation cancelled"));
-        signal.addEventListener("abort", abort, { once: true });
-        operation.then(
-            (value) => {
-                signal.removeEventListener("abort", abort);
-                resolve(value);
-            },
-            (error) => {
-                signal.removeEventListener("abort", abort);
-                reject(error);
-            },
-        );
-    });
 }
 
 function contentFor(request: DocumentIngestRequest): string {
@@ -1069,6 +1055,7 @@ export class FileMemoryService
         }
     >();
     private readonly ingestionTails = new Map<string, Promise<void>>();
+    private readonly segmentCollectionWork = new Map<string, Promise<void>>();
     private readonly ingestionGroups =
         new BoundedIngestionGroup<AcceptedIngestion>((entries) =>
             this.dispatchIngestionGroup(entries),
@@ -1100,6 +1087,8 @@ export class FileMemoryService
     private readonly synopsisWork = new Map<string, Promise<void>>();
     private readonly textStores = new Map<string, RevisionTextStore>();
     private readonly revisionTextCheckpoint: FileMemoryServiceOptions["revisionTextCheckpoint"];
+    private readonly agentSessionStore: AgentSessionStore;
+    private readonly agentSessionImportsEnabled: boolean;
 
     public constructor(
         private readonly rootDirectory: string,
@@ -1296,6 +1285,63 @@ export class FileMemoryService
             (corpusId) => this.resumeBatchMaintenance(corpusId),
         );
         this.viewStore = new TypedViewStore(rootDirectory, userInfo().username);
+        this.agentSessionImportsEnabled = options.agentSessionImports !== false;
+        let sessionModel = options.agentSessionDistillationModel;
+        this.agentSessionStore = new AgentSessionStore(
+            rootDirectory,
+            {
+                ingestDocument: (request, signal) =>
+                    this.ingestDocument(request, signal),
+                getJob: (jobId) => this.getJob(jobId),
+                search: (request) => this.search(request),
+                withEligible: (corpusId, sources, operation) =>
+                    this.withEligibleAgentSessionSources(
+                        corpusId,
+                        sources,
+                        operation,
+                    ),
+                withIngestionGroup: (operation) =>
+                    this.withIngestionGroup(operation),
+            },
+            () =>
+                (sessionModel ??= configuredAgentSessionModel(
+                    options.viewModelEndpoint,
+                )),
+        );
+    }
+
+    private withEligibleAgentSessionSources(
+        corpusId: string,
+        sources: Array<{ sourceId: string; revisionId: string }>,
+        operation: () => Promise<void>,
+    ): Promise<void> {
+        return this.enqueueWrite(corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(corpusId);
+            if (runtime.manifest.pendingCorpusClear)
+                throw new Error("Agent session corpus removal is in progress");
+            for (const selected of sources) {
+                const source = runtime.manifest.sources.find(
+                    (entry) => entry.sourceId === selected.sourceId,
+                );
+                if (
+                    runtime.manifest.authorizedSourceRemoval?.sourceId ===
+                        selected.sourceId ||
+                    source?.activeRevisionId !== selected.revisionId ||
+                    !source.revisions.some(
+                        (revision) =>
+                            revision.revisionId === selected.revisionId &&
+                            revision.state === "ready",
+                    ) ||
+                    runtime.manifest.knowledgeSuppressions?.some(
+                        (entry) => entry.sourceId === selected.sourceId,
+                    )
+                )
+                    throw new Error(
+                        "Agent session evidence is unavailable, replaced or suppressed",
+                    );
+            }
+            await operation();
+        });
     }
 
     public initialize(): Promise<void> {
@@ -1327,6 +1373,7 @@ export class FileMemoryService
                         directory.name,
                     );
                     if (manifest) {
+                        await this.agentSessionStore.recover(directory.name);
                         if (manifest.pendingCorpusClear) {
                             const runtime = await this.getCorpusRuntime(
                                 directory.name,
@@ -1402,6 +1449,7 @@ export class FileMemoryService
         for (const controller of this.controllers.values()) {
             controller.abort(new Error("Memory service is closing"));
         }
+        await this.agentSessionStore.close();
         await Promise.allSettled(this.synopsisWork.values());
         await this.batchStore.close();
 
@@ -1412,6 +1460,7 @@ export class FileMemoryService
             ...this.indexedReads,
             ...this.reindexWork,
         ]);
+        await Promise.allSettled(this.segmentCollectionWork.values());
         // Family maintenance may admit a new build while tracked reads drain.
         const viewClosure = await Promise.allSettled([this.viewBuilds.close()]);
         await Promise.allSettled(
@@ -1563,6 +1612,7 @@ export class FileMemoryService
         this.viewBuilds.forget(corpusId);
         return this.enqueueWrite(corpusId, async () => {
             const runtime = await this.getCorpusRuntime(corpusId);
+            await this.agentSessionStore.purge(corpusId);
             await this.viewStore.clearDerivedViews(corpusId);
             if (runtime.manifest.indexGeneration !== undefined) {
                 await classifyIndexSchema(
@@ -1723,6 +1773,46 @@ export class FileMemoryService
         validateIdentifier("corpus ID", request.corpusId);
         await this.getCorpusRuntime(request.corpusId);
         return this.enqueueRootWrite(() => this.batchStore.start(request));
+    }
+
+    private async requireAgentSessionImports(corpusId: string): Promise<void> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        if (!this.agentSessionImportsEnabled)
+            throw new Error(
+                "Agent session imports are explicitly disabled by this host",
+            );
+        await this.getCorpusRuntime(corpusId);
+    }
+
+    public async importAgentSession(
+        request: AgentSessionImportRequest,
+    ): Promise<AgentSessionImportReceipt> {
+        await this.requireAgentSessionImports(request.corpusId);
+        return this.enqueueWrite(request.corpusId, () =>
+            this.agentSessionStore.import(request),
+        );
+    }
+
+    public async getAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt | undefined> {
+        await this.requireAgentSessionImports(request.corpusId);
+        return this.agentSessionStore.get(request);
+    }
+
+    public async cancelAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt> {
+        await this.requireAgentSessionImports(request.corpusId);
+        return this.agentSessionStore.cancel(request);
+    }
+
+    public async searchAgentMemories(
+        request: AgentMemorySearchRequest,
+    ): Promise<AgentMemorySearchResult> {
+        await this.requireAgentSessionImports(request.corpusId);
+        return this.agentSessionStore.search(request);
     }
 
     public async getBatchImport(batchId: string): Promise<MemoryBatchImport> {
@@ -2440,6 +2530,7 @@ export class FileMemoryService
                 }),
             );
         await this.viewStore.forgetSource(corpusId, sourceId);
+        await this.agentSessionStore.purge(corpusId, sourceId);
         if (retained) {
             await this.rebuildAndActivate(
                 corpusId,
@@ -3199,6 +3290,9 @@ export class FileMemoryService
             features: {
                 ...capabilities.features,
                 sourceSynopses: this.sourceSynopsesEnabled,
+                agentSessionImportTypes: this.agentSessionImportsEnabled
+                    ? ["agent-session-jsonl", "copilot-session-jsonl"]
+                    : [],
             },
             ...(this.viewDrafts
                 ? {
@@ -7237,6 +7331,11 @@ export class FileMemoryService
             }
             await this.writeManifest(request.corpusId, candidateManifest);
             runtime.manifest = candidateManifest;
+            if (suppress && changed)
+                await this.agentSessionStore.purge(
+                    request.corpusId,
+                    request.sourceId,
+                );
             await this.invalidateMaintainedViews(request.corpusId);
         });
         return this.listSourceKnowledgeSuppressions(
@@ -7368,6 +7467,12 @@ export class FileMemoryService
                     runtime.manifest = manifest;
                     runtime.index = index;
                     await this.rememberDocumentIndex(corpusId, runtime);
+                    for (const source of manifest.sources)
+                        await this.viewStore.markSourceRevisionStale(
+                            corpusId,
+                            source.sourceId,
+                        );
+                    await this.invalidateMaintainedViews(corpusId);
                     await this.removeInactiveIndexGenerations(
                         corpusId,
                         generation,
@@ -7411,21 +7516,28 @@ export class FileMemoryService
         await mkdir(candidateDirectory, { recursive: true });
         const candidateIndex = this.indexFactory(corpusId, candidateDirectory);
         try {
-            const rebuild = () =>
-                candidateIndex.rebuild(
-                    this.activeDocuments(candidateManifest),
-                    signal,
-                    async () => {},
-                );
-            await raceWithAbort(
-                this.wikiBudget
-                    ? runWithRequestBudget(
-                          new RequestBudget(this.wikiBudget),
-                          rebuild,
-                      )
-                    : rebuild(),
-                signal,
-            );
+            const rebuild = async () => {
+                const documents = this.activeDocuments(candidateManifest);
+                if (
+                    candidateManifest.sources.length <
+                        runtime.manifest.sources.length &&
+                    candidateIndex.rebuildRetained &&
+                    (await candidateIndex.rebuildRetained(
+                        runtime.index,
+                        documents,
+                        signal,
+                        async () => {},
+                    ))
+                )
+                    return;
+                await candidateIndex.rebuild(documents, signal, async () => {});
+            };
+            await (this.wikiBudget
+                ? runWithRequestBudget(
+                      new RequestBudget(this.wikiBudget),
+                      rebuild,
+                  )
+                : rebuild());
             this.throwIfAborted(signal);
             await stampIndexSchema(
                 candidateDirectory,
@@ -7453,6 +7565,7 @@ export class FileMemoryService
     private async removeInactiveIndexGenerations(
         corpusId: string,
         activeGeneration: string,
+        forceCollection = false,
     ): Promise<void> {
         validateIndexGeneration(activeGeneration);
         const root = this.indexDirectory(corpusId);
@@ -7543,9 +7656,55 @@ export class FileMemoryService
                         this.indexDirectory(corpusId, activeGeneration),
             )
         )
-            await timeSearchStage("storage.segments.collect", () =>
-                collectJsonSegments(root),
-            );
+            await this.reclaimIndexSegments(corpusId, root, forceCollection);
+    }
+
+    private async reclaimIndexSegments(
+        corpusId: string,
+        root: string,
+        forceCollection: boolean,
+    ): Promise<void> {
+        const manifest = this.corpora.get(corpusId)?.manifest;
+        if (
+            forceCollection ||
+            manifest?.authorizedSourceRemoval ||
+            manifest?.pendingCorpusClear
+        )
+            await this.collectIndexSegments(root);
+        else this.scheduleIndexCollection(corpusId, root);
+    }
+
+    private collectIndexSegments(root: string): Promise<void> {
+        return timeSearchStage("storage.segments.collect", () =>
+            collectJsonSegments(root),
+        );
+    }
+
+    private scheduleIndexCollection(corpusId: string, root: string): void {
+        if (this.segmentCollectionWork.has(root)) return;
+        const key = `${corpusId}:segment-collection`;
+        const work = new Promise<void>((resolve) => setTimeout(resolve, 250))
+            .then(() =>
+                this.enqueueWrite(
+                    corpusId,
+                    () => this.collectIndexSegments(root),
+                    true,
+                ),
+            )
+            .then(
+                () => this.wikiMaintenanceFailures.delete(key),
+                (error: unknown) => {
+                    this.wikiMaintenanceFailures.set(
+                        key,
+                        new Error(safeError(error)),
+                    );
+                },
+            )
+            .finally(() => this.segmentCollectionWork.delete(root));
+        this.segmentCollectionWork.set(
+            root,
+            work.then(() => {}),
+        );
     }
 
     private indexVersion(manifest: CorpusManifest): string {
@@ -8209,9 +8368,6 @@ export class FileMemoryService
                 );
                 finishPreparation();
             });
-            await timeSearchStage("storage.segments.collect", () =>
-                collectJsonSegments(path.dirname(candidateDirectory)),
-            );
             await this.enqueueWrite(
                 request.corpusId,
                 () =>
@@ -8331,6 +8487,7 @@ export class FileMemoryService
                                 this.removeInactiveIndexGenerations(
                                     request.corpusId,
                                     indexGeneration,
+                                    existing !== undefined,
                                 ),
                         );
                         await this.updateJob(job, "complete", {
@@ -8370,6 +8527,8 @@ export class FileMemoryService
         source: StoredSource,
         existing?: StoredSource,
     ): Promise<void> {
+        if (existing && existing.activeRevisionId !== source.activeRevisionId)
+            await this.agentSessionStore.purge(corpusId, source.sourceId);
         const retained = new Set(
             source.revisions.map((revision) => revision.revisionId),
         );
@@ -8898,6 +9057,7 @@ export class FileMemoryService
             }
         }
         await rm(root, { recursive: true, force: true });
+        clearJsonSegmentCache(root);
     }
 
     private async purgeObsoleteEventIndex(

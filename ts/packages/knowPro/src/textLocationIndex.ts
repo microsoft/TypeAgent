@@ -19,6 +19,16 @@ export type ScoredTextLocation = {
     textLocation: TextLocation;
 };
 
+export interface TextEmbeddingChunk {
+    text: string;
+    start: number;
+    end: number;
+}
+
+export interface TextEmbeddingLocation extends TextLocation {
+    textRange?: { start: number; end: number };
+}
+
 export interface ITextToTextLocationIndex {
     addTextLocation(
         text: string,
@@ -39,12 +49,12 @@ export interface ITextToTextLocationIndex {
 }
 
 export interface ITextToTextLocationIndexData {
-    textLocations: TextLocation[];
+    textLocations: TextEmbeddingLocation[];
     embeddings: Float32Array[];
 }
 
 export class TextToTextLocationIndex implements ITextToTextLocationIndex {
-    private textLocations: TextLocation[];
+    private textLocations: TextEmbeddingLocation[];
     private embeddingIndex: EmbeddingIndex;
 
     constructor(public settings: TextEmbeddingIndexSettings) {
@@ -56,7 +66,7 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
         return this.embeddingIndex.size;
     }
 
-    public get(pos: number): TextLocation {
+    public get(pos: number): TextEmbeddingLocation {
         return this.textLocations[pos];
     }
 
@@ -197,6 +207,11 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
     public clear(): void {
         this.textLocations = [];
         this.embeddingIndex.clear();
+    }
+
+    public truncate(size: number): void {
+        this.embeddingIndex.truncate(size);
+        this.textLocations.length = size;
     }
 
     public serialize(): ITextToTextLocationIndexData {

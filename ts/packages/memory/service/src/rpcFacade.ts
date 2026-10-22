@@ -23,6 +23,18 @@ export function createMemoryServiceRpcFacade(
     service: MemoryService & Partial<MemoryViewService>,
 ): MemoryService & MemoryViewService & MemoryTopicService {
     return {
+        importAgentSession: (request) =>
+            service.importAgentSession?.(request) ??
+            unsupportedCapability("agent session imports"),
+        getAgentSessionImport: (request) =>
+            service.getAgentSessionImport?.(request) ??
+            unsupportedCapability("agent session import status"),
+        cancelAgentSessionImport: (request) =>
+            service.cancelAgentSessionImport?.(request) ??
+            unsupportedCapability("agent session import cancellation"),
+        searchAgentMemories: (request) =>
+            service.searchAgentMemories?.(request) ??
+            unsupportedCapability("agent memory search"),
         queryTopics: (request) =>
             service.queryTopics?.(request) ??
             unsupportedCapability("topic queries"),

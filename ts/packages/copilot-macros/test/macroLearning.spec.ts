@@ -61,19 +61,23 @@ async function setup(mode: MacroLearningMode = "prepare", readOnly?: boolean) {
     return { directory, manager, host };
 }
 
+type StoredTestJob = Omit<MacroLearningJob, "authoring"> & {
+    authoring?: MacroLearningJob["authoring"];
+    attempts: Record<string, number>;
+    draft?: unknown;
+};
+
 async function mutateStoredJob(
     directory: string,
     jobId: string,
-    mutate: (job: { status: string; attempts: Record<string, number> }) => void,
+    mutate: (job: StoredTestJob) => void,
 ) {
     const records = new RevisionRecords(
         path.join(directory, "copilot-macros", "learning.json"),
     );
     const state = await records.load();
-    const job = state.get(jobId) as {
-        status: string;
-        attempts: Record<string, number>;
-    };
+    const job = state.get(jobId) as StoredTestJob;
+    expect(job).toBeDefined();
     mutate(job);
     await records.commit(new Map([[jobId, job]]));
 }
@@ -244,15 +248,14 @@ describe("durable macro learning", () => {
                 "copilot-macros",
                 "learning.json",
             );
-            const stored = JSON.parse(await readFile(filename, "utf8"));
-            const job = stored.jobs[0];
-            delete job.authoring;
-            job.status = status === "saved-catalog" ? "failed" : status;
-            if (status === "saved-catalog") {
-                job.draft = { old: true };
-                job.error = "catalog was saved";
-            }
-            await writeFile(filename, JSON.stringify(stored));
+            await mutateStoredJob(directory, summary.learningJobId!, (job) => {
+                delete job.authoring;
+                job.status = status === "saved-catalog" ? "failed" : status;
+                if (status === "saved-catalog") {
+                    job.draft = { old: true };
+                    job.error = "catalog was saved";
+                }
+            });
             const restarted = createManager(directory, host);
             const learner = runtime();
             await restarted.configureLearning(learner);
@@ -265,9 +268,8 @@ describe("durable macro learning", () => {
             expect(learner.extract).not.toHaveBeenCalled();
             expect(learner.build).not.toHaveBeenCalled();
             await restarted.close();
-            expect(
-                JSON.parse(await readFile(filename, "utf8")).jobs[0],
-            ).toMatchObject({
+            const persisted = await new RevisionRecords(filename).load();
+            expect(persisted.get(summary.learningJobId!)).toMatchObject({
                 status: "failed",
                 error: expect.stringContaining("re-record"),
             });
@@ -293,14 +295,13 @@ describe("durable macro learning", () => {
                     },
                 );
             } else {
-                const filename = path.join(
+                await mutateStoredJob(
                     directory,
-                    "copilot-macros",
-                    "learning.json",
+                    summary.learningJobId!,
+                    (job) => {
+                        job.authoring!.contextDigest = "0".repeat(64);
+                    },
                 );
-                const stored = JSON.parse(await readFile(filename, "utf8"));
-                stored.jobs[0].authoring.contextDigest = "0".repeat(64);
-                await writeFile(filename, JSON.stringify(stored));
             }
             const restarted = createManager(directory, host);
             const learner = runtime();
@@ -370,14 +371,9 @@ describe("durable macro learning", () => {
         const staged = await terminal(manager, summary.learningJobId!);
         expect(staged.status).toBe("needsReview");
         await manager.close();
-        const filename = path.join(
-            directory,
-            "copilot-macros",
-            "learning.json",
-        );
-        const stored = JSON.parse(await readFile(filename, "utf8"));
-        delete stored.jobs[0].authoring;
-        await writeFile(filename, JSON.stringify(stored));
+        await mutateStoredJob(directory, summary.learningJobId!, (job) => {
+            delete job.authoring;
+        });
         const restarted = createManager(directory, host);
         await restarted.configureLearning(runtime());
         await expect(restarted.approveMacro(staged.macro!)).rejects.toThrow(

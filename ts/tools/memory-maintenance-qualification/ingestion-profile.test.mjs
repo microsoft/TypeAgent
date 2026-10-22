@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
@@ -73,6 +74,36 @@ async function observedSegmentStore(observer) {
             }
         }`;
     const wrapperUrl = `data:text/javascript;base64,${Buffer.from(wrapper).toString("base64")}`;
+    const codecSource = await readFile(
+        new URL("../../packages/knowPro/src/fuzzyIndex.ts", import.meta.url),
+        "utf8",
+    );
+    const codecAst = ts.createSourceFile(
+        "fuzzyIndex.ts",
+        codecSource,
+        ts.ScriptTarget.Latest,
+        true,
+    );
+    const codecFunctions = codecAst.statements.filter(
+        (statement) =>
+            ts.isFunctionDeclaration(statement) &&
+            ["serializeEmbeddings", "deserializeEmbeddings"].includes(
+                statement.name?.text,
+            ),
+    );
+    assert.equal(codecFunctions.length, 2, "Missing production vector codec");
+    const codecCode = ts.transpileModule(
+        codecFunctions
+            .map((statement) => statement.getText(codecAst))
+            .join("\n"),
+        {
+            compilerOptions: {
+                module: ts.ModuleKind.ESNext,
+                target: ts.ScriptTarget.ES2022,
+            },
+        },
+    ).outputText;
+    const codecUrl = `data:text/javascript;base64,${Buffer.from(codecCode).toString("base64")}`;
     const source = await readFile(
         new URL("../../packages/knowPro/src/segmentedJson.ts", import.meta.url),
         "utf8",
@@ -85,7 +116,8 @@ async function observedSegmentStore(observer) {
             },
         })
         .outputText.replace('"node:fs/promises"', JSON.stringify(wrapperUrl))
-        .replace('"./searchTiming.js"', JSON.stringify(sourceTimingUrl));
+        .replace('"./searchTiming.js"', JSON.stringify(sourceTimingUrl))
+        .replace('"./fuzzyIndex.js"', JSON.stringify(codecUrl));
     globalThis[Symbol.for(key)] = observer;
     return {
         store: await import(
@@ -117,8 +149,41 @@ test("source segment collector bounds validated reads, retains shared roots, dra
         const oldFile = path.join(root, "old", "corpus_data.json");
         const currentFile = path.join(root, "current", "corpus_data.json");
         const orphanFile = path.join(root, "orphan", "corpus_data.json");
-        await store.writeSegmentedJson(oldFile, initial, {});
-        await store.writeSegmentedJson(currentFile, next, {});
+        const writeLegacy = async (file, data) => {
+            const blobs = path.join(root, ".segments");
+            await mkdir(blobs, { recursive: true });
+            const node = async (value) => {
+                const bytes = Buffer.from(`${JSON.stringify(value)}\n`);
+                const hash = createHash("sha256").update(bytes).digest("hex");
+                await writeFile(path.join(blobs, `${hash}.json`), bytes);
+                return hash;
+            };
+            const children = [];
+            for (let offset = 0; offset < data.records.length; offset += 16) {
+                const records = await Promise.all(
+                    data.records
+                        .slice(offset, offset + 16)
+                        .map((value) => node({ kind: "value", value })),
+                );
+                children.push(await node({ kind: "items", children: records }));
+            }
+            const records = await node({ kind: "chunks", children });
+            const hash = await node({
+                kind: "object",
+                entries: [["records", records]],
+            });
+            await mkdir(path.dirname(file), { recursive: true });
+            await writeFile(
+                file,
+                JSON.stringify({
+                    segmentedJsonVersion: 1,
+                    root: hash,
+                    metadata: {},
+                }),
+            );
+        };
+        await writeLegacy(oldFile, initial);
+        await writeLegacy(currentFile, next);
         await store.collectJsonSegments(root);
         assert.ok(
             observer.maximum > 1,

@@ -36,15 +36,19 @@ function importFunctions(file) {
     `;
 }
 
-function runPowerShell(code, expectedStatus = 0) {
+function runPowerShell(
+    code,
+    expectedStatus = 0,
+    executable = path.join(
+        process.env.SystemRoot,
+        "System32",
+        "WindowsPowerShell",
+        "v1.0",
+        "powershell.exe",
+    ),
+) {
     const result = spawnSync(
-        path.join(
-            process.env.SystemRoot,
-            "System32",
-            "WindowsPowerShell",
-            "v1.0",
-            "powershell.exe",
-        ),
+        executable,
         [
             "-NoProfile",
             "-NonInteractive",
@@ -90,6 +94,112 @@ function fixture(t) {
     return { dir, metadata };
 }
 
+test(
+    "build trust uses prompt-free machine trust and restores it on success and failure",
+    { skip: !windows },
+    () => {
+        runPowerShell(
+            `
+        . ${quote(path.join(scripts, "windows-package-trust.ps1"))}
+        $rsa = [Security.Cryptography.RSA]::Create(2048)
+        $request = [Security.Cryptography.X509Certificates.CertificateRequest]::new(
+            'CN=TypeAgent-Test', $rsa, [Security.Cryptography.HashAlgorithmName]::SHA256,
+            [Security.Cryptography.RSASignaturePadding]::Pkcs1)
+        $certificate = $request.CreateSelfSigned(
+            [DateTimeOffset]::UtcNow.AddMinutes(-1), [DateTimeOffset]::UtcNow.AddMinutes(5))
+        try {
+            $script:testPolicy = @{
+                publisher = $certificate.Subject
+                thumbprints = @($certificate.Thumbprint)
+            } | ConvertTo-Json
+            function Get-Content { $script:testPolicy }
+            $script:added = 0
+            $script:removed = 0
+            $script:closed = 0
+            $script:actions = 0
+            $script:stores = 0
+            $script:store = [pscustomobject]@{ Certificates = @() }
+            $script:store | Add-Member ScriptMethod Open {
+                param($flags)
+                if ($flags -ne [Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite) {
+                    throw 'Unexpected store flags'
+                }
+            }
+            $script:store | Add-Member ScriptMethod Add {
+                param($public)
+                if ($public.HasPrivateKey) { throw 'Private key reached trust store' }
+                if ($public.Thumbprint -ne $certificate.Thumbprint) { throw 'Certificate changed' }
+                $script:added++
+            }
+            $script:store | Add-Member ScriptMethod Remove { param($public) $script:removed++ }
+            $script:store | Add-Member ScriptMethod Close { $script:closed++ }
+            function New-Object {
+                param($TypeName, $ArgumentList)
+                if ($TypeName -eq 'Security.Cryptography.X509Certificates.X509Store') {
+                    if ($ArgumentList.Count -ne 2 -or $ArgumentList[0] -ne 'Root' -or
+                        $ArgumentList[1] -ne 'LocalMachine') {
+                        throw 'Build trust must avoid the CurrentUser Root confirmation dialog'
+                    }
+                    $script:stores++
+                    return $script:store
+                }
+                Microsoft.PowerShell.Utility\\New-Object -TypeName $TypeName -ArgumentList $ArgumentList
+            }
+            Use-TypeAgentBuildTrust -Certificate $certificate -Action { $script:actions++ }
+            $failed = $false
+            try {
+                Use-TypeAgentBuildTrust -Certificate $certificate -Action { throw 'Expected action failure' }
+            } catch {
+                if ($_.Exception.Message -ne 'Expected action failure') { throw }
+                $failed = $true
+            }
+            if (-not $failed -or $script:actions -ne 1 -or $script:added -ne 2 -or
+                $script:removed -ne 2 -or $script:closed -ne 2) {
+                throw 'Temporary trust was not restored'
+            }
+            $script:store.Certificates = @($certificate)
+            Use-TypeAgentBuildTrust -Certificate $certificate -Action { $script:actions++ }
+            if ($script:actions -ne 2 -or $script:added -ne 2 -or
+                $script:removed -ne 2 -or $script:closed -ne 3) {
+                throw 'Pre-existing machine trust was modified'
+            }
+            $script:store | Add-Member ScriptMethod Open { throw 'Store access denied' } -Force
+            $failed = $false
+            try {
+                Use-TypeAgentBuildTrust -Certificate $certificate -Action { throw 'Action ran without trust' }
+            } catch {
+                if ($_.Exception.Message -notlike '*Store access denied*') { throw }
+                $failed = $true
+            }
+            if (-not $failed -or $script:added -ne 2 -or $script:removed -ne 2 -or
+                $script:closed -ne 4) {
+                throw 'Store access failure was not propagated and cleaned up'
+            }
+            $script:testPolicy = @{
+                publisher = $certificate.Subject
+                thumbprints = @('0' * 40)
+            } | ConvertTo-Json
+            $failed = $false
+            try {
+                Use-TypeAgentBuildTrust -Certificate $certificate -Action { throw 'Unpinned action ran' }
+            } catch {
+                if ($_.Exception.Message -ne 'Build certificate does not match the independently pinned signing identity.') { throw }
+                $failed = $true
+            }
+            if (-not $failed -or $script:stores -ne 4) {
+                throw 'Unpinned certificate reached the machine trust store'
+            }
+        } finally {
+            $certificate.Dispose()
+            $rsa.Dispose()
+        }
+    `,
+            0,
+            "pwsh",
+        );
+    },
+);
+
 test("publication verifies final hashes, metadata and signatures", (t) => {
     const { dir, metadata } = fixture(t);
     let calls = 0;
@@ -112,6 +222,45 @@ test("publication verifies final hashes, metadata and signatures", (t) => {
     assert.throws(
         () => verifyShellArtifacts(dir, () => {}),
         /Unsafe installer/,
+    );
+});
+
+test("publication ignores builder diagnostics but still requires channel metadata", (t) => {
+    const { dir } = fixture(t);
+    writeFileSync(
+        path.join(dir, "builder-debug.yml"),
+        "x64:\n  target: nsis\n",
+    );
+    writeFileSync(
+        path.join(dir, "builder-effective-config.yaml"),
+        "win:\n  executableName: typeagentshell\n",
+    );
+    const verified = [];
+    assert.equal(
+        verifyShellArtifacts(dir, (file) => verified.push(file)),
+        1,
+    );
+    assert.deepEqual(verified, [path.join(dir, installer)]);
+    rmSync(path.join(dir, "ci-x64.yml"));
+    assert.throws(
+        () => verifyShellArtifacts(dir, () => {}),
+        /No shell channel metadata found/,
+    );
+});
+
+test("publication rejects unexpected YAML and unreferenced executables beside builder diagnostics", (t) => {
+    const { dir } = fixture(t);
+    writeFileSync(path.join(dir, "builder-debug.yml"), "x64: {}\n");
+    writeFileSync(path.join(dir, "unexpected.yml"), "path: ../outside.exe\n");
+    assert.throws(
+        () => verifyShellArtifacts(dir, () => {}),
+        /Unsafe installer path in unexpected\.yml/,
+    );
+    rmSync(path.join(dir, "unexpected.yml"));
+    writeFileSync(path.join(dir, "unexpected.exe"), "unsigned fixture");
+    assert.throws(
+        () => verifyShellArtifacts(dir, () => {}),
+        /Unreferenced executable in shell publication: unexpected\.exe/,
     );
 });
 
@@ -140,6 +289,10 @@ test("electron-builder validates the required Windows signing and publisher conf
     assert.deepEqual(config.win.signtoolOptions.signingHashAlgorithms, [
         "sha256",
     ]);
+    assert.equal(
+        config.win.signtoolOptions.rfc3161TimeStampServer,
+        "http://timestamp.digicert.com",
+    );
     const trustResource = config.extraResources.find(
         (resource) => resource.to === "windows-package-trust",
     );

@@ -117,6 +117,37 @@ describe("identity-aware conversation serialization", () => {
             }),
         ).rejects.toThrow("missing or incomplete");
     });
+    test("segmented metadata-only reads do not access binary payloads", async () => {
+        const directory = path.join(root, "skip-binary");
+        await writeConversationDataToFile(
+            data(),
+            directory,
+            "known",
+            { embeddingSize: 2 },
+            { message: identity },
+            true,
+        );
+        const blobs = path.join(root, ".segments");
+        const files = (await fs.readdir(blobs)).filter((name) =>
+            name.endsWith(".bin"),
+        );
+        expect(files.length).toBeGreaterThan(0);
+        for (const file of files) await fs.unlink(path.join(blobs, file));
+        const loaded = await readConversationDataFromFile(
+            directory,
+            "known",
+            2,
+            { message: identity },
+            { loadEmbeddings: false },
+        );
+        expect(loaded!.messages).toEqual(data().messages);
+        expect(loaded!.messageIndexData!.indexData).toBeUndefined();
+        await expect(
+            readConversationDataFromFile(directory, "known", 2, {
+                message: identity,
+            }),
+        ).rejects.toThrow();
+    });
     test.each(["legacy", "wrong"])(
         "rejects %s identity preserving structured source",
         async (kind) => {

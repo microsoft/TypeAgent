@@ -122,6 +122,12 @@ export class EmbeddingIndex {
         this.embeddings.splice(pos, 1);
     }
 
+    public truncate(size: number): void {
+        if (!Number.isSafeInteger(size) || size < 0 || size > this.size)
+            throw new Error("Invalid embedding index truncation");
+        this.embeddings.length = size;
+    }
+
     public clear(): void {
         this.embeddings = [];
     }
@@ -625,28 +631,47 @@ function* getIndexingBatches(
 }
 
 export function serializeEmbeddings(embeddings: NormalizedEmbedding[]): Buffer {
-    const buffers = embeddings.map((e) => Buffer.from(e.buffer));
-    return Buffer.concat(buffers);
+    if (!embeddings.length) return Buffer.alloc(0);
+    const dimensions = embeddings[0].length;
+    if (!Number.isSafeInteger(dimensions) || dimensions < 1)
+        throw new Error("Invalid embedding dimensions");
+    const buffer = Buffer.alloc(embeddings.length * dimensions * 4);
+    let offset = 0;
+    for (const embedding of embeddings) {
+        if (embedding.length !== dimensions)
+            throw new Error("Embeddings must have equal dimensions");
+        for (const value of embedding) {
+            if (!Number.isFinite(value))
+                throw new Error("Embedding contains a non-finite value");
+            buffer.writeFloatLE(value, offset);
+            offset += 4;
+        }
+    }
+    return buffer;
 }
 
 export function deserializeEmbeddings(
     buffer: Buffer,
     embeddingSize: number,
 ): NormalizedEmbedding[] {
+    if (!Number.isSafeInteger(embeddingSize) || embeddingSize < 1)
+        throw new Error("Invalid embedding dimensions");
     const embeddings: NormalizedEmbedding[] = [];
     const embeddingByteCount = Float32Array.BYTES_PER_ELEMENT * embeddingSize;
+    if (buffer.length % embeddingByteCount !== 0)
+        throw new Error("Embedding file corrupt: incomplete vector");
     for (
         let startAt = 0;
         startAt < buffer.length;
         startAt += embeddingByteCount
     ) {
-        const sliceStartAt = buffer.byteOffset + startAt;
-        const embedding = new Float32Array(
-            buffer.buffer.slice(
-                sliceStartAt,
-                sliceStartAt + embeddingByteCount,
-            ),
-        );
+        const embedding = new Float32Array(embeddingSize);
+        for (let i = 0; i < embeddingSize; i++) {
+            const value = buffer.readFloatLE(startAt + i * 4);
+            if (!Number.isFinite(value))
+                throw new Error("Embedding file corrupt: non-finite value");
+            embedding[i] = value;
+        }
         embeddings.push(embedding);
     }
     return embeddings;
