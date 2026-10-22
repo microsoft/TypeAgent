@@ -195,9 +195,7 @@ export async function closeBenchmarkService(
     await persist();
 }
 
-async function runWorker(spec) {
-    const prepared = await loadPrepared(spec);
-    const selection = spec.questionIds;
+export function selectConstructionCases(construction, selection) {
     if (selection !== undefined) {
         assert.ok(
             Array.isArray(selection) &&
@@ -205,20 +203,38 @@ async function runWorker(spec) {
                 new Set(selection).size === selection.length,
             "Diagnostic question IDs must be nonempty and unique",
         );
-        const available = new Set(
-            prepared.construction.map((entry) => entry.id),
-        );
+        const available = new Set(construction.map((entry) => entry.id));
         assert.ok(
             selection.every((id) => available.has(id)),
             "Unknown diagnostic question ID",
         );
     }
-    const constructionCases =
-        selection === undefined
-            ? prepared.construction
-            : prepared.construction.filter((entry) =>
-                  selection.includes(entry.id),
-              );
+    return selection === undefined
+        ? construction
+        : construction.filter((entry) => selection.includes(entry.id));
+}
+
+function completedOutcome(constructionCases, state, selection) {
+    if (
+        !constructionCases.every(
+            (entry) => state.cases[entry.id]?.status === "complete",
+        )
+    )
+        return state.stopAfterQuestion
+            ? "PARTIAL_STOP_AFTER_QUESTION"
+            : "PARTIAL_QUESTION_LIMIT";
+    return selection === undefined
+        ? "FULL_500_COMPLETED_CONFIGURED_JUDGE_PROTOCOL"
+        : "DIAGNOSTIC_SELECTION_COMPLETED";
+}
+
+async function runWorker(spec) {
+    const prepared = await loadPrepared(spec);
+    const selection = spec.questionIds;
+    const constructionCases = selectConstructionCases(
+        prepared.construction,
+        selection,
+    );
     const templates = officialJudgeTemplates(
         await readFile(spec.judgeSourcePath, "utf8"),
     );
@@ -451,15 +467,7 @@ async function runWorker(spec) {
                 break;
             if (++completedThisBatch >= spec.maximumCompletedQuestions) break;
         }
-        state.outcome = constructionCases.every(
-            (entry) => state.cases[entry.id]?.status === "complete",
-        )
-            ? selection === undefined
-                ? "FULL_500_COMPLETED_CONFIGURED_JUDGE_PROTOCOL"
-                : "DIAGNOSTIC_SELECTION_COMPLETED"
-            : state.stopAfterQuestion
-              ? "PARTIAL_STOP_AFTER_QUESTION"
-              : "PARTIAL_QUESTION_LIMIT";
+        state.outcome = completedOutcome(constructionCases, state, selection);
     } catch (error) {
         const bounded = signal.aborted || error.name === "TimeoutError";
         state.outcome = bounded

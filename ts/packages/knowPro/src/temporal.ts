@@ -29,9 +29,7 @@ function calendarDate(parts: number[]): Date {
     return date;
 }
 
-export function parseTemporalValue(raw: string): TemporalValue {
-    if (typeof raw !== "string")
-        throw new Error("A temporal value must be a source date string");
+function parseRfcTemporalValue(raw: string): TemporalValue | undefined {
     const rfc =
         /^(?:[A-Za-z]{3},\s*)?(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?(?:\s+([A-Za-z]{1,5}|[+-]\d{4}))?$/i.exec(
             raw.trim(),
@@ -61,6 +59,14 @@ export function parseTemporalValue(raw: string): TemporalValue {
         const spelling = `${rfc[3]}-${String(month).padStart(2, "0")}-${rfc[1].padStart(2, "0")}T${rfc[4]}:${rfc[5]}${rfc[6] ? `:${rfc[6]}` : ""}${zone}`;
         return { ...parseTemporalValue(spelling), raw };
     }
+    return undefined;
+}
+
+export function parseTemporalValue(raw: string): TemporalValue {
+    if (typeof raw !== "string")
+        throw new Error("A temporal value must be a source date string");
+    const rfc = parseRfcTemporalValue(raw);
+    if (rfc) return rfc;
     const match =
         /^(\d{4})[-/](\d{2})[-/](\d{2})(?: \([A-Za-z]{3}\))?(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-]\d{2}:?\d{2})?)?$/.exec(
             raw.trim(),

@@ -11,9 +11,9 @@ function sourceMetadata(message: DocPart) {
     const temporal = metadata.temporalContext;
     if (!temporal) return metadata;
     const {
-        contextHash,
-        discoveredDateEvidence,
-        eventMentions,
+        contextHash: _contextHash,
+        discoveredDateEvidence: _discoveredDateEvidence,
+        eventMentions: _eventMentions,
         inheritedDateEvidence,
         ...sourceContext
     } = temporal;

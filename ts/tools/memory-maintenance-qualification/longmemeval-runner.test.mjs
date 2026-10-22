@@ -20,8 +20,23 @@ import {
     benchmarkInvocationAllowance,
     closeBenchmarkService,
     acknowledgeStopAfterQuestion,
+    selectConstructionCases,
     main,
 } from "./longmemeval-live.mjs";
+
+test("diagnostic selection is exact, validated and retains the frozen construction order", () => {
+    const cases = ["a", "b", "c"].map((id) => ({ id }));
+    assert.deepEqual(selectConstructionCases(cases, ["c", "a"]), [
+        cases[0],
+        cases[2],
+    ]);
+    assert.equal(selectConstructionCases(cases, undefined), cases);
+    for (const invalid of [[], ["a", "a"], ["unknown"]])
+        assert.throws(
+            () => selectConstructionCases(cases, invalid),
+            /Diagnostic|Unknown/,
+        );
+});
 
 test("cooperative question-boundary stops acknowledge durably and malformed controls fail explicitly", async () => {
     const directory = await mkdtemp(
