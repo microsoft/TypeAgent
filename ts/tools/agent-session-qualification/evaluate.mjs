@@ -3219,7 +3219,7 @@ export async function runCli(
     argv,
     {
         evaluateRun = evaluate,
-        stdout = (text) => console.log(text),
+        stdout = (text) => process.stdout.write(`${text}\n`),
         stderr = (text) => console.error(text),
     } = {},
 ) {

@@ -182,5 +182,5 @@ if (
         "--output is required and must name a new JSON receipt",
     );
     const result = await runScale(path.resolve(values.output));
-    console.log(JSON.stringify(result, null, 2));
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
 }

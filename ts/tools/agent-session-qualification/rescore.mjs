@@ -699,13 +699,13 @@ if (
 ) {
     try {
         const result = await rescore(parseRescoreArgs(process.argv.slice(2)));
-        console.log(
+        process.stdout.write(
             JSON.stringify({
                 state: result.state,
                 failure: result.failure,
                 modelCalls: result.modelCalls,
                 metrics: result.metrics,
-            }),
+            }) + "\n",
         );
         process.exitCode = result.state === "failed" ? 1 : 0;
     } catch (error) {
