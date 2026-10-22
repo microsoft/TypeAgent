@@ -136,10 +136,6 @@ function projectTerms(
         textItems.push(term);
         embeddings.push(source.embeddings[index].slice());
     });
-    if (found.size !== terms.size)
-        throw new ReuseUnavailable(
-            "Retained vocabulary vector coverage is incomplete",
-        );
     result.textEmbeddingData = { textItems, embeddings };
     return result;
 }
@@ -150,7 +146,7 @@ function projectMessageVectors(
     ordinals: Map<number, number>,
     enabled: boolean,
 ): kp.IMessageTextIndexData {
-    const textLocations: kp.TextLocation[] = [];
+    const textLocations: kp.TextEmbeddingLocation[] = [];
     const embeddings: Float32Array[] = [];
     const result = {
         messageCount: selected.length,
@@ -165,7 +161,10 @@ function projectMessageVectors(
             source.indexData.embeddings.length
     )
         throw new ReuseUnavailable("Missing complete message vectors");
-    const found = new Set<string>();
+    const found = new Map<
+        string,
+        { length: number; ranges: Array<{ start: number; end: number }> }
+    >();
     source.indexData.textLocations.forEach((location, index) => {
         const messageOrdinal = ordinals.get(location.messageOrdinal);
         if (messageOrdinal === undefined) return;
@@ -177,10 +176,26 @@ function projectMessageVectors(
         )
             throw new Error("Invalid retained message-vector location");
         const key = `${messageOrdinal}:${chunk}`;
-        if (found.has(key))
-            throw new Error("Duplicate retained message-vector location");
-        found.add(key);
-        textLocations.push({ ...location, messageOrdinal });
+        const length =
+            data.messages[location.messageOrdinal].textChunks[chunk].length;
+        const range = location.textRange ?? { start: 0, end: length };
+        if (
+            !Number.isSafeInteger(range.start) ||
+            !Number.isSafeInteger(range.end) ||
+            range.start < 0 ||
+            range.end > length ||
+            range.end < range.start ||
+            (range.start === range.end && length > 0)
+        )
+            throw new Error("Invalid retained message-vector window");
+        const coverage = found.get(key) ?? { length, ranges: [] };
+        coverage.ranges.push(range);
+        found.set(key, coverage);
+        textLocations.push({
+            ...location,
+            messageOrdinal,
+            ...(location.textRange ? { textRange: { ...range } } : {}),
+        });
         embeddings.push(source.indexData!.embeddings[index].slice());
     });
     const expected = selected.reduce(
@@ -191,6 +206,24 @@ function projectMessageVectors(
         throw new ReuseUnavailable(
             "Retained message-vector coverage is incomplete",
         );
+    for (const coverage of found.values()) {
+        let end = 0;
+        for (const [i, range] of coverage.ranges
+            .sort((a, b) => a.start - b.start)
+            .entries()) {
+            if (range.start < end || (i > 0 && coverage.length === 0))
+                throw new Error("Duplicate retained message-vector location");
+            if (range.start !== end)
+                throw new ReuseUnavailable(
+                    "Retained message-vector window coverage is incomplete",
+                );
+            end = range.end;
+        }
+        if (end !== coverage.length)
+            throw new ReuseUnavailable(
+                "Retained message-vector window coverage is incomplete",
+            );
+    }
     return result;
 }
 
@@ -198,7 +231,9 @@ export function projectRetainedIndex(
     data: DocMemoryData,
     parts: DocPart[],
     lanes: { related: boolean; message: boolean },
-): { data: DocMemoryData; reason?: never } | { reason: string; data?: never } {
+):
+    | { data: DocMemoryData; missingTermVectors: number; reason?: never }
+    | { reason: string; data?: never; missingTermVectors?: never } {
     try {
         if (
             data.indexingComplete === false ||
@@ -218,7 +253,14 @@ export function projectRetainedIndex(
         );
         const { refs, ordinals } = projectReferences(data, messages);
         const postings = projectPostings(data, ordinals);
+        const terms = new Set(postings.items.map((item) => item.term));
+        const relatedTermsIndexData = projectTerms(data, terms, lanes.related);
         return {
+            missingTermVectors: lanes.related
+                ? terms.size -
+                  (relatedTermsIndexData.textEmbeddingData?.textItems.length ??
+                      0)
+                : 0,
             data: {
                 nameTag: data.nameTag,
                 tags: [],
@@ -228,11 +270,7 @@ export function projectRetainedIndex(
                 ),
                 semanticRefs: refs,
                 semanticIndexData: postings,
-                relatedTermsIndexData: projectTerms(
-                    data,
-                    new Set(postings.items.map((item) => item.term)),
-                    lanes.related,
-                ),
+                relatedTermsIndexData,
                 messageIndexData: projectMessageVectors(
                     data,
                     selected,

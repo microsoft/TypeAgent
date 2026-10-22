@@ -7385,6 +7385,12 @@ export class FileMemoryService
                     runtime.manifest = manifest;
                     runtime.index = index;
                     await this.rememberDocumentIndex(corpusId, runtime);
+                    for (const source of manifest.sources)
+                        await this.viewStore.markSourceRevisionStale(
+                            corpusId,
+                            source.sourceId,
+                        );
+                    await this.invalidateMaintainedViews(corpusId);
                     await this.removeInactiveIndexGenerations(
                         corpusId,
                         generation,

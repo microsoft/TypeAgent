@@ -120,6 +120,12 @@ export class EmbeddingIndex {
         this.embeddings.splice(pos, 1);
     }
 
+    public truncate(size: number): void {
+        if (!Number.isSafeInteger(size) || size < 0 || size > this.size)
+            throw new Error("Invalid embedding index truncation");
+        this.embeddings.length = size;
+    }
+
     public clear(): void {
         this.embeddings = [];
     }

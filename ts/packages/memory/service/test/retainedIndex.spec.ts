@@ -152,7 +152,6 @@ describe("retained-source index projection", () => {
     test.each([
         "aliases",
         "range",
-        "terms",
         "locations",
         "message-count",
         "part-coverage",
@@ -169,9 +168,6 @@ describe("retained-source index projection", () => {
             };
         if (change === "range")
             data.semanticRefs[1].range.end = { messageOrdinal: 3 };
-        if (change === "terms")
-            data.relatedTermsIndexData!.textEmbeddingData!.textItems[1] =
-                "wrong";
         if (change === "locations")
             data.messageIndexData!.indexData!.textLocations[2] = {
                 messageOrdinal: 2,
@@ -183,6 +179,63 @@ describe("retained-source index projection", () => {
         expect(
             projectRetainedIndex(data, [data.messages[1]], lanes).reason,
         ).toBeDefined();
+    });
+
+    test("partial vocabulary reuses available exact vectors and reports only retained terms needing backfill", () => {
+        const data = fixture();
+        data.relatedTermsIndexData!.textEmbeddingData!.textItems[1] =
+            "unretained";
+        const result = projectRetainedIndex(data, [data.messages[1]], lanes);
+        expect(result.reason).toBeUndefined();
+        expect(result.missingTermVectors).toBe(1);
+        expect(result.data!.relatedTermsIndexData!.textEmbeddingData).toEqual({
+            textItems: [],
+            embeddings: [],
+        });
+        expect(result.data!.semanticRefs).toHaveLength(2);
+    });
+
+    test("preserves complete embedding windows and their ranges without aliasing", () => {
+        const data = fixture();
+        const index = data.messageIndexData!.indexData!;
+        index.textLocations.splice(
+            1,
+            1,
+            {
+                messageOrdinal: 1,
+                chunkOrdinal: 0,
+                textRange: { start: 0, end: 2 },
+            },
+            {
+                messageOrdinal: 1,
+                chunkOrdinal: 0,
+                textRange: { start: 2, end: 5 },
+            },
+        );
+        index.embeddings.splice(
+            1,
+            1,
+            new Float32Array([1, 0]),
+            new Float32Array([0, 1]),
+        );
+        const projected = projectRetainedIndex(
+            data,
+            [data.messages[1]],
+            lanes,
+        ).data!;
+        expect(
+            projected.messageIndexData!.indexData!.textLocations,
+        ).toHaveLength(3);
+        projected.messageIndexData!.indexData!.textLocations[0].textRange!.end = 1;
+        expect(index.textLocations[1].textRange!.end).toBe(2);
+        index.textLocations[2].textRange!.start = 3;
+        expect(
+            projectRetainedIndex(data, [data.messages[1]], lanes).reason,
+        ).toContain("window coverage");
+        index.textLocations[2].textRange!.start = 1;
+        expect(() =>
+            projectRetainedIndex(data, [data.messages[1]], lanes),
+        ).toThrow("Duplicate retained message-vector location");
     });
 
     test("malformed posting ordinals fail instead of becoming empty successful indexes", () => {

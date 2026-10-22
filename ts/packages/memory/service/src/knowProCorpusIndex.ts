@@ -10,6 +10,7 @@ import {
     docPartsFromMarkdown,
     docPartsFromText,
     docPartsFromVtt,
+    splitDocPartTextForEmbedding,
 } from "@typeagent/conversation-memory";
 import * as kp from "@typeagent/knowpro";
 import { isInitiativeSubject } from "./initiativeDiscovery.js";
@@ -42,7 +43,7 @@ import type {
 
 const indexBaseName = "corpus";
 const structuralChunkCharacters = 8_000;
-const extractionChunkTokens = 7_500;
+const extractionChunkTokens = 24_000;
 const durableDocPartOptions = {
     collectLinkKnowledge: false,
     collectStructuralKnowledge: false,
@@ -386,6 +387,13 @@ export class KnowProCorpusIndex implements CorpusIndex {
         private readonly settingsFactory?: () => DocMemorySettings,
     ) {}
 
+    private createSettings(): DocMemorySettings {
+        const settings = this.settingsFactory?.() ?? createDocMemorySettings();
+        settings.conversationSettings.messageTextIndexSettings.splitText ??=
+            splitDocPartTextForEmbedding;
+        return settings;
+    }
+
     public async initialize(): Promise<void> {
         const semanticIndexPath = path.join(
             this.indexDirectory,
@@ -396,8 +404,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             () => false,
         );
         if (this.settingsFactory !== undefined || hasSemanticIndex) {
-            const settings =
-                this.settingsFactory?.() ?? createDocMemorySettings();
+            const settings = this.createSettings();
             const indexes = settings.conversationSettings;
             this.memory = await DocMemory.readFromFile(
                 this.indexDirectory,
@@ -754,11 +761,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         )
             return unavailable("Retained revision eligibility changed");
         const parts = documents.flatMap(toDocParts);
-        const memory = new DocMemory(
-            this.corpusId,
-            [],
-            this.settingsFactory?.(),
-        );
+        const memory = new DocMemory(this.corpusId, [], this.createSettings());
         const settings = memory.settings.conversationSettings;
         const projection = projectRetainedIndex(
             await source.serialize(),
@@ -775,6 +778,20 @@ export class KnowProCorpusIndex implements CorpusIndex {
         if (!projection.data) return unavailable(projection.reason);
         signal.throwIfAborted();
         await memory.deserialize(projection.data);
+        if (projection.missingTermVectors) {
+            console.warn(
+                `Memory retained-index projection requires ${projection.missingTermVectors} missing retained term vectors; backfilling without knowledge extraction`,
+            );
+            await onProgress({
+                completed: 0,
+                total: projection.missingTermVectors,
+                stage: "embedding",
+                operation: "rebuild",
+                message: "Backfilling missing retained term vectors",
+                documentCount: documents.length,
+                docPartCount: parts.length,
+            });
+        }
         const result = await kp.buildRelatedTermsIndex(
             memory,
             settings.relatedTermIndexSettings,
@@ -786,8 +803,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             total: parts.length,
             stage: "persisting",
             operation: "rebuild",
-            message:
-                "Persisting retained-source index without model generation",
+            message: "Persisting projected retained-source index",
             documentCount: documents.length,
             docPartCount: parts.length,
         });
@@ -845,7 +861,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         const memory = new DocMemory(
             this.corpusId,
             parts,
-            this.settingsFactory?.(),
+            this.createSettings(),
         );
         let completed = 0;
         let progressTail = Promise.resolve();
@@ -934,11 +950,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         const startedAt = performance.now();
         await this.initialize();
         const parts = documents.flatMap(toDocParts);
-        this.memory ??= new DocMemory(
-            this.corpusId,
-            [],
-            this.settingsFactory?.(),
-        );
+        this.memory ??= new DocMemory(this.corpusId, [], this.createSettings());
         await onProgress({
             completed: parts.length,
             total: parts.length,

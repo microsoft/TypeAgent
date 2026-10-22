@@ -18,6 +18,7 @@ describe("retained-source rebuild with real KnowPro and deterministic embeddings
     let root: string;
     let service: FileMemoryService;
     let forbidden: boolean;
+    let forbidExtraction: boolean;
     let failPublication: boolean;
     let extractionCalls: number;
     let embeddingCalls: number;
@@ -64,7 +65,8 @@ describe("retained-source rebuild with real KnowPro and deterministic embeddings
         );
         const knowledge = (text: string) => {
             extractionCalls++;
-            if (forbidden) throw new Error("Unexpected knowledge extraction");
+            if (forbidden || forbidExtraction)
+                throw new Error("Unexpected knowledge extraction");
             return {
                 entities: [
                     {
@@ -136,6 +138,7 @@ describe("retained-source rebuild with real KnowPro and deterministic embeddings
     beforeEach(async () => {
         root = await mkdtemp(path.join(os.tmpdir(), "retained-index-service-"));
         forbidden = false;
+        forbidExtraction = false;
         failPublication = false;
         extractionCalls = 0;
         embeddingCalls = 0;
@@ -255,6 +258,51 @@ describe("retained-source rebuild with real KnowPro and deterministic embeddings
         await service.initialize();
         await verify(corpusId);
         expect({ extractionCalls, embeddingCalls }).toEqual(before);
+    });
+
+    test("legacy partial term coverage backfills only missing retained vectors without re-extraction", async () => {
+        const corpusId = await ingest();
+        await service.close();
+        const manifest = JSON.parse(
+            await readFile(path.join(root, corpusId, "manifest.json"), "utf8"),
+        );
+        const directory = path.join(
+            root,
+            corpusId,
+            "index",
+            manifest.indexGeneration,
+        );
+        const memory = await DocMemory.readFromFile(
+            directory,
+            "corpus",
+            settings(),
+        );
+        const data = await memory!.serialize();
+        const terms = data.relatedTermsIndexData!.textEmbeddingData!;
+        expect(terms.textItems).toContain("retained");
+        const selected = terms.textItems
+            .map((text, i) => ({ text, vector: terms.embeddings[i] }))
+            .filter(
+                ({ text }) =>
+                    text !== "retained" && text !== "forgotten_needle",
+            );
+        terms.textItems = selected.map(({ text }) => text);
+        terms.embeddings = selected.map(({ vector }) => vector);
+        await kp.writeConversationDataToFile(data, directory, "corpus");
+        forbidExtraction = true;
+        const before = { extractionCalls, embeddingCalls };
+        service = open();
+        await service.initialize();
+        const preview = await service.previewForgetSource(corpusId, "private");
+        await service.forgetSource({
+            corpusId,
+            sourceId: "private",
+            confirmationToken: preview.confirmationToken,
+        });
+        expect(extractionCalls).toBe(before.extractionCalls);
+        expect(embeddingCalls - before.embeddingCalls).toBe(1);
+        forbidden = true;
+        await verify(corpusId);
     });
 
     test("incompatible retained embedding identity fails explicitly rather than rebuilding silently", async () => {
