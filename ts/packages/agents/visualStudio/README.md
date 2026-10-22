@@ -109,7 +109,7 @@ fallback to a well-known port. Knobs:
 
 - Visual Studio 2022 (or later) with the **Visual Studio extension development**
   workload installed
-- Node.js ≥ 22 and pnpm ≥ 10
+- The latest Node.js LTS release (recommended; see [supported versions](../../../README.md#setup)) and pnpm ≥ 10
 
 ## Build
 

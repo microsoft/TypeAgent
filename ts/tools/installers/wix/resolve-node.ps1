@@ -19,7 +19,7 @@
   install locations of Node itself and the common version managers. On success
   it prepends node's directory to $env:PATH (so npm/npx and child `node`
   invocations resolve too) and returns the full path to node.exe. Returns $null
-  when no Node can be found, letting callers warn-and-continue rather than fail.
+  when no supported Node can be found, letting callers warn-and-continue.
 #>
 
 function Resolve-TypeAgentUserDataDir(
@@ -77,12 +77,13 @@ function Update-PathFromRegistry {
     }
 }
 
-function Get-NodeMajor([string]$nodeExe) {
+function Test-SupportedNode([string]$nodeExe) {
     try {
-        $v = & $nodeExe -e "process.stdout.write(String(process.versions.node.split('.')[0]))" 2>$null
-        return [int]$v
+        & $nodeExe -e "const [major, minor, patch] = process.versions.node.split('.').map(Number); const minimum = {22: [23, 4], 24: [22, 1], 26: [12, 1]}[major]; process.exit(/^\d+\.\d+\.\d+$/.test(process.versions.node) && minimum && (minor > minimum[0] || (minor === minimum[0] && patch >= minimum[1])) ? 0 : 1);" 2>$null
+        return ($LASTEXITCODE -eq 0)
     } catch {
-        return 0
+        Write-Verbose "Could not validate Node at '$nodeExe': $_"
+        return $false
     }
 }
 
@@ -133,8 +134,7 @@ function Resolve-NodeExe {
     }
 
     foreach ($candidate in ($found | Where-Object { $_ } | Select-Object -Unique)) {
-        if (Test-Path $candidate) {
-            # Prefer Node >= 22 but accept anything usable as a last resort.
+        if ((Test-Path $candidate) -and (Test-SupportedNode $candidate)) {
             $dir = Split-Path -Parent $candidate
             $env:PATH = "$dir;$env:PATH"
             return $candidate

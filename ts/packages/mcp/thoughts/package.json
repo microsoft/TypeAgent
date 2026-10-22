@@ -40,7 +40,7 @@
     "microsoft-cognitiveservices-speech-sdk": "^1.40.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.20.5",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
   }

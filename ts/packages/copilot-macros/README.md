@@ -36,7 +36,7 @@ Program APIs are organized as subpath imports:
   and injected test providers.
 
 All names above are under `@typeagent/copilot-macros/`. Constructing the SQLite
-catalog requires **Node >=22.13**; importing the core does not open a database.
+catalog requires a [supported Node version](../../README.md#setup); importing the core does not open a database.
 Catalog data is local and scoped by workspace/profile, not synchronized or
 published remotely. Live provider/account/session bindings remain separate from
 durable recipe content.

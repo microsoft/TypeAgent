@@ -133,7 +133,7 @@ For installation, exact config and rollback, see the
 
 State lives under the plugin data root, in `recipes/<workspace-profile digest>/`.
 `TYPEAGENT_RECIPE_PROFILE_ID` defaults to `local-default`. A SQLite writer lock
-needs Node 22.13 or later. If a second process tries to mutate the same scope, it
+needs a [supported Node version](../../../README.md#setup). If a second process tries to mutate the same scope, it
 fails, so close the existing session before you move a scope to another process.
 The operating system releases the lock after a crash, and TypeAgent never steals
 a lock by checking PIDs. The old experimental SQLite catalog is left alone and not

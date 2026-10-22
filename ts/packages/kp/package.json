@@ -33,7 +33,7 @@
   "dependencies": {
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
-    "better-sqlite3": "12.8.0",
+    "better-sqlite3": "12.11.1",
     "debug": "^4.4.0",
     "typechat": "^0.1.1"
   },
