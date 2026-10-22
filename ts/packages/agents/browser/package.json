@@ -145,7 +145,7 @@
     "jsdom": "^28.1.0",
     "rimraf": "^6.0.1",
     "ts-jest": "^29.3.2",
-    "vite": "^6.4.3"
+    "vite": "^6.4.4"
   },
   "fluidBuild": {
     "tasks": {
