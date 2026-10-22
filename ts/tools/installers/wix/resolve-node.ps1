@@ -96,6 +96,12 @@ function Resolve-NodeExe {
     $cmd = Get-Command node.exe -ErrorAction SilentlyContinue
     if (-not $cmd) { $cmd = Get-Command node -ErrorAction SilentlyContinue }
     if ($cmd -and $cmd.Source -and (Test-Path $cmd.Source)) { $found += $cmd.Source }
+    $pathEntries = $env:PATH -split ';' |
+        ForEach-Object { $_.Trim().Trim('"') } |
+        Where-Object { $_ }
+    foreach ($pathEntry in $pathEntries) {
+        $found += (Join-Path $pathEntry "node.exe")
+    }
 
     # 2) Official installer / winget: Program Files\nodejs.
     foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramW6432)) {
