@@ -332,6 +332,7 @@ export interface MemorySearchRequest {
 }
 
 export interface MemoryEvidence {
+    temporalContext?: import("@typeagent/knowpro").MessageTemporalContext;
     evidenceId: string;
     corpusId: string;
     sourceId: string;
@@ -366,10 +367,10 @@ export interface MemoryAnswerRequest {
     maxResponseChars?: number;
     sourceIds?: string[];
     /**
-     * `synthesized` generates the answer with KnowPro's answer generator over
-     * the retrieved evidence. `extractive` returns the ranked evidence
-     * snippets verbatim. When omitted, `synthesized` is used if the corpus
-     * index supports it and `extractive` otherwise.
+     * `synthesized` uses the configured product answer path: bounded indexed
+     * evidence when informational views are enabled, otherwise the corpus
+     * index's answer generator. `extractive` returns ranked snippets verbatim.
+     * Omission selects synthesis when supported, otherwise extraction.
      */
     answerMode?: AnswerMode;
 }
@@ -737,6 +738,7 @@ export interface IndexedDocument {
 }
 
 export interface CorpusIndexMatch {
+    temporalContext?: import("@typeagent/knowpro").MessageTemporalContext;
     sourceId: string;
     revisionId: string;
     snippet: string;
@@ -752,6 +754,16 @@ export interface CorpusIndexAnswer {
 }
 
 export interface AnswerContextDiagnostics {
+    answerPath?: "indexed-fragments" | "knowpro";
+    indexedAnswer?: {
+        temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
+        fragments: MemoryEvidence[];
+        response: {
+            status: "answered" | "noAnswer";
+            answer: string;
+            citationIds: string[];
+        };
+    };
     queryPlan?: import("@typeagent/knowpro").LanguageSearchDebugContext;
     chunks?: {
         ordinal: number;
@@ -794,6 +806,7 @@ export interface IndexedFragment extends CorpusIndexMatch {
 }
 
 export interface IndexedFragmentRequest {
+    temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
     terms: string[];
     query?: string;
     sourceIds: string[];

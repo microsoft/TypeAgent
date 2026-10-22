@@ -21,6 +21,7 @@ import { access, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { writeRunbookJson } from "./durableRunbookJson.js";
 import { projectRetainedIndex } from "./retainedIndex.js";
+import { temporalQuestion } from "./temporalContext.js";
 import {
     indexedTextHash,
     parseIndexedLocator,
@@ -202,27 +203,6 @@ function collectPostingScores(
 
 function sourceUri(document: IndexedDocument): string {
     return `typeagent-memory://sources/${encodeURIComponent(document.source.sourceId)}/revisions/${encodeURIComponent(document.revision.revisionId)}`;
-}
-
-function temporalQuestion(
-    query: string,
-    context?: kp.TemporalQueryContext,
-): string {
-    if (!context) return query;
-    if (context.availabilityPolicy === "as-of")
-        throw new Error(
-            "Strict as-of temporal availability is not supported; use an explicitly scoped corpus",
-        );
-    const referenceTime =
-        context.referenceTime === undefined
-            ? undefined
-            : typeof context.referenceTime === "string"
-              ? kp.parseTemporalValue(context.referenceTime)
-              : kp.validateTemporalValue(context.referenceTime);
-    return `Question temporal metadata (not source evidence): ${JSON.stringify({
-        referenceTime,
-        availabilityPolicy: context.availabilityPolicy ?? "supplied-history",
-    })}\nResolve query-relative dates against referenceTime, never import time. Floating dates have no assumed timezone. Supplied history remains eligible, including same-day sessions after question time. Event time is not a message-time constraint. Latest means the latest supported applicable state, not the latest uploaded source; retain explicit corrections and unresolved conflicts.\n\n${query}`;
 }
 
 function parseDocParts(document: IndexedDocument): DocPart[] {
@@ -612,6 +592,9 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 blockOrdinal,
                 text: message.textChunks.join("\n"),
                 score: scores?.get(messageOrdinal) ?? 1,
+                ...(message.metadata.temporalContext
+                    ? { temporalContext: message.metadata.temporalContext }
+                    : {}),
             };
         }
     }
@@ -619,6 +602,10 @@ export class KnowProCorpusIndex implements CorpusIndex {
     public async readFragments(
         request: IndexedFragmentRequest,
     ): Promise<IndexedFragmentSelection> {
+        const query = temporalQuestion(
+            request.query ?? request.terms.join(" "),
+            request.temporalContext,
+        );
         const memory = this.memory;
         if (!memory) return { fragments: [], readChars: 0, limited: false };
         const { requested, terms } = matchingIndexTerms(memory, request);
@@ -642,10 +629,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             options.maxMessageMatches = 8;
             options.maxKnowledgeMatches = 12;
             options.messageRangesInScope = this.eligibleRanges();
-            const result = await memory.searchWithLanguage(
-                request.query ?? request.terms.join(" "),
-                options,
-            );
+            const result = await memory.searchWithLanguage(query, options);
             if (!result.success) throw new Error(result.message);
             for (const match of result.data.flatMap(
                 (item) => item.messageMatches,
@@ -1211,6 +1195,12 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     {
                         ...source,
                         snippet: message.textChunks.join("\n"),
+                        ...(message.metadata.temporalContext
+                            ? {
+                                  temporalContext:
+                                      message.metadata.temporalContext,
+                              }
+                            : {}),
                         score,
                         locator: `message:${messageOrdinal}`,
                     },
@@ -1249,6 +1239,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         const readMessages = new Set<number>();
         const readKnowledge = new Set<number>();
         const readerContext: AnswerContextDiagnostics = {
+            answerPath: "knowpro",
             retrievedMessageOrdinals: [],
             messageOrdinals: [],
             knowledgeMessageOrdinals: [],

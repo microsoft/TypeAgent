@@ -16,6 +16,7 @@ import {
 } from "./longmemeval-runner.mjs";
 import {
     benchmarkConfiguration,
+    observedJudgeModel,
     benchmarkFailure,
     benchmarkInvocationAllowance,
     closeBenchmarkService,
@@ -98,6 +99,28 @@ test("Azure configuration identity survives persisted JSON without an optional m
             ...settings,
             endpoint: "https://other.invalid",
         }),
+    );
+});
+
+test("judge identity ignores concurrent maintenance responses and never reuses an earlier judge model", () => {
+    const events = [
+        { role: "benchmarkJudge.complete", model: "previous-judge" },
+        { role: "ingestion:case", model: "source-synopsis" },
+        { role: "benchmarkJudge.complete", model: "current-judge" },
+        { role: "judge:case", model: "background-maintenance" },
+    ];
+    assert.equal(observedJudgeModel(events, 1), "current-judge");
+    assert.throws(
+        () => observedJudgeModel(events, 3),
+        /Judge provider response omitted model identity/,
+    );
+    assert.throws(
+        () =>
+            observedJudgeModel(
+                [...events, { role: "benchmarkJudge.complete" }],
+                4,
+            ),
+        /Judge provider response omitted model identity/,
     );
 });
 
@@ -220,7 +243,13 @@ const reference = {
 
 function fixture() {
     const sources = [];
-    const calls = { ingestion: [], answer: [], judge: [] };
+    const calls = {
+        ingestion: [],
+        search: [],
+        answer: [],
+        wait: [],
+        judge: [],
+    };
     const service = {
         listSources: async () => sources,
         ingestDocument: async ({ source }) => {
@@ -240,9 +269,12 @@ function fixture() {
             });
             return { sourceId: id, revisionId: id, jobId: id };
         },
-        search: async () => ({
-            matches: sources.map((source) => ({ sourceId: source.sourceId })),
-        }),
+        search: async (request) => {
+            calls.search.push(request);
+            throw new Error(
+                "The product-default benchmark must not add a preliminary search",
+            );
+        },
         answer: async (request) => {
             calls.answer.push(request);
             return {
@@ -258,7 +290,10 @@ function fixture() {
         persist: async () => {},
         signal: new AbortController().signal,
         role: () => {},
-        waitForMemoryJob: async () => ({ state: "complete" }),
+        waitForMemoryJob: async (_service, _jobId, options) => {
+            calls.wait.push(options);
+            return { state: "complete" };
+        },
         judge: async (...args) => {
             calls.judge.push(args);
             return { model: "unit-controlled-model", label: true };
@@ -307,6 +342,18 @@ test("production-shaped ingestion and answering exclude reference answers and re
         !JSON.stringify(f.calls.ingestion).includes("READER_QUESTION_SENTINEL"),
     );
     assert.equal(f.calls.answer[0].question, reader.question);
+    assert.deepEqual(f.calls.answer[0], {
+        corpusId: f.record.corpusId,
+        question: reader.question,
+        temporalContext: {
+            referenceTime: reader.question_date,
+            availabilityPolicy: "supplied-history",
+        },
+        includeDiagnostics: true,
+    });
+    assert.equal(f.calls.search.length, 0);
+    for (const options of f.calls.wait)
+        assert.deepEqual(options, { signal: f.controls.signal });
     assert.deepEqual(f.calls.answer[0].temporalContext, {
         referenceTime: reader.question_date,
         availabilityPolicy: "supplied-history",
@@ -319,10 +366,10 @@ test("production-shaped ingestion and answering exclude reference answers and re
         !JSON.stringify(f.calls.answer).includes("EVALUATOR_GOLD_SENTINEL"),
     );
     assert.equal(f.calls.judge[0][0].answer, reference.answer);
-    assert.equal(f.record.evidenceSessionRecallAt20Matches, 1);
+    assert.equal(f.record.evidenceSessionRecallAt20Matches, undefined);
 });
 
-test("preliminary retrieval, answer retrieval and actual reader coverage have separate denominators", async () => {
+test("product reader coverage uses actual answer diagnostics without an extra retrieval", async () => {
     const f = fixture();
     const distinct = {
         ...construction,
@@ -357,7 +404,8 @@ test("preliminary retrieval, answer retrieval and actual reader coverage have se
         f.record,
         f.controls,
     );
-    assert.equal(f.record.evidenceSessionRecallAt20Matches, 1);
+    assert.equal(f.calls.search.length, 0);
+    assert.equal(f.record.evidenceSessionRecallAt20Matches, undefined);
     assert.equal(f.record.answerRetrievalEvidenceSessionRecall, 0.5);
     assert.equal(f.record.readerMessageEvidenceSessionRecall, 0);
     assert.equal(f.record.readerKnowledgeEvidenceSessionRecall, 0.5);
@@ -372,6 +420,10 @@ test("preliminary retrieval, answer retrieval and actual reader coverage have se
     assert.deepEqual(
         scorecard.evidenceCoverage.readerMessageEvidenceSessionRecall,
         { measuredQuestions: 1, mean: 0 },
+    );
+    assert.deepEqual(
+        scorecard.evidenceCoverage.evidenceSessionRecallAt20Matches,
+        { measuredQuestions: 0, mean: null },
     );
 });
 

@@ -8,6 +8,7 @@ import type {
 } from "./types.js";
 
 export interface IndexedBlock {
+    temporalContext?: import("@typeagent/knowpro").MessageTemporalContext;
     sourceId: string;
     revisionId: string;
     blockOrdinal: number;
@@ -270,6 +271,9 @@ function recordFragment(
     if (ranges.some((range) => range.start <= start && range.end >= end))
         return;
     const fragment = {
+        ...(block.temporalContext
+            ? { temporalContext: block.temporalContext }
+            : {}),
         sourceId: block.sourceId,
         revisionId: block.revisionId,
         locator,

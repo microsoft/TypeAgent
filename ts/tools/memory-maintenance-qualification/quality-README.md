@@ -417,12 +417,27 @@ all on the question's calendar day. The diagnostic default remains strict
 timestamp cutoff validation. Question text/date are supplied only at reading;
 reference answers and evidence annotations are used only for evaluation.
 
-The measured arm is **document-backed conversation memory**, one Markdown source
-per original session position, using production KnowPro ingestion/search/answer.
-Navigation synopses and maintained views are explicitly disabled for this arm.
-It is not a measurement of native conversation-event ingestion or wiki quality.
-Evidence-session recall among 20 search matches is recorded separately from
-answer accuracy and is not relabeled as another system's recall@20 protocol.
+The measured arm uses **FileMemoryService constructor defaults**, with one
+Markdown document per original session position. The harness does not override
+the index factory, source synopses, informational views, view drafts, answer mode,
+answer limits, job polling interval, model settings or embedding settings.
+Enabled background maintenance runs normally; the harness neither pauses it nor
+forces an extra drain before answering. Actual service capabilities are frozen
+in the run state. This measures the default document-memory answer path, not
+native conversation-event ingestion or the quality of generated wiki articles.
+
+The harness calls `answer()` directly, with the original question/reference date
+and observational `includeDiagnostics`. There is no extra preliminary search.
+The default indexed reader receives source-owned canonical dates separately from
+question time. Its diagnostics record exactly the supplied fragments, source
+IDs, temporal context and public response, without hidden reasoning. Diagnostics
+do not change reader input or answer configuration. Historical preliminary
+recall@20 fields remain unmeasured, not zero, in new scorecards.
+
+The previous KnowPro-only arm explicitly disabled synopses and maintained views.
+Its immutable results are component diagnostics, not customer-default accuracy.
+Do not resume those stores with this implementation or combine their scores with
+a new default-configured run. Component-specific benchmark modes are not exposed.
 
 Judge templates are loaded verbatim from the pinned official evaluator source
 (SHA-256 `ecce9c4c79dc89d99534ac17b383a5cbb5b9f0c69ee98adaf0684742e3d95251`).

@@ -36,6 +36,7 @@ describe("durable extraction and message embedding windows", () => {
     let forbidden: boolean;
     const extracted: string[] = [];
     const embedded: string[] = [];
+    const languagePrompts: string[] = [];
 
     function model(role: EmbeddingRole = "document"): TextEmbeddingModel {
         const embed = (text: string) => {
@@ -101,7 +102,8 @@ describe("durable extraction and message embedding windows", () => {
             conversationSettings,
             languageModel: {
                 completionSettings: {},
-                complete: async () => {
+                complete: async (prompt) => {
+                    languagePrompts.push(JSON.stringify(prompt));
                     throw new Error("Unexpected chat");
                 },
             },
@@ -140,9 +142,73 @@ describe("durable extraction and message embedding windows", () => {
         forbidden = false;
         extracted.length = 0;
         embedded.length = 0;
+        languagePrompts.length = 0;
     });
     afterEach(async () => {
         await rm(root, { recursive: true, force: true });
+    });
+
+    test("indexed fragments preserve source-owned dates across restart and receive the separate question reference", async () => {
+        const doc = document("text", "Zephyr recovery happened yesterday.");
+        doc.revision.temporalContext = kp.normalizeTemporalContext(
+            {
+                version: 1,
+                scopes: [
+                    {
+                        ownerId: "message",
+                        start: 0,
+                        end: doc.content.length,
+                        messageTime: "2024/02/02 12:00",
+                    },
+                ],
+            },
+            doc.content.length,
+        );
+        const index = new KnowProCorpusIndex("test", root, settings);
+        await index.rebuild(
+            [doc],
+            new AbortController().signal,
+            async () => {},
+        );
+        const reopened = new KnowProCorpusIndex("test", root, settings);
+        await reopened.initialize();
+        const selection = await reopened.readFragments({
+            terms: ["Zephyr"],
+            sourceIds: ["source"],
+            temporalContext: { referenceTime: "2024/02/01 12:00" },
+        });
+        expect(selection.fragments.length).toBeGreaterThan(0);
+        for (const fragment of selection.fragments) {
+            expect(fragment.temporalContext?.messageTime).toEqual(
+                kp.parseTemporalValue("2024/02/02 12:00"),
+            );
+            expect(fragment.temporalContext?.ownerId).toBe("message");
+            expect(
+                await reopened.resolveIndexedLocator(
+                    fragment.sourceId,
+                    fragment.revisionId,
+                    fragment.locator,
+                ),
+            ).toBe(fragment.snippet);
+        }
+        await expect(
+            reopened.readFragments({
+                terms: ["Zephyr"],
+                sourceIds: ["source"],
+                query: "When was recovery?",
+                temporalContext: { referenceTime: "2024/02/01 12:00" },
+            }),
+        ).rejects.toThrow("Unexpected chat");
+        expect(languagePrompts).toHaveLength(1);
+        expect(languagePrompts[0]).toContain("Question temporal metadata");
+        expect(languagePrompts[0]).toContain("2024/02/01 12:00");
+        await expect(
+            reopened.readFragments({
+                terms: ["Zephyr"],
+                sourceIds: ["source"],
+                temporalContext: { availabilityPolicy: "as-of" },
+            }),
+        ).rejects.toThrow("Strict as-of");
     });
 
     test.each(["markdown", "web", "html", "text", "vtt"] as const)(

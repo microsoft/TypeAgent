@@ -18,6 +18,7 @@ import * as filesystem from "node:fs/promises";
 import { userInfo } from "node:os";
 import path from "node:path";
 import lockfile from "proper-lockfile";
+import { normalizeQueryTemporalContext } from "./temporalContext.js";
 
 import {
     MemoryBatchStore,
@@ -3122,6 +3123,9 @@ export class FileMemoryService
     private async searchDocuments(
         request: MemorySearchRequest,
     ): Promise<MemorySearchResult> {
+        const temporalContext = normalizeQueryTemporalContext(
+            request.temporalContext,
+        );
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
         validateSearchDateRange(request);
@@ -3168,6 +3172,7 @@ export class FileMemoryService
                     .slice(-32);
                 const selection = await runtime.index.readFragments({
                     query,
+                    ...(temporalContext ? { temporalContext } : {}),
                     terms: [
                         ...new Set(
                             query
@@ -3318,6 +3323,13 @@ export class FileMemoryService
                     ? {}
                     : { locator: candidate.locator }),
                 snippet: candidate.snippet,
+                ...(candidate.temporalContext
+                    ? {
+                          temporalContext: structuredClone(
+                              candidate.temporalContext,
+                          ),
+                      }
+                    : {}),
                 score: candidate.score,
                 sourceType: source.sourceType,
                 ...(revision.capturedAt === undefined
@@ -7144,6 +7156,9 @@ export class FileMemoryService
                         ? { sourceIds: request.sourceIds }
                         : {}),
                     indexedFragments: true,
+                    ...(request.temporalContext
+                        ? { temporalContext: request.temporalContext }
+                        : {}),
                     limit: Math.min(request.limit ?? 12, 12),
                     maxResponseChars: Math.min(
                         request.maxResponseChars ?? 24000,
@@ -7156,6 +7171,7 @@ export class FileMemoryService
                     Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
                     this.wikiModelEndpoint,
                     this.indexedAnswerModel,
+                    request,
                 );
                 for (const citation of generated.citations) {
                     if (!citation.locator?.startsWith("indexed:"))
@@ -7283,6 +7299,9 @@ export class FileMemoryService
         const result = await this.search({
             corpusId: request.corpusId,
             query: question,
+            ...(request.temporalContext
+                ? { temporalContext: request.temporalContext }
+                : {}),
             limit: request.limit ?? 5,
             ...(request.maxResponseChars === undefined
                 ? {}

@@ -15,7 +15,11 @@ import {
 } from "./harness.mjs";
 import { alive, supervise } from "./watchdog.mjs";
 import { withLiveRunLock } from "./live-resume.mjs";
-import { liveDependencyCheckpoint, observeProvider } from "./live-stages.mjs";
+import {
+    liveDependencyCheckpoint,
+    observedRoles,
+    observeProvider,
+} from "./live-stages.mjs";
 import { safeFailure } from "./live-qualification.mjs";
 import { prepareLongMemEval, publicPins } from "./quality-adapters.mjs";
 import {
@@ -175,6 +179,14 @@ export function benchmarkConfiguration(settings) {
     };
 }
 
+export function observedJudgeModel(events, firstRequest) {
+    const model = events
+        .slice(firstRequest)
+        .findLast((event) => event.role === "benchmarkJudge.complete")?.model;
+    assert.ok(model, "Judge provider response omitted model identity");
+    return model;
+}
+
 export async function closeBenchmarkService(
     service,
     state,
@@ -320,17 +332,15 @@ async function runWorker(spec) {
         );
     state.configuration = configuration;
     state.arm = {
-        name: "TypeAgent production document-backed conversation memory",
+        name: "TypeAgent FileMemoryService product defaults",
+        serviceConfiguration: "constructor-defaults",
         ingestion:
             "One Markdown source per original session position; typed session/turn temporal ownership, raw dates, roles and turn text preserved",
-        sourceSynopses: false,
-        informationalViews: false,
-        viewDrafts: false,
-        answerMode: "synthesized",
+        answerMode: "default",
         readerProvenance:
-            "Separate preliminary search, answer retrieval, actual message context and actual structured-knowledge context; citations identify supplied evidence, not independent entailment.",
-        answerLimit: 12,
-        searchLimit: 20,
+            "Opt-in public diagnostics identify the actual indexed fragments supplied to the product reader; citations identify supplied evidence, not independent entailment.",
+        answerLimit: "product-default",
+        preliminarySearch: false,
         readerDate:
             "Typed original question reference date supplied to querying and reading, never historical construction; official supplied-history eligibility",
         temporalContractVersion: 1,
@@ -341,13 +351,15 @@ async function runWorker(spec) {
     const { FileMemoryService } = await load(
         "packages\\memory\\service\\dist\\fileMemoryService.js",
     );
-    const { createKnowProCorpusIndex } = await load(
-        "packages\\memory\\service\\dist\\knowProCorpusIndex.js",
-    );
     const { waitForMemoryJob } = await load(
         "packages\\memory\\service\\dist\\rpcFacade.js",
     );
-    const model = client.openai.createChatModel();
+    state.roleCalls ??= [];
+    const model = observedRoles(
+        client.openai.createChatModel(),
+        "benchmarkJudge",
+        state,
+    );
     const signal =
         attempt.workDeadlineEpochMs === null
             ? new AbortController().signal
@@ -358,14 +370,9 @@ async function runWorker(spec) {
     const restoreObserver = observeProvider(state.providerRequests, () => role);
     const service = new FileMemoryService(
         path.join(spec.runDirectory, "isolated-store"),
-        {
-            indexFactory: createKnowProCorpusIndex,
-            sourceSynopses: false,
-            informationalViews: false,
-            viewDrafts: false,
-        },
     );
     const judge = async (reference, hypothesis, abortSignal) => {
+        const firstRequest = state.providerRequests.length;
         const result = await model.complete(
             judgePrompt(templates, reference, hypothesis),
             undefined,
@@ -379,12 +386,13 @@ async function runWorker(spec) {
             /^(yes|no)[.!]?$/i,
             "Invalid judge response; no fabricated label",
         );
-        const actual = state.providerRequests.at(-1)?.model;
-        assert.ok(actual, "Judge provider response omitted model identity");
+        const actual = observedJudgeModel(state.providerRequests, firstRequest);
         return { model: actual, label: /^yes/i.test(result.data.trim()) };
     };
     try {
         await service.initialize();
+        state.arm.serviceCapabilities = await service.getCapabilities();
+        await persist();
         const admittedEpochMs = Date.now();
         await writeJson(path.join(spec.runDirectory, "admitted.json"), {
             receiptId: spec.receiptId,

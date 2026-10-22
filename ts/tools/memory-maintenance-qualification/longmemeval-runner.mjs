@@ -126,7 +126,6 @@ export async function executeMemoryCase(
         const job = admitted.jobId
             ? await waitForMemoryJob(service, admitted.jobId, {
                   signal,
-                  pollIntervalMs: 100,
               })
             : admitted;
         assert.equal(
@@ -151,26 +150,12 @@ export async function executeMemoryCase(
         signal.throwIfAborted();
         record.status = "answering";
         await persist();
-        role(`search:${construction.id}`);
-        const start = performance.now();
-        const retrieved = await service.search({
-            corpusId: record.corpusId,
-            query: question,
-            temporalContext,
-            limit: 20,
-        });
-        record.searchMilliseconds = performance.now() - start;
-        record.retrievedSourceIds = retrieved.matches.map(
-            (match) => match.sourceId,
-        );
         role(`answer:${construction.id}`);
         const answerStart = performance.now();
         const answer = await service.answer({
             corpusId: record.corpusId,
             question,
             temporalContext,
-            limit: 12,
-            answerMode: "synthesized",
             includeDiagnostics: true,
         });
         assert.equal(
@@ -191,14 +176,7 @@ export async function executeMemoryCase(
                 entry.sessionId,
             ]),
         );
-        const returned = new Set(
-            record.retrievedSourceIds.map((id) => sourceToSession.get(id)),
-        );
         const expected = new Set(reference.answer_session_ids);
-        record.evidenceSessionRecallAt20Matches = expected.size
-            ? [...expected].filter((id) => returned.has(id)).length /
-              expected.size
-            : null;
         if (answer.readerContext) {
             const recall = (sourceIds) => {
                 const sessions = new Set(
