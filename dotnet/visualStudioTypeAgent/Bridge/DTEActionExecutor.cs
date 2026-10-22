@@ -18,7 +18,7 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge;
 ///
 /// All DTE access happens on the VS UI thread.
 /// </summary>
-internal sealed class DTEActionExecutor
+internal sealed class DTEActionExecutor : IBridgeActionExecutor
 {
     private readonly AsyncPackage _package;
 
