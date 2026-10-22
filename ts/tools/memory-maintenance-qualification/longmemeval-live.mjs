@@ -322,7 +322,7 @@ async function runWorker(spec) {
     state.arm = {
         name: "TypeAgent production document-backed conversation memory",
         ingestion:
-            "One Markdown source per original session position; dates, roles and turn text preserved",
+            "One Markdown source per original session position; typed session/turn temporal ownership, raw dates, roles and turn text preserved",
         sourceSynopses: false,
         informationalViews: false,
         viewDrafts: false,
@@ -331,7 +331,9 @@ async function runWorker(spec) {
             "Separate preliminary search, answer retrieval, actual message context and actual structured-knowledge context; citations identify supplied evidence, not independent entailment.",
         answerLimit: 12,
         searchLimit: 20,
-        readerDate: "Original question date supplied to reader only",
+        readerDate:
+            "Typed original question reference date supplied to querying and reading, never historical construction; official supplied-history eligibility",
+        temporalContractVersion: 1,
         judge: "Pinned official prompts; normal configured model and default generation settings, not official GPT-4o evaluator",
         humanGold:
             "Official LongMemEval references; no assertion of independent review of local artifact gold",

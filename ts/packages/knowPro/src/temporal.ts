@@ -62,6 +62,18 @@ function parseRfcTemporalValue(raw: string): TemporalValue | undefined {
     return undefined;
 }
 
+function parseTemporalPeriod(raw: string): TemporalValue {
+    const period = /^(\d{4})(?:-(\d{2}))?$/.exec(raw.trim());
+    if (!period) throw new Error("Unsupported or invalid source date format");
+    calendarDate([Number(period[1]), Number(period[2] ?? 1), 1]);
+    return {
+        raw,
+        kind: "calendar",
+        precision: period[2] ? "month" : "year",
+        localDateTime: period[0],
+    };
+}
+
 export function parseTemporalValue(raw: string): TemporalValue {
     if (typeof raw !== "string")
         throw new Error("A temporal value must be a source date string");
@@ -71,18 +83,7 @@ export function parseTemporalValue(raw: string): TemporalValue {
         /^(\d{4})[-/](\d{2})[-/](\d{2})(?: \([A-Za-z]{3}\))?(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-]\d{2}:?\d{2})?)?$/.exec(
             raw.trim(),
         );
-    if (!match) {
-        const period = /^(\d{4})(?:-(\d{2}))?$/.exec(raw.trim());
-        if (!period)
-            throw new Error("Unsupported or invalid source date format");
-        calendarDate([Number(period[1]), Number(period[2] ?? 1), 1]);
-        return {
-            raw,
-            kind: "calendar",
-            precision: period[2] ? "month" : "year",
-            localDateTime: period[0],
-        };
-    }
+    if (!match) return parseTemporalPeriod(raw);
     const parts = [
         Number(match[1]),
         Number(match[2]),

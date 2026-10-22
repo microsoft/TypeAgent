@@ -608,3 +608,33 @@ parallelize mutations to a shared index. Cross-case worker concurrency requires
 separate stores and measured provider, memory and storage capacity. Runtime,
 schema or prompt repairs require a new arm or an explicitly audited migration,
 not bypassing the normal checkpoint guards.
+
+### Known-failure temporal repair diagnostic
+
+For an explicitly authorized, fresh-store diagnostic selection, use
+`--question-ids` with the exact IDs preregistered in the investigation.
+Selection preserves the pinned construction order and rejects unknown or
+duplicate IDs. It does not turn inspected failures into an unseen holdout.
+
+```powershell
+$ids = '77eafa52,gpt4_74aed68e,gpt4_59149c77,c4ea545c,gpt4_9a159967'
+node tools\memory-maintenance-qualification\longmemeval-live.mjs --product (Get-Location).Path --dataset $officialCleanedDataset --judge-source $pinnedOfficialJudgeSource --output $ownedArtifactRoot --question-ids $ids --max-questions 5 --work-minutes unlimited --authorized-live-benchmark
+```
+
+Unlimited work must be explicitly authorized; startup validation remains
+bounded. No request-count limit is introduced. The runner creates a new owned
+directory, fresh corpora and frozen compiled/engine/config identities. Do not
+resume an older arm after changing code, schema or prompts.
+
+Historical construction now carries typed session/turn scopes. Question time
+is a separate query/reader reference, not historical evidence or an import
+timestamp. Official supplied-history eligibility includes same-day sessions
+after question time. Optional answer diagnostics contain translated/compiled
+queries, fallback decisions, selected references, reader public responses and
+native combiner groups, never hidden reasoning.
+
+To stop cooperatively, create `stop-after-question.json` inside that owned run
+directory with `{"stop":true}`. The runner checks before admitting a question
+and after grading, durably acknowledges the boundary and executes supported
+close. Remove the marker before intentionally resuming. This control does not
+turn a forced kill into a clean shutdown or cancel an already admitted question.
