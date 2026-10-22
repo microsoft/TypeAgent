@@ -375,6 +375,147 @@ export function chunkJsonl(text) {
     return chunks;
 }
 
+function validateFixtureEntry(root, entry, seen) {
+    requireThat(
+        typeof entry.caseId === "string" &&
+            /^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/.test(entry.caseId) &&
+            !seen.has(entry.caseId),
+        "invalid-case-id",
+    );
+    seen.add(entry.caseId);
+    requireThat(
+        typeof entry.sessionId === "string" &&
+            /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(entry.sessionId),
+        "invalid-session-id",
+    );
+    requireThat(
+        typeof entry.repository === "string" &&
+            entry.repository.trim().length > 0 &&
+            entry.repository.length <= 1000,
+        "invalid-repository",
+    );
+    requireThat(
+        entry.importType === "agent-session-jsonl",
+        "normalized-input-required",
+    );
+    requireThat(
+        entry.provenance?.public === true,
+        "public-provenance-required",
+    );
+    requireThat(
+        typeof entry.provenance.license === "string" &&
+            entry.provenance.license.trim().length > 0 &&
+            !/^(unknown|none|unlicensed|noassertion)$/i.test(
+                entry.provenance.license.trim(),
+            ),
+        "license-required",
+    );
+    const url = new URL(entry.provenance.sourceUrl);
+    requireThat(
+        url.protocol === "https:" &&
+            !url.username &&
+            !url.password &&
+            !/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|\[|::1$)/i.test(
+                url.hostname,
+            ) &&
+            url.hostname.includes(".") &&
+            !url.hostname.endsWith(".local") &&
+            !url.hostname.endsWith(".internal"),
+        "public-source-url-required",
+    );
+    requireThat(
+        /^[a-f0-9]{64}$/i.test(entry.sha256 ?? ""),
+        "input-sha256-required",
+    );
+    requireThat(
+        entry.goldSha256 === undefined ||
+            /^[a-f0-9]{64}$/i.test(entry.goldSha256),
+        "invalid-gold-sha256",
+    );
+    fixturePath(root, entry.input);
+    fixturePath(root, entry.gold);
+}
+
+async function loadFixture(root, entry) {
+    const bytes = await readFile(fixturePath(root, entry.input));
+    requireThat(
+        sha256(bytes) === entry.sha256.toLowerCase(),
+        "input-sha256-mismatch",
+    );
+    const text = bytes.toString("utf8");
+    requireThat(Buffer.from(text).equals(bytes), "invalid-input-utf8");
+    const chunks = chunkJsonl(text);
+    const events = chunks.flatMap((chunk) =>
+        chunk.jsonl
+            .trimEnd()
+            .split("\n")
+            .map((line) => JSON.parse(line)),
+    );
+    const ids = new Set();
+    for (const event of events) {
+        requireThat(
+            event.schemaVersion === 1 &&
+                event.sessionId === entry.sessionId &&
+                typeof event.id === "string" &&
+                !ids.has(event.id) &&
+                typeof event.text === "string" &&
+                event.text.length <= 12_000,
+            "invalid-normalized-event",
+        );
+        ids.add(event.id);
+    }
+    // Gold is retained only in evaluator-owned data, never in an import request.
+    const goldBytes = await readFile(fixturePath(root, entry.gold));
+    const goldSha256 = sha256(goldBytes);
+    requireThat(
+        entry.goldSha256 === undefined ||
+            goldSha256 === entry.goldSha256.toLowerCase(),
+        "gold-sha256-mismatch",
+    );
+    const gold = JSON.parse(goldBytes.toString("utf8"));
+    validateFixtureQuestions(gold, ids);
+    return {
+        entry,
+        text,
+        chunks,
+        events,
+        gold,
+        goldBytes,
+        goldSha256,
+    };
+}
+
+function validateFixtureQuestions(gold, ids) {
+    requireThat(Array.isArray(gold.questions), "invalid-gold");
+    const questionIds = new Set();
+    for (const q of gold.questions) {
+        requireThat(
+            typeof q.questionId === "string" &&
+                q.questionId.length > 0 &&
+                !questionIds.has(q.questionId) &&
+                typeof q.question === "string" &&
+                q.question.trim().length > 0 &&
+                typeof q.answer === "string",
+            "invalid-gold-question",
+        );
+        questionIds.add(q.questionId);
+        requireThat(
+            q.requiredTerms === undefined ||
+                (Array.isArray(q.requiredTerms) &&
+                    q.requiredTerms.every(
+                        (term) => typeof term === "string" && term.trim(),
+                    )),
+            "invalid-required-terms",
+        );
+        requireThat(
+            q.evidenceEventIds === undefined ||
+                (Array.isArray(q.evidenceEventIds) &&
+                    q.evidenceEventIds.every((id) => ids.has(id))),
+            "invalid-gold-evidence",
+        );
+    }
+}
+
 export async function loadFixtures(root, selected = []) {
     const manifest = JSON.parse(
         await readFile(path.join(root, "manifest.json"), "utf8"),
@@ -384,66 +525,7 @@ export async function loadFixtures(root, selected = []) {
         "invalid-manifest",
     );
     const seen = new Set();
-    for (const entry of manifest.cases) {
-        requireThat(
-            typeof entry.caseId === "string" &&
-                /^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/.test(entry.caseId) &&
-                !seen.has(entry.caseId),
-            "invalid-case-id",
-        );
-        seen.add(entry.caseId);
-        requireThat(
-            typeof entry.sessionId === "string" &&
-                /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(entry.sessionId),
-            "invalid-session-id",
-        );
-        requireThat(
-            typeof entry.repository === "string" &&
-                entry.repository.trim().length > 0 &&
-                entry.repository.length <= 1000,
-            "invalid-repository",
-        );
-        requireThat(
-            entry.importType === "agent-session-jsonl",
-            "normalized-input-required",
-        );
-        requireThat(
-            entry.provenance?.public === true,
-            "public-provenance-required",
-        );
-        requireThat(
-            typeof entry.provenance.license === "string" &&
-                entry.provenance.license.trim().length > 0 &&
-                !/^(unknown|none|unlicensed|noassertion)$/i.test(
-                    entry.provenance.license.trim(),
-                ),
-            "license-required",
-        );
-        const url = new URL(entry.provenance.sourceUrl);
-        requireThat(
-            url.protocol === "https:" &&
-                !url.username &&
-                !url.password &&
-                !/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|\[|::1$)/i.test(
-                    url.hostname,
-                ) &&
-                url.hostname.includes(".") &&
-                !url.hostname.endsWith(".local") &&
-                !url.hostname.endsWith(".internal"),
-            "public-source-url-required",
-        );
-        requireThat(
-            /^[a-f0-9]{64}$/i.test(entry.sha256 ?? ""),
-            "input-sha256-required",
-        );
-        requireThat(
-            entry.goldSha256 === undefined ||
-                /^[a-f0-9]{64}$/i.test(entry.goldSha256),
-            "invalid-gold-sha256",
-        );
-        fixturePath(root, entry.input);
-        fixturePath(root, entry.gold);
-    }
+    for (const entry of manifest.cases) validateFixtureEntry(root, entry, seen);
     requireThat(
         selected.every((id) => seen.has(id)),
         "unknown-selected-case",
@@ -453,81 +535,7 @@ export async function loadFixtures(root, selected = []) {
     );
     requireThat(entries.length > 0, "no-selected-cases");
     const loaded = [];
-    for (const entry of entries) {
-        const bytes = await readFile(fixturePath(root, entry.input));
-        requireThat(
-            sha256(bytes) === entry.sha256.toLowerCase(),
-            "input-sha256-mismatch",
-        );
-        const text = bytes.toString("utf8");
-        requireThat(Buffer.from(text).equals(bytes), "invalid-input-utf8");
-        const chunks = chunkJsonl(text);
-        const events = chunks.flatMap((chunk) =>
-            chunk.jsonl
-                .trimEnd()
-                .split("\n")
-                .map((line) => JSON.parse(line)),
-        );
-        const ids = new Set();
-        for (const event of events) {
-            requireThat(
-                event.schemaVersion === 1 &&
-                    event.sessionId === entry.sessionId &&
-                    typeof event.id === "string" &&
-                    !ids.has(event.id) &&
-                    typeof event.text === "string" &&
-                    event.text.length <= 12_000,
-                "invalid-normalized-event",
-            );
-            ids.add(event.id);
-        }
-        // Gold is retained only in evaluator-owned data, never in an import request.
-        const goldBytes = await readFile(fixturePath(root, entry.gold));
-        const goldSha256 = sha256(goldBytes);
-        requireThat(
-            entry.goldSha256 === undefined ||
-                goldSha256 === entry.goldSha256.toLowerCase(),
-            "gold-sha256-mismatch",
-        );
-        const gold = JSON.parse(goldBytes.toString("utf8"));
-        requireThat(Array.isArray(gold.questions), "invalid-gold");
-        const questionIds = new Set();
-        for (const q of gold.questions) {
-            requireThat(
-                typeof q.questionId === "string" &&
-                    q.questionId.length > 0 &&
-                    !questionIds.has(q.questionId) &&
-                    typeof q.question === "string" &&
-                    q.question.trim().length > 0 &&
-                    typeof q.answer === "string",
-                "invalid-gold-question",
-            );
-            questionIds.add(q.questionId);
-            requireThat(
-                q.requiredTerms === undefined ||
-                    (Array.isArray(q.requiredTerms) &&
-                        q.requiredTerms.every(
-                            (term) => typeof term === "string" && term.trim(),
-                        )),
-                "invalid-required-terms",
-            );
-            requireThat(
-                q.evidenceEventIds === undefined ||
-                    (Array.isArray(q.evidenceEventIds) &&
-                        q.evidenceEventIds.every((id) => ids.has(id))),
-                "invalid-gold-evidence",
-            );
-        }
-        loaded.push({
-            entry,
-            text,
-            chunks,
-            events,
-            gold,
-            goldBytes,
-            goldSha256,
-        });
-    }
+    for (const entry of entries) loaded.push(await loadFixture(root, entry));
     return loaded;
 }
 
@@ -602,9 +610,7 @@ export async function stateInventory(root, forbiddenRoot) {
     return files;
 }
 
-export async function prepareResume(options, fixtures) {
-    if (!options.resumeFrom) return undefined;
-    await validateResumeDestination(options);
+async function readResumeSource(options, fixtures) {
     const source = path.resolve(options.resumeFrom);
     requireThat(
         fixtures.length === 1 &&
@@ -657,17 +663,12 @@ export async function prepareResume(options, fixtures) {
             ) === fixture.goldSha256,
         "resume-snapshot-hash-mismatch",
     );
-    const stored = await checkpoint(
-        { runDirectory: source },
-        oldCase.corpusId,
-        fixture.entry.sessionId,
-    );
-    const requests = importRequests(fixture, oldCase.corpusId);
-    const pendingIndex = stored.requests?.length - 1;
-    const pendingRequest = requests[pendingIndex];
-    const digest = (value) => sha256(JSON.stringify(value));
+    return { source, originalInventory, bytes, prior, fixture, oldCase };
+}
+
+function isDeadlineCancellation(stored, prior, oldCase, fixture) {
     const committed = oldCase.receipt;
-    const deadlineCancellation =
+    return (
         stored.receipt?.state === "cancelled" &&
         prior.failure?.category === "timeout" &&
         prior.failure.code === "global-timeout" &&
@@ -687,7 +688,11 @@ export async function prepareResume(options, fixtures) {
               committed.losses?.length === 0
             : stored.receipt.cursor === 0 &&
               stored.receipt.sourceCount === 0 &&
-              stored.receipt.memoryCount === 0);
+              stored.receipt.memoryCount === 0)
+    );
+}
+
+function validateResumeReceipt(stored, oldCase, fixture, deadlineCancellation) {
     requireThat(
         stored.schemaVersion === 1 &&
             (stored.receipt?.state === "failed" || deadlineCancellation) &&
@@ -698,8 +703,24 @@ export async function prepareResume(options, fixtures) {
             stored.receipt.duplicates === 0 &&
             stored.receipt.losses?.length === 0 &&
             JSON.stringify(stored.scope) ===
-                JSON.stringify({ repository: fixture.entry.repository }) &&
-            pendingIndex >= 0 &&
+                JSON.stringify({ repository: fixture.entry.repository }),
+        "resume-checkpoint-request-or-cursor-mismatch",
+    );
+}
+
+function validateResumeRequests(
+    stored,
+    prior,
+    fixture,
+    oldCase,
+    requests,
+    deadlineCancellation,
+) {
+    const pendingIndex = stored.requests?.length - 1;
+    const pendingRequest = requests[pendingIndex];
+    const digest = (value) => sha256(JSON.stringify(value));
+    requireThat(
+        pendingIndex >= 0 &&
             pendingRequest &&
             stored.requests.every(
                 (request, i) =>
@@ -718,6 +739,11 @@ export async function prepareResume(options, fixtures) {
                     prior.failedImportReceipt?.corpusId === oldCase.corpusId)),
         "resume-checkpoint-request-or-cursor-mismatch",
     );
+    return pendingIndex;
+}
+
+async function validateResumeEvidence(stored, requests, pendingIndex) {
+    const digest = (value) => sha256(JSON.stringify(value));
     const parser = await compiled(
         "packages/memory/service/dist/agentSessionParsing.js",
     );
@@ -758,6 +784,9 @@ export async function prepareResume(options, fixtures) {
                 ),
         "resume-checkpoint-evidence-mismatch",
     );
+}
+
+async function resumeEmbeddingIdentities(options, source, prior) {
     let embeddingIdentities = [];
     if (options.mode === "live") {
         const calls = JSON.parse(
@@ -806,6 +835,10 @@ export async function prepareResume(options, fixtures) {
             ];
         }
     }
+    return embeddingIdentities;
+}
+
+async function copyResumeState(options, source, originalInventory, bytes) {
     const stateRoot = path.join(source, "state");
     const inventory = await stateInventory(stateRoot, source);
     await cp(stateRoot, path.join(options.runDirectory, "state"), {
@@ -839,6 +872,47 @@ export async function prepareResume(options, fixtures) {
     await save(
         path.join(options.runDirectory, "resume-original-inventory.json"),
         originalInventory,
+    );
+    return inventory;
+}
+
+export async function prepareResume(options, fixtures) {
+    if (!options.resumeFrom) return undefined;
+    await validateResumeDestination(options);
+    const { source, originalInventory, bytes, prior, fixture, oldCase } =
+        await readResumeSource(options, fixtures);
+    const stored = await checkpoint(
+        { runDirectory: source },
+        oldCase.corpusId,
+        fixture.entry.sessionId,
+    );
+    const requests = importRequests(fixture, oldCase.corpusId);
+    const deadlineCancellation = isDeadlineCancellation(
+        stored,
+        prior,
+        oldCase,
+        fixture,
+    );
+    validateResumeReceipt(stored, oldCase, fixture, deadlineCancellation);
+    const pendingIndex = validateResumeRequests(
+        stored,
+        prior,
+        fixture,
+        oldCase,
+        requests,
+        deadlineCancellation,
+    );
+    await validateResumeEvidence(stored, requests, pendingIndex);
+    const embeddingIdentities = await resumeEmbeddingIdentities(
+        options,
+        source,
+        prior,
+    );
+    const inventory = await copyResumeState(
+        options,
+        source,
+        originalInventory,
+        bytes,
     );
     return {
         source,
@@ -2273,54 +2347,26 @@ async function evaluateQuestions(
     }
 }
 
-async function runCase(
-    fixture,
-    options,
-    runtime,
-    holder,
-    counters,
-    signal,
-    result,
-    resume,
-) {
-    const phase = runtime.profilePhase ?? ((_name, operation) => operation());
-    let service = holder.service;
-    const corpusId =
-        resume?.corpusId ??
-        (
-            await abortable(
-                () =>
-                    service.createCorpus(
-                        `Qualification ${fixture.entry.caseId}`,
-                    ),
-                signal,
-            )
-        ).corpusId;
-    result.corpusId = corpusId;
-    const requests = importRequests(fixture, corpusId);
-    const episodes = [];
-    const parsedEvents = [];
-    for (const request of requests) {
-        const parsed = runtime.parser.parseAgentSessionChunk(request);
-        requireThat(
-            parsed.losses.length === 0 && parsed.duplicates === 0,
-            "production-parser-rejected-normalized-fixture",
-        );
-        parsedEvents.push(...parsed.events);
-        episodes.push(
-            ...runtime.parser.buildAgentSessionEpisodes(parsed.events),
-        );
-    }
+function validateHistoricalReplay(resume, ordinal, request, records, receipt) {
     requireThat(
-        parsedEvents.length === fixture.events.length &&
-            parsedEvents.every(
-                (event, i) =>
-                    event.id === fixture.events[i].id &&
-                    event.text === fixture.events[i].text,
-            ),
-        "normalized-text-changed-by-parser",
+        resume.validatedRequestHashes[ordinal] ===
+            sha256(JSON.stringify(request)) &&
+            request.expectedCursor + records <= resume.committedCursor &&
+            receipt.cursor === resume.committedCursor &&
+            [
+                "failed",
+                "complete",
+                "partial",
+                ...(resume.deadlineCancellation ? ["cancelled"] : []),
+            ].includes(receipt.state),
+        "resume-historical-replay-changed-state-or-caused-work",
     );
-    result.recordCount = fixture.events.length;
+}
+
+async function importCaseRequests(
+    requests,
+    { fixture, service, runtime, counters, signal, result, resume },
+) {
     result.chunks = [];
     for (const [ordinal, request] of requests.entries()) {
         const started = performance.now();
@@ -2337,24 +2383,21 @@ async function runCase(
         const receipt = historical
             ? admission
             : await poll(service, request, signal);
-        if (historical)
+        if (historical) {
+            validateHistoricalReplay(
+                resume,
+                ordinal,
+                request,
+                fixture.chunks[ordinal].records,
+                receipt,
+            );
             requireThat(
-                resume.validatedRequestHashes[ordinal] ===
-                    sha256(JSON.stringify(request)) &&
-                    request.expectedCursor + fixture.chunks[ordinal].records <=
-                        resume.committedCursor &&
-                    receipt.cursor === resume.committedCursor &&
-                    [
-                        "failed",
-                        "complete",
-                        "partial",
-                        ...(resume.deadlineCancellation ? ["cancelled"] : []),
-                    ].includes(receipt.state) &&
-                    counters.extractions === before.extractions &&
+                counters.extractions === before.extractions &&
                     counters.indexWrites === before.indexWrites &&
                     (runtime.tracker?.callBudget?.used ?? 0) === before.calls,
                 "resume-historical-replay-changed-state-or-caused-work",
             );
+        }
         runtime.embeddingTracker?.assertHealthy();
         result.receipt = receiptWithoutError(receipt);
         result.chunks.push({
@@ -2394,6 +2437,12 @@ async function runCase(
             result.receipt.cursor === fixture.events.length,
         "incomplete-final-receipt",
     );
+}
+
+async function validateCaseEvidence(
+    episodes,
+    { fixture, options, service, corpusId, signal, result },
+) {
     const stored = await checkpoint(options, corpusId, fixture.entry.sessionId);
     await save(path.join(result.directory, "artifacts.json"), stored);
     requireThat(
@@ -2473,6 +2522,15 @@ async function runCase(
         spanCount === fixture.events.length,
         "lost-or-duplicated-event-span",
     );
+    return { stored, sources };
+}
+
+async function verifyCaseReplay(
+    requests,
+    stored,
+    { fixture, options, runtime, holder, counters, signal, result, corpusId },
+) {
+    let service = holder.service;
     const snapshot = () => ({
         extractions: counters.extractions,
         modelCalls:
@@ -2542,6 +2600,13 @@ async function runCase(
         Object.values(result.restart.callDeltas).every((count) => count === 0),
         "restart-caused-new-work",
     );
+    return service;
+}
+
+async function verifyScopeFiltering(
+    stored,
+    { fixture, service, corpusId, signal, result },
+) {
     result.scopeFiltering = {
         state: "not-applicable",
         nonemptyMemories: stored.memories.length,
@@ -2592,6 +2657,90 @@ async function runCase(
             retrievedMemories: retrieved,
         };
     }
+}
+
+async function runCase(
+    fixture,
+    options,
+    runtime,
+    holder,
+    counters,
+    signal,
+    result,
+    resume,
+) {
+    const phase = runtime.profilePhase ?? ((_name, operation) => operation());
+    let service = holder.service;
+    const corpusId =
+        resume?.corpusId ??
+        (
+            await abortable(
+                () =>
+                    service.createCorpus(
+                        `Qualification ${fixture.entry.caseId}`,
+                    ),
+                signal,
+            )
+        ).corpusId;
+    result.corpusId = corpusId;
+    const requests = importRequests(fixture, corpusId);
+    const episodes = [];
+    const parsedEvents = [];
+    for (const request of requests) {
+        const parsed = runtime.parser.parseAgentSessionChunk(request);
+        requireThat(
+            parsed.losses.length === 0 && parsed.duplicates === 0,
+            "production-parser-rejected-normalized-fixture",
+        );
+        parsedEvents.push(...parsed.events);
+        episodes.push(
+            ...runtime.parser.buildAgentSessionEpisodes(parsed.events),
+        );
+    }
+    requireThat(
+        parsedEvents.length === fixture.events.length &&
+            parsedEvents.every(
+                (event, i) =>
+                    event.id === fixture.events[i].id &&
+                    event.text === fixture.events[i].text,
+            ),
+        "normalized-text-changed-by-parser",
+    );
+    result.recordCount = fixture.events.length;
+    await importCaseRequests(requests, {
+        fixture,
+        service,
+        runtime,
+        counters,
+        signal,
+        result,
+        resume,
+    });
+    const { stored, sources } = await validateCaseEvidence(episodes, {
+        fixture,
+        options,
+        service,
+        corpusId,
+        signal,
+        result,
+    });
+    service = await verifyCaseReplay(requests, stored, {
+        fixture,
+        options,
+        runtime,
+        holder,
+        counters,
+        signal,
+        result,
+        corpusId,
+    });
+    await verifyScopeFiltering(stored, {
+        fixture,
+        service,
+        corpusId,
+        signal,
+        result,
+    });
     result.questions = [];
     if (options.mode === "live" && options.maxQuestions)
         await phase("qa.paired-arms", () =>
@@ -2698,6 +2847,163 @@ async function diskBytes(directory) {
     return total;
 }
 
+function runtimeCounters(runtime, counters) {
+    return {
+        ...counters,
+        modelCalls:
+            runtime?.tracker?.callBudget?.used ??
+            runtime?.tracker?.calls.length ??
+            0,
+        chatCalls: runtime?.tracker?.calls.length ?? 0,
+        embeddingCalls: runtime?.embeddingTracker?.calls.length ?? 0,
+        embeddingItems: (runtime?.embeddingTracker?.calls ?? []).reduce(
+            (n, call) => n + call.items,
+            0,
+        ),
+        embeddingTransportAttempts: (
+            runtime?.embeddingTracker?.calls ?? []
+        ).reduce((n, call) => n + call.transportAttempts, 0),
+    };
+}
+
+function embeddingMetrics(runtime) {
+    const calls = runtime?.embeddingTracker?.calls ?? [];
+    return {
+        inputTokens: calls.reduce((n, call) => n + (call.inputTokens ?? 0), 0),
+        inputChars: calls.reduce((n, call) => n + call.inputChars, 0),
+        elapsedMs: calls.reduce((n, call) => n + call.elapsedMs, 0),
+        usageReportedCalls: calls.filter(
+            (call) => call.usageAvailability === "provider-returned",
+        ).length,
+        usage: Object.fromEntries(
+            ["prompt_tokens", "total_tokens"].map((key) => {
+                const available = calls.filter((call) =>
+                    Number.isFinite(call.usage?.[key]),
+                );
+                return [
+                    key,
+                    available.length
+                        ? available.reduce((n, call) => n + call.usage[key], 0)
+                        : null,
+                ];
+            }),
+        ),
+        usageCoverage: ratio(
+            calls.filter(
+                (call) => call.usageAvailability === "provider-returned",
+            ).length,
+            runtime?.embeddingTracker?.calls.length ?? 0,
+        ),
+        usageNote:
+            "Only provider-returned counts; unavailable usage is not estimated. See per-call availability.",
+        admissionFailures: runtime?.embeddingTracker?.admissionFailures ?? [],
+    };
+}
+
+function modelRoleMetrics(runtime) {
+    return Object.fromEntries(
+        [
+            ...new Set(
+                (runtime?.tracker?.calls ?? []).map((call) => call.role),
+            ),
+        ].map((role) => {
+            const calls = runtime.tracker.calls.filter(
+                (call) => call.role === role,
+            );
+            return [
+                role,
+                {
+                    calls: calls.length,
+                    inputChars: calls.reduce(
+                        (n, call) => n + call.inputChars,
+                        0,
+                    ),
+                    outputChars: calls.reduce(
+                        (n, call) => n + call.outputChars,
+                        0,
+                    ),
+                    elapsedMs: calls.reduce((n, call) => n + call.elapsedMs, 0),
+                },
+            ];
+        }),
+    );
+}
+
+async function closeEvaluationRuntime(
+    holder,
+    runtime,
+    options,
+    started,
+    receipt,
+) {
+    for (const cleanup of [
+        () => holder.service?.close(),
+        () => runtime?.stop(),
+    ]) {
+        const remaining = Math.max(
+            1,
+            Math.min(10_000, options.timeoutMs - (performance.now() - started)),
+        );
+        const deadline = deadlineSignal(
+            new AbortController().signal,
+            remaining,
+        );
+        try {
+            await abortable(cleanup, deadline.signal);
+        } catch (error) {
+            receipt.state = "failed";
+            receipt.cleanupFailure = safeFailure(error);
+        } finally {
+            deadline.close();
+        }
+    }
+}
+
+function validateResumedRuntime(runtime, resume, options) {
+    if (!resume || options.mode !== "live") return;
+    requireThat(
+        runtime.tracker?.identity === "copilot:gpt-6-luna" &&
+            runtime.modelCapacity?.selectedModel === "gpt-6-luna",
+        "resume-current-chat-model-identity-mismatch",
+    );
+    for (const identity of resume.embeddingIdentities) {
+        const current = runtime.trackedEmbedding?.forRole(
+            identity.task,
+        ).embeddingIdentity;
+        requireThat(
+            JSON.stringify(current) === JSON.stringify(identity),
+            "resume-current-embedding-semantic-identity-mismatch",
+        );
+    }
+}
+
+async function auditResumeSource(receipt, resume, phase) {
+    receipt.cumulativeCounters = Object.fromEntries(
+        Object.entries(receipt.counters).map(([key, value]) => [
+            key,
+            value + (resume.priorCounters?.[key] ?? 0),
+        ]),
+    );
+    receipt.cumulativeElapsedMs = receipt.elapsedMs + resume.priorElapsedMs;
+    try {
+        await phase("recovery.audit-source", async () =>
+            requireThat(
+                sha256(
+                    await readFile(path.join(resume.source, "receipt.json")),
+                ) === resume.sourceReceiptSha256 &&
+                    JSON.stringify(await stateInventory(resume.source)) ===
+                        JSON.stringify(resume.originalInventory),
+                "resume-source-bytes-or-mtimes-changed",
+            ),
+        );
+        receipt.resume.originalStateUnchanged = true;
+    } catch (error) {
+        receipt.state = "failed";
+        receipt.resume.originalStateUnchanged = false;
+        receipt.resume.failure = safeFailure(error);
+    }
+}
+
 export async function evaluate(options, injections = {}) {
     const phase =
         injections.profilePhase ?? ((_name, operation) => operation());
@@ -2799,22 +3105,7 @@ export async function evaluate(options, injections = {}) {
                 ),
             controller.signal,
         );
-        if (resume && options.mode === "live") {
-            requireThat(
-                runtime.tracker?.identity === "copilot:gpt-6-luna" &&
-                    runtime.modelCapacity?.selectedModel === "gpt-6-luna",
-                "resume-current-chat-model-identity-mismatch",
-            );
-            for (const identity of resume.embeddingIdentities) {
-                const current = runtime.trackedEmbedding?.forRole(
-                    identity.task,
-                ).embeddingIdentity;
-                requireThat(
-                    JSON.stringify(current) === JSON.stringify(identity),
-                    "resume-current-embedding-semantic-identity-mismatch",
-                );
-            }
-        }
+        validateResumedRuntime(runtime, resume, options);
         holder.service = runtime.open();
         if (runtime.tracker?.constraints)
             receipt.limits.constraints = runtime.tracker.constraints;
@@ -2887,30 +3178,13 @@ export async function evaluate(options, injections = {}) {
             await save(path.join(item.directory, "results.json"), item);
         }
     } finally {
-        for (const cleanup of [
-            () => holder.service?.close(),
-            () => runtime?.stop(),
-        ]) {
-            const remaining = Math.max(
-                1,
-                Math.min(
-                    10_000,
-                    options.timeoutMs - (performance.now() - started),
-                ),
-            );
-            const deadline = deadlineSignal(
-                new AbortController().signal,
-                remaining,
-            );
-            try {
-                await abortable(cleanup, deadline.signal);
-            } catch (error) {
-                receipt.state = "failed";
-                receipt.cleanupFailure = safeFailure(error);
-            } finally {
-                deadline.close();
-            }
-        }
+        await closeEvaluationRuntime(
+            holder,
+            runtime,
+            options,
+            started,
+            receipt,
+        );
         clearTimeout(timeout);
         clearInterval(sample);
         process.removeListener("SIGINT", cancel);
@@ -2920,125 +3194,11 @@ export async function evaluate(options, injections = {}) {
             peakRss,
             process.memoryUsage().rss,
         );
-        receipt.counters = {
-            ...counters,
-            modelCalls:
-                runtime?.tracker?.callBudget?.used ??
-                runtime?.tracker?.calls.length ??
-                0,
-            chatCalls: runtime?.tracker?.calls.length ?? 0,
-            embeddingCalls: runtime?.embeddingTracker?.calls.length ?? 0,
-            embeddingItems: (runtime?.embeddingTracker?.calls ?? []).reduce(
-                (n, call) => n + call.items,
-                0,
-            ),
-            embeddingTransportAttempts: (
-                runtime?.embeddingTracker?.calls ?? []
-            ).reduce((n, call) => n + call.transportAttempts, 0),
-        };
-        receipt.embeddingMetrics = {
-            inputTokens: (runtime?.embeddingTracker?.calls ?? []).reduce(
-                (n, call) => n + (call.inputTokens ?? 0),
-                0,
-            ),
-            inputChars: (runtime?.embeddingTracker?.calls ?? []).reduce(
-                (n, call) => n + call.inputChars,
-                0,
-            ),
-            elapsedMs: (runtime?.embeddingTracker?.calls ?? []).reduce(
-                (n, call) => n + call.elapsedMs,
-                0,
-            ),
-            usageReportedCalls: (runtime?.embeddingTracker?.calls ?? []).filter(
-                (call) => call.usageAvailability === "provider-returned",
-            ).length,
-            usage: Object.fromEntries(
-                ["prompt_tokens", "total_tokens"].map((key) => {
-                    const available = (
-                        runtime?.embeddingTracker?.calls ?? []
-                    ).filter((call) => Number.isFinite(call.usage?.[key]));
-                    return [
-                        key,
-                        available.length
-                            ? available.reduce(
-                                  (n, call) => n + call.usage[key],
-                                  0,
-                              )
-                            : null,
-                    ];
-                }),
-            ),
-            usageCoverage: ratio(
-                (runtime?.embeddingTracker?.calls ?? []).filter(
-                    (call) => call.usageAvailability === "provider-returned",
-                ).length,
-                runtime?.embeddingTracker?.calls.length ?? 0,
-            ),
-            usageNote:
-                "Only provider-returned counts; unavailable usage is not estimated. See per-call availability.",
-            admissionFailures:
-                runtime?.embeddingTracker?.admissionFailures ?? [],
-        };
-        receipt.modelRoles = Object.fromEntries(
-            [
-                ...new Set(
-                    (runtime?.tracker?.calls ?? []).map((call) => call.role),
-                ),
-            ].map((role) => {
-                const calls = runtime.tracker.calls.filter(
-                    (call) => call.role === role,
-                );
-                return [
-                    role,
-                    {
-                        calls: calls.length,
-                        inputChars: calls.reduce(
-                            (n, call) => n + call.inputChars,
-                            0,
-                        ),
-                        outputChars: calls.reduce(
-                            (n, call) => n + call.outputChars,
-                            0,
-                        ),
-                        elapsedMs: calls.reduce(
-                            (n, call) => n + call.elapsedMs,
-                            0,
-                        ),
-                    },
-                ];
-            }),
-        );
+        receipt.counters = runtimeCounters(runtime, counters);
+        receipt.embeddingMetrics = embeddingMetrics(runtime);
+        receipt.modelRoles = modelRoleMetrics(runtime);
         receipt.completedAt = new Date().toISOString();
-        if (resume) {
-            receipt.cumulativeCounters = Object.fromEntries(
-                Object.entries(receipt.counters).map(([key, value]) => [
-                    key,
-                    value + (resume.priorCounters?.[key] ?? 0),
-                ]),
-            );
-            receipt.cumulativeElapsedMs =
-                receipt.elapsedMs + resume.priorElapsedMs;
-            try {
-                await phase("recovery.audit-source", async () =>
-                    requireThat(
-                        sha256(
-                            await readFile(
-                                path.join(resume.source, "receipt.json"),
-                            ),
-                        ) === resume.sourceReceiptSha256 &&
-                            JSON.stringify(
-                                await stateInventory(resume.source),
-                            ) === JSON.stringify(resume.originalInventory),
-                        "resume-source-bytes-or-mtimes-changed",
-                    ),
-                );
-                receipt.resume.originalStateUnchanged = true;
-            } catch (error) {
-                receipt.state = "failed";
-                receipt.resume.originalStateUnchanged = false;
-                receipt.resume.failure = safeFailure(error);
-            }
-        }
+        if (resume) await auditResumeSource(receipt, resume, phase);
         await save(receiptFile, receipt);
         try {
             receipt.diskBytes = await phase("accounting.disk-bytes", () =>

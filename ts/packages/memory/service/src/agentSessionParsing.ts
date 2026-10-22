@@ -359,11 +359,7 @@ function withoutReasoning(
     return value;
 }
 
-function sdkEvent(
-    input: unknown,
-    sessionId: string,
-    report: (reason: string) => void,
-): AgentSessionEvent {
+function sdkEnvelope(input: unknown, sessionId: string) {
     const value = record(input);
     knownFields(value, sdkFields);
     if (value.version !== undefined && value.version !== 1) {
@@ -389,22 +385,15 @@ function sdkEvent(
     if (value.parentId !== undefined && value.parentId !== null) {
         identity(value.parentId);
     }
-    const event: AgentSessionEvent = {
-        schemaVersion: 1,
-        id: identity(value.id),
-        sessionId: identity(sessionId),
-        kind: sdkKinds[type],
-        text: "",
-        timestamp: timestamp(value.timestamp),
-        outcome: sdkOutcome(type, data),
-        role: type.startsWith("assistant.")
-            ? "assistant"
-            : type === "user.message"
-              ? "user"
-              : type.startsWith("tool.")
-                ? "tool"
-                : "system",
-    };
+    return { value, type, data };
+}
+
+function sdkRelationships(
+    event: AgentSessionEvent,
+    value: Record<string, unknown>,
+    data: Record<string, unknown>,
+    type: string,
+) {
     if (value.agentId !== undefined) event.agentId = identity(value.agentId);
     for (const field of identityFields) {
         if (data[field] !== undefined) event[field] = identity(data[field]);
@@ -422,6 +411,13 @@ function sdkEvent(
     if (type.startsWith("tool.") && !event.callId) {
         invalid("SDK tool event requires a call ID");
     }
+}
+
+function sdkSafeData(
+    type: string,
+    data: Record<string, unknown>,
+    report: (reason: string) => void,
+) {
     if (type === "user.message" || type === "assistant.message") {
         boundedString(data.content, maxEventText, true);
     }
@@ -448,6 +444,33 @@ function sdkEvent(
         }
     }
     if (omitted) report("Opaque assistant reasoning fields omitted");
+    return safeData;
+}
+
+function sdkEvent(
+    input: unknown,
+    sessionId: string,
+    report: (reason: string) => void,
+): AgentSessionEvent {
+    const { value, type, data } = sdkEnvelope(input, sessionId);
+    const event: AgentSessionEvent = {
+        schemaVersion: 1,
+        id: identity(value.id),
+        sessionId: identity(sessionId),
+        kind: sdkKinds[type],
+        text: "",
+        timestamp: timestamp(value.timestamp),
+        outcome: sdkOutcome(type, data),
+        role: type.startsWith("assistant.")
+            ? "assistant"
+            : type === "user.message"
+              ? "user"
+              : type.startsWith("tool.")
+                ? "tool"
+                : "system",
+    };
+    sdkRelationships(event, value, data, type);
+    const safeData = sdkSafeData(type, data, report);
     // SDK result.content is the model-visible text; do not conflate it with arguments.
     event.text = JSON.stringify(
         sortedValue(
