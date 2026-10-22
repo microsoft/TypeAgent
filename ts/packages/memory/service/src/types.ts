@@ -777,6 +777,12 @@ export interface IndexedFragmentSelection {
 }
 
 export interface CorpusIndex {
+    rebuildRetained?(
+        previous: CorpusIndex,
+        documents: IndexedDocument[],
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<boolean>;
     replace?(
         document: IndexedDocument,
         signal: AbortSignal,

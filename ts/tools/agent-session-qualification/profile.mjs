@@ -363,11 +363,13 @@ export async function instrumentRuntime(profiler, runtime, compiled) {
         { AgentSessionStore },
         { RevisionTextStore },
         { DocMemory },
+        { KnowProCorpusIndex },
     ] = await Promise.all([
         compiled("packages/memory/service/dist/fileMemoryService.js"),
         compiled("packages/memory/service/dist/agentSessionStore.js"),
         compiled("packages/memory/service/dist/revisionTextStore.js"),
         compiled("packages/memory/conversation/dist/docMemory.js"),
+        compiled("packages/memory/service/dist/knowProCorpusIndex.js"),
     ]);
     const hooks = [
         [
@@ -430,6 +432,7 @@ export async function instrumentRuntime(profiler, runtime, compiled) {
             ],
         ],
         [DocMemory, "doc-memory", ["readFromFile"]],
+        [KnowProCorpusIndex.prototype, "corpus-index", ["rebuildRetained"]],
     ];
     for (const [prototype, prefix, methods] of hooks)
         for (const method of methods) {

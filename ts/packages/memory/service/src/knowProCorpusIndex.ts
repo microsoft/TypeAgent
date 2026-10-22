@@ -19,6 +19,7 @@ import { symbolicIdentity, usefulWikiSubject } from "./wikiGrouping.js";
 import { access, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { writeRunbookJson } from "./durableRunbookJson.js";
+import { projectRetainedIndex } from "./retainedIndex.js";
 import {
     indexedTextHash,
     parseIndexedLocator,
@@ -714,6 +715,94 @@ export class KnowProCorpusIndex implements CorpusIndex {
         throw new Error(
             "Indexed-text anchor is unavailable in the current index",
         );
+    }
+
+    public async rebuildRetained(
+        previous: CorpusIndex,
+        documents: IndexedDocument[],
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<boolean> {
+        signal.throwIfAborted();
+        const unavailable = (reason: string): false => {
+            console.warn(
+                `Memory retained-index reuse unavailable: ${reason}; rebuilding canonical retained sources`,
+            );
+            return false;
+        };
+        if (
+            !(previous instanceof KnowProCorpusIndex) ||
+            previous.corpusId !== this.corpusId
+        )
+            return unavailable("Incompatible corpus index");
+        if (!documents.length) {
+            await this.rebuild(documents, signal, onProgress);
+            return true;
+        }
+        if (!previous.memory) await previous.initialize();
+        const source = previous.memory;
+        if (!source?.hasCompleteIndex)
+            return unavailable(
+                "Committed indexing completion is unknown or partial",
+            );
+        if (
+            documents.some(
+                (document) =>
+                    previous.activeRevisions.get(document.source.sourceId) !==
+                    document.revision.revisionId,
+            )
+        )
+            return unavailable("Retained revision eligibility changed");
+        const parts = documents.flatMap(toDocParts);
+        const memory = new DocMemory(
+            this.corpusId,
+            [],
+            this.settingsFactory?.(),
+        );
+        const settings = memory.settings.conversationSettings;
+        const projection = projectRetainedIndex(
+            await source.serialize(),
+            parts,
+            {
+                related:
+                    settings.relatedTermIndexSettings.embeddingIndexSettings
+                        ?.embeddingModel !== undefined,
+                message:
+                    settings.messageTextIndexSettings.embeddingIndexSettings
+                        .embeddingModel !== undefined,
+            },
+        );
+        if (!projection.data) return unavailable(projection.reason);
+        signal.throwIfAborted();
+        await memory.deserialize(projection.data);
+        const result = await kp.buildRelatedTermsIndex(
+            memory,
+            settings.relatedTermIndexSettings,
+        );
+        if (result.error) throw new Error(result.error);
+        signal.throwIfAborted();
+        await onProgress({
+            completed: parts.length,
+            total: parts.length,
+            stage: "persisting",
+            operation: "rebuild",
+            message:
+                "Persisting retained-source index without model generation",
+            documentCount: documents.length,
+            docPartCount: parts.length,
+        });
+        await memory.writeToFile(this.indexDirectory, indexBaseName, true);
+        signal.throwIfAborted();
+        this.memory = memory;
+        this.refreshSourceMessages(memory);
+        this.activeRevisions = new Map(
+            documents.map((document) => [
+                document.source.sourceId,
+                document.revision.revisionId,
+            ]),
+        );
+        await this.saveEligibility();
+        return true;
     }
 
     public async rebuild(

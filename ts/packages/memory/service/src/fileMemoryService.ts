@@ -506,33 +506,6 @@ function applyKnowledgeSuppressions(
     };
 }
 
-function raceWithAbort<T>(
-    operation: Promise<T>,
-    signal: AbortSignal,
-): Promise<T> {
-    if (signal.aborted) {
-        void operation.catch(() => undefined);
-        return Promise.reject(
-            signal.reason ?? new Error("Operation cancelled"),
-        );
-    }
-    return new Promise<T>((resolve, reject) => {
-        const abort = () =>
-            reject(signal.reason ?? new Error("Operation cancelled"));
-        signal.addEventListener("abort", abort, { once: true });
-        operation.then(
-            (value) => {
-                signal.removeEventListener("abort", abort);
-                resolve(value);
-            },
-            (error) => {
-                signal.removeEventListener("abort", abort);
-                reject(error);
-            },
-        );
-    });
-}
-
 function contentFor(request: DocumentIngestRequest): string {
     const { source } = request;
     const candidates = [source.markdown, source.text, source.html].filter(
@@ -7455,21 +7428,28 @@ export class FileMemoryService
         await mkdir(candidateDirectory, { recursive: true });
         const candidateIndex = this.indexFactory(corpusId, candidateDirectory);
         try {
-            const rebuild = () =>
-                candidateIndex.rebuild(
-                    this.activeDocuments(candidateManifest),
-                    signal,
-                    async () => {},
-                );
-            await raceWithAbort(
-                this.wikiBudget
-                    ? runWithRequestBudget(
-                          new RequestBudget(this.wikiBudget),
-                          rebuild,
-                      )
-                    : rebuild(),
-                signal,
-            );
+            const rebuild = async () => {
+                const documents = this.activeDocuments(candidateManifest);
+                if (
+                    candidateManifest.sources.length <
+                        runtime.manifest.sources.length &&
+                    candidateIndex.rebuildRetained &&
+                    (await candidateIndex.rebuildRetained(
+                        runtime.index,
+                        documents,
+                        signal,
+                        async () => {},
+                    ))
+                )
+                    return;
+                await candidateIndex.rebuild(documents, signal, async () => {});
+            };
+            await (this.wikiBudget
+                ? runWithRequestBudget(
+                      new RequestBudget(this.wikiBudget),
+                      rebuild,
+                  )
+                : rebuild());
             this.throwIfAborted(signal);
             await stampIndexSchema(
                 candidateDirectory,
