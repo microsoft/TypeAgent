@@ -267,6 +267,7 @@ async function runWorker(spec) {
               questionIds: selection ?? null,
               cases: {},
               providerRequests: [],
+              roleCalls: [],
               attempts: [],
           };
     assert.equal(state.runId, spec.receiptId);
@@ -354,7 +355,6 @@ async function runWorker(spec) {
     const { waitForMemoryJob } = await load(
         "packages\\memory\\service\\dist\\rpcFacade.js",
     );
-    state.roleCalls ??= [];
     const model = observedRoles(
         client.openai.createChatModel(),
         "benchmarkJudge",

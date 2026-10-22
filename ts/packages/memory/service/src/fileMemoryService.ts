@@ -691,6 +691,19 @@ function validateSearchDateRange(
     }
 }
 
+function matchesSearchSource(
+    source: MemorySource,
+    request: Pick<MemorySearchRequest, "sourceIds" | "sourceTypes" | "tags">,
+): boolean {
+    return (
+        (request.sourceIds === undefined ||
+            request.sourceIds.includes(source.sourceId)) &&
+        (request.sourceTypes === undefined ||
+            request.sourceTypes.includes(source.sourceType)) &&
+        (request.tags ?? []).every((tag) => source.tags?.includes(tag))
+    );
+}
+
 function matchesSearchDate(
     revision: SourceRevision,
     request: Pick<MemorySearchRequest, "dateFrom" | "dateTo">,
@@ -3152,15 +3165,7 @@ export class FileMemoryService
                 const nominated = runtime.manifest.sources
                     .filter(
                         (source) =>
-                            (!request.sourceIds ||
-                                request.sourceIds.includes(source.sourceId)) &&
-                            (!request.sourceTypes ||
-                                request.sourceTypes.includes(
-                                    source.sourceType,
-                                )) &&
-                            (request.tags ?? []).every((tag) =>
-                                source.tags?.includes(tag),
-                            ) &&
+                            matchesSearchSource(source, request) &&
                             source.revisions.some(
                                 (revision) =>
                                     revision.revisionId ===
@@ -3272,15 +3277,6 @@ export class FileMemoryService
         >,
         limit: number,
     ): MemoryEvidence[] {
-        const sourceIds =
-            request.sourceIds === undefined
-                ? undefined
-                : new Set(request.sourceIds);
-        const sourceTypes =
-            request.sourceTypes === undefined
-                ? undefined
-                : new Set(request.sourceTypes);
-        const requestedTags = request.tags ?? [];
         let usedCharacters = 0;
         const maxCharacters = request.maxResponseChars ?? 50_000;
         const matches: MemoryEvidence[] = [];
@@ -3296,10 +3292,7 @@ export class FileMemoryService
                 revision === undefined ||
                 source.activeRevisionId !== revision.revisionId ||
                 !matchesSearchDate(revision, request) ||
-                (sourceIds !== undefined && !sourceIds.has(source.sourceId)) ||
-                (sourceTypes !== undefined &&
-                    !sourceTypes.has(source.sourceType)) ||
-                requestedTags.some((tag) => !source.tags?.includes(tag))
+                !matchesSearchSource(source, request)
             ) {
                 continue;
             }
