@@ -5,12 +5,16 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+    HOSTED_API_CONFIG_FIELD_POLICY,
     HOSTED_API_PROFILE,
     HOSTED_API_SECRET_NAME,
+    loadApiRuntime,
     loadHostedApiRuntimeConfig,
+    validateHostedApiRuntimeConfig,
 } from "../src/containerBootstrap.js";
 import { startAfterBootstrap } from "../src/startup.js";
-import type { ConfigTree, KeyVaultFetcher } from "@typeagent/config";
+import type { Config, ConfigTree, KeyVaultFetcher } from "@typeagent/config";
+import type { TokenCredential } from "@azure/identity";
 
 const ALLOWED_ENDPOINT =
     "https://api-eastus.openai.azure.com/openai/deployments/gpt-6-luna/chat/completions?api-version=2025-01-01-preview";
@@ -294,7 +298,10 @@ describe("hosted API container bootstrap", () => {
         expect(env.TYPEAGENT_SHAREDVAULT).toBeUndefined();
         expect(env.TYPEAGENT_CONFIG_DIR).toBeUndefined();
         expect(env.TYPEAGENT_DOTENV).toBeUndefined();
-        expect(env.AZURE_CLIENT_ID).toBe("dedicated-client-id");
+        expect(env.AZURE_CLIENT_ID).toBeUndefined();
+        expect(env.TYPEAGENT_API_MANAGED_IDENTITY_CLIENT_ID).toBe(
+            "dedicated-client-id",
+        );
     });
 
     test("scrubs an ambient Azure client ID when no dedicated identity is selected", async () => {
@@ -311,6 +318,89 @@ describe("hosted API container bootstrap", () => {
         });
 
         expect(env.AZURE_CLIENT_ID).toBeUndefined();
+    });
+
+    test("returns the validated hosted managed-identity credential factory", async () => {
+        const root = createTempRoot();
+        roots.push(root);
+        const env = createEnvironment(root);
+        env.TYPEAGENT_API_MANAGED_IDENTITY_CLIENT_ID =
+            "00000000-0000-0000-0000-000000000001";
+        const credential: TokenCredential = {
+            getToken: async () => null,
+        };
+
+        const runtime = await loadApiRuntime({
+            env,
+            credential,
+            fetcher: async () => JSON.stringify(hostedTree()),
+            getUid: () => 10001,
+            platform: "win32",
+        });
+
+        expect(runtime.config.modelProvider).toBe("azure");
+        expect(runtime.azureCredentialFactory?.()).toBe(credential);
+        expect(env.AZURE_CLIENT_ID).toBeUndefined();
+    });
+
+    test("classifies every root Config field in the hosted security policy", async () => {
+        expect(HOSTED_API_CONFIG_FIELD_POLICY).toEqual({
+            embeddingModels: "absent",
+            defaultEmbeddingModel: "absent",
+            modelRequestConstraints: "absent",
+            azureOpenAI: "identity-azure-openai",
+            openAI: "absent",
+            speech: "absent",
+            maps: "absent",
+            msGraph: "absent",
+            googleCalendar: "absent",
+            spotify: "absent",
+            wikipedia: "absent",
+            storage: "empty-object",
+            vault: "absent",
+            azureFoundry: "absent",
+            azureAISearch: "absent",
+            reasoning: "absent",
+            copilot: "absent",
+            embedding: "absent",
+            modelProvider: "azure-model-provider",
+            extra: "empty-map",
+        });
+
+        const root = createTempRoot();
+        roots.push(root);
+        const config = await loadHostedApiRuntimeConfig({
+            env: createEnvironment(root),
+            fetcher: async () => JSON.stringify(hostedTree()),
+            getUid: () => 10001,
+            platform: "win32",
+        });
+        expect(() => validateHostedApiRuntimeConfig(config)).not.toThrow();
+
+        const unsupportedMaps: Config = {
+            ...config,
+            maps: {
+                clientId: "unsupported-client",
+                endpoint: "https://atlas.microsoft.com",
+            },
+        };
+        expect(() => validateHostedApiRuntimeConfig(unsupportedMaps)).toThrow(
+            "Hosted API runtime field 'maps' must be absent.",
+        );
+
+        const unsupportedStorage: Config = {
+            ...config,
+            storage: {
+                database: {
+                    cosmosDbConnectionString: "unsupported-connection",
+                },
+            },
+        };
+        expect(() =>
+            validateHostedApiRuntimeConfig(unsupportedStorage),
+        ).toThrow(
+            "Hosted API runtime field 'storage' must be an empty object.",
+        );
     });
 
     test("rejects secret-shaped fields without logging their values", async () => {

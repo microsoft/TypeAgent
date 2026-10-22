@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { TypeAgentServer } from "./typeAgentServer.js";
-import { loadApiRuntimeConfig } from "./containerBootstrap.js";
+import { loadApiRuntime } from "./containerBootstrap.js";
 import { startAfterBootstrap } from "./startup.js";
 import { resolveApiAgentProfile } from "./hostedAgentProfile.js";
 import { otel } from "@typeagent/telemetry";
@@ -41,7 +41,7 @@ process.once("SIGTERM", () => {
 });
 
 async function main(): Promise<void> {
-    await startAfterBootstrap(loadApiRuntimeConfig, async (runtimeConfig) => {
+    await startAfterBootstrap(loadApiRuntime, async (runtime) => {
         const telemetryConfig = otel.resolveTelemetryConfig();
         await otel.initTelemetry({
             config: telemetryConfig,
@@ -60,8 +60,9 @@ async function main(): Promise<void> {
                 void shutdownHost(exitCode);
             },
             telemetryConfig.structuredLogs === true,
-            runtimeConfig,
+            runtime.config,
             resolveApiAgentProfile(process.env),
+            runtime.azureCredentialFactory,
         );
 
         await typeAgentServer.start();

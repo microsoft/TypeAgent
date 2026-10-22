@@ -22,7 +22,7 @@ import { startAfterBootstrap } from "../dist/startup.js";
 import { TypeAgentAPIWebServer } from "../dist/webServer.js";
 import { TypeAgentAPIWebSocketServer } from "../dist/webSocketServer.js";
 import {
-    HOSTED_API_AGENT_NAMES,
+    HOSTED_API_AGENT_SECURITY_ALLOWLIST,
     loadHostedApiAgentProviders,
     validateHostedApiAgentCapabilities,
 } from "../dist/hostedAgentProfile.js";
@@ -130,7 +130,10 @@ const hostedProviders = await loadHostedApiAgentProviders();
 const hostedAgentNames = hostedProviders
     .flatMap((provider) => provider.getAppAgentNames())
     .sort();
-assert.deepEqual(hostedAgentNames, [...HOSTED_API_AGENT_NAMES].sort());
+assert.deepEqual(
+    hostedAgentNames,
+    [...HOSTED_API_AGENT_SECURITY_ALLOWLIST].sort(),
+);
 for (const unsupported of [
     "browser",
     "discord",

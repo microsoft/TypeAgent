@@ -82,7 +82,6 @@ const SAFE_HOSTED_ENVIRONMENT_NAMES = new Set([
     "TYPEAGENT_API_CONFIG_SECRET",
     "TYPEAGENT_API_CONFIG_VAULT",
     "TYPEAGENT_API_MANAGED_IDENTITY_CLIENT_ID",
-    "TYPEAGENT_AZURE_AUTH_MODE",
 ]);
 
 const REPOSITORY_CREDENTIAL_ENVIRONMENT_NAMES = new Set(
@@ -94,7 +93,47 @@ const REPOSITORY_CREDENTIAL_ENVIRONMENT_NAMES = new Set(
     ).map((mapping) => mapping.envVar),
 );
 
+type HostedConfigFieldPolicy =
+    | "absent"
+    | "azure-model-provider"
+    | "empty-map"
+    | "empty-object"
+    | "identity-azure-openai";
+
+/**
+ * Every root Config field must have an explicit hosted-profile decision.
+ * Adding a Config field fails compilation until it is classified here.
+ */
+export const HOSTED_API_CONFIG_FIELD_POLICY = {
+    embeddingModels: "absent",
+    defaultEmbeddingModel: "absent",
+    modelRequestConstraints: "absent",
+    azureOpenAI: "identity-azure-openai",
+    openAI: "absent",
+    speech: "absent",
+    maps: "absent",
+    msGraph: "absent",
+    googleCalendar: "absent",
+    spotify: "absent",
+    wikipedia: "absent",
+    storage: "empty-object",
+    vault: "absent",
+    azureFoundry: "absent",
+    azureAISearch: "absent",
+    reasoning: "absent",
+    copilot: "absent",
+    embedding: "absent",
+    modelProvider: "azure-model-provider",
+    extra: "empty-map",
+} as const satisfies Record<keyof Config, HostedConfigFieldPolicy>;
+
 export type HostedEndpointValidator = (url: URL, fieldPath: string) => void;
+export type ApiAzureCredentialFactory = () => TokenCredential;
+
+export interface ApiRuntime {
+    readonly config: Config;
+    readonly azureCredentialFactory?: ApiAzureCredentialFactory;
+}
 
 export interface HostedApiBootstrapOptions {
     readonly env?: NodeJS.ProcessEnv;
@@ -115,6 +154,12 @@ export interface HostedApiBootstrapOptions {
 export async function loadApiRuntimeConfig(
     options: HostedApiBootstrapOptions = {},
 ): Promise<Config> {
+    return (await loadApiRuntime(options)).config;
+}
+
+export async function loadApiRuntime(
+    options: HostedApiBootstrapOptions = {},
+): Promise<ApiRuntime> {
     const env = options.env ?? process.env;
     const bootstrap = env.TYPEAGENT_API_BOOTSTRAP?.trim();
     if (bootstrap === undefined || bootstrap === "") {
@@ -124,14 +169,16 @@ export async function loadApiRuntimeConfig(
             );
         }
         await loadConfig({ keyVault: {}, strict: false });
-        return buildConfig(processEnvironmentToFlat(process.env));
+        return {
+            config: buildConfig(processEnvironmentToFlat(process.env)),
+        };
     }
     if (bootstrap !== HOSTED_API_PROFILE) {
         throw new Error(
             `Unsupported TYPEAGENT_API_BOOTSTRAP profile '${bootstrap}'.`,
         );
     }
-    return loadHostedApiRuntimeConfig(options);
+    return loadHostedApiRuntime(options);
 }
 
 /**
@@ -141,6 +188,12 @@ export async function loadApiRuntimeConfig(
 export async function loadHostedApiRuntimeConfig(
     options: HostedApiBootstrapOptions = {},
 ): Promise<Config> {
+    return (await loadHostedApiRuntime(options)).config;
+}
+
+async function loadHostedApiRuntime(
+    options: HostedApiBootstrapOptions,
+): Promise<ApiRuntime> {
     const env = options.env ?? process.env;
     prepareRuntime(env, options);
     rejectStaticCredentialEnvironment(env);
@@ -187,19 +240,18 @@ export async function loadHostedApiRuntimeConfig(
     );
     const flat = flatten(selected);
     const config = buildConfig(flat);
-    validateRuntimeConfig(config);
+    validateHostedApiRuntimeConfig(config);
 
     scrubLegacyConfiguration(env);
     applyToProcessEnv(config, { target: env, overwrite: true });
-    env.TYPEAGENT_AZURE_AUTH_MODE = "managed-identity";
-    if (clientId !== undefined) {
-        env.AZURE_CLIENT_ID = clientId;
-    }
 
     options.log?.(
         `Loaded hosted API profile '${HOSTED_API_PROFILE}' with managed identity.`,
     );
-    return config;
+    return {
+        config,
+        azureCredentialFactory: () => credential,
+    };
 }
 
 function prepareRuntime(
@@ -520,10 +572,54 @@ function validateProductionEndpoint(url: URL, fieldPath: string): void {
     }
 }
 
-function validateRuntimeConfig(config: Config): void {
-    if (config.modelProvider !== "azure") {
-        throw new Error("Hosted API runtime provider validation failed.");
+export function validateHostedApiRuntimeConfig(config: Config): void {
+    for (const field of Object.keys(HOSTED_API_CONFIG_FIELD_POLICY) as Array<
+        keyof Config
+    >) {
+        const policy = HOSTED_API_CONFIG_FIELD_POLICY[field];
+        const value = config[field];
+        switch (policy) {
+            case "absent":
+                if (value !== undefined) {
+                    throw new Error(
+                        `Hosted API runtime field '${field}' must be absent.`,
+                    );
+                }
+                break;
+            case "azure-model-provider":
+                if (value !== "azure") {
+                    throw new Error(
+                        "Hosted API runtime provider validation failed.",
+                    );
+                }
+                break;
+            case "empty-map":
+                if (!(value instanceof Map) || value.size !== 0) {
+                    throw new Error(
+                        `Hosted API runtime field '${field}' must be an empty map.`,
+                    );
+                }
+                break;
+            case "empty-object":
+                if (
+                    value === null ||
+                    typeof value !== "object" ||
+                    Array.isArray(value) ||
+                    Object.keys(value).length !== 0
+                ) {
+                    throw new Error(
+                        `Hosted API runtime field '${field}' must be an empty object.`,
+                    );
+                }
+                break;
+            case "identity-azure-openai":
+                validateHostedAzureOpenAI(config);
+                break;
+        }
     }
+}
+
+function validateHostedAzureOpenAI(config: Config): void {
     if (config.azureOpenAI.defaultAuth.kind !== "identity") {
         throw new Error("Hosted API runtime auth validation failed.");
     }
@@ -538,17 +634,12 @@ function validateRuntimeConfig(config: Config): void {
             throw new Error("Hosted API endpoint auth validation failed.");
         }
     }
-    if (
-        config.openAI !== undefined ||
-        config.speech !== undefined ||
-        config.msGraph !== undefined ||
-        config.googleCalendar !== undefined ||
-        config.spotify !== undefined ||
-        config.extra.size !== 0
-    ) {
-        throw new Error(
-            "Hosted API runtime contains unsupported configuration.",
-        );
+    for (const deploymentName of config.azureOpenAI.deployments.keys()) {
+        if (!HOSTED_DEPLOYMENTS.has(deploymentName)) {
+            throw new Error(
+                `Hosted API runtime contains unsupported deployment '${deploymentName}'.`,
+            );
+        }
     }
 }
 

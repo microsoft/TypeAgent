@@ -4,7 +4,6 @@
 import {
     AccessToken,
     DefaultAzureCredential,
-    ManagedIdentityCredential,
     type TokenCredential,
 } from "@azure/identity";
 import { Result, success, error } from "typechat";
@@ -14,10 +13,27 @@ export interface AuthTokenProvider {
     refreshToken(): Promise<Result<string>>;
 }
 
+export type AzureCredentialFactory = () => TokenCredential;
+
 export enum AzureTokenScopes {
     CogServices = "https://cognitiveservices.azure.com/.default",
     AzureMaps = "https://atlas.microsoft.com/.default",
     AzureSearch = "https://search.azure.com/",
+}
+
+const defaultAzureCredentialFactory: AzureCredentialFactory = () =>
+    new DefaultAzureCredential();
+let azureCredentialFactory = defaultAzureCredentialFactory;
+
+/**
+ * Select the credential factory used by identity-authenticated Azure clients.
+ * Hosts with a validated runtime profile may inject a narrower credential;
+ * all other callers retain the normal DefaultAzureCredential chain.
+ */
+export function setAzureCredentialFactory(
+    factory?: AzureCredentialFactory,
+): void {
+    azureCredentialFactory = factory ?? defaultAzureCredentialFactory;
 }
 
 export function createAzureTokenProvider(
@@ -83,16 +99,5 @@ export function createAzureTokenProvider(
 }
 
 export function createDefaultCredential(): TokenCredential {
-    const authMode = process.env.TYPEAGENT_AZURE_AUTH_MODE?.trim();
-    if (authMode === undefined || authMode === "") {
-        return new DefaultAzureCredential();
-    }
-    if (authMode !== "managed-identity") {
-        throw new Error(`Unsupported TYPEAGENT_AZURE_AUTH_MODE '${authMode}'.`);
-    }
-    const clientId =
-        process.env.TYPEAGENT_API_MANAGED_IDENTITY_CLIENT_ID?.trim();
-    return clientId
-        ? new ManagedIdentityCredential(clientId)
-        : new ManagedIdentityCredential();
+    return azureCredentialFactory();
 }

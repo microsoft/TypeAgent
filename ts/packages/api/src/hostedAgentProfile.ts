@@ -9,7 +9,12 @@ import { HOSTED_API_PROFILE } from "./containerBootstrap.js";
 export type ApiAgentProfile = "default" | "hosted";
 
 export const HOSTED_API_AGENT_CONFIG = "hosted";
-export const HOSTED_API_AGENT_NAMES = [
+/**
+ * Independent security policy ratchet for the hosted API surface. The bundled
+ * config must match this list exactly; editing config.hosted.json alone cannot
+ * enable another agent.
+ */
+export const HOSTED_API_AGENT_SECURITY_ALLOWLIST = [
     "chat",
     "greeting",
     "list",
@@ -42,6 +47,18 @@ export function validateHostedApiAgentCapabilities(config: Config): void {
     }
 }
 
+export function validateHostedApiAgentSecurityPolicy(
+    actualNames: readonly string[],
+): void {
+    const actual = [...actualNames].sort();
+    const expected = [...HOSTED_API_AGENT_SECURITY_ALLOWLIST].sort();
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+        throw new Error(
+            `Hosted API agent security policy mismatch: expected ${expected.join(", ")}, got ${actual.join(", ")}.`,
+        );
+    }
+}
+
 export async function loadHostedApiAgentProviders(): Promise<
     AppAgentProvider[]
 > {
@@ -49,12 +66,7 @@ export async function loadHostedApiAgentProviders(): Promise<
     const actualNames = providers
         .flatMap((provider) => provider.getAppAgentNames())
         .sort();
-    const expectedNames = [...HOSTED_API_AGENT_NAMES].sort();
-    if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames)) {
-        throw new Error(
-            `Hosted API agent profile mismatch: expected ${expectedNames.join(", ")}, got ${actualNames.join(", ")}.`,
-        );
-    }
+    validateHostedApiAgentSecurityPolicy(actualNames);
 
     for (const provider of providers) {
         for (const agentName of provider.getAppAgentNames()) {

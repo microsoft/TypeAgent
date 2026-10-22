@@ -14,10 +14,11 @@ import {
     loadHostedApiRuntimeConfig,
 } from "../src/containerBootstrap.js";
 import {
-    HOSTED_API_AGENT_NAMES,
+    HOSTED_API_AGENT_SECURITY_ALLOWLIST,
     loadHostedApiAgentProviders,
     resolveApiAgentProfile,
     validateHostedApiAgentCapabilities,
+    validateHostedApiAgentSecurityPolicy,
 } from "../src/hostedAgentProfile.js";
 
 const ENDPOINT =
@@ -75,7 +76,7 @@ describe("hosted API agent profile", () => {
             .flatMap((provider) => provider.getAppAgentNames())
             .sort();
 
-        expect(names).toEqual([...HOSTED_API_AGENT_NAMES].sort());
+        expect(names).toEqual([...HOSTED_API_AGENT_SECURITY_ALLOWLIST].sort());
         expect(names).toEqual(
             expect.arrayContaining(["chat", "list", "timer"]),
         );
@@ -112,6 +113,26 @@ describe("hosted API agent profile", () => {
         } finally {
             await dispatcher.close();
         }
+    });
+
+    test("fails closed when provider config differs from the security allowlist", () => {
+        expect(() =>
+            validateHostedApiAgentSecurityPolicy([
+                ...HOSTED_API_AGENT_SECURITY_ALLOWLIST,
+                "browser",
+            ]),
+        ).toThrow(
+            "Hosted API agent security policy mismatch: expected chat, greeting, list, settings, timer, got browser, chat, greeting, list, settings, timer.",
+        );
+        expect(() =>
+            validateHostedApiAgentSecurityPolicy(
+                HOSTED_API_AGENT_SECURITY_ALLOWLIST.filter(
+                    (name) => name !== "timer",
+                ),
+            ),
+        ).toThrow(
+            "Hosted API agent security policy mismatch: expected chat, greeting, list, settings, timer, got chat, greeting, list, settings.",
+        );
     });
 
     test("requires the identity-backed GPT deployment used by every hosted agent", async () => {

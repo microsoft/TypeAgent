@@ -86,7 +86,6 @@ EXPOSE 80:3000
 ENV TYPEAGENT_API_HOST=0.0.0.0
 ENV TYPEAGENT_API_BOOTSTRAP=hosted-azure-managed-identity-v1
 ENV TYPEAGENT_API_CONFIG_SECRET=typeagent-api-hosted-config
-ENV TYPEAGENT_AZURE_AUTH_MODE=managed-identity
 ENV HOME=/home/typeagent
 ENV TYPEAGENT_USER_DATA_DIR=/home/typeagent/.typeagent
 

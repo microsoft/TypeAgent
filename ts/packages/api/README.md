@@ -95,7 +95,9 @@ inject an Azure client secret or an Azure CLI cache.
 The hosted API registers only `chat`, `greeting`, `list`, `settings`, and
 `timer`. It does not advertise the broader desktop, browser, media, external
 service, installed-agent, or MCP capabilities that require credentials or
-models outside this least-privilege profile.
+models outside this least-privilege profile. This list is enforced separately
+as a security policy ratchet, so editing the bundled hosted config alone cannot
+broaden the production agent surface.
 
 The image sets `TYPEAGENT_API_HOST=0.0.0.0` because the published port is the
 point there and the container is the isolation boundary. Set

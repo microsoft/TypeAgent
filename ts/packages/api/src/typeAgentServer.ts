@@ -3,7 +3,12 @@
 
 import { getUserDataDir } from "agent-dispatcher/helpers/data";
 import { readFileSync } from "node:fs";
-import { setRuntimeConfig, warmupCopilotFromConfig } from "@typeagent/aiclient";
+import {
+    setAzureCredentialFactory,
+    setRuntimeConfig,
+    warmupCopilotFromConfig,
+    type AzureCredentialFactory,
+} from "@typeagent/aiclient";
 import type { Config } from "@typeagent/config";
 import {
     TypeAgentAPIServerConfig,
@@ -47,10 +52,12 @@ export class TypeAgentServer {
         private readonly structuredLogs: boolean,
         runtimeConfig: Config,
         private readonly agentProfile: ApiAgentProfile = "default",
+        azureCredentialFactory?: AzureCredentialFactory,
     ) {
         if (agentProfile === "hosted") {
             validateHostedApiAgentCapabilities(runtimeConfig);
         }
+        setAzureCredentialFactory(azureCredentialFactory);
         setRuntimeConfig(runtimeConfig);
         // Pre-warm the Copilot CLI/session/endpoint when it's the active
         // provider (no-op otherwise). Kept in the host to avoid an aiclient

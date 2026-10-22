@@ -101,6 +101,7 @@ describe("production API image definition", () => {
         expect(apiImage.body).toContain(
             "TYPEAGENT_USER_DATA_DIR=/home/typeagent/.typeagent",
         );
+        expect(apiImage.body).not.toContain("TYPEAGENT_AZURE_AUTH_MODE");
     });
 
     test("keeps production as the targetless deployment image", () => {
