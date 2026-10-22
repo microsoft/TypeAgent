@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { readFile, writeFile, mkdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
