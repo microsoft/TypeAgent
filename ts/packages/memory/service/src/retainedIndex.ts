@@ -13,6 +13,7 @@ function sourceMetadata(message: DocPart) {
     const {
         contextHash: _contextHash,
         discoveredDateEvidence: _discoveredDateEvidence,
+        rejectedDateAnchors: _rejectedDateAnchors,
         eventMentions: _eventMentions,
         inheritedDateEvidence,
         ...sourceContext

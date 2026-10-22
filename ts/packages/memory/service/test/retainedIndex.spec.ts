@@ -112,6 +112,13 @@ describe("retained-source index projection", () => {
         kept.metadata.temporalContext = {
             ...canonical,
             contextHash: "derived-input",
+            rejectedDateAnchors: [
+                {
+                    chunkOrdinal: 0,
+                    anchorOrdinal: 0,
+                    reason: "quote-not-found",
+                },
+            ],
             discoveredDateEvidence: [
                 {
                     id: "event",

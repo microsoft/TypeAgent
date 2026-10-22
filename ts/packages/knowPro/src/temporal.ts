@@ -11,6 +11,13 @@ import type {
     TemporalValue,
 } from "./temporalSchema.js";
 
+export class TemporalValueError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "TemporalValueError";
+    }
+}
+
 function calendarDate(parts: number[]): Date {
     const [year, month, day, hour = 0, minute = 0, second = 0, ms = 0] = parts;
     const date = new Date(0);
@@ -25,7 +32,7 @@ function calendarDate(parts: number[]): Date {
         date.getUTCSeconds() !== second ||
         date.getUTCMilliseconds() !== ms
     )
-        throw new Error("Invalid temporal calendar components");
+        throw new TemporalValueError("Invalid temporal calendar components");
     return date;
 }
 
@@ -64,7 +71,10 @@ function parseRfcTemporalValue(raw: string): TemporalValue | undefined {
 
 function parseTemporalPeriod(raw: string): TemporalValue {
     const period = /^(\d{4})(?:-(\d{2}))?$/.exec(raw.trim());
-    if (!period) throw new Error("Unsupported or invalid source date format");
+    if (!period)
+        throw new TemporalValueError(
+            "Unsupported or invalid source date format",
+        );
     calendarDate([Number(period[1]), Number(period[2] ?? 1), 1]);
     return {
         raw,
@@ -76,7 +86,9 @@ function parseTemporalPeriod(raw: string): TemporalValue {
 
 export function parseTemporalValue(raw: string): TemporalValue {
     if (typeof raw !== "string")
-        throw new Error("A temporal value must be a source date string");
+        throw new TemporalValueError(
+            "A temporal value must be a source date string",
+        );
     const rfc = parseRfcTemporalValue(raw);
     if (rfc) return rfc;
     const match =
@@ -129,7 +141,7 @@ export function parseTemporalValue(raw: string): TemporalValue {
         offsetParts &&
         (Number(offsetParts[3]) > 59 || Math.abs(offsetMinutes) > 14 * 60)
     )
-        throw new Error("Invalid temporal UTC offset");
+        throw new TemporalValueError("Invalid temporal UTC offset");
     return {
         raw,
         kind: "instant",

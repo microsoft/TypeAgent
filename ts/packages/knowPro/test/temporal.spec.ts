@@ -328,6 +328,74 @@ describe("canonical source temporal context", () => {
         expect(second.contextHash).not.toBe(second.sourceContextHash);
     });
 
+    test("two valid dates in the same source quote have distinct evidence identities", async () => {
+        const temporal = context("2024-05-10");
+        const text = "The event ran from 2024-05-01 to 2024-05-02.";
+        const messages = new MessageCollection([
+            new TemporalMessage(text, temporal),
+        ]);
+        const extractor: kpLib.KnowledgeExtractor = {
+            settings: { maxContextLength: 4096 },
+            extract: async () => empty,
+            extractWithRetry: async () =>
+                success({
+                    ...empty,
+                    dateAnchors: ["2024-05-01", "2024-05-02"].map((date) => ({
+                        quote: text,
+                        date,
+                        role: "eventTime" as const,
+                    })),
+                }),
+        };
+        const results = await extractKnowledgeWithTemporalContext(
+            messages,
+            [{ messageOrdinal: 0 }],
+            extractor,
+        );
+        expect(results[0].success).toBe(true);
+        expect(
+            new Set(temporal.discoveredDateEvidence?.map((entry) => entry.id))
+                .size,
+        ).toBe(2);
+    });
+
+    test("retrying an earlier chunk excludes future discovered, inherited and rejected annotations", async () => {
+        const temporal = context("2024-05-10");
+        const future = {
+            id: "future",
+            role: "eventTime" as const,
+            locator: "later-chunk",
+            value: parseTemporalValue("2028-12-31"),
+            chunkOrdinal: 1,
+        };
+        temporal.discoveredDateEvidence = [future];
+        temporal.inheritedDateEvidence.push(future);
+        temporal.rejectedDateAnchors = [
+            { chunkOrdinal: 1, anchorOrdinal: 77, reason: "invalid-date" },
+        ];
+        const message = new TemporalMessage("Earlier passage", temporal);
+        message.textChunks.push("Future passage dated 2028-12-31.");
+        const messages = new MessageCollection([message]);
+        let prompt = "";
+        const extractor: kpLib.KnowledgeExtractor = {
+            settings: { maxContextLength: 4096 },
+            extract: async () => empty,
+            extractWithRetry: async (_text, _retries, preamble) => {
+                prompt = JSON.stringify(preamble);
+                return success(empty);
+            },
+        };
+        await extractKnowledgeWithTemporalContext(
+            messages,
+            [{ messageOrdinal: 0, chunkOrdinal: 0 }],
+            extractor,
+        );
+        expect(prompt).not.toContain("2028-12-31");
+        expect(prompt).not.toContain('"anchorOrdinal":77');
+        expect(temporal.discoveredDateEvidence).toEqual([]);
+        expect(temporal.rejectedDateAnchors).toEqual([]);
+    });
+
     test("a failed prerequisite prevents dependent extraction", async () => {
         let calls = 0;
         const messages = new MessageCollection([
@@ -352,4 +420,105 @@ describe("canonical source temporal context", () => {
             error("Temporal prerequisite extraction failed"),
         );
     });
+
+    test.each([
+        {
+            quote: "Missing quote",
+            date: "2024-05-01",
+            source: "No such quotation.",
+            reason: "quote-not-found",
+        },
+        {
+            quote: "2024-05-01",
+            date: "2024-05-01",
+            source: "2024-05-01 and 2024-05-01",
+            reason: "ambiguous-quote",
+        },
+        {
+            quote: "Launch was May 1.",
+            date: "2024-05-01",
+            source: "Launch was May 1.",
+            reason: "date-not-in-quote",
+        },
+        {
+            quote: "Invalid 2023-02-29.",
+            date: "2023-02-29",
+            source: "Invalid 2023-02-29.",
+            reason: "invalid-date",
+        },
+    ])(
+        "rejects $reason annotations explicitly without aborting valid knowledge or inheriting the rejected date",
+        async ({ quote, date, source, reason }) => {
+            const first = context("2024-05-10");
+            first.partOrdinal = 0;
+            const second = structuredClone(first);
+            second.partOrdinal = 1;
+            const text = `${source} Valid event 2024-05-02.`;
+            const knowledge = {
+                ...empty,
+                entities: [{ name: "Launch", type: ["event"] }],
+            };
+            const messages = new MessageCollection([
+                new TemporalMessage(text, first),
+                new TemporalMessage("Dependent passage.", second),
+            ]);
+            const extractor: kpLib.KnowledgeExtractor = {
+                settings: { maxContextLength: 4096 },
+                extract: async () => knowledge,
+                extractWithRetry: async (input) =>
+                    success({
+                        ...knowledge,
+                        dateAnchors:
+                            input === text
+                                ? [
+                                      {
+                                          quote,
+                                          date,
+                                          role: "eventTime" as const,
+                                      },
+                                      {
+                                          quote: "Valid event 2024-05-02.",
+                                          date: "2024-05-02",
+                                          role: "eventTime" as const,
+                                      },
+                                  ]
+                                : [],
+                    }),
+            };
+            const originalWarning = console.warn;
+            const warnings: string[] = [];
+            console.warn = (message: unknown) => {
+                warnings.push(String(message));
+            };
+            try {
+                const results = await extractKnowledgeWithTemporalContext(
+                    messages,
+                    [{ messageOrdinal: 0 }, { messageOrdinal: 1 }],
+                    extractor,
+                );
+                expect(results.every((result) => result.success)).toBe(true);
+                expect(results[0]).toMatchObject(
+                    success({ entities: knowledge.entities }),
+                );
+                expect(first.rejectedDateAnchors).toEqual([
+                    { anchorOrdinal: 0, chunkOrdinal: 0, reason },
+                ]);
+                expect(
+                    first.discoveredDateEvidence?.map(
+                        (entry) => entry.value.localDateTime,
+                    ),
+                ).toEqual(["2024-05-02"]);
+                expect(
+                    second.inheritedDateEvidence
+                        .filter((entry) => entry.role === "eventTime")
+                        .map((entry) => entry.value.localDateTime),
+                ).toEqual(["2024-05-02"]);
+                expect(warnings).toHaveLength(1);
+                expect(warnings[0]).toContain(reason);
+                expect(warnings[0]).not.toContain(quote);
+            } finally {
+                console.warn = originalWarning;
+            }
+        },
+    );
 });

@@ -60,6 +60,15 @@ export type MessageTemporalContext = {
         quote?: string;
         chunkOrdinal?: number;
     }[];
+    rejectedDateAnchors?: {
+        chunkOrdinal: number;
+        anchorOrdinal: number;
+        reason:
+            | "quote-not-found"
+            | "ambiguous-quote"
+            | "date-not-in-quote"
+            | "invalid-date";
+    }[];
     eventMentions?: TemporalMention[];
 };
 

@@ -268,6 +268,9 @@ describe("document embedding persistence (deterministic, offline)", () => {
             },
             "revision",
         )[0].context;
+        message.metadata.temporalContext!.rejectedDateAnchors = [
+            { anchorOrdinal: 0, chunkOrdinal: 0, reason: "ambiguous-quote" },
+        ];
         await original.writeToFile(root, "temporal");
         const reopened = (await DocMemory.readFromFile(
             root,
