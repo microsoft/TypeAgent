@@ -71,6 +71,10 @@ describe("production API image definition", () => {
         path.join(root, "..", "pipelines", "azure-build-docker-container.yml"),
         "utf8",
     );
+    const acrBuildTask = fs.readFileSync(
+        path.join(root, "acr-build.yaml"),
+        "utf8",
+    );
 
     test("runs as the dedicated account without Azure CLI bootstrap", () => {
         expect(apiImage.body).toContain("USER typeagent");
@@ -112,8 +116,9 @@ describe("production API image definition", () => {
         expect(defaultImage?.body).not.toContain("container/smoke.mjs");
         expect(defaultImage?.body).not.toContain("container-smoke.mjs");
         expect(apiImage.body).not.toContain("container/smoke.mjs");
-        expect(deploymentPipeline).toContain("az acr build");
-        expect(deploymentPipeline).not.toContain("--target");
+        expect(deploymentPipeline).toContain("az acr run");
+        expect(acrBuildTask).toContain("-f Dockerfile .");
+        expect(acrBuildTask).not.toContain("--target");
     });
 
     test("installs the smoke harness where its runtime imports resolve", () => {
