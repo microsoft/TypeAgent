@@ -7563,18 +7563,22 @@ export class FileMemoryService
                     });
                 }),
         );
-        if (
-            ![
-                ...this.preparingIndexes.keys(),
-                ...this.detachedRebuilds.keys(),
-            ].some(
-                (directory) =>
-                    path.dirname(directory) === root &&
-                    directory !==
-                        this.indexDirectory(corpusId, activeGeneration),
-            )
-        )
+        if (!this.hasUnpublishedIndex(corpusId, root))
             await this.reclaimIndexSegments(corpusId, root, forceCollection);
+    }
+
+    private hasUnpublishedIndex(corpusId: string, root: string): boolean {
+        const generation = this.corpora.get(corpusId)?.manifest.indexGeneration;
+        const active = generation
+            ? this.indexDirectory(corpusId, generation)
+            : undefined;
+        return [
+            ...this.preparingIndexes.keys(),
+            ...this.detachedRebuilds.keys(),
+        ].some(
+            (directory) =>
+                path.dirname(directory) === root && directory !== active,
+        );
     }
 
     private async reclaimIndexSegments(
@@ -7599,16 +7603,25 @@ export class FileMemoryService
     private scheduleIndexCollection(corpusId: string, root: string): void {
         if (this.segmentCollectionWork.has(root)) return;
         const key = `${corpusId}:segment-collection`;
+        let retry = false;
         const work = new Promise<void>((resolve) => setTimeout(resolve, 250))
             .then(() =>
                 this.enqueueWrite(
                     corpusId,
-                    () => this.collectIndexSegments(root),
+                    async () => {
+                        // Preparation can start after this collection was scheduled.
+                        if (this.hasUnpublishedIndex(corpusId, root)) {
+                            retry = true;
+                            return;
+                        }
+                        await this.collectIndexSegments(root);
+                        this.wikiMaintenanceFailures.delete(key);
+                    },
                     true,
                 ),
             )
             .then(
-                () => this.wikiMaintenanceFailures.delete(key),
+                () => {},
                 (error: unknown) => {
                     this.wikiMaintenanceFailures.set(
                         key,
@@ -7616,7 +7629,11 @@ export class FileMemoryService
                     );
                 },
             )
-            .finally(() => this.segmentCollectionWork.delete(root));
+            .finally(() => {
+                this.segmentCollectionWork.delete(root);
+                if (retry && !this.closed)
+                    this.scheduleIndexCollection(corpusId, root);
+            });
         this.segmentCollectionWork.set(
             root,
             work.then(() => {}),
