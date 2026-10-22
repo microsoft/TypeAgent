@@ -275,7 +275,7 @@ export async function buildMessageIndex(
     conversation: IConversation,
     settings: MessageTextIndexSettings,
     eventHandler?: IndexingEventHandlers,
-    batchSize: number = 8,
+    batchSize: number = settings.embeddingIndexSettings.batchSize,
 ): Promise<ListIndexingResult> {
     return addToMessageIndex(
         conversation,
@@ -291,7 +291,7 @@ export async function addToMessageIndex(
     settings: MessageTextIndexSettings,
     startAtOrdinal: MessageOrdinal,
     eventHandler?: IndexingEventHandlers,
-    batchSize: number = 8,
+    batchSize: number = settings.embeddingIndexSettings.batchSize,
 ): Promise<ListIndexingResult> {
     const result: ListIndexingResult = {
         numberCompleted: 0,

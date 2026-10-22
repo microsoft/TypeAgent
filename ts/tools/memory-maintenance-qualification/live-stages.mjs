@@ -8,6 +8,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
     checkpointExpectationHash,
+    guardHeadRequest,
     initialReadiness,
     installSnapshotQualification,
     loadPlan,
@@ -46,6 +47,17 @@ export function livePhases(spec) {
         "Unsupported live source scope",
     );
     return spec.sourceScope === "baseline19" ? phases.slice(0, 3) : [...phases];
+}
+
+export async function maintainLiveFamily(service, request, hooks) {
+    return guardHeadRequest(
+        async () =>
+            service.maintainViews({
+                ...request,
+                expectedHead: (await service.listViews(request.corpusId)).head,
+            }),
+        hooks,
+    );
 }
 
 export function observedRoles(model, prefix, receipt) {
@@ -192,6 +204,7 @@ export async function loadLiveContract(load) {
     const imports = {
         "fileMemoryService.js": ["FileMemoryService"],
         "viewStore.js": ["TypedViewStore"],
+        "viewBuilds.js": ["ViewBuildStaleError"],
         "viewHistory.js": ["ViewHistory"],
         "rpcFacade.js": ["waitForMemoryJob"],
         "viewRelationships.js": [
@@ -294,6 +307,7 @@ export async function runLiveStages(
         authoredRelationships,
         editorialProtection,
         viewHash,
+        ViewBuildStaleError,
     } = await loadLiveContract(load);
     const plan = await loadPlan(spec.fixtureRoot);
     const baselineOnly = spec.sourceScope === "baseline19";
@@ -383,13 +397,18 @@ export async function runLiveStages(
             );
     };
     const control = async (family, operation) => {
-        check();
-        return service.maintainViews({
-            corpusId: receipt.corpusId,
-            family,
-            operation,
-            expectedHead: (await service.listViews(receipt.corpusId)).head,
-        });
+        return maintainLiveFamily(
+            service,
+            { corpusId: receipt.corpusId, family, operation },
+            {
+                checkDeadline: check,
+                isStale: (error) => error instanceof ViewBuildStaleError,
+                onDiagnostic: (diagnostic) =>
+                    (receipt.handledHeadRetries ??= []).push(diagnostic),
+                onSuccessfulReturn: (proof) =>
+                    (receipt.successfulRequestReturns ??= []).push(proof),
+            },
+        );
     };
     const inspect = async () => {
         const corpusId = receipt.corpusId;

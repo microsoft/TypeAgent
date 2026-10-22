@@ -92,8 +92,10 @@ describe("synthesized answers over the KnowPro corpus index", () => {
                         settings: {
                             maxCharsInBudget: 16_000,
                             concurrency: 1,
-                            fastStop: true,
-                        } as never,
+                            fastStop: false,
+                            answerGeneratorModel: languageModel,
+                            answerCombinerModel: languageModel,
+                        },
                         generateAnswer: async (_question, context) => {
                             generated.push(
                                 typeof context === "string"
@@ -160,6 +162,17 @@ describe("synthesized answers over the KnowPro corpus index", () => {
             "zephyr",
         );
         expect(generated.length).toBeGreaterThan(0);
+        expect(answer.readerContext?.completedChunks).toBe(generated.length);
+        expect(answer.readerContext?.serializedContextChars).toBeGreaterThan(0);
+        const supplied = new Set([
+            ...(answer.readerContext?.messageSourceIds ?? []),
+            ...(answer.readerContext?.knowledgeSourceIds ?? []),
+        ]);
+        expect(
+            answer.citations.every((citation) =>
+                supplied.has(citation.sourceId),
+            ),
+        ).toBe(true);
 
         const extractive = await service.answer({
             corpusId,

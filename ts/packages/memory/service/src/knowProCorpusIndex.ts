@@ -28,6 +28,7 @@ import {
 import type {
     CorpusIndex,
     CorpusIndexAnswer,
+    AnswerContextDiagnostics,
     CorpusIndexMatch,
     IndexedDocument,
     IndexedSubject,
@@ -398,17 +399,21 @@ export class KnowProCorpusIndex implements CorpusIndex {
             const settings =
                 this.settingsFactory?.() ?? createDocMemorySettings();
             const indexes = settings.conversationSettings;
-            this.memory = await DocMemory.readFromFile(
-                this.indexDirectory,
-                indexBaseName,
-                settings,
-                {
-                    loadEmbeddings: [
-                        indexes.relatedTermIndexSettings.embeddingIndexSettings,
-                        indexes.messageTextIndexSettings.embeddingIndexSettings,
-                        indexes.threadSettings,
-                    ].some((lane) => lane?.embeddingModel !== undefined),
-                },
+            this.memory = await kp.timeSearchStage("ingestion.index.load", () =>
+                DocMemory.readFromFile(
+                    this.indexDirectory,
+                    indexBaseName,
+                    settings,
+                    {
+                        loadEmbeddings: [
+                            indexes.relatedTermIndexSettings
+                                .embeddingIndexSettings,
+                            indexes.messageTextIndexSettings
+                                .embeddingIndexSettings,
+                            indexes.threadSettings,
+                        ].some((lane) => lane?.embeddingModel !== undefined),
+                    },
+                ),
             );
             this.refreshSourceMessages(this.memory);
             await this.loadEligibility();
@@ -722,7 +727,11 @@ export class KnowProCorpusIndex implements CorpusIndex {
         onProgress: (progress: JobProgress) => Promise<void>,
     ): Promise<void> {
         const startedAt = performance.now();
-        const parts = documents.flatMap(toDocParts);
+        const parts = kp.timeSearchStage(
+            "ingestion.document.prepare",
+            () => documents.flatMap(toDocParts),
+            { count: documents.length },
+        );
         await onProgress({
             completed: parts.length,
             total: parts.length,
@@ -813,7 +822,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             documentCount: documents.length,
             docPartCount: parts.length,
         });
-        await kp.timeSearchStage("knowpro.index.persist", () =>
+        await kp.timeSearchStage("ingestion.index.persist", () =>
             memory.writeToFile(this.indexDirectory, indexBaseName, true),
         );
         this.memory = memory;
@@ -844,7 +853,11 @@ export class KnowProCorpusIndex implements CorpusIndex {
     ): Promise<void> {
         const startedAt = performance.now();
         await this.initialize();
-        const parts = documents.flatMap(toDocParts);
+        const parts = kp.timeSearchStage(
+            "ingestion.document.prepare",
+            () => documents.flatMap(toDocParts),
+            { count: documents.length },
+        );
         this.memory ??= new DocMemory(
             this.corpusId,
             [],
@@ -860,9 +873,14 @@ export class KnowProCorpusIndex implements CorpusIndex {
             documentCount: documents.length,
             docPartCount: parts.length,
         });
-        for (const part of parts) {
-            this.memory.messages.append(part);
-        }
+        const messages = this.memory.messages;
+        kp.timeSearchStage(
+            "ingestion.index.populate",
+            () => {
+                for (const part of parts) messages.append(part);
+            },
+            { count: parts.length },
+        );
         let completed = 0;
         let progressTail = Promise.resolve();
         const total = Math.max(parts.length, 1);
@@ -919,7 +937,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             documentCount: documents.length,
             docPartCount: parts.length,
         });
-        await kp.timeSearchStage("knowpro.index.persist", () =>
+        await kp.timeSearchStage("ingestion.index.persist", () =>
             memory.writeToFile(this.indexDirectory, indexBaseName, true),
         );
         this.refreshSourceMessages(this.memory);
@@ -1056,6 +1074,18 @@ export class KnowProCorpusIndex implements CorpusIndex {
             throw new Error(searched.message);
         }
         const matches = new Map<number, number>();
+        const readMessages = new Set<number>();
+        const readKnowledge = new Set<number>();
+        const readerContext: AnswerContextDiagnostics = {
+            retrievedMessageOrdinals: [],
+            messageOrdinals: [],
+            knowledgeMessageOrdinals: [],
+            completedChunks: 0,
+            serializedContextChars: 0,
+            retrievedSourceIds: [],
+            messageSourceIds: [],
+            knowledgeSourceIds: [],
+        };
         const answers: string[] = [];
         const reasons: string[] = [];
         for (const searchResult of searched.data) {
@@ -1093,6 +1123,25 @@ export class KnowProCorpusIndex implements CorpusIndex {
             const generated = await memory.getAnswerFromSearchResults(
                 scoped,
                 query,
+                (context, _index, result) => {
+                    if (!result.success) return;
+                    readerContext.completedChunks++;
+                    readerContext.serializedContextChars +=
+                        kp.answerContextToString(context).length;
+                    for (const message of context.messages ?? []) {
+                        for (const ordinal of message.sourceMessageOrdinals ??
+                            [])
+                            readMessages.add(ordinal);
+                    }
+                    for (const knowledge of [
+                        ...(context.entities ?? []),
+                        ...(context.topics ?? []),
+                    ]) {
+                        for (const ordinal of knowledge.sourceMessageOrdinals ??
+                            [])
+                            readKnowledge.add(ordinal);
+                    }
+                },
             );
             if (!generated.success) {
                 throw new Error(generated.message);
@@ -1109,9 +1158,44 @@ export class KnowProCorpusIndex implements CorpusIndex {
             }
         }
         return {
-            matches: this.toCorpusMatches(matches, limit),
+            matches: this.toCorpusMatches(
+                new Map(
+                    [...new Set([...readMessages, ...readKnowledge])].map(
+                        (ordinal) => [ordinal, matches.get(ordinal) ?? 0],
+                    ),
+                ),
+                limit,
+            ),
             answer: answers.length === 0 ? undefined : answers.join("\n\n"),
             whyNoAnswer: reasons.length === 0 ? undefined : reasons.join(" "),
+            readerContext: {
+                ...readerContext,
+                retrievedMessageOrdinals: [...matches.keys()],
+                messageOrdinals: [...readMessages],
+                knowledgeMessageOrdinals: [...readKnowledge],
+                retrievedSourceIds: this.toCorpusMatches(
+                    matches,
+                    matches.size,
+                ).map((match) => match.sourceId),
+                messageSourceIds: this.toCorpusMatches(
+                    new Map(
+                        [...readMessages].map((ordinal) => [
+                            ordinal,
+                            matches.get(ordinal) ?? 0,
+                        ]),
+                    ),
+                    readMessages.size,
+                ).map((match) => match.sourceId),
+                knowledgeSourceIds: this.toCorpusMatches(
+                    new Map(
+                        [...readKnowledge].map((ordinal) => [
+                            ordinal,
+                            matches.get(ordinal) ?? 0,
+                        ]),
+                    ),
+                    readKnowledge.size,
+                ).map((match) => match.sourceId),
+            },
         };
     }
 

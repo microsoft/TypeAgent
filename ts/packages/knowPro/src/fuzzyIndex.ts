@@ -24,6 +24,8 @@ import {
     MessageOrdinal,
 } from "./interfaces.js";
 import { error, Result, success } from "typechat";
+import { instrumentEmbeddingModel, timeSearchStage } from "./searchTiming.js";
+import { countTokens } from "gpt-tokenizer/encoding/cl100k_base";
 
 export interface IEmbeddingIndex {
     readonly size: number;
@@ -196,26 +198,34 @@ export async function generateTextEmbeddingsForIndex(
     embeddingModel: TextEmbeddingModel,
     texts: string | string[],
 ): Promise<Result<NormalizedEmbedding[]>> {
-    try {
-        const textsToEmbed = Array.isArray(texts) ? texts : [texts];
-        embeddingModel = embeddingModelForRole(embeddingModel, "document");
-        const embeddings = await generateTextEmbeddingsWithRetry(
-            embeddingModel,
-            textsToEmbed,
-        );
-        if (embeddings.length !== textsToEmbed.length) {
-            throw new Error("Embedding batch cardinality mismatch");
-        }
-        const dimensions =
-            embeddingModel.embeddingIdentity?.dimensions ??
-            embeddings[0]?.length;
-        for (const vector of embeddings) {
-            validateEmbeddingVector(Array.from(vector), dimensions!);
-        }
-        return success(embeddings);
-    } catch (ex) {
-        return error(`generateTextEmbeddingsForIndex failed: ${ex}`);
-    }
+    const textsToEmbed = Array.isArray(texts) ? texts : [texts];
+    return timeSearchStage(
+        "ingestion.embedding.call",
+        async () => {
+            try {
+                embeddingModel = instrumentEmbeddingModel(
+                    embeddingModelForRole(embeddingModel, "document"),
+                );
+                const embeddings = await generateTextEmbeddingsWithRetry(
+                    embeddingModel,
+                    textsToEmbed,
+                );
+                if (embeddings.length !== textsToEmbed.length) {
+                    throw new Error("Embedding batch cardinality mismatch");
+                }
+                const dimensions =
+                    embeddingModel.embeddingIdentity?.dimensions ??
+                    embeddings[0]?.length;
+                for (const vector of embeddings) {
+                    validateEmbeddingVector(Array.from(vector), dimensions!);
+                }
+                return success(embeddings);
+            } catch (ex) {
+                return error(`generateTextEmbeddingsForIndex failed: ${ex}`);
+            }
+        },
+        { calls: 1, items: textsToEmbed.length },
+    );
 }
 
 export async function addTextToEmbeddingIndex(
@@ -245,7 +255,11 @@ export async function addTextBatchToEmbeddingIndex(
     eventHandler?: IndexingEventHandlers,
 ): Promise<ListIndexingResult> {
     const result: ListIndexingResult = { numberCompleted: 0 };
-    for (const batch of getIndexingBatches(textToIndex, batchSize)) {
+    for (const batch of getEmbeddingBatches(
+        textToIndex,
+        batchSize,
+        embeddingModel,
+    )) {
         if (
             eventHandler?.onEmbeddingsCreated &&
             !eventHandler.onEmbeddingsCreated(
@@ -268,6 +282,40 @@ export async function addTextBatchToEmbeddingIndex(
         result.numberCompleted = batch.startAt + batch.values.length;
     }
     return result;
+}
+
+function* getEmbeddingBatches(
+    texts: string[],
+    batchSize: number,
+    model: TextEmbeddingModel,
+) {
+    const provider = model.embeddingIdentity?.provider;
+    for (const batch of getIndexingBatches(texts, batchSize)) {
+        if (provider !== "azure" && provider !== "openai") {
+            yield batch;
+            continue;
+        }
+        let start = 0;
+        let tokens = 0;
+        for (let index = 0; index < batch.values.length; index++) {
+            const inputTokens = countTokens(batch.values[index], {
+                disallowedSpecial: new Set(),
+            });
+            if (index > start && tokens + inputTokens > 300_000) {
+                yield {
+                    startAt: batch.startAt + start,
+                    values: batch.values.slice(start, index),
+                };
+                start = index;
+                tokens = 0;
+            }
+            tokens += inputTokens;
+        }
+        yield {
+            startAt: batch.startAt + start,
+            values: batch.values.slice(start),
+        };
+    }
 }
 
 export async function indexOfNearestTextInIndex(
@@ -490,7 +538,7 @@ export function createTextEmbeddingIndexSettings(
         maxMatches,
         retryMaxAttempts: 2,
         retryPauseMs: 2000,
-        batchSize: 8,
+        batchSize: 128,
     };
 }
 

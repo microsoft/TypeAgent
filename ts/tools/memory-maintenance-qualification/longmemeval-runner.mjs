@@ -157,6 +157,7 @@ export async function executeMemoryCase(
         record.answerMilliseconds = performance.now() - answerStart;
         record.hypothesis = answer.answer;
         record.citations = answer.citations;
+        record.readerContext = answer.readerContext;
         record.indexVersion = answer.indexVersion;
         record.warnings = answer.warnings;
         const sourceToSession = new Map(
@@ -173,6 +174,26 @@ export async function executeMemoryCase(
             ? [...expected].filter((id) => returned.has(id)).length /
               expected.size
             : null;
+        if (answer.readerContext) {
+            const recall = (sourceIds) => {
+                const sessions = new Set(
+                    sourceIds.map((id) => sourceToSession.get(id)),
+                );
+                return expected.size
+                    ? [...expected].filter((id) => sessions.has(id)).length /
+                          expected.size
+                    : null;
+            };
+            record.answerRetrievalEvidenceSessionRecall = recall(
+                answer.readerContext.retrievedSourceIds,
+            );
+            record.readerMessageEvidenceSessionRecall = recall(
+                answer.readerContext.messageSourceIds,
+            );
+            record.readerKnowledgeEvidenceSessionRecall = recall(
+                answer.readerContext.knowledgeSourceIds,
+            );
+        }
         await persist();
     }
     signal.throwIfAborted();
@@ -246,6 +267,28 @@ export function benchmarkScorecard(prepared, records, events) {
             p50: percentile(answerTimes, 0.5),
             p95: percentile(answerTimes, 0.95),
         },
+        evidenceCoverage: Object.fromEntries(
+            [
+                "evidenceSessionRecallAt20Matches",
+                "answerRetrievalEvidenceSessionRecall",
+                "readerMessageEvidenceSessionRecall",
+                "readerKnowledgeEvidenceSessionRecall",
+            ].map((field) => {
+                const values = completed
+                    .map((record) => record[field])
+                    .filter((value) => typeof value === "number");
+                return [
+                    field,
+                    {
+                        measuredQuestions: values.length,
+                        mean: values.length
+                            ? values.reduce((sum, value) => sum + value, 0) /
+                              values.length
+                            : null,
+                    },
+                ];
+            }),
+        ),
         judgeModels: [
             ...new Set(completed.map((record) => record.autoeval_label.model)),
         ],

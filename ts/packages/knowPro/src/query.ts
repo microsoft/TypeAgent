@@ -1661,25 +1661,36 @@ function messageMatchesFromKnowledgeMatches(
     intersectAcrossKnowledgeTypes: boolean = true,
 ): MessageAccumulator {
     let messageMatches = new MessageAccumulator();
+    const typeHits = new Map<MessageOrdinal, number>();
     let knowledgeTypeHitCount = 0; // How many types of knowledge matched? (e.g. entity, topic, action)
     for (const knowledgeType of knowledgeMatches.keys()) {
         const matchesByType = knowledgeMatches.get(knowledgeType);
         if (matchesByType && matchesByType.semanticRefMatches.length > 0) {
             knowledgeTypeHitCount++;
+            const typeMessages = new MessageAccumulator();
             for (const match of matchesByType.semanticRefMatches) {
+                typeMessages.addMessagesForSemanticRef(
+                    semanticRefs.get(match.semanticRefOrdinal),
+                    match.score,
+                );
                 messageMatches.addMessagesForSemanticRef(
                     semanticRefs.get(match.semanticRefOrdinal),
                     match.score,
                 );
+            }
+            for (const match of typeMessages.getMatches()) {
+                typeHits.set(match.value, (typeHits.get(match.value) ?? 0) + 1);
             }
         }
     }
     if (intersectAcrossKnowledgeTypes && knowledgeTypeHitCount > 0) {
         // This basically intersects the sets of messages that matched each knowledge type
         // E.g. if topics and entities matched, then a relevant message must have both matching topics and entities
-        const relevantMessages = messageMatches.getWithHitCount(
-            knowledgeTypeHitCount,
-        );
+        const relevantMessages = [
+            ...messageMatches.getMatches(
+                (match) => typeHits.get(match.value) === knowledgeTypeHitCount,
+            ),
+        ];
         if (relevantMessages.length > 0) {
             messageMatches = new MessageAccumulator(relevantMessages);
         }

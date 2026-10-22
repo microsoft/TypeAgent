@@ -38,7 +38,6 @@ import { getScoredSemanticRefsFromOrdinals } from "./knowledgeLib.js";
 import {
     getEnclosingDateRangeForMessages,
     getEnclosingMetadataForMessages,
-    getMessagesFromScoredOrdinals,
 } from "./message.js";
 import { ConversationSearchResult } from "./search.js";
 import {
@@ -46,7 +45,7 @@ import {
     AnswerContextOptions,
     answerContextToString,
 } from "./answerContext.js";
-import { flattenResultsArray, Scored, trimStringLength } from "./common.js";
+import { flattenResultsArray, Scored } from "./common.js";
 import { createMultipleChoiceQuestion } from "./searchLib.js";
 
 export type AnswerTranslator =
@@ -232,7 +231,12 @@ async function generateAnswerFromSearchResult(
         !chunking
     ) {
         // Context is small enough
-        return generator.generateAnswer(question, contextContent);
+        const response = await generator.generateAnswer(
+            question,
+            contextContent,
+        );
+        progress?.(context, 0, response);
+        return response;
     }
     //
     // Use chunks
@@ -286,7 +290,7 @@ export async function generateAnswerInChunks(
     }
 
     const chunkAnswers: answerSchema.AnswerResponse[] = [];
-    const knowledgeChunks = getKnowledgeChunks(chunks);
+    const knowledgeChunks = chunks.filter((chunk) => !chunk.messages?.length);
     let hasKnowledgeAnswer = false;
     if (knowledgeChunks.length > 0) {
         const knowledgeAnswers = await runGenerateAnswers(
@@ -294,6 +298,7 @@ export async function generateAnswerInChunks(
             question,
             knowledgeChunks,
             progress,
+            answerGenerator.settings.fastStop,
         );
         if (!knowledgeAnswers.success) {
             return knowledgeAnswers;
@@ -311,6 +316,7 @@ export async function generateAnswerInChunks(
             answerGenerator,
             question,
             messageChunks,
+            progress,
         );
         if (!messageAnswers.success) {
             return messageAnswers;
@@ -332,32 +338,6 @@ export async function generateAnswerInChunks(
 
     function hasAnswer(answers: answerSchema.AnswerResponse[]): boolean {
         return answers.some((a) => a.type === "Answered");
-    }
-
-    function getKnowledgeChunks(
-        chunks: contextSchema.AnswerContext[],
-    ): contextSchema.AnswerContext[] {
-        const structuredChunks: contextSchema.AnswerContext[] = [];
-        for (const chunk of chunks) {
-            let knowledgeChunk: contextSchema.AnswerContext | undefined =
-                undefined;
-            if (chunk.entities) {
-                knowledgeChunk ??= {};
-                knowledgeChunk.entities = chunk.entities;
-            }
-            if (chunk.topics) {
-                knowledgeChunk ??= {};
-                knowledgeChunk.topics = chunk.topics;
-            }
-            if (chunk.messages) {
-                knowledgeChunk ??= {};
-                knowledgeChunk.messages = chunk.messages;
-            }
-            if (knowledgeChunk !== undefined) {
-                structuredChunks.push(knowledgeChunk);
-            }
-        }
-        return structuredChunks;
     }
 }
 
@@ -420,14 +400,15 @@ export class AnswerGenerator implements IAnswerGenerator {
         question: string,
         context: contextSchema.AnswerContext | string,
     ): Promise<Result<answerSchema.AnswerResponse>> {
-        let contextContent =
+        const contextContent =
             typeof context === "string"
                 ? context
                 : answerContextToString(context);
         if (contextContent.length > this.settings.maxCharsInBudget) {
-            contextContent = trimStringLength(
-                contextContent,
-                this.settings.maxCharsInBudget,
+            return Promise.resolve(
+                error(
+                    "Answer context exceeds the serialized character budget; enable chunking or choose an explicit larger budget.",
+                ),
             );
         }
         const prompt: string[] = [];
@@ -461,38 +442,24 @@ export class AnswerGenerator implements IAnswerGenerator {
             }
             return error("No answer");
         }
-        let answer = "";
+        const answers: string[] = [];
         let whyNoAnswer: string | undefined;
-        let answerCount = 0;
         for (const partialAnswer of partialAnswers) {
             if (partialAnswer) {
                 if (partialAnswer.type === "Answered") {
-                    answerCount++;
-                    answer += partialAnswer.answer + "\n";
+                    if (partialAnswer.answer)
+                        answers.push(partialAnswer.answer);
                 } else {
                     whyNoAnswer ??= partialAnswer.whyNoAnswer;
                 }
             }
         }
-        if (answer.length > 0) {
-            if (answerCount > 1) {
-                answer = trimStringLength(
-                    answer,
-                    this.settings.maxCharsInBudget,
-                );
-                const rewrittenAnswer = await rewriteText(
-                    this.settings.answerCombinerModel,
-                    answer,
-                    question,
-                );
-                if (!rewrittenAnswer) {
-                    return error("rewriteAnswer failed");
-                }
-                answer = rewrittenAnswer;
-            }
+        if (answers.length > 0) {
+            const combined = await this.combineAnswers(question, answers);
+            if (!combined.success) return combined;
             return success({
                 type: "Answered",
-                answer,
+                answer: combined.data,
             });
         }
         whyNoAnswer ??= "";
@@ -501,6 +468,62 @@ export class AnswerGenerator implements IAnswerGenerator {
             whyNoAnswer,
         });
     }
+
+    private async combineAnswers(
+        question: string,
+        answers: string[],
+    ): Promise<Result<string>> {
+        while (answers.length > 1) {
+            const grouped = groupPartialAnswers(
+                answers,
+                this.settings.maxCharsInBudget,
+            );
+            if (!grouped.success) return grouped;
+            if (grouped.data.length >= answers.length) {
+                return error(
+                    "Partial answers cannot be reduced within the combination budget; no evidence was truncated.",
+                );
+            }
+            const combined: string[] = [];
+            for (const group of grouped.data) {
+                if (group.length === 1) {
+                    combined.push(group[0]);
+                    continue;
+                }
+                const rewritten = await rewriteText(
+                    this.settings.answerCombinerModel,
+                    group.join("\n\n"),
+                    `${question}\nReconcile partial evidence, preserving dates, attribution, corrections and distinct item identities. Do not add local counts blindly or treat missing evidence in one part as absence. Preserve facts needed to combine this result with other parts.`,
+                );
+                if (!rewritten) return error("rewriteAnswer failed");
+                combined.push(rewritten);
+            }
+            answers = combined;
+        }
+        return success(answers[0]);
+    }
+}
+
+function groupPartialAnswers(
+    answers: string[],
+    budget: number,
+): Result<string[][]> {
+    const groups: string[][] = [];
+    let current: string[] = [];
+    for (const answer of answers) {
+        if (answer.length > budget) {
+            return error(
+                "Partial answer exceeds the combination budget; no evidence was truncated.",
+            );
+        }
+        if ([...current, answer].join("\n\n").length > budget) {
+            groups.push(current);
+            current = [];
+        }
+        current.push(answer);
+    }
+    if (current.length) groups.push(current);
+    return success(groups);
 }
 
 export function createAnswerGeneratorSettings(
@@ -512,7 +535,7 @@ export function createAnswerGeneratorSettings(
         answerCombinerModel: openai.createChatModel(),
         maxCharsInBudget: 4096 * 4, // 4096 tokens * 4 chars per token,
         concurrency: 2,
-        fastStop: true,
+        fastStop: false,
     };
 }
 
@@ -615,14 +638,14 @@ export function getRelevantMessagesForAnswer(
     topK?: number,
 ): contextSchema.RelevantMessage[] {
     const relevantMessages: contextSchema.RelevantMessage[] = [];
-    for (const message of getMessagesFromScoredOrdinals(
-        conversation.messages,
-        messageOrdinals,
-    )) {
+    for (const { messageOrdinal } of messageOrdinals) {
+        const message = conversation.messages.get(messageOrdinal);
         if (message.textChunks.length === 0) {
             continue;
         }
-        const relevantMessage: contextSchema.RelevantMessage = {};
+        const relevantMessage: contextSchema.RelevantMessage = {
+            sourceMessageOrdinals: [messageOrdinal],
+        };
         const meta = message.metadata;
         if (meta) {
             relevantMessage.from = meta.source;
@@ -662,6 +685,7 @@ async function runGenerateAnswers(
         contextSchema.AnswerContext,
         Result<answerSchema.AnswerResponse>
     >,
+    stopOnAnswer = false,
 ): Promise<Result<answerSchema.AnswerResponse[]>> {
     if (chunks.length === 0) {
         return success([]);
@@ -669,7 +693,11 @@ async function runGenerateAnswers(
     const results = await asyncArray.mapAsync(
         chunks,
         answerGenerator.settings.concurrency,
-        (chunk) => answerGenerator.generateAnswer(question, chunk),
+        (chunk) =>
+            answerGenerator.generateAnswer(
+                `${question}\n\nThis context is only one part of the retrieved evidence. Preserve dates, attribution, correction details and individual item identities needed to combine answers across parts. Do not claim a local count or list is globally complete.`,
+                chunk,
+            ),
         (context, index, response) => {
             if (progress) {
                 progress(context, index, response);
@@ -678,7 +706,7 @@ async function runGenerateAnswers(
                 return false;
             }
             // Return false if mapAsync should stop
-            return response && response.data.type !== "Answered";
+            return !stopOnAnswer || response.data.type !== "Answered";
         },
     );
     return flattenResultsArray(results);
@@ -693,13 +721,15 @@ function createRelevantKnowledge(
         knowledge,
     };
     if (sourceMessageOrdinals) {
+        const ordinals = [...sourceMessageOrdinals];
+        relevantKnowledge.sourceMessageOrdinals = ordinals;
         relevantKnowledge.timeRange = getEnclosingDateRangeForMessages(
             conversation.messages,
-            sourceMessageOrdinals,
+            ordinals,
         );
         const meta = getEnclosingMetadataForMessages(
             conversation.messages,
-            sourceMessageOrdinals,
+            ordinals,
         );
         if (meta.source) {
             relevantKnowledge.origin = meta.source;

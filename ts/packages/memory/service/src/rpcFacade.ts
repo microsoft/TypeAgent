@@ -192,19 +192,15 @@ export async function waitForMemoryJob(
         ) {
             return job;
         }
-        await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(resolve, interval);
-            options.signal?.addEventListener(
-                "abort",
-                () => {
-                    clearTimeout(timeout);
-                    reject(
-                        options.signal?.reason ??
-                            new Error("Job wait cancelled"),
-                    );
-                },
-                { once: true },
-            );
+        await new Promise<void>((resolve) => {
+            const finished = () => {
+                clearTimeout(timeout);
+                options.signal?.removeEventListener("abort", finished);
+                resolve();
+            };
+            const timeout = setTimeout(finished, interval);
+            options.signal?.addEventListener("abort", finished, { once: true });
+            if (options.signal?.aborted) finished();
         });
     }
 }

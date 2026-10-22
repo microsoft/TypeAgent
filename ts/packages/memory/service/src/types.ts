@@ -368,6 +368,7 @@ export interface MemoryAnswerResult {
     grounded: true;
     indexVersion: string;
     warnings: string[];
+    readerContext?: AnswerContextDiagnostics;
 }
 
 export type MemoryEventSourceKind =
@@ -720,6 +721,18 @@ export interface CorpusIndexAnswer {
     answer?: string | undefined;
     whyNoAnswer?: string | undefined;
     matches: CorpusIndexMatch[];
+    readerContext?: AnswerContextDiagnostics;
+}
+
+export interface AnswerContextDiagnostics {
+    retrievedMessageOrdinals: number[];
+    messageOrdinals: number[];
+    knowledgeMessageOrdinals: number[];
+    completedChunks: number;
+    serializedContextChars: number;
+    retrievedSourceIds: string[];
+    messageSourceIds: string[];
+    knowledgeSourceIds: string[];
 }
 
 export interface IndexedSubject {

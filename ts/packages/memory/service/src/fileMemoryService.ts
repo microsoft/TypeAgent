@@ -10,19 +10,11 @@ import {
     jsonSegmentDirectory,
 } from "@typeagent/knowpro";
 import { createHash, randomUUID } from "node:crypto";
-import {
-    access,
-    cp,
-    mkdir,
-    readFile,
-    readdir,
-    rename,
-    rm,
-    writeFile,
-} from "node:fs/promises";
+import * as filesystem from "node:fs/promises";
 import { userInfo } from "node:os";
 import path from "node:path";
 import lockfile from "proper-lockfile";
+
 import {
     MemoryBatchStore,
     type MemoryBatchImport,
@@ -50,7 +42,8 @@ import {
     sourceSynopsisRecipe,
     type SourceSynopsisModel,
 } from "./sourceSynopsis.js";
-import { writeRunbookJson } from "./durableRunbookJson.js";
+import { writeRunbookJson as persistRunbookJson } from "./durableRunbookJson.js";
+
 import {
     classifyIndexSchema,
     indexFingerprint,
@@ -268,6 +261,39 @@ import type {
     ViewVersion,
 } from "./viewTypes.js";
 import { validateViewArchive, validateViewDraft } from "./viewValidation.js";
+
+// Awaited API wall time includes scheduling/cache/filesystem work, not OS I/O counters.
+const { access, cp, mkdir, readFile, readdir, rename, rm, writeFile } =
+    new Proxy(filesystem, {
+        get(target, property) {
+            const method = Reflect.get(target, property, target);
+            if (typeof method !== "function") return method;
+            const stages: Record<string, string> = {
+                access: "storage.io.access",
+                cp: "storage.io.copy",
+                mkdir: "storage.io.mkdir",
+                readFile: "storage.io.read",
+                readdir: "storage.io.readdir",
+                rename: "storage.io.rename",
+                rm: "storage.io.remove",
+                writeFile: "storage.io.write",
+            };
+            const stage = stages[String(property)];
+            if (!stage) return method;
+            return (...args: unknown[]) =>
+                timeSearchStage(stage, () =>
+                    Reflect.apply(method, target, args),
+                );
+        },
+    });
+
+function writeRunbookJson(
+    ...args: Parameters<typeof persistRunbookJson>
+): Promise<void> {
+    return timeSearchStage("storage.runbook.persist", () =>
+        persistRunbookJson(...args),
+    );
+}
 
 const manifestFileName = "manifest.json";
 const eventsFileName = "events.jsonl";
@@ -919,7 +945,10 @@ function pageItems<T>(
 
 async function readJson<T>(filePath: string): Promise<T | undefined> {
     try {
-        return JSON.parse(await readFile(filePath, "utf8")) as T;
+        const text = await readFile(filePath, "utf8");
+        return timeSearchStage("storage.json.parse", () =>
+            JSON.parse(text),
+        ) as T;
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
             return undefined;
@@ -935,7 +964,11 @@ async function writeJsonAtomic(
     await mkdir(path.dirname(filePath), { recursive: true });
     const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
     const backupPath = `${filePath}.${randomUUID()}.bak`;
-    await writeFile(temporaryPath, `${JSON.stringify(value, undefined, 2)}\n`);
+    const serialized = timeSearchStage(
+        "storage.json.serialize",
+        () => `${JSON.stringify(value, undefined, 2)}\n`,
+    );
+    await writeFile(temporaryPath, serialized);
     let hasBackup = false;
     try {
         await rename(filePath, backupPath);
@@ -1993,6 +2026,23 @@ export class FileMemoryService
         request: DocumentIngestRequest,
         signal?: AbortSignal,
     ): Promise<DocumentIngestResult> {
+        const jobId = randomUUID();
+        return runWithSearchTiming(jobId, "memory.ingestion", () => {
+            const admittedAt = currentSearchTraceId()
+                ? performance.now()
+                : undefined;
+            return timeSearchStage("ingestion.admission", () =>
+                this.acceptDocument(request, signal, jobId, admittedAt),
+            );
+        });
+    }
+
+    private async acceptDocument(
+        request: DocumentIngestRequest,
+        signal: AbortSignal | undefined,
+        jobId: string,
+        admittedAt: number | undefined,
+    ): Promise<DocumentIngestResult> {
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
         if (
@@ -2026,7 +2076,6 @@ export class FileMemoryService
             request.source.assets ?? [],
         );
         request = structuredClone(request);
-        const jobId = randomUUID();
         const timestamp = now();
         const job: IngestionJobStatus = {
             jobId,
@@ -2064,16 +2113,26 @@ export class FileMemoryService
                     signal: controller.signal,
                     execute: async () => {
                         const ingest = () =>
-                            timeSearchStage("ingestion.total", () =>
-                                this.processIngestion(
-                                    request,
-                                    content,
-                                    contentHash,
+                            runWithSearchTiming(
+                                job.jobId,
+                                "memory.ingestion",
+                                () =>
+                                    timeSearchStage("ingestion.total", () =>
+                                        this.processIngestion(
+                                            request,
+                                            content,
+                                            contentHash,
+                                            sourceId,
+                                            revisionId,
+                                            job,
+                                            controller.signal,
+                                        ),
+                                    ),
+                                {
+                                    corpusId: request.corpusId,
                                     sourceId,
                                     revisionId,
-                                    job,
-                                    controller.signal,
-                                ),
+                                },
                             );
                         await (this.wikiBudget
                             ? runWithRequestBudget(
@@ -2101,7 +2160,24 @@ export class FileMemoryService
                 );
                 if (forgotten) throw error;
             })
-            .finally(() => this.controllers.delete(jobId));
+            .finally(() => {
+                this.controllers.delete(jobId);
+                if (admittedAt !== undefined) {
+                    runWithSearchTiming(jobId, "memory.ingestion", () =>
+                        recordSearchTiming(
+                            "ingestion.admissionThroughCompletion",
+                            performance.now() - admittedAt,
+                            {
+                                complete: job.state === "complete",
+                                cancelled: job.state === "cancelled",
+                                failed: job.state === "failed",
+                                warningCount: job.warnings.length,
+                            },
+                            job.state === "complete" ? "success" : "error",
+                        ),
+                    );
+                }
+            });
         this.indexedReads.add(work);
         void work.then(
             () => this.indexedReads.delete(work),
@@ -7028,6 +7104,9 @@ export class FileMemoryService
                     grounded: true,
                     indexVersion,
                     warnings,
+                    ...(result.readerContext === undefined
+                        ? {}
+                        : { readerContext: result.readerContext }),
                 };
             }
             return {
@@ -7038,6 +7117,9 @@ export class FileMemoryService
                 grounded: true,
                 indexVersion,
                 warnings,
+                ...(result.readerContext === undefined
+                    ? {}
+                    : { readerContext: result.readerContext }),
             };
         });
     }
@@ -7461,7 +7543,9 @@ export class FileMemoryService
                         this.indexDirectory(corpusId, activeGeneration),
             )
         )
-            await collectJsonSegments(root);
+            await timeSearchStage("storage.segments.collect", () =>
+                collectJsonSegments(root),
+            );
     }
 
     private indexVersion(manifest: CorpusManifest): string {
@@ -7682,6 +7766,31 @@ export class FileMemoryService
         corpusId: string,
         entries: AcceptedIngestion[],
     ): Promise<boolean> {
+        const groupId = randomUUID();
+        for (const entry of entries) {
+            runWithSearchTiming(entry.job.jobId, "memory.ingestion", () =>
+                recordSearchTiming("ingestion.group.member", 0, {
+                    groupId,
+                    groupSize: entries.length,
+                    sharedPreparation: true,
+                }),
+            );
+        }
+        return runWithSearchTiming(
+            groupId,
+            "memory.ingestion.group",
+            () =>
+                timeSearchStage("ingestion.group.total", () =>
+                    this.prepareIngestionGroup(corpusId, entries),
+                ),
+            { corpusId, groupSize: entries.length, sharedPreparation: true },
+        );
+    }
+
+    private async prepareIngestionGroup(
+        corpusId: string,
+        entries: AcceptedIngestion[],
+    ): Promise<boolean> {
         const generation = randomUUID();
         const directory = this.indexDirectory(corpusId, generation);
         const controller = new AbortController();
@@ -7738,56 +7847,84 @@ export class FileMemoryService
             } finally {
                 finishPreparation();
             }
-            await this.enqueueWrite(corpusId, async () => {
-                signal.throwIfAborted();
-                if (
-                    capture.runtime.manifest.indexGeneration !==
-                        capture.baseGeneration ||
-                    this.indexVersion(capture.runtime.manifest) !==
-                        capture.baseVersion
-                )
-                    throw new ViewBuildStaleError(
-                        "Corpus changed during grouped ingestion preparation",
+            await this.enqueueWrite(
+                corpusId,
+                async () => {
+                    signal.throwIfAborted();
+                    if (
+                        capture.runtime.manifest.indexGeneration !==
+                            capture.baseGeneration ||
+                        this.indexVersion(capture.runtime.manifest) !==
+                            capture.baseVersion
+                    )
+                        throw new ViewBuildStaleError(
+                            "Corpus changed during grouped ingestion preparation",
+                        );
+                    const manifest = structuredClone(capture.runtime.manifest);
+                    delete manifest.pendingSourceForget;
+                    for (const addition of capture.additions) {
+                        addition.revision.state = "ready";
+                        addition.revision.indexedAt = now();
+                        manifest.sources.push(addition.source);
+                    }
+                    manifest.indexGeneration = generation;
+                    manifest.corpus.status = "ready";
+                    manifest.corpus.updatedAt = now();
+                    manifest.corpus.documentCount = manifest.sources.length;
+                    manifest.changes = pruneChangeReceipts(manifest.changes);
+                    for (const entry of entries)
+                        await this.updateJob(entry.job, "persisting", {
+                            completed: 1,
+                            total: 1,
+                            message: "Persisting shared corpus metadata",
+                        });
+                    await this.writeManifest(corpusId, manifest);
+                    capture.runtime.manifest = manifest;
+                    capture.runtime.index = capture.index;
+                    committed = true;
+                    await timeSearchStage(
+                        "ingestion.postIndex.fingerprint",
+                        () =>
+                            this.rememberDocumentIndex(
+                                corpusId,
+                                capture.runtime,
+                            ),
                     );
-                const manifest = structuredClone(capture.runtime.manifest);
-                delete manifest.pendingSourceForget;
-                for (const addition of capture.additions) {
-                    addition.revision.state = "ready";
-                    addition.revision.indexedAt = now();
-                    manifest.sources.push(addition.source);
-                }
-                manifest.indexGeneration = generation;
-                manifest.corpus.status = "ready";
-                manifest.corpus.updatedAt = now();
-                manifest.corpus.documentCount = manifest.sources.length;
-                manifest.changes = pruneChangeReceipts(manifest.changes);
-                for (const entry of entries)
-                    await this.updateJob(entry.job, "persisting", {
-                        completed: 1,
-                        total: 1,
-                        message: "Persisting shared corpus metadata",
-                    });
-                await this.writeManifest(corpusId, manifest);
-                capture.runtime.manifest = manifest;
-                capture.runtime.index = capture.index;
-                committed = true;
-                await this.rememberDocumentIndex(corpusId, capture.runtime);
-                for (const entry of entries)
-                    await this.viewStore.markSourceRevisionStale(
-                        corpusId,
-                        entry.sourceId,
-                        entry.revisionId,
+                    for (const entry of entries)
+                        await timeSearchStage(
+                            "ingestion.postIndex.markViewsStale",
+                            () =>
+                                this.viewStore.markSourceRevisionStale(
+                                    corpusId,
+                                    entry.sourceId,
+                                    entry.revisionId,
+                                ),
+                        );
+                    await timeSearchStage(
+                        "ingestion.postIndex.invalidateViews",
+                        () => this.invalidateMaintainedViews(corpusId),
                     );
-                await this.invalidateMaintainedViews(corpusId);
-                await this.textStore(corpusId).purge(manifest.sources);
-                await this.removeInactiveIndexGenerations(corpusId, generation);
-                for (const entry of entries)
-                    await this.updateJob(entry.job, "complete", {
-                        completed: 1,
-                        total: 1,
-                        message: "Ingestion complete",
-                    });
-            });
+                    await timeSearchStage("ingestion.postIndex.purgeText", () =>
+                        this.textStore(corpusId).purge(manifest.sources),
+                    );
+                    await timeSearchStage(
+                        "ingestion.postIndex.removeGenerations",
+                        () =>
+                            this.removeInactiveIndexGenerations(
+                                corpusId,
+                                generation,
+                            ),
+                    );
+                    for (const entry of entries)
+                        await this.updateJob(entry.job, "complete", {
+                            completed: 1,
+                            total: 1,
+                            message: "Ingestion complete",
+                        });
+                },
+                false,
+                "ingestion.commit.queue",
+            );
             return true;
         } catch (error) {
             finishPreparation();
@@ -8072,100 +8209,138 @@ export class FileMemoryService
                 );
                 finishPreparation();
             });
-            await collectJsonSegments(path.dirname(candidateDirectory));
-            await this.enqueueWrite(request.corpusId, () =>
-                timeSearchStage("ingestion.commit", async () => {
-                    this.throwIfAborted(signal);
-                    if (
-                        runtime.manifest.indexGeneration !==
-                            capture.baseGeneration ||
-                        this.indexVersion(runtime.manifest) !==
-                            capture.baseVersion
-                    )
-                        throw new ViewBuildStaleError(
-                            "Corpus source index changed during ingestion preparation",
+            await timeSearchStage("storage.segments.collect", () =>
+                collectJsonSegments(path.dirname(candidateDirectory)),
+            );
+            await this.enqueueWrite(
+                request.corpusId,
+                () =>
+                    timeSearchStage("ingestion.commit", async () => {
+                        this.throwIfAborted(signal);
+                        if (
+                            runtime.manifest.indexGeneration !==
+                                capture.baseGeneration ||
+                            this.indexVersion(runtime.manifest) !==
+                                capture.baseVersion
+                        )
+                            throw new ViewBuildStaleError(
+                                "Corpus source index changed during ingestion preparation",
+                            );
+                        // Other stores and source synopses can advance while the detached
+                        // index is prepared. Publish only the source change into fresh metadata.
+                        const committedManifest = structuredClone(
+                            runtime.manifest,
                         );
-                    // Other stores and source synopses can advance while the detached
-                    // index is prepared. Publish only the source change into fresh metadata.
-                    const committedManifest = structuredClone(runtime.manifest);
-                    delete committedManifest.pendingSourceForget;
-                    const currentSource = committedManifest.sources.find(
-                        (item) => item.sourceId === sourceId,
-                    );
-                    source.revisions = source.revisions.map((item) =>
-                        item.revisionId === revisionId
-                            ? item
-                            : (currentSource?.revisions.find(
-                                  (current) =>
-                                      current.revisionId === item.revisionId,
-                              ) ?? item),
-                    );
-                    committedManifest.sources = [
-                        ...committedManifest.sources.filter(
-                            (item) => item.sourceId !== sourceId,
-                        ),
-                        source,
-                    ];
-                    committedManifest.indexGeneration = indexGeneration;
-                    revision.state = "ready";
-                    revision.indexedAt = now();
-                    committedManifest.corpus.status = "ready";
-                    committedManifest.corpus.updatedAt = now();
-                    committedManifest.corpus.documentCount =
-                        committedManifest.sources.length;
-                    committedManifest.changes = pruneChangeReceipts(
-                        committedManifest.changes,
-                    );
-                    if (existing !== undefined) {
-                        committedManifest.changes.push(
-                            createChangeReceipt(
-                                request.corpusId,
-                                "replace",
-                                sourceId,
-                                { sources: 1, revisions: 1, knowledge: 0 },
-                                existing.activeRevisionId,
-                                revisionId,
+                        delete committedManifest.pendingSourceForget;
+                        const currentSource = committedManifest.sources.find(
+                            (item) => item.sourceId === sourceId,
+                        );
+                        source.revisions = source.revisions.map((item) =>
+                            item.revisionId === revisionId
+                                ? item
+                                : (currentSource?.revisions.find(
+                                      (current) =>
+                                          current.revisionId ===
+                                          item.revisionId,
+                                  ) ?? item),
+                        );
+                        committedManifest.sources = [
+                            ...committedManifest.sources.filter(
+                                (item) => item.sourceId !== sourceId,
                             ),
+                            source,
+                        ];
+                        committedManifest.indexGeneration = indexGeneration;
+                        revision.state = "ready";
+                        revision.indexedAt = now();
+                        committedManifest.corpus.status = "ready";
+                        committedManifest.corpus.updatedAt = now();
+                        committedManifest.corpus.documentCount =
+                            committedManifest.sources.length;
+                        committedManifest.changes = pruneChangeReceipts(
+                            committedManifest.changes,
                         );
-                    }
-                    await this.updateJob(job, "persisting", {
-                        completed: 1,
-                        total: 1,
-                        message: "Persisting corpus metadata",
-                    });
-                    await this.writeManifest(
-                        request.corpusId,
-                        committedManifest,
-                    );
-                    runtime.manifest = committedManifest;
-                    runtime.index = candidateIndex;
-                    committed = true;
-                    await this.rememberDocumentIndex(request.corpusId, runtime);
-                    candidateIndexDirectory = undefined;
-                    await this.viewStore.markSourceRevisionStale(
-                        request.corpusId,
-                        sourceId,
-                        revisionId,
-                    );
-                    await this.invalidateMaintainedViews(request.corpusId);
-                    await this.cleanupReplacedAssets(
-                        request.corpusId,
-                        source,
-                        existing,
-                    );
-                    await this.textStore(request.corpusId).purge(
-                        runtime.manifest.sources,
-                    );
-                    await this.removeInactiveIndexGenerations(
-                        request.corpusId,
-                        indexGeneration,
-                    );
-                    await this.updateJob(job, "complete", {
-                        completed: 1,
-                        total: 1,
-                        message: "Ingestion complete",
-                    });
-                }),
+                        if (existing !== undefined) {
+                            committedManifest.changes.push(
+                                createChangeReceipt(
+                                    request.corpusId,
+                                    "replace",
+                                    sourceId,
+                                    { sources: 1, revisions: 1, knowledge: 0 },
+                                    existing.activeRevisionId,
+                                    revisionId,
+                                ),
+                            );
+                        }
+                        await this.updateJob(job, "persisting", {
+                            completed: 1,
+                            total: 1,
+                            message: "Persisting corpus metadata",
+                        });
+                        await this.writeManifest(
+                            request.corpusId,
+                            committedManifest,
+                        );
+                        runtime.manifest = committedManifest;
+                        runtime.index = candidateIndex;
+                        committed = true;
+                        await timeSearchStage(
+                            "ingestion.postIndex.fingerprint",
+                            () =>
+                                this.rememberDocumentIndex(
+                                    request.corpusId,
+                                    runtime,
+                                ),
+                        );
+                        candidateIndexDirectory = undefined;
+                        await timeSearchStage(
+                            "ingestion.postIndex.markViewsStale",
+                            () =>
+                                this.viewStore.markSourceRevisionStale(
+                                    request.corpusId,
+                                    sourceId,
+                                    revisionId,
+                                ),
+                        );
+                        await timeSearchStage(
+                            "ingestion.postIndex.invalidateViews",
+                            () =>
+                                this.invalidateMaintainedViews(
+                                    request.corpusId,
+                                ),
+                        );
+                        await timeSearchStage(
+                            "ingestion.postIndex.cleanupAssets",
+                            () =>
+                                this.cleanupReplacedAssets(
+                                    request.corpusId,
+                                    source,
+                                    existing,
+                                ),
+                        );
+                        await timeSearchStage(
+                            "ingestion.postIndex.purgeText",
+                            () =>
+                                this.textStore(request.corpusId).purge(
+                                    runtime.manifest.sources,
+                                ),
+                        );
+                        await timeSearchStage(
+                            "ingestion.postIndex.removeGenerations",
+                            () =>
+                                this.removeInactiveIndexGenerations(
+                                    request.corpusId,
+                                    indexGeneration,
+                                ),
+                        );
+                        await this.updateJob(job, "complete", {
+                            completed: 1,
+                            total: 1,
+                            message: "Ingestion complete",
+                        });
+                    }),
+                false,
+                "ingestion.commit.queue",
             );
         } catch (error) {
             finishPreparation();
@@ -8292,7 +8467,7 @@ export class FileMemoryService
                     "ingestion.wait",
                     performance.now() - queuedAt,
                 );
-            return operation();
+            return timeSearchStage("ingestion.queue.work", operation);
         });
         const settled = work.then(
             () => undefined,
@@ -8311,19 +8486,23 @@ export class FileMemoryService
         corpusId: string,
         operation: () => Promise<T>,
         recoveringRemoval = false,
+        timingStage = "queue",
     ): Promise<T> {
-        const runtime = await this.getCorpusRuntime(
-            corpusId,
-            recoveringRemoval,
+        const runtime = await timeSearchStage("queue.runtime", () =>
+            this.getCorpusRuntime(corpusId, recoveringRemoval),
         );
         const queuedAt = currentSearchTraceId() ? performance.now() : undefined;
         const run = async () => {
             if (!recoveringRemoval) this.assertRemovalComplete(runtime);
             if (queuedAt !== undefined)
-                recordSearchTiming("queue.wait", performance.now() - queuedAt, {
-                    corpusId,
-                    access: "write",
-                });
+                recordSearchTiming(
+                    `${timingStage}.wait`,
+                    performance.now() - queuedAt,
+                    {
+                        corpusId,
+                        access: "write",
+                    },
+                );
             const changes = pruneChangeReceipts(runtime.manifest.changes);
             if (changes.length !== (runtime.manifest.changes ?? []).length) {
                 const candidate = { ...runtime.manifest, changes };
@@ -8332,7 +8511,12 @@ export class FileMemoryService
             }
             return operation();
         };
-        return runtime.access.write(run);
+        return runtime.access.write(() =>
+            timeSearchStage(`${timingStage}.work`, run, {
+                corpusId,
+                access: "write",
+            }),
+        );
     }
 
     private enqueueRead<T>(
@@ -9630,7 +9814,16 @@ export class FileMemoryService
         operation: () => Promise<T>,
     ): Promise<T> {
         const previous = this.jobWrites.get(jobId) ?? Promise.resolve();
-        const task = previous.then(operation, operation);
+        const queuedAt = currentSearchTraceId() ? performance.now() : undefined;
+        const run = () => {
+            if (queuedAt !== undefined)
+                recordSearchTiming(
+                    "job.queue.wait",
+                    performance.now() - queuedAt,
+                );
+            return timeSearchStage("job.queue.work", operation);
+        };
+        const task = previous.then(run, run);
         const settled = task.then(
             () => undefined,
             () => undefined,
@@ -9740,7 +9933,9 @@ export class FileMemoryService
                 const { text: _text, ...metadata } = revision;
                 revisions.push({
                     ...metadata,
-                    content: await store.read(revision),
+                    content: await timeSearchStage("storage.text.read", () =>
+                        store.read(revision),
+                    ),
                 });
             }
             sources.push({ ...source, revisions });
@@ -9759,7 +9954,11 @@ export class FileMemoryService
         for (const source of manifest.sources) {
             const revisions = [];
             for (const revision of source.revisions)
-                revisions.push(await store.prepare(revision));
+                revisions.push(
+                    await timeSearchStage("storage.text.prepare", () =>
+                        store.prepare(revision),
+                    ),
+                );
             sources.push({ ...source, revisions });
         }
         const stored: SerializedCorpusManifest = {
@@ -9767,10 +9966,13 @@ export class FileMemoryService
             storageVersion: 1,
             sources,
         };
-        await store.prepared();
-        await writeRunbookJson(
-            this.manifestPath(corpusId),
-            `${JSON.stringify(stored, undefined, 2)}\n`,
+        await timeSearchStage("storage.text.flush", () => store.prepared());
+        const serialized = timeSearchStage(
+            "storage.json.serialize",
+            () => `${JSON.stringify(stored, undefined, 2)}\n`,
+        );
+        await timeSearchStage("storage.manifest.persist", () =>
+            writeRunbookJson(this.manifestPath(corpusId), serialized),
         );
     }
 

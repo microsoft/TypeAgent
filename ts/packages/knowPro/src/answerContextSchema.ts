@@ -16,6 +16,7 @@ export type AnswerContext = {
 export type EntityNames = string | string[];
 
 export type RelevantKnowledge = {
+    sourceMessageOrdinals?: number[] | undefined;
     // The actual knowledge
     knowledge: any;
     // Entity or entities who mentioned the knowledge
@@ -27,6 +28,7 @@ export type RelevantKnowledge = {
 };
 
 export type RelevantMessage = {
+    sourceMessageOrdinals?: number[] | undefined;
     from?: EntityNames | undefined;
     to?: EntityNames | undefined;
     timestamp?: Date | undefined;

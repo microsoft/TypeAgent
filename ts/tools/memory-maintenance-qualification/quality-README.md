@@ -355,6 +355,9 @@ after any production repair before starting another preflight.
 Full eligible drain and enabled-path unchanged cold-reopen zero-call checks are
 required before a clean-family claim; a partial run is not success. Actual
 semantic review and the independent artifact benchmark remain separate gates.
+Family activation refreshes its expected head and retries only the existing
+`ViewBuildStaleError`, using the same deadline-bounded guard as offline
+qualification. Semantic/provider failures are not retried by that guard.
 
 ### Resuming a bounded baseline19 run
 
@@ -429,10 +432,36 @@ recorded. Invalid judge responses fail explicitly; no automatic positive labels
 or invented independent-human approvals are supplied.
 
 Each invocation has a 35-minute total cap with five minutes reserved for cleanup.
-Fetches and job waits share the work deadline. Completed histories and saved
+Job waits and the judge observe the work deadline. Aborting a polling delay
+reaches the normal job-cancellation path and removes its abort listener.
+The runner does not inject a global fetch abort below the production client:
+in-flight production calls can finish during cleanup, under the outer watchdog
+cap. Attempt outcome and close-start time are persisted before awaiting
+supported close, so a forced shutdown does not leave an unqualified
+`IN_PROGRESS` outcome.
+
+Use `--max-questions 1` to stop an invocation after its next completed
+answer/judgment without changing the frozen 500-question schedule or order.
+The default is 500; valid limits are integers from 1 to 500. Reaching the
+invocation limit produces `PARTIAL_QUESTION_LIMIT`, not a full-suite success.
+The same explicit resume command continues with the next unfinished case.
+Completed histories and saved
 hypotheses are reusable across explicit resume invocations; a failed non-budget
 case requires review before retry. Corpus identity, dataset/plan, compiled and
 model dependencies, benchmark implementation and configuration are frozen.
+Configuration identity omits an absent optional model name, so Azure identities
+compare exactly after JSON persistence.
+
+Normal resume never bypasses checkpoint checks after a repair. A reviewed
+recovery must use a separate store copy, preserve original receipts/state, and
+record the original state hash, before/after runtime and engine identities,
+exact patch hash, changed compiled files, unchanged model/config dependencies
+and authorization. Validate retained completed-source hashes and readiness
+without inference before continuing. Report such a run as a repaired
+continuation, not an unchanged baseline. A copied lock directory can have a
+fresh directory timestamp even when file timestamps are preserved; after
+confirming the old owners exited, let normal stale-lock recovery handle it.
+Do not delete an unverified live lock.
 
 Local outputs include the manifest, resumable state, hypotheses, per-attempt
 receipts, observed provider usage and scorecard. Missing questions stay missing.
@@ -440,3 +469,130 @@ Full-schedule accuracy is `null` until all 500 are judged; observed-prefix accur
 is labeled incomplete, never a full-suite leaderboard score. Dollar cost remains
 unknown without verified pricing. Official reference answers do not require us
 to invent human approval for the unrelated, still-provisional local artifact gold.
+
+## Profiling LongMemEval ingestion
+
+Historical analysis is read-only and makes no provider calls:
+
+```powershell
+node tools\memory-maintenance-qualification\ingestion-profile.mjs analyze --run $ownedBenchmarkRun --output $newAbsoluteProfileDirectory
+```
+
+It reports completed-job wall time and nonoverlapping persisted boundaries:
+admission through chunking, index preparation (extraction, embeddings and
+indexing), persistence, and post-index completion. Missing milestones/job IDs
+remain explicitly unknown. Failed/cancelled work is not included in the completed
+job totals. Provider fetch durations overlap and are not an exclusive wall-time
+breakdown.
+
+For a separately authorized bounded diagnostic run, pass the normal supervised
+runner arguments after `--`:
+
+```powershell
+node tools\memory-maintenance-qualification\ingestion-profile.mjs run --output $newAbsoluteProfileDirectory -- --product (Get-Location).Path --dataset $officialCleanedDataset --judge-source $pinnedOfficialJudgeSource --output $ownedArtifactRoot --authorized-live-benchmark --max-questions 1
+```
+
+The profile output directory must be new and its parent must exist. Use a
+separate owned diagnostic run, not an immutable measured store. Normal checkpoint,
+resume, authorization and deadline checks remain in force; this command does
+not authorize future batches or bypass a runtime-identity change.
+
+The wrapper enables the existing production `TYPEAGENT_MEMORY_SEARCH_TRACE=1`
+flag, retains supervisor stdout/stderr and emits a 30-second process heartbeat.
+It analyzes the actual worker's `stderr-<startedEpochMs>.log` only after confirming
+worker/supervisor exit. A supplied log with zero stage events is reported as
+unavailable, not successful timing capture. A nonzero runner exit code is
+preserved; missing capture after a successful runner, analysis errors or lifecycle
+validation errors fail profiling explicitly.
+
+Reports correlate inclusive stage durations with ingestion trace/job IDs.
+Nested stages cannot be summed into a critical path. This is stage instrumentation,
+not a native CPU/disk profile, and its overhead must be measured before throughput
+comparison. Reports omit source prose, answers, credentials and endpoint URLs;
+raw worker logs remain local diagnostic artifacts under existing custody rules.
+
+### Isolated development ingestion profile
+
+After building, run representative synthetic Markdown, HTML and text admissions,
+then a replacement, without loading benchmark questions, references or stores:
+
+```powershell
+node tools\memory-maintenance-qualification\ingestion-profile.mjs development --product (Get-Location).Path --output $newAbsoluteProfileDirectory --authorized-development-inference --native-worker-cpu
+```
+
+This uses the existing configured production service/model and a fresh store.
+The watchdog bounds the invocation to 30 minutes. The optional native CPU profile
+samples the worker, not merely its supervisor. Inspect the persisted outcome
+and timing report before interpreting a partial or failed run.
+
+Stage observations distinguish parsing/structural splitting, token-aware chunk
+assembly, logical extraction calls, extraction attempts/output counts, embedding
+calls/attempts/items, file API read/write/copy activity, serialization, segment
+collection, admission, serialized queue wait/work and post-index cleanup.
+Entities, topics and actions normally share one extraction response; their output
+counts are not three separate provider calls. SDK-internal HTTP retries are not
+observed by a model-method attempt counter.
+
+Filesystem spans measure awaited API/logical wall time, not physical disk service
+time or device I/O bytes. Parsing includes structural splitting; final token
+chunk assembly is a separate span. Inclusive nested durations and concurrent
+provider calls must not be added to infer an exclusive job critical path.
+Enabled tracing/sampling overhead must be measured before throughput claims.
+
+Segment-store hooks include validated file reads/writes, JSON parse/serialization,
+hashing and root-queue wait/work. Coverage is explicitly partial: service-owned
+file wrappers alone do not capture all index or segment activity. Use interval
+unions to understand concurrent reads; a sum of overlapping API spans is not
+elapsed disk time. Per-file tracing can produce many events even for small input
+documents and is intentionally opt-in.
+
+For an explicit development-only trace-off control, add `--no-stage-timing` to
+the development command above. Its fingerprinted policy is retained in the
+spec/state/admission/report; zero stage events are `INTENTIONALLY_DISABLED`,
+not missing capture. Provider metadata, persisted job boundaries and optional
+`--native-worker-cpu` remain available. This switch does not disable capture for
+the benchmark profiling command. Model outputs and request counts may vary, so
+one trace-on/off pair is not a controlled overhead or throughput estimate.
+
+Segment GC marks at most eight independent nodes concurrently and deduplicates
+shared nodes. Root publication and sweep remain guarded and ordered; failed
+marking drains in-flight reads and cannot sweep. This does not enable concurrent
+mutation of a corpus or parallel full-suite workers.
+
+Answers now include optional actual-reader diagnostics. Preliminary search,
+answer retrieval, text-reader evidence and knowledge-reader evidence have
+separate source sets and recall denominators. Returned citations identify
+supplied reader evidence, not an independent entailment judgment. Context/prompt,
+synopsis schema and cache changes require a new measured arm rather than silently
+resuming an older compiled checkpoint.
+
+### Bounded serial full-suite controller
+
+Only after repairing and qualifying the chosen arm, explicitly authorize an
+overall allowance and launch a fresh frozen run:
+
+```powershell
+node tools\memory-maintenance-qualification\longmemeval-campaign.mjs --output $newAbsoluteControllerDirectory --allowance-minutes 120 --minimum-free-gib 2 -- --product (Get-Location).Path --dataset $officialCleanedDataset --judge-source $pinnedOfficialJudgeSource --output $ownedArtifactRoot --authorized-live-benchmark
+```
+
+The controller resumes only `PARTIAL_BOUNDED_WORK` or `PARTIAL_QUESTION_LIMIT`
+after supported close and verified worker/supervisor exit. It stops on product,
+checkpoint or close failures, no committed progress, insufficient remaining
+allowance or disk reserve. Each invocation gets 1-30 work minutes plus five
+minutes cleanup; two more minutes are reserved by the controller. The default
+2 GiB free-space floor is not a full-suite storage-capacity estimate.
+
+To restart a cleanly stopped controller, use the identical command and
+`--resume-controller`. Original deadline, runner arguments and controller source
+identity remain frozen; restart does not renew authorization. An interrupted
+controller requires the exact recorded supervisors/workers to have exited and a
+clean termination receipt. A stale lock or missing owned-run identity requires
+explicit inspection/recovery; never remove an unverified live lock.
+Invocation ownership, progress and heartbeat timestamps are persisted through
+ordered atomic journal writes as well as reported on stdout.
+
+The controller does not copy the whole store at every invocation and does not
+parallelize mutations to a shared index. Cross-case worker concurrency requires
+separate stores and measured provider, memory and storage capacity. Runtime,
+schema or prompt repairs require a new arm or an explicitly audited migration,
+not bypassing the normal checkpoint guards.

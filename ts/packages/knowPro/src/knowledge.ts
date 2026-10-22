@@ -18,6 +18,11 @@ import { BatchTask, runInBatches } from "./taskQueue.js";
 import { MessageTag, StructuredTag, Tag } from "./interfaces.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import * as knowledgeSchema2 from "./knowledgeSchema_v2.js";
+import {
+    instrumentExtractionModel,
+    recordSearchTiming,
+    timeSearchStage,
+} from "./searchTiming.js";
 
 /**
  * Create a knowledge extractor using the given Chat Model
@@ -28,15 +33,18 @@ export function createKnowledgeExtractor(
     chatModel?: ChatModel,
 ): kpLib.KnowledgeExtractor {
     chatModel ??= createKnowledgeModel();
-    const extractor = kpLib.createKnowledgeExtractor(chatModel, {
-        maxContextLength: 4096,
-        /**
-         * This should *ALWAYS* be false.
-         * Merging is handled during indexing:
-         */
-        mergeActionKnowledge: false,
-        mergeEntityFacets: true,
-    });
+    const extractor = kpLib.createKnowledgeExtractor(
+        instrumentExtractionModel(chatModel),
+        {
+            maxContextLength: 4096,
+            /**
+             * This should *ALWAYS* be false.
+             * Merging is handled during indexing:
+             */
+            mergeActionKnowledge: false,
+            mergeEntityFacets: true,
+        },
+    );
     return extractor;
 }
 
@@ -45,8 +53,23 @@ export function extractKnowledgeFromText(
     text: string,
     maxRetries: number,
 ): Promise<Result<kpLib.KnowledgeResponse>> {
-    return async.callWithRetry(() =>
-        knowledgeExtractor.extractWithRetry(text, maxRetries),
+    return timeSearchStage(
+        "ingestion.extraction.call",
+        async () => {
+            const result = await async.callWithRetry(() =>
+                knowledgeExtractor.extractWithRetry(text, maxRetries),
+            );
+            if (result.success) {
+                recordSearchTiming("ingestion.extraction.output", 0, {
+                    entities: result.data.entities?.length ?? 0,
+                    topics: result.data.topics?.length ?? 0,
+                    actions: result.data.actions?.length ?? 0,
+                    inverseActions: result.data.inverseActions?.length ?? 0,
+                });
+            }
+            return result;
+        },
+        { calls: 1 },
     );
 }
 

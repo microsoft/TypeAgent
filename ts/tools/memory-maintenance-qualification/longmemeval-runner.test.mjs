@@ -11,6 +11,94 @@ import {
     officialJudgeTemplates,
     sessionSource,
 } from "./longmemeval-runner.mjs";
+import {
+    benchmarkConfiguration,
+    closeBenchmarkService,
+    main,
+} from "./longmemeval-live.mjs";
+
+test("Azure configuration identity survives persisted JSON without an optional model name", () => {
+    const settings = {
+        provider: "azure",
+        endpoint: "https://test.invalid",
+        requestConstraints: { contextTokens: 1000 },
+    };
+    const identity = benchmarkConfiguration(settings);
+    assert.deepEqual(JSON.parse(JSON.stringify(identity)), identity);
+    assert.equal("modelName" in identity, false);
+    assert.equal(
+        benchmarkConfiguration({ ...settings, modelName: "configured" })
+            .modelName,
+        "configured",
+    );
+    assert.notDeepEqual(
+        identity,
+        benchmarkConfiguration({
+            ...settings,
+            endpoint: "https://other.invalid",
+        }),
+    );
+});
+
+test("question-count bounds are rejected before creating or opening a run", async () => {
+    for (const value of ["0", "-1", "1.5", "501", "NaN"]) {
+        await assert.rejects(
+            main(["--authorized-live-benchmark", `--max-questions=${value}`]),
+            /Batch question limit/,
+        );
+    }
+});
+
+test("invocation work allowance is bounded before opening a run", async () => {
+    for (const value of ["0", "-1", "1.5", "31", "NaN"]) {
+        await assert.rejects(
+            main(["--authorized-live-benchmark", `--work-minutes=${value}`]),
+            /Invocation work minutes/,
+        );
+    }
+});
+
+test("bounded outcome is durable before close waits, and close failures remain failures", async () => {
+    const state = { outcome: "PARTIAL_BOUNDED_WORK" };
+    const attempt = {};
+    const writes = [];
+    let release;
+    const closed = new Promise((resolve) => {
+        release = resolve;
+    });
+    const closing = closeBenchmarkService(
+        { close: () => closed },
+        state,
+        attempt,
+        async () => {
+            writes.push(structuredClone({ state, attempt }));
+        },
+        (error) => ({ name: error.name }),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].attempt.outcome, "PARTIAL_BOUNDED_WORK");
+    assert.ok(writes[0].attempt.closeStartedEpochMs);
+    assert.equal(writes[0].attempt.supportedClose, undefined);
+    release();
+    await closing;
+    assert.equal(writes.at(-1).attempt.supportedClose, "COMPLETE");
+    await closeBenchmarkService(
+        {
+            async close() {
+                throw new Error("Controlled close failure");
+            },
+        },
+        state,
+        attempt,
+        async () => {
+            writes.push(structuredClone({ state, attempt }));
+        },
+        (error) => ({ name: error.name }),
+    );
+    assert.equal(state.outcome, "FAILED_SUPPORTED_CLOSE");
+    assert.deepEqual(attempt.supportedClose, { name: "Error" });
+});
 
 const construction = {
     id: "case",
@@ -127,6 +215,59 @@ test("production-shaped ingestion and answering exclude reference answers and re
     );
     assert.equal(f.calls.judge[0][0].answer, reference.answer);
     assert.equal(f.record.evidenceSessionRecallAt20Matches, 1);
+});
+
+test("preliminary retrieval, answer retrieval and actual reader coverage have separate denominators", async () => {
+    const f = fixture();
+    const distinct = {
+        ...construction,
+        sessions: construction.sessions.map((session, index) => ({
+            ...session,
+            id: `synthetic-${index}`,
+        })),
+    };
+    const expected = {
+        ...reference,
+        answer_session_ids: ["synthetic-0", "synthetic-1"],
+    };
+    const originalAnswer = f.service.answer;
+    f.service.answer = async (request) => ({
+        ...(await originalAnswer(request)),
+        readerContext: {
+            retrievedMessageOrdinals: [1],
+            messageOrdinals: [],
+            knowledgeMessageOrdinals: [1],
+            retrievedSourceIds: ["source-1"],
+            messageSourceIds: [],
+            knowledgeSourceIds: ["source-1"],
+            completedChunks: 1,
+            serializedContextChars: 100,
+        },
+    });
+    await executeMemoryCase(
+        f.service,
+        distinct,
+        reader,
+        expected,
+        f.record,
+        f.controls,
+    );
+    assert.equal(f.record.evidenceSessionRecallAt20Matches, 1);
+    assert.equal(f.record.answerRetrievalEvidenceSessionRecall, 0.5);
+    assert.equal(f.record.readerMessageEvidenceSessionRecall, 0);
+    assert.equal(f.record.readerKnowledgeEvidenceSessionRecall, 0.5);
+    const scorecard = benchmarkScorecard(
+        {
+            evaluatorOnly: { references: [expected] },
+            manifest: { provenance: {} },
+        },
+        { case: f.record },
+        [],
+    );
+    assert.deepEqual(
+        scorecard.evidenceCoverage.readerMessageEvidenceSessionRecall,
+        { measuredQuestions: 1, mean: 0 },
+    );
 });
 
 test("resume after a saved hypothesis neither re-ingests histories nor regenerates the answer", async () => {

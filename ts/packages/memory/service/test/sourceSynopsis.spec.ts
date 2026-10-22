@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { getRuntimeConfig, setRuntimeConfig } from "@typeagent/aiclient";
@@ -10,6 +11,7 @@ import { FileMemoryService } from "../src/fileMemoryService.js";
 import {
     generateSourceSynopsis,
     configuredSourceSynopsisModel,
+    sourceSynopsisRecipe,
     synopsisInputHash,
     type SourceSynopsisModel,
 } from "../src/sourceSynopsis.js";
@@ -22,6 +24,41 @@ import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { originalFixtureRoot } from "./wikiConsolidationFixtures.js";
 import { TypedViewStore } from "../src/viewStore.js";
 
+interface PromptEvidence {
+    id: string;
+    start: number;
+    end: number;
+    excerpt: string;
+}
+
+interface SynopsisPrompt {
+    text: string;
+    start: number;
+    end: number;
+    evidence: PromptEvidence[];
+    summaries?: {
+        overview: string;
+        evidence: PromptEvidence[];
+        qualifications: string[];
+        contrasts: string[];
+    }[];
+}
+
+function readPrompt(prompt: string): SynopsisPrompt {
+    return JSON.parse(prompt.slice(prompt.lastIndexOf("\n") + 1));
+}
+
+function selection(evidence: unknown): string {
+    return JSON.stringify({
+        preview: "Synthetic source navigation.",
+        overview: "Synthetic source navigation, not independent evidence.",
+        qualifications: [],
+        contrasts: [],
+        limitations: [],
+        evidence,
+    });
+}
+
 class DeterministicModel implements SourceSynopsisModel {
     identity = "offline-source-synopsis";
     calls: string[] = [];
@@ -31,18 +68,7 @@ class DeterministicModel implements SourceSynopsisModel {
     }
     async complete(prompt: string): Promise<string> {
         this.calls.push(prompt);
-        const input = JSON.parse(
-            prompt.slice(prompt.lastIndexOf("\n") + 1),
-        ) as {
-            text?: string;
-            start: number;
-            end: number;
-            summaries?: {
-                overview: string;
-                evidence: SourceSynopsis["evidence"];
-                qualifications: string[];
-            }[];
-        };
+        const input = readPrompt(prompt);
         if (input.summaries) {
             const selected =
                 input.summaries.find((item) => item.qualifications.length) ??
@@ -50,13 +76,13 @@ class DeterministicModel implements SourceSynopsisModel {
             return JSON.stringify({
                 preview: selected.overview.slice(0, 300),
                 overview: selected.overview,
-                evidence: selected.evidence,
+                evidence: selected.evidence.map(({ id }) => ({ id })),
                 qualifications: selected.qualifications,
                 contrasts: [],
                 limitations: [],
             });
         }
-        const text = input.text!;
+        const text = input.text;
         const marker = text.indexOf("Governing tail exception:");
         const from = marker >= 0 ? marker : 0;
         const excerpt = text.slice(
@@ -68,9 +94,13 @@ class DeterministicModel implements SourceSynopsisModel {
             overview: excerpt,
             evidence: [
                 {
-                    start: input.start + from,
-                    end: input.start + from + excerpt.length,
-                    excerpt,
+                    id: (
+                        input.evidence.find(
+                            (item) =>
+                                item.start <= input.start + from &&
+                                item.end > input.start + from,
+                        ) ?? input.evidence[0]
+                    ).id,
                 },
             ],
             qualifications: marker >= 0 ? [excerpt] : [],
@@ -102,14 +132,6 @@ describe("source synopsis orchestration", () => {
         const originalConfig = getRuntimeConfig();
         const originalFetch = globalThis.fetch;
         const content = "A retained governing qualification.";
-        const output = {
-            preview: content,
-            overview: content,
-            evidence: [{ start: 0, end: content.length, excerpt: content }],
-            qualifications: [],
-            contrasts: [],
-            limitations: [],
-        };
         let calls = 0;
         try {
             setRuntimeConfig(
@@ -149,6 +171,19 @@ describe("source synopsis orchestration", () => {
                 expect(body.messages[0].content).toContain(
                     "approximately 2000 tokens in the final JSON response, excluding reasoning",
                 );
+                const output = {
+                    preview: content,
+                    overview: content,
+                    evidence: [
+                        {
+                            id: readPrompt(body.messages[0].content).evidence[0]
+                                .id,
+                        },
+                    ],
+                    qualifications: [],
+                    contrasts: [],
+                    limitations: [],
+                };
                 return new Response(
                     JSON.stringify({
                         choices: [
@@ -231,6 +266,14 @@ describe("source synopsis orchestration", () => {
     test("configured capacity permits direct synthesis; CRLF/Unicode coordinates stay original", async () => {
         const content = "# Context\r\n\r\nA 😀 qualification and contrast.\r\n";
         const model = new DeterministicModel();
+        const complete = model.complete.bind(model);
+        model.complete = async (prompt) => {
+            const output = JSON.parse(await complete(prompt));
+            output.evidence = readPrompt(prompt).evidence.map(({ id }) => ({
+                id,
+            }));
+            return JSON.stringify(output);
+        };
         const output = await generateSourceSynopsis(
             source,
             revision,
@@ -240,93 +283,100 @@ describe("source synopsis orchestration", () => {
         );
         expect(output.coverage.method).toBe("direct");
         expect(model.calls).toHaveLength(1);
-        expect(output.evidence[0].excerpt).toBe(content);
+        expect(output.evidence.map(({ excerpt }) => excerpt).join("")).toBe(
+            content,
+        );
     });
 
-    test("captured live exact quote survives incorrect model arithmetic without changing original CRLF coordinates", async () => {
-        const content = (
-            await readFile(
-                new URL(
-                    "../../test/fixtures/memoryDemo/memory-import-second-brain/content-only/baseline/document-001.md",
-                    import.meta.url,
+    test.each(["\n", "\r\n"])(
+        "host selects repeated text by ID and preserves whitespace and UTF-16 for %j",
+        async (newline) => {
+            const repeated = `  A\t😀  scoped statement. ${newline}`;
+            const content = `# Synthetic 🧪${newline}${repeated}${repeated}\t  ${newline}`;
+            const model = new DeterministicModel();
+            let selected!: PromptEvidence;
+            model.complete = async (prompt) => {
+                const input = readPrompt(prompt);
+                expect(
+                    input.evidence.map(({ excerpt }) => excerpt).join(""),
+                ).toBe(content);
+                const matches = input.evidence.filter(
+                    ({ excerpt }) => excerpt === repeated,
+                );
+                expect(matches).toHaveLength(2);
+                expect(matches[0].id).not.toBe(matches[1].id);
+                selected = matches[1];
+                return selection([{ id: selected.id }]);
+            };
+            const output = await generateSourceSynopsis(
+                source,
+                revision,
+                content,
+                model,
+                new AbortController().signal,
+            );
+            expect(output.evidence).toEqual([
+                {
+                    coordinateSpace: "retained-utf16",
+                    start: content.lastIndexOf(repeated),
+                    end: content.lastIndexOf(repeated) + repeated.length,
+                    excerpt: repeated,
+                },
+            ]);
+            expect(output.evidence[0]).not.toHaveProperty("id");
+            expect(selected.start).toBe(content.lastIndexOf(repeated));
+            model.complete = async () => selection([{ excerpt: repeated }]);
+            await expect(
+                generateSourceSynopsis(
+                    source,
+                    revision,
+                    content,
+                    model,
+                    new AbortController().signal,
                 ),
-                "utf8",
-            )
-        )
-            .replace(/\r?\n/g, "\r\n")
-            .slice(0, 1024);
-        const excerpt =
-            "Explain checkout latency, preserve the investigation trajectory across analyst\r\nhandoffs, and establish evidence requirements for safe future diagnosis.";
-        expect(content.indexOf(excerpt)).toBe(290);
-        expect(content.slice(290, 443)).not.toBe(excerpt);
-        const model = new DeterministicModel();
-        model.complete = async () =>
-            JSON.stringify({
-                preview: "Retained project purpose.",
-                overview: excerpt,
-                qualifications: [],
-                contrasts: [],
-                limitations: [],
-                evidence: [{ start: 290, end: 443, excerpt }],
-            });
-        const output = await generateSourceSynopsis(
-            source,
-            revision,
-            content,
-            model,
-            new AbortController().signal,
-        );
-        expect(output.evidence).toEqual([
-            {
-                coordinateSpace: "retained-utf16",
-                start: 290,
-                end: 442,
-                excerpt,
-            },
-        ]);
-    });
+            ).rejects.toThrow("exact supplied retained evidence ID");
+        },
+    );
 
-    test("host resolves an exact unique Unicode quote without model-generated offsets", async () => {
-        const excerpt = "A 😀 qualification.";
-        const content = `# Context\r\n\r\n${excerpt}\r\n`;
+    test.each([
+        "unknown",
+        "shortened",
+        "whitespace",
+        "number",
+        "null",
+        "array",
+        "quote-only",
+        "offsets-only",
+        "normalized-quote",
+        "exact-quote",
+        "extra-offsets",
+    ])("rejects invalid evidence selection: %s", async (kind) => {
+        const content = "Synthetic\t  evidence 😀.\r\n";
         const model = new DeterministicModel();
-        model.complete = async () =>
-            JSON.stringify({
-                preview: excerpt,
-                overview: excerpt,
-                qualifications: [],
-                contrasts: [],
-                limitations: [],
-                evidence: [{ excerpt }],
-            });
-        const output = await generateSourceSynopsis(
-            source,
-            revision,
-            content,
-            model,
-            new AbortController().signal,
-        );
-        const evidence = output.evidence[0];
-        expect(evidence.start).toBe(content.indexOf(excerpt));
-        expect(evidence.end).toBe(evidence.start + excerpt.length);
-        expect(content.slice(evidence.start, evidence.end)).toBe(excerpt);
-    });
-
-    test("ambiguous quotes require exact disambiguating original ranges", async () => {
-        const excerpt = "Repeated evidence.";
-        const content = `${excerpt}\r\n${excerpt}`;
-        const model = new DeterministicModel();
-        let evidence: Array<{ excerpt: string; start?: number; end?: number }> =
-            [{ excerpt }];
-        model.complete = async () =>
-            JSON.stringify({
-                preview: excerpt,
-                overview: excerpt,
-                qualifications: [],
-                contrasts: [],
-                limitations: [],
-                evidence,
-            });
+        model.complete = async (prompt) => {
+            const item = readPrompt(prompt).evidence[0];
+            const entries: Record<string, unknown> = {
+                unknown: { id: "forged" },
+                shortened: { id: item.id.slice(0, 20) },
+                whitespace: { id: ` ${item.id}` },
+                number: { id: 0 },
+                null: null,
+                array: [item.id],
+                "quote-only": { excerpt: content },
+                "offsets-only": { start: item.start, end: item.end },
+                "normalized-quote": {
+                    id: item.id,
+                    excerpt: content.replace(/\s+/g, " "),
+                },
+                "exact-quote": { id: item.id, excerpt: content },
+                "extra-offsets": {
+                    id: item.id,
+                    start: item.start,
+                    end: item.end,
+                },
+            };
+            return selection([entries[kind]]);
+        };
         await expect(
             generateSourceSynopsis(
                 source,
@@ -335,32 +385,77 @@ describe("source synopsis orchestration", () => {
                 model,
                 new AbortController().signal,
             ),
-        ).rejects.toThrow("ambiguous");
-        const start = content.lastIndexOf(excerpt);
-        evidence = [{ excerpt, start, end: start + excerpt.length }];
-        const output = await generateSourceSynopsis(
-            source,
-            revision,
-            content,
-            model,
-            new AbortController().signal,
-        );
-        expect(output.evidence[0].start).toBe(start);
+        ).rejects.toThrow(/synopsis evidence/i);
     });
 
-    test("an exact quote elsewhere in the source is not evidence for an unsupplied section", async () => {
-        const excerpt = "Evidence from the final section only.";
-        const content = `${"Earlier context. ".repeat(600)}\n\n${excerpt}`;
+    test.each(["source", "corpus", "revision", "hash", "content"])(
+        "rejects a valid ID reused for a different %s",
+        async (kind) => {
+            const content = "Same synthetic text 😀.\r\n";
+            const model = new DeterministicModel();
+            let previousId!: string;
+            model.complete = async (prompt) => {
+                previousId = readPrompt(prompt).evidence[0].id;
+                return selection([{ id: previousId }]);
+            };
+            await generateSourceSynopsis(
+                source,
+                revision,
+                content,
+                model,
+                new AbortController().signal,
+            );
+            model.complete = async () => selection([{ id: previousId }]);
+            await expect(
+                generateSourceSynopsis(
+                    {
+                        ...source,
+                        ...(kind === "source" ? { sourceId: "other" } : {}),
+                        ...(kind === "corpus" ? { corpusId: "other" } : {}),
+                    },
+                    {
+                        ...revision,
+                        ...(kind === "source" ? { sourceId: "other" } : {}),
+                        ...(kind === "revision" ? { revisionId: "r2" } : {}),
+                        ...(kind === "hash" ? { contentHash: "other" } : {}),
+                    },
+                    kind === "content" ? content + "changed" : content,
+                    model,
+                    new AbortController().signal,
+                ),
+            ).rejects.toThrow("exact supplied retained evidence ID");
+        },
+    );
+
+    test("rejects mismatched source/revision identity before requesting synthesis", async () => {
+        const model = new DeterministicModel();
+        await expect(
+            generateSourceSynopsis(
+                source,
+                { ...revision, sourceId: "other" },
+                "text",
+                model,
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow("different source");
+        expect(model.calls).toHaveLength(0);
+    });
+
+    test("an ID elsewhere in the source is not evidence for an unsupplied section", async () => {
+        const content = `${"Earlier synthetic context. ".repeat(600)}\n\nFinal evidence only.`;
         const model = new DeterministicModel(7000);
-        model.complete = async () =>
-            JSON.stringify({
-                preview: excerpt,
-                overview: excerpt,
-                qualifications: [],
-                contrasts: [],
-                limitations: [],
-                evidence: [{ excerpt }],
-            });
+        await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
+        );
+        const sections = model.calls.filter(
+            (prompt) => !readPrompt(prompt).summaries,
+        );
+        const lastId = readPrompt(sections.at(-1)!).evidence.at(-1)!.id;
+        model.complete = async () => selection([{ id: lastId }]);
         await expect(
             generateSourceSynopsis(
                 source,
@@ -369,18 +464,22 @@ describe("source synopsis orchestration", () => {
                 model,
                 new AbortController().signal,
             ),
-        ).rejects.toThrow("exact supplied retained");
+        ).rejects.toThrow("exact supplied retained evidence ID");
     });
 
-    test("composition cannot introduce an original quote absent from supplied summary evidence", async () => {
-        const excerpt = "Original but not selected in any summary.";
-        const content = `${"a ".repeat(500)}${excerpt}${" b".repeat(7000)}`;
+    test("composition cannot introduce a valid original ID absent from supplied summary evidence", async () => {
+        const content =
+            "First synthetic line.\nNot selected in any summary.\n" +
+            "Other context.\n".repeat(1000);
         const model = new DeterministicModel(7000);
         const complete = model.complete.bind(model);
+        let unselectedId: string | undefined;
         model.complete = async (prompt) => {
+            const input = readPrompt(prompt);
+            if (!input.summaries && !unselectedId)
+                unselectedId = input.evidence[1].id;
             const output = JSON.parse(await complete(prompt));
-            if (prompt.includes('"summaries":'))
-                output.evidence = [{ excerpt }];
+            if (input.summaries) output.evidence = [{ id: unselectedId }];
             return JSON.stringify(output);
         };
         await expect(
@@ -391,8 +490,144 @@ describe("source synopsis orchestration", () => {
                 model,
                 new AbortController().signal,
             ),
-        ).rejects.toThrow("exact supplied retained");
+        ).rejects.toThrow("exact supplied retained evidence ID");
     });
+
+    test("fresh long synthetic source traverses every original span and preserves distant governing details", async () => {
+        const qualification =
+            "Governing tail exception: the 43-slot number is withdrawn; only local review is complete, not rollout. Hold time is not command execution time.";
+        const content =
+            "# Synthetic capacity\r\nProvisional value: 43 slots.\r\n\r\n" +
+            "## Observations\r\nMetric | Value\r\n--- | ---\r\nSample | 😀\t  pending\r\n\r\n".repeat(
+                600,
+            ) +
+            qualification +
+            "\r\n";
+        const model = new DeterministicModel(7000);
+        const coverage: SourceSynopsis["coverage"][] = [];
+        const output = await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
+            (read) => coverage.push(read),
+        );
+        expect(output.coverage.method).toBe("source-order-sections");
+        expect(output.coverage.scannedChars).toBe(content.length);
+        expect(output.overview).toContain(qualification);
+        expect(coverage.at(-1)?.scannedChars).toBe(content.length);
+        const sections = model.calls
+            .filter((prompt) => !readPrompt(prompt).summaries)
+            .map(readPrompt);
+        expect(sections.map(({ text }) => text).join("")).toBe(content);
+        expect(sections.at(-1)?.end).toBe(content.length);
+        expect(model.calls.every((prompt) => model.fits(prompt))).toBe(true);
+        for (const section of sections) {
+            expect(
+                section.evidence.map(({ excerpt }) => excerpt).join(""),
+            ).toBe(section.text);
+            for (const evidence of section.evidence) {
+                expect(content.slice(evidence.start, evidence.end)).toBe(
+                    evidence.excerpt,
+                );
+                expect(/^[\uDC00-\uDFFF]/.test(evidence.excerpt)).toBe(false);
+                expect(/[\uD800-\uDBFF]$/.test(evidence.excerpt)).toBe(false);
+                expect(
+                    content.slice(evidence.end - 1, evidence.end + 1),
+                ).not.toBe("\r\n");
+            }
+        }
+        for (const evidence of output.evidence)
+            expect(content.slice(evidence.start, evidence.end)).toBe(
+                evidence.excerpt,
+            );
+    });
+
+    test("host inventory bounds long lines without splitting surrogate pairs or CRLF", async () => {
+        const content =
+            "x".repeat(999) +
+            "😀" +
+            " y".repeat(1000) +
+            "\r\n" +
+            "x".repeat(999) +
+            "\r\n";
+        const model = new DeterministicModel();
+        model.complete = async (prompt) => {
+            const input = readPrompt(prompt);
+            expect(input.evidence.length).toBeGreaterThan(3);
+            expect(input.evidence.map(({ excerpt }) => excerpt).join("")).toBe(
+                content,
+            );
+            for (const item of input.evidence) {
+                expect(item.end - item.start).toBeLessThanOrEqual(1000);
+                expect(/^[\uDC00-\uDFFF]/.test(item.excerpt)).toBe(false);
+                expect(/[\uD800-\uDBFF]$/.test(item.excerpt)).toBe(false);
+                expect(content.slice(item.end - 1, item.end + 1)).not.toBe(
+                    "\r\n",
+                );
+            }
+            return selection(input.evidence.map(({ id }) => ({ id })));
+        };
+        const output = await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
+        );
+        expect(output.evidence.map(({ excerpt }) => excerpt).join("")).toBe(
+            content,
+        );
+    });
+
+    test.each(["qualifications", "contrasts"] as const)(
+        "synthetic composition rejects dropped governing %s in arrays or overview",
+        async (key) => {
+            const detail =
+                "Only the amber cohort is approved; the violet cohort is excluded.";
+            const content =
+                "# Provisional claim\n" +
+                "Neutral observation.\n".repeat(900) +
+                "\n" +
+                detail;
+            for (const drop of ["array", "overview"]) {
+                const model = new DeterministicModel(7000);
+                const complete = model.complete.bind(model);
+                model.complete = async (prompt) => {
+                    const input = readPrompt(prompt);
+                    const output = JSON.parse(await complete(prompt));
+                    if (!input.summaries && input.text.includes(detail)) {
+                        output[key] = [detail];
+                        output.overview = detail;
+                    } else if (input.summaries) {
+                        const distinctions = input.summaries.flatMap(
+                            (summary) => summary[key],
+                        );
+                        output[key] = [...new Set(distinctions)];
+                        output.overview =
+                            output[key].join(" ") || "Synthetic overview.";
+                        if (output[key].length) {
+                            if (drop === "array") output[key] = [];
+                            else output.overview = "All cohorts approved.";
+                        }
+                    }
+                    return JSON.stringify(output);
+                };
+                await expect(
+                    generateSourceSynopsis(
+                        source,
+                        revision,
+                        content,
+                        model,
+                        new AbortController().signal,
+                    ),
+                ).rejects.toThrow(
+                    "dropped a supplied governing qualification or contrast",
+                );
+            }
+        },
+    );
 
     test("non-leading-pipe tables retain repeated structural headers separately from original CRLF/Unicode ranges", async () => {
         const content =
@@ -491,7 +726,29 @@ describe("source synopsis orchestration", () => {
     });
 
     test("one semantic fingerprint ignores index timestamps/generations but includes recipe, role, title and eligibility", () => {
+        expect(sourceSynopsisRecipe).toBe("source-synopsis-v4");
         const hash = synopsisInputHash(source, revision, "model", true);
+        const legacyV3Hash = createHash("sha256")
+            .update(
+                JSON.stringify([
+                    "source-synopsis-v3",
+                    "model",
+                    true,
+                    source.sourceId,
+                    revision.revisionId,
+                    revision.contentHash,
+                    source.sourceType,
+                    source.title,
+                    source.canonicalUri,
+                    source.tags,
+                    revision.mimeType,
+                    revision.capturedAt,
+                    revision.sourceModifiedAt,
+                    revision.pipelineVersion,
+                ]),
+            )
+            .digest("hex");
+        expect(hash).not.toBe(legacyV3Hash);
         expect(
             synopsisInputHash(
                 source,
@@ -509,6 +766,24 @@ describe("source synopsis orchestration", () => {
             ),
             synopsisInputHash(source, revision, "different-model", true),
             synopsisInputHash(source, revision, "model", false),
+            synopsisInputHash(
+                { ...source, corpusId: "other" },
+                revision,
+                "model",
+                true,
+            ),
+            synopsisInputHash(
+                source,
+                { ...revision, revisionId: "r2" },
+                "model",
+                true,
+            ),
+            synopsisInputHash(
+                source,
+                { ...revision, contentHash: "changed" },
+                "model",
+                true,
+            ),
         ])
             expect(changed).not.toBe(hash);
     });

@@ -41,9 +41,19 @@ function validateBenchmarkSpec(spec) {
     );
     assert.equal(spec.mode, "longmemeval-full500");
     assert.equal(spec.startupAllowanceMs, 120000);
-    assert.equal(spec.workAllowanceMs, workAllowanceMs);
-    assert.equal(spec.totalAllowanceMs, workAllowanceMs);
+    assert.ok(
+        Number.isSafeInteger(spec.workAllowanceMs) &&
+            spec.workAllowanceMs > cleanupReserveMs &&
+            spec.workAllowanceMs <= workAllowanceMs,
+    );
+    assert.equal(spec.totalAllowanceMs, spec.workAllowanceMs);
     assert.equal(typeof spec.resume, "boolean");
+    assert.ok(
+        Number.isSafeInteger(spec.maximumCompletedQuestions) &&
+            spec.maximumCompletedQuestions > 0 &&
+            spec.maximumCompletedQuestions <= 500,
+        "Batch question limit must be between 1 and 500",
+    );
     for (const key of [
         "productRoot",
         "datasetPath",
@@ -95,6 +105,37 @@ async function loadPrepared(spec) {
     });
 }
 
+export function benchmarkConfiguration(settings) {
+    return {
+        provider: settings.provider,
+        ...(settings.modelName === undefined
+            ? {}
+            : { modelName: settings.modelName }),
+        endpointHash: digest(settings.endpoint),
+        requestConstraints: settings.requestConstraints,
+    };
+}
+
+export async function closeBenchmarkService(
+    service,
+    state,
+    attempt,
+    persist,
+    failure,
+) {
+    attempt.outcome = state.outcome;
+    attempt.closeStartedEpochMs = Date.now();
+    await persist();
+    try {
+        await service.close();
+        attempt.supportedClose = "COMPLETE";
+    } catch (error) {
+        attempt.supportedClose = failure(error);
+        state.outcome = "FAILED_SUPPORTED_CLOSE";
+    }
+    await persist();
+}
+
 async function runWorker(spec) {
     const prepared = await loadPrepared(spec);
     const templates = officialJudgeTemplates(
@@ -144,8 +185,8 @@ async function runWorker(spec) {
         startedEpochMs: spec.spawnedEpochMs,
         workerPid: process.pid,
         workDeadlineEpochMs:
-            spec.spawnedEpochMs + workAllowanceMs - cleanupReserveMs,
-        totalDeadlineEpochMs: spec.spawnedEpochMs + workAllowanceMs,
+            spec.spawnedEpochMs + spec.workAllowanceMs - cleanupReserveMs,
+        totalDeadlineEpochMs: spec.spawnedEpochMs + spec.workAllowanceMs,
     };
     state.attempts.push(attempt);
     state.outcome = "IN_PROGRESS";
@@ -161,12 +202,7 @@ async function runWorker(spec) {
     config.loadConfigSync();
     client.initRuntimeConfigFromProcessEnv();
     const settings = client.openai.getChatModelSettings();
-    const configuration = {
-        provider: settings.provider,
-        modelName: settings.modelName,
-        endpointHash: digest(settings.endpoint),
-        requestConstraints: settings.requestConstraints,
-    };
+    const configuration = benchmarkConfiguration(settings);
     if (spec.resume)
         assert.deepEqual(
             state.configuration,
@@ -182,6 +218,8 @@ async function runWorker(spec) {
         informationalViews: false,
         viewDrafts: false,
         answerMode: "synthesized",
+        readerProvenance:
+            "Separate preliminary search, answer retrieval, actual message context and actual structured-knowledge context; citations identify supplied evidence, not independent entailment.",
         answerLimit: 12,
         searchLimit: 20,
         readerDate: "Original question date supplied to reader only",
@@ -202,16 +240,6 @@ async function runWorker(spec) {
     const signal = AbortSignal.timeout(
         Math.max(1, attempt.workDeadlineEpochMs - Date.now()),
     );
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (input, init) =>
-        originalFetch(input, {
-            ...init,
-            signal: AbortSignal.any([
-                signal,
-                ...(init?.signal ? [init.signal] : []),
-                ...(input instanceof Request ? [input.signal] : []),
-            ]),
-        });
     let role = "benchmark-startup";
     const restoreObserver = observeProvider(state.providerRequests, () => role);
     const service = new FileMemoryService(
@@ -263,6 +291,7 @@ async function runWorker(spec) {
                 row,
             ]),
         );
+        let completedThisBatch = 0;
         for (const construction of prepared.construction) {
             signal.throwIfAborted();
             const id = construction.id;
@@ -305,8 +334,13 @@ async function runWorker(spec) {
                     },
                 },
             );
+            if (++completedThisBatch >= spec.maximumCompletedQuestions) break;
         }
-        state.outcome = "FULL_500_COMPLETED_CONFIGURED_JUDGE_PROTOCOL";
+        state.outcome = prepared.construction.every(
+            (entry) => state.cases[entry.id]?.status === "complete",
+        )
+            ? "FULL_500_COMPLETED_CONFIGURED_JUDGE_PROTOCOL"
+            : "PARTIAL_QUESTION_LIMIT";
     } catch (error) {
         const bounded = signal.aborted || error.name === "TimeoutError";
         state.outcome = bounded
@@ -319,15 +353,19 @@ async function runWorker(spec) {
             record.error = safeFailure(error);
         }
     } finally {
-        try {
-            await service.close();
-            attempt.supportedClose = "COMPLETE";
-        } catch (error) {
-            attempt.supportedClose = safeFailure(error);
-            state.outcome = "FAILED_SUPPORTED_CLOSE";
-        }
+        state.scorecard = benchmarkScorecard(
+            prepared,
+            state.cases,
+            state.providerRequests,
+        );
+        await closeBenchmarkService(
+            service,
+            state,
+            attempt,
+            persist,
+            safeFailure,
+        );
         restoreObserver();
-        globalThis.fetch = originalFetch;
         attempt.finishedEpochMs = Date.now();
         attempt.elapsedMs = attempt.finishedEpochMs - attempt.startedEpochMs;
         attempt.outcome = state.outcome;
@@ -373,6 +411,8 @@ export async function main(args = process.argv.slice(2)) {
             resume: { type: "string" },
             spec: { type: "string" },
             "authorized-live-benchmark": { type: "boolean" },
+            "max-questions": { type: "string", default: "500" },
+            "work-minutes": { type: "string", default: "30" },
         },
     });
     if (values.spec) {
@@ -380,10 +420,29 @@ export async function main(args = process.argv.slice(2)) {
         validateBenchmarkSpec(spec);
         const outcome = await runWorker(spec);
         process.stdout.write(JSON.stringify({ outcome }) + "\n");
-        process.exitCode = outcome.startsWith("FULL_500_") ? 0 : 1;
+        process.exitCode =
+            outcome.startsWith("FULL_500_") ||
+            outcome === "PARTIAL_QUESTION_LIMIT"
+                ? 0
+                : 1;
         return;
     }
     assert.equal(values["authorized-live-benchmark"], true);
+    const maximumCompletedQuestions = Number(values["max-questions"]);
+    assert.ok(
+        Number.isSafeInteger(maximumCompletedQuestions) &&
+            maximumCompletedQuestions > 0 &&
+            maximumCompletedQuestions <= 500,
+        "Batch question limit must be between 1 and 500",
+    );
+    const workMinutes = Number(values["work-minutes"]);
+    assert.ok(
+        Number.isSafeInteger(workMinutes) &&
+            workMinutes >= 1 &&
+            workMinutes <= 30,
+        "Invocation work minutes must be an integer from 1 to 30",
+    );
+    const invocationAllowanceMs = workMinutes * 60000 + cleanupReserveMs;
     for (const key of ["product", "dataset", "judge-source", "output"])
         assert.ok(values[key] && path.isAbsolute(values[key]));
     const runDirectory = values.resume
@@ -401,6 +460,10 @@ export async function main(args = process.argv.slice(2)) {
             receiptId,
             runDirectory,
         });
+    process.stdout.write(
+        JSON.stringify({ kind: "run-directory", runDirectory, receiptId }) +
+            "\n",
+    );
     const hashes = await snapshotCompiledCheckpoint(values.product);
     const spec = {
         receiptId,
@@ -412,8 +475,9 @@ export async function main(args = process.argv.slice(2)) {
         expectedCheckpoint: { name: "longmemeval-production-frozen", hashes },
         authorizedLiveBenchmark: true,
         startupAllowanceMs: 120000,
-        workAllowanceMs,
-        totalAllowanceMs: workAllowanceMs,
+        workAllowanceMs: invocationAllowanceMs,
+        totalAllowanceMs: invocationAllowanceMs,
+        maximumCompletedQuestions,
         resume: !!values.resume,
     };
     const result = await withLiveRunLock(runDirectory, async () => {
