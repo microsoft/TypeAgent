@@ -431,7 +431,7 @@ The actual judge uses the normal configured model/default generation settings,
 recorded. Invalid judge responses fail explicitly; no automatic positive labels
 or invented independent-human approvals are supplied.
 
-Each invocation has a 35-minute total cap with five minutes reserved for cleanup.
+By default, each invocation has a 35-minute total cap with five minutes reserved for cleanup.
 Job waits and the judge observe the work deadline. Aborting a polling delay
 reaches the normal job-cancellation path and removes its abort listener.
 The runner does not inject a global fetch abort below the production client:
@@ -439,6 +439,18 @@ in-flight production calls can finish during cleanup, under the outer watchdog
 cap. Attempt outcome and close-start time are persisted before awaiting
 supported close, so a forced shutdown does not leave an unqualified
 `IN_PROGRESS` outcome.
+
+For a separately authorized correctness pilot without a duration/call-count
+budget, use `--work-minutes unlimited --max-questions 25`. This disables the
+worker's work/total deadlines and the watchdog's post-admission time cap. Startup
+health checks, normal provider request timeouts, ownership, checkpoint checks and
+explicit error reporting remain active. There is no benchmark request-count cap.
+The runner finishes only after the requested 25 additional questions have been
+answered and judged, or an actual execution failure; negative judgments do not
+stop the run. The selected prefix retains complete official histories. Its
+accuracy is a 25-question pilot result, not full-500 performance. Freeze the
+selected IDs before starting, and do not resume beyond 25 under that pilot's
+authorization.
 
 Use `--max-questions 1` to stop an invocation after its next completed
 answer/judgment without changing the frozen 500-question schedule or order.

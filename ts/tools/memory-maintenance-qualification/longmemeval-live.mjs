@@ -42,9 +42,10 @@ function validateBenchmarkSpec(spec) {
     assert.equal(spec.mode, "longmemeval-full500");
     assert.equal(spec.startupAllowanceMs, 120000);
     assert.ok(
-        Number.isSafeInteger(spec.workAllowanceMs) &&
-            spec.workAllowanceMs > cleanupReserveMs &&
-            spec.workAllowanceMs <= workAllowanceMs,
+        spec.workAllowanceMs === null ||
+            (Number.isSafeInteger(spec.workAllowanceMs) &&
+                spec.workAllowanceMs > cleanupReserveMs &&
+                spec.workAllowanceMs <= workAllowanceMs),
     );
     assert.equal(spec.totalAllowanceMs, spec.workAllowanceMs);
     assert.equal(typeof spec.resume, "boolean");
@@ -62,6 +63,35 @@ function validateBenchmarkSpec(spec) {
     ])
         assert.ok(path.isAbsolute(spec[key]));
     assertCheckpoint(spec.expectedCheckpoint.hashes, spec.expectedCheckpoint);
+}
+
+export function benchmarkInvocationAllowance(value) {
+    if (value === "unlimited") return null;
+    const minutes = Number(value);
+    assert.ok(
+        Number.isSafeInteger(minutes) && minutes >= 1 && minutes <= 30,
+        "Invocation work minutes must be an integer from 1 to 30, or unlimited",
+    );
+    return minutes * 60000 + cleanupReserveMs;
+}
+
+export function benchmarkFailure(error) {
+    return {
+        ...safeFailure(error),
+        ...(/^E[A-Z0-9_]+$/.test(error?.code ?? "")
+            ? { code: error.code }
+            : {}),
+        ...(["open", "rename", "read", "write", "stat", "unlink"].includes(
+            error?.syscall,
+        )
+            ? { syscall: error.syscall }
+            : {}),
+        ownedHarnessFrames: [
+            ...(error?.stack ?? "").matchAll(
+                /[\\/]([\w.-]+\.(?:mjs|js):\d+:\d+)/g,
+            ),
+        ].map((match) => match[1]),
+    };
 }
 
 async function engineIdentity() {
@@ -185,8 +215,14 @@ async function runWorker(spec) {
         startedEpochMs: spec.spawnedEpochMs,
         workerPid: process.pid,
         workDeadlineEpochMs:
-            spec.spawnedEpochMs + spec.workAllowanceMs - cleanupReserveMs,
-        totalDeadlineEpochMs: spec.spawnedEpochMs + spec.workAllowanceMs,
+            spec.workAllowanceMs === null
+                ? null
+                : spec.spawnedEpochMs + spec.workAllowanceMs - cleanupReserveMs,
+        totalDeadlineEpochMs:
+            spec.workAllowanceMs === null
+                ? null
+                : spec.spawnedEpochMs + spec.workAllowanceMs,
+        maximumCompletedQuestions: spec.maximumCompletedQuestions,
     };
     state.attempts.push(attempt);
     state.outcome = "IN_PROGRESS";
@@ -237,9 +273,12 @@ async function runWorker(spec) {
         "packages\\memory\\service\\dist\\rpcFacade.js",
     );
     const model = client.openai.createChatModel();
-    const signal = AbortSignal.timeout(
-        Math.max(1, attempt.workDeadlineEpochMs - Date.now()),
-    );
+    const signal =
+        attempt.workDeadlineEpochMs === null
+            ? new AbortController().signal
+            : AbortSignal.timeout(
+                  Math.max(1, attempt.workDeadlineEpochMs - Date.now()),
+              );
     let role = "benchmark-startup";
     const restoreObserver = observeProvider(state.providerRequests, () => role);
     const service = new FileMemoryService(
@@ -276,7 +315,10 @@ async function runWorker(spec) {
             receiptId: spec.receiptId,
             workerPid: process.pid,
             admittedEpochMs,
-            workDeadlineEpochMs: admittedEpochMs + spec.workAllowanceMs,
+            workDeadlineEpochMs:
+                spec.workAllowanceMs === null
+                    ? null
+                    : admittedEpochMs + spec.workAllowanceMs,
             checkpointExpectationHash: checkpointExpectationHash(
                 spec.expectedCheckpoint,
             ),
@@ -346,11 +388,11 @@ async function runWorker(spec) {
         state.outcome = bounded
             ? "PARTIAL_BOUNDED_WORK"
             : "FAILED_REAL_BENCHMARK";
-        attempt.error = safeFailure(error);
+        attempt.error = benchmarkFailure(error);
         const record = state.cases[state.currentQuestionId];
         if (record && record.status !== "complete") {
             record.status = bounded ? "interrupted" : "failed";
-            record.error = safeFailure(error);
+            record.error = benchmarkFailure(error);
         }
     } finally {
         state.scorecard = benchmarkScorecard(
@@ -435,14 +477,9 @@ export async function main(args = process.argv.slice(2)) {
             maximumCompletedQuestions <= 500,
         "Batch question limit must be between 1 and 500",
     );
-    const workMinutes = Number(values["work-minutes"]);
-    assert.ok(
-        Number.isSafeInteger(workMinutes) &&
-            workMinutes >= 1 &&
-            workMinutes <= 30,
-        "Invocation work minutes must be an integer from 1 to 30",
+    const invocationAllowanceMs = benchmarkInvocationAllowance(
+        values["work-minutes"],
     );
-    const invocationAllowanceMs = workMinutes * 60000 + cleanupReserveMs;
     for (const key of ["product", "dataset", "judge-source", "output"])
         assert.ok(values[key] && path.isAbsolute(values[key]));
     const runDirectory = values.resume

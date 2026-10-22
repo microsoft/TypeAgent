@@ -13,6 +13,8 @@ import {
 } from "./longmemeval-runner.mjs";
 import {
     benchmarkConfiguration,
+    benchmarkFailure,
+    benchmarkInvocationAllowance,
     closeBenchmarkService,
     main,
 } from "./longmemeval-live.mjs";
@@ -56,6 +58,42 @@ test("invocation work allowance is bounded before opening a run", async () => {
             /Invocation work minutes/,
         );
     }
+});
+
+test("unlimited evaluation is explicit while normal invocation budgets remain unchanged", () => {
+    assert.equal(benchmarkInvocationAllowance("unlimited"), null);
+    assert.equal(benchmarkInvocationAllowance("30"), 35 * 60000);
+    assert.equal(benchmarkInvocationAllowance("1"), 6 * 60000);
+    for (const value of ["Infinity", "", "null", "0", "-1", "31"]) {
+        assert.throws(
+            () => benchmarkInvocationAllowance(value),
+            /Invocation work minutes/,
+        );
+    }
+});
+
+test("benchmark failure diagnostics retain filesystem codes and frame locations without raw messages", () => {
+    const error = Object.assign(new Error("PRIVATE_MESSAGE_SENTINEL"), {
+        code: "EPERM",
+        syscall: "rename",
+        stack: "Error: PRIVATE_MESSAGE_SENTINEL\n at async writeJson (file:///private/harness.mjs:90:5)\n at async runWorker (file:///private/longmemeval-live.mjs:360:9)",
+    });
+    const failure = benchmarkFailure(error);
+    assert.equal(failure.code, "EPERM");
+    assert.equal(failure.syscall, "rename");
+    assert.deepEqual(failure.ownedHarnessFrames, [
+        "harness.mjs:90:5",
+        "longmemeval-live.mjs:360:9",
+    ]);
+    assert.ok(!JSON.stringify(failure).includes("PRIVATE_MESSAGE_SENTINEL"));
+    assert.ok(!JSON.stringify(failure).includes("/private/"));
+    assert.equal(
+        benchmarkFailure({
+            code: "PRIVATE_MESSAGE_SENTINEL",
+            syscall: "PRIVATE_MESSAGE_SENTINEL",
+        }).code,
+        undefined,
+    );
 });
 
 test("bounded outcome is durable before close waits, and close failures remain failures", async () => {

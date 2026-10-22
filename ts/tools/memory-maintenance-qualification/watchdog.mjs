@@ -36,16 +36,18 @@ export function validateAdmission(ack, spec, workerPid, observedEpochMs) {
         workerPid,
         "Admission must name exact owned spawned PID",
     );
-    assert.ok(
-        Number.isSafeInteger(ack.admittedEpochMs) &&
-            Number.isSafeInteger(ack.workDeadlineEpochMs),
-    );
+    assert.ok(Number.isSafeInteger(ack.admittedEpochMs));
     assert.ok(ack.admittedEpochMs <= observedEpochMs + 1000);
-    assert.ok(ack.workDeadlineEpochMs > observedEpochMs);
-    assert.equal(
-        ack.workDeadlineEpochMs - ack.admittedEpochMs,
-        spec.workAllowanceMs,
-    );
+    if (spec.workAllowanceMs === null) {
+        assert.equal(ack.workDeadlineEpochMs, null);
+    } else {
+        assert.ok(Number.isSafeInteger(ack.workDeadlineEpochMs));
+        assert.ok(ack.workDeadlineEpochMs > observedEpochMs);
+        assert.equal(
+            ack.workDeadlineEpochMs - ack.admittedEpochMs,
+            spec.workAllowanceMs,
+        );
+    }
     assert.ok(ack.admittedEpochMs >= spec.spawnedEpochMs);
     if (spec.performance || spec.qualification || spec.expectedCheckpoint) {
         assert.equal(
@@ -163,7 +165,9 @@ async function readAdmission(
 }
 
 export function workerDeadline(spec, admission, startupDeadlineEpochMs) {
-    const deadline = admission?.workDeadlineEpochMs ?? startupDeadlineEpochMs;
+    const deadline = admission
+        ? (admission.workDeadlineEpochMs ?? Infinity)
+        : startupDeadlineEpochMs;
     const total =
         spec.totalAllowanceMs ??
         (spec.sourceScope === "baseline19" ? spec.workAllowanceMs : undefined);
