@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { createHash } from "node:crypto";
-import { readFile, readdir, rm } from "node:fs/promises";
+import { lstat, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { writeRunbookJson } from "./durableRunbookJson.js";
 import { redactRunbookText } from "./runbookRedaction.js";
@@ -69,6 +69,7 @@ interface StoredSession {
 }
 
 interface SessionHost {
+    withIngestionGroup?(operation: () => Promise<void>): Promise<void>;
     ingestDocument(
         request: DocumentIngestRequest,
         signal?: AbortSignal,
@@ -170,6 +171,14 @@ function newSession(request: AgentSessionImportRequest): StoredSession {
 }
 
 export class AgentSessionStore {
+    private readonly receipts = new Map<
+        string,
+        {
+            stamp: string;
+            receipt: AgentSessionImportReceipt;
+            sources: SourceReference[];
+        }
+    >();
     private readonly admissions = new Map<string, Promise<unknown>>();
     private readonly active = new Map<
         string,
@@ -236,15 +245,26 @@ export class AgentSessionStore {
             );
         stored.receipt.updatedAt = new Date().toISOString();
         const content = JSON.stringify(stored);
+        const snapshot = {
+            receipt: structuredClone(stored.receipt),
+            sources: structuredClone(stored.sources),
+        };
         const work = (this.writes.get(key) ?? Promise.resolve())
             .catch(() => undefined)
-            .then(() =>
-                writeRunbookJson(
+            .then(async () => {
+                await writeRunbookJson(
                     path.join(directory, "session.json"),
                     content,
                     () => !this.removed.has(key),
-                ),
-            );
+                );
+                if (!this.removed.has(key))
+                    this.receipts.set(key, {
+                        ...snapshot,
+                        stamp: await this.receiptStamp(directory),
+                    });
+                if (this.receipts.size > 256)
+                    this.receipts.delete(this.receipts.keys().next().value!);
+            });
         this.writes.set(key, work);
         return work;
     }
@@ -407,27 +427,32 @@ export class AgentSessionStore {
             const pending = stored.pending;
             if (!pending)
                 throw new Error("Agent session pending work is missing");
-            for (const item of pending.episodes) {
-                signal.throwIfAborted();
-                if (!item.source)
-                    item.source = await this.retainEpisode(
-                        stored,
-                        item.episode,
-                        signal,
-                    );
-                await this.checkpoint(stored);
-                if (!item.memories) {
-                    item.memories = await distillAgentSessionEpisode(
-                        {
-                            ...stored.scope,
-                            ...item.source,
-                            episode: item.episode,
-                        },
-                        this.model(),
-                        signal,
-                    );
+            for (
+                let offset = 0;
+                offset < pending.episodes.length;
+                offset += 2
+            ) {
+                const items = pending.episodes.slice(offset, offset + 2);
+                await this.retainEpisodes(stored, items, signal);
+                for (const item of items) {
                     signal.throwIfAborted();
-                    await this.checkpoint(stored);
+                    if (!item.source)
+                        throw new Error(
+                            "Agent session retained episode is missing",
+                        );
+                    if (!item.memories) {
+                        item.memories = await distillAgentSessionEpisode(
+                            {
+                                ...stored.scope,
+                                ...item.source,
+                                episode: item.episode,
+                            },
+                            this.model(),
+                            signal,
+                        );
+                        signal.throwIfAborted();
+                        await this.checkpoint(stored);
+                    }
                 }
             }
             const incoming = pending.episodes.flatMap(
@@ -471,6 +496,39 @@ export class AgentSessionStore {
             stored.receipt.error = safeError(error);
             await this.save(stored);
         }
+    }
+
+    private async retainEpisodes(
+        stored: StoredSession,
+        items: EpisodeWork[],
+        signal: AbortSignal,
+    ): Promise<void> {
+        const operation = async () => {
+            const results = await Promise.allSettled(
+                items.map(async (item) => {
+                    signal.throwIfAborted();
+                    item.source ??= await this.retainEpisode(
+                        stored,
+                        item.episode,
+                        signal,
+                    );
+                }),
+            );
+            for (const item of items)
+                if (
+                    item.source &&
+                    !stored.sources.some(
+                        (entry) => entry.sourceId === item.source!.sourceId,
+                    )
+                )
+                    stored.sources.push(item.source);
+            await this.checkpoint(stored);
+            for (const result of results)
+                if (result.status === "rejected") throw result.reason;
+        };
+        if (this.host.withIngestionGroup)
+            await this.host.withIngestionGroup(operation);
+        else await operation();
     }
 
     private async retainEpisode(
@@ -524,8 +582,6 @@ export class AgentSessionStore {
             sourceId: result.sourceId,
             revisionId: result.revisionId,
         };
-        if (!stored.sources.some((entry) => entry.sourceId === source.sourceId))
-            stored.sources.push(source);
         return source;
     }
 
@@ -540,16 +596,44 @@ export class AgentSessionStore {
     public async get(
         request: AgentSessionReadRequest,
     ): Promise<AgentSessionImportReceipt | undefined> {
-        const failure = this.failures.get(this.location(request).key);
+        const { key, directory } = this.location(request);
+        const failure = this.failures.get(key);
         if (failure) throw failure;
-        const stored = await this.load(request);
+        let stamp: string;
+        try {
+            stamp = await this.receiptStamp(directory);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+            this.receipts.delete(key);
+            return undefined;
+        }
+        const cached = this.receipts.get(key);
+        const stored =
+            cached?.stamp === stamp ? cached : await this.load(request);
         if (!stored) return undefined;
+        if (cached?.stamp !== stamp)
+            this.receipts.set(key, {
+                stamp,
+                receipt: structuredClone(stored.receipt),
+                sources: structuredClone(stored.sources),
+            });
+        if (this.receipts.size > 256)
+            this.receipts.delete(this.receipts.keys().next().value!);
         await this.host.withEligible(
             request.corpusId,
             stored.sources,
             async () => {},
         );
         return structuredClone(stored.receipt);
+    }
+
+    private async receiptStamp(directory: string): Promise<string> {
+        const info = await lstat(path.join(directory, "session.json"), {
+            bigint: true,
+        });
+        if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1n)
+            throw new Error("Unsafe agent session checkpoint");
+        return `${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
     }
 
     public async cancel(
@@ -684,6 +768,7 @@ export class AgentSessionStore {
                 continue;
             const { key, tombstone } = this.location(stored.receipt);
             this.removed.add(key);
+            this.receipts.delete(key);
             this.failures.delete(key);
             this.active
                 .get(key)

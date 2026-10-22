@@ -815,8 +815,12 @@ export async function prepareResume(options, fixtures) {
         source,
     );
     requireThat(
-        JSON.stringify(inventory.map(({ mtimeMs, ...file }) => file)) ===
-            JSON.stringify(copied.map(({ mtimeMs, ...file }) => file)) &&
+        JSON.stringify(
+            inventory.map(({ mtimeMs: _mtimeMs, ...file }) => file),
+        ) ===
+            JSON.stringify(
+                copied.map(({ mtimeMs: _mtimeMs, ...file }) => file),
+            ) &&
             JSON.stringify(await stateInventory(source)) ===
                 JSON.stringify(originalInventory),
         "resume-copy-or-source-immutability-failed",
@@ -1680,7 +1684,7 @@ export class OfflineSubstringIndex {
     }
 }
 
-async function createRuntime(options, signal, counters) {
+export async function createRuntime(options, signal, counters) {
     if (options.mode === "live") {
         process.env.DEBUG = "";
         process.env.ENABLE_MODEL_REQUEST_LOGGING = "false";
@@ -2276,6 +2280,7 @@ async function runCase(
     result,
     resume,
 ) {
+    const phase = runtime.profilePhase ?? ((_name, operation) => operation());
     let service = holder.service;
     const corpusId =
         resume?.corpusId ??
@@ -2586,15 +2591,17 @@ async function runCase(
     }
     result.questions = [];
     if (options.mode === "live" && options.maxQuestions)
-        await evaluateQuestions(
-            fixture,
-            service,
-            corpusId,
-            runtime.tracker,
-            sources,
-            episodes,
-            result,
-            signal,
+        await phase("qa.paired-arms", () =>
+            evaluateQuestions(
+                fixture,
+                service,
+                corpusId,
+                runtime.tracker,
+                sources,
+                episodes,
+                result,
+                signal,
+            ),
         );
     else
         result.questionEvaluation =
@@ -2605,7 +2612,9 @@ async function runCase(
         options.mode === "live" &&
         options.maxQuestions > 0 &&
         fixture.gold.questions.length > 0
-            ? await assessArtifactSupport(stored.memories, runtime.tracker)
+            ? await phase("qa.artifact-support", () =>
+                  assessArtifactSupport(stored.memories, runtime.tracker),
+              )
             : {
                   state:
                       options.mode === "protocol"
@@ -2687,6 +2696,8 @@ async function diskBytes(directory) {
 }
 
 export async function evaluate(options, injections = {}) {
+    const phase =
+        injections.profilePhase ?? ((_name, operation) => operation());
     validateEmbeddingOptions(options);
     await validateResumeDestination(options);
     // Recovery copies a finalized failed run; an existing destination is never overwritten.
@@ -2753,13 +2764,17 @@ export async function evaluate(options, injections = {}) {
     let runtime, resume;
     const holder = {};
     try {
-        const fixtures = await abortable(
-            () => loadFixtures(options.fixtureRoot, options.cases),
-            controller.signal,
+        const fixtures = await phase("fixtures.load", () =>
+            abortable(
+                () => loadFixtures(options.fixtureRoot, options.cases),
+                controller.signal,
+            ),
         );
-        resume = await abortable(
-            () => prepareResume(options, fixtures),
-            controller.signal,
+        resume = await phase("recovery.prepare", () =>
+            abortable(
+                () => prepareResume(options, fixtures),
+                controller.signal,
+            ),
         );
         if (resume) {
             const { inventory, originalInventory, ...description } = resume;
@@ -2832,15 +2847,17 @@ export async function evaluate(options, injections = {}) {
             };
             receipt.cases.push(result);
             try {
-                await runCase(
-                    fixture,
-                    options,
-                    runtime,
-                    holder,
-                    counters,
-                    controller.signal,
-                    result,
-                    resume,
+                await phase("case.run", () =>
+                    runCase(
+                        fixture,
+                        options,
+                        runtime,
+                        holder,
+                        counters,
+                        controller.signal,
+                        result,
+                        resume,
+                    ),
                 );
             } finally {
                 result.predictionFiles = await writePredictions(
@@ -2999,15 +3016,18 @@ export async function evaluate(options, injections = {}) {
             receipt.cumulativeElapsedMs =
                 receipt.elapsedMs + resume.priorElapsedMs;
             try {
-                requireThat(
-                    sha256(
-                        await readFile(
-                            path.join(resume.source, "receipt.json"),
-                        ),
-                    ) === resume.sourceReceiptSha256 &&
-                        JSON.stringify(await stateInventory(resume.source)) ===
-                            JSON.stringify(resume.originalInventory),
-                    "resume-source-bytes-or-mtimes-changed",
+                await phase("recovery.audit-source", async () =>
+                    requireThat(
+                        sha256(
+                            await readFile(
+                                path.join(resume.source, "receipt.json"),
+                            ),
+                        ) === resume.sourceReceiptSha256 &&
+                            JSON.stringify(
+                                await stateInventory(resume.source),
+                            ) === JSON.stringify(resume.originalInventory),
+                        "resume-source-bytes-or-mtimes-changed",
+                    ),
                 );
                 receipt.resume.originalStateUnchanged = true;
             } catch (error) {
@@ -3018,8 +3038,8 @@ export async function evaluate(options, injections = {}) {
         }
         await save(receiptFile, receipt);
         try {
-            receipt.diskBytes = await (injections.diskBytes ?? diskBytes)(
-                options.runDirectory,
+            receipt.diskBytes = await phase("accounting.disk-bytes", () =>
+                (injections.diskBytes ?? diskBytes)(options.runDirectory),
             );
         } catch (error) {
             receipt.diskBytes = null;

@@ -25,6 +25,87 @@ Live question runs additionally assess up to eight artifacts in stable memory-ID
 in one bounded judge call using only each body and its original evidence.
 Capacity-blocked/no-artifact support assessments retain a zero denominator.
 
+## Wall-time and CPU profiling
+
+[profile.mjs](./profile.mjs) is an opt-in wrapper over the same evaluator and
+compiled production service. It does not change model routing, call limits,
+import chunks, cache identity, polling intervals or privacy checks. It hooks
+storage/index/session methods, actual corpus read/write-lock admission, model
+calls, metric-log persistence and asynchronous filesystem operations. Hook
+contracts fail explicitly if production methods change.
+
+From `ts`, with the existing S05 failed checkpoint available:
+
+```powershell
+if (Test-Path $PROFILE) { . $PROFILE }
+$reposRoot = Split-Path -Parent (Split-Path -Parent (Get-Location).Path)
+$runs = Join-Path $reposRoot 'memoryDemo\validation\agent-sessions'
+$outer = Join-Path $runs ('profile-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$cpu = Join-Path $outer 'cpu'
+New-Item -ItemType Directory -Path $cpu -ErrorAction Stop | Out-Null
+node --cpu-prof --cpu-prof-interval=10000 "--cpu-prof-dir=$cpu" --cpu-prof-name=profile.cpuprofile .\tools\agent-session-qualification\profile.mjs --profile-directory (Join-Path $outer 'timing') --fixture-root (Join-Path $reposRoot 'memoryDemo\fixtures\agent-sessions') --run-directory (Join-Path $outer 'run') --case longmemeval-s-000 --mode live --provider copilot --embeddings copilot --max-model-calls 5000 --max-questions 1 --timeout-ms 7200000 --resume-from (Join-Path $runs '2026-10-21-s-live-05-recovery')
+```
+
+This forks the same failed state used by S07, retaining its source/request/model
+checks and final original-state immutability audit. It profiles the remaining
+import, QA, restart/replay, privacy rebuild and harness accounting, **not** a
+fresh 510-event import or a retrospective decomposition of the old run chain.
+Omit `--resume-from` for a new import. Profile output must be new, outside the
+evaluation directory and outside the original checkpoint.
+
+- `timing\progress.json`: current aggregate snapshot, refreshed every 30 seconds.
+- `timing\profile.json`: final observed window, mutually exclusive wall buckets,
+  inclusive/self operation durations, open operations, HTTP status counts and
+  numeric Retry-After values, filesystem failure codes, CPU/resource usage and
+  event-loop delay/utilization.
+- `cpu\profile.cpuprofile`: V8 sampling profile at 10 ms, including startup.
+- `run\`: unchanged evaluator receipt, call logs and case artifacts.
+
+Wall buckets select the highest-priority active leaf operation; simultaneous
+categories are explicit. They partition elapsed time but do not prove causal
+critical-path ownership. Inclusive operation totals overlap; self durations
+subtract the union of direct child spans, not detached asynchronous work.
+Provider logical spans include response consumption and endpoint discovery;
+HTTP spans stop at response headers. Native SQLite I/O and SDK child-process
+internals are not filesystem-hooked. CPU sampling and profiling overhead must
+be considered when comparing to an uninstrumented run.
+
+No contents, prompts, credentials, endpoint URLs or general headers enter the
+timing aggregates. Progress failures are surfaced rather than silently ignored.
+The wrapper restores hooks on completion. The profiling tests are included with:
+
+```powershell
+node --test .\tools\agent-session-qualification\evaluate.test.mjs .\tools\agent-session-qualification\rescore.test.mjs .\tools\agent-session-qualification\profile.test.mjs .\tools\scripts\test\agentSessionScale.spec.mjs
+```
+
+### Deterministic storage comparison
+
+[agent-session-storage-benchmark.mjs](../agent-session-storage-benchmark.mjs)
+compares the compiled segmented generation store with the existing single-binary-
+file snapshot store using identical fixed extracted records and normalized
+1536-dimensional float32 vectors. It asserts exact message/vector roundtrips and
+records an input hash, write/read/collection timings, filesystem operations and
+final logical file/byte inventories:
+
+```powershell
+if (Test-Path $PROFILE) { . $PROFILE }
+node .\tools\agent-session-storage-benchmark.mjs '<unused-output-directory>'
+```
+
+New segmented publications use readable, byte-targeted JSON records and binary
+vector blocks rather than numeric-vector JSON leaves. A hashed publication
+catalog retains shared immutable artifacts; ordinary collection is scheduled
+separately, while source-removal cleanup remains synchronous. A bounded verified
+byte cache avoids rereading unchanged backing without sharing mutable vectors.
+Legacy v1 checkpoints remain readable and are not rewritten in place.
+
+The profiler distinguishes `.segments` artifacts as `index-json` and
+`index-binary`; earlier profiles classified many of these as `other-json`.
+Compare aggregate filesystem totals across versions rather than treating those
+role labels as unchanged. Inclusive stage totals overlap. File reuse reduces
+persisted work but does not make full logical hydration, serialization or hashing
+O(delta). Binary I/O is buffered; no OS memory mapping is used.
+
 ## Fixture contract
 
 `manifest.json`:

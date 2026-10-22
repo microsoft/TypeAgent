@@ -51,17 +51,14 @@ export async function writeConversationDataToFile(
     if (segmented) {
         const relatedCount =
             fileData.jsonData.embeddingFileHeader?.relatedCount ?? 0;
-        const vectors =
-            fileData.binaryData.embeddings?.map((vector) =>
-                Array.from(vector),
-            ) ?? [];
+        const embeddings = fileData.binaryData.embeddings ?? [];
         await writeSegmentedJson(
             path.join(dirPath, baseFileName + DataFileSuffix),
             {
                 jsonData: fileData.jsonData,
                 binaryData: {
-                    relatedEmbeddings: vectors.slice(0, relatedCount),
-                    messageEmbeddings: vectors.slice(relatedCount),
+                    relatedEmbeddings: embeddings.slice(0, relatedCount),
+                    messageEmbeddings: embeddings.slice(relatedCount),
                 },
             },
             {
@@ -113,7 +110,15 @@ export async function readConversationDataFromFile(
             await readSegmentedJson(
                 path.join(dirPath, baseFileName + DataFileSuffix),
                 jsonData,
+                {
+                    reuseVerified: true,
+                    skipRootProperties:
+                        options?.loadEmbeddings === false
+                            ? ["binaryData"]
+                            : undefined,
+                },
             ),
+            options?.loadEmbeddings !== false,
         );
     }
     validateFileData(fileData, embeddingSize);
@@ -160,22 +165,30 @@ export async function readConversationDataFromFile(
 }
 
 function readSegmentVectors(value: unknown): Float32Array[] {
-    if (
-        !Array.isArray(value) ||
-        value.some(
-            (vector) =>
-                !Array.isArray(vector) ||
+    if (!Array.isArray(value))
+        throw new Error("Invalid segmented conversation vectors");
+    return value.map((vector: unknown) => {
+        if (
+            !(vector instanceof Float32Array) &&
+            (!Array.isArray(vector) ||
                 vector.some(
                     (number) =>
                         typeof number !== "number" || !Number.isFinite(number),
-                ),
+                ))
         )
-    )
-        throw new Error("Invalid segmented conversation vectors");
-    return value.map((vector: number[]) => new Float32Array(vector));
+            throw new Error("Invalid segmented conversation vectors");
+        const result =
+            vector instanceof Float32Array ? vector : new Float32Array(vector);
+        if (result.some((number) => !Number.isFinite(number)))
+            throw new Error("Invalid segmented conversation vectors");
+        return result;
+    });
 }
 
-function segmentedFileData(value: unknown): ConversationFileData {
+function segmentedFileData(
+    value: unknown,
+    loadEmbeddings: boolean,
+): ConversationFileData {
     if (
         !value ||
         typeof value !== "object" ||
@@ -186,20 +199,24 @@ function segmentedFileData(value: unknown): ConversationFileData {
         !Array.isArray(value.jsonData.messages) ||
         !("binaryData" in value) ||
         !value.binaryData ||
-        typeof value.binaryData !== "object" ||
-        !("relatedEmbeddings" in value.binaryData) ||
-        !("messageEmbeddings" in value.binaryData)
+        typeof value.binaryData !== "object"
     )
         throw new Error("Invalid segmented conversation payload");
-    return {
+    const data: ConversationFileData = {
         jsonData: value.jsonData as ConversationJsonData,
-        binaryData: {
-            embeddings: [
-                ...readSegmentVectors(value.binaryData.relatedEmbeddings),
-                ...readSegmentVectors(value.binaryData.messageEmbeddings),
-            ],
-        },
+        binaryData: {},
     };
+    if (!loadEmbeddings) return data;
+    if (
+        "relatedEmbeddings" in value.binaryData &&
+        "messageEmbeddings" in value.binaryData
+    ) {
+        data.binaryData.embeddings = [
+            ...readSegmentVectors(value.binaryData.relatedEmbeddings),
+            ...readSegmentVectors(value.binaryData.messageEmbeddings),
+        ];
+    } else throw new Error("Missing segmented binary vectors");
+    return data;
 }
 
 export async function readConversationDataFromBuffer(

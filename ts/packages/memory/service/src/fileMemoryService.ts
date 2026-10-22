@@ -7,6 +7,7 @@ import {
     runWithSearchTiming,
     timeSearchStage,
     collectJsonSegments,
+    clearJsonSegmentCache,
     jsonSegmentDirectory,
 } from "@typeagent/knowpro";
 import { createHash, randomUUID } from "node:crypto";
@@ -1048,6 +1049,7 @@ export class FileMemoryService
         }
     >();
     private readonly ingestionTails = new Map<string, Promise<void>>();
+    private readonly segmentCollectionWork = new Map<string, Promise<void>>();
     private readonly ingestionGroups =
         new BoundedIngestionGroup<AcceptedIngestion>((entries) =>
             this.dispatchIngestionGroup(entries),
@@ -1292,6 +1294,8 @@ export class FileMemoryService
                         sources,
                         operation,
                     ),
+                withIngestionGroup: (operation) =>
+                    this.withIngestionGroup(operation),
             },
             () =>
                 (sessionModel ??= configuredAgentSessionModel(
@@ -1450,6 +1454,7 @@ export class FileMemoryService
             ...this.indexedReads,
             ...this.reindexWork,
         ]);
+        await Promise.allSettled(this.segmentCollectionWork.values());
         // Family maintenance may admit a new build while tracked reads drain.
         const viewClosure = await Promise.allSettled([this.viewBuilds.close()]);
         await Promise.allSettled(
@@ -7492,6 +7497,7 @@ export class FileMemoryService
     private async removeInactiveIndexGenerations(
         corpusId: string,
         activeGeneration: string,
+        forceCollection = false,
     ): Promise<void> {
         validateIndexGeneration(activeGeneration);
         const root = this.indexDirectory(corpusId);
@@ -7582,7 +7588,53 @@ export class FileMemoryService
                         this.indexDirectory(corpusId, activeGeneration),
             )
         )
-            await collectJsonSegments(root);
+            await this.reclaimIndexSegments(corpusId, root, forceCollection);
+    }
+
+    private async reclaimIndexSegments(
+        corpusId: string,
+        root: string,
+        forceCollection: boolean,
+    ): Promise<void> {
+        const manifest = this.corpora.get(corpusId)?.manifest;
+        if (
+            forceCollection ||
+            manifest?.authorizedSourceRemoval ||
+            manifest?.pendingCorpusClear
+        )
+            await this.collectIndexSegments(root);
+        else this.scheduleIndexCollection(corpusId, root);
+    }
+
+    private collectIndexSegments(root: string): Promise<void> {
+        return collectJsonSegments(root);
+    }
+
+    private scheduleIndexCollection(corpusId: string, root: string): void {
+        if (this.segmentCollectionWork.has(root)) return;
+        const key = `${corpusId}:segment-collection`;
+        const work = new Promise<void>((resolve) => setTimeout(resolve, 250))
+            .then(() =>
+                this.enqueueWrite(
+                    corpusId,
+                    () => this.collectIndexSegments(root),
+                    true,
+                ),
+            )
+            .then(
+                () => this.wikiMaintenanceFailures.delete(key),
+                (error: unknown) => {
+                    this.wikiMaintenanceFailures.set(
+                        key,
+                        new Error(safeError(error)),
+                    );
+                },
+            )
+            .finally(() => this.segmentCollectionWork.delete(root));
+        this.segmentCollectionWork.set(
+            root,
+            work.then(() => {}),
+        );
     }
 
     private indexVersion(manifest: CorpusManifest): string {
@@ -8193,7 +8245,6 @@ export class FileMemoryService
                 );
                 finishPreparation();
             });
-            await collectJsonSegments(path.dirname(candidateDirectory));
             await this.enqueueWrite(request.corpusId, () =>
                 timeSearchStage("ingestion.commit", async () => {
                     this.throwIfAborted(signal);
@@ -8280,6 +8331,7 @@ export class FileMemoryService
                     await this.removeInactiveIndexGenerations(
                         request.corpusId,
                         indexGeneration,
+                        existing !== undefined,
                     );
                     await this.updateJob(job, "complete", {
                         completed: 1,
@@ -8837,6 +8889,7 @@ export class FileMemoryService
             }
         }
         await rm(root, { recursive: true, force: true });
+        clearJsonSegmentCache(root);
     }
 
     private async purgeObsoleteEventIndex(

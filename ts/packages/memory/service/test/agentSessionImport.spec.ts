@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { FileMemoryService } from "../src/fileMemoryService.js";
@@ -12,6 +12,7 @@ import type {
 } from "../src/agentSessionTypes.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import type { IndexedDocument } from "../src/types.js";
 
 const roots: string[] = [];
 const services: FileMemoryService[] = [];
@@ -99,6 +100,65 @@ async function settled(
 }
 
 describe("opt-in long-running session import", () => {
+    test("compatible episode pairs share one publication and cached receipts detect file changes", async () => {
+        const sizes: number[] = [];
+        class GroupedIndex extends FakeSemanticCorpusIndex {
+            public override async rebuild(
+                documents: IndexedDocument[],
+            ): Promise<void> {
+                sizes.push(documents.length);
+                await super.rebuild(documents);
+            }
+        }
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "agent-session-pair-"),
+        );
+        roots.push(root);
+        const service = new FileMemoryService(root, {
+            agentSessionDistillationModel: {
+                identity: "offline-pair",
+                fits: () => true,
+                complete: async () => '{"memories":[]}',
+            },
+            sourceSynopses: false,
+            informationalViews: false,
+            viewDrafts: false,
+            indexFactory: (_corpusId, directory) => new GroupedIndex(directory),
+        });
+        services.push(service);
+        const { corpusId } = await service.createCorpus("Paired episodes");
+        const input = request(corpusId);
+        input.jsonl =
+            [1, 2]
+                .map((number) =>
+                    JSON.stringify({
+                        schemaVersion: 1,
+                        id: `e${number}`,
+                        sessionId: input.sessionId,
+                        kind: "message",
+                        role: "user",
+                        taskId: `task-${number}`,
+                        text: `Task ${number}: inspect the repository and run focused validation.`,
+                    }),
+                )
+                .join("\n") + "\n";
+        await service.importAgentSession(input);
+        expect((await settled(service, corpusId)).sourceCount).toBe(2);
+        expect(sizes).toEqual([2]);
+        const receipt = await service.getAgentSessionImport(input);
+        receipt!.cursor = 999;
+        expect((await service.getAgentSessionImport(input))!.cursor).toBe(2);
+        const directory = path.join(root, corpusId, "agent-sessions");
+        const [id] = await readdir(directory);
+        await writeFile(
+            path.join(directory, id, "session.json"),
+            '{"schemaVersion":999}',
+        );
+        await expect(service.getAgentSessionImport(input)).rejects.toThrow(
+            "Invalid agent session checkpoint",
+        );
+    });
+
     test("synthesizes a cross-chunk procedure with citations to both original episodes", async () => {
         let extractions = 0;
         let reductions = 0;

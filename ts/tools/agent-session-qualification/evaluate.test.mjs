@@ -1362,7 +1362,7 @@ async function recoveryFixture(t, failureStage = "index") {
                             if (
                                 fail &&
                                 failureStage === "index" &&
-                                counters.indexWrites === 3
+                                documents.length >= 3
                             ) {
                                 counters.indexWrites++;
                                 throw new Error(
@@ -1524,7 +1524,10 @@ test("real production-owner recovery copies failed state, accepts advanced FAILE
                     },
                 ],
             );
-            assert.equal(recovered.counters.extractions, 2);
+            assert.equal(
+                recovered.counters.extractions,
+                failureStage === "index" ? 3 : 2,
+            );
             assert.equal(
                 recovered.counters.indexWrites,
                 failureStage === "index" ? 3 : 2,
