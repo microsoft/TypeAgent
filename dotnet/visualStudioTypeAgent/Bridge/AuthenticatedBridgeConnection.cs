@@ -103,7 +103,10 @@ internal sealed class AuthenticatedBridgeRequestProcessor
 
 internal static class AuthenticatedBridgeConnection
 {
-    private const int MaxMessageBytes = 1024 * 1024;
+    // This channel carries only authenticated VisualStudioActions and compact
+    // EnvDTE results. Chat and attachment data use the dispatcher connection,
+    // so 1 MiB is ample while bounding peer-controlled buffering.
+    internal const int MaxMessageBytes = 1024 * 1024;
     private static readonly TimeSpan DefaultAuthenticationTimeout =
         TimeSpan.FromSeconds(5);
 
@@ -176,6 +179,11 @@ internal static class AuthenticatedBridgeConnection
             {
                 return;
             }
+            catch (InvalidOperationException)
+            {
+                await CloseForPolicyViolationAsync(ws).ConfigureAwait(false);
+                throw;
+            }
 
             string response;
             try
@@ -193,8 +201,8 @@ internal static class AuthenticatedBridgeConnection
         }
     }
 
-    private static async Task<string> ReceiveTextAsync(
-        ClientWebSocket ws,
+    internal static async Task<string> ReceiveTextAsync(
+        WebSocket ws,
         CancellationToken cancellation)
     {
         var buffer = new ArraySegment<byte>(new byte[16 * 1024]);

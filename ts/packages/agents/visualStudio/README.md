@@ -50,6 +50,11 @@ Two WebSocket channels:
   result and action channel are authenticated before a port is trusted or an
   EnvDTE action is dispatched.
 
+The action bridge carries only structured Visual Studio action frames and
+compact EnvDTE results. Chat messages, images, and other attachments use the
+separate dispatcher/WebView connection. Action-bridge messages are capped at
+1 MiB to bound buffering from a connected peer.
+
 ### Authentication
 
 The TypeScript host provisions a 256-bit per-user credential at

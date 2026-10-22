@@ -96,6 +96,8 @@ internal static class BridgeAuthentication
     public const string CredentialPathOverrideEnvironmentVariable =
         "TYPEAGENT_VS_BRIDGE_CREDENTIAL_PATH";
 
+    // Handshake and discovery proofs are deliberately short-lived. Verification
+    // also caps the sender-selected window and permits only small clock skew.
     private const long AuthWindowMilliseconds = 15_000;
     private const long MaxAuthWindowMilliseconds = 30_000;
     private const long ClockSkewMilliseconds = 5_000;
@@ -305,6 +307,8 @@ internal static class BridgeAuthentication
             serverNonce,
             sessionId,
         };
+        // Direction-specific domain labels prevent a valid request MAC from
+        // being reflected as a response MAC (or vice versa).
         return new AuthenticatedBridgeSession(
             sessionId,
             expiresAt.Value,
@@ -540,6 +544,8 @@ internal static class BridgeAuthentication
         && expiresAt >= now - ClockSkewMilliseconds;
 
     private static string NormalizeRole(string agentName, string role) =>
+        // Discovery historically permits an omitted Visual Studio role. Both
+        // runtimes authenticate that spelling as the canonical "default" tuple.
         agentName == VisualStudioAgentName && string.IsNullOrEmpty(role)
             ? VisualStudioAgentRole
             : role;
@@ -549,6 +555,9 @@ internal static class BridgeAuthentication
 
     private static byte[] CreateMac(byte[] key, string domain, params string[] fields)
     {
+        // This is the cross-runtime canonical encoding: UTF-8 domain label,
+        // followed by each ordered field prefixed with LF. Domain separation
+        // keeps proofs from one protocol phase valid in another.
         using var hmac = new HMACSHA256(key);
         var input = new StringBuilder(domain);
         foreach (string field in fields)
@@ -601,6 +610,8 @@ internal static class BridgeAuthentication
 
     private static bool FixedTimeEquals(string left, string right)
     {
+        // Do not short-circuit on a differing byte or length; peer-provided
+        // identifiers and proofs must not expose comparison timing.
         byte[] leftBytes = Encoding.UTF8.GetBytes(left);
         byte[] rightBytes = Encoding.UTF8.GetBytes(right);
         int difference = leftBytes.Length ^ rightBytes.Length;

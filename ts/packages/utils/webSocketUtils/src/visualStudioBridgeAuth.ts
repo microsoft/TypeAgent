@@ -18,6 +18,8 @@ export const VISUAL_STUDIO_BRIDGE_AUTH_VERSION = 1;
 export const VISUAL_STUDIO_BRIDGE_CREDENTIAL_PATH_ENV =
     "TYPEAGENT_VS_BRIDGE_CREDENTIAL_PATH";
 
+// Discovery and handshake proofs are short-lived; verification also limits the
+// sender-selected window and allows only a small amount of clock skew.
 const AUTH_WINDOW_MS = 15_000;
 const MAX_AUTH_WINDOW_MS = 30_000;
 const CLOCK_SKEW_MS = 5_000;
@@ -902,6 +904,8 @@ function deriveSessionKeys(
         serverNonce,
         sessionId,
     ];
+    // Direction-specific domain labels prevent request MACs from being
+    // reflected and accepted as responses.
     return {
         clientToServer: createMac(
             credential.secret,
@@ -927,6 +931,8 @@ function isProtectedVisualStudioTuple(
 }
 
 function normalizeRole(agentName: string, role: string | undefined): string {
+    // Discovery historically permits an omitted Visual Studio role. Authenticate
+    // that spelling as the canonical "default" tuple in both runtimes.
     return agentName === VISUAL_STUDIO_AGENT_NAME && role === undefined
         ? VISUAL_STUDIO_AGENT_ROLE
         : (role ?? "");
@@ -1018,6 +1024,8 @@ function createProof(key: Buffer, domain: string, ...fields: string[]): string {
 }
 
 function createMac(key: Buffer, domain: string, ...fields: string[]): Buffer {
+    // Cross-runtime canonical encoding: UTF-8 domain label followed by each
+    // ordered field prefixed with LF. Domain labels separate protocol phases.
     const hmac = createHmac("sha256", key);
     hmac.update(domain, "utf8");
     for (const field of fields) {
@@ -1028,6 +1036,8 @@ function createMac(key: Buffer, domain: string, ...fields: string[]): Buffer {
 }
 
 function constantTimeEqualText(left: string, right: string): boolean {
+    // timingSafeEqual requires equal lengths; all authenticated fields have
+    // fixed formats, so a length mismatch is rejected before comparison.
     const leftBytes = Buffer.from(left, "utf8");
     const rightBytes = Buffer.from(right, "utf8");
     return (

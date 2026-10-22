@@ -7,6 +7,7 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -39,6 +40,7 @@ internal static class Program
             TestDiscoveryAuthentication();
             AuthenticatedBridgeSession session = TestMutualHandshake();
             await TestAuthenticationTimeoutIsRetryableAsync();
+            await TestAuthenticatedMessageSizeLimitAsync(session);
             await TestExecutorGatingAsync(session);
             Console.WriteLine($"Visual Studio bridge authentication tests passed ({_assertions} assertions).");
             return 0;
@@ -730,6 +732,89 @@ internal static class Program
             "An expired session must not reach the executor");
     }
 
+    private static async Task TestAuthenticatedMessageSizeLimitAsync(
+        AuthenticatedBridgeSession session)
+    {
+        JObject frame = BridgeAuthentication.CreateSecureFrame(
+            session.SessionId,
+            1,
+            "request",
+            "45454545454545454545454545454545",
+            new JObject
+            {
+                ["actionName"] = "saveAll",
+                ["parameters"] = new JObject(),
+            },
+            session.ServerToClientKey);
+        string frameText = frame.ToString(Newtonsoft.Json.Formatting.None);
+        string boundaryFrame = PadUtf8(
+            frameText,
+            AuthenticatedBridgeConnection.MaxMessageBytes);
+        Assert(
+            Encoding.UTF8.GetByteCount(boundaryFrame)
+                == AuthenticatedBridgeConnection.MaxMessageBytes,
+            "The size-test frame must reach the exact byte boundary");
+
+        var boundaryExecutor = new RecordingExecutor();
+        var boundaryProcessor = new AuthenticatedBridgeRequestProcessor(
+            session,
+            boundaryExecutor);
+        using (var socket = new TextMessageWebSocket(boundaryFrame))
+        {
+            string received = await AuthenticatedBridgeConnection.ReceiveTextAsync(
+                socket,
+                CancellationToken.None)
+                .ConfigureAwait(false);
+            _ = await boundaryProcessor.ProcessRequestAsync(
+                received,
+                CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        Assert(
+            boundaryExecutor.CallCount == 1,
+            "An authenticated message at the size limit must execute");
+
+        string oversizedFrame = boundaryFrame + " ";
+        var oversizedExecutor = new RecordingExecutor();
+        var oversizedProcessor = new AuthenticatedBridgeRequestProcessor(
+            session,
+            oversizedExecutor);
+        bool rejected = false;
+        using (var socket = new TextMessageWebSocket(oversizedFrame))
+        {
+            try
+            {
+                string received = await AuthenticatedBridgeConnection.ReceiveTextAsync(
+                    socket,
+                    CancellationToken.None)
+                    .ConfigureAwait(false);
+                _ = await oversizedProcessor.ProcessRequestAsync(
+                    received,
+                    CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex)
+                when (ex.Message.Contains("size limit", StringComparison.Ordinal))
+            {
+                rejected = true;
+            }
+        }
+        Assert(rejected, "An oversized authenticated message must fail closed");
+        Assert(
+            oversizedExecutor.CallCount == 0,
+            "An oversized authenticated message must not reach the executor");
+    }
+
+    private static string PadUtf8(string value, int targetBytes)
+    {
+        int currentBytes = Encoding.UTF8.GetByteCount(value);
+        if (currentBytes > targetBytes)
+        {
+            throw new InvalidOperationException("Size-test frame exceeded its target");
+        }
+        return value + new string(' ', targetBytes - currentBytes);
+    }
+
     private static async Task AssertRejectedWithoutExecutorCallAsync(
         AuthenticatedBridgeRequestProcessor processor,
         JObject frame,
@@ -831,5 +916,64 @@ internal static class Program
                 parameters,
             });
         }
+    }
+
+    private sealed class TextMessageWebSocket : WebSocket
+    {
+        private readonly byte[] _payload;
+        private int _offset;
+        private WebSocketState _state = WebSocketState.Open;
+
+        public TextMessageWebSocket(string payload)
+        {
+            _payload = Encoding.UTF8.GetBytes(payload);
+        }
+
+        public override WebSocketCloseStatus? CloseStatus => null;
+        public override string? CloseStatusDescription => null;
+        public override string? SubProtocol => null;
+        public override WebSocketState State => _state;
+
+        public override void Abort() => _state = WebSocketState.Aborted;
+
+        public override Task CloseAsync(
+            WebSocketCloseStatus closeStatus,
+            string? statusDescription,
+            CancellationToken cancellationToken)
+        {
+            _state = WebSocketState.Closed;
+            return Task.CompletedTask;
+        }
+
+        public override Task CloseOutputAsync(
+            WebSocketCloseStatus closeStatus,
+            string? statusDescription,
+            CancellationToken cancellationToken)
+        {
+            _state = WebSocketState.CloseSent;
+            return Task.CompletedTask;
+        }
+
+        public override void Dispose() => _state = WebSocketState.Closed;
+
+        public override Task<WebSocketReceiveResult> ReceiveAsync(
+            ArraySegment<byte> buffer,
+            CancellationToken cancellationToken)
+        {
+            int count = Math.Min(buffer.Count, _payload.Length - _offset);
+            Array.Copy(_payload, _offset, buffer.Array!, buffer.Offset, count);
+            _offset += count;
+            return Task.FromResult(new WebSocketReceiveResult(
+                count,
+                WebSocketMessageType.Text,
+                _offset == _payload.Length));
+        }
+
+        public override Task SendAsync(
+            ArraySegment<byte> buffer,
+            WebSocketMessageType messageType,
+            bool endOfMessage,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 }
