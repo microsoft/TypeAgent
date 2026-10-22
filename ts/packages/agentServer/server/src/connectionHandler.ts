@@ -29,6 +29,7 @@ import type {
 } from "@typeagent/skill-catalog";
 import type { Dispatcher, PortRegistrar } from "agent-dispatcher";
 import registerDebug from "debug";
+import { protectVisualStudioDiscoveryResponse } from "@typeagent/websocket-utils/visualStudioBridgeAuth";
 import type { ConversationManager } from "./conversationManager.js";
 import { createRunbookHostCapabilities } from "./runbookCapabilities.js";
 import { getSpeechToken } from "./speechToken.js";
@@ -953,6 +954,7 @@ export function createAgentServerConnectionHandler(
                     // configured; local clients (and a down/absent tunnel) fall
                     // back to localhost. See tunnelResolver.ts.
                     resolveTunnelUrlForDiscovery,
+                    protectVisualStudioDiscoveryResponse,
                 ),
             );
         }

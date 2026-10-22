@@ -65,7 +65,7 @@ function run(cmd, cmdArgs, cwd, env = process.env) {
         throw new Error(`Command failed (${res.status}): ${cmd}`);
 }
 
-function writeRuntimeInstallWorkspace(directory) {
+export function writeRuntimeInstallWorkspace(directory) {
     const content = [
         'packages: ["."]',
         "allowBuilds:",
@@ -75,6 +75,7 @@ function writeRuntimeInstallWorkspace(directory) {
         "  keytar: true",
         "  koffi: true",
         "  onnxruntime-node: true",
+        "  protobufjs: false",
         "  puppeteer: false",
         "  sharp: true",
         "",
@@ -257,4 +258,6 @@ async function main() {
     );
 }
 
-await main();
+if (path.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
+    await main();
+}

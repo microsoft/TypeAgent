@@ -28,6 +28,9 @@
     "asc": "asc -i ./src/visualStudioSchema.ts -o ./dist/visualStudioSchema.pas.json -t VisualStudioActions",
     "build": "concurrently npm:tsc npm:asc npm:agc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "test": "npm run test:local",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {
@@ -39,9 +42,12 @@
   "devDependencies": {
     "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
+    "@typeagent/agent-server-protocol": "workspace:*",
     "@types/debug": "^4.1.12",
+    "@types/jest": "^29.5.7",
     "@types/ws": "^8.5.10",
     "concurrently": "^9.1.2",
+    "jest": "^29.7.0",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
   },

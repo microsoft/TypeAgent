@@ -1,0 +1,14 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+version: v1.1.0
+stepTimeout: 3600
+steps:
+  - build: >-
+      --pull --no-cache --platform linux/amd64
+      -t {{.Run.Registry}}/{{.Values.imageName}}:{{.Values.imageTag}}
+      -f Dockerfile .
+    env:
+      - DOCKER_BUILDKIT=1
+  - push:
+      - "{{.Run.Registry}}/{{.Values.imageName}}:{{.Values.imageTag}}"

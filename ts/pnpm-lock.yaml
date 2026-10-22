@@ -246,8 +246,8 @@ importers:
         specifier: workspace:*
         version: link:../examplesLib
       exifreader:
-        specifier: ^4.39.0
-        version: 4.40.3
+        specifier: ^4.50.0
+        version: 4.50.0
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
@@ -353,8 +353,8 @@ importers:
         specifier: ^16.3.1
         version: 16.5.0
       exifreader:
-        specifier: ^4.39.0
-        version: 4.40.3
+        specifier: ^4.50.0
+        version: 4.50.0
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
@@ -1292,8 +1292,8 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
       vite:
-        specifier: ^6.4.3
-        version: 6.4.3(@types/node@26.4.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
+        specifier: ^6.4.4
+        version: 6.4.4(@types/node@26.4.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
 
   packages/actionGrammar:
     dependencies:
@@ -2072,8 +2072,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.13
-        version: 3.4.13
+        specifier: ^3.4.17
+        version: 3.4.17
       express:
         specifier: ^4.22.0
         version: 4.22.1
@@ -2111,8 +2111,8 @@ importers:
         specifier: ^0.16.21
         version: 0.16.22
       markdown-it:
-        specifier: ^14.2.0
-        version: 14.3.0
+        specifier: ^14.3.2
+        version: 14.3.2
       mermaid:
         specifier: ^11.16.1
         version: 11.16.1
@@ -2229,8 +2229,8 @@ importers:
         specifier: ^29.3.2
         version: 29.3.3(@babel/core@7.29.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(esbuild@0.28.1)(jest@29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5)))(typescript@5.4.5)
       vite:
-        specifier: ^6.4.3
-        version: 6.4.3(@types/node@22.15.18)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.8.3)
+        specifier: ^6.4.4
+        version: 6.4.4(@types/node@22.15.18)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/agents/browserControlRpc:
     dependencies:
@@ -2241,8 +2241,8 @@ importers:
         specifier: workspace:*
         version: link:../../memory/service
       dompurify:
-        specifier: ^3.4.13
-        version: 3.4.13
+        specifier: ^3.4.17
+        version: 3.4.17
       jsdom:
         specifier: ^28.1.0
         version: 28.1.0(@noble/hashes@2.4.0)
@@ -2314,14 +2314,14 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.13
-        version: 3.4.13
+        specifier: ^3.4.17
+        version: 3.4.17
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
       markdown-it:
-        specifier: ^14.2.0
-        version: 14.2.0
+        specifier: ^14.3.2
+        version: 14.3.2
       pdfjs-dist:
         specifier: 5.3.31
         version: 5.3.31
@@ -2411,8 +2411,8 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
       vite:
-        specifier: ^6.4.3
-        version: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
+        specifier: ^6.4.4
+        version: 6.4.4(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
 
   packages/agents/calendar:
     dependencies:
@@ -2950,8 +2950,8 @@ importers:
         specifier: ^4.3.4
         version: 4.4.1(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.13
-        version: 3.4.13
+        specifier: ^3.4.17
+        version: 3.4.17
       express:
         specifier: ^4.22.0
         version: 4.22.1
@@ -2965,8 +2965,8 @@ importers:
         specifier: ^0.2.52
         version: 0.2.108
       markdown-it:
-        specifier: ^14.2.0
-        version: 14.2.0
+        specifier: ^14.3.2
+        version: 14.3.2
       markdown-it-texmath:
         specifier: ^1.0.0
         version: 1.0.0
@@ -3053,8 +3053,8 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
       vite:
-        specifier: ^6.4.3
-        version: 6.4.3(@types/node@26.4.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
+        specifier: ^6.4.4
+        version: 6.4.4(@types/node@26.4.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
 
   packages/agents/memory:
     dependencies:
@@ -3900,15 +3900,24 @@ importers:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
+      '@typeagent/agent-server-protocol':
+        specifier: workspace:*
+        version: link:../../agentServer/protocol
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@26.4.1)(ts-node@10.9.2(@types/node@26.4.1)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -3944,8 +3953,8 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
       vite:
-        specifier: ^6.4.3
-        version: 6.4.3(@types/node@26.4.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
+        specifier: ^6.4.4
+        version: 6.4.4(@types/node@26.4.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
 
   packages/agents/weather:
     dependencies:
@@ -4397,11 +4406,11 @@ importers:
         specifier: ^6.0.2
         version: 6.0.5
       dompurify:
-        specifier: ^3.4.13
-        version: 3.4.13
+        specifier: ^3.4.17
+        version: 3.4.17
       markdown-it:
-        specifier: ^14.2.0
-        version: 14.2.0
+        specifier: ^14.3.2
+        version: 14.3.2
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
@@ -4935,8 +4944,8 @@ importers:
   packages/defaultAgentProvider:
     dependencies:
       '@modelcontextprotocol/client':
-        specifier: ^2.0.0
-        version: 2.0.0
+        specifier: ^2.3.1
+        version: 2.3.1
       '@modelcontextprotocol/server-filesystem':
         specifier: 2026.1.14
         version: 2026.1.14(zod@4.1.13)
@@ -5076,8 +5085,8 @@ importers:
         specifier: workspace:*
         version: link:../dispatcher/nodeProviders
       exifreader:
-        specifier: ^4.39.0
-        version: 4.40.3
+        specifier: ^4.50.0
+        version: 4.50.0
       file-size:
         specifier: ^1.0.0
         version: 1.0.0
@@ -5251,8 +5260,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       exifreader:
-        specifier: ^4.39.0
-        version: 4.40.3
+        specifier: ^4.50.0
+        version: 4.50.0
       file-size:
         specifier: ^1.0.0
         version: 1.0.0
@@ -5544,8 +5553,8 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
       vite:
-        specifier: ^6.4.3
-        version: 6.4.3(@types/node@26.4.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
+        specifier: ^6.4.4
+        version: 6.4.4(@types/node@26.4.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
 
   packages/interactiveApp:
     dependencies:
@@ -5679,8 +5688,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
       exifreader:
-        specifier: ^4.39.0
-        version: 4.40.3
+        specifier: ^4.50.0
+        version: 4.50.0
       sharp:
         specifier: 0.35.5
         version: 0.35.5(@types/node@26.4.1)
@@ -5827,8 +5836,8 @@ importers:
   packages/memory/client:
     dependencies:
       '@modelcontextprotocol/client':
-        specifier: ^2.0.0
-        version: 2.0.0
+        specifier: ^2.3.1
+        version: 2.3.1
       '@typeagent/memory-service':
         specifier: workspace:*
         version: link:../service
@@ -6354,8 +6363,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.13
-        version: 3.4.13
+        specifier: ^3.4.17
+        version: 3.4.17
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -6369,8 +6378,8 @@ importers:
         specifier: ^4.3.2
         version: 4.3.2
       markdown-it:
-        specifier: ^14.2.0
-        version: 14.2.0
+        specifier: ^14.3.2
+        version: 14.3.2
       microsoft-cognitiveservices-speech-sdk:
         specifier: ^1.38.0
         version: 1.43.1(supports-color@8.1.1)
@@ -6434,7 +6443,7 @@ importers:
         version: 26.15.3(dmg-builder@26.15.3)(supports-color@8.1.1)
       electron-vite:
         specifier: ^4.0.1
-        version: 4.0.1(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0))
+        version: 4.0.1(vite@6.4.4(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0))
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
@@ -6454,8 +6463,8 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
       vite:
-        specifier: ^6.4.3
-        version: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
+        specifier: ^6.4.4
+        version: 6.4.4(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
 
   packages/skillCatalog:
     dependencies:
@@ -6920,8 +6929,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       exifreader:
-        specifier: ^4.39.0
-        version: 4.40.3
+        specifier: ^4.50.0
+        version: 4.50.0
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -7119,14 +7128,14 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.13
-        version: 3.4.13
+        specifier: ^3.4.17
+        version: 3.4.17
       isomorphic-ws:
         specifier: ^5.0.0
         version: 5.0.0(ws@8.21.3)
       markdown-it:
-        specifier: ^14.2.0
-        version: 14.2.0
+        specifier: ^14.3.2
+        version: 14.3.2
       microsoft-cognitiveservices-speech-sdk:
         specifier: 1.43.1
         version: 1.43.1(supports-color@8.1.1)
@@ -9863,12 +9872,12 @@ packages:
   '@milkdown/utils@7.13.1':
     resolution: {integrity: sha1-VB5qUzLNF9mLz5oJqPJ3g5r3csQ=}
 
-  '@modelcontextprotocol/client@2.0.0':
-    resolution: {integrity: sha1-TcGMmDx6y0AEDwhEISPjxbiNYHQ=}
+  '@modelcontextprotocol/client@2.3.1':
+    resolution: {integrity: sha512-mIGZXpHsjnZ6lD+gD/WCMpR5k8yVQQ8nNFH1N0Srf7AvnwTUMYD6pvTY8ng2+He5FfV7YMZLmrjL7cLa/cc3dQ==}
     engines: {node: '>=20'}
 
-  '@modelcontextprotocol/core@2.0.0':
-    resolution: {integrity: sha1-yRikxq7yKnxZ37CqvCqCwYfM4Vc=}
+  '@modelcontextprotocol/core@2.3.1':
+    resolution: {integrity: sha512-laVmIhPGpWi7rG9q+0UigblRN0Hws/Yjlb6qLFtVqryXVLkc4h+yN8z731POD2LnAGQlFe7/tXhUm7Bi0YB91g==}
     engines: {node: '>=20'}
 
   '@modelcontextprotocol/sdk@1.26.0':
@@ -10602,19 +10611,9 @@ packages:
       rollup:
         optional: true
 
-  '@rollup/rollup-android-arm-eabi@4.62.2':
-    resolution: {integrity: sha1-XphJtmHCIpz5Z6CNvi276ejJkeU=}
-    cpu: [arm]
-    os: [android]
-
   '@rollup/rollup-android-arm-eabi@4.62.4':
     resolution: {integrity: sha1-K4bI//E6BlhF3bZfZNgUSZrOAg8=}
     cpu: [arm]
-    os: [android]
-
-  '@rollup/rollup-android-arm64@4.62.2':
-    resolution: {integrity: sha1-WwaZ7l3UhLIiye10r/Q8keqLF/g=}
-    cpu: [arm64]
     os: [android]
 
   '@rollup/rollup-android-arm64@4.62.4':
@@ -10622,19 +10621,9 @@ packages:
     cpu: [arm64]
     os: [android]
 
-  '@rollup/rollup-darwin-arm64@4.62.2':
-    resolution: {integrity: sha1-i8UsnXo86NBTPDUanJNd54HaoG8=}
-    cpu: [arm64]
-    os: [darwin]
-
   '@rollup/rollup-darwin-arm64@4.62.4':
     resolution: {integrity: sha1-6dCtugbjm2MvyOiAEA/wZUftqAs=}
     cpu: [arm64]
-    os: [darwin]
-
-  '@rollup/rollup-darwin-x64@4.62.2':
-    resolution: {integrity: sha1-ui7z6PsxDwrzVYjycM+lqpbkh2Q=}
-    cpu: [x64]
     os: [darwin]
 
   '@rollup/rollup-darwin-x64@4.62.4':
@@ -10642,19 +10631,9 @@ packages:
     cpu: [x64]
     os: [darwin]
 
-  '@rollup/rollup-freebsd-arm64@4.62.2':
-    resolution: {integrity: sha1-k7EL2/6K2iJri8DALva39URHTZY=}
-    cpu: [arm64]
-    os: [freebsd]
-
   '@rollup/rollup-freebsd-arm64@4.62.4':
     resolution: {integrity: sha1-q+E5mnDoGQNPSS0F28yXlkMQu1c=}
     cpu: [arm64]
-    os: [freebsd]
-
-  '@rollup/rollup-freebsd-x64@4.62.2':
-    resolution: {integrity: sha1-PoqjjvPJwwCUaHHj/bsMMOCiD4Y=}
-    cpu: [x64]
     os: [freebsd]
 
   '@rollup/rollup-freebsd-x64@4.62.4':
@@ -10662,23 +10641,11 @@ packages:
     cpu: [x64]
     os: [freebsd]
 
-  '@rollup/rollup-linux-arm-gnueabihf@4.62.2':
-    resolution: {integrity: sha1-HXmUOEuwrRvEGSG1BuFkLU+df8M=}
-    cpu: [arm]
-    os: [linux]
-    libc: [glibc]
-
   '@rollup/rollup-linux-arm-gnueabihf@4.62.4':
     resolution: {integrity: sha1-pfKn5+txklSmgA2xjp82nTxiNDk=}
     cpu: [arm]
     os: [linux]
     libc: [glibc]
-
-  '@rollup/rollup-linux-arm-musleabihf@4.62.2':
-    resolution: {integrity: sha1-plQPR8+ESla4DKn/ldKs37LO+Xs=}
-    cpu: [arm]
-    os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-arm-musleabihf@4.62.4':
     resolution: {integrity: sha1-OQyGx5dpWvh8ONbwBSItkgtb+iI=}
@@ -10686,23 +10653,11 @@ packages:
     os: [linux]
     libc: [musl]
 
-  '@rollup/rollup-linux-arm64-gnu@4.62.2':
-    resolution: {integrity: sha1-QE8gRWUYQMv0jakbptD0kPC8LL8=}
-    cpu: [arm64]
-    os: [linux]
-    libc: [glibc]
-
   '@rollup/rollup-linux-arm64-gnu@4.62.4':
     resolution: {integrity: sha1-H+p4YJoVgTzamNk/6NmHyHAX9XI=}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
-
-  '@rollup/rollup-linux-arm64-musl@4.62.2':
-    resolution: {integrity: sha1-o0BP/d97R0tIyZuciTtiR7t2W6U=}
-    cpu: [arm64]
-    os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-arm64-musl@4.62.4':
     resolution: {integrity: sha1-O1ADHJkWUXV2CY9uEbOKExR9xGM=}
@@ -10710,23 +10665,11 @@ packages:
     os: [linux]
     libc: [musl]
 
-  '@rollup/rollup-linux-loong64-gnu@4.62.2':
-    resolution: {integrity: sha1-6KrG1Umzd5ReNJiC8Zm3yOt1yjg=}
-    cpu: [loong64]
-    os: [linux]
-    libc: [glibc]
-
   '@rollup/rollup-linux-loong64-gnu@4.62.4':
     resolution: {integrity: sha1-tAMlVUYJmkMAsX2XbuF3YiTAkOU=}
     cpu: [loong64]
     os: [linux]
     libc: [glibc]
-
-  '@rollup/rollup-linux-loong64-musl@4.62.2':
-    resolution: {integrity: sha1-bi5E6lAxCzpYIHipFeX+uHnIINQ=}
-    cpu: [loong64]
-    os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-loong64-musl@4.62.4':
     resolution: {integrity: sha1-WQBhDlnGbuWUU5xlkFZtv9pwgrE=}
@@ -10734,23 +10677,11 @@ packages:
     os: [linux]
     libc: [musl]
 
-  '@rollup/rollup-linux-ppc64-gnu@4.62.2':
-    resolution: {integrity: sha1-aJgwLabXegU3zeZLK0xrYGWb0RA=}
-    cpu: [ppc64]
-    os: [linux]
-    libc: [glibc]
-
   '@rollup/rollup-linux-ppc64-gnu@4.62.4':
     resolution: {integrity: sha1-qJLMi4QUvIrgsmeBa144Tl0yH/I=}
     cpu: [ppc64]
     os: [linux]
     libc: [glibc]
-
-  '@rollup/rollup-linux-ppc64-musl@4.62.2':
-    resolution: {integrity: sha1-MzcXyV3Vpmvvj2Pn74qf2EX9GNA=}
-    cpu: [ppc64]
-    os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-ppc64-musl@4.62.4':
     resolution: {integrity: sha1-2eYNVot9tN8hlvskEbDGkYsjYMw=}
@@ -10758,23 +10689,11 @@ packages:
     os: [linux]
     libc: [musl]
 
-  '@rollup/rollup-linux-riscv64-gnu@4.62.2':
-    resolution: {integrity: sha1-gbwGujgDUgBNAfSCbrfNzO+gW60=}
-    cpu: [riscv64]
-    os: [linux]
-    libc: [glibc]
-
   '@rollup/rollup-linux-riscv64-gnu@4.62.4':
     resolution: {integrity: sha1-WzFBq0OvvZ5Q9jnlYulO0lbSAc8=}
     cpu: [riscv64]
     os: [linux]
     libc: [glibc]
-
-  '@rollup/rollup-linux-riscv64-musl@4.62.2':
-    resolution: {integrity: sha1-lafNOd4hOJrWeIpShOqqc44pykw=}
-    cpu: [riscv64]
-    os: [linux]
-    libc: [musl]
 
   '@rollup/rollup-linux-riscv64-musl@4.62.4':
     resolution: {integrity: sha1-sP51EBW8OCL5AEiE6rpeXN/eeqY=}
@@ -10782,21 +10701,9 @@ packages:
     os: [linux]
     libc: [musl]
 
-  '@rollup/rollup-linux-s390x-gnu@4.62.2':
-    resolution: {integrity: sha1-BubbLsG8SLU3THkj74PC6wJLJFI=}
-    cpu: [s390x]
-    os: [linux]
-    libc: [glibc]
-
   '@rollup/rollup-linux-s390x-gnu@4.62.4':
     resolution: {integrity: sha1-DLMj6FBQnhub9tJBMoqYsOEuKRY=}
     cpu: [s390x]
-    os: [linux]
-    libc: [glibc]
-
-  '@rollup/rollup-linux-x64-gnu@4.62.2':
-    resolution: {integrity: sha1-XcgYmIKF4J6IeQxkYt73JBPfLaM=}
-    cpu: [x64]
     os: [linux]
     libc: [glibc]
 
@@ -10806,51 +10713,25 @@ packages:
     os: [linux]
     libc: [glibc]
 
-  '@rollup/rollup-linux-x64-musl@4.62.2':
-    resolution: {integrity: sha1-IID0qTNJ6a/TS+b8GjfgH8i/yA8=}
-    cpu: [x64]
-    os: [linux]
-    libc: [musl]
-
   '@rollup/rollup-linux-x64-musl@4.62.4':
     resolution: {integrity: sha1-Gd+aF9IP88F72OnMJVNWOuCqBYA=}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@rollup/rollup-openbsd-x64@4.62.2':
-    resolution: {integrity: sha1-IdZKistmIhckuSPlGvUzPfGvBEs=}
-    cpu: [x64]
-    os: [openbsd]
-
   '@rollup/rollup-openbsd-x64@4.62.4':
     resolution: {integrity: sha1-McPKG9AOgPMJodDLjaS99Zyy36M=}
     cpu: [x64]
     os: [openbsd]
-
-  '@rollup/rollup-openharmony-arm64@4.62.2':
-    resolution: {integrity: sha1-jg/NnQIUHjN7TFtc/1dsuadrG6A=}
-    cpu: [arm64]
-    os: [openharmony]
 
   '@rollup/rollup-openharmony-arm64@4.62.4':
     resolution: {integrity: sha1-hFYaFDgcrst2UuFY0QVRpe3Apvw=}
     cpu: [arm64]
     os: [openharmony]
 
-  '@rollup/rollup-win32-arm64-msvc@4.62.2':
-    resolution: {integrity: sha1-vbTMTv1Y7+gIIDNH8PVGPw6hblI=}
-    cpu: [arm64]
-    os: [win32]
-
   '@rollup/rollup-win32-arm64-msvc@4.62.4':
     resolution: {integrity: sha1-vFMu2yDNOcC1Pu4t+uQ7UsLjvh4=}
     cpu: [arm64]
-    os: [win32]
-
-  '@rollup/rollup-win32-ia32-msvc@4.62.2':
-    resolution: {integrity: sha1-26695a/STq4O7+kV2QFjLny1mGA=}
-    cpu: [ia32]
     os: [win32]
 
   '@rollup/rollup-win32-ia32-msvc@4.62.4':
@@ -10858,18 +10739,8 @@ packages:
     cpu: [ia32]
     os: [win32]
 
-  '@rollup/rollup-win32-x64-gnu@4.62.2':
-    resolution: {integrity: sha1-hBCehf6l+PE1NJn5ZXj9wqDosTg=}
-    cpu: [x64]
-    os: [win32]
-
   '@rollup/rollup-win32-x64-gnu@4.62.4':
     resolution: {integrity: sha1-rmBxCwhosv5zHZ98NB+knL+Ohik=}
-    cpu: [x64]
-    os: [win32]
-
-  '@rollup/rollup-win32-x64-msvc@4.62.2':
-    resolution: {integrity: sha1-NnHOP5uSjVwB+Hl5LVwLYK4U1K0=}
     cpu: [x64]
     os: [win32]
 
@@ -13815,8 +13686,8 @@ packages:
     resolution: {integrity: sha1-zDhff3UfHR/GUMITdIBCVFOMfTE=}
     engines: {node: '>= 4'}
 
-  dompurify@3.4.13:
-    resolution: {integrity: sha1-/CiUnVn5LWLiijp2S8vu41iXob4=}
+  dompurify@3.4.17:
+    resolution: {integrity: sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==}
 
   domutils@2.8.0:
     resolution: {integrity: sha1-RDfe9dtuLR9dbuhZvZXKfQIEgTU=}
@@ -14204,8 +14075,9 @@ packages:
     resolution: {integrity: sha1-+ArZy/Qpj3vR1MlVXCHpN0HEEd0=}
     engines: {node: '>=10'}
 
-  exifreader@4.40.3:
-    resolution: {integrity: sha1-P1uewWrL5upiH3Uth0Tzo+ta5Ow=}
+  exifreader@4.50.0:
+    resolution: {integrity: sha512-RUtdkMPWJd2BdinNSO0JVw0QkMigxDTsuambp+jMlPM1b5k3xvXa4p9Wat+JhW4iVBOEfpBw66PS6oYHS1yFTg==}
+    hasBin: true
 
   exit@0.1.2:
     resolution: {integrity: sha1-BjJjj42HfMghB9MKD/8aF8uhzQw=}
@@ -16078,12 +15950,12 @@ packages:
   markdown-it-texmath@1.0.0:
     resolution: {integrity: sha1-ZXA7I10HqPlrxYy/nUeK9XFU5fA=}
 
-  markdown-it@14.2.0:
-    resolution: {integrity: sha1-BtSNkDXnfVscha2zFUgvyCQCie8=}
-    hasBin: true
-
   markdown-it@14.3.0:
     resolution: {integrity: sha1-hUL6VQbjUw9+KwjcOIVjATXFYg4=}
+    hasBin: true
+
+  markdown-it@14.3.2:
+    resolution: {integrity: sha512-sHHjZ5fJKlgrG4qns2YwVcdNep35h5fERrfkD2YNsb9UFk0UIHarbiTaHKVMlPuWAoiilyK8Fv/jAm11slsY7Q==}
     hasBin: true
 
   markdown-link-check@3.14.2:
@@ -16184,9 +16056,6 @@ packages:
 
   mdn-data@2.27.1:
     resolution: {integrity: sha1-43ucUIgLdTZsTUCsY9m7ys22Hw4=}
-
-  mdurl@2.0.0:
-    resolution: {integrity: sha1-gGduwEMwJd0+F+6YPQ/o3loiN+A=}
 
   mdurl@2.1.0:
     resolution: {integrity: sha1-1xHT97zn8ixIfJG+eFRfNW+pZXM=}
@@ -17143,10 +17012,6 @@ packages:
     peerDependencies:
       postcss: ^8.2.9
 
-  postcss@8.5.24:
-    resolution: {integrity: sha1-AdiwMkUeG57EGuZurwKEP0KnINI=}
-    engines: {node: ^10 || ^12 || >=14}
-
   postcss@8.5.26:
     resolution: {integrity: sha1-bnUTV4DH4Q3zQzvyJmxVLTXIxiA=}
     engines: {node: ^10 || ^12 || >=14}
@@ -17744,11 +17609,6 @@ packages:
 
   robust-predicates@3.0.2:
     resolution: {integrity: sha1-1bKFKMSCTSD8SN8ZKNQdnvoa13E=}
-
-  rollup@4.62.2:
-    resolution: {integrity: sha1-2Q/Ey4EfBxMDyJC3eVlWNPNflUE=}
-    engines: {node: '>=18.0.0', npm: '>=8.0.0'}
-    hasBin: true
 
   rollup@4.62.4:
     resolution: {integrity: sha1-ltLmIHDwsKxjQk7dDJOn+4ZO8Gk=}
@@ -19064,8 +18924,8 @@ packages:
   vfile@6.0.3:
     resolution: {integrity: sha1-NlKrHEllMYUr9VprrFevmB68OKs=}
 
-  vite@6.4.3:
-    resolution: {integrity: sha1-haFk23znBvKndoEu+is0DxchhY4=}
+  vite@6.4.4:
+    resolution: {integrity: sha512-xGjU/SyjeNyb0E4KxXBvYz/1C+3JXuujvf2hXNOtnlcE+58o5ajd9N2/n2VhkiJvpCP2qQasnUpx5PXNeI+p1Q==}
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
     hasBin: true
     peerDependencies:
@@ -23144,7 +23004,7 @@ snapshots:
       '@types/lodash.debounce': 4.0.9
       '@types/lodash.throttle': 4.1.9
       clsx: 2.1.1
-      dompurify: 3.4.13
+      dompurify: 3.4.17
       lodash.debounce: 4.0.8
       lodash.throttle: 4.1.1
       nanoid: 5.1.16
@@ -23443,9 +23303,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/client@2.0.0':
+  '@modelcontextprotocol/client@2.3.1':
     dependencies:
-      '@modelcontextprotocol/core': 2.0.0
+      '@modelcontextprotocol/core': 2.3.1
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
@@ -23453,7 +23313,7 @@ snapshots:
       pkce-challenge: 5.0.1
       zod: 4.4.3
 
-  '@modelcontextprotocol/core@2.0.0':
+  '@modelcontextprotocol/core@2.3.1':
     dependencies:
       zod: 4.4.3
 
@@ -24313,151 +24173,76 @@ snapshots:
     optionalDependencies:
       rollup: 4.62.4
 
-  '@rollup/rollup-android-arm-eabi@4.62.2':
-    optional: true
-
   '@rollup/rollup-android-arm-eabi@4.62.4':
-    optional: true
-
-  '@rollup/rollup-android-arm64@4.62.2':
     optional: true
 
   '@rollup/rollup-android-arm64@4.62.4':
     optional: true
 
-  '@rollup/rollup-darwin-arm64@4.62.2':
-    optional: true
-
   '@rollup/rollup-darwin-arm64@4.62.4':
-    optional: true
-
-  '@rollup/rollup-darwin-x64@4.62.2':
     optional: true
 
   '@rollup/rollup-darwin-x64@4.62.4':
     optional: true
 
-  '@rollup/rollup-freebsd-arm64@4.62.2':
-    optional: true
-
   '@rollup/rollup-freebsd-arm64@4.62.4':
-    optional: true
-
-  '@rollup/rollup-freebsd-x64@4.62.2':
     optional: true
 
   '@rollup/rollup-freebsd-x64@4.62.4':
     optional: true
 
-  '@rollup/rollup-linux-arm-gnueabihf@4.62.2':
-    optional: true
-
   '@rollup/rollup-linux-arm-gnueabihf@4.62.4':
-    optional: true
-
-  '@rollup/rollup-linux-arm-musleabihf@4.62.2':
     optional: true
 
   '@rollup/rollup-linux-arm-musleabihf@4.62.4':
     optional: true
 
-  '@rollup/rollup-linux-arm64-gnu@4.62.2':
-    optional: true
-
   '@rollup/rollup-linux-arm64-gnu@4.62.4':
-    optional: true
-
-  '@rollup/rollup-linux-arm64-musl@4.62.2':
     optional: true
 
   '@rollup/rollup-linux-arm64-musl@4.62.4':
     optional: true
 
-  '@rollup/rollup-linux-loong64-gnu@4.62.2':
-    optional: true
-
   '@rollup/rollup-linux-loong64-gnu@4.62.4':
-    optional: true
-
-  '@rollup/rollup-linux-loong64-musl@4.62.2':
     optional: true
 
   '@rollup/rollup-linux-loong64-musl@4.62.4':
     optional: true
 
-  '@rollup/rollup-linux-ppc64-gnu@4.62.2':
-    optional: true
-
   '@rollup/rollup-linux-ppc64-gnu@4.62.4':
-    optional: true
-
-  '@rollup/rollup-linux-ppc64-musl@4.62.2':
     optional: true
 
   '@rollup/rollup-linux-ppc64-musl@4.62.4':
     optional: true
 
-  '@rollup/rollup-linux-riscv64-gnu@4.62.2':
-    optional: true
-
   '@rollup/rollup-linux-riscv64-gnu@4.62.4':
-    optional: true
-
-  '@rollup/rollup-linux-riscv64-musl@4.62.2':
     optional: true
 
   '@rollup/rollup-linux-riscv64-musl@4.62.4':
     optional: true
 
-  '@rollup/rollup-linux-s390x-gnu@4.62.2':
-    optional: true
-
   '@rollup/rollup-linux-s390x-gnu@4.62.4':
-    optional: true
-
-  '@rollup/rollup-linux-x64-gnu@4.62.2':
     optional: true
 
   '@rollup/rollup-linux-x64-gnu@4.62.4':
     optional: true
 
-  '@rollup/rollup-linux-x64-musl@4.62.2':
-    optional: true
-
   '@rollup/rollup-linux-x64-musl@4.62.4':
-    optional: true
-
-  '@rollup/rollup-openbsd-x64@4.62.2':
     optional: true
 
   '@rollup/rollup-openbsd-x64@4.62.4':
     optional: true
 
-  '@rollup/rollup-openharmony-arm64@4.62.2':
-    optional: true
-
   '@rollup/rollup-openharmony-arm64@4.62.4':
-    optional: true
-
-  '@rollup/rollup-win32-arm64-msvc@4.62.2':
     optional: true
 
   '@rollup/rollup-win32-arm64-msvc@4.62.4':
     optional: true
 
-  '@rollup/rollup-win32-ia32-msvc@4.62.2':
-    optional: true
-
   '@rollup/rollup-win32-ia32-msvc@4.62.4':
     optional: true
 
-  '@rollup/rollup-win32-x64-gnu@4.62.2':
-    optional: true
-
   '@rollup/rollup-win32-x64-gnu@4.62.4':
-    optional: true
-
-  '@rollup/rollup-win32-x64-msvc@4.62.2':
     optional: true
 
   '@rollup/rollup-win32-x64-msvc@4.62.4':
@@ -28219,7 +28004,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.4.13:
+  dompurify@3.4.17:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -28334,7 +28119,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-vite@4.0.1(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)):
+  electron-vite@4.0.1(vite@6.4.4(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)):
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-transform-arrow-functions': 7.27.1(@babel/core@7.29.7)
@@ -28342,7 +28127,7 @@ snapshots:
       esbuild: 0.25.12
       magic-string: 0.30.17
       picocolors: 1.1.1
-      vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
+      vite: 6.4.4(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -28887,7 +28672,7 @@ snapshots:
       signal-exit: 3.0.7
       strip-final-newline: 2.0.0
 
-  exifreader@4.40.3:
+  exifreader@4.50.0:
     optionalDependencies:
       '@xmldom/xmldom': 0.9.12
 
@@ -31781,16 +31566,16 @@ snapshots:
 
   markdown-it-texmath@1.0.0: {}
 
-  markdown-it@14.2.0:
+  markdown-it@14.3.0:
     dependencies:
       argparse: 2.0.1
       entities: 4.5.0
       linkify-it: 5.0.2
-      mdurl: 2.0.0
+      mdurl: 2.1.0
       punycode.js: 2.3.1
       uc.micro: 2.1.0
 
-  markdown-it@14.3.0:
+  markdown-it@14.3.2:
     dependencies:
       argparse: 2.0.1
       entities: 4.5.0
@@ -31995,8 +31780,6 @@ snapshots:
 
   mdn-data@2.27.1: {}
 
-  mdurl@2.0.0: {}
-
   mdurl@2.1.0: {}
 
   media-typer@0.3.0: {}
@@ -32050,7 +31833,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
       dayjs: 1.11.20
-      dompurify: 3.4.13
+      dompurify: 3.4.17
       es-toolkit: 1.46.1
       katex: 0.16.47
       khroma: 2.1.0
@@ -33126,12 +32909,6 @@ snapshots:
       postcss: 8.5.26
       quote-unquote: 1.0.0
 
-  postcss@8.5.24:
-    dependencies:
-      nanoid: 3.3.18
-      picocolors: 1.1.1
-      source-map-js: 1.2.1
-
   postcss@8.5.26:
     dependencies:
       nanoid: 3.3.18
@@ -34004,37 +33781,6 @@ snapshots:
     optional: true
 
   robust-predicates@3.0.2: {}
-
-  rollup@4.62.2:
-    dependencies:
-      '@types/estree': 1.0.9
-    optionalDependencies:
-      '@rollup/rollup-android-arm-eabi': 4.62.2
-      '@rollup/rollup-android-arm64': 4.62.2
-      '@rollup/rollup-darwin-arm64': 4.62.2
-      '@rollup/rollup-darwin-x64': 4.62.2
-      '@rollup/rollup-freebsd-arm64': 4.62.2
-      '@rollup/rollup-freebsd-x64': 4.62.2
-      '@rollup/rollup-linux-arm-gnueabihf': 4.62.2
-      '@rollup/rollup-linux-arm-musleabihf': 4.62.2
-      '@rollup/rollup-linux-arm64-gnu': 4.62.2
-      '@rollup/rollup-linux-arm64-musl': 4.62.2
-      '@rollup/rollup-linux-loong64-gnu': 4.62.2
-      '@rollup/rollup-linux-loong64-musl': 4.62.2
-      '@rollup/rollup-linux-ppc64-gnu': 4.62.2
-      '@rollup/rollup-linux-ppc64-musl': 4.62.2
-      '@rollup/rollup-linux-riscv64-gnu': 4.62.2
-      '@rollup/rollup-linux-riscv64-musl': 4.62.2
-      '@rollup/rollup-linux-s390x-gnu': 4.62.2
-      '@rollup/rollup-linux-x64-gnu': 4.62.2
-      '@rollup/rollup-linux-x64-musl': 4.62.2
-      '@rollup/rollup-openbsd-x64': 4.62.2
-      '@rollup/rollup-openharmony-arm64': 4.62.2
-      '@rollup/rollup-win32-arm64-msvc': 4.62.2
-      '@rollup/rollup-win32-ia32-msvc': 4.62.2
-      '@rollup/rollup-win32-x64-gnu': 4.62.2
-      '@rollup/rollup-win32-x64-msvc': 4.62.2
-      fsevents: 2.3.3
 
   rollup@4.62.4:
     dependencies:
@@ -35730,13 +35476,13 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.2
 
-  vite@6.4.3(@types/node@22.15.18)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.8.3):
+  vite@6.4.4(@types/node@22.15.18)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.8.3):
     dependencies:
       esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.5)
       picomatch: 4.0.5
-      postcss: 8.5.24
-      rollup: 4.62.2
+      postcss: 8.5.26
+      rollup: 4.62.4
       tinyglobby: 0.2.17
     optionalDependencies:
       '@types/node': 22.15.18
@@ -35747,13 +35493,13 @@ snapshots:
       tsx: 4.21.0
       yaml: 2.8.3
 
-  vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0):
+  vite@6.4.4(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0):
     dependencies:
       esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.5)
       picomatch: 4.0.5
-      postcss: 8.5.24
-      rollup: 4.62.2
+      postcss: 8.5.26
+      rollup: 4.62.4
       tinyglobby: 0.2.17
     optionalDependencies:
       '@types/node': 22.20.1
@@ -35764,13 +35510,13 @@ snapshots:
       tsx: 4.21.0
       yaml: 2.9.0
 
-  vite@6.4.3(@types/node@26.4.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0):
+  vite@6.4.4(@types/node@26.4.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0):
     dependencies:
       esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.5)
       picomatch: 4.0.5
-      postcss: 8.5.24
-      rollup: 4.62.2
+      postcss: 8.5.26
+      rollup: 4.62.4
       tinyglobby: 0.2.17
     optionalDependencies:
       '@types/node': 26.4.1
