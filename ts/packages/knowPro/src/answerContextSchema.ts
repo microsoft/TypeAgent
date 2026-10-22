@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import { DateRange } from "./interfaces.js";
+import { MessageTemporalContext } from "./temporalSchema.js";
+import { Knowledge } from "./interfaces.js";
 
 export type AnswerContext = {
     // Relevant entities
@@ -16,6 +18,13 @@ export type AnswerContext = {
 export type EntityNames = string | string[];
 
 export type RelevantKnowledge = {
+    // Original, unmerged statements preserve per-fact attribution and conflicting values.
+    evidence?: {
+        semanticRefOrdinal: number;
+        sourceMessageOrdinal: number;
+        knowledge?: Knowledge;
+        temporalContext?: MessageTemporalContext | undefined;
+    }[];
     sourceMessageOrdinals?: number[] | undefined;
     // The actual knowledge
     knowledge: any;
@@ -28,6 +37,7 @@ export type RelevantKnowledge = {
 };
 
 export type RelevantMessage = {
+    temporalContext?: MessageTemporalContext | undefined;
     sourceMessageOrdinals?: number[] | undefined;
     from?: EntityNames | undefined;
     to?: EntityNames | undefined;

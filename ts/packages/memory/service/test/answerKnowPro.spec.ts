@@ -18,6 +18,7 @@ const knowledgeForText = (text: string) => ({
     topics: [text.includes("Zephyr") ? "Zephyr recovery" : "Orion billing"],
 });
 
+let multipleSearches = false;
 const languageModel = {
     completionSettings: {},
     complete: async () => ({
@@ -34,6 +35,23 @@ const languageModel = {
                         },
                     ],
                 },
+                ...(multipleSearches
+                    ? [
+                          {
+                              rewrittenQuery: "Orion billing",
+                              filters: [
+                                  {
+                                      entitySearchTerms: [
+                                          {
+                                              name: "Orion",
+                                              isNamePronoun: false,
+                                          },
+                                      ],
+                                  },
+                              ],
+                          },
+                      ]
+                    : []),
             ],
         }),
     }),
@@ -60,6 +78,7 @@ describe("synthesized answers over the KnowPro corpus index", () => {
     const generated: string[] = [];
 
     beforeEach(async () => {
+        multipleSearches = false;
         generated.length = 0;
         root = await mkdtemp(
             path.join(os.tmpdir(), `typeagent-answer-knowpro-${randomUUID()}-`),
@@ -106,7 +125,11 @@ describe("synthesized answers over the KnowPro corpus index", () => {
                                 success: true as const,
                                 data: {
                                     type: "Answered" as const,
-                                    answer: "Restart the Zephyr worker.",
+                                    answer: JSON.stringify(context).includes(
+                                        "Orion",
+                                    )
+                                        ? "Reconcile Orion invoices."
+                                        : "Restart the Zephyr worker.",
                                 },
                             };
                         },
@@ -115,7 +138,16 @@ describe("synthesized answers over the KnowPro corpus index", () => {
                             responses,
                         ) => ({
                             success: true as const,
-                            data: responses[0],
+                            data: {
+                                type: "Answered" as const,
+                                answer: [
+                                    ...new Set(
+                                        responses.map(
+                                            (response) => response.answer,
+                                        ),
+                                    ),
+                                ].join("\n"),
+                            },
                         }),
                     };
                     return settings;
@@ -181,5 +213,82 @@ describe("synthesized answers over the KnowPro corpus index", () => {
         });
         expect(extractive.mode).toBe("extractive");
         expect(extractive.answer).toContain("[1]");
+    });
+
+    test("independent search results receive one global evidence synthesis with opt-in diagnostics", async () => {
+        multipleSearches = true;
+        const { corpusId } = await service.createCorpus(
+            "Complementary evidence",
+        );
+        for (const [sourceId, text] of [
+            ["zephyr", "Restart the Zephyr worker."],
+            ["orion", "Reconcile Orion invoices."],
+        ]) {
+            const result = await service.ingestDocument({
+                corpusId,
+                source: {
+                    sourceId,
+                    sourceType: "text",
+                    title: sourceId,
+                    text,
+                    authoredAt: "2024-05-10",
+                },
+            });
+            await waitForJob(service, result.jobId);
+        }
+        const answer = await service.answer({
+            corpusId,
+            question: "What must be done for both services?",
+            includeDiagnostics: true,
+            temporalContext: {
+                referenceTime: "2024-05-11",
+                availabilityPolicy: "supplied-history",
+            },
+        });
+        expect(answer.answer).toContain("Restart the Zephyr worker.");
+        expect(answer.answer).toContain("Reconcile Orion invoices.");
+        expect(
+            answer.readerContext?.queryPlan?.searchQuery?.searchExpressions,
+        ).toHaveLength(2);
+        expect(answer.readerContext?.chunks?.length).toBeGreaterThan(0);
+        expect(
+            answer.readerContext?.chunks?.every(
+                (chunk) => chunk.response.type === "Answered",
+            ),
+        ).toBe(true);
+        expect(
+            generated.some((context) => context.includes("2024-05-10")),
+        ).toBe(true);
+    });
+
+    test("a metadata-only authored-date correction creates a new revision", async () => {
+        const { corpusId } = await service.createCorpus("Dates");
+        const source = {
+            sourceId: "dated",
+            sourceType: "text" as const,
+            title: "dated",
+            text: "Zephyr recovery.",
+        };
+        const first = await service.ingestDocument({
+            corpusId,
+            source: { ...source, authoredAt: "2024-05-10" },
+        });
+        await waitForJob(service, first.jobId);
+        const second = await service.ingestDocument({
+            corpusId,
+            source: { ...source, authoredAt: "2024-05-11" },
+        });
+        await waitForJob(service, second.jobId);
+        expect(first.revisionId).not.toBe(second.revisionId);
+        await expect(
+            service.ingestDocument({
+                corpusId,
+                source: {
+                    ...source,
+                    authoredAt: "2024-05-10",
+                    temporalContext: { version: 1, scopes: [] },
+                },
+            }),
+        ).rejects.toThrow("not both");
     });
 });

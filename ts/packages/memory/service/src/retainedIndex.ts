@@ -6,6 +6,28 @@ import type * as kp from "@typeagent/knowpro";
 
 class ReuseUnavailable extends Error {}
 
+function sourceMetadata(message: DocPart) {
+    const metadata = message.metadata;
+    const temporal = metadata.temporalContext;
+    if (!temporal) return metadata;
+    const {
+        contextHash,
+        discoveredDateEvidence,
+        eventMentions,
+        inheritedDateEvidence,
+        ...sourceContext
+    } = temporal;
+    return {
+        ...metadata,
+        temporalContext: {
+            ...sourceContext,
+            inheritedDateEvidence: inheritedDateEvidence.filter(
+                (evidence) => evidence.role === "messageTime",
+            ),
+        },
+    };
+}
+
 function selectedMessages(data: DocMemoryData, parts: DocPart[]): number[] {
     const byUri = new Map<string, number[]>();
     data.messages.forEach((message, ordinal) => {
@@ -26,7 +48,7 @@ function selectedMessages(data: DocMemoryData, parts: DocPart[]): number[] {
             ordinal === undefined ? undefined : data.messages[ordinal];
         const signature = (message: DocPart) =>
             JSON.stringify([
-                message.metadata,
+                sourceMetadata(message),
                 message.textChunks,
                 message.tags,
                 message.timestamp,

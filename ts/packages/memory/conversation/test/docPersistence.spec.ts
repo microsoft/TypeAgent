@@ -250,6 +250,36 @@ describe("document embedding persistence (deterministic, offline)", () => {
         expect(calls.some((call) => call.includes(":document:"))).toBe(true);
     });
 
+    test("source temporal context survives a cold document-memory reopen", async () => {
+        const original = await createSaved();
+        const message = original.messages.get(0);
+        message.metadata.temporalContext = kp.temporalSegments(
+            message.textChunks.join("\n"),
+            {
+                version: 1,
+                scopes: [
+                    {
+                        ownerId: "session",
+                        start: 0,
+                        end: message.textChunks.join("\n").length,
+                        messageTime: "2023/05/27 (Sat) 22:00",
+                    },
+                ],
+            },
+            "revision",
+        )[0].context;
+        await original.writeToFile(root, "temporal");
+        const reopened = (await DocMemory.readFromFile(
+            root,
+            "temporal",
+            settings(),
+        ))!;
+        expect(reopened.messages.get(0).metadata.temporalContext).toEqual(
+            message.metadata.temporalContext,
+        );
+        expect(reopened.messages.get(0).timestamp).toBeUndefined();
+    });
+
     test.each([
         { dimensions: 4, revision: "one" },
         { dimensions: 3, revision: "different-model-space" },

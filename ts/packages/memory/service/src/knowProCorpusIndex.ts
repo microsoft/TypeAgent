@@ -204,7 +204,28 @@ function sourceUri(document: IndexedDocument): string {
     return `typeagent-memory://sources/${encodeURIComponent(document.source.sourceId)}/revisions/${encodeURIComponent(document.revision.revisionId)}`;
 }
 
-function toDocParts(document: IndexedDocument): DocPart[] {
+function temporalQuestion(
+    query: string,
+    context?: kp.TemporalQueryContext,
+): string {
+    if (!context) return query;
+    if (context.availabilityPolicy === "as-of")
+        throw new Error(
+            "Strict as-of temporal availability is not supported; use an explicitly scoped corpus",
+        );
+    const referenceTime =
+        context.referenceTime === undefined
+            ? undefined
+            : typeof context.referenceTime === "string"
+              ? kp.parseTemporalValue(context.referenceTime)
+              : kp.validateTemporalValue(context.referenceTime);
+    return `Question temporal metadata (not source evidence): ${JSON.stringify({
+        referenceTime,
+        availabilityPolicy: context.availabilityPolicy ?? "supplied-history",
+    })}\nResolve query-relative dates against referenceTime, never import time. Floating dates have no assumed timezone. Supplied history remains eligible, including same-day sessions after question time. Event time is not a message-time constraint. Latest means the latest supported applicable state, not the latest uploaded source; retain explicit corrections and unresolved conflicts.\n\n${query}`;
+}
+
+function parseDocParts(document: IndexedDocument): DocPart[] {
     const uri = sourceUri(document);
     const chunkCharacters =
         document.pipeline.maxCharsPerChunk ?? structuralChunkCharacters;
@@ -240,6 +261,40 @@ function toDocParts(document: IndexedDocument): DocPart[] {
         part.tags.push(...(document.indexTags ?? []));
     }
     return parts;
+}
+
+function toDocParts(document: IndexedDocument): DocPart[] {
+    const temporal: kp.SourceTemporalContext = document.revision
+        .temporalContext ?? {
+        version: 1,
+        scopes: [
+            { ownerId: "document", start: 0, end: document.content.length },
+        ],
+    };
+    const ordinals = new Map<string, number>();
+    return kp
+        .temporalSegments(
+            document.content,
+            temporal,
+            document.revision.revisionId,
+        )
+        .flatMap((segment) => {
+            const parts = parseDocParts({ ...document, content: segment.text });
+            for (const part of parts) {
+                if (!segment.context) continue;
+                const context = structuredClone(segment.context);
+                const partOrdinal = ordinals.get(context.ownerId) ?? 0;
+                ordinals.set(context.ownerId, partOrdinal + 1);
+                context.partOrdinal = partOrdinal;
+                context.eventMentions = kp.temporalMentions(
+                    part.textChunks.join("\n"),
+                    context,
+                );
+                part.metadata.temporalContext = context;
+                part.timestamp = context.messageTime?.instantUtc;
+            }
+            return parts;
+        });
 }
 
 function parseSourceUri(
@@ -1064,10 +1119,16 @@ export class KnowProCorpusIndex implements CorpusIndex {
         query: string,
         limit: number,
         tags?: string[],
+        temporalContext?: kp.TemporalQueryContext,
     ): Promise<CorpusIndexMatch[]> {
         return kp.timeSearchStage(
             "knowpro.index.search",
-            () => this.searchCore(query, limit, tags),
+            () =>
+                this.searchCore(
+                    temporalQuestion(query, temporalContext),
+                    limit,
+                    tags,
+                ),
             { limit, tagCount: tags?.length ?? 0 },
         );
     }
@@ -1161,7 +1222,10 @@ export class KnowProCorpusIndex implements CorpusIndex {
         query: string,
         limit: number,
         sourceIds?: ReadonlySet<string>,
+        temporalContext?: kp.TemporalQueryContext,
+        includeDiagnostics = false,
     ): Promise<CorpusIndexAnswer> {
+        query = temporalQuestion(query, temporalContext);
         const memory = this.memory;
         if (memory === undefined) {
             return { matches: [], whyNoAnswer: "The corpus has no index." };
@@ -1170,7 +1234,14 @@ export class KnowProCorpusIndex implements CorpusIndex {
         options.messageRangesInScope = this.eligibleRanges(sourceIds);
         options.maxMessageMatches = limit;
         options.maxKnowledgeMatches = limit;
-        const searched = await memory.searchWithLanguage(query, options);
+        const queryPlan: kp.LanguageSearchDebugContext | undefined =
+            includeDiagnostics ? {} : undefined;
+        const searched = await memory.searchWithLanguage(
+            query,
+            options,
+            undefined,
+            queryPlan,
+        );
         if (!searched.success) {
             throw new Error(searched.message);
         }
@@ -1186,9 +1257,11 @@ export class KnowProCorpusIndex implements CorpusIndex {
             retrievedSourceIds: [],
             messageSourceIds: [],
             knowledgeSourceIds: [],
+            ...(queryPlan === undefined
+                ? {}
+                : { queryPlan, chunks: [], combinations: [] }),
         };
-        const answers: string[] = [];
-        const reasons: string[] = [];
+        const scopedResults: kp.ConversationSearchResult[] = [];
         for (const searchResult of searched.data) {
             let scoped = searchResult;
             if (sourceIds !== undefined) {
@@ -1221,14 +1294,46 @@ export class KnowProCorpusIndex implements CorpusIndex {
             ) {
                 continue;
             }
+            scopedResults.push(scoped);
+        }
+        let response: kp.AnswerResponse | undefined;
+        if (scopedResults.length) {
             const generated = await memory.getAnswerFromSearchResults(
-                scoped,
+                scopedResults,
                 query,
                 (context, _index, result) => {
                     if (!result.success) return;
                     readerContext.completedChunks++;
                     readerContext.serializedContextChars +=
                         kp.answerContextToString(context).length;
+                    readerContext.chunks?.push({
+                        ordinal: readerContext.chunks.length,
+                        messageOrdinals: [
+                            ...new Set(
+                                (context.messages ?? []).flatMap(
+                                    (message) =>
+                                        message.sourceMessageOrdinals ?? [],
+                                ),
+                            ),
+                        ],
+                        semanticRefOrdinals: [
+                            ...new Set(
+                                [
+                                    ...(context.entities ?? []),
+                                    ...(context.topics ?? []),
+                                ].flatMap(
+                                    (knowledge) =>
+                                        knowledge.evidence?.map(
+                                            (evidence) =>
+                                                evidence.semanticRefOrdinal,
+                                        ) ?? [],
+                                ),
+                            ),
+                        ],
+                        serializedChars:
+                            kp.answerContextToString(context).length,
+                        response: result.data,
+                    });
                     for (const message of context.messages ?? []) {
                         for (const ordinal of message.sourceMessageOrdinals ??
                             [])
@@ -1243,20 +1348,22 @@ export class KnowProCorpusIndex implements CorpusIndex {
                             readKnowledge.add(ordinal);
                     }
                 },
+                includeDiagnostics
+                    ? {
+                          onCombination: (inputs, output) => {
+                              readerContext.combinations!.push({
+                                  ordinal: readerContext.combinations!.length,
+                                  inputs,
+                                  output,
+                              });
+                          },
+                      }
+                    : undefined,
             );
             if (!generated.success) {
                 throw new Error(generated.message);
             }
-            if (generated.data === undefined) {
-                continue;
-            }
-            if (generated.data.type === "Answered") {
-                if (generated.data.answer) {
-                    answers.push(generated.data.answer);
-                }
-            } else if (generated.data.whyNoAnswer) {
-                reasons.push(generated.data.whyNoAnswer);
-            }
+            response = generated.data;
         }
         return {
             matches: this.toCorpusMatches(
@@ -1267,8 +1374,8 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 ),
                 limit,
             ),
-            answer: answers.length === 0 ? undefined : answers.join("\n\n"),
-            whyNoAnswer: reasons.length === 0 ? undefined : reasons.join(" "),
+            answer: response?.type === "Answered" ? response.answer : undefined,
+            whyNoAnswer: response?.whyNoAnswer,
             readerContext: {
                 ...readerContext,
                 retrievedMessageOrdinals: [...matches.keys()],

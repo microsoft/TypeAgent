@@ -82,6 +82,8 @@ export interface SourceDocument {
 }
 
 export interface SourceRevision {
+    authoredAt?: string;
+    temporalContext?: import("@typeagent/knowpro").SourceTemporalContext;
     revisionId: string;
     sourceId: string;
     contentHash: string;
@@ -143,6 +145,8 @@ export interface MemorySource extends SourceDocument {
 }
 
 export interface IngestionSource {
+    authoredAt?: string;
+    temporalContext?: import("@typeagent/knowpro").SourceTemporalContext;
     sourceId?: string;
     sourceType: SourceType;
     title: string;
@@ -313,6 +317,7 @@ export interface JobListRequest {
 }
 
 export interface MemorySearchRequest {
+    temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
     traceId?: string;
     corpusId: string;
     query: string;
@@ -353,6 +358,8 @@ export interface MemorySearchResult {
 export type AnswerMode = "synthesized" | "extractive";
 
 export interface MemoryAnswerRequest {
+    includeDiagnostics?: boolean;
+    temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
     corpusId: string;
     question: string;
     limit?: number;
@@ -745,6 +752,19 @@ export interface CorpusIndexAnswer {
 }
 
 export interface AnswerContextDiagnostics {
+    queryPlan?: import("@typeagent/knowpro").LanguageSearchDebugContext;
+    chunks?: {
+        ordinal: number;
+        messageOrdinals: number[];
+        semanticRefOrdinals: number[];
+        serializedChars: number;
+        response: import("@typeagent/knowpro").AnswerResponse;
+    }[];
+    combinations?: {
+        ordinal: number;
+        inputs: import("@typeagent/knowpro").AnswerResponse[];
+        output: import("@typeagent/knowpro").AnswerResponse;
+    }[];
     retrievedMessageOrdinals: number[];
     messageOrdinals: number[];
     knowledgeMessageOrdinals: number[];
@@ -829,11 +849,14 @@ export interface CorpusIndex {
         query: string,
         limit: number,
         tags?: string[],
+        temporalContext?: import("@typeagent/knowpro").TemporalQueryContext,
     ): Promise<CorpusIndexMatch[]>;
     answer?(
         query: string,
         limit: number,
         sourceIds?: ReadonlySet<string>,
+        temporalContext?: import("@typeagent/knowpro").TemporalQueryContext,
+        includeDiagnostics?: boolean,
     ): Promise<CorpusIndexAnswer>;
     getKnowledgeGraph(
         sourceIds?: ReadonlySet<string>,

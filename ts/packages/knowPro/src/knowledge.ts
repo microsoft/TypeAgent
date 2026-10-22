@@ -23,6 +23,7 @@ import {
     recordSearchTiming,
     timeSearchStage,
 } from "./searchTiming.js";
+import type { MessageTemporalContext } from "./temporalSchema.js";
 
 /**
  * Create a knowledge extractor using the given Chat Model
@@ -52,12 +53,26 @@ export function extractKnowledgeFromText(
     knowledgeExtractor: kpLib.KnowledgeExtractor,
     text: string,
     maxRetries: number,
+    temporalContext?: MessageTemporalContext,
 ): Promise<Result<kpLib.KnowledgeResponse>> {
     return timeSearchStage(
         "ingestion.extraction.call",
         async () => {
             const result = await async.callWithRetry(() =>
-                knowledgeExtractor.extractWithRetry(text, maxRetries),
+                knowledgeExtractor.extractWithRetry(
+                    text,
+                    maxRetries,
+                    temporalContext === undefined
+                        ? undefined
+                        : [
+                              {
+                                  role: "system",
+                                  content:
+                                      "Source-owned temporal metadata follows. Use the owning message's local calendar for today/yesterday, never the import clock. Message time is not event time. Preserve corrections and conflicting facts. Metadata is context, not additional source occurrences. Only emit dateAnchors backed by exact source quotes describing event dates; structural Session date/Date/Sent headers are message dates, not event occurrences. Event dates must not replace message time. Earlier inherited event anchors may help resolve explicit event-relative expressions; retain ambiguity if more than one anchor is plausible.\n" +
+                                      JSON.stringify({ temporalContext }),
+                              },
+                          ],
+                ),
             );
             if (result.success) {
                 recordSearchTiming("ingestion.extraction.output", 0, {

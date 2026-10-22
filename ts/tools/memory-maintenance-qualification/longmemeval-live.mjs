@@ -75,6 +75,35 @@ export function benchmarkInvocationAllowance(value) {
     return minutes * 60000 + cleanupReserveMs;
 }
 
+export async function acknowledgeStopAfterQuestion(
+    runDirectory,
+    state,
+    persist,
+) {
+    let text;
+    try {
+        text = await readFile(
+            path.join(runDirectory, "stop-after-question.json"),
+            "utf8",
+        );
+    } catch (error) {
+        if (error.code === "ENOENT") return false;
+        throw error;
+    }
+    const request = JSON.parse(text);
+    assert.equal(
+        request.stop,
+        true,
+        "Stop-after-question request must contain stop: true",
+    );
+    state.stopAfterQuestion = {
+        acknowledgedEpochMs: Date.now(),
+        lastQuestionId: state.currentQuestionId ?? null,
+    };
+    await persist();
+    return true;
+}
+
 export function benchmarkFailure(error) {
     return {
         ...safeFailure(error),
@@ -168,6 +197,28 @@ export async function closeBenchmarkService(
 
 async function runWorker(spec) {
     const prepared = await loadPrepared(spec);
+    const selection = spec.questionIds;
+    if (selection !== undefined) {
+        assert.ok(
+            Array.isArray(selection) &&
+                selection.length > 0 &&
+                new Set(selection).size === selection.length,
+            "Diagnostic question IDs must be nonempty and unique",
+        );
+        const available = new Set(
+            prepared.construction.map((entry) => entry.id),
+        );
+        assert.ok(
+            selection.every((id) => available.has(id)),
+            "Unknown diagnostic question ID",
+        );
+    }
+    const constructionCases =
+        selection === undefined
+            ? prepared.construction
+            : prepared.construction.filter((entry) =>
+                  selection.includes(entry.id),
+              );
     const templates = officialJudgeTemplates(
         await readFile(spec.judgeSourcePath, "utf8"),
     );
@@ -185,11 +236,17 @@ async function runWorker(spec) {
               compiledDigest,
               dependencies,
               engineHash,
+              questionIds: selection ?? null,
               cases: {},
               providerRequests: [],
               attempts: [],
           };
     assert.equal(state.runId, spec.receiptId);
+    assert.deepEqual(
+        state.questionIds ?? null,
+        selection ?? null,
+        "Diagnostic selection changed",
+    );
     assert.equal(
         state.manifestHash,
         prepared.manifest.sha256,
@@ -334,8 +391,16 @@ async function runWorker(spec) {
             ]),
         );
         let completedThisBatch = 0;
-        for (const construction of prepared.construction) {
+        for (const construction of constructionCases) {
             signal.throwIfAborted();
+            if (
+                await acknowledgeStopAfterQuestion(
+                    spec.runDirectory,
+                    state,
+                    persist,
+                )
+            )
+                break;
             const id = construction.id;
             if (state.cases[id]?.status === "complete") continue;
             assert.notEqual(
@@ -376,13 +441,25 @@ async function runWorker(spec) {
                     },
                 },
             );
+            if (
+                await acknowledgeStopAfterQuestion(
+                    spec.runDirectory,
+                    state,
+                    persist,
+                )
+            )
+                break;
             if (++completedThisBatch >= spec.maximumCompletedQuestions) break;
         }
-        state.outcome = prepared.construction.every(
+        state.outcome = constructionCases.every(
             (entry) => state.cases[entry.id]?.status === "complete",
         )
-            ? "FULL_500_COMPLETED_CONFIGURED_JUDGE_PROTOCOL"
-            : "PARTIAL_QUESTION_LIMIT";
+            ? selection === undefined
+                ? "FULL_500_COMPLETED_CONFIGURED_JUDGE_PROTOCOL"
+                : "DIAGNOSTIC_SELECTION_COMPLETED"
+            : state.stopAfterQuestion
+              ? "PARTIAL_STOP_AFTER_QUESTION"
+              : "PARTIAL_QUESTION_LIMIT";
     } catch (error) {
         const bounded = signal.aborted || error.name === "TimeoutError";
         state.outcome = bounded
@@ -455,6 +532,7 @@ export async function main(args = process.argv.slice(2)) {
             "authorized-live-benchmark": { type: "boolean" },
             "max-questions": { type: "string", default: "500" },
             "work-minutes": { type: "string", default: "30" },
+            "question-ids": { type: "string" },
         },
     });
     if (values.spec) {
@@ -464,6 +542,8 @@ export async function main(args = process.argv.slice(2)) {
         process.stdout.write(JSON.stringify({ outcome }) + "\n");
         process.exitCode =
             outcome.startsWith("FULL_500_") ||
+            outcome === "DIAGNOSTIC_SELECTION_COMPLETED" ||
+            outcome === "PARTIAL_STOP_AFTER_QUESTION" ||
             outcome === "PARTIAL_QUESTION_LIMIT"
                 ? 0
                 : 1;
@@ -515,6 +595,9 @@ export async function main(args = process.argv.slice(2)) {
         workAllowanceMs: invocationAllowanceMs,
         totalAllowanceMs: invocationAllowanceMs,
         maximumCompletedQuestions,
+        ...(values["question-ids"] === undefined
+            ? {}
+            : { questionIds: values["question-ids"].split(",") }),
         resume: !!values.resume,
     };
     const result = await withLiveRunLock(runDirectory, async () => {

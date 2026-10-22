@@ -3,6 +3,9 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
     benchmarkScorecard,
     digest,
@@ -16,8 +19,49 @@ import {
     benchmarkFailure,
     benchmarkInvocationAllowance,
     closeBenchmarkService,
+    acknowledgeStopAfterQuestion,
     main,
 } from "./longmemeval-live.mjs";
+
+test("cooperative question-boundary stops acknowledge durably and malformed controls fail explicitly", async () => {
+    const directory = await mkdtemp(
+        path.join(os.tmpdir(), "longmemeval-stop-"),
+    );
+    try {
+        const state = { currentQuestionId: "graded-question" };
+        let persisted;
+        const persist = async () => {
+            persisted = structuredClone(state);
+        };
+        assert.equal(
+            await acknowledgeStopAfterQuestion(directory, state, persist),
+            false,
+        );
+        await writeFile(
+            path.join(directory, "stop-after-question.json"),
+            JSON.stringify({ stop: true }),
+        );
+        assert.equal(
+            await acknowledgeStopAfterQuestion(directory, state, persist),
+            true,
+        );
+        assert.equal(
+            persisted.stopAfterQuestion.lastQuestionId,
+            "graded-question",
+        );
+        assert.ok(persisted.stopAfterQuestion.acknowledgedEpochMs);
+        await writeFile(
+            path.join(directory, "stop-after-question.json"),
+            JSON.stringify({ stop: false }),
+        );
+        await assert.rejects(
+            acknowledgeStopAfterQuestion(directory, state, persist),
+            /stop: true/,
+        );
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+});
 
 test("Azure configuration identity survives persisted JSON without an optional model name", () => {
     const settings = {
@@ -247,7 +291,15 @@ test("production-shaped ingestion and answering exclude reference answers and re
     assert.ok(
         !JSON.stringify(f.calls.ingestion).includes("READER_QUESTION_SENTINEL"),
     );
-    assert.ok(f.calls.answer[0].question.includes(reader.question_date));
+    assert.equal(f.calls.answer[0].question, reader.question);
+    assert.deepEqual(f.calls.answer[0].temporalContext, {
+        referenceTime: reader.question_date,
+        availabilityPolicy: "supplied-history",
+    });
+    assert.equal(
+        f.calls.ingestion[0].temporalContext.scopes[0].messageTime,
+        construction.sessions[0].date,
+    );
     assert.ok(
         !JSON.stringify(f.calls.answer).includes("EVALUATOR_GOLD_SENTINEL"),
     );

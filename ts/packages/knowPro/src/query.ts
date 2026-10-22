@@ -61,6 +61,8 @@ import {
     textRangeFromMessageChunk,
     textRangesFromMessageOrdinals,
 } from "./message.js";
+import { matchesTemporalRange, parseTemporalValue } from "./temporal.js";
+import type { TemporalQueryRange } from "./temporalSchema.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     // TODO: also require secondary indices, once we have removed non-index based retrieval to test
@@ -90,10 +92,6 @@ export function getTextRangeForDateRange(
                     rangeStartOrdinal = messageOrdinal;
                 }
                 rangeEndOrdinal = messageOrdinal;
-            } else {
-                if (rangeStartOrdinal >= 0) {
-                    break;
-                }
             }
         }
     }
@@ -1229,11 +1227,22 @@ export class TextRangeSelector implements IQueryTextRangeSelector {
 }
 
 export class TextRangesInDateRangeSelector implements IQueryTextRangeSelector {
-    constructor(public dateRangeInScope: DateRange) {}
+    constructor(public dateRangeInScope: DateRange | TemporalQueryRange) {}
 
     public eval(context: QueryEvalContext): TextRangeCollection | undefined {
         const textRangesInScope = new TextRangeCollection();
-        if (context.timestampIndex) {
+        if (
+            "domain" in this.dateRangeInScope &&
+            context.timestampIndex?.lookupTemporalRange
+        ) {
+            textRangesInScope.addRanges(
+                context.timestampIndex.lookupTemporalRange(
+                    this.dateRangeInScope,
+                ),
+            );
+            return textRangesInScope;
+        }
+        if (context.timestampIndex && !("domain" in this.dateRangeInScope)) {
             const textRanges = context.timestampIndex.lookupRange(
                 this.dateRangeInScope,
             );
@@ -1242,12 +1251,34 @@ export class TextRangesInDateRangeSelector implements IQueryTextRangeSelector {
             }
             return textRangesInScope;
         } else {
-            const textRange = getTextRangeForDateRange(
-                context.conversation,
-                this.dateRangeInScope,
-            );
-            if (textRange !== undefined) {
-                textRangesInScope.addRange(textRange);
+            for (
+                let ordinal = 0;
+                ordinal < context.conversation.messages.length;
+                ordinal++
+            ) {
+                const message = context.conversation.messages.get(ordinal);
+                const matches =
+                    "domain" in this.dateRangeInScope
+                        ? matchesTemporalRange(
+                              message.metadata?.temporalContext ??
+                                  (message.timestamp
+                                      ? {
+                                            messageTime: parseTemporalValue(
+                                                message.timestamp,
+                                            ),
+                                        }
+                                      : undefined),
+                              this.dateRangeInScope,
+                          )
+                        : message.timestamp !== undefined &&
+                          isInDateRange(
+                              this.dateRangeInScope,
+                              new Date(message.timestamp),
+                          );
+                if (matches)
+                    textRangesInScope.addRange(
+                        textRangeFromMessageChunk(ordinal),
+                    );
             }
         }
         return textRangesInScope;

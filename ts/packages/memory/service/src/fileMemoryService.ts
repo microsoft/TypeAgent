@@ -9,6 +9,9 @@ import {
     collectJsonSegments,
     clearJsonSegmentCache,
     jsonSegmentDirectory,
+    normalizeTemporalContext,
+    temporalContextFromHeaders,
+    parseTemporalValue,
 } from "@typeagent/knowpro";
 import { createHash, randomUUID } from "node:crypto";
 import * as filesystem from "node:fs/promises";
@@ -587,6 +590,12 @@ function createStoredSource(
         sourceId,
         contentHash,
         mimeType,
+        ...(request.source.authoredAt === undefined
+            ? {}
+            : { authoredAt: request.source.authoredAt }),
+        ...(request.source.temporalContext === undefined
+            ? {}
+            : { temporalContext: request.source.temporalContext }),
         ...(request.source.capturedAt === undefined
             ? {}
             : { capturedAt: request.source.capturedAt }),
@@ -2151,6 +2160,43 @@ export class FileMemoryService
             );
         }
         const content = contentFor(request);
+        if (
+            request.source.authoredAt !== undefined &&
+            request.source.temporalContext !== undefined
+        )
+            throw new Error(
+                "Supply authoredAt or explicit temporal scopes, not both",
+            );
+        if (request.source.authoredAt !== undefined) {
+            parseTemporalValue(request.source.authoredAt);
+        }
+        const suppliedTemporalContext =
+            request.source.temporalContext ??
+            (request.source.authoredAt === undefined
+                ? temporalContextFromHeaders(content)
+                : {
+                      version: 1 as const,
+                      scopes: [
+                          {
+                              ownerId: "document",
+                              start: 0,
+                              end: content.length,
+                              messageTime: request.source.authoredAt,
+                          },
+                      ],
+                  });
+        if (suppliedTemporalContext !== undefined) {
+            request = {
+                ...request,
+                source: {
+                    ...request.source,
+                    temporalContext: normalizeTemporalContext(
+                        suppliedTemporalContext,
+                        content.length,
+                    ),
+                },
+            };
+        }
         const computedContentHash = hashContent(content);
         const contentHash = request.source.contentHash ?? computedContentHash;
         if (contentHash !== computedContentHash) {
@@ -2164,6 +2210,7 @@ export class FileMemoryService
         const revisionId = revisionDigest(
             contentHash,
             request.source.assets ?? [],
+            request.source.temporalContext,
         );
         request = structuredClone(request);
         const timestamp = now();
@@ -3086,7 +3133,12 @@ export class FileMemoryService
             const limit = Math.max(1, Math.min(request.limit ?? 10, 100));
             let candidates: CorpusIndexMatch[] = request.indexedFragments
                 ? []
-                : await runtime.index.search(query, limit * 4);
+                : await runtime.index.search(
+                      query,
+                      limit * 4,
+                      undefined,
+                      request.temporalContext,
+                  );
             let fragmentLimited = false;
             if (request.indexedFragments) {
                 if (!runtime.index.readFragments)
@@ -7175,7 +7227,13 @@ export class FileMemoryService
                 request.sourceIds === undefined
                     ? undefined
                     : new Set(request.sourceIds);
-            const result = await index.answer(question, limit * 4, scope);
+            const result = await index.answer(
+                question,
+                limit * 4,
+                scope,
+                request.temporalContext,
+                request.includeDiagnostics,
+            );
             const citations = this.toEvidence(
                 request.corpusId,
                 runtime,

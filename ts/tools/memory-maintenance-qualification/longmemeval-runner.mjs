@@ -45,15 +45,21 @@ export function judgePrompt(templates, reference, hypothesis) {
 }
 
 export function sessionSource(caseId, session) {
-    const text = [
+    let text = [
         `# Conversation session ${session.position + 1}`,
         `Session ID: ${session.id}`,
         `Session date: ${session.date}`,
-        ...session.turns.map(
-            (turn, index) =>
-                `\n## Turn ${index + 1}: ${turn.role}\n${turn.content}`,
-        ),
     ].join("\n");
+    const scopes = session.turns.map((turn, index) => {
+        const start = text.length;
+        text += `\n\n## Turn ${index + 1}: ${turn.role}\n${turn.content}`;
+        return {
+            ownerId: `turn:${index}`,
+            start,
+            end: text.length,
+            role: turn.role,
+        };
+    });
     return {
         phase: "history",
         sourceKey: `${session.position}:${session.id}`,
@@ -65,6 +71,18 @@ export function sessionSource(caseId, session) {
             title: `Session ${session.position + 1}: ${session.id}`,
             canonicalUri: `longmemeval://${encodeURIComponent(caseId)}/${session.position}`,
             text,
+            temporalContext: {
+                version: 1,
+                scopes: [
+                    {
+                        ownerId: "session",
+                        start: 0,
+                        end: text.length,
+                        messageTime: session.date,
+                    },
+                    ...scopes,
+                ],
+            },
         },
     };
 }
@@ -124,7 +142,11 @@ export async function executeMemoryCase(
         delete record.inFlight;
         await persist();
     }
-    const question = `Current date: ${reader.question_date}\n\n${reader.question}`;
+    const question = reader.question;
+    const temporalContext = {
+        referenceTime: reader.question_date,
+        availabilityPolicy: "supplied-history",
+    };
     if (!record.hypothesis) {
         signal.throwIfAborted();
         record.status = "answering";
@@ -134,6 +156,7 @@ export async function executeMemoryCase(
         const retrieved = await service.search({
             corpusId: record.corpusId,
             query: question,
+            temporalContext,
             limit: 20,
         });
         record.searchMilliseconds = performance.now() - start;
@@ -145,8 +168,10 @@ export async function executeMemoryCase(
         const answer = await service.answer({
             corpusId: record.corpusId,
             question,
+            temporalContext,
             limit: 12,
             answerMode: "synthesized",
+            includeDiagnostics: true,
         });
         assert.equal(
             answer.mode,

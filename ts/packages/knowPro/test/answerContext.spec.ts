@@ -228,13 +228,18 @@ describe("lossless answer context and complete traversal", () => {
             ...model,
             complete: async (prompt) => {
                 prompts.push(JSON.stringify(prompt));
-                return success("A compact merged observation.");
+                return success(
+                    JSON.stringify({
+                        type: "Answered",
+                        answer: "Compact merged observation.",
+                    }),
+                );
             },
         };
         const reader = new AnswerGenerator({
             ...generator().settings,
             answerCombinerModel: combiner,
-            maxCharsInBudget: 128,
+            maxCharsInBudget: 210,
         });
         const result = await reader.combinePartialAnswers(
             "Reconcile the observations",
@@ -250,5 +255,78 @@ describe("lossless answer context and complete traversal", () => {
                 prompt.includes("A later Violet correction"),
             ),
         ).toBe(true);
+    });
+
+    test("NoAnswer facts and operands reach the structured global combiner", async () => {
+        const prompts: string[] = [];
+        const reader = new AnswerGenerator({
+            ...generator().settings,
+            maxCharsInBudget: 1000,
+            answerCombinerModel: {
+                ...model,
+                complete: async (prompt) => {
+                    prompts.push(JSON.stringify(prompt));
+                    return success(
+                        JSON.stringify({
+                            type: "Answered",
+                            answer: "$300 increase",
+                        }),
+                    );
+                },
+            },
+        });
+        const result = await reader.combinePartialAnswers(
+            "What was the increase?",
+            [
+                {
+                    type: "NoAnswer",
+                    whyNoAnswer: "Only the earlier $2,500 price is present.",
+                    supportingFacts: [
+                        {
+                            text: "Earlier price $2,500",
+                            sourceMessageOrdinals: [1],
+                        },
+                    ],
+                },
+                {
+                    type: "NoAnswer",
+                    whyNoAnswer: "Only the corrected $2,800 price is present.",
+                    supportingFacts: [
+                        {
+                            text: "Corrected price $2,800",
+                            sourceMessageOrdinals: [2],
+                        },
+                    ],
+                },
+            ],
+        );
+        expect(result).toEqual(
+            success({ type: "Answered", answer: "$300 increase" }),
+        );
+        expect(prompts[0]).toContain("$2,500");
+        expect(prompts[0]).toContain("$2,800");
+        expect(prompts[0]).toContain("sourceMessageOrdinals");
+    });
+
+    test("nonempty structured combination may still be insufficient", async () => {
+        const response: AnswerResponse = {
+            type: "NoAnswer",
+            whyNoAnswer: "The exact price is not supported.",
+            supportingFacts: [{ text: "The price is less than $300." }],
+        };
+        const reader = new AnswerGenerator({
+            ...generator().settings,
+            maxCharsInBudget: 1000,
+            answerCombinerModel: {
+                ...model,
+                complete: async () => success(JSON.stringify(response)),
+            },
+        });
+        expect(
+            await reader.combinePartialAnswers("What exact price?", [
+                { type: "Answered", answer: "At least $200" },
+                { type: "NoAnswer", whyNoAnswer: "Less than $300" },
+            ]),
+        ).toEqual(success(response));
     });
 });

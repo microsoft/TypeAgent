@@ -15,6 +15,7 @@ import {
 } from "./knowledgeSchema.js";
 import {
     Result,
+    PromptSection,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
     createJsonTranslator,
@@ -30,6 +31,7 @@ export interface KnowledgeExtractor {
     extractWithRetry(
         message: string,
         maxRetries: number,
+        context?: PromptSection[],
     ): Promise<Result<KnowledgeResponse>>;
     /**
      * Custom translator to use
@@ -78,18 +80,21 @@ export function createKnowledgeExtractor(
     function extractWithRetry(
         message: string,
         maxRetries: number,
+        context?: PromptSection[],
     ): Promise<Result<KnowledgeResponse>> {
         return async.getResultWithRetry(
-            () => extractKnowledge(message),
+            () => extractKnowledge(message, context),
             maxRetries,
         );
     }
 
     async function extractKnowledge(
         message: string,
+        context?: PromptSection[],
     ): Promise<Result<KnowledgeResponse>> {
         const result = await (extractor.translator ?? translator).translate(
             message,
+            context,
         );
         if (result.success) {
             if (settings.mergeActionKnowledge || settings.mergeEntityFacets) {

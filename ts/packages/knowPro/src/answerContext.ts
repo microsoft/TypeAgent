@@ -7,6 +7,7 @@ import {
     RelevantMessage,
 } from "./answerContextSchema.js";
 import { jsonStringifyForPrompt } from "./common.js";
+import type { AnswerResponse } from "./answerResponseSchema.js";
 
 export function answerContextToString(
     context: AnswerContext,
@@ -208,6 +209,9 @@ export class AnswerContextChunkBuilder {
 }
 
 export type AnswerContextOptions = {
+    onCombination?:
+        | ((inputs: AnswerResponse[], output: AnswerResponse) => void)
+        | undefined;
     entitiesTopK?: number | undefined;
     topicsTopK?: number | undefined;
     messagesTopK?: number | undefined;
