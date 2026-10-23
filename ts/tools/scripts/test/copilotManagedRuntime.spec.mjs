@@ -13,6 +13,7 @@ import {
     createCopilotRuntimeManifest,
 } from "../copilotRuntimeManifest.mjs";
 import {
+    defaultRuntimeRoot,
     globalCopilotPackageVersion,
     managedRuntimeDirectory,
     npmInstallArgs,
@@ -20,12 +21,206 @@ import {
     npmViewArgs,
     readCopilotRuntimeManifest,
     resolveInstalledCopilotPath,
+    setupStatePath,
     transientNpmrcContent,
 } from "../copilotRuntime.mjs";
+import { bundleEntry } from "../bundleUtils.mjs";
 import { listedEntryState } from "../../installers/common/register-plugin.mjs";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const tsRoot = path.resolve(testDir, "..", "..", "..");
+
+test("managed cache defaults ignore the application asset root", () => {
+    const dataHome = path.join(os.tmpdir(), "ta-data-home");
+    const appRoot = path.join(os.tmpdir(), "ta-application");
+    const env = {
+        TYPEAGENT_RUNTIME_ROOT: appRoot,
+        LOCALAPPDATA: dataHome,
+        XDG_DATA_HOME: dataHome,
+    };
+    assert.equal(
+        defaultRuntimeRoot(env),
+        path.join(dataHome, "TypeAgent", "runtimes"),
+    );
+    assert.equal(
+        defaultRuntimeRoot({
+            ...env,
+            TYPEAGENT_COPILOT_RUNTIME_ROOT: "custom-cache",
+        }),
+        path.resolve("custom-cache"),
+    );
+    assert.equal(
+        defaultRuntimeRoot({ TYPEAGENT_RUNTIME_ROOT: appRoot }),
+        path.join(os.homedir(), ".local", "share", "TypeAgent", "runtimes"),
+    );
+});
+
+test("bundled runtime helper uses a separate managed cache and verifies startup", async (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ta-copilot-bundle-"));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const appRoot = path.join(root, "agent-server");
+    const dataHome = path.join(root, "profile");
+    const runtimeRoot = path.join(dataHome, "TypeAgent", "runtimes");
+    const manifest = createCopilotRuntimeManifest({
+        platform: process.platform,
+        arch: process.arch,
+    });
+    const packageDir = path.join(
+        managedRuntimeDirectory(manifest, runtimeRoot),
+        "node_modules",
+        ...manifest.platformPackage.split("/"),
+    );
+    fs.mkdirSync(packageDir, { recursive: true });
+    fs.writeFileSync(
+        path.join(packageDir, "package.json"),
+        JSON.stringify({
+            name: manifest.platformPackage,
+            version: manifest.platformVersion,
+        }),
+    );
+    const executable = path.join(packageDir, manifest.executablePath);
+    const runtimeLibrary = path.join(packageDir, manifest.runtimeLibraryPath);
+    fs.mkdirSync(path.dirname(executable), { recursive: true });
+    fs.writeFileSync(executable, "fixture executable");
+    fs.writeFileSync(runtimeLibrary, "fixture library");
+
+    const sdkDir = path.join(appRoot, "node_modules", "@github", "copilot-sdk");
+    fs.mkdirSync(sdkDir, { recursive: true });
+    fs.writeFileSync(
+        path.join(sdkDir, "package.json"),
+        JSON.stringify({ type: "module", exports: "./index.js" }),
+    );
+    fs.writeFileSync(
+        path.join(sdkDir, "index.js"),
+        `import fs from "node:fs";
+function record(stage) {
+    fs.appendFileSync(process.env.TEST_RUNTIME_EVENTS, stage + "\\n");
+    if (process.env.TEST_RUNTIME_FAILURE === stage) {
+        throw new Error("Runtime verification failed at " + stage);
+    }
+}
+export const RuntimeConnection = { forStdio: (options) => ({ kind: "stdio", ...options }) };
+export class CopilotClient {
+    constructor(options) {
+        if (options.connection.path !== process.env.TEST_RUNTIME_EXECUTABLE) {
+            throw new Error("Wrong managed runtime selected");
+        }
+    }
+    async start() { record("start"); }
+    async getStatus() { record("status"); return { version: "${manifest.runtimeVersion}", protocolVersion: 3 }; }
+    async getAuthStatus() { record("auth"); return { isAuthenticated: false }; }
+    async listModels() { throw new Error("Model access is not required"); }
+    async stop() { record("stop"); }
+}`,
+    );
+    fs.writeFileSync(
+        path.join(appRoot, "copilot-runtime.json"),
+        JSON.stringify(manifest),
+    );
+    const helper = path.join(appRoot, "tools", "copilotRuntime.mjs");
+    await bundleEntry({
+        entryPoint: path.join(tsRoot, "tools", "scripts", "copilotRuntime.mjs"),
+        outfile: helper,
+        runtimeRootFromOutput: "../",
+    });
+    const events = path.join(root, "events.txt");
+    const env = {
+        ...process.env,
+        LOCALAPPDATA: dataHome,
+        XDG_DATA_HOME: dataHome,
+        TEST_RUNTIME_EVENTS: events,
+        TEST_RUNTIME_EXECUTABLE: executable,
+    };
+    delete env.TYPEAGENT_RUNTIME_ROOT;
+    delete env.TYPEAGENT_COPILOT_RUNTIME_ROOT;
+    delete env.TEST_RUNTIME_FAILURE;
+    const invoke = (args, overrides = {}) =>
+        spawnSync(process.execPath, [helper, ...args], {
+            encoding: "utf8",
+            env: { ...env, ...overrides },
+            timeout: 30_000,
+        });
+    const readEvents = () => fs.readFileSync(events, "utf8").trim().split("\n");
+
+    await t.test(
+        "bundle banner does not redirect default cache discovery",
+        () => {
+            const result = invoke(["path"]);
+            assert.equal(result.status, 0, result.stderr);
+            assert.equal(result.stdout.trim(), executable);
+            assert.equal(
+                fs.existsSync(
+                    path.join(
+                        appRoot,
+                        "node_modules",
+                        manifest.platformPackage,
+                    ),
+                ),
+                false,
+            );
+        },
+    );
+    await t.test("dedicated cache setting overrides platform defaults", () => {
+        const result = invoke(["path"], {
+            LOCALAPPDATA: path.join(root, "unused-profile"),
+            XDG_DATA_HOME: path.join(root, "unused-profile"),
+            TYPEAGENT_COPILOT_RUNTIME_ROOT: runtimeRoot,
+        });
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(result.stdout.trim(), executable);
+    });
+    await t.test("explicit cache argument overrides the environment", () => {
+        const result = invoke(["path", "--runtime-root", runtimeRoot], {
+            TYPEAGENT_COPILOT_RUNTIME_ROOT: path.join(root, "unused-cache"),
+        });
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(result.stdout.trim(), executable);
+    });
+    for (const flag of ["--runtime-only", "--skip-login"]) {
+        await t.test(
+            `${flag} verifies startup without querying auth or models`,
+            () => {
+                fs.writeFileSync(events, "");
+                const result = invoke(["setup", flag, "--non-interactive"]);
+                assert.equal(result.status, 0, result.stderr);
+                assert.match(result.stdout, /runtime startup verified/);
+                assert.deepEqual(readEvents(), ["start", "status", "stop"]);
+            },
+        );
+    }
+    for (const stage of ["start", "status"]) {
+        await t.test(
+            `failed ${stage} reports incomplete setup and stops the client`,
+            () => {
+                fs.writeFileSync(events, "");
+                const result = invoke(
+                    ["setup", "--runtime-only", "--non-interactive"],
+                    { TEST_RUNTIME_FAILURE: stage },
+                );
+                assert.equal(result.status, 1, result.stderr);
+                assert.match(result.stderr, /Runtime verification failed/);
+                assert.doesNotMatch(result.stdout, /runtime startup verified/);
+                assert.deepEqual(
+                    readEvents(),
+                    stage === "start"
+                        ? ["start", "stop"]
+                        : ["start", "status", "stop"],
+                );
+            },
+        );
+    }
+    await t.test("normal setup still requires sign-in", () => {
+        fs.writeFileSync(events, "");
+        const result = invoke(["setup", "--non-interactive"]);
+        assert.equal(result.status, 2, result.stderr);
+        assert.match(result.stderr, /sign-in is required/);
+        assert.deepEqual(readEvents(), ["start", "status", "auth", "stop"]);
+        const state = JSON.parse(
+            fs.readFileSync(setupStatePath(runtimeRoot), "utf8"),
+        );
+        assert.equal(state.status, "auth-required");
+    });
+});
 
 test("manifest records the resolved SDK-compatible Windows runtime", () => {
     const manifest = createCopilotRuntimeManifest({
@@ -252,6 +447,11 @@ test("installer integration uses managed setup without adding UI properties", ()
         prereqs,
         /setup --provider copilot --runtime-only --non-interactive/,
     );
+    assert.match(
+        prereqs,
+        /if \(\$LASTEXITCODE -ne 0\) \{\s*Write-Log "  WARNING: Copilot runtime setup is incomplete\.[^\n]*\s*return \$null/,
+    );
+    assert.match(prereqs, /exit 0\s*$/);
     assert.doesNotMatch(
         prereqs,
         /Install-Cli\s+"copilot"\s+"@github\/copilot"/,
