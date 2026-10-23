@@ -125,6 +125,81 @@ async function waitForIngestion(
 }
 
 describe("searchPersonalMemory", () => {
+    it("retrieves cited experiential guidance with explicit scope without authorizing execution", async () => {
+        const searchAgentMemories = jest
+            .fn<NonNullable<MemoryService["searchAgentMemories"]>>()
+            .mockResolvedValue({
+                memories: [
+                    {
+                        memoryId: "memory-1",
+                        kind: "procedure",
+                        title: "Focused test procedure",
+                        body: "Inspect the package scripts before running the focused tests.",
+                        state: "diagnostic-only",
+                        scope: { repository: "example/repo", commit: "abc123" },
+                        evidence: [
+                            {
+                                eventId: "event-1",
+                                sourceId: "source-1",
+                                revisionId: "revision-1",
+                                locator: "chars:0-15",
+                                excerpt: "Inspect scripts",
+                            },
+                        ],
+                        influenceSourceIds: ["source-1"],
+                        supersedes: [],
+                        conflicted: true,
+                    },
+                ],
+                warnings: [],
+            });
+        const service = {
+            listCorpora: async () => [
+                corpus("agent-memory", "Agent experience"),
+            ],
+            search: async () => ({
+                ...result("agent-memory", "No result"),
+                matches: [],
+            }),
+            searchAgentMemories,
+        };
+        const scope = { repository: "example/repo", commit: "abc123" };
+        const text = await searchPersonalMemory(
+            "focused tests",
+            async () => "",
+            service,
+            scope,
+        );
+        expect(searchAgentMemories).toHaveBeenCalledWith({
+            corpusId: "agent-memory",
+            query: "focused tests",
+            limit: 3,
+            ...scope,
+        });
+        expect(text).toContain("Agent experience memory");
+        expect(text).toContain("never execution authority");
+        expect(text).toContain("unresolved conflicting evidence");
+        expect(text).toContain("source-1/revision-1/chars:0-15");
+    });
+
+    it("keeps conversation and document recall when experiential search fails", async () => {
+        const service = {
+            listCorpora: async () => [corpus("web", "Saved pages")],
+            search: async () => result("web", "Service runbook"),
+            searchAgentMemories: async () => {
+                throw new Error("experience unavailable");
+            },
+        };
+        const text = await searchPersonalMemory(
+            "debug service",
+            async () => "Earlier decision",
+            service,
+        );
+        expect(text).toContain("Earlier decision");
+        expect(text).toContain("Service runbook");
+        expect(text).toContain("experience unavailable");
+    });
+
     it("retrieves a saved troubleshooting page after real ingestion completes", async () => {
         const root = path.join(
             os.tmpdir(),

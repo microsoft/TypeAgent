@@ -12,6 +12,11 @@ import {
     type StdioServerParameters,
 } from "@modelcontextprotocol/client/stdio";
 import type {
+    AgentMemorySearchRequest,
+    AgentMemorySearchResult,
+    AgentSessionImportReceipt,
+    AgentSessionImportRequest,
+    AgentSessionReadRequest,
     DocumentIngestRequest,
     DocumentIngestResult,
     IngestionJobStatus,
@@ -86,6 +91,14 @@ import type {
     TopicQueryPage,
 } from "@typeagent/memory-service";
 import { topicQueryPageSchema, topicToolNames } from "./topicProtocol.js";
+import {
+    agentMemorySearchRequestSchema,
+    agentMemorySearchResultSchema,
+    agentSessionImportReceiptSchema,
+    agentSessionImportRequestSchema,
+    agentSessionReadRequestSchema,
+    agentSessionToolNames,
+} from "./agentSessionProtocol.js";
 import type { z } from "zod";
 import {
     answerResultSchema,
@@ -140,6 +153,18 @@ export interface MemoryClientCallOptions {
 }
 
 export interface MemoryServiceClient extends MemoryService, MemoryViewService {
+    importAgentSession(
+        request: AgentSessionImportRequest,
+    ): Promise<AgentSessionImportReceipt>;
+    getAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt | undefined>;
+    cancelAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt>;
+    searchAgentMemories(
+        request: AgentMemorySearchRequest,
+    ): Promise<AgentMemorySearchResult>;
     queryTopics(request: TopicQueryRequest): Promise<TopicQueryPage>;
     rebuildTopics(corpusId: string): Promise<ViewBuildJob>;
     ingestDocument(
@@ -154,6 +179,38 @@ export interface MemoryServiceClient extends MemoryService, MemoryViewService {
 }
 
 export class InProcessMemoryServiceClient implements MemoryServiceClient {
+    public importAgentSession(
+        request: AgentSessionImportRequest,
+    ): Promise<AgentSessionImportReceipt> {
+        return (
+            this.service.importAgentSession?.(request) ??
+            unsupportedCapability("agent session imports")
+        );
+    }
+    public getAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt | undefined> {
+        return (
+            this.service.getAgentSessionImport?.(request) ??
+            unsupportedCapability("agent session import status")
+        );
+    }
+    public cancelAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt> {
+        return (
+            this.service.cancelAgentSessionImport?.(request) ??
+            unsupportedCapability("agent session import cancellation")
+        );
+    }
+    public searchAgentMemories(
+        request: AgentMemorySearchRequest,
+    ): Promise<AgentMemorySearchResult> {
+        return (
+            this.service.searchAgentMemories?.(request) ??
+            unsupportedCapability("agent memory search")
+        );
+    }
     public queryTopics(request: TopicQueryRequest): Promise<TopicQueryPage> {
         return (
             this.service.queryTopics?.(request) ??
@@ -535,6 +592,42 @@ export type MemoryMcpTransportConfig =
 type MemoryMcpTransport = StdioClientTransport | StreamableHTTPClientTransport;
 
 export class McpMemoryServiceClient implements MemoryServiceClient {
+    public importAgentSession(
+        request: AgentSessionImportRequest,
+    ): Promise<AgentSessionImportReceipt> {
+        return this.invoke(
+            agentSessionToolNames.importAgentSession,
+            agentSessionImportRequestSchema.parse(request),
+            agentSessionImportReceiptSchema,
+        );
+    }
+    public getAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt | undefined> {
+        return this.invoke<AgentSessionImportReceipt | null>(
+            agentSessionToolNames.getAgentSessionImport,
+            agentSessionReadRequestSchema.parse(request),
+            agentSessionImportReceiptSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public cancelAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt> {
+        return this.invoke(
+            agentSessionToolNames.cancelAgentSessionImport,
+            agentSessionReadRequestSchema.parse(request),
+            agentSessionImportReceiptSchema,
+        );
+    }
+    public searchAgentMemories(
+        request: AgentMemorySearchRequest,
+    ): Promise<AgentMemorySearchResult> {
+        return this.invoke(
+            agentSessionToolNames.searchAgentMemories,
+            agentMemorySearchRequestSchema.parse(request),
+            agentMemorySearchResultSchema,
+        );
+    }
     public queryTopics(request: TopicQueryRequest): Promise<TopicQueryPage> {
         return this.invoke(
             topicToolNames.queryTopics,

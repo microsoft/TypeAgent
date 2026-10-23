@@ -24,6 +24,22 @@ for refresh behavior.
 
 ## Tool details
 
+Agent-session import is opt-in and separate from ordinary ingestion:
+
+- `memory_agent_session_import`: explicit session ID, import type
+  (`agent-session-jsonl` or `copilot-session-jsonl`), idempotency key,
+  expected cursor, bounded JSONL content, optional scope, and final flag.
+- `memory_agent_session_get`: receipt or `null` for an unknown session.
+- `memory_agent_session_cancel`: explicit session cancellation receipt.
+- `memory_agent_memory_search`: scoped diagnostic memories with complete
+  evidence metadata and warnings.
+
+No tool opens local paths. Chunks are at most 512 KiB UTF-8 and 1,000 lines;
+send them sequentially, polling each running receipt before advancing
+`expectedCursor`. Retry lost responses with the identical request and key.
+Unsupported service capabilities return tool errors, not empty success.
+Native local file submission is available through `@memory import session`.
+
 `memory_view_source_usage` returns paginated metadata for current derived Views
 that depend on a document source. It never enumerates legacy procedures,
 canonical event-ID matches, or historical-only View dependencies.

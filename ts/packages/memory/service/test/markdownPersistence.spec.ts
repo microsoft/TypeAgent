@@ -166,7 +166,7 @@ describe("Markdown source persistence with stubbed KnowPro", () => {
                 {
                     collectLinkKnowledge: false,
                     collectStructuralKnowledge: false,
-                    maxTokensPerPart: 7500,
+                    maxTokensPerPart: 24000,
                 },
             ).map((part) => part.textChunks.join("\n"));
             expect(expectedSnippets).toContain(evidence.snippet);
