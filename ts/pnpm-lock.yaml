@@ -11561,6 +11561,9 @@ packages:
   '@types/node@22.20.1':
     resolution: {integrity: sha1-hOfN9jzaogwTSqMXzMkBqiHhbw4=}
 
+  '@types/node@22.20.5':
+    resolution: {integrity: sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==}
+
   '@types/node@24.13.3':
     resolution: {integrity: sha1-SfGL08ZHhm3NpRoHVsFF4UWQzhY=}
 
@@ -25308,6 +25311,10 @@ snapshots:
       undici-types: 6.21.0
 
   '@types/node@22.20.1':
+    dependencies:
+      undici-types: 6.21.0
+
+  '@types/node@22.20.5':
     dependencies:
       undici-types: 6.21.0
 
