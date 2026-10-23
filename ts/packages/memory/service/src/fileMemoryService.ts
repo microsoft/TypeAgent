@@ -7419,11 +7419,13 @@ export class FileMemoryService
             finishPreparation = resolve;
         });
         let published = false;
+        let runtimeForCleanup: CorpusRuntime | undefined;
         try {
             const capture = await this.enqueueWrite(corpusId, async () => {
                 if (this.closed) throw new Error("Memory service is closed");
                 this.throwIfAborted(bounded);
                 const runtime = await this.getCorpusRuntime(corpusId);
+                runtimeForCleanup = runtime;
                 if (
                     sourceId !== undefined &&
                     !runtime.manifest.sources.some(
@@ -7532,11 +7534,17 @@ export class FileMemoryService
             );
         } finally {
             finishPreparation();
-            if (!published)
-                await rm(directory, { recursive: true, force: true });
             this.preparingIndexes.delete(directory);
             this.detachedRebuilds.delete(directory);
             this.controllers.delete(generation);
+            if (!published) {
+                const remove = () =>
+                    rm(directory, { recursive: true, force: true });
+                // Source removal also collects generations under this reservation.
+                if (runtimeForCleanup)
+                    await runtimeForCleanup.access.write(remove);
+                else await remove();
+            }
         }
     }
 

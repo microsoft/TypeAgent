@@ -321,9 +321,16 @@ provider calls never mutate the live index. Its serialized commit rechecks the
 captured generation and source revisions and merges current metadata. Stale,
 cancelled or forgotten candidates cannot replace the published generation.
 Forgetting also cancels and purges affected prepared candidates.
+Unpublished reindex cleanup uses the same corpus write reservation as source
+removal, preventing concurrent recursive deletion of a candidate generation.
 Each async read retains its snapshot until completion. Cold runtime
 loading is single-flight, and shutdown drains the complete preparation/read
 lifetime before releasing storage.
+
+Agent-session receipt stamps and file reads serialize with checkpoint publication
+for that session. Source eligibility is checked after releasing that queue, so
+source removal cannot deadlock behind a receipt read. Invalid or unsafe checkpoint
+files still fail explicitly; receipt polling does not relax file validation.
 
 Set `TYPEAGENT_MEMORY_SEARCH_TRACE=1` on the host process to enable correlated
 Memory Hub search diagnostics on stderr. Lines prefixed `[memory-search-timing]` contain
