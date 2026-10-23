@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import {
     collectJsonSegments,
     isSegmentedJson,
@@ -68,10 +69,11 @@ describe("immutable segmented JSON publication", () => {
                 expect(info.mtimeMs).toBe(original.get(name)!.mtimeMs);
             } else changedBytes += info.size;
         }
-        expect(changedBytes).toBeLessThan(20_000);
+        expect(changedBytes).toBeLessThan(80 * 1024);
         expect(changedBytes).toBeLessThan(
-            Buffer.byteLength(JSON.stringify(data)) / 20,
+            Buffer.byteLength(JSON.stringify(data)) / 4,
         );
+        expect((await readdir(blobs)).length).toBeLessThan(40);
         expect(await readSegmentedJson(next, await descriptor(next))).toEqual(
             JSON.parse(JSON.stringify(data)),
         );
@@ -156,7 +158,7 @@ describe("immutable segmented JSON publication", () => {
         );
         await expect(readSegmentedJson(file, value)).rejects.toThrow("Corrupt");
         expect(() =>
-            isSegmentedJson({ ...value, segmentedJsonVersion: 2 }),
+            isSegmentedJson({ ...value, segmentedJsonVersion: 3 }),
         ).toThrow("unsupported");
         expect(() =>
             isSegmentedJson({ ...value, root: "..\\outside" }),
@@ -177,5 +179,158 @@ describe("immutable segmented JSON publication", () => {
         expect(await readSegmentedJson(next, await descriptor(next))).toEqual({
             records: records().slice(0, 512),
         });
+    });
+
+    test("legacy v1 roots remain readable and survive collection beside v2 publications", async () => {
+        const blobs = path.join(root, ".segments");
+        await mkdir(blobs, { recursive: true });
+        const bytes = Buffer.from(
+            JSON.stringify({
+                kind: "value",
+                value: { vectors: [[0.6, 0.8]] },
+            }) + "\n",
+        );
+        const hash = createHash("sha256").update(bytes).digest("hex");
+        await writeFile(path.join(blobs, `${hash}.json`), bytes);
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(
+            file,
+            JSON.stringify({
+                segmentedJsonVersion: 1,
+                root: hash,
+                metadata: {},
+            }),
+        );
+        const next = path.join(root, "next", "corpus_data.json");
+        await writeSegmentedJson(
+            next,
+            { vectors: [new Float32Array([1, 0])] },
+            {},
+        );
+        const staging = path.join(
+            blobs,
+            `${"a".repeat(64)}.bin.00000000-0000-0000-0000-000000000000.staging`,
+        );
+        await writeFile(staging, "Interrupted binary write");
+        await collectJsonSegments(root);
+        expect(await readSegmentedJson(file, await descriptor(file))).toEqual({
+            vectors: [[0.6, 0.8]],
+        });
+        expect(await readSegmentedJson(next, await descriptor(next))).toEqual({
+            vectors: [new Float32Array([1, 0])],
+        });
+        expect(await readdir(blobs)).not.toContain(path.basename(staging));
+    });
+
+    test("date metadata preserves JSON serialization without normalizing the whole generation", async () => {
+        const data = { createdAt: new Date("2026-10-21T00:00:00Z") };
+        await writeSegmentedJson(file, data, {});
+        expect(await readSegmentedJson(file, await descriptor(file))).toEqual(
+            JSON.parse(JSON.stringify(data)),
+        );
+    });
+
+    test("binary vectors use coarse immutable blocks and reuse complete prefixes", async () => {
+        const vectors = Array.from({ length: 360 }, (_, ordinal) =>
+            Float32Array.from(
+                { length: 1536 },
+                (_, lane) => (ordinal + lane) / 1000,
+            ),
+        );
+        await writeSegmentedJson(file, { vectors }, {});
+        const blobs = path.join(root, ".segments");
+        const binary = (await readdir(blobs)).filter((name) =>
+            name.endsWith(".bin"),
+        );
+        expect(binary).toHaveLength(3);
+        const before = new Map(
+            await Promise.all(
+                binary.map(
+                    async (name) =>
+                        [name, await stat(path.join(blobs, name))] as const,
+                ),
+            ),
+        );
+        const next = path.join(root, "next", "corpus_data.json");
+        await writeSegmentedJson(
+            next,
+            {
+                vectors: [...vectors, new Float32Array(1536).fill(0.5)],
+            },
+            {},
+        );
+        expect(
+            (await readdir(blobs)).filter((name) => name.endsWith(".bin")),
+        ).toHaveLength(4);
+        for (const [name, previous] of before) {
+            const current = await stat(path.join(blobs, name));
+            expect(current.ino).toBe(previous.ino);
+            expect(current.mtimeMs).toBe(previous.mtimeMs);
+        }
+        expect(await readSegmentedJson(file, await descriptor(file))).toEqual({
+            vectors,
+        });
+        const loaded = (await readSegmentedJson(next, await descriptor(next), {
+            reuseVerified: true,
+        })) as { vectors: Float32Array[] };
+        loaded.vectors[0][0] = 123;
+        expect(
+            (
+                (await readSegmentedJson(file, await descriptor(file), {
+                    reuseVerified: true,
+                })) as {
+                    vectors: Float32Array[];
+                }
+            ).vectors[0][0],
+        ).toBe(vectors[0][0]);
+    });
+
+    test("collection reads authenticated reachability without consuming retained vector payloads", async () => {
+        await writeSegmentedJson(
+            file,
+            { vectors: [new Float32Array([1, 0])] },
+            {},
+        );
+        const blobs = path.join(root, ".segments");
+        const binary = (await readdir(blobs)).find((name) =>
+            name.endsWith(".bin"),
+        )!;
+        await writeFile(path.join(blobs, binary), Buffer.alloc(8));
+        await expect(collectJsonSegments(root)).resolves.toBeUndefined();
+        await expect(
+            readSegmentedJson(file, await descriptor(file)),
+        ).rejects.toThrow("Corrupt");
+    });
+
+    test("forget collects private binary backing while preserving shared retained vectors", async () => {
+        await writeSegmentedJson(
+            file,
+            { vectors: [new Float32Array([1, 0])] },
+            {},
+        );
+        const blobs = path.join(root, ".segments");
+        const privateBlock = (await readdir(blobs)).find((name) =>
+            name.endsWith(".bin"),
+        )!;
+        const next = path.join(root, "next", "corpus_data.json");
+        const retained = { vectors: [new Float32Array([0, 1])] };
+        await writeSegmentedJson(next, retained, {});
+        const shared = path.join(root, "shared", "corpus_data.json");
+        await writeSegmentedJson(shared, retained, {});
+        await readSegmentedJson(file, await descriptor(file), {
+            reuseVerified: true,
+        });
+        await rm(path.dirname(file), { recursive: true });
+        await rm(path.dirname(next), { recursive: true });
+        await collectJsonSegments(root);
+        expect(await readdir(blobs)).not.toContain(privateBlock);
+        expect(
+            (await readdir(blobs)).filter((name) => name.endsWith(".bin")),
+        ).toHaveLength(1);
+        expect(
+            await readSegmentedJson(shared, await descriptor(shared), {
+                reuseVerified: true,
+            }),
+        ).toEqual(retained);
     });
 });

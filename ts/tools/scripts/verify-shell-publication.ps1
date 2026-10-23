@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "windows-package-trust.ps1")
 $certificate = $null
 try {
-    $certificate = New-Object Security.Cryptography.X509Certificates.X509Certificate2(
+    $certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
         (Join-Path $Directory "windows-package-trust.cer"))
     Use-TypeAgentBuildTrust -Certificate $certificate -Action {
         & node (Join-Path $PSScriptRoot "verify-shell-artifacts.mjs") $Directory

@@ -53,7 +53,10 @@ function verifySignature(packagePath) {
 
 export function verifyShellArtifacts(directory, verify = verifySignature) {
     const names = readdirSync(directory);
-    const metadataNames = names.filter((name) => name.endsWith(".yml"));
+    // Electron-builder diagnostics share the output directory with channel metadata.
+    const metadataNames = names.filter(
+        (name) => name.endsWith(".yml") && name !== "builder-debug.yml",
+    );
     if (metadataNames.length === 0) {
         throw new Error("No shell channel metadata found.");
     }

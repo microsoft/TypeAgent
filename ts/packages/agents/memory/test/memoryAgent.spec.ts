@@ -10,6 +10,7 @@ import type {
     Storage,
 } from "@typeagent/agent-sdk";
 import type {
+    AgentSessionImportRequest,
     DocumentIngestRequest,
     MemoryEvidence,
     MemoryService,
@@ -720,6 +721,69 @@ test("commands retain corpus and answer evidence", async () => {
     expect(displayText(answer)).toContain("source-1");
     expect(displayText(answer)).toContain("revision-1");
     expect(displayText(explanation)).toContain('"sourceId": "source-1"');
+});
+
+test("explicit session command forwards optional scope on every chunk and finalization", async () => {
+    const path = resolve(scratch, "scoped-session.jsonl");
+    await writeFile(path, "{}\n".repeat(1001));
+    const service = createFakeService();
+    const requests: AgentSessionImportRequest[] = [];
+    service.importAgentSession = async (request) => {
+        requests.push(structuredClone(request));
+        return {
+            schemaVersion: 1,
+            corpusId: request.corpusId,
+            sessionId: request.sessionId,
+            importType: request.importType,
+            state: request.final ? "complete" : "partial",
+            cursor:
+                request.expectedCursor +
+                request.jsonl.split("\n").filter(Boolean).length,
+            final: request.final ?? false,
+            sourceCount: 0,
+            memoryCount: 0,
+            duplicates: 0,
+            losses: [],
+            updatedAt: new Date().toISOString(),
+        };
+    };
+    service.getAgentSessionImport = async () => undefined;
+    const agent = instantiate();
+    const state = (await agent.initializeAgentContext?.({
+        options: service,
+    })) as MemoryAgentContext;
+    state.activeCorpusId = "corpus-1";
+    const result = await agent.executeCommand?.(
+        ["import", "session"],
+        commandParams(
+            { path },
+            {
+                type: "copilot-session-jsonl",
+                session: "session-42",
+                repository: "example/repo",
+                commit: "commit-123",
+                environment: "offline",
+            },
+        ),
+        actionContext(state),
+    );
+    expect(requests).toHaveLength(3);
+    for (const request of requests) {
+        expect(request).toMatchObject({
+            corpusId: "corpus-1",
+            sessionId: "session-42",
+            importType: "copilot-session-jsonl",
+            repository: "example/repo",
+            commit: "commit-123",
+            environment: "offline",
+        });
+    }
+    expect(requests[2]).toMatchObject({
+        jsonl: "",
+        final: true,
+        expectedCursor: 1001,
+    });
+    expect(displayText(result)).toContain('"state": "complete"');
 });
 
 test("changes command uses canonical paging and rejects unsupported services", async () => {

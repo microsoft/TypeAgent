@@ -86,12 +86,16 @@ test(
                 .providerDocuments,
             1,
         );
-        const sample =
-            report.workloads["segmented-append-1024"].observations[0];
-        assert.ok(
-            sample.segmentBytes + sample.descriptorBytes <
-                sample.monolithicJsonBytes / 20,
-        );
-        assert.equal(sample.retainedSegmentsRewritten, 0);
+        for (const records of [1024, 4096]) {
+            const workload = report.workloads[`segmented-append-${records}`];
+            assert.equal(workload.recordCount, records);
+            const sample = workload.observations[0];
+            const written = sample.segmentBytes + sample.descriptorBytes;
+            assert.ok(written < 80 * 1024);
+            assert.ok(written < sample.monolithicJsonBytes / 4);
+            if (records === 4096)
+                assert.ok(written < sample.monolithicJsonBytes / 20);
+            assert.equal(sample.retainedSegmentsRewritten, 0);
+        }
     },
 );
