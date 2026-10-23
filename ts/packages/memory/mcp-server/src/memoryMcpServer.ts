@@ -41,6 +41,8 @@ import {
     searchResultSchema,
     sourceContentRequestSchema,
     sourceContentSchema,
+    sourceSynopsisRequestSchema,
+    sourceSynopsisSchema,
     sourceForgetPreviewSchema,
     sourceForgetRequestSchema,
     sourceForgetResultSchema,
@@ -67,6 +69,7 @@ import type {
 } from "@typeagent/memory-service";
 import { z } from "zod";
 import { registerViewTools } from "./viewTools.js";
+import { registerAgentSessionTools } from "./agentSessionTools.js";
 
 const corpusCreateInputSchema = z.object({
     name: z.string().min(1),
@@ -115,6 +118,9 @@ export class MemoryMcpServer {
         });
         this.registerTools();
         registerViewTools(this.server, service, (operation) =>
+            this.run(operation),
+        );
+        registerAgentSessionTools(this.server, service, (operation) =>
             this.run(operation),
         );
         this.registerResources();
@@ -279,6 +285,28 @@ export class MemoryMcpServer {
                 this.run(() =>
                     this.service.getSourceKnowledge(corpusId, sourceId),
                 ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceSynopsisGet,
+            {
+                description:
+                    "Read the exact retained revision's generated synopsis, original UTF-16 evidence and honest scan/fidelity limits. This is a navigation aid, never independent citation evidence.",
+                inputSchema: sourceSynopsisRequestSchema,
+                outputSchema: outputSchema(sourceSynopsisSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() => {
+                    if (!this.service.getSourceSynopsis)
+                        throw new Error("Source synopses are not supported");
+                    return this.service.getSourceSynopsis({
+                        corpusId: request.corpusId,
+                        sourceId: request.sourceId,
+                        ...(request.revisionId !== undefined
+                            ? { revisionId: request.revisionId }
+                            : {}),
+                    });
+                }),
         );
         this.server.registerTool(
             memoryToolNames.documentIngest,

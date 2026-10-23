@@ -30,7 +30,7 @@
     "@typeagent/agent-harness-hooks": "workspace:*",
     "@typeagent/conversation-memory": "workspace:*",
     "commander": "^12.1.0",
-    "hono": "^4.13.5",
+    "hono": "^4.13.13",
     "tirith": "0.4.2",
     "zod": "^4.1.13"
   },

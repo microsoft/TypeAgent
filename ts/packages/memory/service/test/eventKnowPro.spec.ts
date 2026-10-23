@@ -158,7 +158,7 @@ test("event search uses structured knowledge with ledger filters before the limi
 
 test("event index reconciles replay, failed extraction, forgetting, and restart", async () => {
     const fixture = await createFixture();
-    const { root, failExtraction } = fixture;
+    const { root, failExtraction, extracted } = fixture;
     let service = fixture.service;
     try {
         const { corpusId } = await service.createCorpus("Event lifecycle");
@@ -177,9 +177,10 @@ test("event index reconciles replay, failed extraction, forgetting, and restart"
             (await service.searchEvents({ corpusId, query: question }))
                 .matches[0].event.eventId,
         ).toBe(first.event.eventId);
+        expect(extracted).toHaveLength(1);
 
         const indexRoot = path.join(root, corpusId, "event-search-index");
-        expect(await readdir(indexRoot)).toHaveLength(2);
+        expect(await readdir(indexRoot)).toHaveLength(3);
         const second = await service.appendEvent({
             ...request,
             idempotencyKey: "second",
@@ -189,15 +190,17 @@ test("event index reconciles replay, failed extraction, forgetting, and restart"
         await expect(
             service.searchEvents({ corpusId, query: question }),
         ).rejects.toThrow("Expected extraction failure");
-        expect(await readdir(indexRoot)).toEqual([]);
+        expect(await readdir(indexRoot)).toHaveLength(3);
         expect((await service.listEvents({ corpusId })).total).toBe(2);
         failExtraction.value = false;
+        const beforeAppend = extracted.length;
         expect(
             (await service.searchEvents({ corpusId, query: question })).matches,
         ).toHaveLength(2);
+        expect(extracted.length - beforeAppend).toBe(1);
 
         const generation = (await readdir(indexRoot)).find(
-            (entry) => entry !== "state.json",
+            (entry) => entry !== "state.json" && entry !== ".segments",
         );
         expect(generation).toBeDefined();
         await rm(path.join(indexRoot, generation!), {
@@ -210,9 +213,11 @@ test("event index reconciles replay, failed extraction, forgetting, and restart"
 
         await service.close();
         service = fixture.makeService();
+        const beforeRestart = extracted.length;
         expect(
             (await service.searchEvents({ corpusId, query: question })).matches,
         ).toHaveLength(2);
+        expect(extracted).toHaveLength(beforeRestart);
         expect((await service.appendEvent(request)).replayed).toBe(true);
 
         await service.forgetEvents({
@@ -238,7 +243,7 @@ test("event index reconciles replay, failed extraction, forgetting, and restart"
         await expect(service.appendEvent(request)).rejects.toMatchObject({
             code: "EVENT_FORGOTTEN",
         });
-        expect(await readdir(indexRoot)).toHaveLength(2);
+        expect(await readdir(indexRoot)).toHaveLength(3);
         await service.forgetEvents({
             corpusId,
             eventIds: [second.event.eventId],
@@ -295,6 +300,7 @@ async function createFixture() {
     const previousProvider = process.env.TYPEAGENT_EMBEDDING_PROVIDER;
     process.env.TYPEAGENT_EMBEDDING_PROVIDER = "none";
     const failExtraction = { value: false };
+    const extracted: string[] = [];
     const knowledgeForText = (text: string) => ({
         entities: text.includes("Zephyr")
             ? [{ name: "Zephyr", type: ["service"] }]
@@ -340,8 +346,9 @@ async function createFixture() {
                             settings: { maxContextLength: 1000 },
                             extract: async (text: string) =>
                                 knowledgeForText(text),
-                            extractWithRetry: async (text: string) =>
-                                failExtraction.value
+                            extractWithRetry: async (text: string) => {
+                                extracted.push(text);
+                                return failExtraction.value
                                     ? {
                                           success: false as const,
                                           message:
@@ -350,7 +357,8 @@ async function createFixture() {
                                     : {
                                           success: true as const,
                                           data: knowledgeForText(text),
-                                      },
+                                      };
+                            },
                         };
                     return settings;
                 }),
@@ -360,6 +368,7 @@ async function createFixture() {
         makeService,
         service: makeService(),
         failExtraction,
+        extracted,
         restoreProvider: () => {
             if (previousProvider === undefined) {
                 delete process.env.TYPEAGENT_EMBEDDING_PROVIDER;

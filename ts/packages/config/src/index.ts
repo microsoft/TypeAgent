@@ -101,6 +101,11 @@ export {
     type Deployment,
     type DeploymentEndpoint,
     type DeploymentMode,
+    type EmbeddingConfig,
+    type EmbeddingModelDefinition,
+    type EmbeddingProviderMode,
+    type EmbeddingRuntime,
+    type EmbeddingModality,
     type GoogleCalendarConfig,
     type MapsConfig,
     type MicrosoftGraphConfig,
@@ -112,6 +117,7 @@ export {
     type WikipediaConfig,
 } from "./runtime/types.js";
 export { buildConfig, parseSuffix } from "./runtime/build.js";
+export { resolveEmbeddingConfig } from "./runtime/embedding.js";
 export { type ModelRequestConstraints } from "./runtime/requestConstraints.js";
 export {
     configToEnv,

@@ -44,7 +44,7 @@ async function waitForAddedResources(resourcesBefore, timeoutMs) {
 
 function parseArgs(argv) {
     const args = {
-        maxFiles: 8000,
+        maxFiles: 10000,
         platform: process.platform,
         arch: process.arch,
     };

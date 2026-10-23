@@ -1,9 +1,12 @@
 // Copyright (c) Microsoft Corporation and Henry Lucco.
 // Licensed under the MIT License.
 
-import { DefaultAzureCredential } from "@azure/identity";
 import { TypeAgentStorageProvider } from "../storageProvider.js";
-import { getEnvSetting, openai } from "@typeagent/aiclient";
+import {
+    createDefaultCredential,
+    getEnvSetting,
+    openai,
+} from "@typeagent/aiclient";
 import { env } from "node:process";
 import {
     BlobServiceClient,
@@ -40,7 +43,7 @@ export class AzureStorageProvider implements TypeAgentStorageProvider {
         this.accountURL = `https://${this.storageAccount}.blob.core.windows.net`;
         this.blobServiceClient = new BlobServiceClient(
             this.accountURL,
-            new DefaultAzureCredential(),
+            createDefaultCredential(),
         );
     }
 

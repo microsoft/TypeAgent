@@ -17,33 +17,37 @@
  *   @typeagent status        — show current configuration
  */
 
-import { handleDirect, type DirectHandlingOptions } from "./hook-direct.js";
-import { handleMcpRedirect } from "./hook-mcp-redirect.js";
-import { handleDevActions } from "./hook-dev-actions.js";
-import { makeTurnId, writeDemoState } from "./demo-state.js";
-import { createHash } from "node:crypto";
-import { fileURLToPath } from "node:url";
 import type {
     UserPromptSubmittedInput,
     UserPromptSubmittedOutput,
 } from "@typeagent/agent-harness-hooks/copilot-cli";
-import { connectToAgentServer } from "../shared/typeagent-client.js";
 import { redactTraceValue } from "@typeagent/copilot-macros";
-import { getMacroFeatures } from "../shared/macro-features.js";
-import { isMacroRunnerSession } from "../shared/macro-runner-bridge.js";
+import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
-    getConfigPath,
-    getMode,
-    getModeLabel,
-    readConfig,
-    writeConfig,
-    type Mode,
-} from "../shared/plugin-config.js";
+    publishControlMetadata,
+    readControlledMode,
+} from "../shared/control-metadata.js";
+import { getMacroFeatures } from "../shared/macro-features.js";
+import { cancelMacroWork, learningSetting } from "../shared/macro-learning.js";
 import {
     getModeDescription,
     handleModeSetting,
 } from "../shared/mode-command.js";
-import { cancelMacroWork, learningSetting } from "../shared/macro-learning.js";
+import {
+    getConfigPath,
+    getMode,
+    getModeLabel,
+    getRecipeOwner,
+    type Mode,
+    type RecipeOwner,
+} from "../shared/plugin-config.js";
+import { handleRecipeCommand } from "../shared/recipe-commands.js";
+import { connectToMacroOwner } from "../shared/macro-owner.js";
+import { handleLocalRecipes } from "./hook-local-recipes.js";
+import { makeTurnId, writeDemoState } from "./demo-state.js";
+import { handleDirect, type DirectHandlingOptions } from "./hook-direct.js";
 
 async function handleMacroCommand(
     input: UserPromptSubmittedInput,
@@ -53,7 +57,11 @@ async function handleMacroCommand(
     if (learning) {
         return {
             handled: true,
-            responseContent: await learningSetting(input.cwd, learning[1]),
+            responseContent: await learningSetting(
+                input.cwd,
+                learning[1],
+                input.sessionId,
+            ),
             handledBy: "typeagent",
         };
     }
@@ -66,11 +74,13 @@ async function handleMacroCommand(
     if (command === "cancel") {
         return {
             handled: true,
-            responseContent: await cancelMacroWork(input.sessionId),
+            responseContent: await cancelMacroWork(input.sessionId, () =>
+                connectToMacroOwner(input.cwd, input.sessionId),
+            ),
             handledBy: "typeagent",
         };
     }
-    const connection = await connectToAgentServer();
+    const connection = await connectToMacroOwner(input.cwd, input.sessionId);
     try {
         if (command === "record") {
             const token = await connection.armMacroRecording({
@@ -164,38 +174,6 @@ function handleModeCommand(
     };
 }
 
-function handlePowerShellCommand(
-    lower: string,
-): UserPromptSubmittedOutput | undefined {
-    const match = lower.match(/^@typeagent\s+powershell(?:\s+(on|off))?\s*$/);
-    if (!match) return undefined;
-
-    const setting = match[1] as "on" | "off" | undefined;
-    if (!setting) {
-        const config = readConfig();
-        const enabled = config?.powershell?.enabled ?? true;
-        return {
-            handled: true,
-            responseContent: `TypeAgent PowerShell: **${enabled ? "on" : "off"}**\n\nUse \`@typeagent powershell on\` or \`@typeagent powershell off\` to toggle.`,
-            handledBy: "typeagent",
-        };
-    }
-
-    const config = readConfig() ?? { mode: "direct" };
-    if (!config.powershell) config.powershell = {};
-    config.powershell.enabled = setting === "on";
-    writeConfig(config);
-    return {
-        handled: true,
-        responseContent:
-            `TypeAgent PowerShell guidance switched **${setting}**.` +
-            (setting === "on"
-                ? "  \nPowerShell commands will be guided toward TypeAgent PowerShell for reusability."
-                : "  \nPowerShell commands will execute directly without TypeAgent PowerShell guidance."),
-        handledBy: "typeagent",
-    };
-}
-
 function handleStatusCommand(
     lower: string,
 ): UserPromptSubmittedOutput | undefined {
@@ -206,8 +184,6 @@ function handleStatusCommand(
     const host = process.env.TYPEAGENT_HOST || "localhost";
     const port = process.env.TYPEAGENT_PORT || "8999";
     const configPath = getConfigPath();
-    const config = readConfig();
-    const powershellEnabled = config?.powershell?.enabled ?? true;
 
     return {
         handled: true,
@@ -216,7 +192,7 @@ function handleStatusCommand(
             "",
             `- Mode: **${getModeLabel()}**`,
             `- Routing: ${getModeDescription()}`,
-            `- TypeAgent PowerShell: **${powershellEnabled ? "on" : "off"}**`,
+            "- Ordinary prompts: local recipes, then Copilot",
             `- Macro workspace tools: **${mode === "bypass" ? "disabled" : "available"}**`,
             `- Server: ws://${host}:${port}`,
             `- Config: ${configPath}`,
@@ -226,11 +202,11 @@ function handleStatusCommand(
             "- `@typeagent run <command>` — send command directly to TypeAgent",
             "- `@typeagent mode direct` — switch to direct mode",
             "- `@typeagent mode mcp` — switch to MCP mode, preserving saved policy (default: delegate)",
-            "- `@typeagent mode mcp mixed` — delegate whole requests or prefer TypeAgent searchActions/executeAction for Copilot-selected operations; native tools only for capability gaps",
-            "- `@typeagent mode mcp delegate` — delegate user prompts to TypeAgent (default)",
-            "- `@typeagent mode dev` — route registered PowerShell flows and recording directives",
+            "- `@typeagent mode mcp mixed` — configure explicit TypeAgent MCP policy",
+            "- `@typeagent mode mcp delegate` — configure explicit whole-request delegation policy",
+            "- `@typeagent mode dev` — select explicit development tool availability",
             "- `@typeagent mode bypass` — disable TypeAgent routing",
-            "- `@typeagent powershell on/off` — toggle TypeAgent PowerShell redirect",
+            "- `@typeagent recipe status` — inspect the local checked-program catalog",
             "- `@typeagent status` — show this info",
         ].join("  \n"),
         handledBy: "typeagent",
@@ -257,18 +233,31 @@ export async function handleSlashCommand(
 ): Promise<UserPromptSubmittedOutput | undefined> {
     const trimmed = input.prompt.trim();
     const lower = trimmed.toLowerCase();
+    if (/^@typeagent\s+powershell(?:\s+(?:on|off))?\s*$/.test(lower))
+        return {
+            handled: true,
+            handledBy: "typeagent",
+            responseContent:
+                "The automatic PowerShell redirect setting has been removed. Ordinary prompts use local recipes, then Copilot. Use an explicit @typeagent run command for TypeAgent operations.",
+        };
 
     return (
+        (await handleRecipeCommand(input)) ??
         (await handleMacroCommand(input, lower)) ??
         handleRunCommand(input, trimmed, dependencies.direct) ??
         handleModeCommand(lower) ??
-        handlePowerShellCommand(lower) ??
         handleStatusCommand(lower) ??
         handleCatchAllCommand(input, trimmed, dependencies.direct)
     );
 }
 
 async function main(): Promise<void> {
+    if (process.argv[2] === "--control-metadata") {
+        process.stdout.write(
+            `${JSON.stringify(publishControlMetadata("native-hook") ?? null)}\n`,
+        );
+        return;
+    }
     const abortController = new AbortController();
     const abortRequest = () => abortController.abort();
     process.once("SIGINT", abortRequest);
@@ -290,6 +279,7 @@ async function main(): Promise<void> {
             process.exit(1);
         }
 
+        const mode = readControlledMode("native-hook", input);
         // Check for slash commands first
         const slashResult = await handleSlashCommand(input);
         if (slashResult) {
@@ -298,7 +288,6 @@ async function main(): Promise<void> {
             return;
         }
 
-        const mode = getMode();
         const output = await routePrompt(input, mode, abortController.signal);
 
         console.log(JSON.stringify(output));
@@ -310,20 +299,15 @@ async function main(): Promise<void> {
 }
 
 export interface RoutePromptDependencies {
-    claimRecording: (input: UserPromptSubmittedInput) => Promise<boolean>;
-    direct: DirectHandler;
-    mcp: (input: UserPromptSubmittedInput) => UserPromptSubmittedOutput;
-    dev: (
+    recipeOwner?: () => RecipeOwner;
+    localRecipes?: typeof handleLocalRecipes;
+    claimRecording: (
         input: UserPromptSubmittedInput,
-        signal: AbortSignal,
-    ) => Promise<UserPromptSubmittedOutput>;
+    ) => Promise<boolean | "child">;
 }
 
 const routePromptDefaults: RoutePromptDependencies = {
     claimRecording: claimMacroRecording,
-    direct: handleDirect,
-    mcp: handleMcpRedirect,
-    dev: (input, signal) => handleDevActions(input, undefined, signal),
 };
 
 export async function routePrompt(
@@ -332,21 +316,26 @@ export async function routePrompt(
     signal: AbortSignal,
     dependencies: RoutePromptDependencies = routePromptDefaults,
 ): Promise<UserPromptSubmittedOutput> {
-    if (isMacroRunnerSession(input.sessionId)) return {};
     if (mode === "bypass") return {};
-    if (await dependencies.claimRecording(input)) return {};
-    if (mode === "mcp") return dependencies.mcp(input);
-    if (mode === "dev") return dependencies.dev(input, signal);
-    return dependencies.direct(input);
+    const owner = (dependencies.recipeOwner ?? getRecipeOwner)();
+    if (owner === "off") return {};
+    const recording = await dependencies.claimRecording(input);
+    if (recording === "child")
+        return {
+            additionalContext:
+                "This turn is explicitly selected for TypeAgent macro learning. Perform the user's task normally. Only after it actually succeeds, call typeagent_recorded_task_succeeded once with a concise factual summary, before delivering your final answer. Do not call it after failed, denied, incomplete or aborted work. It records success metadata only; do not rerun the task, launch authoring agents yourself, or wait for background learning. If the receipt tool is unavailable, deliver the answer and report that child authoring is unavailable; do not invent success.",
+        };
+    if (recording) return {};
+    return (dependencies.localRecipes ?? handleLocalRecipes)(input, signal);
 }
 
 async function claimMacroRecording(
     input: UserPromptSubmittedInput,
-): Promise<boolean> {
+): Promise<boolean | "child"> {
     if (!getMacroFeatures().recording) return false;
     let connection;
     try {
-        connection = await connectToAgentServer();
+        connection = await connectToMacroOwner(input.cwd, input.sessionId);
         const token = await connection.claimMacroRecording({
             sessionId: input.sessionId,
             cwd: input.cwd,
@@ -354,7 +343,7 @@ async function claimMacroRecording(
                 .update(redactTraceValue(input.prompt) as string)
                 .digest("hex"),
         });
-        return token !== undefined;
+        return token?.learning ? "child" : token !== undefined;
     } catch (error) {
         console.error(
             `[macro] Unable to claim recording: ${error instanceof Error ? error.message : String(error)}`,
@@ -388,7 +377,10 @@ function emitDemoStateForOutput(
     });
 }
 
-if (fileURLToPath(import.meta.url) === process.argv[1]) {
+if (
+    process.argv[1] &&
+    fileURLToPath(import.meta.url) === realpathSync(process.argv[1])
+) {
     main().catch((error) => {
         console.error("Hook error:", error);
         process.exit(1);

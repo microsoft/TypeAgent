@@ -2,8 +2,10 @@
 // Licensed under the MIT License.
 
 import type { MacroLearningMode } from "@typeagent/copilot-macros";
-import type { AgentServerConnection } from "@typeagent/agent-server-client";
-import { connectToAgentServer } from "./typeagent-client.js";
+import {
+    connectToMacroOwner,
+    type MacroOwnerConnection,
+} from "./macro-owner.js";
 
 export function parseLearningMode(value: string): MacroLearningMode {
     switch (value.trim().toLowerCase()) {
@@ -25,8 +27,9 @@ export function parseLearningMode(value: string): MacroLearningMode {
 export async function learningSetting(
     cwd: string,
     value?: string,
+    sessionId?: string,
 ): Promise<string> {
-    const connection = await connectToAgentServer();
+    const connection = await connectToMacroOwner(cwd, sessionId);
     try {
         const preference = value?.trim()
             ? await connection.setMacroLearningPreference({
@@ -44,13 +47,13 @@ export async function cancelMacroWork(
     sessionId: string,
     connect: () => Promise<
         Pick<
-            AgentServerConnection,
+            MacroOwnerConnection,
             | "getMacroRecordingState"
             | "cancelMacroLearningJob"
             | "cancelMacroRecording"
             | "close"
         >
-    > = connectToAgentServer,
+    > = () => connectToMacroOwner(process.cwd(), sessionId),
 ): Promise<string> {
     const connection = await connect();
     try {

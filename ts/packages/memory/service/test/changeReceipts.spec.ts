@@ -294,24 +294,32 @@ describe("durable change receipts", () => {
             service.forgetSource({
                 corpusId,
                 sourceId: initial.sourceId,
-                confirmationToken: preview.confirmationToken,
+                confirmationToken: "invalid",
             }),
-        ).rejects.toThrow("Private failure");
-        failRebuild = false;
+        ).rejects.toThrow("confirmation");
         await expect(
             service.forgetSource({
                 corpusId,
                 sourceId: initial.sourceId,
-                confirmationToken: "invalid",
+                confirmationToken: preview.confirmationToken,
             }),
-        ).rejects.toThrow("confirmation");
+        ).rejects.toThrow("Private failure");
+        await expect(service.listChanges({ corpusId })).rejects.toThrow(
+            "pending purge recovery",
+        );
+        await expect(
+            service.getSource(corpusId, initial.sourceId),
+        ).rejects.toThrow("pending purge recovery");
+        await service.close();
+        failRebuild = false;
+        service = openService();
         const receipts = await service.listChanges({ corpusId });
         expect(receipts.total).toBe(1);
+        expect(receipts.items[0].operation).toBe("forget");
         expect(JSON.stringify(receipts)).not.toContain("failure");
         expect(
-            (await service.getSource(corpusId, initial.sourceId))
-                ?.activeRevisionId,
-        ).toBe(initial.revisionId);
+            await service.getSource(corpusId, initial.sourceId),
+        ).toBeUndefined();
     });
 
     test("forget preserves unrelated corpus receipts", async () => {

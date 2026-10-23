@@ -15,10 +15,27 @@ import type {
 import { parseWikiAssessment, wikiPageContext } from "./wikiAdmission.js";
 import { publicationProof } from "./viewPublication.js";
 import { validateInventoryAudit } from "./viewInventory.js";
-import { mergeView } from "./viewMerge.js";
+import {
+    mergeEditorialView,
+    requiresEditorialCheck,
+    assertEditorialAssessment,
+    EditorialRejection,
+} from "./viewEditorial.js";
+import {
+    ConsolidationRejection,
+    ConsolidationTargetChanged,
+} from "./wikiConsolidation.js";
 import { validateConstructedGuide, validateSupport } from "./viewSynthesis.js";
 import { redactRunbookText } from "./runbookRedaction.js";
 import { informationalPipeline } from "./informationalView.js";
+import { generateTopicTarget, type TopicBuildOwner } from "./topicBuilds.js";
+import { createTopicSnapshot, type TopicGenerator } from "./topicGeneration.js";
+import {
+    isSearchTimingEnabled,
+    recordSearchTiming,
+    runWithSearchTiming,
+    timeSearchStage,
+} from "@typeagent/knowpro";
 import {
     RequestBudget,
     runWithRequestBudget,
@@ -33,7 +50,7 @@ interface ViewBuildRuntimeScope {
     events: Set<string>;
 }
 
-export interface ViewBuildOwner {
+export interface ViewBuildOwner extends TopicBuildOwner {
     update(
         corpusId: string,
         jobId: string,
@@ -61,6 +78,11 @@ export interface ViewBuildOwner {
         result: ViewBuildTargetResult,
         signal: AbortSignal,
     ): Promise<boolean>;
+    consolidateWiki?(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+    ): Promise<void>;
     materialize(
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
@@ -88,6 +110,7 @@ export class ViewBuildRunner {
         private readonly adapter: ViewSynthesisAdapter,
         private readonly owner: ViewBuildOwner,
         private readonly informationalLimits?: RequestBudgetLimits,
+        private readonly topicGenerator?: TopicGenerator,
     ) {}
 
     public assertPersistence(jobId: string): void {
@@ -106,6 +129,9 @@ export class ViewBuildRunner {
                         (input) => input.sourceId,
                     ),
                     ...(result.snapshot.maintenance?.privacySources ?? []),
+                    ...(result.snapshot.influenceSources?.map(
+                        (source) => source.sourceId,
+                    ) ?? []),
                 ]),
             ),
             events: new Set(
@@ -118,20 +144,26 @@ export class ViewBuildRunner {
             ),
         };
         this.controllers.set(job.jobId, { ...scope, controller });
-        const task = this.tail.then(() => {
-            if (
-                !job.results.some((result) =>
-                    informationalPipeline(result.snapshot.pipeline),
-                )
-            )
-                return this.run(job, controller.signal);
-            if (!this.informationalLimits)
-                return this.run(job, controller.signal);
-            return runWithRequestBudget(
-                new RequestBudget(this.informationalLimits),
-                () => this.run(job, controller.signal),
-            );
-        });
+        const queuedAt = isSearchTimingEnabled()
+            ? performance.now()
+            : undefined;
+        const task = this.tail.then(() =>
+            runWithSearchTiming(
+                job.jobId,
+                "memory.build",
+                () => {
+                    if (queuedAt !== undefined)
+                        recordSearchTiming(
+                            "build.queue.wait",
+                            performance.now() - queuedAt,
+                        );
+                    return timeSearchStage("build.job.total", () =>
+                        this.run(job, controller.signal),
+                    );
+                },
+                { corpusId: job.corpusId },
+            ),
+        );
         this.tail = task
             .catch((error: unknown) => {
                 if (this.purged.has(job.jobId)) return;
@@ -204,6 +236,8 @@ export class ViewBuildRunner {
                 "Wiki contribution no longer has an active owner",
             );
         for (const source of input.inputs) scope.sources.add(source.sourceId);
+        for (const source of input.influenceSources ?? [])
+            scope.sources.add(source.sourceId);
     }
 
     public forgetEvent(corpusId: string, eventId: string): void {
@@ -264,7 +298,9 @@ export class ViewBuildRunner {
             "Extracting facts and context before any guide exists",
         );
         const inventory = await abortable(
-            this.adapter.inventory(result.snapshot, signal),
+            timeSearchStage("view.inventory.model", () =>
+                this.adapter.inventory!(result.snapshot, signal),
+            ),
             signal,
         );
         await this.result(
@@ -275,7 +311,13 @@ export class ViewBuildRunner {
             { inventory },
         );
         const inventoryAudit = await abortable(
-            this.adapter.checkInventory(result.snapshot, inventory, signal),
+            timeSearchStage("view.inventory.check", () =>
+                this.adapter.checkInventory!(
+                    result.snapshot,
+                    inventory,
+                    signal,
+                ),
+            ),
             signal,
         );
         await this.result(
@@ -293,21 +335,82 @@ export class ViewBuildRunner {
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
         signal: AbortSignal,
-    ): Promise<void> {
-        const timeoutMs = informationalPipeline(result.snapshot.pipeline)
-            ? (this.informationalLimits?.elapsedMs ?? 120_000)
-            : 300_000;
+    ): Promise<boolean> {
+        const timeoutMs =
+            (informationalPipeline(result.snapshot.pipeline)
+                ? this.informationalLimits?.elapsedMs
+                : undefined) ?? 3_000_000;
+        const controller = new AbortController();
+        const jobSignal = signal;
+        const cancel = () => controller.abort(jobSignal.reason);
+        signal.addEventListener("abort", cancel, { once: true });
+        if (signal.aborted) cancel();
+        signal = controller.signal;
         const timer = setTimeout(
             () =>
-                this.cancel(
-                    job.jobId,
-                    `Evidence-first synthesis exceeded ${timeoutMs / 1000} second limit`,
+                controller.abort(
+                    new Error(
+                        `Evidence-first synthesis exceeded ${timeoutMs / 1000} second limit`,
+                    ),
                 ),
             timeoutMs,
         );
         let validation = false;
         try {
             signal.throwIfAborted();
+            if (result.snapshot.pipeline === "topics-v1") {
+                if (!this.owner.materializeTopics)
+                    throw new Error(
+                        "Topic snapshot materialization is not supported",
+                    );
+                await this.result(
+                    job,
+                    result.viewId,
+                    "generating",
+                    "Generating complete topic incidence snapshot",
+                );
+                if (this.owner.materializeTopicIncidence)
+                    await timeSearchStage("topic.incidence.materialize", () =>
+                        this.owner.materializeTopicIncidence!(
+                            job,
+                            result,
+                            createTopicSnapshot(
+                                result.snapshot,
+                                result.snapshot.model,
+                            ),
+                            signal,
+                        ),
+                    );
+                const snapshot = await abortable(
+                    timeSearchStage("topic.generate.total", () =>
+                        generateTopicTarget(
+                            this.adapter,
+                            result.snapshot,
+                            signal,
+                            this.topicGenerator,
+                        ),
+                    ),
+                    signal,
+                );
+                validation = true;
+                await this.result(
+                    job,
+                    result.viewId,
+                    "validating",
+                    "Validated complete membership, original evidence and organizational DAG",
+                );
+                validation = false;
+                signal.throwIfAborted();
+                await timeSearchStage("topic.snapshot.materialize", () =>
+                    this.owner.materializeTopics!(
+                        job,
+                        result,
+                        snapshot,
+                        signal,
+                    ),
+                );
+                return true;
+            }
             if (
                 result.snapshot.definition.kind === "timeline" &&
                 !result.snapshot.inputs.some((input) => input.records?.length)
@@ -318,22 +421,26 @@ export class ViewBuildRunner {
                     "skipped",
                     "Empty eligible timeline checkpoint; no new artifact or publication was created",
                 );
-                return;
+                return true;
             }
             validation = true;
             const informational = informationalPipeline(
                 result.snapshot.pipeline,
             );
             if (
-                (await this.skipInformationalTarget(
-                    job,
-                    result,
-                    signal,
-                    informational,
+                (await timeSearchStage("view.admission.skip", () =>
+                    this.skipInformationalTarget(
+                        job,
+                        result,
+                        signal,
+                        informational,
+                    ),
                 )) ||
-                (await this.assessWikiAdmission(job, result, signal))
+                (await timeSearchStage("wiki.subject.assess", () =>
+                    this.assessWikiAdmission(job, result, signal),
+                ))
             )
-                return;
+                return true;
             const evidence = informational
                 ? undefined
                 : await this.prepareInventory(job, result, signal);
@@ -346,7 +453,9 @@ export class ViewBuildRunner {
                 "Synthesizing complete labeled retained inputs",
             );
             const candidate = await abortable(
-                this.adapter.generate(result.snapshot, signal, inventory),
+                timeSearchStage("view.synthesis.generate", () =>
+                    this.adapter.generate(result.snapshot, signal, inventory),
+                ),
                 signal,
             );
             signal.throwIfAborted();
@@ -378,8 +487,10 @@ export class ViewBuildRunner {
                     ),
                 );
             validation = false;
-            const current = await this.owner.current(result.snapshot);
-            const { output, conflicts } = mergeView(
+            const current = await timeSearchStage("view.current.read", () =>
+                this.owner.current(result.snapshot),
+            );
+            const { output, conflicts } = mergeEditorialView(
                 current,
                 candidate,
                 result.snapshot.inputs,
@@ -388,10 +499,15 @@ export class ViewBuildRunner {
             if (!conflicts.length) {
                 validation = true;
                 validateConstructedGuide(result.snapshot, output);
-                await this.verifyContributionRefresh(
-                    result.snapshot,
-                    output,
-                    signal,
+                await timeSearchStage("wiki.contribution.refresh", () =>
+                    this.verifyContributionRefresh(
+                        result.snapshot,
+                        output,
+                        signal,
+                    ),
+                );
+                await timeSearchStage("view.editorial.verify", () =>
+                    this.verifyEditorialUpdate(result.snapshot, output, signal),
                 );
                 const support = informational
                     ? undefined
@@ -414,29 +530,67 @@ export class ViewBuildRunner {
             }
             validation = false;
             signal.throwIfAborted();
-            await this.owner.materialize(
-                job,
-                result,
-                candidate,
-                output,
-                conflicts,
-                signal,
-                proof,
+            await timeSearchStage("view.materialize-and-index", () =>
+                this.owner.materialize(
+                    job,
+                    result,
+                    candidate,
+                    output,
+                    conflicts,
+                    signal,
+                    proof,
+                ),
+            );
+            await timeSearchStage("wiki.consolidation", () =>
+                this.consolidateWikiTarget(job, result, conflicts, signal),
             );
         } catch (error) {
-            const state =
-                error instanceof ViewBuildStaleError
-                    ? "stale"
-                    : signal.aborted
-                      ? "cancelled"
-                      : validation
-                        ? "blocked"
-                        : "failed";
+            const state = failedTargetState(
+                error,
+                signal,
+                jobSignal,
+                validation,
+            );
             if (!this.purged.has(job.jobId))
                 await this.result(job, result.viewId, state, safeError(error));
+            return false;
         } finally {
             clearTimeout(timer);
+            jobSignal.removeEventListener("abort", cancel);
         }
+        return true;
+    }
+
+    private async consolidateWikiTarget(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        conflicts: string[],
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (
+            conflicts.length ||
+            result.snapshot.pipeline !== "informational-wiki-v1"
+        )
+            return;
+        await this.owner.consolidateWiki?.(job, result, signal);
+    }
+
+    private async verifyEditorialUpdate(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (!requiresEditorialCheck(input, output)) return;
+        if (!this.adapter.checkEditorial)
+            throw new Error(
+                "Consequential editorial update requires an actual-output checker",
+            );
+        assertEditorialAssessment(
+            await abortable(
+                this.adapter.checkEditorial(input, output, signal),
+                signal,
+            ),
+        );
     }
 
     private async verifyContributionRefresh(
@@ -517,6 +671,10 @@ export class ViewBuildRunner {
             );
         const pages = await this.owner.wikiPages(result.snapshot);
         if (!pages.length) return false;
+        const sources = pages.flatMap((page) => page.contributingSources);
+        result.snapshot.influenceSources = sources;
+        const scope = this.controllers.get(job.jobId);
+        for (const source of sources) scope?.sources.add(source.sourceId);
         await this.result(
             job,
             result.viewId,
@@ -559,8 +717,32 @@ export class ViewBuildRunner {
     }
 
     private async run(job: ViewBuildJob, signal: AbortSignal): Promise<void> {
-        for (const result of job.results)
-            await this.target(job, result, signal);
+        for (const result of job.results) {
+            const target = () =>
+                runWithSearchTiming(
+                    undefined,
+                    `memory.build.${result.snapshot.pipeline}`,
+                    () =>
+                        timeSearchStage("build.target.total", async () => {
+                            const success = await this.target(
+                                job,
+                                result,
+                                signal,
+                            );
+                            return { success };
+                        }),
+                    { corpusId: job.corpusId },
+                );
+            if (
+                this.informationalLimits &&
+                informationalPipeline(result.snapshot.pipeline)
+            )
+                await runWithRequestBudget(
+                    new RequestBudget(this.informationalLimits),
+                    target,
+                );
+            else await target();
+        }
         if (this.purged.has(job.jobId)) return;
         await this.owner.update(job.corpusId, job.jobId, (current) => {
             if (current.state === "cancelled") return;
@@ -594,6 +776,26 @@ export class ViewBuildRunner {
         await this.tail;
         for (const failure of this.failures.values()) throw failure.error;
     }
+}
+
+function failedTargetState(
+    error: unknown,
+    targetSignal: AbortSignal,
+    jobSignal: AbortSignal,
+    validation: boolean,
+): ViewBuildTargetResult["state"] {
+    if (
+        error instanceof ViewBuildStaleError ||
+        error instanceof ConsolidationTargetChanged
+    )
+        return "stale";
+    if (
+        error instanceof EditorialRejection ||
+        error instanceof ConsolidationRejection
+    )
+        return "blocked";
+    if (targetSignal.aborted) return jobSignal.aborted ? "cancelled" : "failed";
+    return validation ? "blocked" : "failed";
 }
 
 export function safeError(error: unknown): string {

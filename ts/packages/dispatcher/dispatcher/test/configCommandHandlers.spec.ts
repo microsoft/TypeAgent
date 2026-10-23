@@ -79,6 +79,44 @@ describe("applyModelProviderSelection", () => {
         expect(rebuildActionSemanticMap).not.toHaveBeenCalled();
         expect(clear).toHaveBeenCalledTimes(1);
     });
+
+    it("preserves a named embedding selection when changing chat to Copilot", async () => {
+        const rebuildActionSemanticMap = jest.fn<() => Promise<void>>();
+        const clear = jest.fn();
+        const embeddingModels = {
+            minilm: {
+                provider: "local" as const,
+                runtime: "minilm" as const,
+                model: "Xenova/all-MiniLM-L6-v2",
+                size: 384,
+                modalities: ["text"] as const,
+            },
+        };
+        setRuntimeConfig({
+            ...originalConfig,
+            embedding: undefined,
+            defaultEmbeddingModel: "minilm",
+            embeddingModels,
+        });
+        const beforeEmbeddingProvider =
+            process.env.TYPEAGENT_EMBEDDING_PROVIDER;
+        const beforeEmbeddingModel = process.env.TYPEAGENT_EMBEDDING_MODEL;
+        await applyModelProviderSelection("copilot", {
+            agents: { rebuildActionSemanticMap },
+            translatorCache: { clear },
+        });
+        expect(getRuntimeConfig().defaultEmbeddingModel).toBe("minilm");
+        expect(getRuntimeConfig().embeddingModels).toEqual(embeddingModels);
+        expect(getRuntimeConfig().embedding).toBeUndefined();
+        expect(process.env.TYPEAGENT_EMBEDDING_PROVIDER).toBe(
+            beforeEmbeddingProvider,
+        );
+        expect(process.env.TYPEAGENT_EMBEDDING_MODEL).toBe(
+            beforeEmbeddingModel,
+        );
+        expect(rebuildActionSemanticMap).not.toHaveBeenCalled();
+        expect(clear).toHaveBeenCalledTimes(1);
+    });
 });
 
 function restoreEnv(name: string, value: string | undefined): void {

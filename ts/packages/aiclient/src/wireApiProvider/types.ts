@@ -10,6 +10,7 @@ export type ModelRequest = {
     messages: PromptSection[];
     jsonSchema?: CompletionJsonSchema | undefined;
     completionSettings: CompletionSettings;
+    providerOutputTokens?: number | undefined;
     defaultParams: Record<string, unknown>;
     disableResponseFormat: boolean;
     modelName?: string | undefined;

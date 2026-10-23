@@ -14,9 +14,6 @@
 #   - azure-build-docker-container.yml — builds inside ACR, orthogonal
 #   - azure-docs-aggregation-signal.yml — documentation only
 #   - component-detection.yml        — security/compliance scan
-#
-# Design doc: codeDocs/TypeAgent/forAgent/projects/inProgress/
-#             2026-07-15_consolidated-build-pipeline/README.md
 
 trigger:
   branches:
@@ -292,7 +289,7 @@ stages:
             condition: eq(variables['Agent.OS'], 'Linux')
 
           - script: |
-              node tools/scripts/validateBundledArtifact.mjs --dir "$(stagingDir)/agent-server" --max-files 8200
+              node tools/scripts/validateBundledArtifact.mjs --dir "$(stagingDir)/agent-server" --max-files 10000
             displayName: "Validate bundled agent-server ($(platform)-$(arch))"
             workingDirectory: $(buildDirectory)
 
@@ -384,10 +381,14 @@ stages:
               restoreKeys: |
                 electron | $(Agent.OS) | $(Agent.OSArchitecture)
 
-          - script: |
-              pnpm run shell:package
-            displayName: "Package shell"
-            workingDirectory: $(buildDirectory)
+          - task: AzureCLI@2
+            displayName: "Sign, package and verify Windows shell"
+            inputs:
+              azureSubscription: $(azureSubscription)
+              scriptType: pscore
+              scriptLocation: scriptPath
+              scriptPath: $(buildDirectory)/tools/scripts/package-signed-shell.ps1
+              workingDirectory: $(buildDirectory)
             env:
               ELECTRON_BUILDER_CHANNEL: $(resolvedChannel)
 
@@ -837,7 +838,7 @@ stages:
       # ── Publish shell installers to Azure Blob Storage ────────────
       - deployment: publish_shell
         displayName: "Publish shell to Azure Storage"
-        condition: eq('${{ parameters.publishShell }}', 'true')
+        condition: and(succeeded(), eq('${{ parameters.publishShell }}', 'true'))
         environment: typeagent-shell-$(resolvedChannel)
         # stageDependencies is not available in step conditions, so map the
         # optional mac/linux build results to job variables the steps can read.
@@ -851,6 +852,12 @@ stages:
           runOnce:
             deploy:
               steps:
+                - template: include-prepare-repo.yml
+                  parameters:
+                    buildDirectory: $(buildDirectory)
+                    nodeVersion: $(nodeVersion)
+                    registry: $(INSTALL_REGISTRY)
+
                 - download: current
                   artifact: shell-win
                   displayName: "Download shell-win"
@@ -858,6 +865,12 @@ stages:
                     TypeAgent Shell[-_]*
                     typeagentshell-*
                     $(resolvedChannel)*.yml
+                    windows-package-trust.cer
+
+                - pwsh: |
+                    & "$(buildDirectory)/tools/scripts/verify-shell-publication.ps1" -Directory "$(Pipeline.Workspace)/shell-win"
+                    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                  displayName: "Verify signed Windows shell before publication"
 
                 - task: AzureFileCopy@6
                   displayName: "Upload Azure Storage - win"

@@ -13,15 +13,29 @@ const TYPEAGENT_AGENT_SERVER_TOOLS = [
     "typeagent-powershell-import",
 ];
 
-export function isCopilotTelemetryTool(
+export function isMacroTaskReceiptTool(
     toolName: string,
     mcpServerName?: string,
 ): boolean {
     return (
         mcpServerName === undefined &&
-        ["report_intent", "functions.report_intent"].includes(
-            toolName.toLowerCase(),
-        )
+        [
+            "typeagent_recorded_task_succeeded",
+            "functions.typeagent_recorded_task_succeeded",
+        ].includes(toolName.toLowerCase())
+    );
+}
+
+export function isCopilotTelemetryTool(
+    toolName: string,
+    mcpServerName?: string,
+): boolean {
+    return (
+        isMacroTaskReceiptTool(toolName, mcpServerName) ||
+        (mcpServerName === undefined &&
+            ["report_intent", "functions.report_intent"].includes(
+                toolName.toLowerCase(),
+            ))
     );
 }
 

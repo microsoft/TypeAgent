@@ -79,6 +79,18 @@ memory = await cm.DocMemory.readFromFile(...)
 
 ```
 
+Persisted vectors are loaded only when their identities match the configured
+embedding models. Unknown or incompatible identities require an explicit
+`{ rebuildEmbeddings: true }` reload with a configured model.
+
+For text-only retrieval, disable every embedding lane in the settings and pass
+`{ loadEmbeddings: false }` as the fourth argument to `DocMemory.readFromFile`.
+This retains source text, structured knowledge and symbolic indexes while
+discarding all persisted vectors in memory, without reading the binary embedding
+artifact or rewriting the saved index. It cannot be combined with rebuilding
+embeddings. The memory service selects this mode when all its embedding lanes
+are disabled; enabled lanes still require compatible identities.
+
 ## Podcasts
 
 See example code in [knowproPodcast.ts](../../../examples/chat/src/memory/knowproPodcast.ts)

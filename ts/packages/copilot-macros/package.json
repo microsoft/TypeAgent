@@ -11,7 +11,22 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./macroAuthoringRuntime": "./dist/macroAuthoringRuntime.js",
+    "./macroProgramAuthoring": "./dist/macroProgramAuthoring.js",
+    "./macroSchema": "./dist/macroSchema.js",
+    "./recipeCore": "./dist/recipeCore.js",
+    "./recipeTesting": "./dist/recipeTesting.js",
+    "./recipeCatalog": "./dist/recipeCatalog.js",
+    "./recipeRouting": "./dist/recipeRouting.js",
+    "./recipeCompiler": "./dist/recipeCompiler.js",
+    "./recipeExecutor": "./dist/recipeExecutor.js",
+    "./recipeAuthoring": "./dist/recipeAuthoring.js",
+    "./recipeAuthoringCandidate": "./dist/recipeAuthoringCandidate.js",
+    "./recipeAuthoringValidation": "./dist/recipeAuthoringValidation.js",
+    "./recipeAuthoringStore": "./dist/recipeAuthoringStore.js",
+    "./recipeSemantic": "./dist/recipeSemantic.js",
+    "./recipeSemanticTesting": "./dist/recipeSemanticTesting.js"
   },
   "types": "./dist/index.d.ts",
   "files": [
@@ -28,12 +43,18 @@
     "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b"
   },
+  "dependencies": {
+    "@tootallnate/quickjs-emscripten": "0.23.0",
+    "@typeagent/action-grammar": "workspace:*",
+    "@typeagent/action-schema": "workspace:*",
+    "typescript": "~5.4.5",
+    "zod": "^4.1.13"
+  },
   "devDependencies": {
     "@types/jest": "^29.5.7",
-    "@types/node": "^20.10.0",
+    "@types/node": "^22.0.0",
     "jest": "^29.7.0",
     "prettier": "^3.5.3",
-    "rimraf": "^6.0.1",
-    "typescript": "~5.4.5"
+    "rimraf": "^6.0.1"
   }
 }

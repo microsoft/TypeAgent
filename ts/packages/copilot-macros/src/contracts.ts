@@ -1,6 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type {
+    JsonValue,
+    RecipeArtifact,
+    RecipeEffectCheckpoint,
+    RecipeRunResult,
+} from "./recipeContracts.js";
+
 export interface RecordedToolCall {
     toolCallId: string;
     name: string;
@@ -9,12 +16,15 @@ export interface RecordedToolCall {
     result?: unknown;
     // Parsed model-facing tool text, distinct from the raw event/UI result.
     modelResult?: unknown;
+    resultArtifact?: PrivateResultReference;
+    modelResultArtifact?: PrivateResultReference;
     status: "completed" | "failed" | "denied";
     permission?: unknown;
 }
 
 export interface RecordedInteractionTrace {
-    schemaVersion: 1;
+    schemaVersion: 1 | 2;
+    capabilities?: ["private-result-evidence-v1"];
     sessionId: string;
     cwd: string;
     prompt: string;
@@ -22,7 +32,6 @@ export interface RecordedInteractionTrace {
     startedAt: string;
     completedAt: string;
     toolCalls: RecordedToolCall[];
-    handoffRunId?: string;
 }
 
 export interface ArmRecordingRequest {
@@ -59,6 +68,45 @@ export interface RecordingState {
 export interface FinalizeRecordingRequest {
     tokenId: string;
     trace: RecordedInteractionTrace;
+    childAuthoring?: MacroChildCapture;
+}
+
+export interface MacroChildCapture {
+    taskId: string;
+    firstEventId: string;
+    successEventId: string;
+    outputEventId: string;
+    recordingTokenId: string;
+}
+
+export interface MacroAuthoringClaim {
+    cwd: string;
+    sessionId: string;
+    workerId: string;
+    /** Durable reconciliation happens before and after this bounded IPC wait. */
+    waitMs?: number;
+    observeOnly?: boolean;
+}
+
+export interface MacroAuthoringRequest {
+    requestId: string;
+    jobId: string;
+    captureId: string;
+    contextDigest: string;
+    promptDigest: string;
+    prompt: string;
+    leaseId: string;
+    leaseExpiresAt: string;
+    context: import("./recipeAuthoring.js").SealedRecipeAuthoringContext;
+}
+
+export interface MacroAuthoringSubmission extends MacroAuthoringClaim {
+    requestId: string;
+    leaseId: string;
+    promptDigest: string;
+    outcome:
+        | { status: "completed"; text: string; childId: string }
+        | { status: "failed"; error: string };
 }
 
 export interface TraceSummary {
@@ -76,6 +124,7 @@ export type ValueExpression =
     | { kind: "literal"; value: unknown }
     | { kind: "input"; name: string }
     | { kind: "stepResult"; stepId: string; path?: string[] }
+    | { kind: "resultPath"; stepId: string; path: string[]; suffix: string }
     | {
           kind: "template";
           value: unknown;
@@ -117,7 +166,8 @@ export interface MacroStep {
 }
 
 export interface CopilotToolMacro {
-    schemaVersion: 1;
+    schemaVersion: 1 | 2;
+    capabilities?: ["result-path-v1"];
     macroId: string;
     version: number;
     name: string;
@@ -129,7 +179,8 @@ export interface CopilotToolMacro {
     sourceTraceId: string;
     createdAt: string;
     warnings: string[];
-    candidateProvenance?: MacroCandidateProvenance;
+    executionKind?: "program";
+    program?: RecipeArtifact;
     learning?: {
         jobId: string;
         cwd: string;
@@ -138,6 +189,7 @@ export interface CopilotToolMacro {
         grammarRules: string[];
         exampleInputs: Record<string, unknown>;
         requests: string[];
+        authoring: MacroChildAuthoringIdentity;
     };
 }
 
@@ -156,6 +208,7 @@ export interface MacroExecutionRecipe {
     toolCallIds: string[];
     description: string;
     uncertainties: string[];
+    programRequirements?: string[];
 }
 
 export interface MacroLearningBuild {
@@ -179,6 +232,7 @@ export interface MacroLearningJob {
         | "queued"
         | "extracting"
         | "building"
+        | "awaitingAuthor"
         | "needsReview"
         | "ready"
         | "failed"
@@ -187,9 +241,36 @@ export interface MacroLearningJob {
     error?: string;
     createdAt: string;
     updatedAt: string;
+    authoring: MacroChildAuthoringIdentity;
 }
 
+export interface MacroChildAuthoringIdentity {
+    captureId: string;
+    taskId: string;
+    tokenId: string;
+    contextDigest: string;
+}
+export type MacroAuthoringQuery = (
+    prompt: string,
+    signal: AbortSignal,
+) => Promise<string>;
+export type MacroVerifierQueryCache = (
+    prompt: string,
+    execute: () => Promise<string>,
+) => Promise<string>;
+
 export interface MacroLearningRuntime {
+    withAuthorQuery(
+        query: MacroAuthoringQuery,
+        cacheVerifier?: MacroVerifierQueryCache,
+    ): MacroLearningRuntime;
+    buildProgram(
+        macro: CopilotToolMacro,
+        trace: RecordedInteractionTrace,
+        signal: AbortSignal,
+        query?: MacroAuthoringQuery,
+        cacheVerifier?: MacroVerifierQueryCache,
+    ): Promise<RecipeArtifact>;
     extract(
         trace: RecordedInteractionTrace,
         traceId: string,
@@ -214,14 +295,6 @@ export interface MacroLearningRuntime {
     ): void;
 }
 
-export interface MacroCandidateProvenance {
-    sourceMacroId: string;
-    sourceVersion: number;
-    handoffRunId: string;
-    reason: string;
-    submittedAt: string;
-}
-
 export interface MacroSummary {
     macroId: string;
     version: number;
@@ -236,12 +309,6 @@ export interface MacroSummary {
 export interface MacroMatch {
     macro: MacroSummary;
     score: number;
-}
-
-export interface CreateMacroFromTraceRequest {
-    traceId: string;
-    name: string;
-    description?: string;
 }
 
 export interface MacroVersionRef {
@@ -298,6 +365,7 @@ export interface MacroRequirements {
     macroId: string;
     version: number;
     executionClass: MacroExecutionClass;
+    executionKind?: "program";
     inputs: MacroInput[];
     tools: Array<{
         toolName: string;
@@ -305,71 +373,13 @@ export interface MacroRequirements {
         executionClass: MacroExecutionClass;
     }>;
 }
-
-export type MacroExecutionPreference = "replay" | "agent" | "auto";
-export type MacroRunStatus =
-    | "running"
-    | "completed"
-    | "failed"
-    | "cancelled"
-    | "agentRequired";
+export type MacroRunStatus = "running" | "completed" | "failed" | "cancelled";
 
 export interface RunMacroRequest extends InspectMacroRequest {
     runId: string;
     inputs?: Record<string, unknown>;
-    preference?: MacroExecutionPreference;
     timeoutMs?: number;
     dryRun?: boolean;
-}
-
-export interface AgentRunnerLaunchPayload {
-    agent: "typeagent-macro-runner";
-    macro: CopilotToolMacro;
-    inputs: Record<string, unknown>;
-    reason: {
-        code: "agentRequested" | "agentRequired";
-        message: string;
-        stepIds: string[];
-    };
-    budgets: {
-        maxToolCalls: number;
-        maxRetries: number;
-        timeoutMs: number;
-        maxTokens: number;
-    };
-    candidate: {
-        sourceMacroId: string;
-        sourceVersion: number;
-        handoffRunId: string;
-    };
-}
-
-export interface SubmitMacroCandidateRequest {
-    sourceMacroId: string;
-    sourceVersion: number;
-    handoffRunId: string;
-    reason: string;
-    name?: string;
-    description?: string;
-    inputs: MacroInput[];
-    steps: MacroStep[];
-    executionEvidence: {
-        outcome: "completed";
-        toolCalls: number;
-        retries: number;
-        durationMs: number;
-        tokensUsed: number;
-        steps: Array<{
-            stepId: string;
-            status: "completed" | "failed" | "denied" | "cancelled";
-        }>;
-    };
-}
-
-export interface EvidencedMacroCandidateRequest
-    extends SubmitMacroCandidateRequest {
-    traceId: string;
-    exampleInputs: Record<string, unknown>;
 }
 
 export interface MacroRunStep {
@@ -378,6 +388,7 @@ export interface MacroRunStep {
     mcpServerName?: string;
     status: "completed" | "failed" | "cancelled";
     result?: unknown;
+    resultArtifact?: PrivateResultReference;
     error?: string;
     startedAt: string;
     completedAt: string;
@@ -394,32 +405,60 @@ export interface MacroRunRecord {
     startedAt: string;
     completedAt?: string;
     result?: unknown;
+    resultArtifact?: PrivateResultReference;
     error?: { code: string; message: string };
+    program?: RecipeRunResult;
+}
+
+export interface MacroProgramRunContext {
+    runId: string;
+    cwd: string;
+    signal: AbortSignal;
+    timeoutMs: number;
+    onCheckpoint(checkpoint: RecipeEffectCheckpoint): Promise<void>;
+}
+
+export interface MacroProgramRuntime {
+    execute(
+        artifact: RecipeArtifact,
+        input: JsonValue,
+        context: MacroProgramRunContext,
+    ): Promise<RecipeRunResult>;
+}
+
+export interface PrivateResultReference {
+    schemaVersion: 1;
+    capability: "private-result-evidence-v1";
+    owner: "trace" | "run";
+    ownerId: string;
+    toolCallId: string;
+    source: "result" | "modelResult";
+    id: string;
+    encoding: "json-utf8";
+    sha256: string;
+    sizeBytes: number;
+    sensitive: true;
+    view: unknown;
+    omittedPaths: string[][];
+    blobs: Array<{
+        path: string[];
+        encoding: "base64";
+        sha256: string;
+        sizeBytes: number;
+    }>;
 }
 
 export type RunMacroResponse =
-    | {
-          status: "validated";
-          runId: string;
-          macroId: string;
-          version: number;
-      }
     | { status: "completed"; run: MacroRunRecord }
-    | { status: "failed" | "cancelled"; run: MacroRunRecord }
-    | {
-          status: "agentRequired";
-          runId: string;
-          macroId: string;
-          version: number;
-          reason: string;
-          launch: AgentRunnerLaunchPayload;
-      };
+    | { status: "failed" | "cancelled"; run: MacroRunRecord };
 
 export interface ReplayToolDescriptor {
     mcpServerName?: string;
     toolName: string;
     schemaFingerprint: string;
     readOnly?: boolean;
+    inputSchema?: unknown;
+    outputSchema?: unknown;
 }
 
 export interface ReplayToolContext {
@@ -427,6 +466,8 @@ export interface ReplayToolContext {
 }
 
 export interface ReplayToolHost {
+    // Native inspection is opt-in; existing MCP-only hosts keep failing closed.
+    readonly supportsNativeTools?: true;
     // Missing servers/tools return undefined; connection and inspection failures throw.
     inspectTool(
         mcpServerName: string | undefined,

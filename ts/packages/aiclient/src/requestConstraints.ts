@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import type { ModelRequestConstraints } from "@typeagent/config";
-import { RequestAdmissionError, outputReservation } from "./requestBudget.js";
+import {
+    RequestAdmissionError,
+    outputReservation,
+    isChatWireRequest,
+} from "./requestBudget.js";
 
 export interface RequestConstraintReceipt {
     metadata: "configured" | "missing";
@@ -75,17 +79,10 @@ export function checkSerializedRequestConstraints(
         throw new RequestAdmissionError(
             "Inference request must be a serialized object",
         );
-    const chat =
-        "messages" in body ||
-        "instructions" in body ||
-        "max_output_tokens" in body;
+    const chat = isChatWireRequest(body);
     const outputTokens =
-        chat &&
-        (constraints ||
-            "max_completion_tokens" in body ||
-            "max_output_tokens" in body ||
-            "max_tokens" in body)
-            ? outputReservation(body)
+        chat && (constraints || "max_tokens" in body)
+            ? outputReservation(body, constraints?.outputTokens)
             : 0;
     if (constraints) {
         enforceRequestBudget(

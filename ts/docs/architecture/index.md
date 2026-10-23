@@ -40,9 +40,15 @@ choose. These docs cover detection, resolution strategies, and rollout:
 
 ## Memory
 
-- [Memory architecture](./memory/memory.md) — how TypeAgent's conversational
-  memory works using **Structured RAG** (indexing and querying agent
-  conversations), implemented in the `knowPro` package.
+- [Memory architecture](./memory/memory.md) — retained evidence, KnowPro
+  structured recall and editable maintained knowledge.
+- [Current system](./memory/current-system.md) — host, transport, storage and
+  client-specific implementation boundaries.
+- [Derived Views](./memory/derived-views.md) — construction, edits, publication,
+  exact-version search and history.
+- [View maintenance](./memory/view-maintenance.md) — automatic families,
+  explicit scope, editorial protection and recovery.
+- [Memory scenarios](./memory/scenarios.md) — user journeys and evaluation checks.
 
 ## Agents & conversations
 
@@ -89,7 +95,9 @@ formerly the separate "Design" section, now folded in here:
 - [Workflow system overview](./workflows/README.md) — the surface DSL, the IR
   it compiles to, the editor/LSP design, engineering plan, and principles.
 - [Workflows architecture](./workflows/workflows.md) — how workflows are
-  captured, persisted, and executed at runtime.
+  captured, persisted, and executed by their owning providers.
+- [Checked program macros](./workflows/macros.md) — learning, publication,
+  TypeAgent/plugin ownership and contained symbolic/hybrid execution.
 
 ## Documentation pipeline
 

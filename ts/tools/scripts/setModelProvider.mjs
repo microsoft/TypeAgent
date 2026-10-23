@@ -8,14 +8,14 @@
  * machine that already has a (Key-Vault-downloaded) config.
  *
  * Unlike generate-selfhost-config.mjs (which writes a fresh minimal config on
- * repo-less machines), this patches the chat `modelProvider` + `embedding`
+ * repo-less machines), this patches the chat `modelProvider` + named embedding
  * fields of an existing config while PRESERVING everything else (azureOpenAI
  * endpoints, azureFoundry, maps, speech, etc.). That lets a developer flip to
  * Copilot chat + local embeddings, validate, then flip back to AI Systems
  * (`--provider aisystems`) or `--restore` the pristine backup.
  *
- * Provider governs CHAT only (routed via aiclient's provider-mode override);
- * `embedding.provider` is independent (the Copilot SDK has no embeddings).
+ * Provider governs CHAT only; existing embedding selection is preserved unless
+ * embedding/model/alias options explicitly request a change.
  *
  * Config path precedence (mirrors getKeys / the @typeagent/config loader):
  *   --config
@@ -29,14 +29,17 @@
  *
  * Options:
  *   --provider <mode>            copilot | ollama | aisystems (required unless --restore).
- *   --embedding <mode>           local | ollama | openai | none | azure (default: local
- *                                for copilot/ollama; azure for aisystems).
+ *   --embedding <mode>           local | ollama | openai | none | azure (explicit override).
  *   --copilot-model <name>       Copilot chat model (default gpt-5.6-luna).
  *   --ollama-host <url>          Ollama base URL (default http://localhost:11434).
  *   --chat-model <name>          Ollama chat model (default llama3.2).
  *   --embedding-endpoint <url>   Embedding endpoint (openai mode; full path).
  *   --embedding-model <name>     Embedding model name.
- *   --local-embedding-model <n>  transformers.js model (default Xenova/all-MiniLM-L6-v2).
+ *   --local-embedding-model <n>  minilm (default) | embeddinggemma; known IDs accepted.
+ *   --local-embedding-cache-dir <path> Persistent snapshot cache.
+ *   --default-embedding-model <alias> Select a named profile (or none).
+ *   --embedding-size <n>         Required dimensions for unknown hosted models.
+ *   --download-local-embedding [0|1] Explicit download consent (default: no).
  *   --openai-key <key>           API key for openai embedding mode.
  *   --config <path>              Config file to patch (overrides env resolution).
  *   --backup                     Write <config>.bak before editing (won't clobber an
@@ -48,12 +51,17 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import yaml from "js-yaml";
+import {
+    downloadEmbeddingConsent,
+    provisionLocalEmbedding,
+    selectConfiguredEmbeddingAlias,
+    selectLocalEmbedding,
+    selectedLocalEmbedding,
+} from "./localEmbeddingModels.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-const yaml = require("js-yaml");
 
 const DEFAULT_OLLAMA_HOST = "http://localhost:11434";
 const DEFAULT_OLLAMA_CHAT_MODEL = "llama3.2";
@@ -63,7 +71,6 @@ const DEFAULT_COPILOT_FALLBACK_MODELS = [
     "gpt-5-mini",
     "gpt-5.4",
 ];
-const DEFAULT_LOCAL_EMBEDDING_MODEL = "Xenova/all-MiniLM-L6-v2";
 const DEFAULT_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text";
 
 function arg(name, fallback) {
@@ -116,14 +123,22 @@ function ensureObject(cfg, key) {
 
 function applyEmbedding(cfg, options) {
     const { embedding } = options;
+    if (options.defaultEmbeddingModel) {
+        return;
+    }
+    if (
+        !options.explicitEmbedding &&
+        (cfg.defaultEmbeddingModel || cfg.embedding)
+    ) {
+        return;
+    }
     switch (embedding) {
         case "local": {
-            cfg.embedding = {
-                provider: "local",
-                model:
-                    options.localEmbeddingModel ||
-                    DEFAULT_LOCAL_EMBEDDING_MODEL,
-            };
+            selectLocalEmbedding(
+                cfg,
+                options.localEmbeddingModel || "minilm",
+                options.localEmbeddingCacheDir,
+            );
             break;
         }
         case "ollama": {
@@ -153,14 +168,41 @@ function applyEmbedding(cfg, options) {
             // Restore Azure/AI-Systems embeddings: drop the override so the
             // loader falls back to the azureOpenAI embedding deployments.
             delete cfg.embedding;
+            delete cfg.defaultEmbeddingModel;
             break;
         }
         case "none": {
-            cfg.embedding = { provider: "none" };
+            cfg.defaultEmbeddingModel = "none";
+            delete cfg.embedding;
             break;
         }
         default:
             throw new Error(`Unknown embedding mode: ${embedding}`);
+    }
+    if (embedding === "openai" || embedding === "ollama") {
+        const model = cfg.openAI.modelEmbedding;
+        const size =
+            options.embeddingSize ??
+            {
+                "text-embedding-3-small": 1536,
+                "text-embedding-3-large": 3072,
+                "text-embedding-ada-002": 1536,
+                "nomic-embed-text": 768,
+            }[model];
+        if (!Number.isSafeInteger(size) || size <= 0) {
+            throw new Error(
+                "Unknown embedding dimensions; pass --embedding-size <positive integer>.",
+            );
+        }
+        cfg.embeddingModels ??= {};
+        cfg.defaultEmbeddingModel = `${embedding}-embedding`;
+        cfg.embeddingModels[cfg.defaultEmbeddingModel] = {
+            provider: "openai",
+            model,
+            size,
+            modalities: ["text"],
+        };
+        delete cfg.embedding;
     }
 }
 
@@ -182,7 +224,6 @@ function patchConfig(cfg, options) {
         copilot.fallbackModels ??= DEFAULT_COPILOT_FALLBACK_MODELS;
     } else if (provider === "ollama") {
         const openAI = ensureObject(cfg, "openAI");
-        openAI.apiKey ??= "ollama";
         const local = ensureObject(openAI, "local");
         local.apiKey = "None";
         local.endpoint = ollamaBaseUrl(options.ollamaHost);
@@ -200,32 +241,99 @@ function validate(outPath) {
         path.resolve(__dirname, "../../packages/config/dist/index.js"),
     ];
     const distPath = distCandidates.find((p) => fs.existsSync(p));
-    if (!distPath) {
-        console.warn(
-            "  (skipping loader validation: packages/config/dist not built)",
-        );
-        return Promise.resolve(true);
-    }
-    return import(pathToFileUrl(distPath))
+    const module = distPath
+        ? import(pathToFileURL(distPath).href)
+        : import("@typeagent/config");
+    return module
         .then((mod) => {
+            const bundledDefaults = path.join(
+                __dirname,
+                "config.defaults.yaml",
+            );
             const { config } = mod.loadRuntimeConfigSync({
                 localPath: outPath,
+                defaultsPath:
+                    process.env.TYPEAGENT_CONFIG_DEFAULTS ||
+                    (fs.existsSync(bundledDefaults)
+                        ? bundledDefaults
+                        : undefined),
                 populateProcessEnv: false,
             });
+            const embedding = mod.resolveEmbeddingConfig(config);
             console.log(
                 `  Validated: modelProvider=${config.modelProvider ?? "(azure default)"}, ` +
-                    `embedding.provider=${config.embedding?.provider ?? "(azure default)"}`,
+                    `embedding.provider=${embedding?.provider ?? "(azure default)"}`,
             );
             return true;
         })
         .catch((e) => {
+            if (
+                e.code === "ERR_MODULE_NOT_FOUND" ||
+                e.code === "MODULE_NOT_FOUND"
+            ) {
+                console.warn(
+                    "  (skipping loader validation: @typeagent/config not built)",
+                );
+                return true;
+            }
             console.error(`  Validation FAILED: ${e.message}`);
             return false;
         });
 }
 
-function pathToFileUrl(p) {
-    return new URL(`file://${path.resolve(p).replace(/\\/g, "/")}`).href;
+async function prepareEmbeddingSelection(cfg, options, configPath) {
+    if (options.defaultEmbeddingModel) {
+        await selectConfiguredEmbeddingAlias(
+            cfg,
+            options.defaultEmbeddingModel,
+            configPath,
+        );
+    }
+    const download = downloadEmbeddingConsent();
+    if (download && cfg.defaultEmbeddingModel) {
+        await selectConfiguredEmbeddingAlias(
+            cfg,
+            cfg.defaultEmbeddingModel,
+            configPath,
+        );
+    }
+    const localDefinition = download ? selectedLocalEmbedding(cfg) : undefined;
+    const embeddingSelection =
+        cfg.defaultEmbeddingModel ??
+        cfg.embedding?.provider ??
+        options.embedding;
+    const selectedProvider =
+        cfg.embeddingModels?.[cfg.defaultEmbeddingModel]?.provider ??
+        cfg.embedding?.provider;
+    return { download, localDefinition, embeddingSelection, selectedProvider };
+}
+
+function logConfiguration(
+    configPath,
+    options,
+    embeddingSelection,
+    selectedProvider,
+) {
+    const { provider } = options;
+    console.log(
+        `Patched ${configPath} (${provider} chat, ${embeddingSelection} embeddings)`,
+    );
+    if (provider === "ollama") {
+        console.log(
+            `  Prereq: 'ollama serve' running with '${options.chatModel || DEFAULT_OLLAMA_CHAT_MODEL}' pulled.`,
+        );
+    } else if (provider === "copilot") {
+        console.log("  Prereq: an authenticated 'copilot' CLI (github login).");
+    }
+    if (selectedProvider === "local") {
+        console.log(
+            "  Embeddings: pinned CPU/FP32, offline-only; explicitly stage the selected snapshot. Restart the server to switch models.",
+        );
+    } else if (embeddingSelection === "none") {
+        console.log(
+            "  Embeddings: disabled — semantic search / fuzzy features degrade gracefully.",
+        );
+    }
 }
 
 async function main() {
@@ -252,7 +360,11 @@ async function main() {
         return 1;
     }
 
-    const embeddingDefault = provider === "aisystems" ? "azure" : "local";
+    const embeddingDefault = hasFlag("--local-embedding-model")
+        ? "local"
+        : provider === "aisystems"
+          ? "azure"
+          : "local";
     const embedding = (arg("--embedding") ?? embeddingDefault).toLowerCase();
     const validEmbedding = ["local", "ollama", "openai", "none", "azure"];
     if (!validEmbedding.includes(embedding)) {
@@ -274,11 +386,19 @@ async function main() {
     const options = {
         provider,
         embedding,
+        explicitEmbedding:
+            hasFlag("--embedding") || hasFlag("--local-embedding-model"),
+        defaultEmbeddingModel: arg("--default-embedding-model"),
+        localEmbeddingCacheDir: arg("--local-embedding-cache-dir"),
         copilotModel: arg("--copilot-model"),
         ollamaHost: arg("--ollama-host", DEFAULT_OLLAMA_HOST),
         chatModel: arg("--chat-model"),
         embeddingEndpoint: arg("--embedding-endpoint"),
         embeddingModel: arg("--embedding-model"),
+        embeddingSize:
+            arg("--embedding-size") === undefined
+                ? undefined
+                : Number(arg("--embedding-size")),
         localEmbeddingModel: arg("--local-embedding-model"),
         openaiKey: arg("--openai-key"),
     };
@@ -291,13 +411,15 @@ async function main() {
     }
 
     patchConfig(cfg, options);
+    const { download, localDefinition, embeddingSelection, selectedProvider } =
+        await prepareEmbeddingSelection(cfg, options, configPath);
 
     const body = yaml.dump(cfg, { indent: 2, lineWidth: -1, noRefs: true });
     const out =
         "# Copyright (c) Microsoft Corporation.\n" +
         "# Licensed under the MIT License.\n" +
         "#\n" +
-        `# Patched by setModelProvider.mjs (chat=${provider}, embedding=${embedding}).\n` +
+        `# Patched by setModelProvider.mjs (chat=${provider}, embedding=${embeddingSelection}).\n` +
         "# Restore the original with: node setModelProvider.mjs --restore\n" +
         "#\n" +
         body;
@@ -307,6 +429,9 @@ async function main() {
         return 0;
     }
 
+    if (download) {
+        await provisionLocalEmbedding(localDefinition, { allowDownload: true });
+    }
     if (hasFlag("--backup")) {
         if (fs.existsSync(backupPath)) {
             console.log(
@@ -319,33 +444,23 @@ async function main() {
     }
 
     fs.writeFileSync(configPath, out, "utf8");
-    console.log(
-        `Patched ${configPath} (${provider} chat, ${embedding} embeddings)`,
-    );
-    if (provider === "ollama") {
-        console.log(
-            `  Prereq: 'ollama serve' running with '${options.chatModel || DEFAULT_OLLAMA_CHAT_MODEL}' pulled.`,
-        );
-    } else if (provider === "copilot") {
-        console.log("  Prereq: an authenticated 'copilot' CLI (github login).");
-    }
-    if (embedding === "local") {
-        console.log(
-            "  Embeddings: bundled CPU-only local model (downloads weights on first use).",
-        );
-    } else if (embedding === "none") {
-        console.log(
-            "  Embeddings: disabled — semantic search / fuzzy features degrade gracefully.",
-        );
-    }
+    logConfiguration(configPath, options, embeddingSelection, selectedProvider);
 
     if (!hasFlag("--no-validate")) {
         const ok = await validate(configPath);
         if (!ok) {
+            fs.writeFileSync(configPath, raw, "utf8");
             return 1;
         }
     }
     return 0;
 }
 
-main().then((code) => process.exit(code));
+main()
+    .then((code) => {
+        process.exitCode = code;
+    })
+    .catch((error) => {
+        console.error(`setModelProvider: ${error.message}`);
+        process.exitCode = 1;
+    });

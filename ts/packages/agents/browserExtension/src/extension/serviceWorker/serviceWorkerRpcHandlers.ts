@@ -71,6 +71,8 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryListEvents: (params) => forward("memoryListEvents", params),
         memoryViewCapabilities: (params) =>
             forward("memoryViewCapabilities", params),
+        memoryQueryTopics: (params) => forward("memoryQueryTopics", params),
+        memoryRebuildTopics: (params) => forward("memoryRebuildTopics", params),
         memoryListViews: (params) => forward("memoryListViews", params),
         memoryGetView: (params) => forward("memoryGetView", params),
         memorySaveViewDraft: (params) => forward("memorySaveViewDraft", params),
@@ -106,6 +108,8 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryResolveViewConflict: (params) =>
             forward("memoryResolveViewConflict", params),
         memoryGetSource: (params) => forward("memoryGetSource", params),
+        memoryGetSourceSynopsis: (params) =>
+            forward("memoryGetSourceSynopsis", params),
         memoryGetSourceContent: (params) =>
             forward("memoryGetSourceContent", params),
         memoryGetSourceKnowledge: (params) =>

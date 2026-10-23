@@ -137,6 +137,11 @@ test("workflow passes the dispatch value as environment data and validates it", 
         const offset = fix.run.indexOf(operation);
         assert.ok(offset > validation && validation >= 0, operation);
     }
-    assert.match(workflow, /read -r -a filtered_args <<< "\$FLAGS"/);
+    assert.match(workflow, /read -r -a extra_args <<< "\$FLAGS"/);
+    assert.match(
+        workflow,
+        /--auto-fix\|--auto-fix=\*\|--package\|--package=\*/,
+    );
     assert.match(workflow, /filtered_args\+=\("--auto-fix=\$PKG"\)/);
+    assert.match(workflow, /filtered_args\+=\("--package=\$PKG"\)/);
 });

@@ -42,38 +42,32 @@ azureOpenAI:
   # Named model deployments.  Each deployment has one or more regional
   # endpoints that form a routing pool.
   deployments:
-    gpt_4_o:
+    gpt_6_luna:
       # Per-deployment defaultCapacity overrides the section-level value.
       # defaultCapacity: 200
       endpoints:
         # PTU (provisioned throughput) endpoints get priority 1 by default.
-        - endpoint: https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://my-resource.openai.azure.com/openai/deployments/gpt-6-luna/chat/completions?api-version=2025-01-01-preview
           mode: PTU
           capacity: 300
 
         # PAYG endpoints get priority 2 by default.  Capacity is optional.
-        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/gpt-6-luna/chat/completions?api-version=2025-01-01-preview
           capacity: 450
 
         # Region is auto-derived from the hostname (e.g. "eastus" from
         # "my-resource-eastus").  Override when the hostname is ambiguous:
-        - endpoint: https://custom-resource.cognitiveservices.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://custom-resource.cognitiveservices.azure.com/openai/deployments/gpt-6-luna/chat/completions?api-version=2025-01-01-preview
           region: eastus2
 
         # Use `capacity: null` to explicitly opt out of capacity
         # inheritance for this endpoint.
-        - endpoint: https://my-resource-france.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://my-resource-france.openai.azure.com/openai/deployments/gpt-6-luna/chat/completions?api-version=2025-01-01-preview
           capacity: null
 
         # Per-endpoint auth override (uses an API key instead of identity):
-        - endpoint: https://partner-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://partner-resource.openai.azure.com/openai/deployments/gpt-6-luna/chat/completions?api-version=2025-01-01-preview
           auth: sk-abc123...
-
-    gpt_4_o_mini:
-      endpoints:
-        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview
-          capacity: 2000
-        - endpoint: https://my-resource-westus.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview
 
     embedding:
       defaultCapacity: 120
@@ -121,7 +115,7 @@ openAI:
   apiKey: sk-proj-...
   endpoint: https://api.openai.com/v1/chat/completions
   endpointEmbedding: https://api.openai.com/v1/embeddings
-  model: gpt-4o
+  model: gpt-6-luna
   modelEmbedding: text-embedding-3-small
   organization: org-...
   responseFormat: true
@@ -367,10 +361,38 @@ reasoning:
 # When omitted, the provider is inferred from the configured embedding
 # endpoints (openAI/azureOpenAI), or disabled if none is present.
 
-embedding:
-  provider: local
-  model: Xenova/all-MiniLM-L6-v2 # local provider only (384-d, ~23MB)
-  # cacheDir: /var/lib/typeagent/models  # pre-stage weights (air-gapped)
+# Named models merge by alias and field with config.defaults.yaml.
+# Uncomment one selector, and remove any legacy embedding: overrides.
+# defaultEmbeddingModel: local-minilm
+# defaultEmbeddingModel: local-embeddinggemma
+# defaultEmbeddingModel: azure-ada
+# defaultEmbeddingModel: none
+# No selector preserves existing embedding endpoint/provider inference.
+embeddingModels:
+  azure-ada:
+    provider: azure
+    deployment: embedding # references azureOpenAI.deployments.embedding above
+    model: text-embedding-ada-002 # must match the actual deployment
+    size: 1536
+    modalities: [text]
+  local-minilm:
+    provider: local
+    runtime: minilm
+    model: Xenova/all-MiniLM-L6-v2
+    revision: 751bff37182d3f1213fa05d7196b954e230abad9
+    size: 384
+    modalities: [text]
+    localFilesOnly: true
+  local-embeddinggemma:
+    provider: local
+    runtime: embeddinggemma
+    model: onnx-community/embeddinggemma-2-ONNX
+    revision: daa72c51243991dfcaf9f9137d2c573d8f7790c0
+    size: 768
+    modalities: [text, image]
+    localFilesOnly: true
+    maxBatchSize: 1
+    maxPending: 8
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Key Vault                                                       ║

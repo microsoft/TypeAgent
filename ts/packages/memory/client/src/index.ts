@@ -4,3 +4,5 @@
 export * from "./memoryClient.js";
 export * from "./protocol.js";
 export * from "./viewProtocol.js";
+export * from "./topicProtocol.js";
+export * from "./agentSessionProtocol.js";

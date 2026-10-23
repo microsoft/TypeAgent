@@ -77,6 +77,7 @@ export type MacroValueExpressionLike =
     | { kind: "literal"; value: unknown }
     | { kind: "input"; name: string }
     | { kind: "stepResult"; stepId: string; path?: string[] }
+    | { kind: "resultPath"; stepId: string; path: string[]; suffix: string }
     | {
           kind: "template";
           value: unknown;
@@ -339,6 +340,14 @@ export function describeExpression(
                         ? `: ${expression.path.join(".")}`
                         : ""
                 }`,
+            ];
+        case "resultPath":
+            return [
+                `path from result of ${expression.stepId}${
+                    expression.path.length > 0
+                        ? `: ${expression.path.join(".")}`
+                        : ""
+                } + ${JSON.stringify(expression.suffix)}`,
             ];
         case "template":
             return expression.bindings.map(

@@ -56,6 +56,8 @@ export type SearchQueryExpr = {
 };
 
 export interface SearchOptions {
+    /** Applied to both knowledge and vector candidates before ranking limits. */
+    messageRangesInScope?: import("./interfaces.js").TextRange[];
     maxKnowledgeMatches?: number | undefined;
     exactMatch?: boolean | undefined;
     maxMessageMatches?: number | undefined;
@@ -465,7 +467,11 @@ class QueryCompiler {
     ): Promise<IQueryOpExpr | undefined> {
         const messageIndex = this.conversation.secondaryIndexes?.messageIndex;
         if (messageIndex !== undefined) {
-            const scopeExpr = await this.compileScope(undefined, whenFilter);
+            const scopeExpr = await this.compileScope(
+                undefined,
+                whenFilter,
+                options,
+            );
             return this.compileMessageSimilarity(query, scopeExpr, options);
         }
         return undefined;
@@ -478,7 +484,7 @@ class QueryCompiler {
     ): Promise<IQueryOpExpr<Map<KnowledgeType, SemanticRefAccumulator>>> {
         let selectExpr = this.compileSelect(
             searchTermGroup,
-            await this.compileScope(searchTermGroup, filter),
+            await this.compileScope(searchTermGroup, filter, options),
             options,
         );
         // Constrain the select with scopes and 'where'
@@ -630,11 +636,16 @@ class QueryCompiler {
     private async compileScope(
         termGroup?: SearchTermGroup,
         filter?: WhenFilter | undefined,
+        options?: SearchOptions,
     ): Promise<q.GetScopeExpr | undefined> {
-        let scopeSelectors: q.IQueryTextRangeSelector[] | undefined;
+        const scopeSelectors: q.IQueryTextRangeSelector[] = [];
+        if (options?.messageRangesInScope !== undefined) {
+            scopeSelectors.push(
+                new q.TextRangeSelector(options.messageRangesInScope),
+            );
+        }
         // First, use any provided date ranges to select scope
         if (filter && filter.dateRange) {
-            scopeSelectors ??= [];
             scopeSelectors.push(
                 new q.TextRangesInDateRangeSelector(filter.dateRange),
             );
@@ -644,7 +655,6 @@ class QueryCompiler {
         //
         // If specific scoping terms were provided
         if (filter && filter.scopeDefiningTerms !== undefined) {
-            scopeSelectors ??= [];
             this.addTermsScopeSelector(
                 filter.scopeDefiningTerms,
                 scopeSelectors,
@@ -654,20 +664,17 @@ class QueryCompiler {
             const actionTermsGroup =
                 this.getActionTermsFromSearchGroup(termGroup);
             if (actionTermsGroup !== undefined) {
-                scopeSelectors ??= [];
                 this.addTermsScopeSelector(actionTermsGroup, scopeSelectors);
             }
         }
         // Include any ranges directly provided by the caller
         if (filter && filter.textRangesInScope) {
-            scopeSelectors ??= [];
-            scopeSelectors?.push(
+            scopeSelectors.push(
                 new q.TextRangeSelector(filter.textRangesInScope),
             );
         }
         // Tags...
         if (filter && filter.tags && filter.tags.length > 0) {
-            scopeSelectors ??= [];
             this.addTermsScopeSelector(
                 createTagSearchTermGroup(filter.tags, true),
                 scopeSelectors,
@@ -680,7 +687,6 @@ class QueryCompiler {
                 filter.threadDescription,
             );
             if (threadsInScope) {
-                scopeSelectors ??= [];
                 scopeSelectors.push(
                     new q.ThreadSelector(
                         threadsInScope.map(
@@ -696,11 +702,10 @@ class QueryCompiler {
             filter.tagMatchingTerms &&
             filter.tagMatchingTerms.terms.length > 0
         ) {
-            scopeSelectors ??= [];
             this.addSTagScopeSelector(filter.tagMatchingTerms, scopeSelectors);
         }
 
-        return scopeSelectors && scopeSelectors.length > 0
+        return scopeSelectors.length > 0
             ? new q.GetScopeExpr(scopeSelectors)
             : undefined;
     }

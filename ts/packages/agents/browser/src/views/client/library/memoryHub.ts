@@ -1162,6 +1162,7 @@ async function showManagedRoute(
             corpusId: corpusId || undefined,
             viewId: route.objectId,
             revisionId: route.viewRevisionId,
+            pageId: route.viewPageId,
         });
         return;
     }

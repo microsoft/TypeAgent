@@ -30,6 +30,53 @@ function budget(chatAttempts = 2) {
 }
 
 describe("serialized inference budget (mock transport)", () => {
+    test("uncapped requests reserve known provider capacity and retain opt-in budget enforcement", async () => {
+        const original = globalThis.fetch;
+        let sent = 0;
+        const pool = discoverEndpointPoolFromConfig(
+            buildConfig({
+                AZURE_OPENAI_ENDPOINT: "https://synthetic.invalid/uncapped",
+                AZURE_OPENAI_API_KEY: "synthetic-key",
+            }),
+            "azure",
+            ModelType.Chat,
+        );
+        pool.members[0].settings.requestConstraints = {
+            contextTokens: 21000,
+            outputTokens: 4000,
+        };
+        const call = () =>
+            callJsonApiWithPool(pool, async () => ({
+                success: true,
+                data: { headers: {}, body: { messages: [] } },
+            }));
+        try {
+            globalThis.fetch = async (_url, options) => {
+                sent++;
+                expect(JSON.parse(String(options?.body))).not.toHaveProperty(
+                    "max_completion_tokens",
+                );
+                return new Response("{}", { status: 200 });
+            };
+            const limits = budget();
+            expect((await runWithRequestBudget(limits, call)).success).toBe(
+                true,
+            );
+            expect(limits.receipts[0].outputTokens).toBe(4000);
+            const smaller = new RequestBudget({
+                ...budget().limits,
+                outputTokens: 3999,
+            });
+            await expect(
+                runWithRequestBudget(smaller, call),
+            ).rejects.toBeInstanceOf(RequestAdmissionError);
+            expect(smaller.receipts).toEqual([]);
+            expect(sent).toBe(1);
+        } finally {
+            globalThis.fetch = original;
+        }
+    });
+
     test("queued callers retain separate opt-in envelopes and do not leak a completed envelope into product requests", async () => {
         const original = globalThis.fetch;
         let sent = 0;
@@ -48,12 +95,13 @@ describe("serialized inference budget (mock transport)", () => {
         );
         const first = budget(1);
         const second = budget(1);
+        pool.members[0].settings.requestConstraints = { outputTokens: 4000 };
         const call = () =>
             callJsonApiWithPool(pool, async () => ({
                 success: true,
                 data: {
                     headers: {},
-                    body: { messages: [], max_completion_tokens: 4000 },
+                    body: { messages: [] },
                 },
             }));
         try {
@@ -86,6 +134,7 @@ describe("serialized inference budget (mock transport)", () => {
             AZURE_OPENAI_MAX_CONCURRENCY: "1",
         });
         const limits = budget();
+        pool.members[0].settings.requestConstraints = { outputTokens: 4000 };
         try {
             await expect(
                 runWithRequestBudget(limits, () =>
@@ -95,7 +144,6 @@ describe("serialized inference budget (mock transport)", () => {
                             headers: {},
                             body: {
                                 messages: ["x".repeat(16000)],
-                                max_completion_tokens: 4000,
                             },
                         },
                     })),
@@ -126,26 +174,24 @@ describe("serialized inference budget (mock transport)", () => {
         });
         expect(JSON.parse(serialized).input).toEqual(inputs);
         expect(() =>
-            limits.reserve(
-                JSON.stringify({ messages: inputs, max_tokens: 4000 }),
-            ),
+            limits.reserve(JSON.stringify({ messages: inputs }), 4000),
         ).toThrow(RequestAdmissionError);
     });
     test("nested scopes reserve atomically before a network attempt", () => {
         const outer = budget();
         const inner = budget(1);
         const request = {
-            body: JSON.stringify({ messages: [], max_completion_tokens: 4000 }),
+            body: JSON.stringify({ messages: [] }),
         };
         runWithRequestBudget(outer, () =>
             runWithRequestBudget(inner, () =>
-                reserveSerializedRequest(request),
+                reserveSerializedRequest(request, 4000),
             ),
         );
         expect(() =>
             runWithRequestBudget(outer, () =>
                 runWithRequestBudget(inner, () =>
-                    reserveSerializedRequest(request),
+                    reserveSerializedRequest(request, 4000),
                 ),
             ),
         ).toThrow("exhausted");
@@ -164,8 +210,8 @@ describe("serialized inference budget (mock transport)", () => {
                     response_format: {
                         schema: { description: "schema framing" },
                     },
-                    max_completion_tokens: 4000,
                 }),
+                4000,
             ),
         ).toThrow("exceeds configured context");
         expect(limits.receipts).toEqual([]);
@@ -179,21 +225,33 @@ describe("serialized inference budget (mock transport)", () => {
             return new Response("{}", { status: 429 });
         };
         const limits = budget(1);
+        const pool = discoverEndpointPool("azure", ModelType.Chat, undefined, {
+            AZURE_OPENAI_ENDPOINT: "https://synthetic.invalid/chat",
+            AZURE_OPENAI_API_KEY: "unit-key",
+        });
+        pool.members[0].settings.requestConstraints = { outputTokens: 4000 };
+        pool.members[0].settings.maxRetryAttempts = 2;
+        pool.members[0].settings.timeout = 10000;
         try {
             await expect(
                 runWithRequestBudget(limits, () =>
-                    callApi(
-                        {},
-                        "https://synthetic.invalid/chat",
-                        {
-                            messages: [
-                                { role: "user", content: "synthetic source" },
-                            ],
-                            max_completion_tokens: 4000,
-                        },
-                        2,
-                        1,
-                        10000,
+                    callJsonApiWithPool(
+                        pool,
+                        async () => ({
+                            success: true,
+                            data: {
+                                headers: {},
+                                body: {
+                                    messages: [
+                                        {
+                                            role: "user",
+                                            content: "synthetic source",
+                                        },
+                                    ],
+                                },
+                            },
+                        }),
+                        { retryPauseMs: 1 },
                     ),
                 ),
             ).rejects.toBeInstanceOf(RequestAdmissionError);
@@ -226,7 +284,7 @@ describe("serialized inference budget (mock transport)", () => {
             ...budget().limits,
             contextTokens: undefined,
         });
-        limits.reserve(JSON.stringify({ messages: [], max_tokens: 4000 }));
+        limits.reserve(JSON.stringify({ messages: [] }), 4000);
         expect(limits.receipts[0]).toMatchObject({
             contextTokens: undefined,
             tokenAccounting: "estimate",
@@ -236,19 +294,19 @@ describe("serialized inference budget (mock transport)", () => {
             limits.reserve(
                 JSON.stringify({
                     messages: ["x".repeat(16000)],
-                    max_tokens: 4000,
                 }),
+                4000,
             ),
         ).toThrow("exceeds configured");
         expect(() =>
-            limits.reserve(JSON.stringify({ messages: [], max_tokens: 4001 })),
+            limits.reserve(JSON.stringify({ messages: [] }), 4001),
         ).toThrow("exceeds configured");
         const tighter = new RequestBudget({
             ...budget().limits,
             contextTokens: 5000,
         });
         expect(() =>
-            tighter.reserve(JSON.stringify({ messages: [], max_tokens: 4000 })),
+            tighter.reserve(JSON.stringify({ messages: [] }), 4000),
         ).toThrow("exceeds configured");
     });
 });

@@ -1,30 +1,65 @@
 # Copilot fast actions
 
-Status: Implemented, with follow-up work. This document is the source of truth
-for the cross-package design of Copilot dev actions and tool-composed macros.
-Progress and remaining work are tracked in [STATUS.md](./STATUS.md).
+Status: Implemented, with follow-up work. This repository plan records the
+cross-package delivery of dev actions and program macros. The stable public
+contract is [Checked program macros](../../architecture/workflows/macros.md);
+provider behavior is in [Workflows](../../architecture/workflows/workflows.md).
+Progress, scoped evidence and remaining gates are in [STATUS.md](./STATUS.md).
+
+## Program-only critical path
+
+Plugin ownership is the default and sole enabled recipe implementation.
+The only owner settings are `plugin` and `off`; obsolete `typeagent` settings
+fail explicitly. Both TypeAgent server entry points no longer construct a
+macro owner/learner, expose its lifecycle RPCs or register server macro routes.
+There are no external compatibility clients to preserve.
+
+All learning requires token-bound root success receipts, sealed explicit
+context and tools-disabled native Copilot children. Shared-core admission,
+program provenance and persisted-job resume enforce that contract. Backend/
+log-based authorship and missing-child fallback are removed; obsolete jobs
+require re-recording. Explicit nonlearning trace capture cannot induce learning.
+
+The joined native extension owns the shared `MacroManager`, portable author/
+validator, action-grammar matcher and contained executor. Hooks, commands and
+macro MCP tools use authenticated session-local IPC and one workspace/profile
+catalog. A held SQLite writer lock prevents concurrent mutation owners.
+Unmatched requests stay with Copilot; accepted/uncertain runs never retry through
+another engine. The independent verifier and bounded semantics use isolated
+sessions on a separate installed native CLI. Compiler/worker assets are bundled.
+The optional TypeAgent structured-action bridge remains; it supplies capabilities,
+not another lifecycle or author. See [owner setup](../../../packages/copilot-plugin/README.md#plugin-owned-recipes)
+and [verification boundaries](./STATUS.md); CLI evidence never implies VS Code support.
+
+The [implementation plan](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/implementation-plan.md)
+delivered A/B/C incrementally. The repository-wide
+[cleanup plan](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/cleanup-implementation-plan.md)
+supersedes those temporary coexistence/rollback arrangements.
+The [historical host evidence](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-15_plugin-first-fast-actions/HOST-CAPABILITIES-2026-10-15.md) still informs B/C, not missing A runtime
+implementation. See [status](./STATUS.md) and
+[runtime boundaries](../../../packages/copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs).
 
 ## Purpose
 
-Copilot fast actions let TypeAgent reuse a known procedure instead of asking
-the Copilot model to plan the same work again. The area contains two related
-mechanisms:
-
-| Mechanism            | Entry point                                    | Fast path                                                                   | Learning or adaptation                                                           |
-| -------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Dev actions          | Copilot `userPromptSubmitted` hook in dev mode | A registered PowerShell namespace action or dynamic flow handles the prompt | PowerShell-specific reasoning may reuse, create, or repair a flow                |
-| Tool-composed macros | `typeagent-macros` MCP tools                   | An approved replayable macro invokes its MCP steps in order                 | An explicit trace creates a draft; agent-guided execution may submit a new draft |
-
-Both mechanisms store reusable procedures, but they have different routing,
-approval, execution, and platform rules. Approved macros are also published as
-typed actions by the `macros` agent in agent-server. They can use normal
-translation and learned grammar routing; macros are not a fourth plugin mode.
+Copilot fast actions reuse checked programs through local grammar matching or
+explicit macro commands/MCP tools, rather than replanning a known procedure.
+All routes resolve the same approved artifact. The previous automatic dev/
+PowerShell-first and MCP redirect hooks are removed. Independent TypeAgent
+flows remain available through explicit TypeAgent commands/tools, not as macro
+fallbacks. Server-side macro typed-action and runbook registrations are removed.
 
 For the common TypeAgent workflow lifecycle, dynamic schema and grammar API,
 and provider-specific flow formats, see
 [Workflows](../../architecture/workflows/workflows.md).
 
-## Goals
+## Historical design and delivery phases
+
+The remaining sections describe the earlier implementation sequence and its
+temporary APIs/modes. They are retained as design history, not supported
+compatibility paths. Current behavior is defined above, in the package READMEs
+and in the cleanup plan; do not restore old code to match historical examples.
+
+### Original goals
 
 - Handle known development actions before the Copilot agent loop.
 - Reuse successful procedures without repeated model planning.
@@ -39,103 +74,39 @@ and provider-specific flow formats, see
 
 - A unified catalog across PowerShell, WebFlow, TaskFlow, and Excel providers.
 - Deterministic replay of Copilot-native shell or edit tools.
-- General semantic program induction from one recorded interaction.
+- Unbounded semantic planning or arbitrary native-code execution on repeat.
 - Treating dynamic PowerShell policy metadata as a security sandbox.
 - A separate plugin routing mode for macros.
 
 ## Terminology
 
-| Term                    | Meaning                                                                                            |
-| ----------------------- | -------------------------------------------------------------------------------------------------- |
-| Dev action              | A PowerShell-family action offered first refusal in Copilot dev mode                               |
-| Static namespace action | A committed, typed PowerShell action implemented in a `powershell.*` namespace                     |
-| Dynamic PowerShell flow | A persisted PowerShell recipe with generated schema and grammar                                    |
-| Tool-composed macro     | A versioned procedure induced from one explicitly recorded Copilot tool trace                      |
-| Deterministic replay    | TypeAgent executes a fixed, validated sequence of replayable MCP calls                             |
-| Agent-guided execution  | The Copilot macro runner executes the whole procedure through the live tool and permission surface |
-| Automatic selection     | `run_macro` chooses replay or agent handoff from the approved macro's execution class              |
+| Term                    | Meaning                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| Dev action              | A PowerShell-family action offered first refusal in Copilot dev mode           |
+| Static namespace action | A committed, typed PowerShell action implemented in a `powershell.*` namespace |
+| Dynamic PowerShell flow | A persisted PowerShell recipe with generated schema and grammar                |
+| Tool-composed macro     | A versioned procedure induced from one explicitly recorded Copilot tool trace  |
+| Symbolic program        | Checked code performs known operations without a model                         |
+| Hybrid program          | Checked code invokes only declared bounded semantic functions                  |
 
 ## System map
 
 ```text
-User prompt
-  |
-  +-> dev-mode hook
-  |     +-> registered PowerShell action/flow -> handled result
-  |     +-> PowerShell capability reasoning -> reuse/create/repair/decline
-  |     +-> not suitable -> Copilot continues
-  |
-  +-> Copilot tool use
-        +-> explicit recording -> trace -> draft -> approval
-        +-> approved replayable macro -> full preflight -> MCP replay
-        +-> agent-required macro -> bounded Copilot runner handoff
+User prompt -> dev-mode PowerShell action/flow, or
+            -> explicit recording -> grounded build + grammar -> author/compile/fixtures
+              -> checked draft -> publication -> current version-pinned program
+              -> contained executor -> read-only MCP / declared semantic calls
 ```
-
-Dev actions can intercept the root prompt. Tool-composed macros can be invoked through MCP tools after Copilot selects them,
-or through the dispatcher when a request selects an approved macro action.
 
 ### Approved macro action routing
 
-Agent-server and its in-process host share their `MacroManager` with a dynamic
-`macros` AppAgent provider. Each current approved macro without secret inputs
-becomes a typed action named `run_<macroId>_v<version>`. Its parameters are the
-macro inputs; macro identity and version are fixed by the action, not supplied
-as user-editable parameters. `listApprovedMacros` lists the routable catalog.
-
-The first request may use translation and the normal learning path. In NFA
-mode, a successfully selected action can acquire a persisted grammar rule.
-Covered repeats match the rule and invoke the same macro without translation.
-Approval does not automatically create grammar or guarantee every paraphrase.
-
-Approval, disable, and deletion refresh active sessions. Learned routes carry
-the macro source identity and immutable-definition fingerprint, so removed or
-replaced actions are suspended through ordinary schema reconciliation.
-Execution also rechecks the current approved version, preventing a stale action
-from running an older version. Replay still preflights every step.
-
-Agent-required actions return a structured whole-macro handoff. MCP delegation
-returns it to Copilot. The Direct hook always sends the complete launch
-through authenticated session-local IPC to the
-native extension, which invokes one synchronous named runner through
-`session.rpc.tools.execute`. This bypasses root-model task-generation and
-final-answer turns, not Copilot's native invocation or permission pipeline.
-The hook returns the actual child answer after correlated completion. The
-existing runner uses live permissions. No replay prefix executes,
-and accepted macro failures remain handled in Direct mode to prevent duplicate
-execution. Handoffs must be standalone actions: queued trailing actions stop
-with an explicit error and are not resumed automatically.
-
-The packaged runner selects `gpt-6-luna` for execution rather than inheriting
-the caller's reasoning model; extraction/building model configuration is
-independent. Its immutable-version `inspect_macro` tool declares read-only,
-non-destructive, idempotent, local-catalog MCP annotations. This removes the
-unnecessary mutating-tool consent prompt on the tested CLI without granting
-execution permissions for the recorded steps. Before a host-controlled launch,
-the extension deterministically inspects the exact version with
-`requireRunnable: true`, checks the current approved unsuppressed route, and
-compares the complete catalog macro with the handoff. A verified host launch
-selects the host-only `typeagent-macro-runner-host` profile, skipping the
-redundant inspection model turn. The live pre-tool hook denies this profile
-unless its child is correlated to actual host verification; a prompt claim
-cannot authorize it. Caller/MCP handoffs execute the complete macro already
-validated by the server without another inspection call. The read-only
-`inspect_macro` tool remains for explicit catalog inspection and draft review,
-not as an execution prerequisite. Execution/backend checks remain.
-
-A grammar hit avoids translation, not the live runner's model turns. The
-Direct host path removes root-model handoff/answer overhead, while child
-startup, deterministic catalog validation and dependent-step/guard resolution
-remain. Native runner
-session markers prevent the structured launch from being routed as a new
-user request. A live pre-tool hook denies nested runner delegation and makes
-such attempts terminal. Host phase records contain timings, not launch
-payloads or tool results. Native correctness repeats pass, but matched-query
-speed benchmarks remain necessary before claiming speedup.
-
-Replay and handoff feature flags apply to the routed catalog and execution.
-Set them consistently in agent-server and plugin processes. Macros with secret
-inputs stay on the explicit macro tool surface instead of accepting secrets
-through learned utterances.
+The dynamic `macros` provider exposes current approved programs without secret
+inputs as `run_<macroId>_v<version>` typed actions. Learning validates original/
+equivalent requests, changed inputs, negative intents and combined-catalog
+collisions before publication. Approval/disable/delete refresh active schemas.
+Grammar hits and explicit calls share current-revision checks and program
+execution. Failures are terminal; no replay, planning child or runner fallback
+executes. Broader paraphrases may miss and follow normal request routing.
 
 ## Dev-action routing
 
@@ -192,92 +163,41 @@ Dynamic flows use a pending/test/promote/activate transaction:
 1. Search for an existing flow with the proposed action name.
 2. Validate grammar patterns.
 3. Save a pending recipe.
-4. Execute that recipe once.
+4. Obtain trusted interactive authorization for the exact candidate and execute
+   it once. A model-only MCP client without the authorization callback fails closed.
 5. Delete the pending recipe on failure or cancellation.
 6. Promote the same recipe after success.
 7. Reload the dynamic schema and grammar.
 8. Remove the promoted flow if activation fails.
 
 Same-name mutations are serialized within one agent-server process. A promoted
-flow persists in instance storage and is available after restart. Repair is
-bounded to one attempt per request and is not attempted for policy denial,
+flow persists in instance storage and is available after restart. An explicitly
+requested repair is bounded to one attempt per request; PowerShell failures do
+not automatically enter reasoning repair. Repair is not attempted for policy denial,
 cancellation, unsafe requests, or failures that may have produced partial side
 effects.
 
 ## Tool-composed macro lifecycle
 
-### Capture
+Explicit session recording retains the actual successful tool trace. Learning
+extracts a factual recipe, derives grounded parameters/dependencies, stages
+version-targeted grammar, then authors checked TypeScript. Fixture expectations
+are derived independently of candidate code; the actual executable must pass them.
+Prepare stages a draft; Read-only and All may auto-publish valid local programs.
+Both production brokers reject writes even in All. The TypeAgent-owned broker
+also rejects native-only tools; plugin ownership supports the native reads and
+exact read-only MCP identities described in its setup guide.
 
-`@typeagent macro record` arms exactly one eligible Copilot interaction. The
-plugin claims the recording before the turn, associates tool calls by ID, and
-finalizes a redacted trace after the turn completes. Recording is explicit and
-expires if the armed interaction is not claimed in time.
+Programs run in worker-contained QuickJS/WASM with bounded CPU/memory/stack/JSON
+and broker calls. Symbolic repeats use no model; hybrid repeats invoke only
+declared strict semantics through the selected owner's configured provider. Existing
+MCP trust/backend authorization remains authoritative, without extra recipe
+consent or model-driven inspection. Durable journals preserve uncertain external
+dispatch; cancellation cannot roll back backend work.
 
-### Induction
-
-`create_macro_from_trace` creates draft version 1. Current induction can:
-
-- replace prompt-mentioned string leaves with inputs;
-- create secret inputs for redacted leaves;
-- bind a later argument to an exact value found in an earlier result; and
-- infer result-type and result-path postconditions.
-
-It does not infer arbitrary semantics, loops, branches, or a generalized
-program from one example.
-
-Calls that identify an MCP server are classified as `replayable`. Calls
-without one are `agentRequired`.
-
-### Validation and approval
-
-Drafts cannot run. Validation checks macro structure, bindings, trace
-provenance, and execution classes. Approval is explicit and creates a new,
-immutable approved version. When a replay host is configured, approval also
-records the current schema fingerprint for each replayable tool.
-
-```text
-captured trace -> draft v1 -> validation -> approval -> approved v2
-```
-
-### Deterministic replay
-
-Before step one, replay checks the entire macro:
-
-- the version is approved and replayable;
-- every required input exists and has the expected type;
-- every input reference is bound;
-- every tool is available; and
-- recorded schema fingerprints still match.
-
-A failed preflight, including `schemaDrift`, invokes no steps. After preflight,
-steps run in order. Arguments may include literals, caller inputs, or values
-from prior step results. Postconditions check result types and required paths.
-Cancellation and timeout stop the run and are recorded in the sanitized run
-record.
-
-### Agent-guided execution
-
-If the macro is `agentRequired`, or the caller requests the `agent`
-preference, `run_macro` returns an `AgentRunnerLaunchPayload`. The
-`typeagent-macro-runner` executes the whole macro through Copilot's live tools
-and permission surface. Replay never executes a prefix before handing off the
-remainder.
-
-A successful adaptation may call `submit_macro_candidate`. Agent-server checks
-the handoff provenance and execution budgets before saving a separate draft.
-It does not mutate or approve the source version.
-
-## Execution selection
-
-| Condition                                                | Result                                                |
-| -------------------------------------------------------- | ----------------------------------------------------- |
-| Registered PowerShell action or flow matches in dev mode | TypeAgent executes it and handles the prompt          |
-| No direct PowerShell match, request is suitable          | Bounded reasoning may reuse, create, or repair a flow |
-| Request is not suitable for PowerShell                   | TypeAgent returns not handled and Copilot continues   |
-| Approved macro contains only replayable MCP steps        | TypeAgent preflights and replays it                   |
-| Macro contains an agent-required step                    | TypeAgent returns a runner launch payload             |
-| Macro version is draft or disabled                       | Execution is rejected                                 |
-| A tool schema changed after approval                     | Replay fails before step one with `schemaDrift`       |
+Grounded step/expression metadata remains authoring/audit evidence only. A
+step-only definition cannot be persisted, approved or run. `ReplayToolHost`
+remains the shared discovery/invocation interface, not a step executor.
 
 ## Try dev actions
 
@@ -296,23 +216,27 @@ learn: show the 3 newest .log files under <PATH>
 show the 3 newest .log files under <PATH>
 ```
 
-The generated flow name and exact output depend on the configured model. Use
-the name returned by TypeAgent instead of predicting it.
+The generated flow name and output depend on the model. Exact dynamic-script
+authorization is required before candidate/test/repair execution, even for
+read-only tasks. Use an interactive connected client; the MCP-only route does
+not implement that approval callback. This is not an unattended creation recipe.
 
 ## Try a tool-composed macro
 
-1. Run `@typeagent macro record`.
-2. Complete one successful Copilot turn that uses an MCP tool.
-3. Run `@typeagent macro status` and copy the returned trace ID.
-4. Use `create_macro_from_trace`.
-5. Inspect requirements and call `validate_macro`.
-6. Ask the user to approve the draft, then call `approve_macro`.
-7. Call `run_macro` with the approved macro ID, required inputs, and
-   `preference: "auto"`.
-8. Use `get_macro_run` to inspect persisted, sanitized replay evidence.
+1. Select `@typeagent macro learning prepare` (or All for automatic publication).
+2. Arm `@typeagent macro record`, then perform one supported read-only task
+   with a bounded original request, for example a quoted file path followed by
+   fixed words `for me`.
+3. Check `@typeagent macro status` for the saved trace and learning job outcome.
+4. In Prepare, review/validate the checked candidate and call `approve_macro`.
+5. Repeat a covered natural request with a changed input, or call MCP `run_macro`
+   with `macroId`, optional `version`, and required `inputs`. The MCP adapter
+   assigns the run ID; direct manager callers provide their own.
+6. Inspect `get_macro_run` evidence. A draft must be rejected; failures never
+   fall back to another execution engine.
 
-Keep the draft-rejection step in tests and demos. It makes the approval
-boundary observable.
+Restart agent-server and reload the built plugin after updating; no program flag
+is required. See the [recording walkthrough](../../../packages/copilot-plugin/README.md#learn-from-one-executed-task).
 
 ## Safety and trust boundaries
 
@@ -320,25 +244,18 @@ Static PowerShell actions contain reviewed scripts. Dynamic flows contain
 generated, imported, edited, or repaired scripts. These paths do not currently
 have the same trust level.
 
-Dynamic scripts run in PowerShell `FullLanguage` mode. Cmdlet lists, path
-validation, module lists, and network flags restrict common command paths, but
-they do not prevent direct .NET filesystem, process, network, reflection, or
-assembly APIs. Treat dynamic flow execution as host code execution, not as a
-security sandbox. See the active FullLanguage issue in codeDocs for the
-mitigation plan.
+Dynamic scripts require exact script/context authorization and run approved-local
+under the current user's OS rights. They are not an arbitrary-code sandbox:
+legacy cmdlet/path/network metadata does not prevent .NET access. Missing
+interactive authorization or a broker prevents execution. Denial never falls
+back to restricted protocol v1 or another tool. See
+[PowerShell authorization](../../architecture/workflows/workflows.md#approved-local-execution).
 
-Macro recording is explicit, drafts cannot run, and deterministic replay
-preflights every step. Agent-guided execution uses Copilot's permission
-surface and remains model-mediated.
-
-Macro boundaries can be disabled independently:
-
-| Environment variable                    | Boundary                 |
-| --------------------------------------- | ------------------------ |
-| `TYPEAGENT_MACRO_RECORDING_ENABLED`     | Explicit trace recording |
-| `TYPEAGENT_MACRO_INDUCTION_ENABLED`     | Draft creation           |
-| `TYPEAGENT_MACRO_REPLAY_ENABLED`        | Deterministic replay     |
-| `TYPEAGENT_MACRO_AGENT_HANDOFF_ENABLED` | Agent-runner handoff     |
+Macro recording is explicit; drafts cannot run. Program validation, current
+revision checks, schema/capability identity, containment and bounded semantic
+declarations remain enforced. Only recording/induction startup switches remain:
+`TYPEAGENT_MACRO_RECORDING_ENABLED` and `TYPEAGENT_MACRO_INDUCTION_ENABLED`.
+Disable/forget an approved program to revoke its route.
 
 ## Storage
 
@@ -346,8 +263,10 @@ PowerShell flows live under the PowerShell area of TypeAgent instance storage.
 They include an index, flow metadata, script bodies, generated grammar, and
 pending recipes.
 
-Macros use a separate `copilot-macros/` directory under agent-server instance
-storage:
+TypeAgent-owned macros use a `copilot-macros/` directory under agent-server
+instance storage. Plugin ownership uses the same manager layout beneath the
+plugin data root's `recipes/<workspace-profile digest>/`; those stores are
+separate, not mirrored:
 
 ```text
 copilot-macros/
@@ -355,12 +274,12 @@ copilot-macros/
   traces/<traceId>.json
   macros/<macroId>/versions/<version>.json
   runs/<runId>.json
-  handoffs/<runId>.json
   metrics.jsonl
 ```
 
-Back up these directories before migrations. Restore them only while
-agent-server is stopped.
+Back up only with the relevant owner quiescent, and restore only while it is
+stopped. The plugin's lifetime SQLite lock prevents competing owners in the
+same scope; this is not general multi-process locking for agent-server stores.
 
 ## Known limitations
 
@@ -370,7 +289,7 @@ agent-server is stopped.
   sharing one storage directory.
 - PowerShell cancellation has no forced process-tree termination fallback.
 - Macro induction from a single trace is deliberately narrow.
-- Native Copilot tools require agent-guided execution.
+- Native Copilot tools and writes are unsupported by the initial program broker.
 - Macro catalog mutation coordination is process-local.
 - Credentialed live end-to-end coverage is not yet a release gate.
 - The macro catalog does not enumerate other TypeAgent workflow providers.
@@ -384,8 +303,8 @@ agent-server is stopped.
 | Flow transaction, repair, persistence, and namespaces            | `packages/agents/powershell/test/actionHandler.spec.ts`                      |
 | Flow storage                                                     | `packages/agents/powershell/test/powerShellStore.spec.ts`                    |
 | Macro induction and validation                                   | `packages/copilot-macros/test/macroDefinition.spec.ts`                       |
-| Replay preflight and ordered execution                           | `packages/copilot-macros/test/deterministicReplay.spec.ts`                   |
-| Versioning, approval, schema drift, and runs                     | `packages/copilot-macros/test/macroCatalog.spec.ts`                          |
+| Program preflight, actual contained execution, and fresh inputs  | `packages/defaultAgentProvider/test/checkpointAPrograms.spec.ts`             |
+| Versioning, approval, suppression, restart, and durable runs     | `packages/copilot-macros/test/macroPrograms.spec.ts`                         |
 | Macro MCP surface and packaging                                  | `packages/copilot-plugin/test/macroServer.spec.ts`, `pluginArtifact.spec.ts` |
 | Recording RPC integration                                        | `packages/agentServer/server/test/macroRecordingRpc.spec.ts`                 |
 
@@ -399,7 +318,7 @@ agent-server is stopped.
 | Macro contracts                      | `packages/copilot-macros/src/contracts.ts`                         |
 | Induction and validation             | `packages/copilot-macros/src/macroDefinition.ts`                   |
 | Macro lifecycle and persistence      | `packages/copilot-macros/src/macroManager.ts`                      |
-| Deterministic replay                 | `packages/copilot-macros/src/deterministicReplay.ts`               |
+| Contained program execution          | `packages/copilot-macros/src/recipeExecutor.ts`                    |
 | MCP replay host                      | `packages/defaultAgentProvider/src/mcp/mcpReplayHost.ts`           |
 | PowerShell action and flow lifecycle | `packages/agents/powershell/src/actionHandler.mts`                 |
 | PowerShell store                     | `packages/agents/powershell/src/store/powerShellStore.mts`         |

@@ -4,35 +4,6 @@
 import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 import type { AppAgentManifest } from "@typeagent/agent-sdk";
 import type {
-    ApproveMacroRequest,
-    ArmRecordingRequest,
-    ClaimRecordingRequest,
-    CopilotToolMacro,
-    CreateMacroFromTraceRequest,
-    DeleteMacroRequest,
-    DisableMacroRequest,
-    FinalizeRecordingRequest,
-    InspectMacroRequest,
-    ListMacrosRequest,
-    MacroLearningJob,
-    MacroLearningMode,
-    MacroLearningPreference,
-    MacroMatch,
-    MacroRequirements,
-    MacroRunRecord,
-    MacroSummary,
-    MacroValidationReport,
-    MacroVersionRef,
-    RecordingState,
-    RecordingToken,
-    RunMacroRequest,
-    RunMacroResponse,
-    SearchMacrosRequest,
-    SubmitMacroCandidateRequest,
-    TraceSummary,
-    ValidateMacroRequest,
-} from "@typeagent/copilot-macros";
-import type {
     PendingInteractionRequest,
     QueueSnapshot,
 } from "@typeagent/dispatcher-types";
@@ -50,38 +21,6 @@ import type {
 import type { RunbookHostCapabilities } from "./runbookCapabilities.js";
 
 export type { MacroDraftResult } from "@typeagent/procedure-artifacts";
-
-export type {
-    ApproveMacroRequest,
-    ArmRecordingRequest,
-    ClaimRecordingRequest,
-    CopilotToolMacro,
-    CreateMacroFromTraceRequest,
-    DeleteMacroRequest,
-    DisableMacroRequest,
-    FinalizeRecordingRequest,
-    InspectMacroRequest,
-    ListMacrosRequest,
-    MacroLearningJob,
-    MacroLearningMode,
-    MacroLearningPreference,
-    MacroMatch,
-    MacroRequirements,
-    MacroRunRecord,
-    MacroSummary,
-    MacroValidationReport,
-    MacroVersionRef,
-    RecordedInteractionTrace,
-    RecordedToolCall,
-    RecordingState,
-    RecordingToken,
-    RunMacroRequest,
-    RunMacroResponse,
-    SearchMacrosRequest,
-    SubmitMacroCandidateRequest,
-    TraceSummary,
-    ValidateMacroRequest,
-} from "@typeagent/copilot-macros";
 
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
@@ -292,55 +231,6 @@ export type AgentServerInvokeFunctions = {
     listBindingTargets: RunbookHostCapabilities["listBindingTargets"];
     checkBindingTargets: RunbookHostCapabilities["checkBindingTargets"];
     suggestBindings: RunbookHostCapabilities["suggestBindings"];
-    getMacroLearningPreference: (
-        cwd: string,
-    ) => Promise<MacroLearningPreference>;
-    setMacroLearningPreference: (request: {
-        cwd: string;
-        mode: MacroLearningMode;
-    }) => Promise<MacroLearningPreference>;
-    prepareMacroLearning: (request: {
-        traceId: string;
-    }) => Promise<MacroLearningJob>;
-    getMacroLearningJob: (jobId: string) => Promise<MacroLearningJob>;
-    cancelMacroLearningJob: (jobId: string) => Promise<MacroLearningJob>;
-    armMacroRecording: (
-        request: ArmRecordingRequest,
-    ) => Promise<RecordingToken>;
-    getMacroRecordingState: (sessionId: string) => Promise<RecordingState>;
-    claimMacroRecording: (
-        request: ClaimRecordingRequest,
-    ) => Promise<RecordingToken | undefined>;
-    cancelMacroRecording: (sessionId: string) => Promise<void>;
-    failMacroRecording: (
-        sessionId: string,
-        tokenId: string,
-        error: string,
-    ) => Promise<void>;
-    finalizeMacroRecording: (
-        request: FinalizeRecordingRequest,
-    ) => Promise<TraceSummary>;
-    listMacros: (request?: ListMacrosRequest) => Promise<MacroSummary[]>;
-    searchMacros: (request: SearchMacrosRequest) => Promise<MacroMatch[]>;
-    inspectMacro: (request: InspectMacroRequest) => Promise<CopilotToolMacro>;
-    getMacroRequirements: (
-        request: InspectMacroRequest,
-    ) => Promise<MacroRequirements>;
-    createMacroFromTrace: (
-        request: CreateMacroFromTraceRequest,
-    ) => Promise<MacroVersionRef>;
-    validateMacro: (
-        request: ValidateMacroRequest,
-    ) => Promise<MacroValidationReport>;
-    approveMacro: (request: ApproveMacroRequest) => Promise<MacroVersionRef>;
-    disableMacro: (request: DisableMacroRequest) => Promise<MacroVersionRef>;
-    deleteMacro: (request: DeleteMacroRequest) => Promise<void>;
-    runMacro: (request: RunMacroRequest) => Promise<RunMacroResponse>;
-    submitMacroCandidate: (
-        request: SubmitMacroCandidateRequest,
-    ) => Promise<MacroVersionRef>;
-    cancelMacroRun: (runId: string) => Promise<void>;
-    getMacroRun: (runId: string) => Promise<MacroRunRecord>;
     listSkills: (request?: ListSkillsRequest) => Promise<CatalogEntry[]>;
     searchSkills: (
         request: SearchSkillsRequest,
@@ -534,6 +424,57 @@ export const AGENT_SERVER_DEFAULT_URL = `ws://localhost:${AGENT_SERVER_DEFAULT_P
  */
 export const AGENT_SERVER_DISCOVERY_NAME = "agent-server";
 
+export type DiscoveryRequestAuth = {
+    version: 1;
+    credentialId: string;
+    nonce: string;
+    issuedAt: number;
+    expiresAt: number;
+    proof: string;
+};
+
+export type DiscoveryResponseAuth = {
+    version: 1;
+    credentialId: string;
+    requestNonce: string;
+    serverNonce: string;
+    issuedAt: number;
+    expiresAt: number;
+    proof: string;
+};
+
+export type DiscoveryLookupRequest = {
+    agentName: string;
+    role?: string;
+    /**
+     * Hint that the request originates from a remote (non-loopback)
+     * client, so the server should answer with a tunnel `url` (when one
+     * is configured and live) rather than a localhost realm. Optional and
+     * backward compatible - omitted by local clients, which only ever
+     * need the port. See the dev-tunnel discovery design.
+     */
+    remote?: boolean;
+    /**
+     * Optional tuple-specific authentication. Hosts require this for
+     * protected tuples while leaving unrelated discovery compatible.
+     */
+    auth?: DiscoveryRequestAuth;
+};
+
+export type DiscoveryLookupResponse = {
+    port: number | null;
+    /**
+     * A fully-qualified WebSocket URL (e.g. a `wss://…devtunnels.ms`
+     * tunnel address) the caller should connect to instead of
+     * `ws://localhost:<port>`. Present only when the server resolved a
+     * live tunnel mapping for `port` and the request was remote-realm.
+     * Absent means callers fall back to the localhost realm using `port`.
+     */
+    url?: string;
+    /** Tuple-specific proof authenticating the response fields. */
+    auth?: DiscoveryResponseAuth;
+};
+
 /**
  * RPC surface for the discovery channel. Read-only on purpose: clients can
  * ask "where is agent X's role Y?" but cannot mutate the registrar — only
@@ -560,28 +501,9 @@ export type DiscoveryInvokeFunctions = {
      * defined value; callers should treat null as "no allocation found,
      * try again later" rather than a hard error.
      */
-    lookupPort: (param: {
-        agentName: string;
-        role?: string;
-        /**
-         * Hint that the request originates from a remote (non-loopback)
-         * client, so the server should answer with a tunnel `url` (when one
-         * is configured and live) rather than a localhost realm. Optional and
-         * backward compatible — omitted by local clients, which only ever
-         * need the port. See the dev-tunnel discovery design.
-         */
-        remote?: boolean;
-    }) => Promise<{
-        port: number | null;
-        /**
-         * A fully-qualified WebSocket URL (e.g. a `wss://…devtunnels.ms`
-         * tunnel address) the caller should connect to instead of
-         * `ws://localhost:<port>`. Present only when the server resolved a
-         * live tunnel mapping for `port` and the request was remote-realm.
-         * Absent → fall back to the localhost realm using `port`.
-         */
-        url?: string;
-    }>;
+    lookupPort: (
+        param: DiscoveryLookupRequest,
+    ) => Promise<DiscoveryLookupResponse>;
 };
 
 /**
@@ -613,15 +535,32 @@ export function createDiscoveryHandlers(
         port: number,
         remote?: boolean,
     ) => string | undefined | Promise<string | undefined>,
+    /**
+     * Optional tuple-specific response protector. It may reject the request
+     * or return a proof that is attached to the result. Unprotected tuples
+     * return undefined and retain the legacy response shape.
+     */
+    protectResponse?: (
+        request: DiscoveryLookupRequest,
+        response: DiscoveryLookupResponse,
+    ) =>
+        | DiscoveryResponseAuth
+        | undefined
+        | Promise<DiscoveryResponseAuth | undefined>,
 ): DiscoveryInvokeFunctions {
     return {
-        lookupPort: async ({ agentName, role, remote }) => {
+        lookupPort: async (request) => {
+            const { agentName, role, remote } = request;
             const port = lookup(agentName, role) ?? null;
+            let response: DiscoveryLookupResponse;
             if (port === null) {
-                return { port };
+                response = { port };
+            } else {
+                const url = await resolveUrl?.(agentName, port, remote);
+                response = url ? { port, url } : { port };
             }
-            const url = await resolveUrl?.(agentName, port, remote);
-            return url ? { port, url } : { port };
+            const auth = await protectResponse?.(request, response);
+            return auth === undefined ? response : { ...response, auth };
         },
     };
 }

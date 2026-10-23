@@ -3,6 +3,13 @@
 
 import type { AgentEdition } from "./agentEdition.js";
 import type {
+    AgentMemorySearchRequest,
+    AgentMemorySearchResult,
+    AgentSessionImportReceipt,
+    AgentSessionImportRequest,
+    AgentSessionReadRequest,
+} from "./agentSessionTypes.js";
+import type {
     MemoryBatchImport,
     MemoryBatchImportLookup,
     MemoryBatchImportRequest,
@@ -89,7 +96,46 @@ export interface SourceRevision {
     };
     embeddingIdentity?: string;
     assets?: RevisionAssetDescriptor[];
+    synopsis?: SourceSynopsisPreview;
     state: "accepted" | "processing" | "ready" | "failed" | "deleted";
+}
+
+export interface SourceSynopsisPreview {
+    status: "pending" | "ready" | "failed" | "unavailable";
+    freshness: "fresh" | "stale";
+    preview?: string;
+    generatedVersion: number;
+    recipe: string;
+    inputHash: string;
+    generatedAt?: string;
+    reason?: string;
+}
+
+export interface SourceSynopsis extends SourceSynopsisPreview {
+    corpusId: string;
+    sourceId: string;
+    revisionId: string;
+    overview?: string;
+    evidence: {
+        coordinateSpace: "retained-utf16";
+        start: number;
+        end: number;
+        excerpt: string;
+    }[];
+    influenceSources: { sourceId: string; revisionId: string }[];
+    coverage: {
+        method: "direct" | "source-order-sections";
+        scannedChars: number;
+        totalChars: number;
+        sectionCount: number;
+    };
+    limitations: string[];
+}
+
+export interface SourceSynopsisRequest {
+    corpusId: string;
+    sourceId: string;
+    revisionId?: string;
 }
 
 export interface MemorySource extends SourceDocument {
@@ -293,6 +339,7 @@ export interface MemoryEvidence {
     sourceType: SourceType;
     capturedAt?: string;
     indexedAt: string;
+    synopsis?: SourceSynopsisPreview;
 }
 
 export interface MemorySearchResult {
@@ -518,6 +565,8 @@ export interface MemoryServiceCapabilities {
         exactSearch: boolean;
         management: boolean;
         groundedAnswer: boolean;
+        sourceSynopses?: boolean;
+        agentSessionImportTypes?: AgentSessionImportRequest["importType"][];
     };
     warnings: string[];
 }
@@ -561,6 +610,18 @@ export interface ProcedureVersion {
 export interface MemoryService {
     initialize?(): Promise<void>;
     close?(): Promise<void>;
+    importAgentSession?(
+        request: AgentSessionImportRequest,
+    ): Promise<AgentSessionImportReceipt>;
+    getAgentSessionImport?(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt | undefined>;
+    cancelAgentSessionImport?(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt>;
+    searchAgentMemories?(
+        request: AgentMemorySearchRequest,
+    ): Promise<AgentMemorySearchResult>;
     createCorpus(name: string, description?: string): Promise<MemoryCorpus>;
     listCorpora(): Promise<MemoryCorpus[]>;
     getCorpus(corpusId: string): Promise<MemoryCorpusStatus | undefined>;
@@ -593,6 +654,7 @@ export interface MemoryService {
         sourceId: string,
     ): Promise<MemorySource | undefined>;
     getSourceContent(request: SourceContentRequest): Promise<SourceContent>;
+    getSourceSynopsis?(request: SourceSynopsisRequest): Promise<SourceSynopsis>;
     getSourceKnowledge(
         corpusId: string,
         sourceId: string,
@@ -702,6 +764,7 @@ export interface IndexedFragmentRequest {
     terms: string[];
     query?: string;
     sourceIds: string[];
+    followSources?: Array<{ sourceId: string; revisionId: string }>;
     maxFragments?: number;
     maxCharsPerFragment?: number;
     maxReadChars?: number;
@@ -714,6 +777,17 @@ export interface IndexedFragmentSelection {
 }
 
 export interface CorpusIndex {
+    rebuildRetained?(
+        previous: CorpusIndex,
+        documents: IndexedDocument[],
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<boolean>;
+    replace?(
+        document: IndexedDocument,
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<void>;
     initialize(): Promise<void>;
     listSubjects?(
         offset: number,

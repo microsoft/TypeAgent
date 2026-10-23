@@ -1,8 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 import { informationalView } from "./informationalView.js";
+import { queryTopicSnapshot, validateTopicSnapshot } from "./topicSnapshot.js";
+import { validateTopicBuildOutput } from "./topicBuilds.js";
+import type {
+    TopicFamilyState,
+    TopicQueryPage,
+    TopicQueryRequest,
+    TopicSnapshot,
+} from "./topicTypes.js";
 
 import { randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -11,7 +20,7 @@ import {
 } from "./agentEdition.js";
 import { retryFilesystemPublication } from "./filesystemPublication.js";
 import { assertViewIdentifier } from "./viewContent.js";
-import { ViewHistory } from "./viewHistory.js";
+import { ViewHistory, type HistorySnapshot } from "./viewHistory.js";
 import {
     inventoryCoverage,
     inventoryEvidence,
@@ -24,8 +33,17 @@ import {
     sameViewBuildEvidence,
     viewHash,
 } from "./viewMerge.js";
+import {
+    recordEditorialProtection,
+    unlockEditorialProtection,
+} from "./viewEditorial.js";
 import { reusableWikiAssessment } from "./wikiAdmission.js";
 import { assertWikiContribution } from "./wikiContribution.js";
+import {
+    assertWikiRedirectCapacity,
+    automaticallyConsolidatable,
+    ConsolidationTargetChanged,
+} from "./wikiConsolidation.js";
 import { assertPublicationProof } from "./viewPublication.js";
 import {
     authoredRelationships,
@@ -69,6 +87,8 @@ interface ViewStoreState {
     viewIndexCleanup?: string[];
     wikiFamily?: WikiFamilyState;
     projectFamily?: WikiFamilyState;
+    topics?: TopicSnapshot;
+    topicFamily?: TopicFamilyState;
     maintenanceReceipts?: Record<
         string,
         Pick<ViewMaintenanceResult, "receiptId" | "plan"> & { jobId?: string }
@@ -127,6 +147,24 @@ function timestamp(): string {
     return new Date().toISOString();
 }
 
+function freezeSnapshot(value: unknown): void {
+    if (!value || typeof value !== "object" || Object.isFrozen(value)) return;
+    for (const child of Object.values(value)) freezeSnapshot(child);
+    Object.freeze(value);
+}
+
+function eraseInformationalRetrieval(value: unknown, sourceId: string): void {
+    if (!value || typeof value !== "object") return;
+    const record = value as Record<string, unknown>;
+    const context = record.informationalRetrieval as
+        | ViewBuildSnapshot["informationalRetrieval"]
+        | undefined;
+    if (context?.sources.some((source) => source.sourceId === sourceId))
+        delete record.informationalRetrieval;
+    for (const child of Object.values(record))
+        eraseInformationalRetrieval(child, sourceId);
+}
+
 function validateIdentifier(kind: string, value: string): void {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)) {
         throw new Error(`Invalid ${kind} '${value}'`);
@@ -134,31 +172,239 @@ function validateIdentifier(kind: string, value: string): void {
 }
 
 export class TypedViewStore {
+    private readonly readOperation = new AsyncLocalStorage<{
+        corpusId: string;
+        active: boolean;
+        snapshot: Promise<HistorySnapshot<ViewStoreState>>;
+    }>();
+
     public constructor(
         private readonly rootDirectory: string,
         private readonly actor = "local-owner",
     ) {}
 
+    private readonly topicSizes = new Map<
+        string,
+        { head: string | null; bytes: number }
+    >();
+
     private history(corpusId: string): ViewHistory<ViewStoreState> {
         validateIdentifier("corpus ID", corpusId);
-        return new ViewHistory(this.viewDirectory(corpusId), () => ({
-            views: {},
-        }));
+        return new ViewHistory(
+            this.viewDirectory(corpusId),
+            () => ({ views: {} }),
+            undefined,
+            (state: ViewStoreState) => state.views,
+        );
+    }
+
+    public async withReadSnapshot<T>(
+        corpusId: string,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        const existing = this.readOperation.getStore();
+        if (existing?.active && existing.corpusId === corpusId)
+            return operation();
+        const history = this.history(corpusId);
+        const scope = {
+            corpusId,
+            active: true,
+            snapshot: history.read().then((snapshot) => {
+                freezeSnapshot(snapshot);
+                return snapshot;
+            }),
+        };
+        return this.readOperation.run(scope, async () => {
+            try {
+                await scope.snapshot;
+                const result = await operation();
+                await history.assertHead((await scope.snapshot).head);
+                return result;
+            } finally {
+                scope.active = false;
+            }
+        });
+    }
+
+    private async readSnapshot(corpusId: string) {
+        const scope = this.readOperation.getStore();
+        const history = this.history(corpusId);
+        if (!scope?.active || scope.corpusId !== corpusId)
+            return history.read();
+        await history.assertReadable();
+        return scope.snapshot;
+    }
+
+    private expireReadSnapshot(): void {
+        const scope = this.readOperation.getStore();
+        if (scope) scope.active = false;
+    }
+
+    public async getViewVersions(
+        request: ViewReadRequest,
+    ): Promise<ViewVersion[]> {
+        assertViewIdentifier("view ID", request.viewId);
+        const { state } = await this.readSnapshot(request.corpusId);
+        return structuredClone(viewVersions(state, request.viewId)).reverse();
+    }
+
+    public async getTopicState(corpusId: string): Promise<{
+        head: string | null;
+        snapshot?: TopicSnapshot;
+        family: TopicFamilyState;
+    }> {
+        const { head, state } = await this.history(corpusId).read();
+        if (state.topics) validateTopicSnapshot(state.topics);
+        return {
+            head,
+            ...(state.topics ? { snapshot: state.topics } : {}),
+            family: state.topicFamily ?? { enabled: true, dirty: true },
+        };
+    }
+
+    public async queryTopics(
+        request: TopicQueryRequest,
+        eligibleFingerprint?: string,
+    ): Promise<TopicQueryPage> {
+        const started = performance.now();
+        const { head, state, stateBytes } = await this.history(
+            request.corpusId,
+        ).read();
+        if (state.topics) validateTopicSnapshot(state.topics);
+        const withheld =
+            state.topics &&
+            eligibleFingerprint !== undefined &&
+            state.topics.inputFingerprint !== eligibleFingerprint;
+        if (withheld && request.continuationToken)
+            throw new Error(
+                "Topic continuation is stale after source eligibility changed",
+            );
+        const page = queryTopicSnapshot(
+            withheld ? undefined : state.topics,
+            request,
+        );
+        if (withheld)
+            page.limits.push(
+                "Topic snapshot withheld: active sources or indexed eligibility changed; maintenance pending.",
+            );
+        if (state.topicFamily?.error)
+            page.limits = [
+                ...page.limits,
+                `Topic family failure: ${state.topicFamily.error}`,
+            ];
+        let size = this.topicSizes.get(request.corpusId);
+        if (!size || size.head !== head) {
+            size = {
+                head,
+                bytes: Buffer.byteLength(JSON.stringify(state.topics ?? null)),
+            };
+            this.topicSizes.set(request.corpusId, size);
+        }
+        page.io = {
+            stateBytes,
+            snapshotBytes: size.bytes,
+            elapsedMs: performance.now() - started,
+        };
+        return page;
+    }
+
+    public async saveTopicFamily(
+        corpusId: string,
+        family: TopicFamilyState,
+    ): Promise<void> {
+        const { head, state } = await this.history(corpusId).read();
+        if (
+            JSON.stringify(
+                state.topicFamily ?? { enabled: true, dirty: true },
+            ) === JSON.stringify(family)
+        )
+            return;
+        state.topicFamily = structuredClone(family);
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            "Checkpoint topic maintenance",
+        );
+    }
+
+    public async materializeTopicBuild(
+        corpusId: string,
+        jobId: string,
+        snapshot: TopicSnapshot,
+        complete = true,
+    ): Promise<void> {
+        validateTopicSnapshot(snapshot);
+        const { head, state } = await this.history(corpusId).read();
+        const job = state.builds?.[jobId];
+        const result = job?.results.find(
+            (entry) => entry.snapshot.pipeline === "topics-v1",
+        );
+        if (
+            !job ||
+            !result ||
+            job.state !== "running" ||
+            snapshot.corpusId !== corpusId ||
+            snapshot.inputFingerprint !== result.snapshot.fingerprint
+        )
+            throw new Error(
+                "Topic build is no longer eligible for materialization",
+            );
+        validateTopicBuildOutput(result.snapshot, snapshot);
+        if (result.state === "draft")
+            throw new Error("Topic generation changed or already completed");
+        if (
+            (state.topics?.generation ?? undefined) !==
+            (result.topicGeneration ?? result.snapshot.targetRevisionId)
+        )
+            throw new Error("Topic generation changed during build");
+        state.topics = structuredClone(snapshot);
+        state.topicFamily = {
+            enabled: state.topicFamily?.enabled ?? true,
+            dirty: false,
+            ...(result.snapshot.topicInput?.indexGeneration
+                ? {
+                      indexGeneration:
+                          result.snapshot.topicInput.indexGeneration,
+                  }
+                : {}),
+        };
+        result.state = complete ? "draft" : "generating";
+        result.topicGeneration = snapshot.generation;
+        result.reason = `Complete topic snapshot ${snapshot.generation} committed and available for browsing; ${snapshot.nodes.filter((node) => node.summaryState === "ready").length}/${snapshot.nodes.length} summaries ready; ${complete ? "generation finished" : "generation pending"}; not a Wiki article revision`;
+        if (complete)
+            result.missingEvidence = [
+                ...snapshot.nodes
+                    .filter((node) => node.summaryState !== "ready")
+                    .map(
+                        (node) =>
+                            `Topic summary ${node.summaryState}: ${node.id}`,
+                    ),
+                ...snapshot.limits.filter((limit) =>
+                    limit.startsWith("Organizational generation failed:"),
+                ),
+            ];
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            `Materialize topic snapshot ${snapshot.generation}`,
+        );
     }
 
     public async getWikiFamily(
         corpusId: string,
         family: "wiki" | "projects" = "wiki",
     ): Promise<WikiFamilyState> {
-        return (
-            (await this.history(corpusId).read()).state[
+        return structuredClone(
+            (await this.readSnapshot(corpusId)).state[
                 family === "wiki" ? "wikiFamily" : "projectFamily"
             ] ?? {
                 enabled: true,
                 dirty: true,
                 cursor: 0,
                 descriptors: [],
-            }
+            },
         );
     }
 
@@ -219,11 +465,13 @@ export class TypedViewStore {
     }
 
     public async listViews(corpusId: string): Promise<ViewSnapshot> {
-        const snapshot = await this.history(corpusId).read();
+        const snapshot = await this.readSnapshot(corpusId);
         return {
             head: snapshot.head,
-            views: Object.values(snapshot.state.views).map(
-                (versions) => versions[versions.length - 1],
+            views: structuredClone(
+                Object.values(snapshot.state.views).map(
+                    (versions) => versions[versions.length - 1],
+                ),
             ),
         };
     }
@@ -232,13 +480,15 @@ export class TypedViewStore {
         request: ViewReadRequest,
     ): Promise<ViewVersion | undefined> {
         assertViewIdentifier("view ID", request.viewId);
-        const state = (await this.history(request.corpusId).read()).state;
+        const state = (await this.readSnapshot(request.corpusId)).state;
         const versions = viewVersions(state, request.viewId);
-        return request.revisionId === undefined
-            ? versions.at(-1)
-            : versions.find(
-                  (version) => version.revisionId === request.revisionId,
-              );
+        return structuredClone(
+            request.revisionId === undefined
+                ? versions.at(-1)
+                : versions.find(
+                      (version) => version.revisionId === request.revisionId,
+                  ),
+        );
     }
 
     public async sourceUsage(
@@ -268,6 +518,9 @@ export class TypedViewStore {
                     view.definition.selector.sources.some(documentReference) ||
                     references.some(documentReference) ||
                     view.generation?.input?.inputs.some(documentReference) ||
+                    view.generation?.input?.influenceSources?.some(
+                        documentReference,
+                    ) ||
                     endpoints.some(
                         (endpoint) =>
                             endpoint.kind === "source" &&
@@ -296,6 +549,26 @@ export class TypedViewStore {
                 state: view.state,
                 provenance: view.provenance,
             }));
+    }
+
+    private draftEdits(
+        current: ViewVersion | undefined,
+        request: ViewSaveRequest,
+    ): NonNullable<ViewVersion["edits"]> {
+        if (request.unlockProtection) {
+            if (!current)
+                throw new Error("Protection unlock requires an existing view");
+            return unlockEditorialProtection(current, request.unlockProtection);
+        }
+        return recordEditorialProtection(
+            current,
+            recordViewEdits(
+                current,
+                request.content,
+                request.relationships,
+                this.actor,
+            ),
+        );
     }
 
     public async saveViewDraft(
@@ -328,12 +601,7 @@ export class TypedViewStore {
             ...(current?.maintenance
                 ? { maintenance: structuredClone(current.maintenance) }
                 : {}),
-            edits: recordViewEdits(
-                current,
-                request.content,
-                request.relationships,
-                this.actor,
-            ),
+            edits: this.draftEdits(current, request),
             ...(current ? { baseRevisionId: current.revisionId } : {}),
             definition: materializeDefinition(
                 preserveMaintenanceDefinition(
@@ -365,6 +633,7 @@ export class TypedViewStore {
             });
         }
         state.views[request.viewId] = [...versions, version];
+        this.expireReadSnapshot();
         const commitId = await history.commit(
             head,
             state,
@@ -381,6 +650,7 @@ export class TypedViewStore {
         state: ViewStoreState,
         message: string,
     ): Promise<string> {
+        this.expireReadSnapshot();
         return this.history(corpusId).commit(
             head,
             state,
@@ -391,10 +661,12 @@ export class TypedViewStore {
     }
 
     public async listViewBuilds(corpusId: string): Promise<ViewBuildJob[]> {
-        const { state } = await this.history(corpusId).read();
-        return Object.values(state.builds ?? {})
-            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-            .slice(0, 100);
+        const { state } = await this.readSnapshot(corpusId);
+        return structuredClone(
+            Object.values(state.builds ?? {})
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                .slice(0, 100),
+        );
     }
 
     public async getViewBuild(
@@ -412,6 +684,7 @@ export class TypedViewStore {
         maintenancePlan?: ViewMaintenancePlan,
         wikiFamily?: WikiFamilyState,
         familyKind: "wiki" | "projects" = "wiki",
+        topicFamily?: TopicFamilyState,
     ): Promise<{ job: ViewBuildJob; admitted: boolean }> {
         const { head, state } = await this.history(request.corpusId).read();
         const fingerprint = viewHash({ request, snapshots });
@@ -444,6 +717,7 @@ export class TypedViewStore {
         };
         state.builds ??= {};
         state.builds[job.jobId] = job;
+        if (topicFamily) state.topicFamily = structuredClone(topicFamily);
         if (wikiFamily)
             state[familyKind === "wiki" ? "wikiFamily" : "projectFamily"] =
                 structuredClone(wikiFamily);
@@ -454,6 +728,44 @@ export class TypedViewStore {
             `Admit draft build ${job.jobId}`,
         );
         return { job, admitted: true };
+    }
+
+    public async admitTopicBuild(
+        input: ViewBuildSnapshot,
+        expectedHead: string | null,
+        family: TopicFamilyState,
+    ): Promise<{
+        job: ViewBuildJob;
+        admitted: boolean;
+    }> {
+        if (input.pipeline !== "topics-v1" || !input.topicInput)
+            throw new Error(
+                "Topic admission requires complete captured incidence",
+            );
+        const checkpoint: TopicFamilyState = {
+            enabled: family.enabled,
+            dirty: false,
+            ...(input.topicInput.indexGeneration
+                ? { indexGeneration: input.topicInput.indexGeneration }
+                : {}),
+        };
+        return this.admitViewBuild(
+            {
+                corpusId: input.corpusId,
+                expectedHead,
+                targets: [
+                    {
+                        definition: input.definition,
+                        expectedVersion: input.expectedVersion,
+                    },
+                ],
+            },
+            [input],
+            undefined,
+            undefined,
+            "wiki",
+            checkpoint,
+        );
     }
 
     public async recordViewMaintenance(
@@ -593,7 +905,7 @@ export class TypedViewStore {
             ) {
                 family.dirty = true;
                 family.cursor = 0;
-                family.error = `Interrupted ${kind} admission; retry pending indexed work`;
+                delete family.error;
             }
         }
         for (const job of running) {
@@ -611,7 +923,7 @@ export class TypedViewStore {
                 ) {
                     result.state = "interrupted";
                     result.reason =
-                        "Service restarted before durable materialization; explicit retry required";
+                        "Service restarted before durable materialization; pending indexed work will reconcile";
                 }
             }
         }
@@ -628,9 +940,9 @@ export class TypedViewStore {
         conflictId: string,
     ): Promise<ViewMergeConflict | undefined> {
         assertViewIdentifier("conflict ID", conflictId);
-        return (await this.history(corpusId).read()).state.conflicts?.[
-            conflictId
-        ];
+        return structuredClone(
+            (await this.readSnapshot(corpusId)).state.conflicts?.[conflictId],
+        );
     }
 
     public async pendingWikiContributionConflict(
@@ -662,6 +974,7 @@ export class TypedViewStore {
         corpusId: string,
         viewId: string,
         input: ViewBuildSnapshot,
+        includeParkedFailures = true,
     ): Promise<boolean> {
         const { state } = await this.history(corpusId).read();
         const pendingConflict = Object.values(state.conflicts ?? {}).some(
@@ -671,6 +984,25 @@ export class TypedViewStore {
                 sameViewBuildEvidence(conflict.input, input),
         );
         if (pendingConflict) return true;
+        const attempts = Object.values(state.builds ?? {}).flatMap((job) =>
+            job.results.filter(
+                (result) =>
+                    result.viewId === viewId &&
+                    sameViewBuildEvidence(result.snapshot, input),
+            ),
+        );
+        if (
+            includeParkedFailures &&
+            attempts.some((result) =>
+                ["blocked", "conflicted", "cancelled"].includes(result.state),
+            )
+        )
+            return true;
+        if (
+            includeParkedFailures &&
+            attempts.filter((result) => result.state === "failed").length >= 2
+        )
+            return true;
         return Object.values(state.builds ?? {}).some((job) =>
             job.results.some((result) => {
                 if (result.viewId !== viewId) return false;
@@ -779,6 +1111,161 @@ export class TypedViewStore {
             `Materialize draft build ${jobId}: ${viewId} ${result.state}`,
         );
         return result;
+    }
+
+    public async acceptWikiConsolidation(
+        corpusId: string,
+        jobId: string,
+        targetId: string,
+    ): Promise<ViewVersion> {
+        const { head, state } = await this.history(corpusId).read();
+        const receipt = state.builds?.[jobId]?.results.find(
+            (result) => result.viewId === targetId,
+        )?.wikiConsolidation;
+        if (!receipt)
+            throw new Error("Consolidation receipt was removed or forgotten");
+        const survivor = viewVersions(state, receipt.survivorViewId).at(-1);
+        if (receipt.acceptedRevisionId) {
+            if (survivor?.revisionId !== receipt.acceptedRevisionId)
+                throw new ConsolidationTargetChanged(
+                    "Accepted consolidation target changed",
+                );
+            return survivor;
+        }
+        const retiring = viewVersions(state, receipt.retiringViewId).at(-1);
+        const generated = (view: ViewVersion) =>
+            automaticallyConsolidatable(
+                view,
+                viewVersions(state, view.viewId).map((version) => ({
+                    commitId: "",
+                    version,
+                })),
+            );
+        if (
+            receipt.stage !== "prepared" ||
+            receipt.assessment.relation !== "samePurpose" ||
+            !receipt.verification.safe ||
+            receipt.verification.failures.length ||
+            !survivor ||
+            !retiring ||
+            !generated(survivor) ||
+            !generated(retiring) ||
+            survivor.revisionId !== receipt.input.targetRevisionId ||
+            survivor.version !== receipt.input.expectedVersion ||
+            retiring.revisionId !== receipt.retiringRevisionId ||
+            retiring.version !== receipt.retiringVersion
+        )
+            throw new ConsolidationTargetChanged(
+                "Consolidation acceptance target or authorship changed",
+            );
+        assertWikiRedirectCapacity(
+            Object.keys(state.views).flatMap((viewId) =>
+                viewVersions(state, viewId).slice(-1),
+            ),
+            retiring.viewId,
+        );
+        const version = this.generatedVersion(
+            receipt.input,
+            survivor,
+            receipt.output,
+            receipt.output,
+        );
+        state.views[version.viewId].push(version);
+        receipt.acceptedRevisionId = version.revisionId;
+        receipt.stage = "accepted";
+        state.publications ??= {};
+        state.publications[version.viewId] = {
+            ...state.publications[version.viewId],
+            viewId: version.viewId,
+            latestBuiltRevisionId: version.revisionId,
+            indexState: "pending",
+            reason: "Canonical consolidation accepted; exact derivative readiness pending",
+        };
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            "Accept qualified canonical consolidation",
+        );
+        return version;
+    }
+
+    public async activateWikiRedirect(
+        corpusId: string,
+        jobId: string,
+        targetId: string,
+    ): Promise<void> {
+        const { head, state } = await this.history(corpusId).read();
+        const receipt = state.builds?.[jobId]?.results.find(
+            (result) => result.viewId === targetId,
+        )?.wikiConsolidation;
+        if (!receipt)
+            throw new Error("Consolidation receipt was removed or forgotten");
+        if (receipt.stage === "redirected" || receipt.stage === "ready") return;
+        const survivor = viewVersions(state, receipt.survivorViewId).at(-1);
+        const retiring = viewVersions(state, receipt.retiringViewId).at(-1);
+        if (
+            receipt.stage !== "accepted" ||
+            !survivor ||
+            !retiring ||
+            !survivor.generation ||
+            survivor.revisionId !== receipt.acceptedRevisionId ||
+            retiring.revisionId !== receipt.retiringRevisionId ||
+            !automaticallyConsolidatable(
+                retiring,
+                viewVersions(state, retiring.viewId).map((version) => ({
+                    commitId: "",
+                    version,
+                })),
+            ) ||
+            !automaticallyConsolidatable(
+                survivor,
+                viewVersions(state, survivor.viewId).map((version) => ({
+                    commitId: "",
+                    version,
+                })),
+            )
+        )
+            throw new ConsolidationTargetChanged(
+                "Consolidation redirect target or authorship changed",
+            );
+        assertWikiRedirectCapacity(
+            Object.keys(state.views).flatMap((viewId) =>
+                viewVersions(state, viewId).slice(-1),
+            ),
+            retiring.viewId,
+        );
+        const alias: ViewVersion = {
+            ...retiring,
+            revisionId: randomUUID(),
+            version: retiring.version + 1,
+            baseRevisionId: retiring.revisionId,
+            state: "archived",
+            actor: "memory-view-generator",
+            createdAt: timestamp(),
+            content: structuredClone(survivor.content),
+            generation: structuredClone(survivor.generation),
+            relationships: structuredClone(survivor.relationships),
+            edits: [],
+            redirect: {
+                viewId: survivor.viewId,
+                acceptedRevisionId: survivor.revisionId,
+                anchors: receipt.anchors,
+            },
+        };
+        state.views[retiring.viewId].push(alias);
+        receipt.redirectRevisionId = alias.revisionId;
+        receipt.stage = "redirected";
+        if (state.wikiFamily)
+            state.wikiFamily.descriptors = state.wikiFamily.descriptors.filter(
+                (descriptor) => descriptor.viewId !== retiring.viewId,
+            );
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            "Activate accepted canonical Wiki redirect",
+        );
     }
 
     private recordMergeConflict(
@@ -1008,6 +1495,7 @@ export class TypedViewStore {
                 ...new Set([...(state.viewIndexCleanup ?? []), request.viewId]),
             ];
         }
+        this.expireReadSnapshot();
         const commitId = await history.commit(
             head,
             state,
@@ -1022,13 +1510,19 @@ export class TypedViewStore {
         request: ViewReadRequest,
     ): Promise<ViewHistoryEntry[]> {
         assertViewIdentifier("view ID", request.viewId);
+        const scope = this.readOperation.getStore();
+        const head =
+            scope?.active && scope.corpusId === request.corpusId
+                ? (await scope.snapshot).head
+                : undefined;
         const commits = (
-            await this.history(request.corpusId).history()
+            await this.history(request.corpusId).historyForRecord<
+                ViewVersion[]
+            >(request.viewId, head)
         ).reverse();
         const seen = new Set<string>();
-        const entries = commits.flatMap(({ commitId, state }) => {
-            const versions = viewVersions(state, request.viewId);
-            return versions.flatMap((version) => {
+        const entries = commits.flatMap(({ commitId, record }) => {
+            return (record ?? []).flatMap((version) => {
                 if (seen.has(version.revisionId)) return [];
                 seen.add(version.revisionId);
                 return [{ commitId, version }];
@@ -1046,6 +1540,20 @@ export class TypedViewStore {
     private sanitize(state: ViewStoreState, sourceId: string): ViewStoreState {
         const clearingDerived = sourceId === "@clear-derived-views";
         const forgottenEvents = forgottenEventIds(sourceId);
+        if (
+            clearingDerived ||
+            (!forgottenEvents &&
+                state.topics?.influenceSources.some(
+                    (source) => source.sourceId === sourceId,
+                ))
+        ) {
+            delete state.topics;
+            state.topicFamily = {
+                enabled: state.topicFamily?.enabled ?? true,
+                dirty: true,
+            };
+        }
+        if (!forgottenEvents) eraseInformationalRetrieval(state, sourceId);
         const matches = (value: {
             sourceId: string;
             evidence?: { kind: "event"; eventId: string };
@@ -1080,6 +1588,11 @@ export class TypedViewStore {
                     });
                     return (
                         selected(version.definition) ||
+                        version.generation?.input?.inputs.some(matches) ||
+                        (!forgottenEvents &&
+                            version.generation?.input?.influenceSources?.some(
+                                matches,
+                            )) ||
                         references.some(matches) ||
                         (!forgottenEvents &&
                             version.maintenance?.privacySources.includes(
@@ -1101,9 +1614,27 @@ export class TypedViewStore {
                     !job.results.some(
                         (result) =>
                             result.snapshot.inputs.some(matches) ||
+                            (!forgottenEvents &&
+                                result.snapshot.influenceSources?.some(
+                                    matches,
+                                )) ||
                             result.wikiContribution?.input.inputs.some(
                                 matches,
                             ) ||
+                            result.wikiConsolidation?.input.inputs.some(
+                                matches,
+                            ) ||
+                            (!forgottenEvents &&
+                                result.wikiConsolidation?.input.influenceSources?.some(
+                                    matches,
+                                )) ||
+                            (!!result.wikiConsolidation &&
+                                (affected.has(
+                                    result.wikiConsolidation.survivorViewId,
+                                ) ||
+                                    affected.has(
+                                        result.wikiConsolidation.retiringViewId,
+                                    ))) ||
                             (!forgottenEvents &&
                                 result.snapshot.maintenance?.privacySources.includes(
                                     sourceId,
@@ -1123,6 +1654,8 @@ export class TypedViewStore {
                     !clearingDerived &&
                     !affected.has(conflict.viewId) &&
                     !conflict.input.inputs.some(matches) &&
+                    (forgottenEvents !== undefined ||
+                        !conflict.input.influenceSources?.some(matches)) &&
                     (forgottenEvents !== undefined ||
                         !conflict.input.maintenance?.privacySources.includes(
                             sourceId,
@@ -1147,6 +1680,7 @@ export class TypedViewStore {
             family.dirty = true;
             family.cursor = 0;
             delete family.indexVersion;
+            delete family.error;
         }
         for (const job of Object.values(state.builds))
             delete job.maintenancePlan;
@@ -1167,6 +1701,7 @@ export class TypedViewStore {
         corpusId: string,
         sourceId: string,
     ): Promise<void> {
+        this.expireReadSnapshot();
         await this.history(corpusId).purge(
             sourceId,
             (state, id) => this.sanitize(state, id),
@@ -1185,6 +1720,7 @@ export class TypedViewStore {
     ): Promise<void> {
         if (!eventIds.length) return;
         for (const id of eventIds) assertViewIdentifier("event ID", id);
+        this.expireReadSnapshot();
         await this.history(corpusId).purge(
             JSON.stringify({
                 kind: "events",
@@ -1203,6 +1739,7 @@ export class TypedViewStore {
             !Object.keys(state.views).length &&
             !Object.keys(state.builds ?? {}).length &&
             !Object.keys(state.conflicts ?? {}).length &&
+            !state.topics &&
             !Object.keys(state.maintenanceReceipts ?? {}).length &&
             !Object.keys(state.publications ?? {}).length &&
             !state.viewIndexCleanup?.length &&
@@ -1210,6 +1747,7 @@ export class TypedViewStore {
         )
             return;
         // This identity cannot collide with a validated source ID and is recoverable by the same purge journal.
+        this.expireReadSnapshot();
         await history.purge(
             "@clear-derived-views",
             (state, id) => this.sanitize(state, id),
@@ -1219,6 +1757,7 @@ export class TypedViewStore {
     }
 
     public async recover(corpusId: string): Promise<void> {
+        this.expireReadSnapshot();
         await this.history(corpusId).recoverPurge(
             (state, id) => this.sanitize(state, id),
             (state) => this.entries(state),
@@ -1260,13 +1799,13 @@ export class TypedViewStore {
     public async getViewPublicationPolicy(
         corpusId: string,
     ): Promise<ViewPublicationPolicy> {
-        const { state } = await this.history(corpusId).read();
-        return (
+        const { state } = await this.readSnapshot(corpusId);
+        return structuredClone(
             state.publicationPolicy ?? {
                 revision: 0,
                 autoPublish: true,
                 views: {},
-            }
+            },
         );
     }
 
@@ -1347,8 +1886,8 @@ export class TypedViewStore {
     public async getViewPublication(
         request: ViewReadRequest,
     ): Promise<ViewPublicationStatus> {
-        const { state } = await this.history(request.corpusId).read();
-        return this.publicationStatus(state, request.viewId);
+        const { state } = await this.readSnapshot(request.corpusId);
+        return structuredClone(this.publicationStatus(state, request.viewId));
     }
 
     public async listPublishedViews(corpusId: string) {
@@ -1503,7 +2042,8 @@ export class TypedViewStore {
             snapshot.state.views[id] = [...versions, next];
             changed = true;
         }
-        if (changed)
+        if (changed) {
+            this.expireReadSnapshot();
             await history.commit(
                 snapshot.head,
                 snapshot.state,
@@ -1511,6 +2051,7 @@ export class TypedViewStore {
                 "memory-service",
                 "Invalidate changed view evidence or membership",
             );
+        }
     }
 
     public async markSourceRevisionStale(
@@ -1519,7 +2060,10 @@ export class TypedViewStore {
         activeRevisionId?: string,
     ): Promise<void> {
         await this.invalidateDrafts(corpusId, (view) =>
-            view.definition.selector.sources.some(
+            [
+                ...view.definition.selector.sources,
+                ...(view.generation?.input?.influenceSources ?? []),
+            ].some(
                 (source) =>
                     source.sourceId === sourceId &&
                     source.revisionId !== activeRevisionId,

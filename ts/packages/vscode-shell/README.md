@@ -23,12 +23,16 @@ server.
 
 ### Build & install locally (recommended for development)
 
-From this directory:
+From the [TypeScript workspace root](../..):
 
 ```sh
-npm install
-npm run deploy:local
+pnpm run setup
+pnpm run build vscode-shell
+pnpm --filter vscode-shell run deploy:local
 ```
+
+The extension uses the workspace's `pnpm-lock.yaml`; do not run `npm install`
+or create a separate npm lockfile in this package.
 
 `deploy:local` packages the extension and installs it into your active
 `code` CLI in one step. Reload the VS Code window after the first install.

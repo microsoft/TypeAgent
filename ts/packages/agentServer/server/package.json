@@ -41,7 +41,6 @@
   },
   "dependencies": {
     "@azure/identity": "^4.10.0",
-    "@typeagent/agent-flows": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
@@ -51,7 +50,6 @@
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/conversation-memory": "workspace:*",
-    "@typeagent/copilot-macros": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "@typeagent/memory-client": "workspace:*",

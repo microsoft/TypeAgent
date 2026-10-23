@@ -9,7 +9,6 @@ import {
     rmSync,
     writeFileSync,
 } from "node:fs";
-import os from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -105,24 +104,23 @@ test("MSI no longer exposes embedding or Ollama host properties and controls", (
     assert.match(wxs, /NOT EMBEDDING AND NOT OLLAMAHOST/);
 });
 
-test("PowerShell installer defaults Copilot chat to Copilot embeddings", () => {
+test("PowerShell installer defaults to pinned local embeddings with explicit download consent", () => {
     assert.match(
         installTypeAgent,
         /\[ValidateSet\("copilot", "local", "ollama", "openai", "none"\)\]/,
     );
-    assert.match(
-        installTypeAgent,
-        /\$Provider -eq "copilot"\s+-and\s+-not \$PSBoundParameters\.ContainsKey\("Embedding"\)/,
-    );
-    assert.match(installTypeAgent, /\$Embedding = "copilot"/);
+    assert.match(installTypeAgent, /\$Embedding = "local"/);
+    assert.doesNotMatch(installTypeAgent, /\$Embedding = "copilot"/);
+    assert.match(installTypeAgent, /\$LocalEmbeddingModel = "minilm"/);
+    assert.match(installTypeAgent, /\[switch\]\$DownloadLocalEmbedding/);
+    assert.match(installTypeAgent, /--preserve-embedding-selection/);
 });
 
-test("Bash installer defaults Copilot chat to Copilot embeddings", () => {
+test("Bash installer defaults to local embeddings with explicit download consent", () => {
     assert.match(installTypeAgentBash, /EMBEDDING=""/);
-    assert.match(
-        installTypeAgentBash,
-        /if \[\[ "\$PROVIDER" == "copilot" \]\]; then\s+EMBEDDING="copilot"/,
-    );
+    assert.match(installTypeAgentBash, /EMBEDDING="local"/);
+    assert.doesNotMatch(installTypeAgentBash, /EMBEDDING="copilot"/);
+    assert.match(installTypeAgentBash, /DOWNLOAD_LOCAL_EMBEDDING=0/);
     assert.match(installTypeAgentBash, /copilot\|local\|ollama\|openai\|none/);
 });
 
@@ -134,17 +132,23 @@ test("recovery guidance uses provider-sensitive Copilot defaults", () => {
     );
 });
 
-test("Copilot provisioning uses Copilot embeddings", () => {
+test("Copilot MSI provisions one selected local embedding with offline defaults", () => {
     const command = wxs.match(
         /<SetProperty Id="ProvisionCopilotConfig"[\s\S]*?Value="([^"]*)"/,
     )?.[1];
     assert.ok(command, "ProvisionCopilotConfig command must exist");
     assert.ok(
         command.includes(
-            "-ServeCommand provision --provider COPILOT --embedding COPILOT",
+            "-ServeCommand provision --provider COPILOT --embedding LOCAL",
         ),
     );
-    assert.ok(command.includes("--embedding-model text-embedding-3-small"));
+    assert.ok(
+        command.includes("--local-embedding-model [LOCALEMBEDDINGMODEL]"),
+    );
+    assert.ok(
+        command.includes("--download-local-embedding [DOWNLOADLOCALEMBEDDING]"),
+    );
+    assert.ok(command.includes("--preserve-embedding-selection"));
     assert.ok(command.includes("--force"));
     assert.ok(command.includes("-FailOnError"));
     assert.ok(!command.includes("--ollama-host"));
@@ -154,6 +158,28 @@ test("Copilot provisioning uses Copilot embeddings", () => {
     );
 });
 
+test("MSI local model and download choices are explicit and reject unsupported values", () => {
+    assert.match(
+        wxs,
+        /<Property Id="LOCALEMBEDDINGMODEL" Value="MINILM" Secure="yes" \/>/,
+    );
+    assert.match(
+        wxs,
+        /<Property Id="DOWNLOADLOCALEMBEDDING" Value="0" Secure="yes" \/>/,
+    );
+    assert.match(
+        wxs,
+        /LOCALEMBEDDINGMODEL="MINILM" OR LOCALEMBEDDINGMODEL="EMBEDDINGGEMMA"/,
+    );
+    assert.match(
+        wxs,
+        /DOWNLOADLOCALEMBEDDING="0" OR DOWNLOADLOCALEMBEDDING="1"/,
+    );
+    assert.match(wxs, /<RadioButton Value="MINILM"/);
+    assert.match(wxs, /<RadioButton Value="EMBEDDINGGEMMA"/);
+    assert.match(wxs, /Property="LOCALDOWNLOADCONSENT" CheckBoxValue="1"/);
+    assert.match(wxs, /LOCALDOWNLOADCONSENT="1"/);
+});
 test("provider-specific provisioning actions use exact provider gates", () => {
     assert.match(
         wxs,
@@ -225,7 +251,7 @@ test(
     { skip: process.platform !== "win32" },
     () => {
         const tempDir = mkdtempSync(
-            path.join(os.tmpdir(), "typeagent run-serve-"),
+            path.join(scriptsDir, ".typeagent-run-serve-"),
         );
         try {
             const argsPath = path.join(tempDir, "args.json");
@@ -311,9 +337,9 @@ test(
     },
 );
 
-test("generated Copilot config defaults to Copilot embeddings", () => {
+test("generated Copilot config defaults to pinned local MiniLM embeddings", () => {
     const tempDir = mkdtempSync(
-        path.join(os.tmpdir(), "typeagent-copilot-config-"),
+        path.join(scriptsDir, ".typeagent-copilot-config-"),
     );
     try {
         const configPath = path.join(tempDir, "config.local.yaml");
@@ -344,11 +370,16 @@ test("generated Copilot config defaults to Copilot embeddings", () => {
             strict: true,
         });
         assert.equal(loaded.env.TYPEAGENT_MODEL_PROVIDER, "copilot");
-        assert.equal(loaded.env.TYPEAGENT_EMBEDDING_PROVIDER, "copilot");
         assert.equal(
-            loaded.env.TYPEAGENT_EMBEDDING_MODEL,
-            "text-embedding-3-small",
+            loaded.env.TYPEAGENT_DEFAULT_EMBEDDING_MODEL,
+            "local-minilm",
         );
+        const profile = JSON.parse(loaded.env.TYPEAGENT_EMBEDDING_MODELS)[
+            "local-minilm"
+        ];
+        assert.equal(profile.provider, "local");
+        assert.equal(profile.model, "Xenova/all-MiniLM-L6-v2");
+        assert.equal(profile.localFilesOnly, true);
     } finally {
         rmSync(tempDir, { recursive: true, force: true });
     }
@@ -356,7 +387,7 @@ test("generated Copilot config defaults to Copilot embeddings", () => {
 
 test("generated Copilot config passes strict loading with local embeddings when explicitly selected", () => {
     const tempDir = mkdtempSync(
-        path.join(os.tmpdir(), "typeagent-copilot-config-"),
+        path.join(scriptsDir, ".typeagent-copilot-config-"),
     );
     try {
         const configPath = path.join(tempDir, "config.local.yaml");
@@ -396,15 +427,16 @@ test("generated Copilot config passes strict loading with local embeddings when 
             loaded.env.COPILOT_FALLBACK_MODELS,
             '["gpt-5.4-mini","gpt-5-mini","gpt-5.4"]',
         );
-        assert.equal(loaded.env.TYPEAGENT_EMBEDDING_PROVIDER, "local");
         assert.equal(
-            loaded.env.TYPEAGENT_EMBEDDING_MODEL,
-            "Xenova/all-MiniLM-L6-v2",
+            loaded.env.TYPEAGENT_DEFAULT_EMBEDDING_MODEL,
+            "local-minilm",
         );
-        assert.equal(
-            loaded.env.TYPEAGENT_EMBEDDING_CACHE_DIR,
-            embeddingCacheDir,
-        );
+        const profile = JSON.parse(loaded.env.TYPEAGENT_EMBEDDING_MODELS)[
+            "local-minilm"
+        ];
+        assert.equal(profile.provider, "local");
+        assert.equal(profile.model, "Xenova/all-MiniLM-L6-v2");
+        assert.equal(profile.cacheDir, embeddingCacheDir);
     } finally {
         rmSync(tempDir, { recursive: true, force: true });
     }
