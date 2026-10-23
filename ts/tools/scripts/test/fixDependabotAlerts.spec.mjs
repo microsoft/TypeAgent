@@ -12,7 +12,7 @@ import {
     writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import {
     parsePackageSelection,
@@ -259,33 +259,20 @@ test("checkpoint rollback restores the last verified manifest and lockfile pair"
     const packageManager = JSON.parse(
         readFileSync(resolve(import.meta.dirname, "../../../package.json")),
     ).packageManager;
-    const pnpmCommand =
-        process.platform === "win32" ? process.execPath : "pnpm";
-    const pnpmPrefix =
-        process.platform === "win32"
-            ? [
-                  resolve(
-                      dirname(process.execPath),
-                      "node_modules/corepack/dist/pnpm.js",
-                  ),
-              ]
-            : [];
+    const pnpmCommand = "pnpm";
+    const pnpmOptions = { shell: process.platform === "win32" };
     const pnpmInstall = (...args) =>
-        run(pnpmCommand, [
-            ...pnpmPrefix,
-            "--dir",
-            directory,
-            "install",
-            ...args,
-        ]);
+        run(
+            pnpmCommand,
+            ["--dir", directory, "install", ...args],
+            pnpmOptions,
+        );
     const pnpmInstallResult = (...args) =>
-        runResult(pnpmCommand, [
-            ...pnpmPrefix,
-            "--dir",
-            directory,
-            "install",
-            ...args,
-        ]);
+        runResult(
+            pnpmCommand,
+            ["--dir", directory, "install", ...args],
+            pnpmOptions,
+        );
     const nodeModulesDir = join(directory, "node_modules");
     const hiddenNodeModulesDir = join(directory, "node_modules.hidden");
     const runWithFreshModules = (...args) => {
