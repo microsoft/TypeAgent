@@ -6,8 +6,16 @@ import { TypeAgentMacroMcpServer } from "./macroServer.js";
 import { TypeAgentWorkspaceMcpServer } from "./workspaceServer.js";
 import { TypeAgentSkillsMcpServer } from "./skillsServer.js";
 import { selectMcpServer } from "./serverSelector.js";
+import {
+    publishControlMetadata,
+    assertControlBinding,
+    monitorControlMetadata,
+} from "../shared/control-metadata.js";
 
 const kind = selectMcpServer(process.argv.slice(2));
+const control = publishControlMetadata(`mcp-${kind}`);
+assertControlBinding(control);
+monitorControlMetadata(`mcp-${kind}`);
 const server =
     kind === "workspace"
         ? new TypeAgentWorkspaceMcpServer()

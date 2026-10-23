@@ -205,8 +205,8 @@ describe("markdown document creation", () => {
             try {
                 setRuntimeConfig(
                     configFromEnvRecord({
-                        AZURE_OPENAI_ENDPOINT_GPT_5_MINI_EASTUS: endpoint,
-                        AZURE_OPENAI_API_KEY_GPT_5_MINI_EASTUS: "test-key",
+                        AZURE_OPENAI_ENDPOINT_GPT_6_LUNA_EASTUS: endpoint,
+                        AZURE_OPENAI_API_KEY_GPT_6_LUNA_EASTUS: "test-key",
                     }),
                 );
                 setActiveModelProvider(undefined);

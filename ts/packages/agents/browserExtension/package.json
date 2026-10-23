@@ -45,9 +45,9 @@
     "cytoscape-dagre": "^2.5.0",
     "dagre": "^0.8.5",
     "debug": "^4.4.0",
-    "dompurify": "^3.4.13",
+    "dompurify": "^3.4.17",
     "html-to-text": "^9.0.5",
-    "markdown-it": "^14.2.0",
+    "markdown-it": "^14.3.2",
     "pdfjs-dist": "5.3.31",
     "prismjs": "^1.30.0"
   },
@@ -79,7 +79,7 @@
     "rimraf": "^6.0.1",
     "ts-jest": "^29.3.2",
     "typescript": "~5.4.5",
-    "vite": "^6.4.3"
+    "vite": "^6.4.4"
   },
   "fluidBuild": {
     "tasks": {

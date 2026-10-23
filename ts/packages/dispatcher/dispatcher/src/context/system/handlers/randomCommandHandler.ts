@@ -157,10 +157,17 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
                 scope: "foreground",
             },
             () =>
-                chat.translate(
-                    userInput,
-                    promptLib.dateTimePrompt(), // Always include the current date and time. Makes the bot much smarter
-                ),
+                chat.translate(userInput, [
+                    {
+                        role: "system",
+                        content: promptLib.dateTimePrompt(),
+                    },
+                    {
+                        role: "system",
+                        content:
+                            "Aim for approximately 1000 tokens in the final JSON only, excluding reasoning. Preserve required content even when that needs a longer answer.",
+                    },
+                ]),
         );
 
         return chatResponse;
@@ -174,7 +181,6 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
         }
         const completionSettings: CompletionSettings = {
             temperature: 1.0,
-            max_tokens: 1000, // Max response tokens
             response_format: { type: "json_object" }, // createChatModel will remove it if the model doesn't support it
         };
         const chatModel = openai.createChatModel(

@@ -330,17 +330,30 @@
         tabElement.className = `tab ${tab.id === activeTabId ? "active" : ""}`;
         tabElement.dataset.tabId = tab.id;
 
-        const faviconSrc =
-          tab.favicon ||
-          `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#ccc"/></svg>')}`;
+        const fallbackFaviconSrc = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#ccc"/></svg>')}`;
+        const faviconElement = document.createElement("img");
+        faviconElement.className = "tab-favicon";
+        faviconElement.src = tab.favicon || fallbackFaviconSrc;
+        faviconElement.alt = "";
+        faviconElement.addEventListener(
+          "error",
+          () => {
+            faviconElement.src = fallbackFaviconSrc;
+          },
+          { once: true },
+        );
 
-        tabElement.innerHTML = `
-          <img class="tab-favicon" src="${faviconSrc}" alt="" onerror="this.src='data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#ccc"/></svg>')}'">
-          <span class="tab-title" title="${tab.url}">${tab.title || "New Tab"}</span>
-          <button class="tab-close"><i class="fas fa-times"></i></button>
-        `;
+        const titleElement = document.createElement("span");
+        titleElement.className = "tab-title";
+        titleElement.title = tab.url;
+        titleElement.textContent = tab.title || "New Tab";
 
-        const closeButton = tabElement.querySelector(".tab-close");
+        const closeButton = document.createElement("button");
+        closeButton.className = "tab-close";
+        const closeIcon = document.createElement("i");
+        closeIcon.className = "fas fa-times";
+        closeButton.appendChild(closeIcon);
+        tabElement.append(faviconElement, titleElement, closeButton);
 
         tabElement.addEventListener("click", (e) => {
           if (e.target !== closeButton && !closeButton.contains(e.target)) {

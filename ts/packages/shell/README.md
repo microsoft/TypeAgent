@@ -26,6 +26,18 @@ Additionally, if you are running MS Graph based sample agents like Calendar and 
 del %LOCALAPPDATA%\.IdentityService\typeagent-tokencache
 ```
 
+## Browser tabs
+
+The tab bar displays page titles and URL tooltips as literal text, including quotes, ampersands, and angle brackets. Empty titles use "New Tab", and missing or failed favicons use the default icon.
+
+Click a tab to switch to it. The close button or a middle click closes a tab, and closing the last tab retains the existing layout-toggle behavior.
+
+The [browser tab label tests](./test/browserTabLabels.spec.ts) exercise the view-host HTML in Chromium with an in-memory IPC bridge. They do not start the agent server or require API keys. Run them from this package directory:
+
+```shell
+pnpm exec playwright test browserTabLabels.spec.ts --project=chromium --no-deps
+```
+
 ## Conversation Management
 
 When connected to the agent server (remote mode), TypeAgent Shell supports full multi-conversation management. Conversations persist across sessions and can be created, renamed, switched, and deleted from the UI.

@@ -21,6 +21,19 @@ import {
     evidenceText,
 } from "./viewSynthesisEvidence.js";
 
+export class WikiAssessmentRejection extends Error {
+    public constructor(
+        public readonly code: string,
+        public readonly details: Record<
+            string,
+            number | boolean | number[]
+        > = {},
+    ) {
+        super(`Wiki assessment rejected: ${code} ${JSON.stringify(details)}`);
+        this.name = "WikiAssessmentRejection";
+    }
+}
+
 export const wikiPurposeRules = `Each page needs an independently useful explanatory purpose, not just a different label.
 A sentence-shaped state, warning, open gate or owner-signoff mention usually contributes evidence to its existing concept.
 Admit broader/narrower pages separately only when the selected evidence supports independently useful content:
@@ -32,7 +45,8 @@ Do not turn unknowns into approval, or merge/deactivate existing pages. Sources 
 Compare candidate evidence with the actual supplied pages' explanatory purpose, not their headings alone.
 Contributing source/revision overlap (same or subset sets) nominates comparison even when passage locators differ; it is never equivalence.
 Return covered only when a supplied current page already explains ALL essential distinctions in the selected fragments in the same scope.
-For every selected fragment identify its essential distinctions and quote actual canonical prose explaining each one.
+For covered suppression, identify essential distinctions from every selected fragment and quote actual canonical prose explaining each one.
+For an ordinary contribution, identify the relevant missing distinctions; irrelevant or redundant context need not acquire an invented assertion.
 Shared citations alone are not prose coverage. Empty canonicalExcerpt means a missing explanation, not coverage.
 Return contribute when the same scoped purpose belongs in a supplied canonical page but essential explanation/qualification is missing.
 Contribution adds that missing explanation from indexed evidence; never use model page prose as source evidence.
@@ -242,20 +256,39 @@ export function parseWikiAssessment(
     const canonical = pages.find(
         (page) => page.viewId === assessment.canonicalViewId,
     );
-    if (
-        assessment.disposition !== "distinct"
-            ? !canonical ||
-              !canonical.sourceOverlap.shared ||
-              assessment.sharedFragmentIds.some(
-                  (id) => !canonical.sharedFragmentIds.includes(id),
-              )
-            : assessment.canonicalViewId !== "" ||
-              assessment.sharedFragmentIds.length !== 0 ||
-              assessment.essentialDistinctions.length !== 0
-    )
-        throw new Error(
-            "Wiki assessment lacks current source overlap or names unsupported canonical evidence",
+    if (assessment.disposition === "distinct") {
+        if (
+            assessment.canonicalViewId !== "" ||
+            assessment.sharedFragmentIds.length !== 0 ||
+            assessment.essentialDistinctions.length !== 0
+        )
+            throw new WikiAssessmentRejection("distinct-has-canonical-fields", {
+                canonicalPresent: assessment.canonicalViewId !== "",
+                sharedCount: assessment.sharedFragmentIds.length,
+                distinctionCount: assessment.essentialDistinctions.length,
+            });
+    } else {
+        if (!canonical)
+            throw new WikiAssessmentRejection("canonical-not-supplied", {
+                suppliedCount: pages.length,
+            });
+        if (!canonical.sourceOverlap.shared)
+            throw new WikiAssessmentRejection("canonical-no-source-overlap", {
+                sharedSourceCount: canonical.sourceOverlap.shared,
+            });
+        const invalid = assessment.sharedFragmentIds.filter(
+            (id) => !canonical.sharedFragmentIds.includes(id),
         );
+        if (invalid.length)
+            throw new WikiAssessmentRejection("unsupported-shared-fragments", {
+                invalidCount: invalid.length,
+                suppliedCount: canonical.sharedFragmentIds.length,
+                invalidFragmentOrdinals: invalid
+                    .filter((id) => /^f\d{1,5}$/.test(id))
+                    .slice(0, 24)
+                    .map((id) => Number(id.slice(1))),
+            });
+    }
     if (canonical) validateDistinctions(assessment, canonical);
     if (
         assessment.disposition === "covered" &&
@@ -268,9 +301,10 @@ export function parseWikiAssessment(
                 ),
         )
     )
-        throw new Error(
-            "Wiki contribution coverage omitted a required essential distinction",
-        );
+        throw new WikiAssessmentRejection("required-distinction-omitted", {
+            requiredCount: requirements.length,
+            actualCount: assessment.essentialDistinctions.length,
+        });
     return assessment;
 }
 
@@ -354,9 +388,10 @@ function validateDistinctions(
     const distinctions = assessment.essentialDistinctions;
     if (
         !canonical.candidateFragmentIds.length ||
-        canonical.candidateFragmentIds.some(
-            (id) => !distinctions.some((item) => item.fragmentId === id),
-        ) ||
+        (assessment.disposition === "covered" &&
+            canonical.candidateFragmentIds.some(
+                (id) => !distinctions.some((item) => item.fragmentId === id),
+            )) ||
         distinctions.some(
             (item) =>
                 !canonical.candidateFragmentIds.includes(item.fragmentId) ||
@@ -365,18 +400,33 @@ function validateDistinctions(
                         !canonical.prose.includes(item.canonicalExcerpt))),
         )
     )
-        throw new Error(
-            "Wiki essential distinctions omit candidate fragments or invent actual prose witnesses",
-        );
+        throw new WikiAssessmentRejection("invalid-distinction-evidence", {
+            missingFragmentCount: canonical.candidateFragmentIds.filter(
+                (id) => !distinctions.some((item) => item.fragmentId === id),
+            ).length,
+            invalidFragmentCount: distinctions.filter(
+                (item) =>
+                    !canonical.candidateFragmentIds.includes(item.fragmentId),
+            ).length,
+            invalidWitnessCount: distinctions.filter(
+                (item) =>
+                    item.canonicalExcerpt !== "" &&
+                    (!item.canonicalExcerpt.trim() ||
+                        !canonical.prose.includes(item.canonicalExcerpt)),
+            ).length,
+        });
     const missing = distinctions.some((item) => item.canonicalExcerpt === "");
     if (
         assessment.disposition === "covered"
             ? missing || canonical.proseTruncated
             : !missing
     )
-        throw new Error(
-            "Wiki actual prose coverage is incomplete or contribution has no missing distinction",
-        );
+        throw new WikiAssessmentRejection("incomplete-prose-coverage", {
+            missingWitnessCount: distinctions.filter(
+                (item) => item.canonicalExcerpt === "",
+            ).length,
+            proseTruncated: canonical.proseTruncated,
+        });
 }
 
 export function reusableWikiAssessment(

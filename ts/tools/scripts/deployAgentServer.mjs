@@ -5,8 +5,7 @@
 /**
  * Build a self-contained, repo-less-runnable agent-server artifact.
  *
- * Approach (see codeDocs .../2026-06-11_typeagent-plugin-agent-distribution):
- * the agent-server loads on-disk data assets (agent manifests, grammars) via
+ * The agent-server loads on-disk data assets (agent manifests, grammars) via
  * getPackageFilePath, so it CANNOT be a single-file esbuild bundle. Instead we
  * use `pnpm deploy` to produce a folder with a flat node_modules (workspace
  * packages copied in, so data-asset resolution keeps working), prune
@@ -29,6 +28,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeCopilotRuntimeManifest } from "./copilotRuntimeManifest.mjs";
+import { writeEmbeddingRuntimeManifest } from "./embeddingRuntimeManifest.mjs";
 
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const tsRoot = path.resolve(scriptsDir, "..", ".."); // ts/
@@ -177,6 +177,7 @@ function main() {
     //    closure (chalk, @azure/keyvault-secrets, @azure/identity, js-yaml,
     //    @typeagent/config), so it runs as `node tools/getKeys.mjs`.
     const toolsOut = path.join(args.out, "tools");
+    writeEmbeddingRuntimeManifest(args.out);
     writeCopilotRuntimeManifest(path.join(args.out, "copilot-runtime.json"), {
         platform: args.platform,
         arch: args.arch,
@@ -200,10 +201,22 @@ function main() {
         path.join(scriptsDir, "generate-selfhost-config.mjs"),
         path.join(toolsOut, "generate-selfhost-config.mjs"),
     );
+    copyInto(
+        path.join(scriptsDir, "localEmbeddingModels.mjs"),
+        path.join(toolsOut, "localEmbeddingModels.mjs"),
+    );
+    copyInto(
+        path.join(scriptsDir, "setModelProvider.mjs"),
+        path.join(toolsOut, "setModelProvider.mjs"),
+    );
     const sample = path.join(tsRoot, "config.sample.yaml");
     if (fs.existsSync(sample)) {
         copyInto(sample, path.join(toolsOut, "config.sample.yaml"));
     }
+    copyInto(
+        path.join(tsRoot, "config.defaults.yaml"),
+        path.join(toolsOut, "config.defaults.yaml"),
+    );
 
     // 4. Copy the bootstrap launcher to the artifact root, plus the dev-tunnel
     //    helpers (setup-devtunnel / list-tunnels) for optional remote access.

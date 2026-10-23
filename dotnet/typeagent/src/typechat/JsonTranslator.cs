@@ -130,7 +130,7 @@ public class JsonTranslator<T> : IJsonTranslator
     }
 
     /// <summary>
-    /// Translation settings. Use this to customize attributes like MaxTokens emitted
+    /// Translation settings. Use this to customize attributes like temperature
     /// </summary>
     public TranslationSettings TranslationSettings => _translationSettings;
 

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="BridgeCompileStubs.cs" />
+    <Compile Include="..\visualStudioTypeAgent\Bridge\AgentBridgeClient.cs"
+             Link="Bridge\AgentBridgeClient.cs" />
+    <Compile Include="..\visualStudioTypeAgent\Bridge\AuthenticatedBridgeConnection.cs"
+             Link="Bridge\AuthenticatedBridgeConnection.cs" />
+    <Compile Include="..\visualStudioTypeAgent\Bridge\BridgeAuthentication.cs"
+             Link="Bridge\BridgeAuthentication.cs" />
+    <Compile Include="..\visualStudioTypeAgent\Bridge\BridgeDiscovery.cs"
+             Link="Bridge\BridgeDiscovery.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
+  </ItemGroup>
+</Project>

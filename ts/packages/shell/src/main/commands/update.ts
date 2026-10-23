@@ -20,8 +20,61 @@ import {
 import registerDebug from "debug";
 import { getElapsedString } from "@typeagent/common-utils";
 import { isProd } from "../index.js";
+import { execFile } from "node:child_process";
+import path from "node:path";
+import { readFile } from "node:fs/promises";
+import { load } from "js-yaml";
 
 const { autoUpdater } = electronUpdater;
+
+if (process.platform === "win32") {
+    if (!(autoUpdater instanceof electronUpdater.NsisUpdater)) {
+        throw new Error(
+            "Windows shell updates require the NSIS signature verifier.",
+        );
+    }
+    autoUpdater.verifyUpdateCodeSignature = (_publishers, packagePath) =>
+        new Promise((resolve) => {
+            const verifier = path.join(
+                process.resourcesPath,
+                "windows-package-trust",
+                "verify-windows-package.ps1",
+            );
+            execFile(
+                path.join(
+                    process.env.SystemRoot ?? "C:\\Windows",
+                    "System32",
+                    "WindowsPowerShell",
+                    "v1.0",
+                    "powershell.exe",
+                ),
+                [
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    verifier,
+                    "-Path",
+                    packagePath,
+                ],
+                {
+                    windowsHide: true,
+                    env: Object.fromEntries(
+                        Object.entries(process.env).filter(
+                            ([key]) => key.toLowerCase() !== "psmodulepath",
+                        ),
+                    ),
+                },
+                (error, _stdout, stderr) =>
+                    resolve(
+                        error
+                            ? `TypeAgent update signature rejected: ${stderr || error.message}`
+                            : null,
+                    ),
+            );
+        });
+}
 
 const debugShellUpdate = registerDebug("typeagent:shell:update");
 
@@ -217,6 +270,27 @@ async function checkUpdate(
     url?: string,
     channel?: string,
 ) {
+    if (process.platform === "win32") {
+        const configPath =
+            updateConfigPath ??
+            path.join(
+                app.isPackaged ? process.resourcesPath : app.getAppPath(),
+                app.isPackaged ? "app-update.yml" : "dev-app-update.yml",
+            );
+        const config = load(await readFile(configPath, "utf8"));
+        if (
+            typeof config !== "object" ||
+            config === null ||
+            !("publisherName" in config) ||
+            !config.publisherName ||
+            (Array.isArray(config.publisherName) &&
+                config.publisherName.length === 0)
+        ) {
+            throw new Error(
+                "Windows update configuration must enable publisher signature verification.",
+            );
+        }
+    }
     const token = await getAzureBlobStorageToken();
 
     autoUpdater.forceDevUpdateConfig =

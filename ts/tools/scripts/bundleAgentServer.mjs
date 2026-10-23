@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundleProfileAgents } from "./bundleProductAgents.mjs";
 import { writeCopilotRuntimeManifest } from "./copilotRuntimeManifest.mjs";
+import { writeEmbeddingRuntimeManifest } from "./embeddingRuntimeManifest.mjs";
 import {
     bundleEntry,
     copyFile,
@@ -239,10 +240,12 @@ export async function bundleAgentServer(args) {
         platform: args.platform,
         arch: args.arch,
     });
+    writeEmbeddingRuntimeManifest(out);
     for (const script of [
         "copilotRuntime.mjs",
         "getKeys.mjs",
         "generate-selfhost-config.mjs",
+        "setModelProvider.mjs",
         "setup-devtunnel.mjs",
         "list-tunnels.mjs",
     ]) {
@@ -256,6 +259,10 @@ export async function bundleAgentServer(args) {
     copyFile(
         path.join(tsRoot, "config.sample.yaml"),
         path.join(out, "tools", "config.sample.yaml"),
+    );
+    copyFile(
+        path.join(tsRoot, "config.defaults.yaml"),
+        path.join(out, "tools", "config.defaults.yaml"),
     );
     copyFile(
         path.join(scriptsDir, "getKeys.config.json"),

@@ -108,6 +108,10 @@ export async function createKnowproDocMemoryCommands(
             options: {
                 filePath: argSourceFile(),
                 scoped: argBool("Use scoped queries", true),
+                rebuildEmbeddings: argBool(
+                    "Re-embed all retained text and knowledge with the configured model, without extraction, and save",
+                    false,
+                ),
             },
         };
     }
@@ -126,6 +130,7 @@ export async function createKnowproDocMemoryCommands(
             path.dirname(memoryFilePath),
             getFileName(memoryFilePath),
             createDocMemorySettings(namedArgs.scoped),
+            { rebuildEmbeddings: namedArgs.rebuildEmbeddings },
         );
         clock.stop();
 
@@ -133,6 +138,12 @@ export async function createKnowproDocMemoryCommands(
         if (!docMemory) {
             context.printer.writeLine("DocMemory not found");
             return;
+        }
+        if (namedArgs.rebuildEmbeddings) {
+            await docMemory.writeToFile(
+                path.dirname(memoryFilePath),
+                getFileName(memoryFilePath),
+            );
         }
         context.docMemory = docMemory;
         kpContext.conversation = context.docMemory;

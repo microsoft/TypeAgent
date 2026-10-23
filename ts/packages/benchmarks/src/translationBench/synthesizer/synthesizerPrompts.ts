@@ -32,8 +32,6 @@ export const translationBenchModelConfigurationSchema = z
         temperature: finiteNumber,
         top_p: finiteNumber.optional(),
         seed: finiteNumber.optional(),
-        max_completion_tokens: finiteNumber.optional(),
-        max_tokens: finiteNumber.optional(),
         n: finiteNumber.optional(),
         reasoning_effort: z
             .enum(["minimal", "low", "medium", "high"])
@@ -52,12 +50,6 @@ export const translationBenchCompletionSettingsSchema =
         temperature: config.temperature,
         ...(config.top_p !== undefined ? { top_p: config.top_p } : {}),
         ...(config.seed !== undefined ? { seed: config.seed } : {}),
-        ...(config.max_completion_tokens !== undefined
-            ? { max_completion_tokens: config.max_completion_tokens }
-            : {}),
-        ...(config.max_tokens !== undefined
-            ? { max_tokens: config.max_tokens }
-            : {}),
         ...(config.n !== undefined ? { n: config.n } : {}),
         ...(config.reasoning_effort !== undefined
             ? { reasoning_effort: config.reasoning_effort }

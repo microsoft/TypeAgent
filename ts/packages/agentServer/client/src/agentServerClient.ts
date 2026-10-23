@@ -25,46 +25,22 @@ import {
     AGENT_SERVER_DEFAULT_PORT,
     AgentServerChannelName,
     AgentServerInvokeFunctions,
-    ApproveMacroRequest,
-    ArmRecordingRequest,
     CatalogEntry,
     CatalogSearchResult,
     ChangeSkillStateRequest,
     CheckSkillUpdateResponse,
-    ClaimRecordingRequest,
     ConversationContentMatch,
     ConversationInfo,
     ConversationMatch,
-    CopilotToolMacro,
     CreateConversationOptions,
-    CreateMacroFromTraceRequest,
-    DeleteMacroRequest,
-    DisableMacroRequest,
     DispatcherConnectOptions,
-    FinalizeRecordingRequest,
     GetSkillRequest,
-    InspectMacroRequest,
     JoinConversationResult,
-    ListMacrosRequest,
     ListSkillsRequest,
-    MacroLearningJob,
-    MacroLearningMode,
-    MacroLearningPreference,
-    MacroMatch,
-    MacroRequirements,
-    MacroRunRecord,
-    MacroSummary,
-    MacroValidationReport,
-    MacroVersionRef,
     PublishSkillRequest,
     ReadSkillFileRequest,
     ReadSkillFileResponse,
-    RecordingState,
-    RecordingToken,
     RenameConversationOptions,
-    RunMacroRequest,
-    RunMacroResponse,
-    SearchMacrosRequest,
     SearchSkillsRequest,
     SelectSkillRevisionRequest,
     SkillAcquisitionPreview,
@@ -72,9 +48,6 @@ import {
     SkillAcquisitionRevisionResponse,
     SkillGrammarRoutingResult,
     SpeechToken,
-    SubmitMacroCandidateRequest,
-    TraceSummary,
-    ValidateMacroRequest,
     getClientIOChannelName,
     getDispatcherChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -173,51 +146,6 @@ export type ConversationDispatcher = {
 };
 
 export type AgentServerConnection = {
-    getMacroLearningPreference(cwd: string): Promise<MacroLearningPreference>;
-    setMacroLearningPreference(request: {
-        cwd: string;
-        mode: MacroLearningMode;
-    }): Promise<MacroLearningPreference>;
-    prepareMacroLearning(request: {
-        traceId: string;
-    }): Promise<MacroLearningJob>;
-    getMacroLearningJob(jobId: string): Promise<MacroLearningJob>;
-    cancelMacroLearningJob(jobId: string): Promise<MacroLearningJob>;
-    armMacroRecording(request: ArmRecordingRequest): Promise<RecordingToken>;
-    getMacroRecordingState(sessionId: string): Promise<RecordingState>;
-    claimMacroRecording(
-        request: ClaimRecordingRequest,
-    ): Promise<RecordingToken | undefined>;
-    cancelMacroRecording(sessionId: string): Promise<void>;
-    failMacroRecording(
-        sessionId: string,
-        tokenId: string,
-        error: string,
-    ): Promise<void>;
-    finalizeMacroRecording(
-        request: FinalizeRecordingRequest,
-    ): Promise<TraceSummary>;
-    listMacros(request?: ListMacrosRequest): Promise<MacroSummary[]>;
-    searchMacros(request: SearchMacrosRequest): Promise<MacroMatch[]>;
-    inspectMacro(request: InspectMacroRequest): Promise<CopilotToolMacro>;
-    getMacroRequirements(
-        request: InspectMacroRequest,
-    ): Promise<MacroRequirements>;
-    createMacroFromTrace(
-        request: CreateMacroFromTraceRequest,
-    ): Promise<MacroVersionRef>;
-    validateMacro(
-        request: ValidateMacroRequest,
-    ): Promise<MacroValidationReport>;
-    approveMacro(request: ApproveMacroRequest): Promise<MacroVersionRef>;
-    disableMacro(request: DisableMacroRequest): Promise<MacroVersionRef>;
-    deleteMacro(request: DeleteMacroRequest): Promise<void>;
-    runMacro(request: RunMacroRequest): Promise<RunMacroResponse>;
-    submitMacroCandidate(
-        request: SubmitMacroCandidateRequest,
-    ): Promise<MacroVersionRef>;
-    cancelMacroRun(runId: string): Promise<void>;
-    getMacroRun(runId: string): Promise<MacroRunRecord>;
     listSkills?(request?: ListSkillsRequest): Promise<CatalogEntry[]>;
     getSkillLifecycle?: RunbookHostCapabilities["getSkillLifecycle"];
     changeSkillLifecycle?: RunbookHostCapabilities["changeSkillLifecycle"];
@@ -434,120 +362,6 @@ export function createAgentServerConnection(
     let closed = false;
 
     const connection: AgentServerConnection = {
-        getMacroLearningPreference: (cwd) =>
-            rpc.invoke("getMacroLearningPreference", cwd),
-        setMacroLearningPreference: (request) =>
-            rpc.invoke("setMacroLearningPreference", request),
-        prepareMacroLearning: (request) =>
-            rpc.invoke("prepareMacroLearning", request),
-        getMacroLearningJob: (jobId) =>
-            rpc.invoke("getMacroLearningJob", jobId),
-        cancelMacroLearningJob: (jobId) =>
-            rpc.invoke("cancelMacroLearningJob", jobId),
-        async armMacroRecording(
-            request: ArmRecordingRequest,
-        ): Promise<RecordingToken> {
-            return rpc.invoke("armMacroRecording", request);
-        },
-
-        async getMacroRecordingState(
-            sessionId: string,
-        ): Promise<RecordingState> {
-            return rpc.invoke("getMacroRecordingState", sessionId);
-        },
-
-        async claimMacroRecording(
-            request: ClaimRecordingRequest,
-        ): Promise<RecordingToken | undefined> {
-            return rpc.invoke("claimMacroRecording", request);
-        },
-
-        async cancelMacroRecording(sessionId: string): Promise<void> {
-            return rpc.invoke("cancelMacroRecording", sessionId);
-        },
-
-        async failMacroRecording(
-            sessionId: string,
-            tokenId: string,
-            error: string,
-        ): Promise<void> {
-            return rpc.invoke("failMacroRecording", sessionId, tokenId, error);
-        },
-
-        async finalizeMacroRecording(
-            request: FinalizeRecordingRequest,
-        ): Promise<TraceSummary> {
-            return rpc.invoke("finalizeMacroRecording", request);
-        },
-
-        async listMacros(request?: ListMacrosRequest): Promise<MacroSummary[]> {
-            return rpc.invoke("listMacros", request);
-        },
-
-        async searchMacros(
-            request: SearchMacrosRequest,
-        ): Promise<MacroMatch[]> {
-            return rpc.invoke("searchMacros", request);
-        },
-
-        async inspectMacro(
-            request: InspectMacroRequest,
-        ): Promise<CopilotToolMacro> {
-            return rpc.invoke("inspectMacro", request);
-        },
-
-        async getMacroRequirements(
-            request: InspectMacroRequest,
-        ): Promise<MacroRequirements> {
-            return rpc.invoke("getMacroRequirements", request);
-        },
-
-        async createMacroFromTrace(
-            request: CreateMacroFromTraceRequest,
-        ): Promise<MacroVersionRef> {
-            return rpc.invoke("createMacroFromTrace", request);
-        },
-
-        async validateMacro(
-            request: ValidateMacroRequest,
-        ): Promise<MacroValidationReport> {
-            return rpc.invoke("validateMacro", request);
-        },
-
-        async approveMacro(
-            request: ApproveMacroRequest,
-        ): Promise<MacroVersionRef> {
-            return rpc.invoke("approveMacro", request);
-        },
-
-        async disableMacro(
-            request: DisableMacroRequest,
-        ): Promise<MacroVersionRef> {
-            return rpc.invoke("disableMacro", request);
-        },
-
-        async deleteMacro(request: DeleteMacroRequest): Promise<void> {
-            return rpc.invoke("deleteMacro", request);
-        },
-
-        async runMacro(request: RunMacroRequest): Promise<RunMacroResponse> {
-            return rpc.invoke("runMacro", request);
-        },
-
-        async submitMacroCandidate(
-            request: SubmitMacroCandidateRequest,
-        ): Promise<MacroVersionRef> {
-            return rpc.invoke("submitMacroCandidate", request);
-        },
-
-        async cancelMacroRun(runId: string): Promise<void> {
-            return rpc.invoke("cancelMacroRun", runId);
-        },
-
-        async getMacroRun(runId: string): Promise<MacroRunRecord> {
-            return rpc.invoke("getMacroRun", runId);
-        },
-
         async listSkills(request?: ListSkillsRequest): Promise<CatalogEntry[]> {
             return rpc.invoke("listSkills", request);
         },

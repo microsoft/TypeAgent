@@ -225,10 +225,10 @@ async function semanticPageQuery<T extends object>(
         debug("Screenshot capture failed for semantic query");
     }
 
-    const apiSettings = ai.azureApiSettingsFromEnv(
+    const apiSettings = ai.apiSettingsFromEnv(
         ai.ModelType.Chat,
         undefined,
-        "GPT_4_O_MINI",
+        "GPT_6_LUNA",
     );
     const model = ai.createChatModel(apiSettings);
     const validator = createTypeScriptJsonValidator<T>(schema, typeName);

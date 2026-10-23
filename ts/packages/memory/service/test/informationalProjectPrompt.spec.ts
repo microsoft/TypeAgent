@@ -18,7 +18,6 @@ jest.unstable_mockModule("@typeagent/aiclient", () => ({
     openai: {
         ...actual.openai,
         getChatModelSettings: () => ({ provider: "azure" }),
-        getChatModelOutputLimit: (limit: number) => limit,
         createChatModel: () => ({
             complete: async (
                 messages: Array<{ role: string; content: string }>,
@@ -85,6 +84,12 @@ test("project prompt preserves qualified dimensions and initiative roles; provid
         "Unknown is not blocked; prepared is not executed; local success is not rollout",
     );
     expect(instructions).toContain("older bounded successes");
+    expect(instructions).toContain(
+        "approximately 4000 tokens in the final JSON only, excluding reasoning",
+    );
+    expect(instructions).toContain(
+        "Preserve required evidence even when that needs a longer answer",
+    );
 });
 
 test("wiki prompt keeps retrieval identity independent of labels and requires prose coverage limits", async () => {

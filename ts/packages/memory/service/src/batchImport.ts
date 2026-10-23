@@ -89,6 +89,7 @@ interface StoredBatch extends MemoryBatchImport {
 }
 
 interface BatchHost {
+    withIngestionGroup?(operation: () => Promise<void>): Promise<void>;
     ingestDocument(
         request: DocumentIngestRequest,
         signal?: AbortSignal,
@@ -329,12 +330,38 @@ export class MemoryBatchStore {
         string,
         { controller: AbortController; task: Promise<void>; batch: StoredBatch }
     >();
-    private readonly writes = new Map<string, Promise<void>>();
+    private readonly fileAccess = new Map<string, Promise<void>>();
     private readonly forgettingSources = new Set<string>();
+    private readonly maintenanceHolds = new Map<string, string>();
     public constructor(
         private readonly root: string,
         private readonly host: BatchHost,
+        private readonly onCorpusSettled?: (corpusId: string) => void,
     ) {}
+
+    public hasActiveImports(corpusId: string): boolean {
+        return [...this.maintenanceHolds.values()].includes(corpusId);
+    }
+
+    private releaseMaintenance(batch: StoredBatch): void {
+        if (
+            this.maintenanceHolds.delete(batch.batchId) &&
+            !this.hasActiveImports(batch.corpusId)
+        )
+            this.onCorpusSettled?.(batch.corpusId);
+    }
+
+    private async persistAndLaunch(batch: StoredBatch): Promise<void> {
+        // Hold before the durable admission write, not after ingestion starts.
+        this.maintenanceHolds.set(batch.batchId, batch.corpusId);
+        try {
+            await this.persist(batch);
+        } catch (error) {
+            this.releaseMaintenance(batch);
+            throw error;
+        }
+        this.launch(batch);
+    }
 
     private file(batchId: string): string {
         if (!/^[a-f0-9]{64}$/.test(batchId))
@@ -342,18 +369,29 @@ export class MemoryBatchStore {
         return path.join(this.root, "batches", `${batchId}.json`);
     }
 
-    private async persist(batch: StoredBatch): Promise<void> {
-        const previous = this.writes.get(batch.batchId) ?? Promise.resolve();
-        const task = previous
-            .catch(() => undefined)
-            .then(() => this.write(batch));
-        this.writes.set(batch.batchId, task);
+    private async accessFile<T>(
+        batchId: string,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        // Windows reads can prevent atomic replacement; durable reads and
+        // publication share the same owner-local gate, not an in-memory fallback.
+        const previous = this.fileAccess.get(batchId) ?? Promise.resolve();
+        const task = previous.then(operation);
+        const settled = task.then(
+            () => undefined,
+            () => undefined,
+        );
+        this.fileAccess.set(batchId, settled);
         try {
-            await task;
+            return await task;
         } finally {
-            if (this.writes.get(batch.batchId) === task)
-                this.writes.delete(batch.batchId);
+            if (this.fileAccess.get(batchId) === settled)
+                this.fileAccess.delete(batchId);
         }
+    }
+
+    private persist(batch: StoredBatch): Promise<void> {
+        return this.accessFile(batch.batchId, () => this.write(batch));
     }
 
     private async write(batch: StoredBatch): Promise<void> {
@@ -363,7 +401,11 @@ export class MemoryBatchStore {
     }
 
     private async load(batchId: string): Promise<StoredBatch> {
-        const batch = decoded(await readFile(this.file(batchId), "utf8"));
+        const batch = decoded(
+            await this.accessFile(batchId, () =>
+                readFile(this.file(batchId), "utf8"),
+            ),
+        );
         for (const member of batch.members) {
             const index = Number(member.memberId);
             const document = batch.request.documents[index];
@@ -614,8 +656,7 @@ export class MemoryBatchStore {
             (member) => member.state === "duplicate",
         ))
             this.releaseAcquiredContent(batch, member);
-        await this.persist(batch);
-        this.launch(batch);
+        await this.persistAndLaunch(batch);
         return this.get(batchId);
     }
 
@@ -629,33 +670,38 @@ export class MemoryBatchStore {
                         continue;
                     member.state = "failed";
                     member.reason = boundedMessage(
-                        error instanceof Error
-                            ? error.message
-                            : "Batch processing failed",
+                        error instanceof Error ? error.message : String(error),
                     );
                 }
                 await this.persist(batch);
             })
+            // A failed terminal checkpoint stays held until retry or recovery.
+            .then(() => this.releaseMaintenance(batch))
             .finally(() => this.active.delete(batch.batchId));
         this.active.set(batch.batchId, { controller, task, batch });
         void task.catch(() => undefined);
     }
 
     private async run(batch: StoredBatch, signal: AbortSignal): Promise<void> {
-        // Two acquired documents at a time; ordinary ingestion keeps corpus commit serialization.
+        // Keep acquisition concurrency bounded; the host may share index publication.
         const pending = batch.members.filter(
             (member) => member.state === "pending",
         );
         for (let index = 0; index < pending.length; index += 2) {
-            await Promise.all(
-                pending.slice(index, index + 2).map(async (member) => {
-                    if (signal.aborted || member.state === "cancelled") {
-                        member.state = "cancelled";
-                        return;
-                    }
-                    await this.ingestMember(batch, member, signal);
-                }),
-            );
+            const ingest = async () => {
+                await Promise.all(
+                    pending.slice(index, index + 2).map(async (member) => {
+                        if (signal.aborted || member.state === "cancelled") {
+                            member.state = "cancelled";
+                            return;
+                        }
+                        await this.ingestMember(batch, member, signal);
+                    }),
+                );
+            };
+            if (this.host.withIngestionGroup)
+                await this.host.withIngestionGroup(ingest);
+            else await ingest();
             await this.persist(batch);
         }
         this.linkDuplicates(batch);
@@ -774,9 +820,7 @@ export class MemoryBatchStore {
         } catch (error) {
             member.state = signal.aborted ? "cancelled" : "failed";
             member.reason = boundedMessage(
-                error instanceof Error
-                    ? error.message
-                    : "Acquired document ingestion failed",
+                error instanceof Error ? error.message : String(error),
             );
         }
     }
@@ -793,6 +837,15 @@ export class MemoryBatchStore {
     }
 
     public async retry(batchId: string): Promise<MemoryBatchImport> {
+        const task = this.admissions.then(() => this.retryAdmitted(batchId));
+        this.admissions = task.then(
+            () => undefined,
+            () => undefined,
+        );
+        return task;
+    }
+
+    private async retryAdmitted(batchId: string): Promise<MemoryBatchImport> {
         if (this.active.has(batchId)) throw new Error("Batch is still running");
         if (this.active.size >= 4)
             throw new Error(
@@ -827,10 +880,10 @@ export class MemoryBatchStore {
             throw new Error(
                 "Forgotten-source members require newly acquired content before retry",
             );
+        if (!retryable.length) return this.get(batchId);
         for (const member of retryable) member.state = "pending";
         batch.state = "running";
-        await this.persist(batch);
-        this.launch(batch);
+        await this.persistAndLaunch(batch);
         return this.get(batchId);
     }
 
@@ -856,7 +909,9 @@ export class MemoryBatchStore {
             if (sourceId === undefined) await this.cancel(batch.batchId);
             else await this.cancelSource(corpusId, sourceId);
             if (sourceId === undefined) {
-                await rm(this.file(batch.batchId), { force: true });
+                await this.accessFile(batch.batchId, () =>
+                    rm(this.file(batch.batchId), { force: true }),
+                );
             } else {
                 const current = await this.load(batch.batchId);
                 const forgotten = current.members.filter(
@@ -953,5 +1008,6 @@ export class MemoryBatchStore {
         await Promise.allSettled(
             [...this.active.values()].map((active) => active.task),
         );
+        await Promise.all(this.fileAccess.values());
     }
 }

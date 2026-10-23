@@ -2,6 +2,12 @@
 
 The default agent provider used by the [shell](../shell) and [CLI](../cli). It include the built in agents included in this repo and external agent provider.
 
+Checked-program recording, authoring, and catalogs are owned by the Copilot
+plugin. This package no longer registers a macro agent or supplies backend-model
+learning/authoring defaults. The shared TypeAgent recipe host, capability
+inspector, typed semantic provider, and MCP host remain available to retained
+integrations.
+
 ## Test agents
 
 The provider also registers a small set of agents whose only purpose is to exercise dispatcher subsystems — disabled by default in production sessions:

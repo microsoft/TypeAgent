@@ -27,6 +27,10 @@ import {
 } from "./fuzzyIndex.js";
 import { TextEmbeddingCache } from "@typeagent/knowledge-processor";
 import { CompiledSearchTerm, CompiledTermGroup } from "./compileLib.js";
+import {
+    embeddingIdentityKey,
+    embeddingModelForRole,
+} from "@typeagent/aiclient";
 
 export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
@@ -326,13 +330,15 @@ export class TermEmbeddingIndex
     implements ITermEmbeddingIndex, TextEmbeddingCache
 {
     private textArray: string[];
+    private textPositions = new Map<string, number>();
     private embeddingIndex: TextEmbeddingIndex;
 
     constructor(
         public settings: TextEmbeddingIndexSettings,
         data?: ITextEmbeddingIndexData,
     ) {
-        this.embeddingIndex = new TextEmbeddingIndex(settings);
+        this.settings = { ...settings, lookupRole: "document" };
+        this.embeddingIndex = new TextEmbeddingIndex(this.settings);
         this.textArray = [];
         if (data) {
             this.deserialize(data);
@@ -343,14 +349,27 @@ export class TermEmbeddingIndex
         terms: string[],
         eventHandler?: IndexingEventHandlers,
     ): Promise<ListIndexingResult> {
+        const newTerms = [...new Set(terms)].filter(
+            (term) => !this.textPositions.has(term),
+        );
+        if (newTerms.length === 0) return { numberCompleted: terms.length };
         const result = await this.embeddingIndex.addTextBatch(
-            terms,
+            newTerms,
             eventHandler,
         );
         if (result.numberCompleted > 0) {
-            this.textArray.push(...terms);
+            for (const term of newTerms.slice(0, result.numberCompleted)) {
+                this.textPositions.set(term, this.textArray.length);
+                this.textArray.push(term);
+            }
         }
-        return result;
+        const incomplete = terms.findIndex(
+            (term) => !this.textPositions.has(term),
+        );
+        return {
+            ...result,
+            numberCompleted: incomplete < 0 ? terms.length : incomplete,
+        };
     }
 
     public async lookupTerm(
@@ -385,15 +404,17 @@ export class TermEmbeddingIndex
     }
 
     public removeTerm(term: string): void {
-        const indexOf = this.textArray.indexOf(term);
-        if (indexOf >= 0) {
+        const indexOf = this.textPositions.get(term);
+        if (indexOf !== undefined) {
             this.textArray.splice(indexOf, 1);
             this.embeddingIndex.removeAt(indexOf);
+            this.rebuildTextPositions();
         }
     }
 
     public clear(): void {
         this.textArray = [];
+        this.textPositions.clear();
         this.embeddingIndex.clear();
     }
 
@@ -411,15 +432,41 @@ export class TermEmbeddingIndex
             );
         }
         this.textArray = data.textItems;
+        this.rebuildTextPositions();
         this.embeddingIndex.deserialize(data.embeddings);
     }
 
     public getEmbedding(text: string): number[] | undefined {
-        const pos = this.textArray.indexOf(text);
-        if (pos >= 0) {
+        const model = this.settings.embeddingModel;
+        const identity =
+            model && embeddingModelForRole(model, "document").embeddingIdentity;
+        if (model?.forRole && !identity) return undefined;
+        if (identity) {
+            try {
+                const [namespace, input]: unknown[] = JSON.parse(text);
+                if (
+                    namespace !== embeddingIdentityKey(identity) ||
+                    typeof input !== "string"
+                )
+                    return undefined;
+                text = input;
+            } catch {
+                return undefined;
+            }
+        }
+        const pos = this.textPositions.get(text);
+        if (pos !== undefined) {
             return serializeEmbedding(this.embeddingIndex.get(pos));
         }
         return undefined;
+    }
+
+    private rebuildTextPositions(): void {
+        this.textPositions.clear();
+        this.textArray.forEach((text, ordinal) => {
+            if (!this.textPositions.has(text))
+                this.textPositions.set(text, ordinal);
+        });
     }
 
     private matchesToTerms(matches: Scored[]): Term[] {

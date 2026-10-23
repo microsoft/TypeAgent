@@ -1,0 +1,155 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1808" height="572" viewBox="0 0 1808 572" role="img" aria-labelledby="hybrid-title hybrid-desc">
+  <title id="hybrid-title">Memory overview: sources, shared memory, recall and View builders, consumers</title>
+  <desc id="hybrid-desc">Sources feed two shared stores: retained evidence and the KnowPro index. Two processing paths read both. Query-time recall returns cited answers and passages to Chat and Search and to agents and MCP clients. View builders produce versioned wikis, project briefs, timelines and troubleshooting guides that preserve human edits.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="10" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0 11 5.5 0 11z" fill="#5c7388"/>
+    </marker>
+    <marker id="post" markerWidth="11" markerHeight="11" refX="10" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0 11 5.5 0 11z" fill="#6e947f"/>
+    </marker>
+    <style>
+      text { font-family: "Segoe UI", Arial, sans-serif; fill: #243744; }
+      .cap { font-size: 16px; font-weight: 700; fill: #6d7f8c; letter-spacing: 1.1px; }
+      .h { font-size: 20px; font-weight: 700; }
+      .h22 { font-size: 22px; font-weight: 700; }
+      .body { font-size: 16px; fill: #4e6474; }
+      .small { font-size: 15px; fill: #5c7080; }
+      .tag { font-size: 15px; font-weight: 600; fill: #4e6474; }
+      .edge { fill: none; stroke: #5c7388; stroke-width: 2.25; marker-end: url(#arrow); }
+      .post { fill: none; stroke: #6e947f; stroke-width: 2; stroke-dasharray: 5 4; marker-end: url(#post); }
+    </style>
+  </defs>
+  <rect width="1808" height="572" fill="#f7f6f3"/>
+  <text x="24" y="40" class="cap">SOURCES</text>
+  <text x="328" y="40" class="cap">SHARED MEMORY</text>
+  <text x="936" y="40" class="cap">PROCESSING PATHS</text>
+  <text x="1470" y="40" class="cap">CONSUMERS</text>
+
+  <g data-card="documents">
+    <rect x="24" y="64" width="248" height="72" rx="14" fill="#fff" stroke="#d5e0d8"/>
+    <path d="M44 82h16l7 7v20H44z M60 82v7h7 M50 98h12 M50 104h8" fill="none" stroke="#5f8a74" stroke-width="1.7"/>
+    <text x="84" y="94" class="h">Documents</text>
+    <text x="84" y="118" class="small">Markdown, text, HTML</text>
+  </g>
+  <g data-card="conversations">
+    <rect x="24" y="144" width="248" height="72" rx="14" fill="#fff" stroke="#d5dee8"/>
+    <path d="M44 162h22v14H54l-6 6v-6h-4z" fill="none" stroke="#5d7fa3" stroke-width="1.7"/>
+    <text x="84" y="174" class="h">Conversations</text>
+    <text x="84" y="198" class="small">Typed events</text>
+  </g>
+  <g data-card="web">
+    <rect x="24" y="224" width="248" height="72" rx="14" fill="#fff" stroke="#ddd6ea"/>
+    <rect x="44" y="242" width="24" height="18" rx="2" fill="none" stroke="#7d6d9a" stroke-width="1.7"/>
+    <path d="M44 248h24" stroke="#7d6d9a" stroke-width="1.7"/>
+    <text x="84" y="254" class="h">Web activity</text>
+    <text x="84" y="278" class="small">Pages, visits</text>
+  </g>
+  <g data-card="meetings">
+    <rect x="24" y="304" width="248" height="72" rx="14" fill="#fff" stroke="#eadfce"/>
+    <path d="M46 326v12 M52 320v18 M58 324v14 M64 318v20" fill="none" stroke="#a78455" stroke-width="1.7" stroke-linecap="round"/>
+    <text x="84" y="334" class="h">Meetings</text>
+    <text x="84" y="358" class="small">Logs and VTT</text>
+  </g>
+  <g data-card="procedures">
+    <rect x="24" y="384" width="248" height="72" rx="14" fill="#fff" stroke="#e4d8c4"/>
+    <rect x="44" y="402" width="18" height="22" rx="2" fill="none" stroke="#9a7844" stroke-width="1.7"/>
+    <path d="M48 410h10 M48 416h10" stroke="#9a7844" stroke-width="1.7"/>
+    <text x="84" y="414" class="h">Instruction docs</text>
+    <text x="84" y="438" class="small">Guides and notes</text>
+  </g>
+
+  <path d="M272 100C296 100 304 118 328 124" class="edge"/>
+  <path d="M272 180C296 180 304 176 328 186" class="edge"/>
+  <path d="M272 260C296 260 304 248 328 248" class="edge"/>
+  <path d="M272 340C296 340 304 320 328 310" class="edge"/>
+  <path d="M272 420C296 420 304 392 328 372" class="edge"/>
+  <text x="274" y="56" class="small">capture</text>
+
+  <rect x="328" y="64" width="576" height="392" rx="22" fill="#f3f7f4" stroke="#d0e0d6"/>
+  <g data-card="evidence">
+    <rect x="344" y="108" width="240" height="316" rx="14" fill="#fff" stroke="#c9ddd2"/>
+    <text x="360" y="140" class="h">Retained evidence</text>
+    <text x="360" y="172" class="body">Identity and revisions</text>
+    <text x="360" y="196" class="small">History and forget state</text>
+    <text x="360" y="220" class="small">Canonical evidence</text>
+    <g fill="none" stroke="#7aa58d" stroke-width="1.6">
+      <rect x="368" y="252" width="118" height="28" rx="4"/>
+      <rect x="378" y="262" width="118" height="28" rx="4" fill="#f4faf6"/>
+      <rect x="388" y="272" width="118" height="28" rx="4" fill="#fff"/>
+    </g>
+    <text x="360" y="348" class="small">Originals stay distinct</text>
+    <text x="360" y="372" class="small">from derived structure</text>
+  </g>
+  <g data-card="index">
+    <rect x="644" y="108" width="240" height="316" rx="14" fill="#fff" stroke="#c9d6e4"/>
+    <text x="660" y="140" class="h">KnowPro index</text>
+    <g fill="none" stroke="#7fa0b8" stroke-width="1.7">
+      <path d="M700 184l48-8 46 26 36-18 M748 176l40-16"/>
+      <circle cx="700" cy="184" r="7" fill="#e7f4ee" stroke="#6e947f"/>
+      <circle cx="748" cy="176" r="6" fill="#e8f0f8" stroke="#6d8eae"/>
+      <circle cx="794" cy="210" r="7" fill="#f3eef8" stroke="#8a7eaa"/>
+      <circle cx="830" cy="192" r="6" fill="#f8f1e4" stroke="#b08a58"/>
+      <circle cx="788" cy="160" r="5" fill="#e8f0f8" stroke="#6d8eae"/>
+    </g>
+    <text x="660" y="252" class="body">Entities and topics</text>
+    <text x="660" y="276" class="body">Actions and relations</text>
+    <text x="660" y="304" class="small">Postings to passages</text>
+  </g>
+  <path d="M584 156H644" class="edge"/>
+  <text x="590" y="148" class="small">index</text>
+  <path d="M644 214H584" class="post"/>
+  <path d="M644 268H584" class="post"/>
+  <path d="M644 322H584" class="post"/>
+  <text x="508" y="240" class="small">postings</text>
+
+  <path d="M904 150H936" class="edge"/>
+  <path d="M904 360H936" class="edge"/>
+  <g data-card="recall">
+    <rect x="936" y="64" width="298" height="164" rx="16" fill="#f4f7fb" stroke="#d3dee8"/>
+    <text x="956" y="100" class="h22">Query-time recall</text>
+    <text x="956" y="132" class="body">Translate question to query</text>
+    <text x="956" y="160" class="body">Search index + read passages</text>
+    <text x="956" y="188" class="body">Cite and assemble response</text>
+  </g>
+  <g data-card="builders">
+    <rect x="936" y="324" width="298" height="176" rx="16" fill="#f3f7f4" stroke="#d0e0d6"/>
+    <text x="956" y="360" class="h22">View builders</text>
+    <text x="956" y="392" class="body">Inventory and freeze inputs</text>
+    <text x="956" y="420" class="body">Build and validate candidate</text>
+    <text x="956" y="448" class="body">Merge edits and validate final</text>
+    <text x="956" y="476" class="body">Publish and index exact version</text>
+  </g>
+
+  <path d="M1234 140H1470" class="edge"/>
+  <text x="1352" y="124" text-anchor="middle" class="small">cited answers + passages</text>
+  <path d="M1234 212H1470" class="edge"/>
+  <text x="1352" y="196" text-anchor="middle" class="small">evidence for reasoning</text>
+  <path d="M1234 448H1470" class="edge"/>
+  <text x="1352" y="432" text-anchor="middle" class="small">exact published document</text>
+
+  <g data-card="callers">
+    <rect x="1470" y="64" width="310" height="236" rx="16" fill="#fff" stroke="#d3dee8"/>
+    <text x="1494" y="104" class="h22">Query callers</text>
+    <g data-card="chat">
+      <rect x="1494" y="122" width="262" height="68" rx="12" fill="#f4f7fb" stroke="#d3dee8"/>
+      <text x="1512" y="151" class="h">Chat and Search</text>
+      <text x="1512" y="177" class="small">Cited answers and snippets</text>
+    </g>
+    <g data-card="agents">
+      <rect x="1494" y="204" width="262" height="74" rx="12" fill="#f4f7fb" stroke="#d3dee8"/>
+      <text x="1512" y="234" class="h">Agents and MCP clients</text>
+      <text x="1512" y="260" class="small">Native reasoning and external MCP</text>
+    </g>
+  </g>
+  <g data-card="views">
+    <rect x="1470" y="324" width="310" height="222" rx="16" fill="#fff" stroke="#d0e0d6"/>
+    <text x="1494" y="364" class="h22">Maintained views</text>
+    <text x="1494" y="398" class="body">Wikis and concept pages</text>
+    <text x="1494" y="426" class="body">Project briefs</text>
+    <text x="1494" y="454" class="body">Timelines</text>
+    <text x="1494" y="482" class="body">Troubleshooting guides</text>
+    <line x1="1494" y1="504" x2="1756" y2="504" stroke="#d0e0d6"/>
+    <text x="1494" y="532" class="tag">Versioned and edit-preserving</text>
+  </g>
+</svg>

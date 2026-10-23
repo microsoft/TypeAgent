@@ -13,12 +13,12 @@ export function getModeDescription(): string {
     switch (getMode()) {
         case "mcp":
             return getMcpRouting() === "mixed"
-                ? "Mixed policy: Copilot chooses whole-request delegation through processCommand or owns the analysis and prefers TypeAgent searchActions/executeAction for intermediate operations. Native tools are fallback only when no suitable TypeAgent capability is available, never to bypass a denial or retry failed or uncertain actions."
-                : "Delegate policy (default): delegate the user's exact request through processCommand. TypeAgent is the preferred action provider; native fallback requires an explicit unsupported capability before any action executes, never an error or denial. Recording stays with TypeAgent. Copilot-selected discovery/direct calls are routing guidance only in MCP mixed policy; structured tools remain available.";
+                ? "Explicit TypeAgent mixed policy: structured discovery/execution and whole-request processCommand remain available. Ordinary prompts use local recipes, then Copilot; recording and authorship stay in the plugin."
+                : "Explicit TypeAgent delegate policy: processCommand remains available for intentional whole-request delegation. Ordinary prompts use local recipes, then Copilot; no automatic backend planner or recording fallback.";
         case "direct":
-            return "The hook handles user natural language directly. The persistent MCP bridge remains available for structured actions.";
+            return "Explicit TypeAgent commands and the structured MCP bridge remain available. Ordinary prompts use local recipes, then Copilot.";
         case "dev":
-            return "TypeAgent handles registered PowerShell flows and recording directives; other requests fall through to Copilot.";
+            return "Explicit TypeAgent development commands remain available. Ordinary prompts use local recipes, then Copilot; recording uses the child-authored plugin pipeline.";
         case "bypass":
             return "TypeAgent routing is disabled; requests fall through to Copilot.";
     }

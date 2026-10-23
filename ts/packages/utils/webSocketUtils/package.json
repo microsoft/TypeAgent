@@ -17,7 +17,8 @@
     "./loopback": "./dist/loopback.js",
     "./heartbeat": "./dist/heartbeat.js",
     "./rpcChannel": "./dist/rpcChannel.js",
-    "./backoff": "./dist/backoff.js"
+    "./backoff": "./dist/backoff.js",
+    "./visualStudioBridgeAuth": "./dist/visualStudioBridgeAuth.js"
   },
   "files": [
     "dist",

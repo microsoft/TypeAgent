@@ -181,7 +181,12 @@ describe("live extension skill session integration", () => {
         );
 
         sdk.shutdown();
-        await delay(20);
+        const deadline = Date.now() + 5000;
+        while (
+            (await readdir(temporaryRoot)).length > 0 &&
+            Date.now() < deadline
+        )
+            await delay(10);
 
         expect(await readdir(temporaryRoot)).toEqual([]);
     });

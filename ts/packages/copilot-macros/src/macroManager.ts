@@ -1,14 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { randomUUID } from "node:crypto";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
     appendFile,
     mkdir,
     readFile,
     readdir,
-    stat,
     rename,
     rm,
     writeFile,
@@ -19,59 +17,56 @@ import type {
     ArmRecordingRequest,
     ClaimRecordingRequest,
     CopilotToolMacro,
-    CreateMacroFromTraceRequest,
     DeleteMacroRequest,
     DisableMacroRequest,
     FinalizeRecordingRequest,
     InspectMacroRequest,
     ListMacrosRequest,
+    MacroLearningJob,
+    MacroLearningMode,
+    MacroLearningPreference,
+    MacroLearningRuntime,
     MacroMatch,
+    MacroProgramRuntime,
     MacroRequirements,
     MacroRunRecord,
     MacroSummary,
     MacroValidationReport,
     MacroVersionRef,
     RecordedInteractionTrace,
-    ReplayToolHost,
     RecordingState,
     RecordingToken,
-    SearchMacrosRequest,
-    TraceSummary,
+    ReplayToolHost,
     RunMacroRequest,
     RunMacroResponse,
+    SearchMacrosRequest,
+    TraceSummary,
     ValidateMacroRequest,
-    SubmitMacroCandidateRequest,
-    MacroLearningRuntime,
-    MacroLearningPreference,
-    MacroLearningMode,
-    MacroLearningJob,
-    MacroExecutionPreference,
-    EvidencedMacroCandidateRequest,
 } from "./contracts.js";
-import {
-    inspectReplayTools,
-    replayMacro,
-    ReplayValidationError,
-    validateMacroInputs,
-} from "./deterministicReplay.js";
-import { induceMacroFromTrace, validateMacro } from "./macroDefinition.js";
+import { validateMacro } from "./macroDefinition.js";
 
+import { MacroLearningEngine } from "./macroLearning.js";
+import { sealMacroChildCapture } from "./macroChildCapture.js";
+import type {
+    MacroAuthoringClaim,
+    MacroAuthoringRequest,
+    MacroAuthoringSubmission,
+} from "./contracts.js";
+import { readProgramJournal, runMacroProgram } from "./macroProgramRun.js";
+import type { JsonValue } from "./recipeContracts.js";
+import type { SealedRecipeAuthoringContext } from "./recipeAuthoring.js";
 import { redactTraceValue } from "./redaction.js";
+import { PrivateResultStore } from "./resultEvidence.js";
+import { assertMacroCapabilities } from "./resultPath.js";
 import {
-    MacroLearningEngine,
-    type MacroLearningTarget,
-} from "./macroLearning.js";
-import { getMacroFeatures } from "./macroFeatures.js";
-import {
-    assertLearningTrace,
-    assertLearningProcedure,
-} from "./macroLearningValidation.js";
+    publishImmutable,
+    publishJson,
+    withRecordLock,
+} from "./revisionRecords.js";
 
 const defaultRecordingTtlMs = 10 * 60 * 1000;
 const maxPersistedRunValueBytes = 256 * 1024;
 const maxPersistedRunPreviewCharacters = 16 * 1024;
-const maxCandidateBytes = 256 * 1024;
-const maxCandidateItems = 100;
 
 interface MacroRunOptions {
     signal?: AbortSignal | undefined;
@@ -86,20 +81,6 @@ function forwardAbortSignal(
     signal?.addEventListener("abort", abort, { once: true });
     if (signal?.aborted) controller.abort();
     return () => signal?.removeEventListener("abort", abort);
-}
-
-interface AgentHandoffRecord {
-    runId: string;
-    macroId: string;
-    version: number;
-    createdAt: string;
-    cwd?: string;
-    budgets: {
-        maxToolCalls: number;
-        maxRetries: number;
-        timeoutMs: number;
-        maxTokens: number;
-    };
 }
 
 function sanitizeRunValue(value: unknown): unknown {
@@ -124,15 +105,24 @@ export class MacroManager {
     private readonly failures = new Map<string, string>();
     private readonly rootDir: string;
     private readonly activeRuns = new Map<string, AbortController>();
+    private readonly runCompletions = new Map<string, Promise<void>>();
+    private readonly pendingCancellations = new Map<string, number>();
+    private closed = false;
     private catalogMutation: Promise<void> = Promise.resolve();
     private readonly catalogListeners = new Set<() => Promise<void>>();
     private readonly learning: MacroLearningEngine;
+    private programRuntime?: MacroProgramRuntime;
 
     constructor(
         instanceDir: string,
-        private readonly replayHost?: ReplayToolHost,
+        replayHost?: ReplayToolHost,
+        private readonly authoringProfileId = "typeagent",
     ) {
-        this.rootDir = path.join(instanceDir, "copilot-macros");
+        if (!authoringProfileId.trim() || authoringProfileId.length > 256)
+            throw new Error(
+                "A bounded authoring profile identity is required.",
+            );
+        this.rootDir = path.resolve(instanceDir, "copilot-macros");
         this.learning = new MacroLearningEngine(
             this.rootDir,
             {
@@ -144,11 +134,23 @@ export class MacroManager {
                 recoverApproved: (macro) => this.recoverLearningApproval(macro),
             },
             replayHost,
+            authoringProfileId,
         );
     }
 
     configureLearning(runtime: MacroLearningRuntime): Promise<void> {
         return this.learning.configure(runtime);
+    }
+
+    configureProgramRuntime(runtime: MacroProgramRuntime): void {
+        if (this.closed) throw new Error("The macro owner is closed.");
+        if (this.activeRuns.size)
+            throw new Error("Program runtime cannot change during execution.");
+        this.programRuntime = runtime;
+    }
+
+    canRunPrograms(): boolean {
+        return this.programRuntime !== undefined;
     }
 
     getMacroLearningPreference(cwd: string): Promise<MacroLearningPreference> {
@@ -167,13 +169,23 @@ export class MacroManager {
     async prepareMacroLearning(request: {
         traceId: string;
     }): Promise<MacroLearningJob> {
-        const trace = await this.readLearningTrace(request.traceId);
-        const target = await this.learningTarget(request.traceId, trace);
-        return this.learning.prepare(request.traceId, false, target);
+        return this.learning.prepare(request.traceId, false);
     }
 
     getMacroLearningJob(jobId: string): Promise<MacroLearningJob> {
         return this.learning.getJob(jobId);
+    }
+
+    claimMacroAuthoringRequest(
+        claim: MacroAuthoringClaim,
+    ): Promise<MacroAuthoringRequest | undefined> {
+        return this.learning.claimAuthoring(claim);
+    }
+
+    submitMacroAuthoringResponse(
+        submission: MacroAuthoringSubmission,
+    ): Promise<void> {
+        return this.learning.submitAuthoring(submission);
     }
 
     cancelMacroLearningJob(jobId: string): Promise<MacroLearningJob> {
@@ -306,19 +318,44 @@ export class MacroManager {
             throw new Error("The macro recording token has expired.");
         }
         this.validateTrace(token, request.trace);
-        if (request.trace.handoffRunId)
-            await this.verifyRunnerTrace(request.trace);
         this.recordings.delete(token.sessionId);
 
         const traceId = randomUUID();
         const createdAt = new Date().toISOString();
-        const storedTrace = redactTraceValue({
-            ...request.trace,
-            traceId,
-            createdAt,
-        }) as RecordedInteractionTrace & { traceId: string; createdAt: string };
-        const tracesDir = path.join(this.rootDir, "traces");
+        let storedTrace: RecordedInteractionTrace & {
+            traceId: string;
+            createdAt: string;
+        };
+        let envelope: SealedRecipeAuthoringContext | undefined;
         try {
+            storedTrace = redactTraceValue({
+                ...(await this.retainTraceEvidence(traceId, request.trace)),
+                traceId,
+                createdAt,
+            }) as typeof storedTrace;
+            if (token.learning) {
+                if (!request.childAuthoring)
+                    throw new Error(
+                        "A sealed child authoring capture is required; re-record the successful task.",
+                    );
+                envelope = sealMacroChildCapture(
+                    traceId,
+                    request.trace,
+                    token,
+                    request.childAuthoring,
+                    (await this.learning.getPreference(request.trace.cwd)).mode,
+                    storedTrace,
+                    this.authoringProfileId,
+                );
+            }
+            if (
+                Buffer.byteLength(JSON.stringify(storedTrace, undefined, 2)) >
+                1024 * 1024
+            )
+                throw new Error(
+                    "Recorded learning trace exceeds its 1 MiB storage limit.",
+                );
+            const tracesDir = path.join(this.rootDir, "traces");
             await mkdir(tracesDir, { recursive: true });
             const destination = path.join(tracesDir, `${traceId}.json`);
             const temporary = `${destination}.${randomUUID()}.tmp`;
@@ -331,13 +368,10 @@ export class MacroManager {
                 },
             );
             await rename(temporary, destination);
-            if (request.trace.handoffRunId) {
-                await this.bindRunnerTrace(traceId, request.trace.handoffRunId);
-            }
         } catch (error) {
             this.failures.set(
                 token.sessionId,
-                "The selected interaction could not be stored.",
+                `The selected interaction could not be stored or queued for learning: ${redactTraceValue(error instanceof Error ? error.message : String(error))}`,
             );
             throw error;
         }
@@ -347,35 +381,51 @@ export class MacroManager {
             createdAt,
             toolCallCount: request.trace.toolCalls.length,
         };
+        try {
+            if (token.learning) {
+                const job = await this.learning.prepare(
+                    traceId,
+                    true,
+                    envelope,
+                );
+                summary.learningJobId = job.jobId;
+            }
+        } catch (error) {
+            this.failures.set(
+                token.sessionId,
+                `The stored trace ${traceId} could not be queued for learning: ${redactTraceValue(error instanceof Error ? error.message : String(error))}`,
+            );
+            throw error;
+        }
         this.failures.delete(token.sessionId);
         this.completed.set(token.sessionId, summary);
-        if (token.learning) {
-            const target = await this.learningTarget(traceId, storedTrace);
-            const job = await this.learning.prepare(traceId, true, target);
-            summary.learningJobId = job.jobId;
-        }
         return summary;
     }
 
-    async createMacroFromTrace(
-        request: CreateMacroFromTraceRequest,
-    ): Promise<MacroVersionRef> {
-        if (!request.name.trim()) throw new Error("Macro name is required.");
-        return this.mutateCatalog(async () => {
-            const trace = await this.readTrace(request.traceId);
-            const macro = await induceMacroFromTrace(
-                request.traceId,
-                trace,
-                randomUUID(),
-                request.name.trim(),
-                request.description?.trim() ?? trace.prompt,
-                new Date().toISOString(),
-                this.replayHost,
-            );
-            await this.writeVersion(macro);
-            await this.upsertSummary(macro);
-            return this.versionRef(macro);
-        });
+    private async retainTraceEvidence(
+        traceId: string,
+        trace: RecordedInteractionTrace,
+    ): Promise<RecordedInteractionTrace> {
+        const evidence = new PrivateResultStore(this.rootDir);
+        const boundedTrace = structuredClone(trace);
+        for (const call of boundedTrace.toolCalls) {
+            for (const source of ["result", "modelResult"] as const) {
+                const ref = await evidence.retain(
+                    "trace",
+                    traceId,
+                    call.toolCallId,
+                    source,
+                    call[source],
+                );
+                if (!ref) continue;
+                if (source === "result") call.resultArtifact = ref;
+                else call.modelResultArtifact = ref;
+                call[source] = ref.view;
+                boundedTrace.schemaVersion = 2;
+                boundedTrace.capabilities = ["private-result-evidence-v1"];
+            }
+        }
+        return boundedTrace;
     }
 
     async saveDraft(macro: CopilotToolMacro): Promise<MacroVersionRef> {
@@ -383,6 +433,8 @@ export class MacroManager {
         if (macro.state !== "draft") {
             throw new Error("Only draft macros can be persisted.");
         }
+        if (macro.executionKind !== "program" || !macro.program)
+            throw new Error("Only validated program macros can be persisted.");
         const report = validateMacro(macro);
         if (!report.valid) {
             const errors = report.issues
@@ -393,9 +445,7 @@ export class MacroManager {
         }
         return this.mutateCatalog(async () => {
             if (macro.learning) await this.learning.assertApproval(macro);
-            const latest = (await this.readCatalog()).find(
-                (item) => item.macroId === macro.macroId,
-            );
+            const latest = await this.readSummary(macro.macroId);
             const existing = await this.readVersionIfPresent(
                 macro.macroId,
                 macro.version,
@@ -407,14 +457,13 @@ export class MacroManager {
                     );
                 }
                 if (
-                    !(existing.learning && existing.candidateProvenance) &&
-                    (latest === undefined || latest.version <= existing.version)
+                    latest === undefined ||
+                    latest.version <= existing.version
                 ) {
                     await this.upsertSummary(existing);
                 }
                 return this.versionRef(existing);
             }
-            this.assertLearningAdaptationSource(macro, latest);
             if (
                 latest &&
                 (await this.inspectMacro(latest)).learning &&
@@ -430,9 +479,7 @@ export class MacroManager {
                 );
             }
             await this.writeVersion(macro);
-            if (!this.hasCurrentLearningSource(macro, latest)) {
-                await this.upsertSummary(macro);
-            }
+            await this.upsertSummary(macro);
             return this.versionRef(macro);
         });
     }
@@ -481,6 +528,7 @@ export class MacroManager {
             this.versionPath(request.macroId, version),
             `Macro version not found: ${request.macroId}@${version}`,
         );
+        assertMacroCapabilities(macro);
         if (request.requireRunnable) {
             await this.validateRunRoute(macro, {
                 requireLatestApproved: true,
@@ -497,6 +545,9 @@ export class MacroManager {
             macroId: macro.macroId,
             version: macro.version,
             executionClass: macro.executionClass,
+            ...(macro.executionKind
+                ? { executionKind: macro.executionKind }
+                : {}),
             inputs: macro.inputs,
             tools: macro.steps.map((step) => ({
                 toolName: step.toolName,
@@ -540,39 +591,12 @@ export class MacroManager {
                     "Macro validation failed; approval was not recorded.",
                 );
             }
-            let steps = current.steps;
-            if (
-                this.replayHost !== undefined &&
-                current.executionClass === "replayable" &&
-                !current.learning
-            ) {
-                const trace = current.sourceTraceId.startsWith("procedure:")
-                    ? undefined
-                    : await this.readTrace(current.sourceTraceId);
-                steps = await Promise.all(
-                    current.steps.map(async (step) => {
-                        const descriptor = await this.replayHost!.inspectTool(
-                            step.mcpServerName,
-                            step.toolName,
-                            trace === undefined
-                                ? undefined
-                                : { cwd: trace.cwd },
-                        );
-                        if (!descriptor) {
-                            throw new Error(
-                                `Replay tool is unavailable: ${step.mcpServerName ?? "native"}/${step.toolName}`,
-                            );
-                        }
-                        return {
-                            ...step,
-                            schemaFingerprint: descriptor.schemaFingerprint,
-                        };
-                    }),
+            if (current.executionKind !== "program" || !current.program)
+                throw new Error(
+                    "Only validated program macros can be approved.",
                 );
-            }
             const approved: CopilotToolMacro = {
                 ...current,
-                steps,
                 version: current.learning
                     ? current.version + 1
                     : await this.nextVersion(current.macroId),
@@ -581,13 +605,11 @@ export class MacroManager {
             };
             const latest = await this.getLatestSummary(current.macroId);
             if (
-                (latest.version !== current.version ||
-                    latest.state !== "draft") &&
-                !this.hasCurrentLearningSource(current, latest)
+                latest.version !== current.version ||
+                latest.state !== "draft"
             ) {
                 throw new Error("Only the current draft can be approved.");
             }
-            this.assertLearningAdaptationSource(current, latest);
             const learningPreference = await this.learning.assertApproval(
                 current,
                 automatic,
@@ -624,9 +646,7 @@ export class MacroManager {
                 );
             }
 
-            const latest = (await this.readCatalog()).find(
-                (item) => item.macroId === macro.macroId,
-            );
+            const latest = await this.readSummary(macro.macroId);
             if (
                 latest &&
                 (latest.version > macro.version || latest.state === "disabled")
@@ -635,46 +655,12 @@ export class MacroManager {
                     "Learning recovery cannot resurrect a superseded or disabled version.",
                 );
             }
-            if (
-                latest?.state !== "approved" ||
-                latest.version !== macro.version
-            ) {
-                this.assertLearningAdaptationSource(macro, latest);
-            }
             this.learning.validateApprovalGrammar(
                 macro,
                 await this.getApprovedMacros(),
             );
             await this.upsertSummary(macro);
         });
-    }
-
-    private assertLearningAdaptationSource(
-        macro: CopilotToolMacro,
-        latest: MacroSummary | undefined,
-    ): void {
-        if (
-            macro.learning &&
-            macro.candidateProvenance &&
-            !this.hasCurrentLearningSource(macro, latest)
-        ) {
-            throw new Error(
-                "Learning adaptation requires its source version to remain approved.",
-            );
-        }
-    }
-
-    private hasCurrentLearningSource(
-        macro: CopilotToolMacro,
-        latest: MacroSummary | undefined,
-    ): boolean {
-        return (
-            macro.learning !== undefined &&
-            latest?.state === "approved" &&
-            latest.version < macro.version &&
-            macro.candidateProvenance?.sourceMacroId === macro.macroId &&
-            macro.candidateProvenance.sourceVersion === latest.version
-        );
     }
 
     async disableMacro(request: DisableMacroRequest): Promise<MacroVersionRef> {
@@ -701,517 +687,115 @@ export class MacroManager {
     async deleteMacro(request: DeleteMacroRequest): Promise<void> {
         await this.mutateCatalog(async () => {
             this.validateMacroId(request.macroId);
-            const summary = (await this.readCatalog()).find(
-                (item) => item.macroId === request.macroId,
-            );
+            const summary = await this.readSummary(request.macroId);
             const current = summary
                 ? await this.inspectMacro(summary)
                 : await this.readVersionIfPresent(request.macroId, 1);
             if (current) await this.learning.suppress(current);
+            await publishJson(this.summaryPath(request.macroId), {
+                schemaVersion: 2,
+                summary: null,
+            });
             if (!current?.learning) {
                 await rm(path.join(this.rootDir, "macros", request.macroId), {
                     recursive: true,
                     force: true,
                 });
             }
-            const summaries = (await this.readCatalog()).filter(
-                (macro) => macro.macroId !== request.macroId,
+            const directory = path.dirname(this.summaryPath(request.macroId));
+            const staged = (await readdir(directory)).filter(
+                (file) =>
+                    file.startsWith(`${request.macroId}.json.`) &&
+                    file.endsWith(".tmp"),
             );
-            await this.writeJsonAtomic(this.catalogPath(), summaries);
+            await Promise.all(
+                staged.map((file) =>
+                    rm(path.join(directory, file), { force: true }),
+                ),
+            );
         });
     }
-
-    submitMacroCandidate(
-        request: EvidencedMacroCandidateRequest,
-    ): Promise<MacroLearningJob>;
-    submitMacroCandidate(
-        request: SubmitMacroCandidateRequest,
-    ): Promise<MacroVersionRef>;
-    submitMacroCandidate(
-        request: SubmitMacroCandidateRequest | EvidencedMacroCandidateRequest,
-    ): Promise<MacroVersionRef | MacroLearningJob> {
-        if ("traceId" in request)
-            return this.submitEvidencedMacroCandidate(request);
-        return this.submitLegacyMacroCandidate(request);
-    }
-
-    private async submitEvidencedMacroCandidate(
-        request: EvidencedMacroCandidateRequest,
-    ): Promise<MacroLearningJob> {
-        this.validateCandidateSubmission(request);
-        const trace = await this.readLearningTrace(request.traceId);
-        assertLearningTrace(trace);
-        if (trace.handoffRunId !== request.handoffRunId) {
-            throw new Error(
-                "Candidate trace is not correlated with the runner handoff.",
-            );
-        }
-        const handoff = await this.verifyRunnerTrace(trace);
-        if (
-            handoff.macroId !== request.sourceMacroId ||
-            handoff.version !== request.sourceVersion
-        ) {
-            throw new Error(
-                "Macro candidate provenance does not match its agent handoff.",
-            );
-        }
-        this.validateCandidateEvidence(request, handoff);
-        if (
-            request.executionEvidence.toolCalls !== trace.toolCalls.length ||
-            request.steps.length !== trace.toolCalls.length ||
-            request.steps.some((step, index) => {
-                const call = trace.toolCalls[index];
-                return (
-                    step.sourceToolCallId !== call.toolCallId ||
-                    step.toolName !== call.name ||
-                    step.mcpServerName !== call.mcpServerName
-                );
-            })
-        ) {
-            throw new Error(
-                "Candidate steps do not match the exact completed runner trace.",
-            );
-        }
-        const source = await this.inspectMacro({
-            macroId: request.sourceMacroId,
-            version: request.sourceVersion,
-        });
-        const proposed: CopilotToolMacro = {
-            ...source,
-            state: "draft",
-            inputs: request.inputs,
-            steps: request.steps,
-            sourceTraceId: request.traceId,
-            warnings: [],
-        };
-        assertLearningProcedure(
-            {
-                inputs: request.inputs,
-                steps: request.steps,
-                exampleInputs: request.exampleInputs,
-            },
-            proposed,
-            trace,
-        );
-        const target = await this.learningTarget(
-            request.traceId,
-            trace,
-            request.reason,
-        );
-        return this.learning.prepare(request.traceId, false, target);
-    }
-
-    private async submitLegacyMacroCandidate(
-        request: SubmitMacroCandidateRequest,
-    ): Promise<MacroVersionRef> {
-        this.validateCandidateSubmission(request);
-        return this.mutateCatalog(async () => {
-            const source = await this.inspectMacro({
-                macroId: request.sourceMacroId,
-                version: request.sourceVersion,
-            });
-            if (source.state !== "approved") {
-                throw new Error(
-                    "Macro candidates must derive from an approved version.",
-                );
-            }
-            if (source.learning) {
-                throw new Error(
-                    "Learned macro adaptations require a new grounded build and version-targeted grammar.",
-                );
-            }
-            const handoff = await this.readJson<AgentHandoffRecord>(
-                this.handoffPath(request.handoffRunId),
-                `Agent handoff not found: ${request.handoffRunId}`,
-            );
-            if (
-                handoff.macroId !== source.macroId ||
-                handoff.version !== source.version
-            ) {
-                throw new Error(
-                    "Macro candidate provenance does not match its agent handoff.",
-                );
-            }
-            this.validateCandidateEvidence(request, handoff);
-            const createdAt = new Date().toISOString();
-            const candidate: CopilotToolMacro = {
-                ...source,
-                version: await this.nextVersion(source.macroId),
-                name: request.name?.trim() || source.name,
-                description: request.description?.trim() || source.description,
-                state: "draft",
-                executionClass: request.steps.every(
-                    (step) => step.executionClass === "replayable",
-                )
-                    ? "replayable"
-                    : "agentRequired",
-                inputs: request.inputs,
-                steps: request.steps,
-                createdAt,
-                warnings: [
-                    ...source.warnings,
-                    "Agent-guided adaptation requires explicit review and approval.",
-                ],
-                candidateProvenance: {
-                    sourceMacroId: source.macroId,
-                    sourceVersion: source.version,
-                    handoffRunId: request.handoffRunId,
-                    reason: request.reason.trim(),
-                    submittedAt: createdAt,
-                },
-            };
-            const report = validateMacro(
-                candidate,
-                await this.readTrace(source.sourceTraceId),
-            );
-            if (!report.valid) {
-                throw new Error(
-                    `Macro candidate validation failed: ${report.issues
-                        .filter((issue) => issue.severity === "error")
-                        .map((issue) => issue.message)
-                        .join("; ")}`,
-                );
-            }
-            await this.writeVersion(candidate);
-            await this.upsertSummary(candidate);
-            await this.recordMetric("candidate", "submitted");
-            await rm(this.handoffPath(request.handoffRunId), { force: true });
-            return this.versionRef(candidate);
-        });
-    }
-
-    private validateCandidateSubmission(
-        request: SubmitMacroCandidateRequest,
-    ): void {
-        if (!request.reason.trim() || request.reason.length > 2_000) {
-            throw new Error("A bounded candidate reason is required.");
-        }
-        this.validateMacroId(request.handoffRunId);
-        if (
-            request.inputs.length > maxCandidateItems ||
-            request.steps.length === 0 ||
-            request.steps.length > maxCandidateItems ||
-            Buffer.byteLength(JSON.stringify(request)) > maxCandidateBytes
-        ) {
-            throw new Error("Macro candidate exceeds submission limits.");
-        }
-        if (
-            request.steps.some(
-                (step) =>
-                    !["replayable", "agentRequired"].includes(
-                        step.executionClass,
-                    ) ||
-                    !step.id.trim() ||
-                    !step.toolName.trim() ||
-                    !step.sourceToolCallId.trim(),
-            )
-        ) {
-            throw new Error("Macro candidate contains an invalid step.");
-        }
-    }
-
-    private validateCandidateEvidence(
-        request: SubmitMacroCandidateRequest,
-        handoff: AgentHandoffRecord,
-    ): void {
-        const evidence = request.executionEvidence;
-        const bounded = [
-            [evidence.toolCalls, handoff.budgets.maxToolCalls],
-            [evidence.retries, handoff.budgets.maxRetries],
-            [evidence.durationMs, handoff.budgets.timeoutMs],
-            [evidence.tokensUsed, handoff.budgets.maxTokens],
-        ];
-        if (
-            evidence.outcome !== "completed" ||
-            bounded.some(
-                ([value, maximum]) =>
-                    !Number.isFinite(value) || value < 0 || value > maximum,
-            ) ||
-            evidence.steps.length !== request.steps.length ||
-            new Set(evidence.steps.map((step) => step.stepId)).size !==
-                request.steps.length ||
-            evidence.steps.some((step) => step.status !== "completed") ||
-            request.steps.some(
-                (step) =>
-                    !evidence.steps.some((item) => item.stepId === step.id),
-            )
-        ) {
-            throw new Error(
-                "Macro candidate execution evidence exceeds its handoff budget.",
-            );
-        }
-    }
-
-    private async verifyRunnerTrace(
-        trace: RecordedInteractionTrace,
-    ): Promise<AgentHandoffRecord> {
-        if (!trace.handoffRunId)
-            throw new Error("A verified runner handoff ID is required.");
-        this.validateMacroId(trace.handoffRunId);
-        const handoff = await this.readJson<AgentHandoffRecord>(
-            this.handoffPath(trace.handoffRunId),
-            `Agent handoff not found: ${trace.handoffRunId}`,
-        );
-        const source = await this.inspectMacro({
-            macroId: handoff.macroId,
-            version: handoff.version,
-        });
-        const startedAt = Date.parse(trace.startedAt);
-        const completedAt = Date.parse(trace.completedAt);
-        if (
-            source.state !== "approved" ||
-            !handoff.cwd ||
-            path.resolve(trace.cwd).toLowerCase() !==
-                path.resolve(handoff.cwd).toLowerCase() ||
-            !Number.isFinite(startedAt) ||
-            !Number.isFinite(completedAt) ||
-            startedAt < Date.parse(handoff.createdAt) ||
-            completedAt < startedAt ||
-            completedAt - Date.parse(handoff.createdAt) >
-                handoff.budgets.timeoutMs ||
-            trace.toolCalls.length > handoff.budgets.maxToolCalls
-        ) {
-            throw new Error(
-                "Runner trace does not match the recorded handoff scope or budget.",
-            );
-        }
-        return handoff;
-    }
-
-    private async learningTarget(
-        traceId: string,
-        trace: RecordedInteractionTrace,
-        reason?: string,
-    ): Promise<MacroLearningTarget | undefined> {
-        if (!trace.handoffRunId) return undefined;
-        const handoff = await this.verifyRunnerTrace(trace);
-        const binding = await this.readJson<{ traceId: string }>(
-            this.runnerTracePath(trace.handoffRunId),
-            "Runner trace correlation was not recorded.",
-        );
-        if (binding.traceId !== traceId)
-            throw new Error(
-                "Runner handoff belongs to a different recorded trace.",
-            );
-        return {
-            macroId: handoff.macroId,
-            version: await this.nextVersion(handoff.macroId),
-            provenance: {
-                sourceMacroId: handoff.macroId,
-                sourceVersion: handoff.version,
-                handoffRunId: handoff.runId,
-                reason: reason?.trim() ?? "Verified macro runner execution.",
-                submittedAt: trace.completedAt,
-            },
-        };
-    }
-
-    private runnerTracePath(runId: string): string {
-        return path.join(this.rootDir, "handoff-traces", `${runId}.json`);
-    }
-
-    private async bindRunnerTrace(
-        traceId: string,
-        runId: string,
-    ): Promise<void> {
-        const destination = this.runnerTracePath(runId);
-        await mkdir(path.dirname(destination), { recursive: true });
-        try {
-            await writeFile(destination, JSON.stringify({ traceId }), {
-                encoding: "utf8",
-                flag: "wx",
-            });
-        } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-            const existing = await this.readJson<{ traceId: string }>(
-                destination,
-                "Runner trace binding is missing.",
-            );
-            if (existing.traceId !== traceId)
-                throw new Error(
-                    "Runner handoff is already bound to another trace.",
-                );
-        }
-    }
-
     async runMacro(
         request: RunMacroRequest,
         options: MacroRunOptions = {},
     ): Promise<RunMacroResponse> {
+        if (this.closed) throw new Error("The macro owner is closed.");
         options.signal?.throwIfAborted();
         this.validateMacroId(request.runId);
-        if (this.activeRuns.has(request.runId)) {
+        if ((this.pendingCancellations.get(request.runId) ?? 0) > Date.now())
+            throw new Error(
+                `Macro run was cancelled before acceptance: ${request.runId}`,
+            );
+        if (this.activeRuns.has(request.runId))
             throw new Error(`Macro run is already active: ${request.runId}`);
-        }
-        const macro = await this.inspectMacro(request);
-        await this.validateRunRoute(macro, options);
-        if (macro.learning && request.preference === "replay") {
-            throw new Error("This macro requires agent-guided execution.");
-        }
-        const preference = macro.learning
-            ? "agent"
-            : (request.preference ?? "auto");
-        if (
-            preference === "agent" ||
-            macro.executionClass === "agentRequired"
-        ) {
-            return this.createAgentHandoff(macro, request, preference);
-        }
-        if (!this.replayHost) {
-            throw new Error("Deterministic macro replay is not configured.");
-        }
-        const sourceTrace = await this.readTrace(macro.sourceTraceId);
-        if (request.dryRun === true) {
-            await inspectReplayTools(
-                macro,
-                this.replayHost,
-                {
-                    cwd: sourceTrace.cwd,
-                },
-                request.inputs ?? {},
-            );
-            return {
-                status: "validated",
-                runId: request.runId,
-                macroId: macro.macroId,
-                version: macro.version,
-            };
-        }
-        const timeoutMs = Math.min(
-            Math.max(request.timeoutMs ?? 60_000, 1),
-            10 * 60_000,
-        );
         const controller = new AbortController();
-        const unlinkAbort = forwardAbortSignal(options.signal, controller);
-        let timedOut = false;
-        const timeout = setTimeout(() => {
-            timedOut = true;
-            controller.abort();
-        }, timeoutMs);
+        const unlink = forwardAbortSignal(options.signal, controller);
+        let finish!: () => void;
+        this.runCompletions.set(
+            request.runId,
+            new Promise<void>((resolve) => {
+                finish = resolve;
+            }),
+        );
         this.activeRuns.set(request.runId, controller);
-        let run: MacroRunRecord;
         try {
-            run = await replayMacro(
-                macro,
-                request.runId,
-                request.inputs ?? {},
-                this.replayHost,
-                controller.signal,
-                { cwd: sourceTrace.cwd },
-            );
-        } catch (error) {
-            const now = new Date().toISOString();
-            run = {
-                runId: request.runId,
-                macroId: macro.macroId,
-                version: macro.version,
-                status: controller.signal.aborted ? "cancelled" : "failed",
-                executionClass: macro.executionClass,
-                inputs: request.inputs ?? {},
-                steps: [],
-                startedAt: now,
-                completedAt: now,
-                error: {
-                    code:
-                        error instanceof ReplayValidationError
-                            ? error.code
-                            : controller.signal.aborted
-                              ? "cancelled"
-                              : "replayFailed",
-                    message:
-                        error instanceof Error ? error.message : String(error),
-                },
-            };
+            const macro = await this.inspectMacro(request);
+            if (macro.executionKind !== "program" || !macro.program)
+                throw new Error(
+                    "Step macros are no longer supported. Record the task as a program.",
+                );
+            await this.validateRunRoute(macro, {
+                ...options,
+                signal: controller.signal,
+                requireLatestApproved: true,
+            });
+            return await this.runProgram(macro, request, controller.signal);
         } finally {
-            clearTimeout(timeout);
             this.activeRuns.delete(request.runId);
-            unlinkAbort();
+            unlink();
+            finish();
+            this.runCompletions.delete(request.runId);
         }
-        if (timedOut) {
-            run = {
-                ...run,
-                status: "failed",
-                error: {
-                    code: "timeout",
-                    message: `Macro replay exceeded its ${timeoutMs}ms deadline.`,
-                },
-            };
-        }
-        run = await this.writeRun(run, macro);
-        await this.recordMetric("replay", run.status);
-        return { status: run.status, run } as RunMacroResponse;
     }
 
-    private async createAgentHandoff(
+    private async runProgram(
         macro: CopilotToolMacro,
         request: RunMacroRequest,
-        preference: MacroExecutionPreference,
+        signal: AbortSignal,
     ): Promise<RunMacroResponse> {
-        if (macro.learning && !getMacroFeatures().agentHandoff) {
-            throw new Error("Live macro runner handoff is disabled.");
-        }
-        validateMacroInputs(macro, request.inputs ?? {});
-        if (preference === "replay") {
-            throw new Error("This macro requires agent-guided execution.");
-        }
-        const agentStepIds = macro.learning
-            ? macro.steps.map((step) => step.id)
-            : macro.steps
-                  .filter((step) => step.executionClass === "agentRequired")
-                  .map((step) => step.id);
-        const reason = macro.learning
-            ? "Learned macros require the live runner and current tool permissions."
-            : preference === "agent"
-              ? "Agent-guided execution was requested."
-              : "The macro contains steps that are not replayable.";
-        const budgets = {
-            maxToolCalls: Math.max(macro.steps.length * 2, 10),
-            maxRetries: 1,
-            timeoutMs: Math.min(
-                Math.max(request.timeoutMs ?? 10 * 60_000, 1),
-                10 * 60_000,
-            ),
-            maxTokens: 16_000,
-        };
-        const cwd =
-            macro.learning?.cwd ??
-            (macro.sourceTraceId.startsWith("procedure:")
-                ? undefined
-                : (await this.readTrace(macro.sourceTraceId)).cwd);
-        await this.writeAgentHandoff({
-            runId: request.runId,
-            macroId: macro.macroId,
-            version: macro.version,
-            createdAt: new Date().toISOString(),
-            ...(cwd === undefined ? {} : { cwd }),
-            budgets,
-        });
-        await this.recordMetric("agentHandoff", "required");
-        return {
-            status: "agentRequired",
-            runId: request.runId,
-            macroId: macro.macroId,
-            version: macro.version,
-            reason,
-            launch: {
-                agent: "typeagent-macro-runner",
-                macro,
-                inputs: request.inputs ?? {},
-                reason: {
-                    code:
-                        preference === "agent" && !macro.learning
-                            ? "agentRequested"
-                            : "agentRequired",
-                    message: reason,
-                    stepIds: agentStepIds,
-                },
-                budgets,
-                candidate: {
-                    sourceMacroId: macro.macroId,
-                    sourceVersion: macro.version,
-                    handoffRunId: request.runId,
-                },
+        if (this.closed) throw new Error("The macro owner is closed.");
+        signal?.throwIfAborted();
+        if (!this.canRunPrograms() || !this.programRuntime)
+            throw new Error("The TypeAgent program runtime is unavailable.");
+        if (request.dryRun)
+            throw new Error(
+                "Program dry-run is unsupported. No program calls were dispatched.",
+            );
+        const run = await runMacroProgram(
+            this.rootDir,
+            macro,
+            request,
+            this.programRuntime,
+            signal,
+            async () => {
+                const latest = await this.getLatestSummary(macro.macroId);
+                if (
+                    latest.state !== "approved" ||
+                    latest.version !== macro.version ||
+                    (await this.learning.isSuppressed(macro))
+                )
+                    throw new Error(
+                        "Program route was disabled or superseded; future calls stopped.",
+                    );
             },
+        );
+        const saved = await this.writeRun(run, macro);
+        await this.recordMetric("program", saved.status);
+        if (saved.status === "completed")
+            return { status: "completed", run: saved };
+        return {
+            status: saved.status === "cancelled" ? "cancelled" : "failed",
+            run: saved,
         };
     }
 
@@ -1219,6 +803,9 @@ export class MacroManager {
         macro: CopilotToolMacro,
         options: MacroRunOptions,
     ): Promise<void> {
+        assertMacroCapabilities(macro);
+        if (!validateMacro(macro).valid)
+            throw new Error("Invalid approved macro procedure.");
         if (macro.state !== "approved") {
             throw new Error("Only approved macros can run.");
         }
@@ -1243,15 +830,109 @@ export class MacroManager {
 
     cancelMacroRun(runId: string): void {
         this.validateMacroId(runId);
+        for (const [id, expiresAt] of this.pendingCancellations)
+            if (expiresAt <= Date.now()) this.pendingCancellations.delete(id);
+        if (
+            !this.pendingCancellations.has(runId) &&
+            this.pendingCancellations.size >= 1000
+        )
+            throw new Error("Pending run cancellation capacity exceeded.");
+        this.pendingCancellations.set(runId, Date.now() + 120_000);
         this.activeRuns.get(runId)?.abort();
+    }
+
+    cancelAllMacroRuns(): void {
+        for (const controller of this.activeRuns.values()) controller.abort();
+    }
+
+    async close(): Promise<void> {
+        this.closed = true;
+        this.cancelAllMacroRuns();
+        const outcomes = await Promise.allSettled([
+            this.learning.close(),
+            ...this.runCompletions.values(),
+            this.catalogMutation,
+        ]);
+        const failures = outcomes.filter(
+            (outcome): outcome is PromiseRejectedResult =>
+                outcome.status === "rejected",
+        );
+        if (failures.length)
+            throw new AggregateError(
+                failures.map((outcome) => outcome.reason),
+                "The macro owner stopped with persistence failures.",
+            );
     }
 
     async getMacroRun(runId: string): Promise<MacroRunRecord> {
         this.validateMacroId(runId);
-        return this.readJson<MacroRunRecord>(
-            this.runPath(runId),
-            `Macro run not found: ${runId}`,
-        );
+        let run: MacroRunRecord;
+        try {
+            run = JSON.parse(
+                await readFile(this.runPath(runId), "utf8"),
+            ) as MacroRunRecord;
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+            const journal = await readProgramJournal(this.rootDir, runId).catch(
+                (failure: unknown) => {
+                    if ((failure as NodeJS.ErrnoException).code === "ENOENT")
+                        throw new Error(`Macro run not found: ${runId}`);
+                    throw failure;
+                },
+            );
+            return {
+                runId,
+                macroId: journal.macroId,
+                version: journal.version,
+                status: this.activeRuns.has(runId) ? "running" : "failed",
+                executionClass: "replayable",
+                inputs: {},
+                steps: [],
+                startedAt: journal.startedAt,
+                error: {
+                    code: "execution_uncertain",
+                    message:
+                        "Program has no terminal record. Do not replay; inspect its durable dispatch checkpoints.",
+                },
+                result: { checkpoints: journal.checkpoints, fallback: "never" },
+            };
+        }
+        const evidence = new PrivateResultStore(this.rootDir);
+        for (const step of run.steps) {
+            if (step.resultArtifact) {
+                await evidence.verify(
+                    step.resultArtifact,
+                    "run",
+                    runId,
+                    step.stepId,
+                    "result",
+                );
+                if (
+                    JSON.stringify(step.result) !==
+                    JSON.stringify(step.resultArtifact.view)
+                )
+                    throw new Error(
+                        "Private run result view does not match its source.",
+                    );
+            }
+        }
+        if (run.resultArtifact) {
+            await evidence.verify(
+                run.resultArtifact,
+                "run",
+                runId,
+                "$final",
+                "result",
+            );
+            if (
+                JSON.stringify(run.result) !==
+                JSON.stringify(run.resultArtifact.view)
+            )
+                throw new Error(
+                    "Private final run view does not match its source.",
+                );
+        }
+        return run;
     }
 
     private removeExpired(sessionId: string): void {
@@ -1267,6 +948,10 @@ export class MacroManager {
     ): void {
         if (
             trace.schemaVersion !== 1 ||
+            trace.capabilities !== undefined ||
+            trace.toolCalls.some(
+                (call) => call.resultArtifact || call.modelResultArtifact,
+            ) ||
             trace.sessionId !== token.sessionId ||
             trace.cwd !== token.cwd ||
             createHash("sha256")
@@ -1288,45 +973,128 @@ export class MacroManager {
         traceId: string,
     ): Promise<RecordedInteractionTrace> {
         this.validateMacroId(traceId);
-        return this.readJson<RecordedInteractionTrace>(
+        const trace = await this.readJson<RecordedInteractionTrace>(
             path.join(this.rootDir, "traces", `${traceId}.json`),
             `Trace not found: ${traceId}`,
         );
+        const hasEvidence = trace.toolCalls.some(
+            (call) => call.resultArtifact || call.modelResultArtifact,
+        );
+        if (
+            (trace.schemaVersion === 1 &&
+                (hasEvidence || trace.capabilities !== undefined)) ||
+            (trace.schemaVersion === 2 &&
+                (!hasEvidence ||
+                    trace.capabilities?.length !== 1 ||
+                    trace.capabilities[0] !== "private-result-evidence-v1")) ||
+            (trace.schemaVersion !== 1 && trace.schemaVersion !== 2)
+        )
+            throw new Error(
+                "Unsupported recorded trace schema or capabilities.",
+            );
+        const evidence = new PrivateResultStore(this.rootDir);
+        for (const call of trace.toolCalls) {
+            for (const source of ["result", "modelResult"] as const) {
+                const ref =
+                    source === "result"
+                        ? call.resultArtifact
+                        : call.modelResultArtifact;
+                if (ref) {
+                    await evidence.verify(
+                        ref,
+                        "trace",
+                        traceId,
+                        call.toolCallId,
+                        source,
+                    );
+                    if (
+                        JSON.stringify(call[source]) !==
+                        JSON.stringify(ref.view)
+                    )
+                        throw new Error(
+                            "Private result view does not match its recorded source.",
+                        );
+                }
+            }
+        }
+        return trace;
     }
 
     private async readLearningTrace(
         traceId: string,
     ): Promise<RecordedInteractionTrace> {
         this.validateMacroId(traceId);
-        const destination = path.join(
-            this.rootDir,
-            "traces",
-            `${traceId}.json`,
+        return new PrivateResultStore(this.rootDir).verifyLearningTrace(
+            traceId,
         );
-        if ((await stat(destination)).size > 1024 * 1024) {
-            throw new Error(
-                "Recorded learning trace exceeds its 1 MiB storage limit.",
-            );
-        }
-        return this.readTrace(traceId);
     }
 
     private async readCatalog(): Promise<MacroSummary[]> {
+        await this.assertCatalogFormat();
+        const directory = path.join(this.rootDir, "catalog");
+        const files = await readdir(directory).catch(
+            (error: NodeJS.ErrnoException) => {
+                if (error.code === "ENOENT") return [];
+                throw error;
+            },
+        );
+        const summaries = await Promise.all(
+            files
+                .filter((file) => /^[a-zA-Z0-9-]+\.json$/.test(file))
+                .map((file) => this.readSummary(file.slice(0, -5), false)),
+        );
+        return summaries.filter(
+            (summary): summary is MacroSummary => summary !== undefined,
+        );
+    }
+
+    private async readSummary(
+        macroId: string,
+        checkFormat = true,
+    ): Promise<MacroSummary | undefined> {
+        if (checkFormat) await this.assertCatalogFormat();
+        let pointer: { schemaVersion: number; summary: MacroSummary | null };
         try {
-            return JSON.parse(
-                await readFile(this.catalogPath(), "utf8"),
-            ) as MacroSummary[];
+            pointer = JSON.parse(
+                await readFile(this.summaryPath(macroId), "utf8"),
+            );
         } catch (error) {
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+            if ((error as NodeJS.ErrnoException).code === "ENOENT")
+                return undefined;
             throw error;
         }
+        if (
+            pointer?.schemaVersion !== 2 ||
+            !("summary" in pointer) ||
+            (pointer.summary !== null &&
+                (pointer.summary.macroId !== macroId ||
+                    !Number.isSafeInteger(pointer.summary.version) ||
+                    pointer.summary.version < 1 ||
+                    !["draft", "approved", "disabled"].includes(
+                        pointer.summary.state,
+                    )))
+        )
+            throw new Error(
+                "Incompatible macro catalog publication; explicitly reset/reimport the development store.",
+            );
+        return pointer.summary ?? undefined;
+    }
+
+    private async assertCatalogFormat(): Promise<void> {
+        // The former array is canonical, not a derived cache.
+        try {
+            await readFile(this.catalogPath(), "utf8");
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+            return;
+        }
+        throw new Error(
+            "Incompatible canonical macro catalog index.json; explicitly reset/reimport the development store. It was not deleted.",
+        );
     }
 
     private async upsertSummary(macro: CopilotToolMacro): Promise<void> {
-        const summaries = (await this.readCatalog()).filter(
-            (summary) => summary.macroId !== macro.macroId,
-        );
-        summaries.push({
+        const summary: MacroSummary = {
             macroId: macro.macroId,
             version: macro.version,
             name: macro.name,
@@ -1335,8 +1103,11 @@ export class MacroManager {
             executionClass: macro.executionClass,
             stepCount: macro.steps.length,
             updatedAt: macro.createdAt,
+        };
+        await publishJson(this.summaryPath(macro.macroId), {
+            schemaVersion: 2,
+            summary,
         });
-        await this.writeJsonAtomic(this.catalogPath(), summaries);
     }
 
     private async nextVersion(macroId: string): Promise<number> {
@@ -1358,11 +1129,7 @@ export class MacroManager {
 
     private async writeVersion(macro: CopilotToolMacro): Promise<void> {
         const destination = this.versionPath(macro.macroId, macro.version);
-        await mkdir(path.dirname(destination), { recursive: true });
-        await writeFile(destination, JSON.stringify(macro, undefined, 2), {
-            encoding: "utf8",
-            flag: "wx",
-        });
+        await publishImmutable(destination, JSON.stringify(macro));
     }
 
     private async readVersionIfPresent(
@@ -1381,19 +1148,6 @@ export class MacroManager {
         }
     }
 
-    private async writeJsonAtomic(
-        destination: string,
-        value: unknown,
-    ): Promise<void> {
-        await mkdir(path.dirname(destination), { recursive: true });
-        const temporary = `${destination}.${randomUUID()}.tmp`;
-        await writeFile(temporary, JSON.stringify(value, undefined, 2), {
-            encoding: "utf8",
-            flag: "wx",
-        });
-        await rename(temporary, destination);
-    }
-
     private async readJson<T>(
         filePath: string,
         notFoundMessage: string,
@@ -1410,15 +1164,17 @@ export class MacroManager {
 
     private async getLatestSummary(macroId: string): Promise<MacroSummary> {
         this.validateMacroId(macroId);
-        const summary = (await this.readCatalog()).find(
-            (macro) => macro.macroId === macroId,
-        );
+        const summary = await this.readSummary(macroId);
         if (!summary) throw new Error(`Macro not found: ${macroId}`);
         return summary;
     }
 
     private catalogPath(): string {
         return path.join(this.rootDir, "index.json");
+    }
+
+    private summaryPath(macroId: string): string {
+        return path.join(this.rootDir, "catalog", `${macroId}.json`);
     }
 
     private versionPath(macroId: string, version: number): string {
@@ -1435,23 +1191,8 @@ export class MacroManager {
         return path.join(this.rootDir, "runs", `${runId}.json`);
     }
 
-    private handoffPath(runId: string): string {
-        return path.join(this.rootDir, "handoffs", `${runId}.json`);
-    }
-
-    private async writeAgentHandoff(
-        handoff: AgentHandoffRecord,
-    ): Promise<void> {
-        const destination = this.handoffPath(handoff.runId);
-        await mkdir(path.dirname(destination), { recursive: true });
-        await writeFile(destination, JSON.stringify(handoff, undefined, 2), {
-            encoding: "utf8",
-            flag: "wx",
-        });
-    }
-
     private async recordMetric(
-        operation: "replay" | "agentHandoff" | "candidate",
+        operation: "program",
         outcome: string,
     ): Promise<void> {
         const destination = path.join(this.rootDir, "metrics.jsonl");
@@ -1467,13 +1208,45 @@ export class MacroManager {
         run: MacroRunRecord,
         macro: CopilotToolMacro,
     ): Promise<MacroRunRecord> {
+        const evidence = new PrivateResultStore(this.rootDir);
+        const boundedRun = structuredClone(run);
+        if (run.resultArtifact || run.steps.some((step) => step.resultArtifact))
+            throw new Error(
+                "Caller-submitted run evidence references are not supported.",
+            );
+        for (const step of boundedRun.steps) {
+            const ref = await evidence.retain(
+                "run",
+                run.runId,
+                step.stepId,
+                "result",
+                step.result,
+            );
+            if (ref) {
+                step.resultArtifact = ref;
+                step.result = ref.view;
+            }
+        }
+        const resultRef = await evidence.retain(
+            "run",
+            run.runId,
+            "$final",
+            "result",
+            run.result,
+        );
+        if (resultRef) {
+            boundedRun.resultArtifact = resultRef;
+            boundedRun.result = resultRef.view;
+        }
+        if (boundedRun.program?.output !== undefined)
+            boundedRun.program.output = boundedRun.result as JsonValue;
         const secretInputs = new Set(
             macro.inputs
                 .filter((input) => input.secret)
                 .map((input) => input.name),
         );
         const sanitized = redactTraceValue({
-            ...run,
+            ...boundedRun,
             inputs: Object.fromEntries(
                 Object.entries(run.inputs).map(([name, value]) => [
                     name,
@@ -1482,22 +1255,18 @@ export class MacroManager {
                         : sanitizeRunValue(value),
                 ]),
             ),
-            steps: run.steps.map((step) => ({
+            steps: boundedRun.steps.map((step) => ({
                 ...step,
                 ...(step.result === undefined
                     ? {}
-                    : { result: sanitizeRunValue(step.result) }),
+                    : { result: redactTraceValue(step.result) }),
             })),
-            ...(run.result === undefined
+            ...(boundedRun.result === undefined
                 ? {}
-                : { result: sanitizeRunValue(run.result) }),
+                : { result: redactTraceValue(boundedRun.result) }),
         }) as MacroRunRecord;
         const destination = this.runPath(run.runId);
-        await mkdir(path.dirname(destination), { recursive: true });
-        await writeFile(destination, JSON.stringify(sanitized, undefined, 2), {
-            encoding: "utf8",
-            flag: "wx",
-        });
+        await publishImmutable(destination, JSON.stringify(sanitized));
         return sanitized;
     }
 
@@ -1522,7 +1291,9 @@ export class MacroManager {
     }
 
     private serializeCatalog<T>(operation: () => Promise<T>): Promise<T> {
-        const result = this.catalogMutation.then(operation, operation);
+        const locked = () =>
+            withRecordLock(path.join(this.rootDir, "catalog-owner"), operation);
+        const result = this.catalogMutation.then(locked, locked);
         this.catalogMutation = result.then(
             () => undefined,
             () => undefined,

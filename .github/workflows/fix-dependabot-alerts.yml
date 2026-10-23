@@ -38,6 +38,7 @@ permissions:
 env:
   ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
+  DEPENDABOT_ALERTS_FILE: /tmp/dependabot-alerts.json
 
 jobs:
   fix-alerts:
@@ -48,12 +49,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         name: Install pnpm
         with:
           package_json_file: ts/package.json
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: "pnpm"
@@ -66,20 +67,25 @@ jobs:
           app-id: ${{ vars.DEPENDABOT_APP_ID }}
           private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
 
-      - name: Verify gh authentication
+      - name: Verify gh authentication and cache alerts
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           gh auth status
           echo "---"
-          # Probe the Dependabot API with a 1-item page. If the call fails the
-          # subsequent discovery step would silently produce an empty workspace
-          # list and the entire job would report "No fixable alerts found" —
-          # masking infra outages as "everything's fine". Fail fast instead.
-          if ! gh api "repos/${{ github.repository }}/dependabot/alerts?per_page=1" --jq 'length'; then
-            echo "::error::Dependabot API probe failed — aborting before silently misreporting alerts"
+          # Fetch once while the GitHub App token is fresh. The per-package loop
+          # can run for more than an hour, so every later script invocation reads
+          # this snapshot instead of making another authenticated API request.
+          if ! gh api "repos/${{ github.repository }}/dependabot/alerts?state=open&per_page=100" \
+            --paginate \
+            --slurp > "$DEPENDABOT_ALERTS_FILE.pages"; then
+            echo "::error::Dependabot API fetch failed — aborting before silently misreporting alerts"
             exit 1
           fi
+          jq 'add // []' "$DEPENDABOT_ALERTS_FILE.pages" > "$DEPENDABOT_ALERTS_FILE"
+          rm "$DEPENDABOT_ALERTS_FILE.pages"
+          jq -e 'type == "array"' "$DEPENDABOT_ALERTS_FILE" > /dev/null
+          echo "Cached $(jq 'length' "$DEPENDABOT_ALERTS_FILE") open Dependabot alert(s)"
 
       # Install ts/ dependencies once before the per-workspace loop.
       # The fix-dependabot-alerts.mjs script lives under ts/tools/scripts/ and
@@ -111,8 +117,8 @@ jobs:
 
       # ── Analyse and fix alerts across workspaces ──────────────────────
       #
-      # Auto-discovers which workspaces have open alerts by querying the
-      # Dependabot API, then for each workspace:
+      # Auto-discovers which workspaces have open alerts from the cached
+      # Dependabot API snapshot, then for each workspace:
       # 1. Installs dependencies (if not already installed)
       # 2. Dry-run to discover fixable packages
       # 3. Applies each package's fix individually
@@ -121,7 +127,6 @@ jobs:
       - name: Analyse and fix alerts
         id: fix
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           # Enforce the org's 7-day release-age policy in every workspace the
           # script processes. Without this, workspaces that lack a
           # pnpm-workspace.yaml (e.g. docs/) would fall back to 0 (disabled)
@@ -156,7 +161,100 @@ jobs:
           NOW_EPOCH=$(date -u +%s)
           COOLDOWN_SECONDS=$((ROLLBACK_COOLDOWN_DAYS * 86400))
 
-          # Discover workspaces with open npm alerts from the Dependabot API.
+          # Successful fixes remain staged for the final commit. Advance the
+          # accepted tree only after verification; failed attempts always
+          # restore both the index and worktree from that immutable tree.
+          ACCEPTED_CHECKPOINT=$(git -C "$GITHUB_WORKSPACE" write-tree)
+
+          attempt_has_changes() {
+            ! git -C "$GITHUB_WORKSPACE" diff --quiet ||
+              [ -n "$(git -C "$GITHUB_WORKSPACE" ls-files --others --exclude-standard)" ]
+          }
+
+          checkpoint_attempt() {
+            ATTEMPT_CHECKPOINT="$ACCEPTED_CHECKPOINT"
+            echo "Attempt checkpoint: $ATTEMPT_CHECKPOINT"
+          }
+
+          accept_attempt() {
+            git -C "$GITHUB_WORKSPACE" add -A
+            ACCEPTED_CHECKPOINT=$(git -C "$GITHUB_WORKSPACE" write-tree)
+            echo "Accepted checkpoint: $ACCEPTED_CHECKPOINT"
+          }
+
+          rollback_attempt() {
+            while IFS= read -r -d '' path; do
+              rm -rf -- "$GITHUB_WORKSPACE/$path"
+            done < <(git -C "$GITHUB_WORKSPACE" ls-files --others --exclude-standard -z)
+            git -C "$GITHUB_WORKSPACE" restore \
+              --source="$ATTEMPT_CHECKPOINT" --staged --worktree -- .
+            if ! git -C "$GITHUB_WORKSPACE" diff --quiet "$ATTEMPT_CHECKPOINT" -- ||
+               ! git -C "$GITHUB_WORKSPACE" diff --cached --quiet "$ATTEMPT_CHECKPOINT" --; then
+              echo "::error::Rollback did not restore checkpoint $ATTEMPT_CHECKPOINT exactly"
+              git -C "$GITHUB_WORKSPACE" status --short
+              return 1
+            fi
+          }
+
+          restore_dependencies() {
+            if [ "$WS_DIR" = "ts" ]; then
+              pnpm install --frozen-lockfile --strict-peer-dependencies
+            else
+              pnpm install --frozen-lockfile
+            fi
+          }
+
+          run_without_node_modules() {
+            # pnpm can reuse node_modules state after `pnpm update -r` and
+            # report "Already up to date" even when a workspace override makes
+            # an importer specifier stale. Hide node_modules so lockfile-only
+            # commands must re-evaluate every manifest.
+            local modules_dir="$PWD/node_modules"
+            local backup_dir
+            local moved_modules=false
+            local command_exit
+            backup_dir=$(mktemp -d "$RUNNER_TEMP/dependabot-checkpoint-verify.XXXXXX")
+            if [ -e "$modules_dir" ]; then
+              mv "$modules_dir" "$backup_dir/node_modules"
+              moved_modules=true
+            fi
+
+            if "$@"; then
+              command_exit=0
+            else
+              command_exit=$?
+            fi
+
+            rm -rf -- "$modules_dir"
+            if [ "$moved_modules" = true ]; then
+              mv "$backup_dir/node_modules" "$modules_dir"
+            fi
+            rmdir "$backup_dir"
+            return "$command_exit"
+          }
+
+          normalize_checkpoint_lockfile() {
+            if [ "$WS_DIR" = "ts" ]; then
+              run_without_node_modules \
+                pnpm install --no-frozen-lockfile --lockfile-only --strict-peer-dependencies
+            else
+              run_without_node_modules \
+                pnpm install --no-frozen-lockfile --lockfile-only
+            fi
+          }
+
+          verify_checkpoint_consistency() {
+            if [ "$WS_DIR" = "ts" ]; then
+              run_without_node_modules \
+                pnpm install --frozen-lockfile --lockfile-only --strict-peer-dependencies
+            else
+              run_without_node_modules \
+                pnpm install --frozen-lockfile --lockfile-only
+            fi
+          }
+
+          # Discover workspaces from the alert snapshot fetched before the
+          # long-running loop.
           #
           # NOTE: `split("/")[0]` collapses every alert manifest_path to its
           # leading directory (so `ts/packages/X/package.json` → `ts`). This is
@@ -165,9 +263,9 @@ jobs:
           # manifest_path points outside those roots (e.g. a future workspace
           # under `subprojects/foo/package.json`). Revisit if/when a third
           # workspace root is added.
-          WORKSPACES=$(gh api "repos/${{ github.repository }}/dependabot/alerts?state=open&per_page=100" \
-            --paginate \
-            --jq '[.[] | select(.dependency.package.ecosystem == "npm") | .dependency.manifest_path | split("/")[0]] | unique | .[]')
+          WORKSPACES=$(jq -r \
+            '[.[] | select(.dependency.package.ecosystem == "npm") | .dependency.manifest_path | split("/")[0]] | unique | .[]' \
+            "$DEPENDABOT_ALERTS_FILE")
 
           if [ -z "$WORKSPACES" ]; then
             echo "No open npm Dependabot alerts found 🎉"
@@ -204,7 +302,9 @@ jobs:
 
             # ── Step 1: Discover fixable packages ───────────────────
             echo "::group::Analysing $WS_DIR alerts"
-            node "$SCRIPT" --dry-run --json --skip-install > /tmp/dep-analysis.json 2>/tmp/dep-analysis.log || true
+            node "$SCRIPT" --dry-run --json --skip-install \
+              --alerts-file="$DEPENDABOT_ALERTS_FILE" \
+              > /tmp/dep-analysis.json 2>/tmp/dep-analysis.log || true
 
             if ! jq -e '.summary' /tmp/dep-analysis.json > /dev/null 2>&1; then
               echo "::warning::No valid analysis for $WS_DIR — see log below"
@@ -245,6 +345,7 @@ jobs:
               echo "Capturing dependency chains for $WS_BLOCKED blocked package(s) in $WS_DIR"
               CHAINS_OUT="/tmp/dep-chains-$WS_DIR.txt"
               NO_COLOR=1 node "$SCRIPT" --dry-run --show-chains --skip-install \
+                --alerts-file="$DEPENDABOT_ALERTS_FILE" \
                 > "$CHAINS_OUT" 2>&1 || true
               if [ -s "$CHAINS_OUT" ]; then
                 {
@@ -305,16 +406,15 @@ jobs:
                 fi
               fi
 
-              # Save a rollback point
-              cp package.json /tmp/pkg-backup.json
-              cp pnpm-lock.yaml /tmp/lock-backup.yaml 2>/dev/null || true
+              # Capture the exact accepted tree before this package mutates it.
+              checkpoint_attempt
 
               # Build targeted args
               read -r -a extra_args <<< "$FLAGS"
               filtered_args=()
               for arg in "${extra_args[@]}"; do
                 case "$arg" in
-                  --auto-fix|--auto-fix=*)
+                  --auto-fix|--auto-fix=*|--package|--package=*)
                     ;;
                   *)
                     filtered_args+=("$arg")
@@ -322,22 +422,54 @@ jobs:
                 esac
               done
               filtered_args+=("--auto-fix=$PKG")
+              filtered_args+=("--package=$PKG")
               filtered_args+=("--skip-install")
+              filtered_args+=("--alerts-file=$DEPENDABOT_ALERTS_FILE")
               echo "Running: fix-dependabot-alerts.mjs ${filtered_args[*]}"
               set +e
               node "$SCRIPT" "${filtered_args[@]}" 2>&1
               fix_exit=$?
               set -e
 
-              if [ "$fix_exit" -ne 0 ] && git diff --quiet; then
-                echo "::warning::Script failed for $PKG in $WS_DIR (exit $fix_exit) with no file changes"
+              # A nonzero exit means the selected package was not fully
+              # resolved. Roll back even when the script left a dirty lockfile:
+              # a compiling partial update is not a successful remediation.
+              if [ "$fix_exit" -ne 0 ]; then
+                echo "::warning::Script failed for $PKG in $WS_DIR (exit $fix_exit) — rolling back the entire attempt"
+                rollback_attempt
+                restore_dependencies
+                ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
                 TOTAL_FAILED=$((TOTAL_FAILED + 1))
+                jq --arg k "$ROLLBACK_KEY" --arg sha "$LOCK_SHA" \
+                   --argjson ts "$NOW_EPOCH" --arg reason "fix script exited $fix_exit" \
+                   '.rollbacks[$k] = {lockSha:$sha,timestamp:$ts,reason:$reason}' \
+                   "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
                 echo "::endgroup::"
                 continue
               fi
 
-              if ! git diff --quiet; then
-                echo "Changes detected, reinstalling and verifying build..."
+              if attempt_has_changes; then
+                echo "Changes detected, normalizing the lockfile before verification..."
+                set +e
+                normalize_checkpoint_lockfile 2>&1
+                normalize_exit=$?
+                set -e
+
+                if [ "$normalize_exit" -ne 0 ]; then
+                  echo "::warning::Lockfile normalization failed after fixing $PKG in $WS_DIR — rolling back"
+                  rollback_attempt
+                  restore_dependencies
+                  ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
+                  TOTAL_FAILED=$((TOTAL_FAILED + 1))
+                  jq --arg k "$ROLLBACK_KEY" --arg sha "$LOCK_SHA" \
+                     --argjson ts "$NOW_EPOCH" --arg reason "lockfile normalization failed" \
+                     '.rollbacks[$k] = {lockSha:$sha,timestamp:$ts,reason:$reason}' \
+                     "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
+                  echo "::endgroup::"
+                  continue
+                fi
+
+                echo "Reinstalling and verifying build..."
                 set +e
                 if [ "$WS_DIR" = "ts" ]; then
                   pnpm install --frozen-lockfile --strict-peer-dependencies 2>&1
@@ -349,10 +481,8 @@ jobs:
 
                 if [ "$install_exit" -ne 0 ]; then
                   echo "::warning::pnpm install failed after fixing $PKG in $WS_DIR — rolling back"
-                  cp /tmp/pkg-backup.json package.json
-                  cp /tmp/lock-backup.yaml pnpm-lock.yaml 2>/dev/null || true
-                  pnpm install 2>&1 || true
-                  git checkout -- . 2>/dev/null || true
+                  rollback_attempt
+                  restore_dependencies
                   ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
                   TOTAL_FAILED=$((TOTAL_FAILED + 1))
                   jq --arg k "$ROLLBACK_KEY" --arg sha "$LOCK_SHA" \
@@ -368,16 +498,20 @@ jobs:
                 fi
 
                 set +e
-                pnpm run build 2>&1
+                if [ "$WS_DIR" = "ts" ]; then
+                  # A forced rebuild catches dependency-only type breakage that
+                  # fluid-build's incremental cache can otherwise skip.
+                  pnpm run rebuild 2>&1
+                else
+                  pnpm run build 2>&1
+                fi
                 build_exit=$?
                 set -e
 
                 if [ "$build_exit" -ne 0 ]; then
                   echo "::warning::Build failed after fixing $PKG in $WS_DIR — rolling back"
-                  cp /tmp/pkg-backup.json package.json
-                  cp /tmp/lock-backup.yaml pnpm-lock.yaml 2>/dev/null || true
-                  pnpm install 2>&1 || true
-                  git checkout -- . 2>/dev/null || true
+                  rollback_attempt
+                  restore_dependencies
                   ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
                   TOTAL_FAILED=$((TOTAL_FAILED + 1))
                   jq --arg k "$ROLLBACK_KEY" --arg sha "$LOCK_SHA" \
@@ -385,12 +519,34 @@ jobs:
                      '.rollbacks[$k] = {lockSha:$sha,timestamp:$ts,reason:$reason}' \
                      "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
                 else
-                  echo "✅ $PKG fixed and build passed"
-                  ALL_APPLIED="$ALL_APPLIED $PKG"
-                  TOTAL_RESOLVED=$((TOTAL_RESOLVED + 1))
-                  # Successful upgrade — clear any stale rollback record.
-                  jq --arg k "$ROLLBACK_KEY" 'del(.rollbacks[$k])' \
-                     "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
+                  # Policy/build steps run after the first install and can
+                  # modify dependency manifests. Validate the exact tree that
+                  # will be staged without updating the lockfile or rerunning
+                  # lifecycle scripts.
+                  set +e
+                  verify_checkpoint_consistency 2>&1
+                  checkpoint_exit=$?
+                  set -e
+
+                  if [ "$checkpoint_exit" -ne 0 ]; then
+                    echo "::warning::Accepted checkpoint is not frozen-lockfile consistent after fixing $PKG in $WS_DIR — rolling back"
+                    rollback_attempt
+                    restore_dependencies
+                    ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
+                    TOTAL_FAILED=$((TOTAL_FAILED + 1))
+                    jq --arg k "$ROLLBACK_KEY" --arg sha "$LOCK_SHA" \
+                       --argjson ts "$NOW_EPOCH" --arg reason "checkpoint lockfile mismatch" \
+                       '.rollbacks[$k] = {lockSha:$sha,timestamp:$ts,reason:$reason}' \
+                       "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
+                  else
+                    echo "✅ $PKG fixed, build passed, and checkpoint is lockfile-consistent"
+                    accept_attempt
+                    ALL_APPLIED="$ALL_APPLIED $PKG"
+                    TOTAL_RESOLVED=$((TOTAL_RESOLVED + 1))
+                    # Successful upgrade — clear any stale rollback record.
+                    jq --arg k "$ROLLBACK_KEY" 'del(.rollbacks[$k])' \
+                       "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
+                  fi
                 fi
               else
                 echo "No changes for $PKG (may already be fixed)"
@@ -408,28 +564,25 @@ jobs:
              '.rollbacks |= with_entries(select(.value.timestamp >= $th))' \
              "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
 
-          echo "resolved=$TOTAL_RESOLVED" >> "$GITHUB_OUTPUT"
-          echo "blocked=$TOTAL_BLOCKED" >> "$GITHUB_OUTPUT"
-          echo "no_patch=$TOTAL_NO_PATCH" >> "$GITHUB_OUTPUT"
-          echo "deferred=$TOTAL_DEFERRED" >> "$GITHUB_OUTPUT"
-          echo "min_release_age_days=$MIN_AGE_DAYS" >> "$GITHUB_OUTPUT"
-          echo "failed=$TOTAL_FAILED" >> "$GITHUB_OUTPUT"
-          echo "skipped=$TOTAL_SKIPPED" >> "$GITHUB_OUTPUT"
-          echo "applied_packages=$ALL_APPLIED" >> "$GITHUB_OUTPUT"
-          echo "rolled_back_packages=$ALL_ROLLED_BACK" >> "$GITHUB_OUTPUT"
-          echo "skipped_packages=$ALL_SKIPPED_RECENT_ROLLBACK" >> "$GITHUB_OUTPUT"
-          echo "blocked_packages=$ALL_BLOCKED_PACKAGES" >> "$GITHUB_OUTPUT"
-          echo "no_patch_packages=$ALL_NO_PATCH_PACKAGES" >> "$GITHUB_OUTPUT"
-          echo "deferred_packages=$ALL_DEFERRED_PACKAGES" >> "$GITHUB_OUTPUT"
-          echo "failed_workspaces=$ALL_FAILED_WORKSPACES" >> "$GITHUB_OUTPUT"
+          export FIX_RESOLVED="$TOTAL_RESOLVED" FIX_BLOCKED="$TOTAL_BLOCKED"
+          export FIX_NO_PATCH="$TOTAL_NO_PATCH" FIX_DEFERRED="$TOTAL_DEFERRED"
+          export FIX_MIN_RELEASE_AGE_DAYS="$MIN_AGE_DAYS" FIX_FAILED="$TOTAL_FAILED"
+          export FIX_SKIPPED="$TOTAL_SKIPPED" FIX_APPLIED_PACKAGES="$ALL_APPLIED"
+          export FIX_ROLLED_BACK_PACKAGES="$ALL_ROLLED_BACK"
+          export FIX_SKIPPED_PACKAGES="$ALL_SKIPPED_RECENT_ROLLBACK"
+          export FIX_BLOCKED_PACKAGES="$ALL_BLOCKED_PACKAGES"
+          export FIX_NO_PATCH_PACKAGES="$ALL_NO_PATCH_PACKAGES"
+          export FIX_DEFERRED_PACKAGES="$ALL_DEFERRED_PACKAGES"
+          export FIX_FAILED_WORKSPACES="$ALL_FAILED_WORKSPACES"
+          node "$GITHUB_WORKSPACE/ts/tools/scripts/remediationReport.mjs" outputs
 
           cd "$GITHUB_WORKSPACE"
-          if git diff --quiet; then
+          if git diff --cached --quiet; then
             echo "changes=false" >> "$GITHUB_OUTPUT"
           else
             echo "changes=true" >> "$GITHUB_OUTPUT"
             echo "Files changed:"
-            git diff --stat
+            git diff --cached --stat
           fi
 
       # ── Final build + shell packaging verification ──────────────────
@@ -477,28 +630,23 @@ jobs:
           private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
 
       - name: Create pull request
+        id: pr
         if: ${{ steps.fix.outputs.changes == 'true' && steps.build.outputs.build_ok == 'true' }}
         env:
           GH_TOKEN: ${{ steps.app-token-pr.outputs.token }}
+          REMEDIATION_OUTPUTS: ${{ toJSON(steps.fix.outputs) }}
+          REMEDIATION_SHELL_OK: ${{ steps.shell.outputs.shell_ok }}
+          REMEDIATION_CHAIN_FILE: /tmp/all-blocked-chains.txt
         run: |
-          BRANCH="automated/fix-dependabot-alerts-$(date +%Y%m%d)-${{ github.run_number }}"
+          BRANCH="automated/fix-dependabot-alerts-$(date +%Y%m%d)-$GITHUB_RUN_NUMBER"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git checkout -b "$BRANCH"
           git add -A
-          git commit -m "fix: remediate Dependabot security alerts
-
-          Automated by fix-dependabot-alerts workflow.
-
-          Applied:${{ steps.fix.outputs.applied_packages }}
-          Rolled back:${{ steps.fix.outputs.rolled_back_packages || ' (none)' }}
-          Blocked: ${{ steps.fix.outputs.blocked }} package(s)
-          Deferred (min release age): ${{ steps.fix.outputs.deferred || '0' }} package(s)
-          Shell packaging: ${{ steps.shell.outputs.shell_ok == 'true' && 'passed' || 'skipped' }}
-
-          Co-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          node "$GITHUB_WORKSPACE/ts/tools/scripts/remediationReport.mjs" files
+          git commit -F "$RUNNER_TEMP/remediation-commit.txt"
 
           git push origin "$BRANCH"
 
@@ -522,115 +670,21 @@ jobs:
             done
           fi
 
-          # Build PR body from step outputs
-          APPLIED="${{ steps.fix.outputs.applied_packages }}"
-          ROLLED="${{ steps.fix.outputs.rolled_back_packages }}"
-          RESOLVED="${{ steps.fix.outputs.resolved }}"
-          BLOCKED="${{ steps.fix.outputs.blocked }}"
-          FAILED="${{ steps.fix.outputs.failed }}"
-          BLOCKED_PKGS="${{ steps.fix.outputs.blocked_packages }}"
-          NO_PATCH_PKGS="${{ steps.fix.outputs.no_patch_packages }}"
-          DEFERRED_PKGS="${{ steps.fix.outputs.deferred_packages }}"
-          DEFER_AGE="${{ steps.fix.outputs.min_release_age_days }}"
-
-          BODY=$(cat <<'PREOF'
-          ## Automated Dependabot Alert Remediation
-
-          This PR was automatically generated by the `fix-dependabot-alerts` workflow.
-          Each fix was applied individually and build-verified before inclusion.
-
-          ### Summary
-          PREOF
-          )
-
-          BODY="$BODY
-          - **Applied ($RESOLVED):**$APPLIED
-          - **Blocked ($BLOCKED):**${BLOCKED_PKGS:- (none)}
-          - **No patch available (${{ steps.fix.outputs.no_patch }}):**${NO_PATCH_PKGS:- (none)}
-          - **Deferred — fix not yet ${DEFER_AGE:-7} days old (${{ steps.fix.outputs.deferred || '0' }}):**${DEFERRED_PKGS:- (none)}
-          - **Rolled back ($FAILED):**${ROLLED:- (none)}
-          - **Skipped (recent rollback, ${{ steps.fix.outputs.skipped }}):**${{ steps.fix.outputs.skipped_packages || ' (none)' }}
-          - **Workspaces with analysis failures:**${{ steps.fix.outputs.failed_workspaces && format(' {0}', steps.fix.outputs.failed_workspaces) || ' (none)' }}
-          - **Build:** ✅ Passed
-          - **Shell packaging:** ${{ steps.shell.outputs.shell_ok == 'true' && '✅ Passed' || '⚠️ Skipped' }}
-
-          > _Note: the analysis source (\`fix-dependabot-alerts.mjs\`) is broader than the GitHub Dependabot REST API — it also audits the lockfile directly. Some packages listed above may not have a corresponding open Dependabot alert, and vice versa._
-          "
-
-          # Explain deferred fixes when present so a waiting security fix isn't
-          # mistaken for a missing one.
-          if [ "${{ steps.fix.outputs.deferred || '0' }}" -gt 0 ]; then
-            BODY="$BODY
-          > _⏸ Deferred fixes require a package version that has been published for at least ${DEFER_AGE:-7} days (enforced by pnpm's \`minimumReleaseAge\` and the org release-age policy). They are intentionally **not** applied yet and will be picked up automatically on a later run once a qualifying version matures._
-          "
-          fi
-
-          # Embed dependency chain output for blocked packages so reviewers
-          # can see why each package couldn't be auto-fixed.
-          if [ -s /tmp/all-blocked-chains.txt ]; then
-            CHAINS=$(cat /tmp/all-blocked-chains.txt)
-            BODY="$BODY
-          ### Why blocked packages couldn't be auto-fixed
-          <details><summary>Dependency chains (\`--show-chains\` output)</summary>
-
-          \`\`\`
-          $CHAINS
-          \`\`\`
-
-          </details>
-          "
-          fi
-
-          BODY="$BODY
-          ### How this works
-          1. Analyses all open Dependabot alerts
-          2. Applies each fix **individually** with build verification
-          3. Rolls back any fix that breaks the build
-          4. Only passing fixes are included in this PR
-
-          ### Review checklist
-          - [ ] Check that no breaking changes were introduced
-          - [ ] Verify rolled-back packages are investigated separately
-          - [ ] Run tests locally if concerned about specific packages"
-
           gh pr create \
             --base main \
             --head "$BRANCH" \
             --title "fix: remediate Dependabot security alerts ($(date +%Y-%m-%d))" \
-            --body "$BODY" \
+            --body-file "$RUNNER_TEMP/remediation-pr.md" \
             --label "dependencies,security"
 
       # ── Summary ─────────────────────────────────────────────────────
       - name: Job summary
         if: always()
+        env:
+          REMEDIATION_OUTPUTS: ${{ toJSON(steps.fix.outputs) }}
+          REMEDIATION_SHELL_OK: ${{ steps.shell.outputs.shell_ok }}
+          REMEDIATION_DRY_RUN: ${{ inputs.dry-run }}
+          REMEDIATION_FIX_OUTCOME: ${{ steps.fix.outcome }}
+          REMEDIATION_PR_CREATED: ${{ steps.pr.outcome == 'success' }}
         run: |
-          echo "## Dependabot Alert Remediation" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Metric | Count |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Applied | ${{ steps.fix.outputs.resolved || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Blocked | ${{ steps.fix.outputs.blocked || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| No patch available | ${{ steps.fix.outputs.no_patch || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Deferred (min release age) | ${{ steps.fix.outputs.deferred || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Rolled back | ${{ steps.fix.outputs.failed || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ -n "${{ steps.fix.outputs.applied_packages }}" ]; then
-            echo "**Applied:**${{ steps.fix.outputs.applied_packages }}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          if [ -n "${{ steps.fix.outputs.rolled_back_packages }}" ]; then
-            echo "**Rolled back:**${{ steps.fix.outputs.rolled_back_packages }}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          if [ -n "${{ steps.fix.outputs.deferred_packages }}" ]; then
-            echo "**⏸ Deferred (waiting for minimum release age):** ${{ steps.fix.outputs.deferred_packages }}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          if [ -n "${{ steps.fix.outputs.failed_workspaces }}" ]; then
-            echo "**⚠️ Analysis failed for workspaces:** ${{ steps.fix.outputs.failed_workspaces }}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${{ steps.fix.outputs.changes }}" == "true" ]; then
-            echo "✅ Changes applied and PR created" >> "$GITHUB_STEP_SUMMARY"
-          elif [ "${{ inputs.dry-run }}" == "true" ]; then
-            echo "ℹ️ Dry run — no changes applied" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "ℹ️ No fixable alerts found" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          node "$GITHUB_WORKSPACE/ts/tools/scripts/remediationReport.mjs" summary

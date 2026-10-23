@@ -83,3 +83,6 @@ export {
     tryCreateEmbeddingModel,
     type EmbeddingProvider,
 } from "./embeddingProvider.js";
+export * from "./embeddingIdentity.js";
+export * from "./candidateEmbedding.js";
+export * from "./gemmaEmbedding.js";

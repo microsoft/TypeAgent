@@ -18,7 +18,6 @@ import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import type { TypeAgentAction } from "@typeagent/agent-sdk";
 import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
-import type { MacroManager } from "@typeagent/copilot-macros";
 import type { LiveSkillCatalog } from "@typeagent/skill-catalog";
 import {
     createAgentServerConnection,
@@ -144,7 +143,6 @@ function createTestServer(): TestServer {
 
     const { handler } = createAgentServerConnectionHandler({
         conversationManager,
-        macroManager: {} as MacroManager,
         skillCatalog: {} as LiveSkillCatalog,
         shutdown: () => {},
         getUserIdentity: () => ({

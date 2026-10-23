@@ -78,7 +78,7 @@ export const viewMaintenanceRequestSchema = z.union([
     z.strictObject({
         corpusId: id,
         expectedHead: head,
-        family: z.enum(["wiki", "projects"]),
+        family: z.enum(["wiki", "projects", "topics"]),
         operation: z.enum(["update", "rebuild", "pause", "resume"]),
     }),
 ]);

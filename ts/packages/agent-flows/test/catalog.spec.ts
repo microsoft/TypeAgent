@@ -300,4 +300,27 @@ describe("macro summaries", () => {
         expect(line.length).toBeLessThan(160);
         expect(line.endsWith("...")).toBe(true);
     });
+    test("describes canonical result paths directly and inside template bindings", () => {
+        const expression = {
+            kind: "resultPath" as const,
+            stepId: "lookup",
+            path: ["document", "folder"],
+            suffix: "Generated.docx",
+        };
+        expect(describeExpression(expression)).toEqual([
+            'path from result of lookup: document.folder + "Generated.docx"',
+        ]);
+        const definition = macro();
+        definition.steps[1].arguments = {
+            kind: "template",
+            value: { id: "generated-only" },
+            bindings: [{ path: ["id"], expression }],
+        };
+        expect(detailForMacro(definition).steps[1].lines).toEqual([
+            'id <- path from result of lookup: document.folder + "Generated.docx"',
+        ]);
+        expect(describeExpression({ ...expression, path: [] })).toEqual([
+            'path from result of lookup + "Generated.docx"',
+        ]);
+    });
 });

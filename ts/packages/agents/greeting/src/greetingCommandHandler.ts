@@ -238,8 +238,6 @@ export class GreetingCommandHandler implements CommandHandler {
         }
         const completionSettings: CompletionSettings = {
             temperature: 1.0,
-            // Max response tokens
-            max_tokens: 1000,
             // createChatModel will remove it if the model doesn't support it
             response_format: { type: "json_object" },
         };
@@ -313,7 +311,13 @@ export class GreetingCommandHandler implements CommandHandler {
         );
 
         // make the request
-        const chatResponse = await chat.translate(history.join("\n"));
+        const chatResponse = await chat.translate(history.join("\n"), [
+            {
+                role: "system",
+                content:
+                    "Aim for approximately 1000 tokens in the final JSON only, excluding reasoning. Preserve required content even when that needs a longer answer.",
+            },
+        ]);
 
         return chatResponse;
     }

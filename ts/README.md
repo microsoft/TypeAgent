@@ -26,6 +26,47 @@ In this directory:
 - Run `pnpm i`
 - Run `pnpm run build`
 
+### Docker image
+
+The production [Dockerfile](./Dockerfile) uses Node 24 on Debian Bookworm,
+Corepack 0.36.0, and Azure CLI 2.91.0. The pnpm version comes from
+`packageManager` in [package.json](./package.json). Chrome is installed from
+Google's stable channel. The image currently targets `linux/amd64`.
+The API listens on container port 3000; publish a host port with Docker's
+`--publish` option, for example `--publish 80:3000`.
+
+Build from this directory with Docker BuildKit:
+
+```console
+docker build --pull --no-cache --platform linux/amd64 --tag typeagent:local .
+```
+
+`--pull` refreshes the base image, and `--no-cache` reruns the OS security
+updates instead of reusing an older package-install layer. Updating this image
+does not update the host Docker Engine; update Docker Desktop or Docker Engine
+separately.
+
+For a private npm registry, supply a Linux-compatible npm configuration
+containing the registry URL and its authentication as a BuildKit secret:
+
+```console
+docker build --pull --no-cache --platform linux/amd64 --secret id=npmrc,src=<npm-config-path> --tag typeagent:local .
+```
+
+Alternatively, use `--secret id=npmrc,env=TYPEAGENT_BUILD_NPMRC` when the
+configuration is held in an environment variable. Host-specific `tokenHelper`
+commands must be resolved before passing the configuration to the Linux build.
+The secret is mounted only for package installation and build commands; npm
+credentials, local API-key configuration, and host build outputs are excluded
+from the build context. pnpm is installed through npm so the same registry
+authentication is used for its installation. Application startup uses Node
+directly and does not need npm registry access.
+
+The [ACR task](./acr-build.yaml) enables BuildKit for the
+[container pipeline](../pipelines/azure-build-docker-container.yml) and retains
+the existing build-and-push behavior. The image's normal startup still uses
+Azure managed identity.
+
 ### Agent Specific Steps (Optional)
 
 #### VSCode Agent
