@@ -17,6 +17,7 @@ export * from "./search.js";
 export * from "./searchLang.js";
 export * from "./searchTiming.js";
 export * from "./serialization.js";
+export * from "./embeddingGeneration.js";
 export * from "./queryCmp.js";
 
 export * from "./knowledge.js";
@@ -41,3 +42,4 @@ export * from "./storage.js";
 export * as dataFrame from "./dataFrame/index.js";
 
 export { createConversationFromData } from "./common.js";
+export * from "./segmentedJson.js";

@@ -7,13 +7,14 @@ import type {
     MacroInput,
     MacroPostcondition,
     MacroStep,
-    MacroValueType,
     MacroValidationIssue,
     MacroValidationReport,
+    MacroValueType,
     RecordedInteractionTrace,
     ReplayToolHost,
     ValueExpression,
 } from "./contracts.js";
+import { validateRecipeArtifact } from "./recipeValidation.js";
 import { learningToolResult, omittedResultPath } from "./resultEvidence.js";
 import {
     assertMacroCapabilities,
@@ -28,7 +29,8 @@ async function classifyTool(
     cwd: string,
     replayHost: ReplayToolHost | undefined,
 ): Promise<MacroExecutionClass> {
-    if (!mcpServerName || !replayHost) return "agentRequired";
+    if (!replayHost || (!mcpServerName && !replayHost.supportsNativeTools))
+        return "agentRequired";
     const descriptor = await replayHost.inspectTool(mcpServerName, toolName, {
         cwd,
     });
@@ -412,6 +414,42 @@ export function validateMacro(
     trace?: RecordedInteractionTrace,
 ): MacroValidationReport {
     const issues: MacroValidationIssue[] = [];
+    if ((macro.executionKind === "program") !== (macro.program !== undefined)) {
+        issues.push({
+            severity: "error",
+            code: "invalidProgram",
+            message: "Program execution kind requires a program artifact.",
+        });
+    }
+    if (macro.program) {
+        const errors = validateRecipeArtifact(macro.program);
+        if (
+            errors.length ||
+            macro.program.recipeId !== macro.macroId ||
+            macro.program.provenance.legacySource?.macroId !== macro.macroId ||
+            (macro.learning !== undefined &&
+                (!macro.learning.authoring ||
+                    macro.learning.authoring.captureId !==
+                        macro.sourceTraceId ||
+                    macro.program.provenance.captureId !==
+                        macro.learning.authoring.captureId ||
+                    macro.program.provenance.taskId !==
+                        macro.learning.authoring.taskId ||
+                    macro.program.provenance.tokenId !==
+                        macro.learning.authoring.tokenId ||
+                    !macro.program.provenance.evidenceIds.includes(
+                        macro.learning.authoring.contextDigest,
+                    )))
+        ) {
+            issues.push({
+                severity: "error",
+                code: "invalidProgram",
+                message:
+                    errors.map((issue) => issue.message).join("; ") ||
+                    "Program identity does not match its macro.",
+            });
+        }
+    }
     try {
         assertMacroCapabilities(macro);
     } catch (error) {

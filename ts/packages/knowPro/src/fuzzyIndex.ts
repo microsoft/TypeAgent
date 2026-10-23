@@ -10,7 +10,12 @@ import {
     createTopNListAll,
     dotProduct,
 } from "@typeagent/agent-runtime";
-import { TextEmbeddingModel } from "@typeagent/aiclient";
+import {
+    TextEmbeddingModel,
+    EmbeddingRole,
+    embeddingModelForRole,
+    validateEmbeddingVector,
+} from "@typeagent/aiclient";
 import levenshtein from "fast-levenshtein";
 import { Scored } from "./common.js";
 import {
@@ -115,6 +120,12 @@ export class EmbeddingIndex {
         this.embeddings.splice(pos, 1);
     }
 
+    public truncate(size: number): void {
+        if (!Number.isSafeInteger(size) || size < 0 || size > this.size)
+            throw new Error("Invalid embedding index truncation");
+        this.embeddings.length = size;
+    }
+
     public clear(): void {
         this.embeddings = [];
     }
@@ -163,8 +174,11 @@ export class EmbeddingIndex {
                 messageOrdinal < list.length;
                 ++messageOrdinal
             ) {
+                if (!predicate(messageOrdinal)) {
+                    continue;
+                }
                 const score: number = dotProduct(list[messageOrdinal], other);
-                if (score >= minScore && predicate(messageOrdinal)) {
+                if (score >= minScore) {
                     matches.push(messageOrdinal, score);
                 }
             }
@@ -190,10 +204,20 @@ export async function generateTextEmbeddingsForIndex(
 ): Promise<Result<NormalizedEmbedding[]>> {
     try {
         const textsToEmbed = Array.isArray(texts) ? texts : [texts];
+        embeddingModel = embeddingModelForRole(embeddingModel, "document");
         const embeddings = await generateTextEmbeddingsWithRetry(
             embeddingModel,
             textsToEmbed,
         );
+        if (embeddings.length !== textsToEmbed.length) {
+            throw new Error("Embedding batch cardinality mismatch");
+        }
+        const dimensions =
+            embeddingModel.embeddingIdentity?.dimensions ??
+            embeddings[0]?.length;
+        for (const vector of embeddings) {
+            validateEmbeddingVector(Array.from(vector), dimensions!);
+        }
         return success(embeddings);
     } catch (ex) {
         return error(`generateTextEmbeddingsForIndex failed: ${ex}`);
@@ -258,8 +282,12 @@ export async function indexOfNearestTextInIndex(
     text: string,
     maxMatches?: number,
     minScore?: number,
+    role: EmbeddingRole = "query",
 ): Promise<Scored[]> {
-    const textEmbedding = await generateEmbedding(embeddingModel, text);
+    const textEmbedding = await generateEmbedding(
+        embeddingModelForRole(embeddingModel, role),
+        text,
+    );
     return embeddingIndex.getIndexesOfNearest(
         textEmbedding,
         maxMatches,
@@ -275,7 +303,10 @@ export async function indexOfNearestTextInIndexSubset(
     maxMatches?: number,
     minScore?: number,
 ): Promise<Scored[]> {
-    const textEmbedding = await generateEmbedding(embeddingModel, text);
+    const textEmbedding = await generateEmbedding(
+        embeddingModelForRole(embeddingModel, "query"),
+        text,
+    );
     return embeddingIndex.getIndexesOfNearestInSubset(
         textEmbedding,
         ordinalsToSearch,
@@ -290,9 +321,10 @@ export async function indexesOfNearestTextBatchInIndex(
     textArray: string[],
     maxMatches?: number,
     minScore?: number,
+    role: EmbeddingRole = "query",
 ): Promise<Scored[][]> {
     const textEmbeddings = await generateTextEmbeddings(
-        embeddingModel,
+        embeddingModelForRole(embeddingModel, role),
         textArray,
     );
     const results = [];
@@ -389,6 +421,7 @@ export class TextEmbeddingIndex {
             text,
             maxMatches,
             minScore,
+            this.settings.lookupRole,
         );
     }
 
@@ -408,6 +441,7 @@ export class TextEmbeddingIndex {
             textBatch,
             maxMatches,
             minScore,
+            this.settings.lookupRole,
         );
     }
 
@@ -437,6 +471,8 @@ export function deserializeEmbedding(array: number[]): NormalizedEmbedding {
 }
 
 export type TextEmbeddingIndexSettings = {
+    /** Related terms deliberately compare document embeddings symmetrically. */
+    lookupRole?: EmbeddingRole;
     embeddingModel: TextEmbeddingModel | undefined;
     embeddingSize: number;
     minScore: number;
@@ -547,28 +583,47 @@ function* getIndexingBatches(
 }
 
 export function serializeEmbeddings(embeddings: NormalizedEmbedding[]): Buffer {
-    const buffers = embeddings.map((e) => Buffer.from(e.buffer));
-    return Buffer.concat(buffers);
+    if (!embeddings.length) return Buffer.alloc(0);
+    const dimensions = embeddings[0].length;
+    if (!Number.isSafeInteger(dimensions) || dimensions < 1)
+        throw new Error("Invalid embedding dimensions");
+    const buffer = Buffer.alloc(embeddings.length * dimensions * 4);
+    let offset = 0;
+    for (const embedding of embeddings) {
+        if (embedding.length !== dimensions)
+            throw new Error("Embeddings must have equal dimensions");
+        for (const value of embedding) {
+            if (!Number.isFinite(value))
+                throw new Error("Embedding contains a non-finite value");
+            buffer.writeFloatLE(value, offset);
+            offset += 4;
+        }
+    }
+    return buffer;
 }
 
 export function deserializeEmbeddings(
     buffer: Buffer,
     embeddingSize: number,
 ): NormalizedEmbedding[] {
+    if (!Number.isSafeInteger(embeddingSize) || embeddingSize < 1)
+        throw new Error("Invalid embedding dimensions");
     const embeddings: NormalizedEmbedding[] = [];
     const embeddingByteCount = Float32Array.BYTES_PER_ELEMENT * embeddingSize;
+    if (buffer.length % embeddingByteCount !== 0)
+        throw new Error("Embedding file corrupt: incomplete vector");
     for (
         let startAt = 0;
         startAt < buffer.length;
         startAt += embeddingByteCount
     ) {
-        const sliceStartAt = buffer.byteOffset + startAt;
-        const embedding = new Float32Array(
-            buffer.buffer.slice(
-                sliceStartAt,
-                sliceStartAt + embeddingByteCount,
-            ),
-        );
+        const embedding = new Float32Array(embeddingSize);
+        for (let i = 0; i < embeddingSize; i++) {
+            const value = buffer.readFloatLE(startAt + i * 4);
+            if (!Number.isFinite(value))
+                throw new Error("Embedding file corrupt: non-finite value");
+            embedding[i] = value;
+        }
         embeddings.push(embedding);
     }
     return embeddings;

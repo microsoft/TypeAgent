@@ -56,6 +56,10 @@ outputs and dependencies are excluded, and tests are included only with
 `--include-tests`. Ratchet worktrees are created under `--out-dir` and removed
 after analysis.
 
+Explicit `import type` declarations are excluded from the circular graph. If a
+cycle-closing import is used only in type annotations (including class types),
+use `import type` rather than adding a baseline exception.
+
 ### Suppressing a known offender
 
 Usually you don't need to. The complexity and lint ratchets are **stateless** —
@@ -123,7 +127,7 @@ Four code-quality steps run in
 only**, sequenced after `Build` and before `Test`. They are skipped entirely
 unless the PR touches `ts/**` or the workflow file itself (a `dorny/paths-filter`
 guard), and — like the rest of the job — they run on every matrix cell
-(`ubuntu`/`windows`/`macos` × Node 22/24).
+(`ubuntu`/`windows`/`macos` × Node 22.23.4/24.22.1/26.12.1).
 
 Each step is a **changed-files diff against the PR's base branch**: it first
 `git fetch --no-tags origin <base_ref>`, then passes `--base origin/<base_ref>`

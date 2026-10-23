@@ -18,7 +18,6 @@ const options = {
     caseIds: ["read-a", "read-b"],
     repetitions: 10,
     rootModel: "gpt-5.6-sol",
-    runnerModel: "gpt-6-luna",
     maxTargetModelTurns: 150,
     maxDurationMs: 900000,
 };

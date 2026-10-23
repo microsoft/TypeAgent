@@ -33,7 +33,8 @@ export function createConversationSettings(
     // self-host without a local embedder). Embedding-backed indexes then no-op
     // and search degrades to exact/alias/edit-distance matching.
     embeddingModel ??= tryCreateEmbeddingModel();
-    embeddingSize ??= getEmbeddingSize();
+    embeddingSize ??=
+        embeddingModel?.embeddingIdentity?.dimensions ?? getEmbeddingSize();
     if (embeddingModel === undefined && !embeddingUnavailableAnnounced) {
         embeddingUnavailableAnnounced = true;
         console.warn(

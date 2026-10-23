@@ -2,6 +2,10 @@
 
 Design documentation for the workflow execution engine and its IR (workflow IR).
 
+This design tree is separate from the current
+[provider-flow architecture](./workflows.md) and
+[checked program macros](./macros.md); its IR is not the macro executable ABI.
+
 ## Reading order
 
 If you're new here, read in this order:

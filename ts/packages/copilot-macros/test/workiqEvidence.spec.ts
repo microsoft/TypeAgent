@@ -1,16 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHash, randomUUID } from "node:crypto";
-import {
-    link,
-    mkdir,
-    readFile,
-    rm,
-    symlink,
-    writeFile,
-} from "node:fs/promises";
-import path from "node:path";
 import {
     MacroManager,
     PrivateResultStore,
@@ -23,11 +13,22 @@ import {
     type RecordedInteractionTrace,
     type ValueExpression,
 } from "@typeagent/copilot-macros";
+import { createHash, randomUUID } from "node:crypto";
 import {
-    assertLearningTrace,
-    assertLearningProcedure,
-} from "../src/macroLearningValidation.js";
+    link,
+    mkdir,
+    readFile,
+    rm,
+    symlink,
+    writeFile,
+} from "node:fs/promises";
+import path from "node:path";
 import { parseMacroLearningBuild } from "../src/macroLearningParsers.js";
+import {
+    assertLearningProcedure,
+    assertLearningTrace,
+} from "../src/macroLearningValidation.js";
+import { recipeArtifact } from "./recipeCatalogFixtures.js";
 
 const hash = (bytes: Buffer) =>
     createHash("sha256").update(bytes).digest("hex");
@@ -130,7 +131,7 @@ it("optionally retains a complete small SDK value without changing the inline de
 });
 
 describe("private lossless result evidence", () => {
-    it("keeps full replay step and final results across manager restart without truncated previews", async () => {
+    it("keeps full program results across manager restart without truncated previews", async () => {
         const generated = blob();
         const host = {
             inspectTool: async (
@@ -156,17 +157,48 @@ describe("private lossless result evidence", () => {
             tokenId: token.id,
             trace: sourceTrace(generated.result),
         });
-        const draft = await manager.createMacroFromTrace({
-            traceId: summary.traceId,
-            name: "Replay original",
-            description: "Synthetic",
+        const macro = await induceMacroFromTrace(
+            summary.traceId,
+            sourceTrace(generated.result),
+            randomUUID(),
+            "Retrieve original",
+            "Synthetic",
+            new Date().toISOString(),
+        );
+        macro.executionKind = "program";
+        macro.program = recipeArtifact(macro.macroId, summary.traceId, {
+            provenance: {
+                captureId: summary.traceId,
+                taskId: summary.traceId,
+                tokenId: summary.traceId,
+                evidenceIds: ["evidence"],
+                legacySource: {
+                    macroId: macro.macroId,
+                    version: macro.version,
+                },
+            },
         });
+        const draft = await manager.saveDraft(macro);
         const approved = await manager.approveMacro(draft);
+        manager.configureProgramRuntime({
+            execute: async (artifact, _input, context) => ({
+                runId: context.runId,
+                recipeId: artifact.recipeId,
+                revision: artifact.revision,
+                accepted: true,
+                status: "completed",
+                output: generated.result,
+                checkpoints: [],
+                completedCallIds: [],
+                semanticEvidence: [],
+                fallback: "never",
+            }),
+        });
         const response = await manager.runMacro({
             runId: "run-1",
             macroId: approved.macroId,
             version: approved.version,
-            inputs: {},
+            inputs: { title: "document" },
         });
         expect(response.status).toBe("completed");
         const persisted = await new MacroManager(root, host).getMacroRun(
@@ -175,14 +207,12 @@ describe("private lossless result evidence", () => {
         expect(persisted.resultArtifact?.blobs[0].sha256).toBe(
             hash(generated.bytes),
         );
-        expect(persisted.steps[0].resultArtifact?.blobs[0].sha256).toBe(
-            hash(generated.bytes),
-        );
+        expect(persisted.steps).toEqual([]);
         expect(JSON.stringify(persisted)).not.toContain('"truncated":true');
         expect(Buffer.byteLength(JSON.stringify(persisted))).toBeLessThan(
             32 * 1024,
         );
-        const ref = persisted.steps[0].resultArtifact!;
+        const ref = persisted.resultArtifact!;
         expect(
             await new PrivateResultStore(
                 path.join(root, "copilot-macros"),
@@ -284,12 +314,14 @@ describe("private lossless result evidence", () => {
         expect(stored.toolCalls[0].resultArtifact.source).toBe("result");
         assertLearningTrace(stored);
         const restarted = new MacroManager(root);
-        const draft = await restarted.createMacroFromTrace({
-            traceId: summary.traceId,
-            name: "Original retrieval",
-            description: "",
-        });
-        const macro = await restarted.inspectMacro(draft);
+        const macro = await induceMacroFromTrace(
+            summary.traceId,
+            stored,
+            randomUUID(),
+            "Original retrieval",
+            "",
+            new Date().toISOString(),
+        );
         expect(macro.schemaVersion).toBe(1);
         expect(macro.steps[0].postconditions).not.toContainEqual({
             kind: "resultPathExists",
@@ -315,10 +347,8 @@ describe("private lossless result evidence", () => {
             "{}",
         );
         await expect(
-            restarted.createMacroFromTrace({
+            restarted.prepareMacroLearning({
                 traceId: summary.traceId,
-                name: "Tampered",
-                description: "",
             }),
         ).rejects.toThrow("size");
     });

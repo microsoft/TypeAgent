@@ -543,7 +543,7 @@ function validateCurrentCall(call, recorded, trial, expected, previous) {
     return end;
 }
 
-async function validateCurrent(current, trial, catalog, artifactRoot) {
+async function validateCurrent(current, trial, catalog) {
     record(current, [
         "origin",
         "trace",
@@ -566,22 +566,15 @@ async function validateCurrent(current, trial, catalog, artifactRoot) {
             equal(trace.capabilities, ["private-result-evidence-v1"]),
         "unsupportedTrace",
     );
-    let recordedCalls = trace.toolCalls;
+    const recordedCalls = trace.toolCalls;
     if (
         trial.runIdentityKind === "controller-trial-lease" ||
         current.nativeProjection !== undefined
     ) {
-        const { verifyWorkiqNativeProjection } = await import(
-            "./macro-eval-workiq-native.mjs"
+        throw new WorkiqEvidenceError(
+            "blocked",
+            "retiredNativeLifecycleProjectionReRecordWithPluginOwner",
         );
-        recordedCalls = (
-            await verifyWorkiqNativeProjection(
-                current.nativeProjection,
-                artifactRoot,
-                trace,
-                trial,
-            )
-        ).calls;
     }
     requireEvidence(
         trace.traceId === trial.traceId &&
@@ -1096,7 +1089,6 @@ export function createWorkiqEvidenceVerifier(options) {
                     current,
                     trial,
                     catalog,
-                    options.artifactRoot,
                 );
                 const envelopes = [];
                 for (let index = 0; index < 4; index++) {

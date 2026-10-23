@@ -6,6 +6,6 @@
     "outDir": "../dist/test",
     "types": ["node", "jest"]
   },
-  "include": ["partialCompletion/**/*.ts", "shellTestModel.ts"],
+  "include": ["partialCompletion/**/*.ts"],
   "references": [{ "path": "../src" }, { "path": "./renderer" }]
 }

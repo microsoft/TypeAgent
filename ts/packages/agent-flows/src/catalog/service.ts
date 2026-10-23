@@ -215,24 +215,19 @@ export function createAutomationCatalogService(
             const [powershell, taskflow, macros] = await Promise.all([
                 guarded("powershell", () => listFlows("powershell")),
                 guarded("taskflow", () => listFlows("taskflow")),
-                sources.macros
-                    ? guarded("toolMacro", listMacros)
-                    : Promise.resolve({
-                          items: [] as AutomationSummary[],
-                          status: {
-                              kind: "toolMacro" as const,
-                              available: false,
-                              reason: "Macro manager is not available.",
-                          },
-                      }),
+                sources.macros ? guarded("toolMacro", listMacros) : undefined,
             ]);
             return {
                 items: [
                     ...powershell.items,
                     ...taskflow.items,
-                    ...macros.items,
+                    ...(macros?.items ?? []),
                 ],
-                providers: [powershell.status, taskflow.status, macros.status],
+                providers: [
+                    powershell.status,
+                    taskflow.status,
+                    ...(macros ? [macros.status] : []),
+                ],
             };
         },
 

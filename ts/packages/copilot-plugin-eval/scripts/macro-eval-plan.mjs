@@ -3,7 +3,7 @@
 
 import { createHash } from "node:crypto";
 
-export const macroProtocolVersion = "macro-native-eval-v1";
+export const macroProtocolVersion = "macro-checked-program-eval-v2";
 
 function positiveInteger(value, name) {
     if (!Number.isSafeInteger(value) || value < 1)
@@ -75,11 +75,13 @@ export function createCampaignPlan(cases, options) {
         throw new Error(
             "An explicit unsigned 32-bit scheduler seed is required",
         );
-    for (const name of ["rootModel", "runnerModel"])
+    if (Object.hasOwn(options, "runnerModel"))
+        throw new Error(
+            "runnerModel is retired; checked programs do not use an execution planner.",
+        );
+    for (const name of ["rootModel"])
         if (typeof options[name] !== "string" || !options[name].trim())
             throw new Error(`An explicit ${name} is required`);
-    if (options.runnerModel !== "gpt-6-luna")
-        throw new Error("Current macro runners require gpt-6-luna");
     const repetitions = positiveInteger(options.repetitions, "repetitions");
     const maxTargetModelTurns = positiveInteger(
         options.maxTargetModelTurns,
@@ -131,7 +133,7 @@ export function createCampaignPlan(cases, options) {
         samplingSeed: null,
         models: {
             root: options.rootModel,
-            runner: options.runnerModel,
+            execution: "checked-program; no execution planner",
             preparation: "existing-service-configuration; record at admission",
         },
         budget: {

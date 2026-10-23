@@ -1,12 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHash } from "node:crypto";
-import type {
-    CopilotToolMacro,
-    MacroManager,
-    ValueExpression,
-} from "@typeagent/copilot-macros";
 import type { RegisteredMcpToolCatalog } from "default-agent-provider";
 import type {
     RunbookBindingCatalog,
@@ -38,80 +32,6 @@ export function pageBounds(request?: RunbookCatalogPageRequest | null): {
         );
     }
     return { start: offset, end: offset + limit };
-}
-
-function canonical(value: unknown): unknown {
-    if (Array.isArray(value)) return value.map(canonical);
-    if (value !== null && typeof value === "object") {
-        return Object.fromEntries(
-            Object.entries(value)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([key, child]) => [key, canonical(child)]),
-        );
-    }
-    return value;
-}
-
-function referencedMacroInputs(expression: ValueExpression): string[] {
-    if (expression.kind === "input") return [expression.name];
-    if (expression.kind === "template") {
-        return expression.bindings.flatMap((binding) =>
-            referencedMacroInputs(binding.expression),
-        );
-    }
-    return [];
-}
-
-function macroTarget(macro: CopilotToolMacro): RunbookBindingTarget {
-    const inputSchema: Record<string, unknown> = {
-        type: "object",
-        properties: Object.fromEntries(
-            macro.inputs.map((input) => [
-                input.name,
-                {
-                    ...(input.valueType === undefined
-                        ? {}
-                        : { type: input.valueType }),
-                    description: input.description,
-                },
-            ]),
-        ),
-        required: [
-            ...new Set([
-                ...macro.inputs
-                    .filter((input) => input.required)
-                    .map((input) => input.name),
-                ...macro.steps.flatMap((step) =>
-                    referencedMacroInputs(step.arguments),
-                ),
-            ]),
-        ],
-        additionalProperties: false,
-    };
-    return {
-        kind: "macro",
-        id: macro.macroId,
-        name: macro.name,
-        version: String(macro.version),
-        fingerprint: createHash("sha256")
-            .update(
-                JSON.stringify(
-                    canonical({
-                        inputSchema,
-                        steps: macro.steps,
-                        executionClass: macro.executionClass,
-                    }),
-                ),
-            )
-            .digest("hex"),
-        inputSchema,
-        description: macro.description,
-        safety: { requiresConfirmation: true },
-        permission: {
-            status: "runtime-check-required",
-            requiresLivePermissions: true,
-        },
-    };
 }
 
 function hasSecretInput(value: unknown): boolean {
@@ -215,42 +135,13 @@ function mcpTargets(
 }
 
 export function createRunbookBindingCatalog(
-    macros: Pick<MacroManager, "getApprovedMacros" | "listMacros">,
     readMcp?: () => Promise<RegisteredMcpToolCatalog[]>,
 ) {
     async function snapshot(): Promise<RunbookBindingCatalog> {
         const notices = [
             "Flow bindings unavailable: flow catalogs do not expose immutable approved version snapshots.",
+            "Macro bindings unavailable: checked programs are owned by the Copilot plugin, not this server.",
         ];
-        const approved = await macros.getApprovedMacros();
-        const summaries = await macros.listMacros();
-        const safeMacros = approved.filter(
-            (macro) =>
-                macro.state === "approved" &&
-                summaries.some(
-                    (summary) =>
-                        summary.macroId === macro.macroId &&
-                        summary.version === macro.version &&
-                        summary.state === "approved",
-                ) &&
-                macro.executionClass === "replayable" &&
-                Number.isSafeInteger(macro.version) &&
-                macro.version > 0 &&
-                !macro.inputs.some((input) => input.secret),
-        );
-        for (const summary of summaries) {
-            if (
-                !safeMacros.some(
-                    (macro) =>
-                        macro.macroId === summary.macroId &&
-                        macro.version === summary.version,
-                )
-            ) {
-                notices.push(
-                    `Macro excluded: ${summary.macroId}; requires current approval, replayability, version and non-secret inputs.`,
-                );
-            }
-        }
         let catalogs: RegisteredMcpToolCatalog[] = [];
         if (readMcp === undefined)
             notices.push(
@@ -270,10 +161,7 @@ export function createRunbookBindingCatalog(
                 "No registered current MCP tool catalogs are available.",
             );
         }
-        const targets = [
-            ...safeMacros.map(macroTarget),
-            ...mcpTargets(catalogs, notices),
-        ];
+        const targets = mcpTargets(catalogs, notices);
         return { targets, notices, total: targets.length };
     }
 

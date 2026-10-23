@@ -87,7 +87,7 @@ if (-not (Test-Path $ServePath)) {
 
 $node = Resolve-NodeExe
 if (-not $node) {
-    Write-Log "WARNING: Node.js was not found; cannot run 'typeagent-serve $label'. Install Node.js >= 22 and run it manually from '$ServePath'."
+    Write-Log "WARNING: Supported Node.js was not found; cannot run 'typeagent-serve $label'. Install Node.js 22.23.4+, 24.22.1+, or 26.12.1+ and run it manually from '$ServePath'."
     if ($FailOnError) { exit 1 }
     exit 0
 }

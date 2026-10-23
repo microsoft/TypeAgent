@@ -2,12 +2,12 @@
 // Licensed under the MIT License.
 
 export {
+    getBundledAppAgentProvider,
     getDefaultAppAgentProviders,
     getDefaultAppAgentSource,
     getDefaultDispatcherOptions,
     getIndexingServiceRegistry,
 } from "./defaultAgentProviders.js";
-export { getMcpAppAgentSource } from "./mcpDefaultAgentProvider.js";
 export {
     createDefaultAgentRuntime,
     getDefaultAppAgentSources,
@@ -15,27 +15,19 @@ export {
 } from "./defaultAgentRuntime.js";
 export { getDefaultConstructionProvider } from "./defaultConstructionProvider.js";
 export {
-    createMacroAppAgentProvider,
-    getMacroActionName,
-    macroAgentName,
-} from "./macroAgentProvider.js";
+    createGeneratedAgentTranslator,
+    type GeneratedAgentResolvedAction,
+    type GeneratedAgentTranslateResult,
+    type GeneratedAgentTranslatorHandle,
+    type GeneratedAgentTranslatorOptions,
+} from "./generatedAgentTranslator.js";
 export {
-    createMacroLearningRuntime,
-    validateMacroGrammar,
-    replayMacroGrammarDiagnostic,
-    type MacroGrammarTuple,
-    type MacroLearningQuery,
-} from "./macroLearningRuntime.js";
-export {
-    createSyntheticMacroLearningDiagnostics,
-    syntheticMacroBuildResponsePolicyKind,
-    nativeSyntheticBuildResponseDiagnosticContract,
-    nativeSyntheticGrammarDiagnosticContract,
-} from "./macroLearningDiagnostics.js";
-export {
-    SessionMcpCredentialStore,
-    type McpCredentialStore,
-} from "./mcp/mcpCredentialStore.js";
+    JsonlMcpAuditSink,
+    sanitizeMcpAuditEvent,
+    type McpAuditEvent,
+    type McpAuditSink,
+} from "./mcp/mcpAudit.js";
+export { getCurrentMcpToolCatalogs } from "./mcp/mcpCatalogSnapshots.js";
 export {
     McpConfigDiscovery,
     type DiscoveredMcpConfig,
@@ -45,40 +37,31 @@ export {
     type McpDiscoverySourceKind,
 } from "./mcp/mcpConfigDiscovery.js";
 export {
+    SessionMcpCredentialStore,
+    type McpCredentialStore,
+} from "./mcp/mcpCredentialStore.js";
+export type { McpOAuthInteraction } from "./mcp/mcpOAuth.js";
+export {
     defaultMcpPolicy,
     enforceMcpPolicy,
     type McpPolicy,
 } from "./mcp/mcpPolicy.js";
 export {
-    JsonlMcpAuditSink,
-    sanitizeMcpAuditEvent,
-    type McpAuditEvent,
-    type McpAuditSink,
-} from "./mcp/mcpAudit.js";
-export type { McpOAuthInteraction } from "./mcp/mcpOAuth.js";
-export {
     McpReplayHost,
     type McpReplayHostOptions,
 } from "./mcp/mcpReplayHost.js";
-export type { McpHostServices } from "./mcp/mcpServerProvider.js";
 export type { NormalizedMcpServerConfig } from "./mcp/mcpServerConfig.js";
-export { getCurrentMcpToolCatalogs } from "./mcp/mcpCatalogSnapshots.js";
-export type {
-    RegisteredMcpToolCatalog,
-    McpToolSnapshot,
-} from "./mcp/mcpToolCatalog.js";
+export type { McpHostServices } from "./mcp/mcpServerProvider.js";
 export { validateCatalogSchemaValues } from "./mcp/mcpToolCatalog.js";
+export type {
+    McpToolSnapshot,
+    RegisteredMcpToolCatalog,
+} from "./mcp/mcpToolCatalog.js";
+export { getMcpAppAgentSource } from "./mcpDefaultAgentProvider.js";
 export {
     createOnboardingOnlyDispatcher,
-    type OnboardingDispatcherHandle,
     type OnboardingDispatchResult,
+    type OnboardingDispatcherHandle,
     type OnboardingExecutedAction,
     type OnboardingOnlyDispatcherOptions,
 } from "./onboardingDispatcher.js";
-export {
-    createGeneratedAgentTranslator,
-    type GeneratedAgentTranslatorHandle,
-    type GeneratedAgentTranslatorOptions,
-    type GeneratedAgentTranslateResult,
-    type GeneratedAgentResolvedAction,
-} from "./generatedAgentTranslator.js";

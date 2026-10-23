@@ -5,7 +5,6 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createExtensionCommands } from "../src/extension/commands.js";
-import { getPowerShellHookOutput } from "../src/extension/powershell-guidance.js";
 import { getSelectedSkills, writeConfig } from "../src/shared/plugin-config.js";
 
 describe("extension commands", () => {
@@ -50,7 +49,9 @@ describe("extension commands", () => {
         await command?.handler({} as never);
 
         expect(messages[0]).toContain("Mode: direct");
-        expect(messages[0]).toContain("TypeAgent PowerShell: on");
+        expect(messages[0]).toContain(
+            "Ordinary prompts: local recipes, then Copilot",
+        );
         expect(messages[0]).toContain("Server: ws://localhost:8999");
     });
 
@@ -85,9 +86,7 @@ describe("extension commands", () => {
             ),
             "Usage: /typeagent-mode direct|mcp [delegate|mixed]|dev|bypass",
         ]);
-        expect(messages[0]).toContain(
-            "Delegate policy (default): delegate the user's exact request through processCommand.",
-        );
+        expect(messages[0]).toContain("Explicit TypeAgent");
     });
 
     it("loads explicit selected skills from plugin configuration", () => {
@@ -116,39 +115,4 @@ describe("extension commands", () => {
             },
         ]);
     });
-});
-
-describe("PowerShell extension guidance", () => {
-    const originalMode = process.env.TYPEAGENT_MODE;
-
-    afterEach(() => {
-        if (originalMode === undefined) delete process.env.TYPEAGENT_MODE;
-        else process.env.TYPEAGENT_MODE = originalMode;
-    });
-
-    it("guides direct PowerShell commands in direct mode", () => {
-        process.env.TYPEAGENT_MODE = "direct";
-
-        expect(
-            getPowerShellHookOutput("powershell", {
-                command: "Get-ChildItem C:\\repo",
-            })?.additionalContext,
-        ).toContain("typeagent-processCommand");
-    });
-
-    it.each([
-        ["bypass", "powershell", "Get-ChildItem"],
-        ["dev", "powershell", "Get-ChildItem"],
-        ["direct", "bash", "Get-ChildItem"],
-        ["direct", "powershell", "git status"],
-    ])(
-        "does not guide mode %s, tool %s, command %s",
-        (mode, toolName, command) => {
-            process.env.TYPEAGENT_MODE = mode;
-
-            expect(
-                getPowerShellHookOutput(toolName, { command }),
-            ).toBeUndefined();
-        },
-    );
 });

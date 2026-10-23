@@ -26,7 +26,7 @@ ts/tools/scripts/
 ts/tools/installers/wix/
   ├── TypeAgent-AgentServer.wxs   # WiX project definition
   ├── extract-payload.ps1         # Deferred CA: unpack payload/*.zip at install time
-  ├── install-prereqs.ps1         # Deferred CA: npm i -g claude+copilot, warn on Node<22
+  ├── install-prereqs.ps1         # Deferred CA: npm i -g claude+copilot, warn on unsupported Node
   └── register-plugin.ps1         # Deferred CA: register/unregister the Copilot CLI plugin
 
 ts/tools/installers/common/
@@ -38,12 +38,82 @@ pipelines/
 
 ## Prerequisites
 
+### Shell installer and updater trust
+
+The optional Windows shell now requires a valid Authenticode signature from
+the independently pinned TypeAgent development certificate. Private-feed
+hosting and authenticated blob downloads remain supported; they do not replace
+publisher authentication. Unsigned installers are rejected, including during
+the MSI's separate Download and Install phases.
+
+The approved subject is `CN=dev.typeagent.microsoft.com`, with thumbprint
+`BCA67E6AD2E8B28CE5219EC68B019C099F57FFEE`. The policy lives in
+[`windows-package-trust.json`](../../scripts/windows-package-trust.json).
+Certificate renewal requires a reviewed policy update and distribution of the
+new public trust anchor before switching signing identities.
+
+Before installing or updating, obtain the public `.cer` from an approved
+administrator or release. Verify its thumbprint against the policy distributed
+with your trusted installation scripts, not against channel metadata. For the
+shell's current-user development trust:
+
+```powershell
+$cert = New-Object Security.Cryptography.X509Certificates.X509Certificate2(
+    (Resolve-Path '.\windows-package-trust.cer').Path)
+if ($cert.Thumbprint -ne 'BCA67E6AD2E8B28CE5219EC68B019C099F57FFEE' -or
+    $cert.Subject -ne 'CN=dev.typeagent.microsoft.com') {
+    throw 'Unexpected development signing certificate'
+}
+# Run only after explicitly approving this development trust anchor.
+Import-Certificate -FilePath '.\windows-package-trust.cer' -CertStoreLocation Cert:\CurrentUser\Root
+```
+
+Client trust setup uses **only a public certificate**, never a PFX or private
+key. The installer and updater never enroll certificates themselves. Pipeline
+agents temporarily trust only the pinned public certificate while signing or
+verifying; their temporary trust is removed afterward.
+
+Windows shell packaging signs the app and NSIS installer before generating
+update hashes/blockmaps. Publication rechecks signatures and final metadata
+before either blob or Universal Package upload. Missing signing access,
+incorrect publisher identity, invalid signatures, and stale hashes block
+publication. The public `.cer` accompanies releases for explicit trust setup;
+receiving it does not automatically make it trusted.
+
+GitHub's packaging-only CI check explicitly sets
+`TYPEAGENT_SHELL_VALIDATION_ONLY=1` to validate unsigned builds without signing
+credentials. This mode disables publication and rejects release channels.
+It does not change installer/updater trust checks, and the protected signing
+script rejects this mode before retrieving credentials. Validation artifacts
+must not be distributed as releases.
+
+Existing unsigned shell installations may lack updater publisher checks.
+Migrate them by separately enrolling the approved public certificate and
+reinstalling with the updated, trusted `install-shell.ps1` and its adjacent
+trust-policy files. Do not rely on an old unsigned application's automatic
+updater to establish the initial trust boundary.
+
+The legacy development AgentLauncher installer is separate from the MSI and
+shell. It now runs **non-elevated**, never imports certificates or uninstalls
+the existing package first, and requires an independently obtained signing
+thumbprint:
+
+```powershell
+.\Install.ps1 -ExpectedSignerThumbprint '<approved launcher certificate thumbprint>'
+```
+
+Its MSIX must already have a valid, trusted signature and the
+`TypeAgent.AgentLauncher` package identity. Its development publisher can
+differ from the shell's certificate. Establish any Windows-required MSIX trust
+separately through an administrator or managed deployment; the installer does
+not change machine-wide trust.
+
 ### On Your Development Machine
 
-1. **Node.js ≥ 22**
+1. The **latest Node.js LTS** release (recommended; see [supported versions](../../../README.md#setup))
 
    ```powershell
-   node --version  # Should be v22.x
+   node --version  # Should be a supported LTS release
    ```
 
 2. **WiX Toolset 3.11** (for local testing)
@@ -146,6 +216,13 @@ size. `deployAgentServer.mjs` is the unbundled variant: it preserves workspace
 package boundaries and a conventional production `node_modules` for debugging
 a repo-less deployment, but produces a substantially larger artifact and is not
 intended for MSI packaging.
+
+The bundled artifact validator and CI use a 10,000-file budget. The pinned
+Transformers.js embedding runtime and its dependencies intentionally remain
+external; adding them raised the October 2026 CI artifacts to 8,967-8,971 files,
+exceeding the previous 8,200-file CI budget. The new budget leaves bounded
+headroom without removing runtime files or disabling development-file,
+agent-runtime, native SQLite, or background-resource checks.
 
 ```powershell
 # From D:\repos\TypeAgent\ts
@@ -382,9 +459,11 @@ During an **interactive** install the provider-selection dialog appears after
 the license page. The same choice can be driven **silently** through the public
 `PROVIDER` property:
 
-| Property   | Values                 | Default   | Notes                                                                  |
-| ---------- | ---------------------- | --------- | ---------------------------------------------------------------------- |
-| `PROVIDER` | `AISYSTEMS`, `COPILOT` | `COPILOT` | `COPILOT` generates `config.local.yaml` with local embeddings enabled. |
+| Property                 | Values                     | Default   | Notes                                                                                                              |
+| ------------------------ | -------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
+| `PROVIDER`               | `AISYSTEMS`, `COPILOT`     | `COPILOT` | `COPILOT` generates `config.local.yaml` with local embeddings enabled.                                             |
+| `LOCALEMBEDDINGMODEL`    | `MINILM`, `EMBEDDINGGEMMA` | `MINILM`  | Fresh Copilot installs select one pinned CPU/FP32 model.                                                           |
+| `DOWNLOADLOCALEMBEDDING` | `0`, `1`                   | `0`       | Explicit permission to download the selected snapshot. Gemma is multiple GB; never downloaded silently by default. |
 
 ```powershell
 # Copilot chat (default; requires an authenticated `copilot` CLI) + local embeddings
@@ -398,13 +477,18 @@ msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=COPILOT
 
 # Fully silent Copilot install
 msiexec /i TypeAgent-<version>-win32-x64.msi /quiet PROVIDER=COPILOT
+
+# Explicit Gemma selection and permission to download its text + image snapshot
+msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=COPILOT LOCALEMBEDDINGMODEL=EMBEDDINGGEMMA DOWNLOADLOCALEMBEDDING=1
 ```
 
 The UI is a custom scheme (`WixUI_TypeAgent`): WelcomeDlg → **ProviderDlg** →
 VerifyReadyDlg. For `COPILOT`, a deferred, impersonated custom action runs
 `node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider COPILOT
---embedding LOCAL --local-embedding-cache-dir
-"%LOCALAPPDATA%\TypeAgent\embedding-cache" --force` as the installing user,
+--embedding LOCAL --local-embedding-model [LOCALEMBEDDINGMODEL]
+--local-embedding-cache-dir "%LOCALAPPDATA%\TypeAgent\embedding-cache"
+--download-local-embedding [DOWNLOADLOCALEMBEDDING]
+--preserve-embedding-selection --force` as the installing user,
 writing `config.local.yaml` to `~/.typeagent`. Keeping model weights outside
 the MSI-managed `agent-server` directory preserves the cache across upgrades
 and ensures it inherits the user's per-user cache permissions. The action explicitly pins
@@ -423,6 +507,101 @@ The MSI rejects `PROVIDER=OLLAMA` and the legacy `EMBEDDING` and `OLLAMAHOST`
 properties. Ollama and custom embedding configurations remain available through
 the script installers and the `provision`/`generate-selfhost-config` CLI.
 
+### Named local embeddings and offline staging
+
+The generated YAML uses `defaultEmbeddingModel: local-minilm` or
+`local-embeddinggemma` and an `embeddingModels` catalog. Definitions include
+`provider`, `model`, `runtime`, `size`, `modalities`, immutable `revision`,
+`cacheDir`, and `localFilesOnly: true`. Provider connection settings stay in
+their existing sections. Hosted profiles remain available, but no hosted
+inference is used to provision or validate an installation.
+
+One agent-server process selects one embedding model at startup. Defining
+additional profiles never downloads or loads them. Restart the server after
+changing the selector; existing indexes may require rebuilding when model
+identity changes. Routine chat-provider changes and MSI upgrades preserve
+an existing named (including hosted) or legacy embedding selection. MSI model
+properties choose the initial model, not an upgrade override.
+If an existing hosted/disabled selection is preserved, even
+`DOWNLOADLOCALEMBEDDING=1` does not stage a local model. This corrects an older
+MSI inconsistency: its UI/documentation promised local embeddings, while its
+custom-action command selected hosted Copilot embeddings. Fresh installations
+now consistently default to the documented lightweight local MiniLM choice;
+existing hosted selections are not changed.
+
+Both model choices use the **same** pinned Transformers.js **4.3.1** /
+Sharp **0.35.5** / ONNX Runtime Node **1.30.0** graph, CPU, FP32.
+Both artifact packagers validate these packages, reject conflicting nested
+versions, and emit `embedding-runtime.json`; they do not download model
+weights. Transformers stays external to the JavaScript bundle so its runtime
+assets and native dependencies remain deployable.
+
+| Alias                  | Model ID                               | Revision                                   | Dimensions | Modalities  |
+| ---------------------- | -------------------------------------- | ------------------------------------------ | ---------- | ----------- |
+| `local-minilm`         | `Xenova/all-MiniLM-L6-v2`              | `751bff37182d3f1213fa05d7196b954e230abad9` | 384        | text        |
+| `local-embeddinggemma` | `onnx-community/embeddinggemma-2-ONNX` | `daa72c51243991dfcaf9f9137d2c573d8f7790c0` | 768        | text, image |
+
+Stage an offline snapshot at
+`<cacheDir>\<model-owner>\<model-name>\<revision>\`. MiniLM requires
+`config.json`, `tokenizer.json`, `tokenizer_config.json`, and
+`onnx\model.onnx`. Gemma additionally requires `processor_config.json`,
+`onnx\model.onnx_data` (external weights), and, when image-enabled,
+`onnx\vision_encoder.onnx`. Quantized/FP16 files and revision `main` do not
+substitute for the pinned FP32 snapshot. Missing files fail offline with
+staging/consent guidance, never a network fallback.
+
+For explicit online staging, the CLI accepts `--download-local-embedding`
+(or `--download-local-embedding 1`; `0` forbids downloads). Downloads stream
+only missing selected-model assets from the pinned revision, publish each
+completed file atomically, remove interrupted partials, and can be retried
+without refetching completed files. Download failure leaves the prior config
+unchanged. Without consent, generation only writes offline configuration;
+the complete snapshot must be staged before first inference.
+
+```powershell
+# Repo-less fresh configuration, explicit Gemma consent (no server starts here)
+node .\typeagent-serve.mjs provision --provider copilot --embedding local `
+  --local-embedding-model embeddinggemma --download-local-embedding --force
+
+# Existing configuration: explicitly select a named profile; restart separately
+node .\tools\setModelProvider.mjs --provider copilot `
+  --default-embedding-model local-embeddinggemma
+
+# Source checkout equivalents
+node .\tools\scripts\generate-selfhost-config.mjs --provider copilot `
+  --embedding local --local-embedding-model minilm --out .\config.local.yaml
+node .\tools\scripts\setModelProvider.mjs --provider copilot
+```
+
+`--local-embedding-model` accepts `minilm` or `embeddinggemma`
+(case-insensitive), or either exact known model ID for backward compatibility.
+`--local-embedding-cache-dir` overrides the persistent cache.
+`--default-embedding-model` selects an existing catalog alias (or `none`);
+aliases inherited from `config.defaults.yaml` (including `copilot-small`)
+and partial per-alias overrides are resolved through the config loader.
+The two builtin local aliases can also be materialized automatically.
+Both artifact packagers ship the defaults next to the provisioning tools;
+the launcher honors `TYPEAGENT_CONFIG_DEFAULTS` overrides and otherwise pins
+that shipped defaults file for provisioning and server startup.
+For custom hosted models, pass `--embedding-size <positive integer>` when
+dimensions are not known. `--embedding none` emits the reserved selector
+`defaultEmbeddingModel: none`, without a legacy `embedding` section.
+The PowerShell installer exposes `-LocalEmbeddingModel`,
+`-LocalEmbeddingCacheDir`, `-EmbeddingSize`, and `-DownloadLocalEmbedding`;
+the Bash installer accepts the corresponding kebab-case CLI options.
+Provider-only setter changes preserve the existing embedding selector;
+`--embedding`, `--local-embedding-model`, or `--default-embedding-model`
+make an explicit change. Generator `--force` also preserves an existing
+selection unless embedding options are explicit; MSI adds
+`--preserve-embedding-selection` to protect upgrades.
+
+Offline regression coverage (no network, native inference, MSI execution,
+or service lifecycle):
+
+```powershell
+node --test .\tools\scripts\test\localEmbeddingProvisioning.spec.mjs .\tools\scripts\test\msiInstallerProviderUi.spec.mjs
+```
+
 ## Agent-server prerequisites & lifecycle
 
 The MSI ships the **external** agent-server variant, which resolves the `claude`
@@ -431,11 +610,11 @@ runs these deferred, impersonated custom actions (each **non-fatal** so a hiccup
 never rolls back the agent-server install; issues surface as warnings + the
 ExitDialog reminder):
 
-| Action             | Property gate             | What it does                                                                                                                                                                                        |
-| ------------------ | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `InstallPrereqs`   | —                         | Runs `install-prereqs.ps1`: installs `claude` (`@anthropic-ai/claude-code`) and `copilot` (`@github/copilot`) via `npm i -g` when missing, and warns if Node < 22. Mirrors `install-typeagent.ps1`. |
-| `StartAgentServer` | `STARTSERVER=1` (default) | `node typeagent-serve.mjs start` — starts the daemon.                                                                                                                                               |
-| `EnableAutostart`  | `AUTOSTART=1` (default)   | `node typeagent-serve.mjs autostart enable` — registers a per-user logon Scheduled Task. Removed on uninstall (`DisableAutostart`).                                                                 |
+| Action             | Property gate             | What it does                                                                                                                                                                                                                 |
+| ------------------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `InstallPrereqs`   | —                         | Runs `install-prereqs.ps1`: installs `claude` (`@anthropic-ai/claude-code`) and `copilot` (`@github/copilot`) via `npm i -g` when missing, and warns if no supported Node version is found. Mirrors `install-typeagent.ps1`. |
+| `StartAgentServer` | `STARTSERVER=1` (default) | `node typeagent-serve.mjs start` — starts the daemon.                                                                                                                                                                        |
+| `EnableAutostart`  | `AUTOSTART=1` (default)   | `node typeagent-serve.mjs autostart enable` — registers a per-user logon Scheduled Task. Removed on uninstall (`DisableAutostart`).                                                                                          |
 
 ```powershell
 # Skip starting/autostarting the daemon (e.g. provisioning happens later)

@@ -1,17 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHash } from "node:crypto";
-import path from "node:path";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/client";
 import type {
-    ReplayToolDescriptor,
     ReplayToolContext,
+    ReplayToolDescriptor,
     ReplayToolHost,
 } from "@typeagent/copilot-macros";
+import { createHash } from "node:crypto";
+import path from "node:path";
 import { JsonlMcpAuditSink, type McpAuditSink } from "./mcpAudit.js";
-import { McpConnection } from "./mcpConnection.js";
 import { McpConfigDiscovery } from "./mcpConfigDiscovery.js";
+import { McpConnection } from "./mcpConnection.js";
 import {
     SessionMcpCredentialStore,
     type McpCredentialStore,
@@ -105,6 +105,10 @@ export class McpReplayHost implements ReplayToolHost {
                     }),
                 )
                 .digest("hex"),
+            inputSchema: structuredClone(tool.inputSchema),
+            ...(tool.outputSchema
+                ? { outputSchema: structuredClone(tool.outputSchema) }
+                : {}),
         };
     }
 

@@ -17,7 +17,8 @@ Node and pnpm.
 
 ## Prerequisites
 
-- **Node ≥ 22** (the monorepo targets Node 22+).
+- The **latest Node LTS** (default); **22.23.4+**, **24.22.1+**, and **26.12.1+**
+  are supported within those major lines. Node 20 is no longer supported.
 - **pnpm ≥ 10** (`npm i -g pnpm && pnpm setup`).
 - On Linux/WSL, see the [WSL2](./setup-wsl2.md) / [Linux](./setup-linux.md)
   guides for extra system requirements.
@@ -57,7 +58,8 @@ agent — that includes:
 
 - a single personal-agent conversational interface with **voice** support;
 - dispatch of actions to an extensible set of agents, plus Q&A and conversation;
-- **conversational memory** based on Structured RAG;
+- **memory** combining retained evidence, Structured RAG recall and maintained
+  source-linked documents;
 - integration with the **TypeAgent Cache** to lower cost and latency.
 
 ```bash
@@ -85,7 +87,7 @@ browser extension, Android, and the web API.
 | Component                                            | What it explores                                                                                                                           |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | [Dispatcher](../architecture/core/dispatcher.md)     | Structured prompting + LLM to route a request to the agent whose typed contract best matches user intent — the core of the personal agent. |
-| [KnowPro / memory](../architecture/memory/memory.md) | Agent memory using Structured RAG (the `knowPro` package; see the [Packages](../packages/index.md) section).                               |
+| [KnowPro / memory](../architecture/memory/memory.md) | Retained sources/events, Structured RAG recall and editable Views; see the [current-system map](../architecture/memory/current-system.md). |
 | [Cache](../packages/index.md)                        | Using an LLM with structured prompting to cache action translation, minimizing trips to the LLM.                                           |
 
 ## Build your own agent

@@ -12,7 +12,6 @@ import {
     UserIdentity,
 } from "@typeagent/agent-server-protocol";
 import { computeConfigDrift, loadConfig } from "@typeagent/config";
-import { MacroManager } from "@typeagent/copilot-macros";
 import { MemoryServiceHost } from "@typeagent/memory-mcp-server";
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import { otel } from "@typeagent/telemetry";
@@ -25,12 +24,8 @@ import {
 } from "agent-dispatcher/helpers/data";
 import registerDebug from "debug";
 import {
-    McpReplayHost,
     SessionMcpCredentialStore,
     createDefaultAgentRuntime,
-    createMacroAppAgentProvider,
-    createMacroLearningRuntime,
-    createSyntheticMacroLearningDiagnostics,
     getCurrentMcpToolCatalogs,
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
@@ -42,7 +37,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createAutomationSources } from "./automationSources.js";
+import { withAutomationSources } from "./automationSources.js";
 import { printConfigDriftBanner, printWarningBanner } from "./banner.js";
 import { createAgentServerConnectionHandler } from "./connectionHandler.js";
 import {
@@ -408,34 +403,22 @@ async function main() {
     // (shell, CLI dispatcher) skip this and let each dispatcher mint
     // its own — see DispatcherOptions.portRegistrar in agent-dispatcher.
     const portRegistrar = new PortRegistrar();
-    const macroManager = new MacroManager(
-        instanceDir,
-        new McpReplayHost(instanceDir),
-    );
     const { skillCatalog, skillAcquirer } =
         await createLocalSkillServices(instanceDir);
     const runbookCapabilities = createRunbookHostCapabilities({
         skillCatalog,
-        macroManager,
         readMcpCatalogs: () =>
             getCurrentMcpToolCatalogs(defaultAgentRuntime.appAgentSources),
     });
-    await macroManager.configureLearning(
-        createMacroLearningRuntime(
-            undefined,
-            () => macroManager.getApprovedMacros(),
-            createSyntheticMacroLearningDiagnostics(instanceDir),
-        ),
-    );
 
     const conversationManager: ConversationManager =
         await createConversationManager(
             "agent server",
             {
-                appAgentProviders: [
-                    ...getDefaultAppAgentProviders(instanceDir, configName),
-                    createMacroAppAgentProvider(macroManager),
-                ],
+                appAgentProviders: getDefaultAppAgentProviders(
+                    instanceDir,
+                    configName,
+                ),
                 appAgentSources: defaultAgentRuntime.appAgentSources,
                 persistSession: true,
                 storageProvider: getFsStorageProvider(),
@@ -468,21 +451,20 @@ async function main() {
                 // local-view ports so inline-browser embedding works in
                 // connect mode, matching the standalone (in-process) shell.
                 allowSharedLocalView: ["browser"],
-                agentInitOptions: {
-                    browser: {
-                        runbookCapabilities,
-                        memoryServiceClient:
-                            createMemoryServiceRpcFacade(memoryService),
-                        automations: createAutomationSources(
-                            instanceDir,
-                            macroManager,
-                        ),
+                agentInitOptions: withAutomationSources(
+                    {
+                        browser: {
+                            runbookCapabilities,
+                            memoryServiceClient:
+                                createMemoryServiceRpcFacade(memoryService),
+                        },
+                        memory: {
+                            memoryServiceClient:
+                                createMemoryServiceRpcFacade(memoryService),
+                        },
                     },
-                    memory: {
-                        memoryServiceClient:
-                            createMemoryServiceRpcFacade(memoryService),
-                    },
-                },
+                    instanceDir,
+                ),
             },
             instanceDir,
         );
@@ -634,7 +616,6 @@ async function main() {
     const { handler: connectionHandler, broadcastStaleNotice } =
         createAgentServerConnectionHandler({
             conversationManager,
-            macroManager,
             skillCatalog,
             runbookCapabilities,
             skillAcquirer,

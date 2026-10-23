@@ -10,10 +10,10 @@
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
 import type {
     AgentServerConnection,
+    ConversationContentMatch,
     ConversationDispatcher,
     ConversationInfo,
     ConversationMatch,
-    ConversationContentMatch,
 } from "../src/index.js";
 
 export function makeInfo(
@@ -118,70 +118,6 @@ export function makeStubConnection(
         }) as ConversationDispatcher;
 
     const stub: AgentServerConnection = {
-        async getMacroLearningPreference() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async setMacroLearningPreference() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async prepareMacroLearning() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async getMacroLearningJob() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async cancelMacroLearningJob() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async armMacroRecording() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async getMacroRecordingState() {
-            return { status: "idle" };
-        },
-        async claimMacroRecording() {
-            return undefined;
-        },
-        async cancelMacroRecording() {},
-        async failMacroRecording() {},
-        async finalizeMacroRecording() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async listMacros() {
-            return [];
-        },
-        async searchMacros() {
-            return [];
-        },
-        async inspectMacro() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async getMacroRequirements() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async createMacroFromTrace() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async validateMacro() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async approveMacro() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async disableMacro() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async deleteMacro() {},
-        async runMacro() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async submitMacroCandidate() {
-            throw new Error("Not implemented by conversation test stub");
-        },
-        async cancelMacroRun() {},
-        async getMacroRun() {
-            throw new Error("Not implemented by conversation test stub");
-        },
         async listSkills() {
             return [];
         },

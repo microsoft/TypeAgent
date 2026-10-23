@@ -5,18 +5,18 @@ import { isDeepStrictEqual } from "node:util";
 import type {
     CopilotToolMacro,
     MacroExecutionRecipe,
-    MacroLearningBuild,
     MacroInput,
+    MacroLearningBuild,
     MacroStep,
-    RecordedToolCall,
     RecordedInteractionTrace,
+    RecordedToolCall,
     ValueExpression,
 } from "./contracts.js";
+import { validateMacro } from "./macroDefinition.js";
 import {
     resolveMacroExpression,
     validateMacroInputs,
-} from "./deterministicReplay.js";
-import { validateMacro } from "./macroDefinition.js";
+} from "./macroExpressions.js";
 import { redactTraceValue } from "./redaction.js";
 import { learningToolResult, omittedResultPath } from "./resultEvidence.js";
 import { assertMacroCapabilities, validateResultSuffix } from "./resultPath.js";
@@ -147,6 +147,15 @@ export function assertLearningRecipe(
     traceId: string,
 ): void {
     assertLearningValue(recipe);
+    if (
+        recipe.programRequirements !== undefined &&
+        (!Array.isArray(recipe.programRequirements) ||
+            recipe.programRequirements.length > 100 ||
+            recipe.programRequirements.some(
+                (item) => typeof item !== "string" || !item.trim(),
+            ))
+    )
+        throw new Error("Invalid deferred program requirements.");
     if (
         recipe.schemaVersion !== 1 ||
         recipe.traceId !== traceId ||
@@ -331,8 +340,7 @@ function assertBuildShape(
         typeof build.exampleInputs !== "object" ||
         Array.isArray(build.exampleInputs) ||
         (build.unsupportedOutputs !== undefined &&
-            (!Array.isArray(build.unsupportedOutputs) ||
-                build.unsupportedOutputs.length !== 0))
+            !Array.isArray(build.unsupportedOutputs))
     ) {
         throw new Error(
             "Unsupported or incomplete generalized macro/output contract.",

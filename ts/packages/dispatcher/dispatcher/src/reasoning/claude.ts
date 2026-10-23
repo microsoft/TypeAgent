@@ -715,12 +715,16 @@ function getClaudeOptions(
 
     const searchMemorySchema = {
         question: z.string(),
+        repository: z.string().min(1).max(1000).optional(),
+        commit: z.string().min(1).max(1000).optional(),
+        environment: z.string().min(1).max(1000).optional(),
     };
     const searchMemoryTool: SdkMcpToolDefinition<typeof searchMemorySchema> = {
         name: "search_memory",
         description: [
             "Search past conversations and all saved page/document corpora in parallel.",
             "Use for questions about previously seen pages, imported documents, how-tos, or earlier conversations. Compare the cited evidence before answering.",
+            "Also recalls agent experience as guidance, not execution authority. Supply exact known repository/commit/environment scope for scoped memories; never invent scope.",
         ].join("\n"),
         inputSchema: searchMemorySchema,
         handler: async (args) => {
@@ -733,6 +737,17 @@ function getClaudeOptions(
                         args.question,
                     ),
                 systemContext.durableMemoryService,
+                {
+                    ...(args.repository !== undefined
+                        ? { repository: args.repository }
+                        : {}),
+                    ...(args.commit !== undefined
+                        ? { commit: args.commit }
+                        : {}),
+                    ...(args.environment !== undefined
+                        ? { environment: args.environment }
+                        : {}),
+                },
             );
             return {
                 content: [{ type: "text", text }],

@@ -262,7 +262,14 @@ test("normal typed model selection carries constraints to chat and embedding tra
             return new Response(
                 JSON.stringify({
                     choices: [{ message: { content: "{}" } }],
-                    data: [{ embedding: [1, 0] }],
+                    data: [
+                        {
+                            embedding: Array.from(
+                                { length: 1536 },
+                                (_, index) => (index === 0 ? 1 : 0),
+                            ),
+                        },
+                    ],
                 }),
                 { status: 200 },
             );

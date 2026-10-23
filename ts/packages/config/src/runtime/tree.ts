@@ -27,6 +27,12 @@ import { simpleConfigMappingsForSection } from "../mappings.js";
 import { regionFromUrl, regionToEnvSuffix } from "./regions.js";
 import { buildConfig } from "./build.js";
 import {
+    validateEmbeddingConfig,
+    resolveEmbeddingConfig,
+    EMBEDDING_MODELS_KEY,
+    DEFAULT_EMBEDDING_MODEL_KEY,
+} from "./embedding.js";
+import {
     AuthMode,
     Config,
     Deployment,
@@ -37,6 +43,7 @@ import {
     wireApiFromString,
     DEFAULT_WIRE_API,
     type WireApi,
+    type EmbeddingConfig,
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -511,7 +518,10 @@ export function configToTree(config: Config): ConfigTree {
     }
 
     if (config.embedding) {
+        validateEmbeddingConfig(config.embedding);
         const e: ConfigTree = {};
+        if (config.embedding.deployment !== undefined)
+            e.deployment = config.embedding.deployment;
         if (config.embedding.provider !== undefined)
             e.provider = config.embedding.provider;
         if (config.embedding.model !== undefined)
@@ -521,9 +531,26 @@ export function configToTree(config: Config): ConfigTree {
         if (config.embedding.size !== undefined) e.size = config.embedding.size;
         if (config.embedding.maxBatchSize !== undefined)
             e.maxBatchSize = config.embedding.maxBatchSize;
+        if (config.embedding.runtime !== undefined)
+            e.runtime = config.embedding.runtime;
+        if (config.embedding.modalities !== undefined)
+            e.modalities = [...config.embedding.modalities];
+        if (config.embedding.revision !== undefined)
+            e.revision = config.embedding.revision;
+        if (config.embedding.localFilesOnly !== undefined)
+            e.localFilesOnly = config.embedding.localFilesOnly;
+        if (config.embedding.maxPending !== undefined)
+            e.maxPending = config.embedding.maxPending;
         if (Object.keys(e).length > 0) tree.embedding = e;
     }
 
+    resolveEmbeddingConfig(config);
+    if (config.embeddingModels !== undefined)
+        tree.embeddingModels = JSON.parse(
+            JSON.stringify(config.embeddingModels),
+        );
+    if (config.defaultEmbeddingModel !== undefined)
+        tree.defaultEmbeddingModel = config.defaultEmbeddingModel;
     return tree;
 }
 
@@ -532,6 +559,8 @@ export function configToTree(config: Config): ConfigTree {
 // ---------------------------------------------------------------------------
 
 const TYPED_SECTION_KEYS = new Set([
+    "embeddingModels",
+    "defaultEmbeddingModel",
     "azureOpenAI",
     "openAI",
     "speech",
@@ -1038,6 +1067,12 @@ function emitModelProvider(node: unknown, out: FlatEnv): void {
 
 function emitEmbedding(node: unknown, out: FlatEnv): void {
     const e = asObject(node, "embedding");
+    validateEmbeddingConfig(e as EmbeddingConfig, true);
+    if (e.deployment !== undefined)
+        out.TYPEAGENT_EMBEDDING_DEPLOYMENT = asString(
+            e.deployment,
+            "embedding.deployment",
+        );
     if (e.provider !== undefined)
         out.TYPEAGENT_EMBEDDING_PROVIDER = asString(
             e.provider,
@@ -1057,6 +1092,24 @@ function emitEmbedding(node: unknown, out: FlatEnv): void {
     if (e.maxBatchSize !== undefined)
         out.TYPEAGENT_EMBEDDING_MAX_BATCH_SIZE = String(
             asNumber(e.maxBatchSize, "embedding.maxBatchSize"),
+        );
+    if (e.runtime !== undefined)
+        out.TYPEAGENT_EMBEDDING_RUNTIME = asString(
+            e.runtime,
+            "embedding.runtime",
+        );
+    if (e.modalities !== undefined)
+        out.TYPEAGENT_EMBEDDING_MODALITIES = JSON.stringify(e.modalities);
+    if (e.revision !== undefined)
+        out.TYPEAGENT_EMBEDDING_REVISION = asString(
+            e.revision,
+            "embedding.revision",
+        );
+    if (e.localFilesOnly !== undefined)
+        out.TYPEAGENT_EMBEDDING_LOCAL_FILES_ONLY = e.localFilesOnly ? "1" : "0";
+    if (e.maxPending !== undefined)
+        out.TYPEAGENT_EMBEDDING_MAX_PENDING = String(
+            asNumber(e.maxPending, "embedding.maxPending"),
         );
 }
 
@@ -1126,6 +1179,15 @@ export function typedSectionToFlat(
 ): FlatEnv {
     const out: FlatEnv = {};
     switch (key) {
+        case "embeddingModels":
+            out[EMBEDDING_MODELS_KEY] = JSON.stringify(node);
+            break;
+        case "defaultEmbeddingModel":
+            out[DEFAULT_EMBEDDING_MODEL_KEY] = asString(
+                node,
+                "defaultEmbeddingModel",
+            );
+            break;
         case "modelRequestConstraints":
             return modelRequestConstraintsToFlat(node);
         case "azureOpenAI":

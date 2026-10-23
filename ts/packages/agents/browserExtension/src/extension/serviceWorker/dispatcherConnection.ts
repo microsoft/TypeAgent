@@ -14,23 +14,6 @@
 
 import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
-import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
-import {
-    createDispatcherRpcClient,
-    wrapClientIOForCompletion,
-} from "@typeagent/dispatcher-rpc/dispatcher/client";
-import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
-import type {
-    AgentServerInvokeFunctions,
-    DispatcherConnectOptions,
-    JoinConversationResult,
-} from "@typeagent/agent-server-protocol";
-import {
-    getDispatcherChannelName,
-    getClientIOChannelName,
-    AgentServerChannelName,
-    AGENT_SERVER_DEFAULT_URL,
-} from "@typeagent/agent-server-protocol";
 import type {
     AgentServerConnection,
     ConversationDispatcher,
@@ -38,9 +21,26 @@ import type {
 import {
     manageConversation as manageConversationHelper,
     type ConversationActionResult,
-    type ManageConversationContext,
     type ManageConversationPayload as HelperPayload,
+    type ManageConversationContext,
 } from "@typeagent/agent-server-client/conversation";
+import type {
+    AgentServerInvokeFunctions,
+    DispatcherConnectOptions,
+    JoinConversationResult,
+} from "@typeagent/agent-server-protocol";
+import {
+    AGENT_SERVER_DEFAULT_URL,
+    AgentServerChannelName,
+    getClientIOChannelName,
+    getDispatcherChannelName,
+} from "@typeagent/agent-server-protocol";
+import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
+import {
+    createDispatcherRpcClient,
+    wrapClientIOForCompletion,
+} from "@typeagent/dispatcher-rpc/dispatcher/client";
+import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 
 import registerDebug from "debug";
 
@@ -532,68 +532,6 @@ function makeConnectionAdapter(): AgentServerConnection {
         throw new Error(`${op} not supported in browser extension adapter`);
     };
     return {
-        getMacroLearningPreference: (cwd) => {
-            const { rpc } = requireFresh();
-            return rpc.invoke("getMacroLearningPreference", cwd);
-        },
-        setMacroLearningPreference: (request) => {
-            const { rpc } = requireFresh();
-            return rpc.invoke("setMacroLearningPreference", request);
-        },
-        prepareMacroLearning: (request) => {
-            const { rpc } = requireFresh();
-            return rpc.invoke("prepareMacroLearning", request);
-        },
-        getMacroLearningJob: (jobId) => {
-            const { rpc } = requireFresh();
-            return rpc.invoke("getMacroLearningJob", jobId);
-        },
-        cancelMacroLearningJob: (jobId) => {
-            const { rpc } = requireFresh();
-            return rpc.invoke("cancelMacroLearningJob", jobId);
-        },
-        armMacroRecording: (request) => {
-            const { rpc } = requireFresh();
-            return rpc.invoke("armMacroRecording", request);
-        },
-        getMacroRecordingState: (sessionId: string) => {
-            const { rpc } = requireFresh();
-            return rpc.invoke("getMacroRecordingState", sessionId);
-        },
-        claimMacroRecording: (request) => {
-            const { rpc } = requireFresh();
-            return rpc.invoke("claimMacroRecording", request);
-        },
-        cancelMacroRecording: (sessionId: string) => {
-            const { rpc } = requireFresh();
-            return rpc.invoke("cancelMacroRecording", sessionId);
-        },
-        failMacroRecording: (
-            sessionId: string,
-            tokenId: string,
-            error: string,
-        ) => {
-            const { rpc } = requireFresh();
-            return rpc.invoke("failMacroRecording", sessionId, tokenId, error);
-        },
-        finalizeMacroRecording: (request) => {
-            const { rpc } = requireFresh();
-            return rpc.invoke("finalizeMacroRecording", request);
-        },
-        listMacros: () => notSupported("listMacros"),
-        searchMacros: () => notSupported("searchMacros"),
-        inspectMacro: () => notSupported("inspectMacro"),
-        getMacroRequirements: () => notSupported("getMacroRequirements"),
-        createMacroFromTrace: () => notSupported("createMacroFromTrace"),
-        validateMacro: () => notSupported("validateMacro"),
-        approveMacro: () => notSupported("approveMacro"),
-        disableMacro: () => notSupported("disableMacro"),
-        deleteMacro: () => notSupported("deleteMacro"),
-        runMacro: () => notSupported("runMacro"),
-        submitMacroCandidate: () => notSupported("submitMacroCandidate"),
-        cancelMacroRun: () => notSupported("cancelMacroRun"),
-        getMacroRun: () => notSupported("getMacroRun"),
-
         joinConversation: (
             _clientIO: ClientIO,
             options?: DispatcherConnectOptions,

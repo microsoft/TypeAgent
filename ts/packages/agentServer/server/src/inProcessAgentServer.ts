@@ -8,25 +8,15 @@ import {
     createAgentServerConnection,
 } from "@typeagent/agent-server-client";
 import { UserIdentity } from "@typeagent/agent-server-protocol";
-import { MacroManager } from "@typeagent/copilot-macros";
 import type { MemoryService } from "@typeagent/memory-service";
 import type { SkillAcquirerOptions } from "@typeagent/skill-catalog";
 import { DispatcherOptions } from "agent-dispatcher";
 import registerDebug from "debug";
-import {
-    McpReplayHost,
-    createMacroAppAgentProvider,
-    createMacroLearningRuntime,
-    createSyntheticMacroLearningDiagnostics,
-    getCurrentMcpToolCatalogs,
-} from "default-agent-provider";
+import { getCurrentMcpToolCatalogs } from "default-agent-provider";
 import os from "node:os";
 import path from "node:path";
 
-import {
-    createAutomationSources,
-    withAutomationSources,
-} from "./automationSources.js";
+import { withAutomationSources } from "./automationSources.js";
 import { createAgentServerConnectionHandler } from "./connectionHandler.js";
 import {
     ConversationManager,
@@ -93,17 +83,6 @@ export async function createInProcessAgentServer(
     instanceDir: string,
     options: InProcessAgentServerOptions,
 ): Promise<InProcessAgentServer> {
-    const macroManager = new MacroManager(
-        instanceDir,
-        new McpReplayHost(instanceDir),
-    );
-    await macroManager.configureLearning(
-        createMacroLearningRuntime(
-            undefined,
-            () => macroManager.getApprovedMacros(),
-            createSyntheticMacroLearningDiagnostics(instanceDir),
-        ),
-    );
     const memoryAgentOptions = dispatcherOptions.agentInitOptions?.memory as
         | { memoryServiceClient?: MemoryService }
         | undefined;
@@ -121,7 +100,6 @@ export async function createInProcessAgentServer(
     );
     const runbookCapabilities = createRunbookHostCapabilities({
         skillCatalog,
-        macroManager,
         readMcpCatalogs: () =>
             getCurrentMcpToolCatalogs(dispatcherOptions.appAgentSources ?? []),
     });
@@ -129,17 +107,13 @@ export async function createInProcessAgentServer(
         hostName,
         {
             ...dispatcherOptions,
-            agentInitOptions: withRunbookHostCapabilities(
-                withAutomationSources(
+            agentInitOptions: withAutomationSources(
+                withRunbookHostCapabilities(
                     dispatcherOptions.agentInitOptions,
-                    createAutomationSources(instanceDir, macroManager),
+                    runbookCapabilities,
                 ),
-                runbookCapabilities,
+                instanceDir,
             ),
-            appAgentProviders: [
-                ...(dispatcherOptions.appAgentProviders ?? []),
-                createMacroAppAgentProvider(macroManager),
-            ],
             conversationMemorySettings: {
                 ...dispatcherOptions.conversationMemorySettings,
                 durableMemoryService: memoryService,
@@ -155,7 +129,6 @@ export async function createInProcessAgentServer(
 
     const { handler } = createAgentServerConnectionHandler({
         conversationManager,
-        macroManager,
         skillCatalog,
         runbookCapabilities,
         skillAcquirer,

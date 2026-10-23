@@ -1,90 +1,97 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { MacroManager } from "@typeagent/copilot-macros";
+import { readFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { withAutomationSources } from "../src/automationSources.js";
 import {
-    createAutomationSources,
-    withAutomationSources,
-} from "../src/automationSources.js";
+    createRunbookHostCapabilities,
+    withRunbookHostCapabilities,
+} from "../src/runbookCapabilities.js";
+import { createLocalSkillServices } from "../src/skillCatalog.js";
 
-// Mirrors the check agent-rpc applies to agent init options: objects must be
-// plain, and functions are proxied across the process boundary.
-function assertRpcSafe(value: unknown, path = "options"): void {
-    if (typeof value !== "object" || value === null) return;
-    const proto = Object.getPrototypeOf(value);
-    if (proto !== null && proto !== Object.prototype) {
-        throw new Error(`${path} is not a plain object`);
-    }
-    for (const [key, child] of Object.entries(value)) {
-        assertRpcSafe(child, `${path}.${key}`);
-    }
-}
+describe("TypeAgent automation sources", () => {
+    const instanceDir = "instance";
 
-class FakeMacroManager {
-    calls: string[] = [];
-    async listMacros() {
-        this.calls.push("list");
-        return [{ macroId: "m1" }];
-    }
-    async inspectMacro(request: { macroId: string }) {
-        this.calls.push(`inspect:${request.macroId}`);
-        return {};
-    }
-    async validateMacro() {
-        return { valid: true, issues: [] };
-    }
-    async approveMacro() {}
-    async disableMacro() {}
-    async deleteMacro() {}
-}
-
-describe("automation sources", () => {
-    test("are plain objects that cross the agent process boundary", () => {
-        const manager = new FakeMacroManager();
-        const sources = createAutomationSources(
-            "C:\\instance",
-            manager as unknown as MacroManager,
-        );
-        expect(() =>
-            assertRpcSafe(withAutomationSources(undefined, sources)),
-        ).not.toThrow();
+    test("provides only the flow store location, without a macro owner", () => {
+        expect(withAutomationSources(undefined, instanceDir)).toEqual({
+            browser: { automations: { instanceDir } },
+        });
     });
 
-    test("a macro manager instance would be rejected", () => {
-        expect(() => assertRpcSafe({ macros: new FakeMacroManager() })).toThrow(
-            "not a plain object",
-        );
-    });
-
-    test("calls are delegated to the macro manager", async () => {
-        const manager = new FakeMacroManager();
-        const sources = createAutomationSources(
-            "C:\\instance",
-            manager as unknown as MacroManager,
-        );
-        expect(await sources.macros!.listMacros()).toEqual([{ macroId: "m1" }]);
-        await sources.macros!.inspectMacro({ macroId: "m1" });
-        expect(manager.calls).toEqual(["list", "inspect:m1"]);
-    });
-
-    test("merges into existing browser options and wraps a bare control", () => {
-        const sources = createAutomationSources(
-            "C:\\instance",
-            new FakeMacroManager() as unknown as MacroManager,
-        );
-        const memory = {};
+    test("wraps bare browser control without losing its identity", () => {
+        const browserControl = { openTab: () => {} };
+        const memory = { marker: "memory" };
         expect(
             withAutomationSources(
-                { browser: { memoryServiceClient: memory }, other: 1 },
-                sources,
+                { browser: browserControl, memory },
+                instanceDir,
             ),
         ).toEqual({
-            browser: { memoryServiceClient: memory, automations: sources },
-            other: 1,
+            browser: { browserControl, automations: { instanceDir } },
+            memory,
         });
-        const control = { getPageUrl: () => "x" };
-        expect(
-            withAutomationSources({ browser: control }, sources).browser,
-        ).toEqual({ browserControl: control, automations: sources });
     });
+
+    test("preserves browser services and replaces stale macro sources", () => {
+        const browserControl = {};
+        const memoryServiceClient = {};
+        const runbookCapabilities = {};
+        const options = {
+            browser: {
+                browserControl,
+                memoryServiceClient,
+                runbookCapabilities,
+                automations: { instanceDir: "old", macros: {} },
+            },
+        };
+        expect(withAutomationSources(options, instanceDir)).toEqual({
+            browser: {
+                browserControl,
+                memoryServiceClient,
+                runbookCapabilities,
+                automations: { instanceDir },
+            },
+        });
+        expect(options.browser.automations.instanceDir).toBe("old");
+    });
+
+    test("composes with embedded runbook capability initialization", async () => {
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "automation-options-"),
+        );
+        try {
+            const { skillCatalog } = await createLocalSkillServices(root);
+            const runbookCapabilities = createRunbookHostCapabilities({
+                skillCatalog,
+            });
+            const options = withRunbookHostCapabilities(
+                undefined,
+                runbookCapabilities,
+            );
+            expect(withAutomationSources(options, instanceDir)).toEqual({
+                browser: {
+                    runbookCapabilities,
+                    automations: { instanceDir },
+                },
+            });
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+
+    test.each(["server", "inProcessAgentServer"])(
+        "%s wires the flow catalog into browser initialization",
+        (entryPoint) => {
+            const source = readFileSync(
+                new URL(`../../src/${entryPoint}.ts`, import.meta.url),
+                "utf8",
+            );
+            expect(source).toMatch(
+                /agentInitOptions:\s*withAutomationSources\(/,
+            );
+        },
+    );
 });

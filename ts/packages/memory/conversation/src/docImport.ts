@@ -17,6 +17,7 @@ import { getHtml } from "@typeagent/aiclient";
 import { Result, success } from "typechat";
 import * as kp from "@typeagent/knowpro";
 import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
+import { countTokens as countEmbeddingTokens } from "gpt-tokenizer/encoding/cl100k_base";
 
 export interface DocPartOptions {
     collectLinkKnowledge?: boolean;
@@ -24,8 +25,51 @@ export interface DocPartOptions {
     maxTokensPerPart?: number;
 }
 
+const literalTokenOptions = {
+    allowedSpecial: new Set<string>(),
+    disallowedSpecial: new Set<string>(),
+};
+
 export function countDocTokens(text: string): number {
-    return countTokens(text);
+    return countTokens(text, literalTokenOptions);
+}
+
+export function splitDocPartTextForEmbedding(
+    text: string,
+): kp.TextEmbeddingChunk[] {
+    const fits = (value: string) =>
+        countDocTokens(value) <= 7_500 &&
+        countEmbeddingTokens(value, literalTokenOptions) <= 7_500;
+    if (fits(text)) return [{ text, start: 0, end: text.length }];
+
+    // Search UTF-16 offsets only at code-point boundaries; token decoding can
+    // otherwise cut a multi-byte character and introduce replacement text.
+    const offsets = [0];
+    for (const character of text)
+        offsets.push(offsets[offsets.length - 1] + character.length);
+    const chunks: kp.TextEmbeddingChunk[] = [];
+    let start = 0;
+    while (start < offsets.length - 1) {
+        let low = start + 1;
+        let high = offsets.length - 1;
+        while (low < high) {
+            const middle = Math.ceil((low + high) / 2);
+            if (fits(text.slice(offsets[start], offsets[middle]))) low = middle;
+            else high = middle - 1;
+        }
+        const chunk = {
+            text: text.slice(offsets[start], offsets[low]),
+            start: offsets[start],
+            end: offsets[low],
+        };
+        if (!fits(chunk.text))
+            throw new Error(
+                "Cannot create a bounded document embedding window",
+            );
+        chunks.push(chunk);
+        start = low;
+    }
+    return chunks;
 }
 
 /**
@@ -75,6 +119,8 @@ export async function importDocMemoryFromTextFile(
         type,
         maxCharsPerChunk,
         sourceUrl,
+        docName,
+        settings,
     );
     return memory;
 }
@@ -298,7 +344,7 @@ export function aggregateDocParts(
                 : `${current.textChunks[0]}\n\n${text}`;
         if (
             current !== undefined &&
-            countTokens(combinedText) > maxTokensPerPart
+            countDocTokens(combinedText) > maxTokensPerPart
         ) {
             aggregated.push(current);
             current = undefined;

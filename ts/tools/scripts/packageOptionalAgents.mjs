@@ -4,8 +4,7 @@
 
 /**
  * Package the optional agents (those omitted from a server profile) as
- * self-contained, installable bundles - Option 3 from
- * codeDocs .../2026-06-11_typeagent-plugin-agent-distribution.
+ * self-contained, installable bundles.
  *
  * The lean inbox profile (config.<profile>.json) drops some agents; this packs
  * each dropped agent so users can reinstall it on demand. Each agent is produced
@@ -66,7 +65,7 @@ function run(cmd, cmdArgs, cwd, env = process.env) {
         throw new Error(`Command failed (${res.status}): ${cmd}`);
 }
 
-function writeRuntimeInstallWorkspace(directory) {
+export function writeRuntimeInstallWorkspace(directory) {
     const content = [
         'packages: ["."]',
         "allowBuilds:",
@@ -76,6 +75,7 @@ function writeRuntimeInstallWorkspace(directory) {
         "  keytar: true",
         "  koffi: true",
         "  onnxruntime-node: true",
+        "  protobufjs: false",
         "  puppeteer: false",
         "  sharp: true",
         "",
@@ -258,4 +258,6 @@ async function main() {
     );
 }
 
-await main();
+if (path.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
+    await main();
+}

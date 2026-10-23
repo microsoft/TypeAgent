@@ -95,7 +95,7 @@ variables:
   - name: buildDirectory
     value: $(Build.SourcesDirectory)/ts
   - name: nodeVersion
-    value: "22"
+    value: "24.22.1"
   # Mirrors the GitHub workflow's env.NODE_OPTIONS. Non-secret pipeline variables
   # are surfaced to every script step as environment variables. Azure auth no
   # longer needs secret variables — the "Azure login + Get Keys" step signs in
@@ -242,9 +242,8 @@ jobs:
       # pwsh gives consistent single-quote argument grouping on Windows and
       # Linux. Authenticates to Azure OpenAI via the AZURE_* WIF variables the
       # login step published.
-      # The -- separator prevents npm from consuming the CLI's --model flag.
       - pwsh: |
-          npm run start:dev -- 'prompt' 'why is the sky blue' '--model' 'GPT_4_O'
+          npm run start:dev -- 'prompt' 'why is the sky blue'
         displayName: Test CLI - smoke
         timeoutInMinutes: 5
         workingDirectory: $(buildDirectory)/packages/cli
@@ -258,8 +257,6 @@ jobs:
       # this task's fresh AzureCliCredential. Clearing them makes it fall through.
       - task: AzureCLI@2
         displayName: Shell Tests - full (Windows)
-        env:
-          TYPEAGENT_SHELL_TEST_MODEL: GPT_4_O
         timeoutInMinutes: 60
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))
         inputs:
@@ -275,8 +272,6 @@ jobs:
       # rationale as "Shell Tests - full" above.
       - task: AzureCLI@2
         displayName: Shell Tests - smoke (Linux)
-        env:
-          TYPEAGENT_SHELL_TEST_MODEL: GPT_4_O
         timeoutInMinutes: 60
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
         inputs:

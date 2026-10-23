@@ -6,8 +6,6 @@ import { getMacroFeatures } from "../src/shared/macro-features.js";
 const names = [
     "TYPEAGENT_MACRO_RECORDING_ENABLED",
     "TYPEAGENT_MACRO_INDUCTION_ENABLED",
-    "TYPEAGENT_MACRO_REPLAY_ENABLED",
-    "TYPEAGENT_MACRO_AGENT_HANDOFF_ENABLED",
 ] as const;
 
 describe("macro feature flags", () => {
@@ -29,8 +27,6 @@ describe("macro feature flags", () => {
         expect(getMacroFeatures()).toEqual({
             recording: true,
             induction: true,
-            replay: true,
-            agentHandoff: true,
         });
     });
 
@@ -40,8 +36,6 @@ describe("macro feature flags", () => {
         expect(getMacroFeatures()).toEqual({
             recording: false,
             induction: false,
-            replay: false,
-            agentHandoff: false,
         });
     });
 });

@@ -8,17 +8,18 @@ import type { SkillSelection } from "../extension/skill-session.js";
 
 export type Mode = "direct" | "mcp" | "dev" | "bypass";
 export type McpRouting = "delegate" | "mixed";
+export type RecipeOwner = "plugin" | "off";
 
 export interface PluginConfig {
     mode: Mode;
     mcpRouting?: McpRouting;
     /** Public server conversation id, never a structured resume capability. */
     conversationId?: string;
-    powershell?: {
-        enabled?: boolean;
-    };
     /** Catalog revisions to expose to this Copilot session. */
     selectedSkills?: SkillSelection[];
+    recipeOwner?: RecipeOwner;
+    recipeReadOnlyMcpTools?: { mcpServerName: string; toolName: string }[];
+    recipeInferenceCliPath?: string;
     [key: string]: unknown;
 }
 
@@ -34,11 +35,84 @@ export function getConfigPath(): string {
     return join(getConfigDir(), "config.json");
 }
 
+export function getRecipeOwner(): RecipeOwner {
+    const environment = process.env.TYPEAGENT_RECIPE_OWNER;
+    const configured =
+        environment === undefined ? readConfig()?.recipeOwner : undefined;
+    const value =
+        environment ?? (configured === undefined ? "plugin" : configured);
+    if (value === "typeagent")
+        throw new Error(
+            "The TypeAgent recipe owner has been removed. Remove the obsolete recipeOwner/TYPEAGENT_RECIPE_OWNER setting, restart Copilot, and re-record tasks in the plugin catalog.",
+        );
+    if (value !== "plugin" && value !== "off")
+        throw new Error("Recipe owner must be plugin or off.");
+    return value;
+}
+
+export function getRecipeReadOnlyMcpTools(): {
+    mcpServerName: string;
+    toolName: string;
+}[] {
+    const value = readConfig()?.recipeReadOnlyMcpTools;
+    if (value === undefined) return [];
+    if (!Array.isArray(value) || value.length > 128)
+        throw new Error(
+            "recipeReadOnlyMcpTools must be a bounded array of exact server/tool identities.",
+        );
+    return value.map((entry) => {
+        if (
+            !entry ||
+            typeof entry.mcpServerName !== "string" ||
+            !entry.mcpServerName.trim() ||
+            typeof entry.toolName !== "string" ||
+            !entry.toolName.trim() ||
+            entry.mcpServerName.length > 256 ||
+            entry.toolName.length > 256
+        )
+            throw new Error(
+                "Invalid read-only MCP classification; this setting never grants tool permissions.",
+            );
+        return { mcpServerName: entry.mcpServerName, toolName: entry.toolName };
+    });
+}
+
+export function getRecipeInferenceCliPath(): string | undefined {
+    const value =
+        process.env.TYPEAGENT_RECIPE_CLI_PATH ??
+        readConfig()?.recipeInferenceCliPath;
+    if (
+        value !== undefined &&
+        (typeof value !== "string" ||
+            !value.trim() ||
+            value.length > 4096 ||
+            value.includes("\0"))
+    )
+        throw new Error(
+            "The native recipe inference CLI path must be a bounded executable path.",
+        );
+    return value;
+}
+
 export function readConfig(): PluginConfig | undefined {
     try {
-        return JSON.parse(readFileSync(getConfigPath(), "utf-8"));
-    } catch {
-        return undefined;
+        const value: unknown = JSON.parse(
+            readFileSync(getConfigPath(), "utf-8"),
+        );
+        if (!value || typeof value !== "object" || Array.isArray(value))
+            throw new Error("Plugin configuration must be a JSON object.");
+        return value as PluginConfig;
+    } catch (error) {
+        if (
+            typeof error === "object" &&
+            error !== null &&
+            "code" in error &&
+            error.code === "ENOENT"
+        )
+            return undefined;
+        throw new Error(
+            `Unable to read plugin configuration: ${error instanceof Error ? error.message : String(error)}`,
+        );
     }
 }
 
@@ -68,10 +142,6 @@ export function getMode(): Mode {
         return configMode;
     }
     return "direct";
-}
-
-export function isPowerShellGuidanceEnabled(): boolean {
-    return readConfig()?.powershell?.enabled ?? true;
 }
 
 export function getMcpRouting(): McpRouting {

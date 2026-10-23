@@ -1,33 +1,25 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { AgentServerConnection } from "@typeagent/agent-server-client";
-import type {
-    SubmitMacroCandidateRequest,
-    ValueExpression,
-} from "@typeagent/copilot-macros";
-import { connectToAgentServer } from "../shared/typeagent-client.js";
 import { getMode, type Mode } from "../shared/plugin-config.js";
 import {
-    getMacroFeatures,
-    type MacroFeatures,
-} from "../shared/macro-features.js";
+    connectToMacroOwner,
+    type MacroOwnerConnection,
+} from "../shared/macro-owner.js";
 
 export interface MacroServerDependencies {
-    connect: () => Promise<AgentServerConnection>;
+    connect: () => Promise<MacroOwnerConnection>;
     getMode: () => Mode;
-    getFeatures?: () => MacroFeatures;
 }
 
 const defaultDependencies: MacroServerDependencies = {
-    connect: connectToAgentServer,
+    connect: connectToMacroOwner,
     getMode,
-    getFeatures: getMacroFeatures,
 };
 
 function result(value: unknown): CallToolResult {
@@ -101,27 +93,6 @@ export class MacroCatalogAdapter {
         );
     }
 
-    createMacroFromTrace(request: {
-        traceId: string;
-        name: string;
-        description?: string | undefined;
-    }) {
-        if (!this.features().induction) {
-            return Promise.resolve(
-                errorResult("Macro induction is disabled by configuration."),
-            );
-        }
-        return this.call((connection) =>
-            connection.createMacroFromTrace({
-                traceId: request.traceId,
-                name: request.name,
-                ...(request.description !== undefined
-                    ? { description: request.description }
-                    : {}),
-            }),
-        );
-    }
-
     validateMacro(request: { macroId: string; version?: number | undefined }) {
         return this.call((connection) =>
             connection.validateMacro(this.macroRef(request)),
@@ -149,18 +120,11 @@ export class MacroCatalogAdapter {
         return this.call((connection) => connection.getMacroRun(request.runId));
     }
 
-    submitMacroCandidate(request: SubmitMacroCandidateRequest) {
-        return this.call((connection) =>
-            connection.submitMacroCandidate(request),
-        );
-    }
-
     async runMacro(
         request: {
             macroId: string;
             version?: number | undefined;
             inputs?: Record<string, unknown> | undefined;
-            preference?: "replay" | "agent" | "auto" | undefined;
             timeoutMs?: number | undefined;
             dryRun?: boolean | undefined;
         },
@@ -172,31 +136,11 @@ export class MacroCatalogAdapter {
             );
         }
         const runId = randomUUID();
-        let connection: AgentServerConnection | undefined;
+        let connection: MacroOwnerConnection | undefined;
         let removeAbort: (() => void) | undefined;
         try {
             connection = await this.dependencies.connect();
             const activeConnection = connection;
-            const features = this.features();
-            if (!features.replay || !features.agentHandoff) {
-                const requirements = await connection.getMacroRequirements(
-                    this.macroRef(request),
-                );
-                const usesAgent =
-                    request.preference === "agent" ||
-                    (request.preference !== "replay" &&
-                        requirements.executionClass === "agentRequired");
-                if (usesAgent && !features.agentHandoff) {
-                    return errorResult(
-                        "Macro agent-runner handoff is disabled by configuration.",
-                    );
-                }
-                if (!usesAgent && !features.replay) {
-                    return errorResult(
-                        "Deterministic macro replay is disabled by configuration.",
-                    );
-                }
-            }
             if (signal) {
                 const cancel = () => {
                     void activeConnection.cancelMacroRun(runId);
@@ -213,9 +157,6 @@ export class MacroCatalogAdapter {
                         : {}),
                     ...(request.inputs !== undefined
                         ? { inputs: request.inputs }
-                        : {}),
-                    ...(request.preference !== undefined
-                        ? { preference: request.preference }
                         : {}),
                     ...(request.timeoutMs !== undefined
                         ? { timeoutMs: request.timeoutMs }
@@ -245,19 +186,15 @@ export class MacroCatalogAdapter {
         };
     }
 
-    private features(): MacroFeatures {
-        return this.dependencies.getFeatures?.() ?? getMacroFeatures();
-    }
-
     private async call(
-        operation: (connection: AgentServerConnection) => Promise<unknown>,
+        operation: (connection: MacroOwnerConnection) => Promise<unknown>,
     ): Promise<CallToolResult> {
         if (this.dependencies.getMode() === "bypass") {
             return errorResult(
                 "TypeAgent macro tools are disabled in bypass mode.",
             );
         }
-        let connection: AgentServerConnection | undefined;
+        let connection: MacroOwnerConnection | undefined;
         try {
             connection = await this.dependencies.connect();
             return result(await operation(connection));
@@ -273,81 +210,6 @@ const macroRefSchema = {
     macroId: z.string().min(1),
     version: z.number().int().positive().optional(),
 };
-
-const boundValueExpressionSchema = z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("literal"), value: z.unknown() }),
-    z.object({ kind: z.literal("input"), name: z.string().min(1) }),
-    z.object({
-        kind: z.literal("stepResult"),
-        stepId: z.string().min(1),
-        path: z.array(z.string()).optional(),
-    }),
-    z.object({
-        kind: z.literal("resultPath"),
-        stepId: z.string().min(1),
-        path: z.array(z.string()),
-        suffix: z
-            .string()
-            .regex(
-                /^(?:\/content|\?\$select=[A-Za-z][A-Za-z0-9]*(?:,[A-Za-z][A-Za-z0-9]*){0,19})(?![\s\S])/,
-            ),
-    }),
-]);
-
-const valueExpressionSchema = z.discriminatedUnion("kind", [
-    ...boundValueExpressionSchema.options,
-    z.object({
-        kind: z.literal("template"),
-        value: z.unknown(),
-        bindings: z
-            .array(
-                z.object({
-                    path: z.array(z.string()).min(1),
-                    expression: boundValueExpressionSchema,
-                }),
-            )
-            .min(1),
-    }),
-]);
-
-const macroValueTypeSchema = z.enum([
-    "null",
-    "array",
-    "object",
-    "string",
-    "number",
-    "boolean",
-]);
-
-const macroInputSchema = z.object({
-    name: z.string().min(1),
-    description: z.string(),
-    required: z.boolean(),
-    secret: z.boolean(),
-    valueType: macroValueTypeSchema.optional(),
-});
-
-const macroPostconditionSchema = z.discriminatedUnion("kind", [
-    z.object({
-        kind: z.literal("resultType"),
-        valueType: macroValueTypeSchema,
-    }),
-    z.object({
-        kind: z.literal("resultPathExists"),
-        path: z.array(z.string()).min(1),
-    }),
-]);
-
-const macroStepSchema = z.object({
-    id: z.string().min(1),
-    toolName: z.string().min(1),
-    mcpServerName: z.string().min(1).optional(),
-    arguments: valueExpressionSchema,
-    executionClass: z.enum(["replayable", "agentRequired"]),
-    sourceToolCallId: z.string().min(1),
-    schemaFingerprint: z.string().optional(),
-    postconditions: z.array(macroPostconditionSchema).max(100).optional(),
-});
 
 export class TypeAgentMacroMcpServer {
     private readonly server = new McpServer({
@@ -393,16 +255,6 @@ export class TypeAgentMacroMcpServer {
             (request) => adapter.getMacroRequirements(request),
         );
         this.server.tool(
-            "create_macro_from_trace",
-            "Create a non-executable draft macro from an explicit trace.",
-            {
-                traceId: z.string().min(1),
-                name: z.string().min(1),
-                description: z.string().optional(),
-            },
-            (request) => adapter.createMacroFromTrace(request),
-        );
-        this.server.tool(
             "validate_macro",
             "Validate a draft macro and return errors, warnings, and execution class.",
             macroRefSchema,
@@ -428,13 +280,12 @@ export class TypeAgentMacroMcpServer {
         );
         this.server.tool(
             "run_macro",
-            "Validate and run an approved macro, or return its complete validated agentRequired launch for typeagent-macro-runner. Execute the returned handoff without another inspect_macro call.",
+            "Run the current approved program macro and return its actual output. No planning agent or legacy step execution is used.",
             {
                 macroId: z.string().min(1),
                 version: z.number().int().positive().optional(),
                 inputs: z.record(z.unknown()).optional(),
-                preference: z.enum(["replay", "agent", "auto"]).optional(),
-                timeoutMs: z.number().int().positive().max(600_000).optional(),
+                timeoutMs: z.number().int().positive().max(60_000).optional(),
                 dryRun: z.boolean().optional(),
             },
             (request, extra) => adapter.runMacro(request, extra.signal),
@@ -444,80 +295,6 @@ export class TypeAgentMacroMcpServer {
             "Inspect a sanitized macro run record.",
             { runId: z.string().min(1) },
             (request) => adapter.getMacroRun(request),
-        );
-        this.server.tool(
-            "submit_macro_candidate",
-            "Save an agent-guided adaptation as a validated draft version for explicit review.",
-            {
-                sourceMacroId: z.string().min(1),
-                sourceVersion: z.number().int().positive(),
-                handoffRunId: z.string().min(1),
-                reason: z.string().min(1).max(2_000),
-                name: z.string().min(1).optional(),
-                description: z.string().optional(),
-                inputs: z.array(macroInputSchema).max(100),
-                steps: z.array(macroStepSchema).min(1).max(100),
-                executionEvidence: z.object({
-                    outcome: z.literal("completed"),
-                    toolCalls: z.number().int().nonnegative(),
-                    retries: z.number().int().nonnegative(),
-                    durationMs: z.number().nonnegative(),
-                    tokensUsed: z.number().int().nonnegative(),
-                    steps: z
-                        .array(
-                            z.object({
-                                stepId: z.string().min(1),
-                                status: z.enum([
-                                    "completed",
-                                    "failed",
-                                    "denied",
-                                    "cancelled",
-                                ]),
-                            }),
-                        )
-                        .min(1)
-                        .max(100),
-                }),
-            },
-            (request) =>
-                adapter.submitMacroCandidate({
-                    sourceMacroId: request.sourceMacroId,
-                    sourceVersion: request.sourceVersion,
-                    handoffRunId: request.handoffRunId,
-                    reason: request.reason,
-                    inputs: request.inputs.map((input) => ({
-                        name: input.name,
-                        description: input.description,
-                        required: input.required,
-                        secret: input.secret,
-                        ...(input.valueType !== undefined
-                            ? { valueType: input.valueType }
-                            : {}),
-                    })),
-                    executionEvidence: request.executionEvidence,
-                    steps: request.steps.map((step) => ({
-                        id: step.id,
-                        toolName: step.toolName,
-                        ...(step.mcpServerName !== undefined
-                            ? { mcpServerName: step.mcpServerName }
-                            : {}),
-                        arguments: step.arguments as ValueExpression,
-                        executionClass: step.executionClass,
-                        sourceToolCallId: step.sourceToolCallId,
-                        ...(step.schemaFingerprint !== undefined
-                            ? { schemaFingerprint: step.schemaFingerprint }
-                            : {}),
-                        ...(step.postconditions !== undefined
-                            ? { postconditions: step.postconditions }
-                            : {}),
-                    })),
-                    ...(request.name !== undefined
-                        ? { name: request.name }
-                        : {}),
-                    ...(request.description !== undefined
-                        ? { description: request.description }
-                        : {}),
-                }),
         );
     }
 
