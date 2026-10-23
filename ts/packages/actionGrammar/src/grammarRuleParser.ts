@@ -87,7 +87,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *
  *   <VariableSpecifier> ::= <VarName> (":" (<TypeName> | <RuleName>))?
  *
- *   <RuleRefExpr> ::= <RuleName>
+ *   <RuleRefExpr> ::= <RuleName> (immediately followed by "?")?
  *   <GroupExpr> ::= "(" <Rules> ( ")" | ")?" | ")*" | ")+" )
  *
  *   // ── Value (basic mode: enableValueExpressions=false) ──────────────────────────
@@ -232,6 +232,7 @@ export type CommentedName = {
 export type RuleRefExpr = {
     type: "ruleReference";
     refName: CommentedName;
+    optional?: boolean | undefined;
     pos?: number | undefined;
     leadingComments?: Comment[] | undefined;
 };
@@ -753,7 +754,7 @@ class GrammarRuleParser implements ValueExprParserContext {
             refPos = this.pos;
             if (this.isAt("<")) {
                 ruleReference = true;
-                bracketedName = this.parseRuleName();
+                bracketedName = this.parseRuleName().name;
             } else {
                 bracketedName = this.parseNameWithComments("Type name");
             }
@@ -798,11 +799,17 @@ class GrammarRuleParser implements ValueExprParserContext {
 
             if (this.isAt("<")) {
                 const pos = this.pos;
+                const { name: refName, end } = this.parseRuleName();
                 const node: RuleRefExpr = {
                     type: "ruleReference",
-                    refName: this.parseRuleName(),
+                    refName,
                     pos,
                 };
+                if (this.content.startsWith("?", end)) {
+                    node.optional = true;
+                    this.curr = end;
+                    this.skipWhitespace(1);
+                }
                 attach(node);
                 expNodes.push(node);
                 continue;
@@ -1171,11 +1178,12 @@ class GrammarRuleParser implements ValueExprParserContext {
         return { name, leadingComments, trailingComments };
     }
 
-    private parseRuleName(): CommentedName {
+    private parseRuleName(): { name: CommentedName; end: number } {
         this.consume("<", "at start of rule name");
-        const result = this.parseNameWithComments("Rule identifier");
+        const name = this.parseNameWithComments("Rule identifier");
+        const end = this.curr + 1;
         this.consume(">", "at end of rule name");
-        return result;
+        return { name, end };
     }
 
     private parseRules(): Rule[] {
@@ -1238,7 +1246,7 @@ class GrammarRuleParser implements ValueExprParserContext {
         afterExportComments?: Comment[],
     ): RuleDefinition {
         const pos = this.pos;
-        const rn = this.parseRuleName();
+        const rn = this.parseRuleName().name;
         let spacingMode: SpacingMode;
         let spacingAnnotationComments: SpacingAnnotationComments | undefined;
         let beforeEqualsComments: Comment[] | undefined;
