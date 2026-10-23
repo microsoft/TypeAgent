@@ -430,9 +430,25 @@ The harness calls `answer()` directly, with the original question/reference date
 and observational `includeDiagnostics`. There is no extra preliminary search.
 The default indexed reader receives source-owned canonical dates separately from
 question time. Its diagnostics record exactly the supplied fragments, source
-IDs, temporal context and public response, without hidden reasoning. Diagnostics
-do not change reader input or answer configuration. Historical preliminary
+IDs, temporal context and public response, without hidden reasoning. Selection
+diagnostics additionally record eligible source IDs, full-question lexical terms,
+candidate block identities, posting/language/preference score contributions,
+block admission, emitted fragment counts, and actual read/response use. Candidate
+admission is distinct from delivery: a selected block can emit no fragments when
+the read budget is exhausted. Missing candidates are not assigned invented scores.
+Diagnostics do not change reader input or answer configuration. Historical preliminary
 recall@20 fields remain unmeasured, not zero, in new scorecards.
+
+Default indexed answers consider the entire eligible corpus, rather than only
+the last 32 manifest sources. They retain query terms beyond an eight-token
+prefix, do not amplify every entity of a generic queried type, and allocate
+bounded windows across relevance-ranked blocks before expanding long turns.
+Multiple necessary turns from one session are allowed. Informational-view
+construction retains its separate diversity policy. Output bounds remain 12
+fragments, 2,000 UTF-16 characters per fragment, 32,000 read characters and 24,000
+answer snippet characters. The reader requires supported named-event identity
+and both operands for a comparison; prompt qualification is not a proof of
+semantic entailment.
 
 The previous KnowPro-only arm explicitly disabled synopses and maintained views.
 Its immutable results are component diagnostics, not customer-default accuracy.

@@ -19,6 +19,7 @@ import { userInfo } from "node:os";
 import path from "node:path";
 import lockfile from "proper-lockfile";
 import { normalizeQueryTemporalContext } from "./temporalContext.js";
+import { indexedQueryTerms } from "./indexedFragments.js";
 
 import {
     MemoryBatchStore,
@@ -115,6 +116,7 @@ import type {
     MemoryPage,
     MemorySearchRequest,
     MemorySearchResult,
+    IndexedSelectionDiagnostics,
     MemoryService,
     MemoryServiceCapabilities,
     MemorySource,
@@ -3157,79 +3159,35 @@ export class FileMemoryService
                       request.temporalContext,
                   );
             let fragmentLimited = false;
+            let indexedSelection: IndexedSelectionDiagnostics | undefined;
             if (request.indexedFragments) {
                 if (!runtime.index.readFragments)
                     throw new Error(
                         "This index does not support bounded indexed fragments",
                     );
-                const nominated = runtime.manifest.sources
-                    .filter(
-                        (source) =>
-                            matchesSearchSource(source, request) &&
-                            source.revisions.some(
-                                (revision) =>
-                                    revision.revisionId ===
-                                        source.activeRevisionId &&
-                                    revision.state === "ready" &&
-                                    matchesSearchDate(revision, request),
-                            ),
-                    )
-                    .slice(-32);
+                const nominated = runtime.manifest.sources.filter(
+                    (source) =>
+                        matchesSearchSource(source, request) &&
+                        source.revisions.some(
+                            (revision) =>
+                                revision.revisionId ===
+                                    source.activeRevisionId &&
+                                revision.state === "ready" &&
+                                matchesSearchDate(revision, request),
+                        ),
+                );
                 const selection = await runtime.index.readFragments({
                     query,
                     ...(temporalContext ? { temporalContext } : {}),
-                    terms: [
-                        ...new Set(
-                            query
-                                .toLowerCase()
-                                .match(/[\p{L}\p{N}][\p{L}\p{N}-]*/gu) ?? [
-                                query.slice(0, 200),
-                            ],
-                        ),
-                    ]
-                        .filter(
-                            (term) =>
-                                term.length <= 200 &&
-                                !new Set([
-                                    "what",
-                                    "which",
-                                    "does",
-                                    "about",
-                                    "with",
-                                    "from",
-                                    "have",
-                                    "that",
-                                    "this",
-                                    "their",
-                                    "were",
-                                    "when",
-                                    "where",
-                                    "should",
-                                    "would",
-                                    "could",
-                                    "how",
-                                    "why",
-                                    "the",
-                                    "and",
-                                    "for",
-                                    "are",
-                                    "can",
-                                    "was",
-                                    "not",
-                                    "did",
-                                    "its",
-                                    "is",
-                                    "to",
-                                    "of",
-                                    "in",
-                                    "a",
-                                    "an",
-                                ]).has(term),
-                        )
-                        .slice(0, 8),
+                    terms: indexedQueryTerms(query),
                     sourceIds: nominated.map((item) => item.sourceId),
+                    maxFragments: Math.min(limit, 12),
+                    ...(request.includeDiagnostics
+                        ? { includeDiagnostics: true }
+                        : {}),
                 });
                 candidates = selection.fragments;
+                indexedSelection = selection.diagnostics;
                 fragmentLimited = fragmentLimited || selection.limited;
             }
             const matches = this.toEvidence(
@@ -3239,7 +3197,15 @@ export class FileMemoryService
                 request,
                 limit,
             );
+            if (indexedSelection) {
+                indexedSelection.deliveredFragmentCount = matches.length;
+                indexedSelection.responseChars = matches.reduce(
+                    (total, item) => total + item.snippet.length,
+                    0,
+                );
+            }
             return {
+                ...(indexedSelection ? { indexedSelection } : {}),
                 query,
                 matches,
                 warnings: [
@@ -7149,6 +7115,9 @@ export class FileMemoryService
                         ? { sourceIds: request.sourceIds }
                         : {}),
                     indexedFragments: true,
+                    ...(request.includeDiagnostics
+                        ? { includeDiagnostics: true }
+                        : {}),
                     ...(request.temporalContext
                         ? { temporalContext: request.temporalContext }
                         : {}),
@@ -7166,6 +7135,12 @@ export class FileMemoryService
                     this.indexedAnswerModel,
                     request,
                 );
+                if (
+                    generated.readerContext?.indexedAnswer &&
+                    result.indexedSelection
+                )
+                    generated.readerContext.indexedAnswer.selection =
+                        result.indexedSelection;
                 for (const citation of generated.citations) {
                     if (!citation.locator?.startsWith("indexed:"))
                         throw new Error(

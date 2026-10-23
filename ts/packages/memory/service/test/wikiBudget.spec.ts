@@ -352,6 +352,11 @@ test("indexed answers separate source calendars from question time and diagnosti
     expect(prompt[0].content).toContain(
         "not the question, capture or index clock",
     );
+    expect(prompt[0].content).toContain(
+        "Require the name or a supported alias/identity link",
+    );
+    expect(prompt[0].content).toContain("otherwise return noAnswer");
+    expect(prompt[0].content).toContain("not an explicit same-day date");
     expect(observed.readerContext?.serializedContextChars).toBe(
         user.content.length,
     );

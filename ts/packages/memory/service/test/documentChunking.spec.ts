@@ -18,6 +18,7 @@ import { createEmbeddingCache } from "@typeagent/knowledge-processor";
 import * as kp from "@typeagent/knowpro";
 import { KnowProCorpusIndex } from "../src/knowProCorpusIndex.js";
 import { projectRetainedIndex } from "../src/retainedIndex.js";
+import { indexedQueryTerms } from "../src/indexedFragments.js";
 import type { IndexedDocument, SourceType } from "../src/types.js";
 
 const markdown = Array.from(
@@ -146,6 +147,100 @@ describe("durable extraction and message embedding windows", () => {
     });
     afterEach(async () => {
         await rm(root, { recursive: true, force: true });
+    });
+
+    test("query scoring keeps relevant price operands without type-wide boosts and scopes language search before ranking", async () => {
+        const configured = settings();
+        const extract = (text: string) => ({
+            entities: [
+                {
+                    name: text,
+                    type: [text.includes("initial") ? "reservation" : "trip"],
+                },
+            ],
+            topics: [],
+            actions: [],
+            inverseActions: [],
+        });
+        configured.conversationSettings!.semanticRefIndexSettings.knowledgeExtractor =
+            {
+                settings: { maxContextLength: 1000 },
+                extract: async (text) => extract(text),
+                extractWithRetry: async (text) => ({
+                    success: true,
+                    data: extract(text),
+                }),
+            };
+        const index = new KnowProCorpusIndex("test", root, () => configured);
+        const documents = [
+            document(
+                "text",
+                "Sakura trip corrected price $2,800.",
+                "corrected",
+            ),
+            document("text", "Sakura trip initial quote $2,500.", "initial"),
+            ...Array.from({ length: 16 }, (_, i) =>
+                document("text", `Unrelated gardening ${i}.`, `other-${i}`),
+            ),
+        ];
+        await index.rebuild(
+            documents,
+            new AbortController().signal,
+            async () => {},
+        );
+        const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+        const language = clock
+            .spyOn(DocMemory.prototype, "searchWithLanguage")
+            .mockResolvedValue({ success: true, data: [] });
+        try {
+            const request = {
+                query: "How much more was the Sakura trip corrected price after the initial quote?",
+                terms: indexedQueryTerms(
+                    "Sakura trip corrected price after initial quote",
+                ),
+                sourceIds: documents.map((doc) => doc.source.sourceId),
+            };
+            const ordinary = await index.readFragments(request);
+            const observed = await index.readFragments({
+                ...request,
+                includeDiagnostics: true,
+            });
+            expect(observed.fragments).toEqual(ordinary.fragments);
+            expect(
+                observed.fragments.map((fragment) => fragment.sourceId),
+            ).toEqual(expect.arrayContaining(["corrected", "initial"]));
+            expect(
+                observed.diagnostics?.blocks.every(
+                    (block) =>
+                        block.preferenceBoost === 0 &&
+                        block.languageScore === 0,
+                ),
+            ).toBe(true);
+            expect(
+                observed.diagnostics?.blocks.find(
+                    (block) => block.sourceId === "initial",
+                )?.postingScore,
+            ).toBeGreaterThan(0);
+            const scoped = await index.readFragments({
+                ...request,
+                sourceIds: ["initial"],
+                includeDiagnostics: true,
+            });
+            expect(
+                scoped.fragments.map((fragment) => fragment.sourceId),
+            ).toEqual(["initial"]);
+            const ranges =
+                language.mock.calls.at(-1)?.[1]?.messageRangesInScope ?? [];
+            expect(ranges).toHaveLength(1);
+            const calls = language.mock.calls.length;
+            expect(
+                (await index.readFragments({ ...request, sourceIds: [] }))
+                    .fragments,
+            ).toEqual([]);
+            expect(language.mock.calls).toHaveLength(calls);
+        } finally {
+            language.mockRestore();
+        }
     });
 
     test("indexed fragments preserve source-owned dates across restart and receive the separate question reference", async () => {

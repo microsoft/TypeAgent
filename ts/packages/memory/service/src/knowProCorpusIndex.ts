@@ -139,12 +139,10 @@ function collectPostingScores(
     memory: DocMemory,
     terms: string[],
     requested: Set<string>,
-    typedQuery: boolean,
     eligible: (ordinal: number) => boolean,
     messageCount: number,
-): { scores: Map<number, number>; typedSubjects: Map<string, Set<number>> } {
+): Map<number, number> {
     const matches = new Map<number, Set<string>>();
-    const typedSubjects = new Map<string, Set<number>>();
     for (const term of terms) {
         const matchedWords = indexedWords(term).filter((word) =>
             requested.has(word),
@@ -157,24 +155,12 @@ function collectPostingScores(
                 ? ref.range.end.messageOrdinal -
                   ((ref.range.end.chunkOrdinal ?? 0) === 0 ? 1 : 0)
                 : start;
-            if (typedQuery && ref.knowledgeType === "entity") {
-                const entity = ref.knowledge as EntityKnowledge;
-                if (
-                    entity.type.some((type) =>
-                        requested.has(type.toLocaleLowerCase()),
-                    )
-                ) {
-                    const ordinals =
-                        typedSubjects.get(entity.name) ?? new Set<number>();
-                    ordinals.add(start);
-                    typedSubjects.set(entity.name, ordinals);
-                }
-            }
             for (
                 let ordinal = start;
                 ordinal <= Math.min(end, start + 4);
                 ordinal++
             ) {
+                if (!eligible(ordinal)) continue;
                 const words = matches.get(ordinal) ?? new Set<string>();
                 matchedWords.forEach((word) => words.add(word));
                 matches.set(ordinal, words);
@@ -198,7 +184,7 @@ function collectPostingScores(
                 0,
             ),
         );
-    return { scores, typedSubjects };
+    return scores;
 }
 
 function sourceUri(document: IndexedDocument): string {
@@ -590,6 +576,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             yield {
                 ...source,
                 blockOrdinal,
+                messageOrdinal,
                 text: message.textChunks.join("\n"),
                 score: scores?.get(messageOrdinal) ?? 1,
                 ...(message.metadata.temporalContext
@@ -608,96 +595,135 @@ export class KnowProCorpusIndex implements CorpusIndex {
         );
         const memory = this.memory;
         if (!memory) return { fragments: [], readChars: 0, limited: false };
+        const ranges = this.eligibleRanges(new Set(request.sourceIds));
+        const eligible = new Set(
+            ranges.map((range) => range.start.messageOrdinal),
+        );
+        if (!eligible.size) return selectIndexedFragments([], request);
         const { requested, terms } = matchingIndexTerms(memory, request);
-        const { scores, typedSubjects } = collectPostingScores(
+        const scores = collectPostingScores(
             memory,
             terms,
             requested,
-            request.query !== undefined,
-            (ordinal) => this.eligible(ordinal),
-            this.eligibleRanges().reduce(
-                (count, range) =>
-                    count +
-                    range.end!.messageOrdinal -
-                    range.start.messageOrdinal,
-                0,
-            ),
+            (ordinal) => eligible.has(ordinal),
+            eligible.size,
         );
+        const postingScores = request.includeDiagnostics
+            ? new Map(scores)
+            : undefined;
+        const languageScores = new Map<number, number>();
         const followed = this.sourceFollowingScores(request, scores);
         if (request.query) {
             const options = kp.createLanguageSearchOptionsTypical();
             options.maxMessageMatches = 8;
             options.maxKnowledgeMatches = 12;
-            options.messageRangesInScope = this.eligibleRanges();
+            options.messageRangesInScope = ranges;
             const result = await memory.searchWithLanguage(query, options);
             if (!result.success) throw new Error(result.message);
             for (const match of result.data.flatMap(
                 (item) => item.messageMatches,
-            ))
+            )) {
+                if (!eligible.has(match.messageOrdinal)) continue;
+                const score = Math.max(1, match.score);
+                languageScores.set(
+                    match.messageOrdinal,
+                    (languageScores.get(match.messageOrdinal) ?? 0) + score,
+                );
                 scores.set(
                     match.messageOrdinal,
-                    (scores.get(match.messageOrdinal) ?? 0) +
-                        Math.max(1, match.score),
+                    (scores.get(match.messageOrdinal) ?? 0) + score,
                 );
-        }
-        const preferred = new Set(
-            [...typedSubjects.values()].map(
-                (ordinals) =>
-                    [...ordinals].sort(
-                        (a, b) => (scores.get(b) ?? 0) - (scores.get(a) ?? 0),
-                    )[0],
-            ),
-        );
-        if (request.query) {
-            const graph = await this.getKnowledgeGraph();
-            const matchedSources = new Set(
-                graph.entities
-                    .filter((item) =>
-                        (
-                            item.name
-                                .toLocaleLowerCase()
-                                .match(/[\p{L}\p{N}-]+/gu) ?? []
-                        ).some((word) => requested.has(word)),
-                    )
-                    .flatMap((item) => item.sourceIds),
-            );
-            for (const entity of graph.entities.filter(
-                (item) =>
-                    item.types.some((type) =>
-                        /correction|follow.?up|qualification/i.test(type),
-                    ) &&
-                    item.sourceIds.some((sourceId) =>
-                        matchedSources.has(sourceId),
-                    ),
-            )) {
-                for (
-                    let ordinal = memory.messages.length - 1;
-                    ordinal >= 0;
-                    ordinal--
-                ) {
-                    const source = parseSourceUri(
-                        memory.messages.get(ordinal).metadata.sourceUrl,
-                    );
-                    if (
-                        source &&
-                        this.eligible(ordinal) &&
-                        entity.sourceIds.includes(source.sourceId)
-                    )
-                        preferred.add(ordinal);
-                }
             }
         }
+        const preferred = new Set<number>();
+        if (request.query)
+            for (const ordinal of await this.preferredFollowupMessages(
+                requested,
+                memory,
+                eligible,
+            ))
+                preferred.add(ordinal);
         const highest = Math.max(0, ...scores.values());
         for (const ordinal of preferred)
             scores.set(ordinal, highest + (scores.get(ordinal) ?? 0));
+        const blocks = [...this.indexedBlocks(memory, scores)];
+        if (postingScores)
+            this.fragmentScoreDiagnostics(
+                blocks,
+                postingScores,
+                languageScores,
+                preferred,
+                highest,
+            );
         const selection = selectIndexedFragments(
-            [...this.indexedBlocks(memory, scores)].sort(
-                (a, b) => b.score - a.score,
-            ),
+            blocks.sort((a, b) => b.score - a.score),
             request,
         );
         selection.limited ||= followed.limited;
+        if (selection.diagnostics)
+            selection.diagnostics.limited = selection.limited;
         return selection;
+    }
+
+    private fragmentScoreDiagnostics(
+        blocks: IndexedBlock[],
+        postingScores: Map<number, number>,
+        languageScores: Map<number, number>,
+        preferred: Set<number>,
+        boost: number,
+    ): void {
+        for (const block of blocks) {
+            const ordinal = block.messageOrdinal;
+            if (ordinal === undefined)
+                throw new Error("Indexed diagnostic block is unavailable");
+            block.postingScore = postingScores.get(ordinal) ?? 0;
+            block.languageScore = languageScores.get(ordinal) ?? 0;
+            block.preferenceBoost = preferred.has(ordinal) ? boost : 0;
+        }
+    }
+
+    private async preferredFollowupMessages(
+        requested: Set<string>,
+        memory: DocMemory,
+        eligible: Set<number>,
+    ): Promise<Set<number>> {
+        const preferred = new Set<number>();
+        const graph = await this.getKnowledgeGraph();
+        const matchedSources = new Set(
+            graph.entities
+                .filter((item) =>
+                    (
+                        item.name
+                            .toLocaleLowerCase()
+                            .match(/[\p{L}\p{N}-]+/gu) ?? []
+                    ).some((word) => requested.has(word)),
+                )
+                .flatMap((item) => item.sourceIds),
+        );
+        for (const entity of graph.entities.filter(
+            (item) =>
+                item.types.some((type) =>
+                    /correction|follow.?up|qualification/i.test(type),
+                ) &&
+                item.sourceIds.some((sourceId) => matchedSources.has(sourceId)),
+        )) {
+            for (
+                let ordinal = memory.messages.length - 1;
+                ordinal >= 0;
+                ordinal--
+            ) {
+                const source = parseSourceUri(
+                    memory.messages.get(ordinal).metadata.sourceUrl,
+                );
+                if (
+                    source &&
+                    eligible.has(ordinal) &&
+                    entity.sourceIds.includes(source.sourceId)
+                )
+                    preferred.add(ordinal);
+            }
+        }
+        return preferred;
     }
 
     private sourceFollowingScores(

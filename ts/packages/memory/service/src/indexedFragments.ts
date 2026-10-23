@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import type {
     IndexedFragmentRequest,
     IndexedFragmentSelection,
+    IndexedSelectionDiagnostics,
 } from "./types.js";
 
 export interface IndexedBlock {
@@ -12,8 +13,64 @@ export interface IndexedBlock {
     sourceId: string;
     revisionId: string;
     blockOrdinal: number;
+    messageOrdinal?: number;
     text: string;
     score: number;
+    postingScore?: number;
+    languageScore?: number;
+    preferenceBoost?: number;
+}
+
+const queryStopWords = new Set([
+    "what",
+    "which",
+    "does",
+    "about",
+    "with",
+    "from",
+    "have",
+    "that",
+    "this",
+    "their",
+    "were",
+    "when",
+    "where",
+    "should",
+    "would",
+    "could",
+    "how",
+    "why",
+    "the",
+    "and",
+    "for",
+    "are",
+    "can",
+    "was",
+    "not",
+    "did",
+    "its",
+    "is",
+    "to",
+    "of",
+    "in",
+    "a",
+    "an",
+    "i",
+    "my",
+    "me",
+    "your",
+    "our",
+    "had",
+    "has",
+    "been",
+    "many",
+    "much",
+]);
+
+export function indexedQueryTerms(query: string): string[] {
+    return [
+        ...new Set(query.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ?? []),
+    ].filter((term) => term.length <= 200 && !queryStopWords.has(term));
 }
 
 export function indexedTextHash(text: string): string {
@@ -255,6 +312,45 @@ interface FragmentSelectionState {
     >;
 }
 
+function selectionDiagnostics(
+    candidates: IndexedBlock[],
+    selected: IndexedBlock[],
+    request: IndexedFragmentRequest,
+    state: FragmentSelectionState,
+): IndexedSelectionDiagnostics {
+    return {
+        terms: [...request.terms],
+        eligibleSourceIds: [...request.sourceIds],
+        blocks: candidates.map((block) => ({
+            sourceId: block.sourceId,
+            revisionId: block.revisionId,
+            blockOrdinal: block.blockOrdinal,
+            ...(block.messageOrdinal !== undefined
+                ? { messageOrdinal: block.messageOrdinal }
+                : {}),
+            score: block.score,
+            ...(block.postingScore !== undefined
+                ? { postingScore: block.postingScore }
+                : {}),
+            ...(block.languageScore !== undefined
+                ? { languageScore: block.languageScore }
+                : {}),
+            ...(block.preferenceBoost !== undefined
+                ? { preferenceBoost: block.preferenceBoost }
+                : {}),
+            selected: selected.includes(block),
+            emittedFragments:
+                state.selectedRanges.get(
+                    `${block.sourceId}:${block.revisionId}:${block.blockOrdinal}`,
+                )?.length ?? 0,
+            reason: selected.includes(block) ? "selected" : "block-limit",
+        })),
+        readChars: state.readChars,
+        fragmentCount: state.fragments.length,
+        limited: state.limited,
+    };
+}
+
 function recordFragment(
     block: IndexedBlock,
     start: number,
@@ -383,9 +479,8 @@ export function selectIndexedFragments(
     const window = bound(request.maxCharsPerFragment, 2000, 2000);
     const readLimit = bound(request.maxReadChars, 32000, 32000);
     if (
-        !request.terms.length ||
+        (!request.terms.length && request.query === undefined) ||
         (request.query !== undefined && !request.query.trim()) ||
-        request.terms.length > 8 ||
         request.terms.some((term) => !term.trim() || term.length > 200)
     )
         throw new Error("Invalid bounded indexed-fragment selector");
@@ -409,10 +504,11 @@ export function selectIndexedFragments(
     const candidates = [...blocks].filter((block) =>
         eligible.has(block.sourceId),
     );
-    const selected = diverseBlocks(
-        candidates,
-        Math.max(2, Math.floor(maxFragments / 3)),
-    );
+    const selected = request.query
+        ? [...candidates]
+              .sort((a, b) => b.score - a.score)
+              .slice(0, maxFragments)
+        : diverseBlocks(candidates, Math.max(2, Math.floor(maxFragments / 3)));
     state.limited = candidates.length > selected.length;
     const windows = candidateWindows(selected, terms, request.terms, window);
     // Interleave sources so an earlier long block cannot hide a newly indexed correction.
@@ -453,5 +549,15 @@ export function selectIndexedFragments(
         fragments: state.fragments,
         readChars: state.readChars,
         limited: state.limited,
+        ...(request.includeDiagnostics
+            ? {
+                  diagnostics: selectionDiagnostics(
+                      candidates,
+                      selected,
+                      request,
+                      state,
+                  ),
+              }
+            : {}),
     };
 }

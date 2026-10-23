@@ -317,6 +317,7 @@ export interface JobListRequest {
 }
 
 export interface MemorySearchRequest {
+    includeDiagnostics?: boolean;
     temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
     traceId?: string;
     corpusId: string;
@@ -349,6 +350,7 @@ export interface MemoryEvidence {
 }
 
 export interface MemorySearchResult {
+    indexedSelection?: IndexedSelectionDiagnostics;
     query: string;
     matches: MemoryEvidence[];
     warnings: string[];
@@ -756,6 +758,7 @@ export interface CorpusIndexAnswer {
 export interface AnswerContextDiagnostics {
     answerPath?: "indexed-fragments" | "knowpro";
     indexedAnswer?: {
+        selection?: IndexedSelectionDiagnostics;
         temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
         fragments: MemoryEvidence[];
         response: {
@@ -806,6 +809,7 @@ export interface IndexedFragment extends CorpusIndexMatch {
 }
 
 export interface IndexedFragmentRequest {
+    includeDiagnostics?: boolean;
     temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
     terms: string[];
     query?: string;
@@ -817,8 +821,32 @@ export interface IndexedFragmentRequest {
 }
 
 export interface IndexedFragmentSelection {
+    diagnostics?: IndexedSelectionDiagnostics;
     fragments: IndexedFragment[];
     readChars: number;
+    limited: boolean;
+}
+
+export interface IndexedSelectionDiagnostics {
+    terms: string[];
+    eligibleSourceIds: string[];
+    blocks: Array<{
+        sourceId: string;
+        revisionId: string;
+        blockOrdinal: number;
+        messageOrdinal?: number;
+        score: number;
+        postingScore?: number;
+        languageScore?: number;
+        preferenceBoost?: number;
+        selected: boolean;
+        emittedFragments: number;
+        reason: "selected" | "block-limit";
+    }>;
+    readChars: number;
+    fragmentCount: number;
+    deliveredFragmentCount?: number;
+    responseChars?: number;
     limited: boolean;
 }
 

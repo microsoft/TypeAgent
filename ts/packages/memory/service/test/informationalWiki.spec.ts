@@ -1179,6 +1179,85 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         },
     );
 
+    test.each([false, true])(
+        "default answer nominates early operands across 40 sources, independently of import order reversed=%s (mock models)",
+        async (reversed) => {
+            await service.close();
+            rehearsalBudget = false;
+            const prompts: string[] = [];
+            indexedAnswerModel = {
+                completionSettings: {},
+                complete: async (prompt) => {
+                    prompts.push(JSON.stringify(prompt));
+                    return {
+                        success: true,
+                        data: JSON.stringify({
+                            status: "noAnswer",
+                            answer: "Mock reader does not calculate.",
+                            citationIds: [],
+                        }),
+                    };
+                },
+            };
+            service = open();
+            const { corpusId } = await service.createCorpus("Forty sources");
+            await update(corpusId, "pause");
+            const sources = Array.from({ length: 40 }, (_, i) => ({
+                id: `source-${i}`,
+                text:
+                    i === 1
+                        ? "Sakura trip corrected price $2,800."
+                        : i === 34
+                          ? "Sakura trip initial quote $2,500."
+                          : `Unrelated gardening advice ${i}.`,
+            }));
+            for (const source of reversed ? sources.reverse() : sources)
+                await add(corpusId, source.id, source.text);
+            await service.close();
+            service = open();
+            const question =
+                "How much more did I have to pay for the trip after the initial quote?";
+            const answer = await service.answer({
+                corpusId,
+                question,
+                includeDiagnostics: true,
+            });
+            const supplied =
+                answer.readerContext?.indexedAnswer?.fragments ?? [];
+            expect(supplied.map((fragment) => fragment.sourceId)).toEqual(
+                expect.arrayContaining(["source-1", "source-34"]),
+            );
+            expect(prompts[0]).toContain("$2,800");
+            expect(prompts[0]).toContain("$2,500");
+            expect(
+                answer.readerContext?.indexedAnswer?.selection
+                    ?.eligibleSourceIds,
+            ).toHaveLength(40);
+            const scoped = await service.search({
+                corpusId,
+                query: question,
+                indexedFragments: true,
+                sourceIds: ["source-34"],
+                includeDiagnostics: true,
+            });
+            expect(scoped.matches.map((item) => item.sourceId)).toEqual([
+                "source-34",
+            ]);
+            expect(scoped.indexedSelection?.eligibleSourceIds).toEqual([
+                "source-34",
+            ]);
+            const excluded = await service.search({
+                corpusId,
+                query: question,
+                indexedFragments: true,
+                sourceIds: [],
+                includeDiagnostics: true,
+            });
+            expect(excluded.matches).toEqual([]);
+        },
+        30000,
+    );
+
     test("automatic wiki builds without rehearsal variables and family pause survives reopen", async () => {
         await service.close();
         rehearsalBudget = false;
