@@ -669,3 +669,47 @@ directory with `{"stop":true}`. The runner checks before admitting a question
 and after grading, durably acknowledges the boundary and executes supported
 close. Remove the marker before intentionally resuming. This control does not
 turn a forced kill into a clean shutdown or cancel an already admitted question.
+
+### Contextual relative-time windows
+
+Default indexed answering, KnowPro answering/combination, and service query
+translation share a policy for temporally used words such as "just", "recently"
+and "soon". They imply context-dependent windows, not a fixed number of days or
+an automatically exact event date. Useful qualified estimates and supported
+bounds are permitted, with assumptions and owning-source citations. Explicit
+dates take precedence; vague future plans do not prove completion. Domain scale,
+midnight, event duration, non-temporal word senses, and source/event ownership
+still matter. Inferences are not promoted into canonical imported event dates
+or unsupported hard retrieval cutoffs.
+
+### Lightweight progress snapshot
+
+Each live run writes `progress.json` alongside `benchmark-state.json`. Both files
+use the existing atomic file replacement helper, with the full ledger written
+first; this is not a transaction across both files. A persistence failure is
+explicit, not a silently stale success. The snapshot updates at durable state
+transitions, including history admission/completion, answering, judging and close.
+It is not a periodic heartbeat or proof that a process is still alive; inspect
+`updatedAt`, job progress and termination receipts when diagnosing a stall.
+
+- `currentQuestion.number`, `.total`, `.id`, `.status`: question X of this
+  invocation's target, not X of the frozen 500-question inventory.
+- `currentQuestion.historiesCompleted`, `.historiesTotal`, `.sourceKey`: current
+  history-level progress. Detailed extraction progress remains in the owned job.
+- `gradedQuestions`, `passedQuestions`, `failedQuestions`, `passPercentage`:
+  pass percentage among graded answers only; null before the first grade.
+- `completionPercentage`: graded questions divided by the invocation target.
+- `executionFailures`: execution errors, separate from incorrect graded answers.
+- `targetQuestionIds`, `targetGraded`, `outcome`, `supportedClose`: frozen
+  invocation scope and lifecycle. A normal 50-of-500 run ends with
+  `PARTIAL_QUESTION_LIMIT`, `targetGraded: true` and supported close complete,
+  not a claim to have executed all 500.
+
+Resumed invocation percentages exclude previously completed cases, while the
+full ledger/scorecard preserve cumulative results. No question text, answers,
+source text, provider request payloads or credentials enter the lightweight file.
+
+For an authorized 50-question iteration, omit `--question-ids` and use
+`--max-questions 50 --work-minutes unlimited` on a fresh owned output root. This
+uses the first 50 questions in the pinned answer-independent construction order.
+It may overlap earlier development questions; it is not a new holdout.

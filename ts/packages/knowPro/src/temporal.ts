@@ -11,6 +11,14 @@ import type {
     TemporalValue,
 } from "./temporalSchema.js";
 
+export const relativeTimeInstructions = [
+    "Interpret temporally used 'just', 'recently', 'soon' and similar expressions as context-dependent time windows, not exact dates or universal fixed offsets. Infer direction, scale and anchor from the event, tense and surrounding evidence. Non-temporal uses such as 'just one' are not date evidence. An expression relative to another event uses that event's anchor, not automatically the message date.",
+    "Anchor source-relative windows to the owning source message, and query-relative windows to the question reference time. Do not substitute import, index or current system time, cross source/quotation ownership, or assume a timezone for a floating date. Explicit dates, explicit relative days and contradictory evidence take precedence over vague recency.",
+    "Give a useful qualified answer, approximate interval or supported bound when the evidence permits it; do not require a literally stated event date merely to avoid all inference. State the assumptions and cite the evidence for each operand. A brief completed activity described as immediate can support an approximate day-level comparison using its message calendar, provided there is no contrary evidence; identify this as an inference, not an explicit same-day fact. Wider or unclear windows require wider bounds or an explanation of the missing precision, not an invented exact day. Match precision to the evidence: duration plus a message timestamp can bound an event, but does not fix its endpoints to the message time or justify an unsupported minute-level estimate.",
+    "Respect midnight boundaries, activity duration and multi-day travel: a recent return does not date every activity during a trip. 'Recently' can have different scales for a meal, a job change or a historical event; do not impose a fixed number of days. 'Soon' indicates an expected or intended future window, not proof that the event occurred. Preserve uncertainty when windows overlap rather than inventing an exact ordering, count or duration.",
+    "Do not turn an inferred vague window into a hard retrieval date cutoff without supported bounds or an explicit user policy. Retrieve broadly enough to evaluate the temporal wording in context. Preserve source wording and canonical dates; do not promote a reader inference into an authoritative stored event date.",
+].join(" ");
+
 export class TemporalValueError extends Error {
     constructor(message: string) {
         super(message);

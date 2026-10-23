@@ -17,6 +17,7 @@ import type { AnswerContext } from "../src/answerContextSchema.js";
 import type { AnswerResponse } from "../src/answerResponseSchema.js";
 import { TestConversation } from "./testCommon.js";
 import { TestMessage } from "./testMessage.js";
+import { relativeTimeInstructions } from "../src/temporal.js";
 
 const model: ChatModel = {
     completionSettings: {},
@@ -54,6 +55,52 @@ function generator(
 }
 
 describe("lossless answer context and complete traversal", () => {
+    test("direct and combined readers share contextual-window reasoning without demanding explicit exact dates", async () => {
+        const prompts: string[] = [];
+        const windowModel: ChatModel = {
+            ...model,
+            complete: async (prompt) => {
+                prompts.push(JSON.stringify(prompt));
+                return success(
+                    JSON.stringify({
+                        type: "Answered",
+                        answer: "An approximate window, with its source anchor and assumption.",
+                    }),
+                );
+            },
+        };
+        const reader = new AnswerGenerator({
+            ...generator().settings,
+            answerGeneratorModel: windowModel,
+            answerCombinerModel: windowModel,
+            maxCharsInBudget: 1000,
+        });
+        expect(
+            (await reader.generateAnswer("When?", "A recent event.")).success,
+        ).toBe(true);
+        expect(
+            (
+                await reader.combinePartialAnswers("When?", [
+                    {
+                        type: "NoAnswer",
+                        whyNoAnswer: "Only the source anchor is explicit.",
+                    },
+                    {
+                        type: "Answered",
+                        answer: "The activity is described as immediate.",
+                    },
+                ])
+            ).success,
+        ).toBe(true);
+        expect(prompts).toHaveLength(2);
+        for (const prompt of prompts) {
+            expect(prompt).toContain(relativeTimeInstructions);
+            expect(prompt).not.toContain(
+                "using ONLY information EXPLICITLY provided",
+            );
+        }
+    });
+
     test.each([false, true])(
         "overflow preserves every ordered message; fastStop=%s",
         async (fastStop) => {

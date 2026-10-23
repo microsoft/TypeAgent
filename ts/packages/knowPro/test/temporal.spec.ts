@@ -62,6 +62,26 @@ const empty = { entities: [], actions: [], inverseActions: [], topics: [] };
 
 describe("canonical source temporal context", () => {
     test.each([
+        "I just finished a short class.",
+        "I recently changed jobs.",
+        "We will visit soon.",
+        "I bought just one ticket.",
+    ])(
+        "vague windows are not promoted to canonical exact event dates: %s",
+        (text) => {
+            const source = context("2024-04-10T00:30:00+14:00");
+            expect(temporalMentions(text, source)).toEqual([]);
+            expect(
+                resolveRelativeDate(text, source.messageTime),
+            ).toBeUndefined();
+            expect(
+                temporalMentions(`${text} Today is busy.`, source)[0].value
+                    ?.localDateTime,
+            ).toBe("2024-04-10");
+        },
+    );
+
+    test.each([
         ["2023/05/27 (Sat) 22:00", "floating", "2023-05-27T22:00"],
         ["2023-05-27", "calendar", "2023-05-27"],
         ["2023-05", "calendar", "2023-05"],

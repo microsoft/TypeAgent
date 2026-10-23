@@ -16,7 +16,20 @@ import {
 } from "@typeagent/aiclient";
 import type { ChatModel } from "@typeagent/aiclient";
 import type { MemoryEvidence } from "../src/types.js";
-import { parseTemporalValue } from "@typeagent/knowpro";
+import {
+    parseTemporalValue,
+    relativeTimeInstructions,
+} from "@typeagent/knowpro";
+import { temporalQuestion } from "../src/temporalContext.js";
+
+test("query translation receives window policy even without a question reference", () => {
+    const prompt = temporalQuestion("What did I do recently?");
+    expect(prompt).toContain(relativeTimeInstructions);
+    expect(prompt).toContain(
+        "referenceTime not supplied; do not invent a reference date",
+    );
+    expect(prompt).toContain("not exact dates or universal fixed offsets");
+});
 
 test("wiki budgets reserve selected model capacity and reject incompatible strict overrides", () => {
     const previous = getRuntimeConfig();
@@ -356,7 +369,7 @@ test("indexed answers separate source calendars from question time and diagnosti
         "Require the name or a supported alias/identity link",
     );
     expect(prompt[0].content).toContain("otherwise return noAnswer");
-    expect(prompt[0].content).toContain("not an explicit same-day date");
+    expect(prompt[0].content).toContain(relativeTimeInstructions);
     expect(observed.readerContext?.serializedContextChars).toBe(
         user.content.length,
     );

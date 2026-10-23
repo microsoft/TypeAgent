@@ -42,6 +42,7 @@ import {
 } from "./answerContext.js";
 import { flattenResultsArray, Scored } from "./common.js";
 import { createMultipleChoiceQuestion } from "./searchLib.js";
+import { relativeTimeInstructions } from "./temporal.js";
 
 export type AnswerTranslator =
     TypeChatJsonTranslator<answerSchema.AnswerResponse>;
@@ -484,7 +485,7 @@ export class AnswerGenerator implements IAnswerGenerator {
                     continue;
                 }
                 const rewritten = await this.answerCombinerTranslator.translate(
-                    `${question}\nReconcile these public partial responses, including useful supportingFacts and facts in NoAnswer explanations. Preserve source ordinals, dates, attribution, corrections, bounds, conflicts and distinct identities. A local NoAnswer does not invalidate its facts. Do not add local counts blindly. Return NoAnswer if the combined evidence is still insufficient, retaining useful supportingFacts for subsequent combinations. Do not invent missing operands or silently prefer the latest assertion. Repeated source facts count once.\n${group.join("\n\n")}`,
+                    `${question}\nReconcile these public partial responses, including useful supportingFacts and facts in NoAnswer explanations. Preserve source ordinals, dates, attribution, corrections, bounds, conflicts and distinct identities. A local NoAnswer does not invalidate its facts. Do not add local counts blindly. Return NoAnswer if the combined evidence is still insufficient, retaining useful supportingFacts for subsequent combinations. Do not invent missing operands or silently prefer the latest assertion. Repeated source facts count once. ${relativeTimeInstructions}\n${group.join("\n\n")}`,
                     this.settings.modelInstructions,
                 );
                 if (!rewritten.success) return rewritten;
@@ -785,10 +786,11 @@ function createQuestionPrompt(question: string): string {
         "",
         "===",
         "- The included [ANSWER CONTEXT] contains information that MAY be relevant to answering the question.",
-        "- Answer the user question PRECISELY using ONLY information EXPLICITLY provided in the topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT]",
-        "- Supported date and numeric operands may be combined using deterministic arithmetic, calendar-day differences, and counts of distinct supported identities. The computed result need not be quoted verbatim. Do not invent missing operands, treat bounds as exact prices, or round an interval without being asked.",
+        "- Answer using only the topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT], distinguishing explicit facts from supported temporal inferences.",
+        `- ${relativeTimeInstructions}`,
+        "- Supported date and numeric operands may be combined using deterministic arithmetic, calendar-day differences, and counts of distinct supported identities. The computed result need not be quoted verbatim. Do not invent missing operands, treat bounds as exact prices or dates, or round an exact interval without being asked.",
         "- Temporal metadata and inherited date evidence annotate their owning source, not additional occurrences. Deduplicate repeated source facts and annotations across chunks and searches.",
-        "- Return 'NoAnswer' if the answer cannot be established from the provided evidence and deterministic arithmetic. Retain supported facts and operands as supportingFacts even when the context is incomplete.",
+        "- Return 'NoAnswer' if neither an exact answer nor a useful qualified answer can be supported. Retain supported facts, windows, assumptions and operands as supportingFacts even when the context is incomplete.",
         "- Use the 'name', 'type' and 'facets' properties of the provided JSON entities to identify those highly relevant to answering the question.",
         "- 'origin' and 'audience' fields contain the names of entities involved in communication about the knowledge",
         "**Important:** Communicating DOES NOT imply associations such as authorship, ownership etc. E.g. origin: [X] telling audience [Y, Z] communicating about a book does not imply authorship.",

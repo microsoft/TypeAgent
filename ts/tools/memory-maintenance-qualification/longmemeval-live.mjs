@@ -240,6 +240,73 @@ function completedOutcome(constructionCases, state, selection) {
         : "DIAGNOSTIC_SELECTION_COMPLETED";
 }
 
+export function benchmarkProgress(constructionCases, state, attempt) {
+    const questionIds = attempt.questionIds;
+    const records = questionIds.map((id) => state.cases[id]);
+    const graded = records.filter((record) => record?.status === "complete");
+    for (const record of graded)
+        assert.equal(
+            typeof record.autoeval_label?.label,
+            "boolean",
+            "Completed progress record lacks a grade",
+        );
+    const passed = graded.filter(
+        (record) => record.autoeval_label.label,
+    ).length;
+    const index = questionIds.indexOf(state.currentQuestionId);
+    const construction = constructionCases.find(
+        (entry) => entry.id === state.currentQuestionId,
+    );
+    const current = state.cases[state.currentQuestionId];
+    return {
+        schemaVersion: 1,
+        runId: state.runId,
+        updatedAt: new Date().toISOString(),
+        updatePolicy: "Durable state transitions, not a periodic heartbeat",
+        outcome: state.outcome,
+        scheduledQuestions: constructionCases.length,
+        targetQuestions: questionIds.length,
+        targetQuestionIds: questionIds,
+        currentQuestion:
+            index < 0
+                ? null
+                : {
+                      id: state.currentQuestionId,
+                      number: index + 1,
+                      total: questionIds.length,
+                      status: current?.status ?? "not-started",
+                      historiesCompleted: current?.operations?.length ?? 0,
+                      historiesTotal: construction.sessions.length,
+                      sourceKey: current?.inFlight?.sourceKey ?? null,
+                  },
+        gradedQuestions: graded.length,
+        passedQuestions: passed,
+        failedQuestions: graded.length - passed,
+        passPercentage: graded.length ? (100 * passed) / graded.length : null,
+        completionPercentage: questionIds.length
+            ? (100 * graded.length) / questionIds.length
+            : null,
+        executionFailures: records.filter(
+            (record) => record?.status === "failed",
+        ).length,
+        targetGraded: graded.length === questionIds.length,
+        supportedClose: attempt.supportedClose ?? null,
+    };
+}
+
+export async function persistBenchmarkProgress(
+    runDirectory,
+    constructionCases,
+    state,
+    attempt,
+) {
+    await writeJson(path.join(runDirectory, "benchmark-state.json"), state);
+    await writeJson(
+        path.join(runDirectory, "progress.json"),
+        benchmarkProgress(constructionCases, state, attempt),
+    );
+}
+
 async function runWorker(spec) {
     const prepared = await loadPrepared(spec);
     const selection = spec.questionIds;
@@ -296,7 +363,6 @@ async function runWorker(spec) {
         engineHash,
         "Benchmark implementation changed",
     );
-    const persist = () => writeJson(statePath, state);
     const attempt = {
         startedEpochMs: spec.spawnedEpochMs,
         workerPid: process.pid,
@@ -309,7 +375,18 @@ async function runWorker(spec) {
                 ? null
                 : spec.spawnedEpochMs + spec.workAllowanceMs,
         maximumCompletedQuestions: spec.maximumCompletedQuestions,
+        questionIds: constructionCases
+            .filter((entry) => state.cases[entry.id]?.status !== "complete")
+            .slice(0, spec.maximumCompletedQuestions)
+            .map((entry) => entry.id),
     };
+    const persist = () =>
+        persistBenchmarkProgress(
+            spec.runDirectory,
+            constructionCases,
+            state,
+            attempt,
+        );
     state.attempts.push(attempt);
     state.outcome = "IN_PROGRESS";
     await persist();

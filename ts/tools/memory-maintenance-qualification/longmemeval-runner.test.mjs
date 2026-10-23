@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -16,6 +16,8 @@ import {
 } from "./longmemeval-runner.mjs";
 import {
     benchmarkConfiguration,
+    benchmarkProgress,
+    persistBenchmarkProgress,
     observedJudgeModel,
     benchmarkFailure,
     benchmarkInvocationAllowance,
@@ -24,6 +26,121 @@ import {
     selectConstructionCases,
     main,
 } from "./longmemeval-live.mjs";
+
+test("progress reports question X of the invocation target and pass percentage of graded answers only", () => {
+    const construction = Array.from({ length: 60 }, (_, i) => ({
+        id: `q${i}`,
+        sessions: [{}, {}, {}],
+    }));
+    const attempt = {
+        questionIds: construction.slice(0, 50).map((entry) => entry.id),
+    };
+    const state = { runId: "run", outcome: "IN_PROGRESS", cases: {} };
+    const empty = benchmarkProgress(construction, state, attempt);
+    assert.equal(empty.targetQuestions, 50);
+    assert.equal(empty.scheduledQuestions, 60);
+    assert.equal(empty.passPercentage, null);
+    assert.equal(empty.currentQuestion, null);
+    for (let i = 0; i < 10; i++)
+        state.cases[`q${i}`] = {
+            status: "complete",
+            autoeval_label: { label: i < 7 },
+        };
+    state.currentQuestionId = "q10";
+    state.cases.q10 = {
+        status: "ingesting",
+        operations: [{}, {}],
+        inFlight: { sourceKey: "2:source" },
+    };
+    const progress = benchmarkProgress(construction, state, attempt);
+    assert.equal(progress.gradedQuestions, 10);
+    assert.equal(progress.passedQuestions, 7);
+    assert.equal(progress.failedQuestions, 3);
+    assert.equal(progress.passPercentage, 70);
+    assert.equal(progress.completionPercentage, 20);
+    assert.deepEqual(progress.currentQuestion, {
+        id: "q10",
+        number: 11,
+        total: 50,
+        status: "ingesting",
+        historiesCompleted: 2,
+        historiesTotal: 3,
+        sourceKey: "2:source",
+    });
+    assert.equal(progress.targetGraded, false);
+    assert.ok(Number.isFinite(Date.parse(progress.updatedAt)));
+});
+
+test("progress isolates resumed or selected invocation grades and distinguishes execution failures from wrong answers", () => {
+    const construction = ["old", "a", "b"].map((id) => ({ id, sessions: [] }));
+    const state = {
+        runId: "resumed",
+        currentQuestionId: "b",
+        outcome: "FAILED_REAL_BENCHMARK",
+        cases: {
+            old: { status: "complete", autoeval_label: { label: true } },
+            a: { status: "complete", autoeval_label: { label: false } },
+            b: { status: "failed" },
+        },
+    };
+    const attempt = { questionIds: ["a", "b"], supportedClose: "COMPLETE" };
+    const progress = benchmarkProgress(construction, state, attempt);
+    assert.equal(progress.currentQuestion.number, 2);
+    assert.equal(progress.targetQuestions, 2);
+    assert.equal(progress.gradedQuestions, 1);
+    assert.equal(progress.failedQuestions, 1);
+    assert.equal(progress.executionFailures, 1);
+    assert.equal(progress.passPercentage, 0);
+    assert.equal(progress.supportedClose, "COMPLETE");
+    state.cases.b = { status: "complete", autoeval_label: { label: true } };
+    state.outcome = "PARTIAL_QUESTION_LIMIT";
+    const completed = benchmarkProgress(construction, state, attempt);
+    assert.equal(completed.targetGraded, true);
+    assert.equal(completed.passPercentage, 50);
+    delete state.cases.b.autoeval_label;
+    assert.throws(
+        () => benchmarkProgress(construction, state, attempt),
+        /Completed progress record lacks a grade/,
+    );
+});
+
+test("persistence writes the ledger then lightweight progress using atomic file replacements", async () => {
+    const directory = await mkdtemp(
+        path.join(os.tmpdir(), "longmemeval-progress-"),
+    );
+    try {
+        const construction = [{ id: "a", sessions: [] }];
+        const state = { runId: "run", outcome: "IN_PROGRESS", cases: {} };
+        const attempt = { questionIds: ["a"] };
+        await persistBenchmarkProgress(directory, construction, state, attempt);
+        assert.deepEqual(
+            JSON.parse(
+                await readFile(
+                    path.join(directory, "benchmark-state.json"),
+                    "utf8",
+                ),
+            ),
+            state,
+        );
+        const progress = JSON.parse(
+            await readFile(path.join(directory, "progress.json"), "utf8"),
+        );
+        assert.equal(progress.targetQuestions, 1);
+        assert.equal(progress.passPercentage, null);
+        assert.equal("providerRequests" in progress, false);
+        await assert.rejects(
+            persistBenchmarkProgress(
+                path.join(directory, "missing"),
+                construction,
+                state,
+                attempt,
+            ),
+            { code: "ENOENT" },
+        );
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+});
 
 test("diagnostic selection is exact, validated and retains the frozen construction order", () => {
     const cases = ["a", "b", "c"].map((id) => ({ id }));
