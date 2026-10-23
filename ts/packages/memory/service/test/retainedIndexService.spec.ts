@@ -194,13 +194,19 @@ describe("retained-source rebuild with real KnowPro and deterministic embeddings
         ).toBe(true);
         for (const file of await readdir(
             path.join(root, corpusId, "index", ".segments"),
-        ))
-            expect(
-                await readFile(
+        )) {
+            let contents: string;
+            try {
+                contents = await readFile(
                     path.join(root, corpusId, "index", ".segments", file),
                     "utf8",
-                ),
-            ).not.toContain("FORGOTTEN_NEEDLE");
+                );
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+                throw error;
+            }
+            expect(contents).not.toContain("FORGOTTEN_NEEDLE");
+        }
     }
 
     test("forget and restart reuse complete facts/vectors with both providers forbidden", async () => {
