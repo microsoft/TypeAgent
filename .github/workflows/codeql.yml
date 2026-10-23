@@ -16,6 +16,9 @@
 #   (codeql-fork-upload.yml) triggered by `workflow_run` then uploads that SARIF.
 #   The companion job never checks out or runs fork code, which avoids the
 #   "pwn request" vulnerability class you would get from `pull_request_target`.
+#   It verifies the producer revision and complete artifact set before uploading
+#   one validated report per language. Fork changes to this analysis workflow
+#   require maintainer review on the base branch before updating the fork PR.
 #
 # NOTE: This workflow REPLACES CodeQL "default setup". Disable default setup under
 #   Settings > Advanced Security > Code scanning first, otherwise the analyze step
