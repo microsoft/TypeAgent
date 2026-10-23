@@ -92,8 +92,8 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"
 }
 
-node_major() {
-  node -e 'process.stdout.write(String(process.versions.node.split(".")[0]))'
+node_is_supported() {
+  node -e "const [major, minor, patch] = process.versions.node.split('.').map(Number); const minimum = {22: [23, 4], 24: [22, 1], 26: [12, 1]}[major]; process.exit(/^\d+\.\d+\.\d+$/.test(process.versions.node) && minimum && (minor > minimum[0] || (minor === minimum[0] && patch >= minimum[1])) ? 0 : 1);"
 }
 
 resolve_latest_upack_version() {
@@ -215,8 +215,8 @@ PLUGIN_MARKETPLACE_DIR="${PLUGIN_MARKETPLACE_DIR:-$HOME/.copilot/marketplaces/ty
 PLUGIN_REGISTER_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/typeagent/register-plugin.log"
 
 require_cmd node
-if [[ "$(node_major)" -lt 22 ]]; then
-  fail "Node.js >= 22 required; found $(node --version)"
+if ! node_is_supported; then
+  fail "Node.js 22.23.4+, 24.22.1+, or 26.12.1+ required; found $(node --version)"
 fi
 
 require_cmd az

@@ -14,8 +14,9 @@ This is a list of step-by-step instructions to set up a MacOS environment from _
     - `\. "$HOME/.nvm/nvm.sh"`
   - Install Node
     - `nvm install --lts`
-- Enable corepack
-  - `corepack enable`
+    - `nvm use --lts`
+- Install pnpm
+  - `npm install --global pnpm`
 - Clone and build:
   - Open command prompt
   - `git clone https://github.com/microsoft/TypeAgent ~/src/TypeAgent` (Note: you can clone this to any location and does not have to be ~/src)

@@ -29,7 +29,7 @@ function Write-LaunchLog([string]$Message) {
 try {
     $nodeExe = Resolve-NodeExe
     if (-not $nodeExe) {
-        Write-LaunchLog "Node.js >= 22 was not found; Copilot setup was not launched."
+        Write-LaunchLog "Node.js 22.23.4+, 24.22.1+, or 26.12.1+ was not found; Copilot setup was not launched."
         exit 0
     }
     if (-not (Test-Path $ServePath)) {

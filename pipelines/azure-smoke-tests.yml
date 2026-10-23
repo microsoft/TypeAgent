@@ -95,7 +95,7 @@ variables:
   - name: buildDirectory
     value: $(Build.SourcesDirectory)/ts
   - name: nodeVersion
-    value: "22"
+    value: "24.22.1"
   # Mirrors the GitHub workflow's env.NODE_OPTIONS. Non-secret pipeline variables
   # are surfaced to every script step as environment variables. Azure auth no
   # longer needs secret variables — the "Azure login + Get Keys" step signs in

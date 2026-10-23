@@ -929,7 +929,7 @@ function buildPackageJson(
             // The agent is built in isolation (pnpm install --ignore-workspace),
             // so @types/node is not hoisted from the workspace. tsconfig.base.json
             // sets `types: ["node"]`, so tsc needs it declared locally.
-            "@types/node": "^22.0.0",
+            "@types/node": "^22.20.5",
             concurrently: "^9.1.2",
             rimraf: "^6.0.1",
             typescript: "~5.4.5",
