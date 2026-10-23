@@ -16,8 +16,12 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
     testDir: "./test",
-    /* Exclude Jest unit tests from Playwright test discovery */
-    testIgnore: /\/partialCompletion\//,
+    /* Exclude Jest and node:test unit tests from Playwright test discovery */
+    testIgnore: [
+        /\/partialCompletion\//,
+        /\/renderer\/localWhisperClient\.spec\.ts$/,
+        /\/inlinePageCapture\.test\.mjs$/,
+    ],
     /* Run tests sequentially otherwise the client will complain about locked session file */
     fullyParallel: false,
     /* Fail the build on CI if you accidentally left test.only in the source code. */
