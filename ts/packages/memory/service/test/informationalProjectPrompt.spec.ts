@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { ViewBuildSnapshot } from "../src/viewTypes.js";
+import { indexedLocator } from "../src/indexedFragments.js";
 
 // Jest 29 exposes this ESM API, but @types/jest does not declare it.
 const runtimeJest = import.meta.jest;
@@ -13,6 +14,7 @@ const jest = runtimeJest as typeof runtimeJest & {
 };
 const actual = await import("@typeagent/aiclient");
 let instructions = "";
+let request: unknown;
 jest.unstable_mockModule("@typeagent/aiclient", () => ({
     ...actual,
     openai: {
@@ -25,6 +27,10 @@ jest.unstable_mockModule("@typeagent/aiclient", () => ({
                 instructions = messages.find(
                     (message) => message.role === "system",
                 )!.content;
+                request = JSON.parse(
+                    messages.find((message) => message.role === "user")!
+                        .content,
+                );
                 return {
                     success: false,
                     message: "Controlled provider failure",
@@ -38,13 +44,35 @@ const { createConfiguredViewSynthesisAdapter } = await import(
 );
 
 test("project prompt preserves qualified dimensions and initiative roles; provider failure has no fallback", async () => {
+    const blocks = [
+        {
+            sourceId: "charter",
+            revisionId: "charter-current",
+            blockOrdinal: 0,
+            score: 1,
+            text: "Atlas rollout is active; its incident is closed. Capacity validation is blocked pending peak-memory evidence. Accountable role: service owner; assigned person unknown. Acceptance review proposed; due date unknown.",
+        },
+        {
+            sourceId: "mixed-review",
+            revisionId: "review-current",
+            blockOrdinal: 0,
+            score: 1,
+            text: "Mira reviews Atlas capacity, not service accountability. Atlas rehearsal acceptance is complete, not rollout. Boreal rollout is blocked on a separate dependency; its owner is Leo.",
+        },
+    ];
     const input: ViewBuildSnapshot = {
         corpusId: "corpus",
         actor: "test",
         definition: {
             viewId: "project",
             kind: "projectBrief",
-            selector: { kind: "sources", sources: [] },
+            selector: {
+                kind: "sources",
+                sources: blocks.map(({ sourceId, revisionId }) => ({
+                    sourceId,
+                    revisionId,
+                })),
+            },
             projectSummary: {
                 construction: "informational-project-summary-v1",
                 query: "Atlas rollout",
@@ -54,7 +82,21 @@ test("project prompt preserves qualified dimensions and initiative roles; provid
         },
         expectedVersion: 0,
         bounds: {},
-        inputs: [],
+        inputs: blocks.map((block) => ({
+            sourceId: block.sourceId,
+            revisionId: block.revisionId,
+            title: block.sourceId,
+            content: block.text,
+            contentHash: "synthetic-current-input",
+            passages: [
+                {
+                    sourceId: block.sourceId,
+                    revisionId: block.revisionId,
+                    locator: indexedLocator(block, 0, block.text.length),
+                    excerpt: block.text,
+                },
+            ],
+        })),
         pipeline: "informational-project-summary-v1",
         model: "test",
         fingerprint: "test",
@@ -65,6 +107,16 @@ test("project prompt preserves qualified dimensions and initiative roles; provid
             new AbortController().signal,
         ),
     ).rejects.toThrow("Controlled provider failure");
+    expect(request).toEqual({
+        query: "Atlas rollout",
+        aliases: [],
+        fragments: blocks.map((block, position) => ({
+            id: `f${position}`,
+            sourceId: block.sourceId,
+            revisionId: block.revisionId,
+            text: block.text,
+        })),
+    });
     expect(instructions).toContain("blocked/unvalidated");
     expect(instructions).toContain("pendingOwnerReview");
     expect(instructions).toContain(

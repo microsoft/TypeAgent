@@ -13,6 +13,7 @@ import {
     indexedLocator,
     parseIndexedLocator,
     selectIndexedFragments,
+    type IndexedBlock,
 } from "../src/indexedFragments.js";
 import { validateViewDraft } from "../src/viewValidation.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
@@ -31,6 +32,7 @@ import { wikiIndex } from "../src/viewContent.js";
 import { reserveSerializedRequest, type ChatModel } from "@typeagent/aiclient";
 import { TypedViewStore } from "../src/viewStore.js";
 import { ViewBuildStaleError } from "../src/viewBuilds.js";
+import { parseTemporalValue } from "@typeagent/knowpro";
 
 test("wiki and project summaries preserve semantic warnings and source dates across host clocks", () => {
     const input: ViewBuildSnapshot = {
@@ -125,6 +127,8 @@ async function waitForViewBuild(
 }
 
 class MockIndexedCorpus extends FakeSemanticCorpusIndex {
+    public static messageTime: string | undefined;
+    public static fragmentRequests: IndexedFragmentRequest[] = [];
     public static subjects = ["acquisition"];
     public static initiatives: string[] = [];
     public static subjectDetails: Record<string, Partial<IndexedSubject>> = {};
@@ -158,6 +162,7 @@ class MockIndexedCorpus extends FakeSemanticCorpusIndex {
         };
     }
     public async readFragments(request: IndexedFragmentRequest) {
+        MockIndexedCorpus.fragmentRequests.push(structuredClone(request));
         const terms = request.terms
             .flatMap(
                 (term) =>
@@ -171,13 +176,34 @@ class MockIndexedCorpus extends FakeSemanticCorpusIndex {
                         document.content.toLocaleLowerCase().includes(term),
                     ),
                 )
-                .map((document) => ({
-                    sourceId: document.source.sourceId,
-                    revisionId: document.revision.revisionId,
-                    blockOrdinal: 0,
-                    text: document.content,
-                    score: 1,
-                })),
+                .map(
+                    (document): IndexedBlock => ({
+                        sourceId: document.source.sourceId,
+                        revisionId: document.revision.revisionId,
+                        blockOrdinal: 0,
+                        text: document.content,
+                        score: 1,
+                        ...(MockIndexedCorpus.messageTime
+                            ? {
+                                  temporalContext: {
+                                      version: 1,
+                                      sourceRevisionId:
+                                          document.revision.revisionId,
+                                      contextHash: "mock-source-owned-context",
+                                      ownerId: "source-message",
+                                      sourceSpan: {
+                                          start: 0,
+                                          end: document.content.length,
+                                      },
+                                      messageTime: parseTemporalValue(
+                                          MockIndexedCorpus.messageTime,
+                                      ),
+                                      inheritedDateEvidence: [],
+                                  },
+                              }
+                            : {}),
+                    }),
+                ),
             request,
         );
     }
@@ -301,6 +327,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 : {}),
         });
     beforeEach(async () => {
+        MockIndexedCorpus.messageTime = undefined;
+        MockIndexedCorpus.fragmentRequests = [];
         MockIndexedCorpus.subjects = ["acquisition"];
         MockIndexedCorpus.initiatives = [];
         MockIndexedCorpus.subjectDetails = {};
@@ -1074,9 +1102,11 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             await service.close();
             rehearsalBudget = budgetEnabled;
             let prompt = "";
+            let answerCalls = 0;
             indexedAnswerModel = {
                 completionSettings: {},
                 complete: async (input) => {
+                    answerCalls++;
                     prompt = JSON.stringify(input);
                     return {
                         success: true,
@@ -1091,6 +1121,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             service = open();
             const corpusId = (await service.createCorpus("Source answer mocks"))
                 .corpusId;
+            MockIndexedCorpus.messageTime = "2024/01/07 12:00";
             await update(corpusId, "pause");
             await add(
                 corpusId,
@@ -1100,10 +1131,39 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             const result = await service.answer({
                 corpusId,
                 question: "Acquisition",
-                answerMode: "synthesized",
+                temporalContext: {
+                    referenceTime: "2024/02/01 12:00",
+                    availabilityPolicy: "supplied-history",
+                },
+                includeDiagnostics: true,
             });
 
             expect(prompt).toContain("governing qualification");
+            expect(prompt).toContain("2024/02/01 12:00");
+            expect(prompt).toContain("2024/01/07 12:00");
+            expect(result.citations[0].temporalContext?.messageTime).toEqual(
+                parseTemporalValue("2024/01/07 12:00"),
+            );
+            expect(
+                MockIndexedCorpus.fragmentRequests.find(
+                    (request) => request.query === "Acquisition",
+                )?.temporalContext,
+            ).toEqual({
+                referenceTime: parseTemporalValue("2024/02/01 12:00"),
+                availabilityPolicy: "supplied-history",
+            });
+            expect(result.readerContext?.answerPath).toBe("indexed-fragments");
+            expect(
+                result.readerContext?.indexedAnswer?.fragments[0].snippet,
+            ).toContain("governing qualification");
+            await expect(
+                service.answer({
+                    corpusId,
+                    question: "Acquisition",
+                    temporalContext: { availabilityPolicy: "as-of" },
+                }),
+            ).rejects.toThrow("Strict as-of");
+            expect(answerCalls).toBe(1);
             expect(result.mode).toBe("synthesized");
             expect(result.citations[0].locator).toMatch(/^indexed:/);
             expect(
@@ -1117,6 +1177,85 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 ).content,
             ).toBe(result.citations[0].snippet);
         },
+    );
+
+    test.each([false, true])(
+        "default answer nominates early operands across 40 sources, independently of import order reversed=%s (mock models)",
+        async (reversed) => {
+            await service.close();
+            rehearsalBudget = false;
+            const prompts: string[] = [];
+            indexedAnswerModel = {
+                completionSettings: {},
+                complete: async (prompt) => {
+                    prompts.push(JSON.stringify(prompt));
+                    return {
+                        success: true,
+                        data: JSON.stringify({
+                            status: "noAnswer",
+                            answer: "Mock reader does not calculate.",
+                            citationIds: [],
+                        }),
+                    };
+                },
+            };
+            service = open();
+            const { corpusId } = await service.createCorpus("Forty sources");
+            await update(corpusId, "pause");
+            const sources = Array.from({ length: 40 }, (_, i) => ({
+                id: `source-${i}`,
+                text:
+                    i === 1
+                        ? "Sakura trip corrected price $2,800."
+                        : i === 34
+                          ? "Sakura trip initial quote $2,500."
+                          : `Unrelated gardening advice ${i}.`,
+            }));
+            for (const source of reversed ? sources.reverse() : sources)
+                await add(corpusId, source.id, source.text);
+            await service.close();
+            service = open();
+            const question =
+                "How much more did I have to pay for the trip after the initial quote?";
+            const answer = await service.answer({
+                corpusId,
+                question,
+                includeDiagnostics: true,
+            });
+            const supplied =
+                answer.readerContext?.indexedAnswer?.fragments ?? [];
+            expect(supplied.map((fragment) => fragment.sourceId)).toEqual(
+                expect.arrayContaining(["source-1", "source-34"]),
+            );
+            expect(prompts[0]).toContain("$2,800");
+            expect(prompts[0]).toContain("$2,500");
+            expect(
+                answer.readerContext?.indexedAnswer?.selection
+                    ?.eligibleSourceIds,
+            ).toHaveLength(40);
+            const scoped = await service.search({
+                corpusId,
+                query: question,
+                indexedFragments: true,
+                sourceIds: ["source-34"],
+                includeDiagnostics: true,
+            });
+            expect(scoped.matches.map((item) => item.sourceId)).toEqual([
+                "source-34",
+            ]);
+            expect(scoped.indexedSelection?.eligibleSourceIds).toEqual([
+                "source-34",
+            ]);
+            const excluded = await service.search({
+                corpusId,
+                query: question,
+                indexedFragments: true,
+                sourceIds: [],
+                includeDiagnostics: true,
+            });
+            expect(excluded.matches).toEqual([]);
+        },
+        30000,
     );
 
     test("automatic wiki builds without rehearsal variables and family pause survives reopen", async () => {

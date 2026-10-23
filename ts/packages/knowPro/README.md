@@ -19,6 +19,26 @@ The KnowPro implementation of Structured RAG is used to explore types of [**memo
 - [Natural language querying](./src/searchLang.ts)
 - [Answer generation](./src/answerGenerator.ts)
 
+### Embedding batches
+
+Default conversation settings batch up to 128 distinct vocabulary terms,
+source-text chunks, or thread descriptions. Message rebuilds group up to 128
+messages before batching their chunks; an explicit outer batch override still
+applies. Thread rebuilds batch descriptions, while incremental thread additions
+embed the single new description immediately.
+
+Provider request-size limits still apply; the generation helper splits requests
+for providers advertising a smaller maximum. Azure/OpenAI index batches also
+split at 300,000 aggregate tokens, counted with `cl100k_base`, without truncating
+source text. The provider's per-input token limit still applies.
+
+Term embeddings are reused within the same persisted vocabulary index, including
+incremental document additions and reloads. Repeated occurrences retain their
+separate evidence references without requiring a vector for every occurrence.
+This is not a global cache across independent corpora, and rebuilding an index
+can recompute its vocabulary. Term and message-text embedding lanes still run
+sequentially.
+
 ### Examples
 
 Examples of using the above APIs can be found here:

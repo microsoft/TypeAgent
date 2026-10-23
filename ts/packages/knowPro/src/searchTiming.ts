@@ -3,6 +3,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
+import type { ChatModel, TextEmbeddingModel } from "@typeagent/aiclient";
 
 /** Counts, flags, opaque IDs and fixed access/index enums only; never search or source text. */
 export type SearchTimingAttributes = Readonly<
@@ -58,7 +59,9 @@ function emitTiming(
                 typeof value === "boolean" ||
                 (typeof value === "number" && Number.isFinite(value)) ||
                 (typeof value === "string" &&
-                    (["corpusId", "sourceId", "revisionId"].includes(key) ||
+                    (["corpusId", "sourceId", "revisionId", "groupId"].includes(
+                        key,
+                    ) ||
                         (key === "access" &&
                             ["read", "write"].includes(value)) ||
                         (key === "indexKind" &&
@@ -78,6 +81,7 @@ function emitTiming(
                 scope: context.scope,
                 stage,
                 elapsedMs,
+                endEpochMs: Date.now(),
                 status,
                 metadata,
             })}`,
@@ -87,6 +91,52 @@ function emitTiming(
     }
 }
 
+/** Model method attempts, not hidden HTTP/SDK retries. Arguments are never recorded. */
+export function instrumentExtractionModel(model: ChatModel): ChatModel {
+    return new Proxy(model, {
+        get(target, property) {
+            if (property === "complete") {
+                return (...args: Parameters<ChatModel["complete"]>) =>
+                    timeSearchStage(
+                        "ingestion.extraction.attempt",
+                        () => target.complete(...args),
+                        { attempts: 1 },
+                    );
+            }
+            return Reflect.get(target, property, target);
+        },
+    });
+}
+
+/** Apply after role selection, so provider role/identity/batch limits are unchanged. */
+export function instrumentEmbeddingModel(
+    model: TextEmbeddingModel,
+): TextEmbeddingModel {
+    return new Proxy(model, {
+        get(target, property) {
+            if (property === "generateEmbedding") {
+                return (input: string) =>
+                    timeSearchStage(
+                        "ingestion.embedding.attempt",
+                        () => target.generateEmbedding(input),
+                        { attempts: 1, items: 1 },
+                    );
+            }
+            if (
+                property === "generateEmbeddingBatch" &&
+                target.generateEmbeddingBatch
+            ) {
+                return (inputs: string[]) =>
+                    timeSearchStage(
+                        "ingestion.embedding.attempt",
+                        () => target.generateEmbeddingBatch!(inputs),
+                        { attempts: 1, items: inputs.length },
+                    );
+            }
+            return Reflect.get(target, property, target);
+        },
+    });
+}
 function resultStatus(value: unknown): "success" | "error" {
     return value !== null &&
         typeof value === "object" &&
@@ -100,10 +150,11 @@ export function recordSearchTiming(
     stage: string,
     elapsedMs: number,
     attributes?: SearchTimingAttributes,
+    status: "success" | "error" = "success",
 ): void {
     if (!isSearchTimingEnabled()) return;
     const context = searchTiming.getStore();
-    if (context) emitTiming(context, stage, elapsedMs, "success", attributes);
+    if (context) emitTiming(context, stage, elapsedMs, status, attributes);
 }
 
 /** Preserves both synchronous return values and asynchronous rejection reasons. */

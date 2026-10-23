@@ -1,0 +1,485 @@
+{
+  "schemaVersion": 1,
+  "bundles": [
+    {
+      "id": "w01",
+      "kind": "wiki",
+      "split": "development",
+      "topic": "Lease renewal and command deadlines",
+      "sources": [
+        {
+          "id": "w01-design",
+          "revision": "r1",
+          "date": "2026-01-08",
+          "text": "A command deadline bounds one request. The worker lease bounds ownership across requests. A successful command does not renew the lease."
+        },
+        {
+          "id": "w01-ops",
+          "revision": "r2",
+          "date": "2026-01-09",
+          "text": "Renewal is performed by the lease heartbeat. After lease expiry the worker must stop accepting commands, even when the last command completed successfully."
+        }
+      ]
+    },
+    {
+      "id": "w02",
+      "kind": "wiki",
+      "split": "development",
+      "topic": "Evidence overlap versus purpose",
+      "sources": [
+        {
+          "id": "w02-catalog",
+          "revision": "r1",
+          "date": "2026-01-10",
+          "text": "The routing article explains destination selection. The retry article explains recovery after transient failure. Both use the same transport trace."
+        },
+        {
+          "id": "w02-review",
+          "revision": "r1",
+          "date": "2026-01-11",
+          "text": "Sharing a transport trace does not make routing and retry interchangeable. Preserve retry limits when consolidating the operational guide."
+        }
+      ]
+    },
+    {
+      "id": "w03",
+      "kind": "wiki",
+      "split": "development",
+      "topic": "Current revision correction",
+      "sources": [
+        {
+          "id": "w03-policy",
+          "revision": "r2",
+          "date": "2026-01-12",
+          "text": "The current retention policy is fourteen days. This revision supersedes the former thirty-day policy; thirty days is historical, not current guidance."
+        },
+        {
+          "id": "w03-audit",
+          "revision": "r1",
+          "date": "2026-01-13",
+          "text": "Exports created before the policy revision are retained under their original legal hold. The new fourteen-day limit does not release a legal hold."
+        }
+      ]
+    },
+    {
+      "id": "w04",
+      "kind": "wiki",
+      "split": "development",
+      "topic": "Unknown ownership versus unassigned ownership",
+      "sources": [
+        {
+          "id": "w04-roster",
+          "revision": "r1",
+          "date": "2026-01-14",
+          "text": "The scanner's owner has not been recorded. The repair queue is explicitly unassigned. These are different states; absence of a scanner owner is not evidence that nobody owns it."
+        },
+        {
+          "id": "w04-followup",
+          "revision": "r1",
+          "date": "2026-01-15",
+          "text": "Mina will investigate the missing scanner roster entry. Investigation responsibility does not appoint Mina as the scanner owner."
+        }
+      ]
+    },
+    {
+      "id": "w05",
+      "kind": "wiki",
+      "split": "development",
+      "topic": "Admission versus publication",
+      "sources": [
+        {
+          "id": "w05-workflow",
+          "revision": "r1",
+          "date": "2026-01-16",
+          "text": "An admitted article is eligible for drafting. Publication still requires citation validation. Admission alone never makes an article searchable."
+        },
+        {
+          "id": "w05-recovery",
+          "revision": "r1",
+          "date": "2026-01-17",
+          "text": "A failed citation check parks the draft for review. Recovery retries validation rather than marking the failed article published."
+        }
+      ]
+    },
+    {
+      "id": "w06",
+      "kind": "wiki",
+      "split": "development",
+      "topic": "Source removal and protected prose",
+      "sources": [
+        {
+          "id": "w06-lifecycle",
+          "revision": "r1",
+          "date": "2026-01-18",
+          "text": "Removing a source invalidates its citations. A later rebuild must not resurrect removed evidence from a cached article."
+        },
+        {
+          "id": "w06-editing",
+          "revision": "r1",
+          "date": "2026-01-19",
+          "text": "Protected human prose stays editable only by its owner. Protection does not preserve the validity of a citation to a removed source."
+        }
+      ]
+    },
+    {
+      "id": "w07",
+      "kind": "wiki",
+      "split": "holdout",
+      "topic": "Archive snapshot and active catalog",
+      "sources": [
+        {
+          "id": "w07-archive",
+          "revision": "r1",
+          "date": "2026-02-01",
+          "text": "The archive snapshot records what was available on January 31. It is not an active catalog and may include products withdrawn since that date."
+        },
+        {
+          "id": "w07-catalog",
+          "revision": "r3",
+          "date": "2026-02-02",
+          "text": "Only the current catalog authorizes new orders. Historical snapshot entries remain useful for audit, not for order eligibility."
+        }
+      ]
+    },
+    {
+      "id": "w08",
+      "kind": "wiki",
+      "split": "holdout",
+      "topic": "Regional quotas and emergency allocation",
+      "sources": [
+        {
+          "id": "w08-quota",
+          "revision": "r1",
+          "date": "2026-02-03",
+          "text": "The north region has a reserved quota of forty units. Unused north capacity cannot be transferred automatically to south."
+        },
+        {
+          "id": "w08-exception",
+          "revision": "r1",
+          "date": "2026-02-04",
+          "text": "An incident commander may approve a temporary cross-region allocation. Such approval is incident-scoped and does not change the permanent regional quotas."
+        }
+      ]
+    },
+    {
+      "id": "w09",
+      "kind": "wiki",
+      "split": "holdout",
+      "topic": "Sensor correction and measurement gaps",
+      "sources": [
+        {
+          "id": "w09-lab",
+          "revision": "r2",
+          "date": "2026-02-05",
+          "text": "Calibration corrected the sensor offset from plus four degrees to plus one degree. Earlier readings must retain the old offset when reconstructed."
+        },
+        {
+          "id": "w09-gap",
+          "revision": "r1",
+          "date": "2026-02-06",
+          "text": "No observations were captured during the battery outage. Interpolation is an estimate and must not be presented as a measured temperature."
+        }
+      ]
+    },
+    {
+      "id": "w10",
+      "kind": "wiki",
+      "split": "holdout",
+      "topic": "Identity rotation and session continuity",
+      "sources": [
+        {
+          "id": "w10-auth",
+          "revision": "r1",
+          "date": "2026-02-07",
+          "text": "Rotating a signing key prevents issuance under the retired key. Existing sessions remain valid until their token expiry unless separately revoked."
+        },
+        {
+          "id": "w10-response",
+          "revision": "r1",
+          "date": "2026-02-08",
+          "text": "For a compromised key, incident response requires explicit session revocation. Routine key rotation alone is not equivalent to revoking sessions."
+        }
+      ]
+    },
+    {
+      "id": "w11",
+      "kind": "wiki",
+      "split": "holdout",
+      "topic": "Cache freshness and authoritative records",
+      "sources": [
+        {
+          "id": "w11-cache",
+          "revision": "r1",
+          "date": "2026-02-09",
+          "text": "The search cache refreshes every hour. A cache hit can be stale and cannot authorize an account suspension."
+        },
+        {
+          "id": "w11-authority",
+          "revision": "r1",
+          "date": "2026-02-10",
+          "text": "Suspension decisions read the authoritative account record at decision time. A cached search preview is navigation evidence only."
+        }
+      ]
+    },
+    {
+      "id": "w12",
+      "kind": "wiki",
+      "split": "holdout",
+      "topic": "Retry safety and payment settlement",
+      "sources": [
+        {
+          "id": "w12-payment",
+          "revision": "r1",
+          "date": "2026-02-11",
+          "text": "Settlement requests carry an idempotency key. A timeout does not establish that settlement failed; query the ledger before issuing a new key."
+        },
+        {
+          "id": "w12-retry",
+          "revision": "r1",
+          "date": "2026-02-12",
+          "text": "Retries reuse the original key while the outcome is unknown. A different key can create a second settlement and requires explicit reconciliation."
+        }
+      ]
+    },
+    {
+      "id": "b01",
+      "kind": "brief",
+      "split": "development",
+      "topic": "Harbor capacity rollout",
+      "sources": [
+        {
+          "id": "b01-status",
+          "revision": "r1",
+          "date": "2026-03-01",
+          "text": "Harbor has completed functional tests. Production rollout is blocked until the capacity review approves peak-load headroom."
+        },
+        {
+          "id": "b01-roles",
+          "revision": "r1",
+          "date": "2026-03-02",
+          "text": "Ravi owns Harbor delivery. Lena reviews capacity. A pending Lena review is not ownership transfer and functional completion is not launch approval."
+        }
+      ]
+    },
+    {
+      "id": "b02",
+      "kind": "brief",
+      "split": "development",
+      "topic": "Cedar incident and rollout",
+      "sources": [
+        {
+          "id": "b02-incident",
+          "revision": "r1",
+          "date": "2026-03-03",
+          "text": "Cedar's incident mitigation was deployed to the affected shard. The incident is resolved, but the general rollout remains paused for compatibility testing."
+        },
+        {
+          "id": "b02-plan",
+          "revision": "r1",
+          "date": "2026-03-04",
+          "text": "Omar owns compatibility testing. The incident commander Sia closed the incident; closure does not approve the general rollout."
+        }
+      ]
+    },
+    {
+      "id": "b03",
+      "kind": "brief",
+      "split": "development",
+      "topic": "Juniper review and delivery roles",
+      "sources": [
+        {
+          "id": "b03-roster",
+          "revision": "r1",
+          "date": "2026-03-05",
+          "text": "Juniper delivery belongs to Chen. Bea is the security reviewer and has not accepted delivery ownership."
+        },
+        {
+          "id": "b03-review",
+          "revision": "r1",
+          "date": "2026-03-06",
+          "text": "The security review is scheduled, not completed. Implementation may continue in the isolated test environment while release approval remains pending."
+        }
+      ]
+    },
+    {
+      "id": "b04",
+      "kind": "brief",
+      "split": "development",
+      "topic": "Maple and Birch shared dependency",
+      "sources": [
+        {
+          "id": "b04-maple",
+          "revision": "r1",
+          "date": "2026-03-07",
+          "text": "Maple is blocked on the parser migration. Birch uses the same library but is not blocked because it uses the legacy interface."
+        },
+        {
+          "id": "b04-release",
+          "revision": "r1",
+          "date": "2026-03-08",
+          "text": "Dara owns the parser migration. Maple and Birch retain separate release decisions; shared dependency does not imply shared status."
+        }
+      ]
+    },
+    {
+      "id": "b05",
+      "kind": "brief",
+      "split": "development",
+      "topic": "Willow target date correction",
+      "sources": [
+        {
+          "id": "b05-schedule",
+          "revision": "r2",
+          "date": "2026-03-09",
+          "text": "Willow's target moved from April 3 to April 17. April 17 is a planning target, not a committed shipment date."
+        },
+        {
+          "id": "b05-risk",
+          "revision": "r1",
+          "date": "2026-03-10",
+          "text": "The vendor has not confirmed hardware arrival. The schedule remains contingent on that arrival; the earlier April 3 target is obsolete."
+        }
+      ]
+    },
+    {
+      "id": "b06",
+      "kind": "brief",
+      "split": "development",
+      "topic": "Aspen owner discovery",
+      "sources": [
+        {
+          "id": "b06-log",
+          "revision": "r1",
+          "date": "2026-03-11",
+          "text": "Aspen's accountable owner is unknown in the handoff record. Niko will locate the record but is not assigned accountable ownership."
+        },
+        {
+          "id": "b06-task",
+          "revision": "r1",
+          "date": "2026-03-12",
+          "text": "The migration checklist is explicitly unassigned. Owner discovery and checklist assignment are separate unresolved tasks."
+        }
+      ]
+    },
+    {
+      "id": "b07",
+      "kind": "brief",
+      "split": "holdout",
+      "topic": "Orchid regional launch",
+      "sources": [
+        {
+          "id": "b07-east",
+          "revision": "r1",
+          "date": "2026-04-01",
+          "text": "Orchid is available in east. West launch is blocked by residency approval, not by east availability or functional readiness."
+        },
+        {
+          "id": "b07-approval",
+          "revision": "r1",
+          "date": "2026-04-02",
+          "text": "Iman owns west launch. Tao can review residency evidence but cannot grant the required legal approval."
+        }
+      ]
+    },
+    {
+      "id": "b08",
+      "kind": "brief",
+      "split": "holdout",
+      "topic": "Saffron prototype and accessibility",
+      "sources": [
+        {
+          "id": "b08-demo",
+          "revision": "r1",
+          "date": "2026-04-03",
+          "text": "Saffron's prototype passed the demo review. Accessibility testing has not started, so demo success is not a readiness signoff."
+        },
+        {
+          "id": "b08-handoff",
+          "revision": "r1",
+          "date": "2026-04-04",
+          "text": "Eli owns the prototype. Noor is arranging accessibility testers; arranging testers does not make Noor the delivery owner."
+        }
+      ]
+    },
+    {
+      "id": "b09",
+      "kind": "brief",
+      "split": "holdout",
+      "topic": "Moss rollback and retained experiment",
+      "sources": [
+        {
+          "id": "b09-rollback",
+          "revision": "r1",
+          "date": "2026-04-05",
+          "text": "Moss rolled back the production optimizer after latency increased. The isolated research experiment remains active and has not been cancelled."
+        },
+        {
+          "id": "b09-gate",
+          "revision": "r1",
+          "date": "2026-04-06",
+          "text": "Pia owns rollback verification. Any new production attempt requires fresh latency evidence and separate approval."
+        }
+      ]
+    },
+    {
+      "id": "b10",
+      "kind": "brief",
+      "split": "holdout",
+      "topic": "Flint procurement exception",
+      "sources": [
+        {
+          "id": "b10-finance",
+          "revision": "r1",
+          "date": "2026-04-07",
+          "text": "Flint has budget approval for a trial batch only. Approval does not cover full-volume procurement."
+        },
+        {
+          "id": "b10-supply",
+          "revision": "r1",
+          "date": "2026-04-08",
+          "text": "Trial delivery is expected in May but the supplier has not committed a date. Full procurement remains blocked on certification."
+        }
+      ]
+    },
+    {
+      "id": "b11",
+      "kind": "brief",
+      "split": "holdout",
+      "topic": "Linden migration and deletion",
+      "sources": [
+        {
+          "id": "b11-copy",
+          "revision": "r1",
+          "date": "2026-04-09",
+          "text": "Linden copied all records to the destination. Validation is incomplete; source deletion is prohibited until audit reconciliation passes."
+        },
+        {
+          "id": "b11-audit",
+          "revision": "r1",
+          "date": "2026-04-10",
+          "text": "Uma leads migration delivery. Vic independently reviews reconciliation. A completed copy is not a completed migration."
+        }
+      ]
+    },
+    {
+      "id": "b12",
+      "kind": "brief",
+      "split": "holdout",
+      "topic": "Quartz and Iris credential renewal",
+      "sources": [
+        {
+          "id": "b12-quartz",
+          "revision": "r1",
+          "date": "2026-04-11",
+          "text": "Quartz credential renewal is complete. Iris still uses the retired credential and is blocked from the next release until its own renewal completes."
+        },
+        {
+          "id": "b12-coordination",
+          "revision": "r1",
+          "date": "2026-04-12",
+          "text": "Wen coordinates both initiatives but only owns Quartz. Iris ownership is not recorded; do not infer it from coordination."
+        }
+      ]
+    }
+  ]
+}

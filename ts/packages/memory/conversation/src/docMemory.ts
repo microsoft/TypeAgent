@@ -660,6 +660,7 @@ function customizeScopeQueryProcessing(
  */
 function docPartClassFromJsonObj(jMsg: DocPart): DocPart {
     const jMeta = new DocPartMeta(jMsg.metadata?.sourceUrl);
+    jMeta.temporalContext = jMsg.metadata?.temporalContext;
     const part = new DocPart(
         jMsg.textChunks,
         jMeta,
