@@ -36,21 +36,31 @@ function Use-TypeAgentBuildTrust {
     if ($Certificate.Subject -ne $policy.publisher -or $Certificate.Thumbprint -notin $policy.thumbprints) {
         throw "Build certificate does not match the independently pinned signing identity."
     }
-    $publicCertificate = New-Object Security.Cryptography.X509Certificates.X509Certificate2(
+    $publicCertificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
         $Certificate.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert))
-    $store = New-Object Security.Cryptography.X509Certificates.X509Store("Root", "CurrentUser")
+    # CurrentUser\Root can display a native confirmation dialog even in non-interactive PowerShell.
+    $store = New-Object Security.Cryptography.X509Certificates.X509Store("Root", "LocalMachine")
     $added = $false
     try {
+        Write-Host "Opening temporary build trust in LocalMachine\Root (requires administrator rights)."
         $store.Open([Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
         if (-not @($store.Certificates | Where-Object { $_.Thumbprint -eq $publicCertificate.Thumbprint }).Count) {
+            Write-Host "Adding pinned build certificate $($publicCertificate.Thumbprint) to LocalMachine\Root."
             $store.Add($publicCertificate)
             $added = $true
         }
+        Write-Host "Build trust ready; running package action."
         & $Action
     } finally {
-        if ($added) { $store.Remove($publicCertificate) }
-        $store.Close()
-        $publicCertificate.Dispose()
+        try {
+            if ($added) {
+                Write-Host "Removing temporary build certificate $($publicCertificate.Thumbprint) from LocalMachine\Root."
+                $store.Remove($publicCertificate)
+            }
+        } finally {
+            $store.Close()
+            $publicCertificate.Dispose()
+        }
     }
 }
 

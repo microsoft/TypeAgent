@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 export {
+    getBundledAppAgentProvider,
     getDefaultAppAgentProviders,
     getDefaultAppAgentSource,
     getDefaultDispatcherOptions,

@@ -1592,6 +1592,7 @@ function getCopilotSessionConfig(
         description: [
             "Search past conversations and all saved page/document corpora in parallel.",
             "Use for questions about previously seen pages, imported documents, how-tos, or earlier conversations. Compare the cited evidence before answering.",
+            "Also recalls agent experience as guidance, not execution authority. Supply exact known repository/commit/environment scope for scoped memories; never invent scope.",
         ].join("\n"),
         parameters: {
             type: "object",
@@ -1600,10 +1601,36 @@ function getCopilotSessionConfig(
                     type: "string",
                     description: "Natural language question to recall",
                 },
+                repository: {
+                    type: "string",
+                    description:
+                        "Exact known repository identity for scoped agent memory",
+                    minLength: 1,
+                    maxLength: 1000,
+                },
+                commit: {
+                    type: "string",
+                    description:
+                        "Exact known source commit for scoped agent memory",
+                    minLength: 1,
+                    maxLength: 1000,
+                },
+                environment: {
+                    type: "string",
+                    description:
+                        "Exact known environment identity for scoped agent memory",
+                    minLength: 1,
+                    maxLength: 1000,
+                },
             },
             required: ["question"],
         },
-        handler: async (args: any) => {
+        handler: async (args: {
+            question: string;
+            repository?: string;
+            commit?: string;
+            environment?: string;
+        }) => {
             const { question } = args;
             debug(`Searching memory: ${question}`);
             const text = await searchPersonalMemory(
@@ -1611,6 +1638,17 @@ function getCopilotSessionConfig(
                 () =>
                     searchReasoningConversationMemory(systemContext, question),
                 systemContext.durableMemoryService,
+                {
+                    ...(args.repository !== undefined
+                        ? { repository: args.repository }
+                        : {}),
+                    ...(args.commit !== undefined
+                        ? { commit: args.commit }
+                        : {}),
+                    ...(args.environment !== undefined
+                        ? { environment: args.environment }
+                        : {}),
+                },
             );
             return {
                 textResultForLlm: text,

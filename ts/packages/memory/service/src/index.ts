@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 export * from "./agentEdition.js";
+export * from "./agentSessionTypes.js";
 export * from "./batchImport.js";
 export * from "./fileMemoryService.js";
 export * from "./knowProCorpusIndex.js";

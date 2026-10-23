@@ -41,6 +41,9 @@ jobs:
           filters: |
             dotnet:
               - "dotnet/**"
+              - "ts/packages/agents/visualStudio/**"
+              - "ts/packages/utils/webSocketUtils/**"
+              - "ts/packages/agentServer/protocol/**"
               - "ts/packages/agents/powershell/**"
               - "ts/packages/config/**"
               - "ts/packages/agents/desktop/src/**Schema.ts"
@@ -60,7 +63,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: "24.22.1"
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
       - name: Install TS dependencies and generate schemas
@@ -91,6 +94,28 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         working-directory: dotnet
         run: msbuild.exe typeagent/TypeAgent.sln /p:platform="Any CPU" /p:configuration="${{ matrix.configuration }}"
+      - name: Build Visual Studio solution, WebView, and VSIX
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
+        working-directory: dotnet
+        run: msbuild.exe visualStudioTypeAgent/VisualStudioTypeAgent.sln /restore /p:platform="Any CPU" /p:configuration="${{ matrix.configuration }}" /p:DeployExtension=false
+      - name: Build Visual Studio bridge TypeScript
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
+        working-directory: ts
+        run: pnpm exec fluid-build "@typeagent/visualstudio-agent" -t tsc --dep
+      - name: Test Visual Studio bridge TypeScript authentication
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
+        working-directory: ts
+        run: pnpm --filter @typeagent/visualstudio-agent run test:local -- --runInBand
+      - name: Build Visual Studio bridge for .NET Framework
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
+        run: dotnet build dotnet/visualStudioTypeAgent.Tests/VisualStudioTypeAgent.BridgeCompile.csproj --configuration Release --nologo
+      - name: Test Visual Studio bridge authentication
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
+        run: dotnet run --project dotnet/visualStudioTypeAgent.Tests/VisualStudioTypeAgent.Tests.csproj --configuration Release
+      - name: Test Visual Studio bridge TypeScript/C# interoperability
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
+        shell: pwsh
+        run: ./dotnet/visualStudioTypeAgent.Tests/RunInterop.ps1 -Configuration Release
       - name: Build PowerShell sandbox broker
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         run: dotnet build dotnet/powerShellSandboxBroker/PowerShellSandboxBroker.csproj --configuration ${{ matrix.configuration }} --runtime win-x64

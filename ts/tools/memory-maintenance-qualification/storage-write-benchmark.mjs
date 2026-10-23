@@ -370,16 +370,16 @@ async function deltaWorkload(root, samples, delta) {
     }
 }
 
-async function segmentWorkload(root, samples) {
+async function segmentWorkload(root, samples, recordCount) {
     const data = {
-        records: Array.from({ length: 1024 }, (_, ordinal) => ({
+        records: Array.from({ length: recordCount }, (_, ordinal) => ({
             ordinal,
             text: `${"Retained source knowledge. ".repeat(24)}${ordinal}`,
         })),
         vectors: [[0.6, 0.8]],
     };
     const initial = path.join(root, "initial", "corpus_data.json");
-    await writeSegmentedJson(initial, data, { messages: 1024 });
+    await writeSegmentedJson(initial, data, { messages: recordCount });
     const segments = path.join(root, ".segments");
     const observations = [];
     for (let i = 0; i < samples; i++) {
@@ -391,7 +391,10 @@ async function segmentWorkload(root, samples) {
                 ]),
             ),
         );
-        data.records.push({ ordinal: 1024 + i, text: `Changed source ${i}` });
+        data.records.push({
+            ordinal: recordCount + i,
+            text: `Changed source ${i}`,
+        });
         const file = path.join(root, `generation-${i}`, "corpus_data.json");
         await writeSegmentedJson(file, data, { messages: data.records.length });
         let segmentBytes = 0;
@@ -419,9 +422,16 @@ async function segmentWorkload(root, samples) {
             ),
             data,
         );
+        // One partial 64 KiB chunk plus bounded publication/descriptor metadata.
+        assert.ok(segmentBytes + descriptorBytes < 80 * 1024);
         assert.ok(
-            segmentBytes + descriptorBytes < Buffer.byteLength(baseline) / 20,
+            segmentBytes + descriptorBytes < Buffer.byteLength(baseline) / 4,
         );
+        if (recordCount >= 4096)
+            assert.ok(
+                segmentBytes + descriptorBytes <
+                    Buffer.byteLength(baseline) / 20,
+            );
         observations.push({
             monolithicJsonBytes: Buffer.byteLength(baseline),
             segmentBytes,
@@ -431,8 +441,8 @@ async function segmentWorkload(root, samples) {
         });
     }
     return {
-        scope: "Identical synthetic JSON values, reconstructed prior whole-JSON serialization versus actual immutable node and descriptor bytes. Excludes index metadata, GC reads/deletes, fsyncs and device I/O; not a full live index benchmark.",
-        recordCount: 1024,
+        scope: "Identical synthetic JSON values, reconstructed prior whole-JSON serialization versus actual coarse immutable node and descriptor bytes. Append budget includes a partial 64 KiB tail plus publication metadata. Excludes index metadata, GC reads/deletes, fsyncs and device I/O; not a full live index benchmark.",
+        recordCount,
         observations,
     };
 }
@@ -455,10 +465,13 @@ export async function runStorageWriteBenchmark(samples, kind = "replace") {
                 samples,
                 true,
             );
-            workloads["segmented-append-1024"] = await segmentWorkload(
-                path.join(root, "segmented"),
-                samples,
-            );
+            for (const records of [1024, 4096])
+                workloads[`segmented-append-${records}`] =
+                    await segmentWorkload(
+                        path.join(root, `segmented-${records}`),
+                        samples,
+                        records,
+                    );
         } else if (kind === "batch")
             workloads["batch-eight-new-sources"] = await batchWorkload(
                 root,

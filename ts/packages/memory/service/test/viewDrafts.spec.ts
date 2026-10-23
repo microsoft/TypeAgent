@@ -120,6 +120,24 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         };
     }
 
+    test("layout-only reindex marks source-dependent drafts stale without changing revisions", async () => {
+        const request = await fixture();
+        await service.saveViewDraft(request);
+        const sourceId = request.definition.selector.sources[0].sourceId;
+        const before = await service.getSource(request.corpusId, sourceId);
+        await service.reindexCorpus(request.corpusId);
+        expect(
+            (await service.getSource(request.corpusId, sourceId))!
+                .activeRevisionId,
+        ).toBe(before!.activeRevisionId);
+        expect(
+            (await service.getView({
+                corpusId: request.corpusId,
+                viewId: request.viewId,
+            }))!.state,
+        ).toBe("stale");
+    });
+
     test("source Used by is current-only metadata, paginated and validates requests", async () => {
         const request = await fixture();
         await service.saveViewDraft(request);
