@@ -195,7 +195,16 @@ test("live observer returns unchanged responses and records only model/usage/adm
             JSON.stringify({
                 model: "gpt-6-luna-test",
                 usage: { total_tokens: 19 },
-                choices: [{ message: { content: "private-body" } }],
+                choices: [
+                    {
+                        finish_reason: "stop",
+                        message: { content: "private-body" },
+                    },
+                    {
+                        finish_reason: "content_filter",
+                        message: { content: null, refusal: "private-refusal" },
+                    },
+                ],
             }),
             { headers: { "content-type": "application/json" } },
         );
@@ -216,6 +225,21 @@ test("live observer returns unchanged responses and records only model/usage/adm
         );
         assert.equal(events[0].model, "gpt-6-luna-test");
         assert.equal(events[0].requestedOutputTokens, undefined);
+        assert.deepEqual(events[0].completionChoices, [
+            {
+                finishReason: "stop",
+                contentCharacters: 12,
+                refusalPresent: false,
+                toolCallCount: 0,
+            },
+            {
+                finishReason: "content_filter",
+                contentCharacters: null,
+                refusalPresent: true,
+                toolCallCount: 0,
+            },
+        ]);
+        assert.ok(Number.isFinite(Date.parse(events[0].observedAt)));
         assert.ok(!JSON.stringify(events).includes("private-"));
         assert.ok(!JSON.stringify(events).includes("example.invalid"));
     } finally {

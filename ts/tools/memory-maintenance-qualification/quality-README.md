@@ -713,3 +713,39 @@ For an authorized 50-question iteration, omit `--question-ids` and use
 `--max-questions 50 --work-minutes unlimited` on a fresh owned output root. This
 uses the first 50 questions in the pinned answer-independent construction order.
 It may overlap earlier development questions; it is not a new holdout.
+
+### Continue past failed question imports
+
+With explicit `--continue-after-import-failure`, a terminally failed ingestion
+job fails that question, records its job/stage/progress and failure category,
+and continues to the next question's independent corpus. The incomplete corpus
+is never answered or graded, and its failed history is not silently omitted.
+Cancellation, filesystem/persistence errors, provenance mismatches, answer
+failures and judge failures remain fatal. Without this flag, import failures
+retain the original fail-fast behavior.
+
+This mode freezes the first `--max-questions` IDs as the iteration target,
+including already graded and failed questions on resume. For an existing
+iteration it verifies the original attempt's IDs against the pinned construction
+prefix. It does not replace failed cases with later questions or run another
+50 after the existing grades.
+
+Progress retains `passPercentage` among graded answers and `completionPercentage`
+as graded/target. Additional `skippedImportQuestions`, `processedQuestions`,
+`processedPercentage` and `targetProcessed` count terminal import failures as
+processed, not graded or passed. An exhausted target with import failures ends
+`QUESTION_TARGET_COMPLETED_WITH_IMPORT_FAILURES`, not full-suite success.
+
+Resuming across a reviewed harness-only update additionally requires
+`--previous-engine-hash <exact-prior-hash>` with this mode. Prior state,
+progress, scorecard, hypotheses, admission and termination receipts are archived
+before startup; the engine transition is recorded. Compiled product, dataset,
+model/configuration and dependency identity checks remain mandatory. This is not
+permission to resume changed product code against old stores.
+
+The provider observer now records response time, per-choice finish reason,
+content character count, refusal presence and tool-call count, alongside existing
+usage/model/status metadata. It still returns the original response unchanged
+and records no prompt, answer, refusal text or credentials. These fields help
+distinguish future empty responses, filtering and truncation; they cannot
+retroactively recover bodies or finish reasons absent from old observations.

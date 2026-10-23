@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, realpath } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -24,6 +24,7 @@ import { safeFailure } from "./live-qualification.mjs";
 import { prepareLongMemEval, publicPins } from "./quality-adapters.mjs";
 import {
     benchmarkScorecard,
+    BenchmarkImportFailure,
     digest,
     executeMemoryCase,
     judgePrompt,
@@ -53,6 +54,16 @@ function validateBenchmarkSpec(spec) {
     );
     assert.equal(spec.totalAllowanceMs, spec.workAllowanceMs);
     assert.equal(typeof spec.resume, "boolean");
+    assert.ok(
+        spec.continueAfterImportFailure === undefined ||
+            typeof spec.continueAfterImportFailure === "boolean",
+    );
+    if (spec.previousEngineHash !== undefined)
+        assert.ok(
+            spec.resume &&
+                spec.continueAfterImportFailure &&
+                /^[a-f0-9]{64}$/.test(spec.previousEngineHash),
+        );
     assert.ok(
         Number.isSafeInteger(spec.maximumCompletedQuestions) &&
             spec.maximumCompletedQuestions > 0 &&
@@ -133,6 +144,7 @@ async function engineIdentity() {
         "longmemeval-runner.mjs",
         "quality-adapters.mjs",
         "live-resume.mjs",
+        "live-stages.mjs",
     ];
     return digest(
         JSON.stringify(
@@ -226,7 +238,19 @@ export function selectConstructionCases(construction, selection) {
         : construction.filter((entry) => selection.includes(entry.id));
 }
 
-function completedOutcome(constructionCases, state, selection) {
+export function completedOutcome(constructionCases, state, selection, attempt) {
+    if (
+        attempt?.continueAfterImportFailure &&
+        attempt.questionIds.every(
+            (id) =>
+                state.cases[id]?.status === "complete" ||
+                state.cases[id]?.failurePhase === "import",
+        ) &&
+        attempt.questionIds.some(
+            (id) => state.cases[id]?.failurePhase === "import",
+        )
+    )
+        return "QUESTION_TARGET_COMPLETED_WITH_IMPORT_FAILURES";
     if (
         !constructionCases.every(
             (entry) => state.cases[entry.id]?.status === "complete",
@@ -258,6 +282,10 @@ export function benchmarkProgress(constructionCases, state, attempt) {
         (entry) => entry.id === state.currentQuestionId,
     );
     const current = state.cases[state.currentQuestionId];
+    const skippedImports = records.filter(
+        (record) =>
+            record?.status === "failed" && record.failurePhase === "import",
+    ).length;
     return {
         schemaVersion: 1,
         runId: state.runId,
@@ -289,9 +317,99 @@ export function benchmarkProgress(constructionCases, state, attempt) {
         executionFailures: records.filter(
             (record) => record?.status === "failed",
         ).length,
+        skippedImportQuestions: skippedImports,
+        processedQuestions: graded.length + skippedImports,
+        processedPercentage: questionIds.length
+            ? (100 * (graded.length + skippedImports)) / questionIds.length
+            : null,
+        targetProcessed: graded.length + skippedImports === questionIds.length,
         targetGraded: graded.length === questionIds.length,
         supportedClose: attempt.supportedClose ?? null,
     };
+}
+
+export function benchmarkQuestionIds(
+    constructionCases,
+    state,
+    maximum,
+    continuing,
+) {
+    if (!continuing)
+        return constructionCases
+            .filter((entry) => state.cases[entry.id]?.status !== "complete")
+            .slice(0, maximum)
+            .map((entry) => entry.id);
+    const expected = constructionCases
+        .slice(0, maximum)
+        .map((entry) => entry.id);
+    const target =
+        state.iterationQuestionIds ??
+        state.attempts[0]?.questionIds ??
+        expected;
+    assert.deepEqual(target, expected, "Frozen question target changed");
+    state.iterationQuestionIds = [...target];
+    return target;
+}
+
+export function acceptBenchmarkEngine(state, engineHash, spec) {
+    if (state.engineHash === engineHash) return;
+    assert.ok(
+        spec.resume &&
+            spec.continueAfterImportFailure &&
+            spec.previousEngineHash === state.engineHash,
+        "Benchmark implementation changed; explicit prior-engine authorization required",
+    );
+    (state.harnessTransitions ??= []).push({
+        previousEngineHash: state.engineHash,
+        engineHash,
+        authorizedEpochMs: Date.now(),
+        policy: "continue-after-import-failure",
+        compiledDigest: state.compiledDigest,
+    });
+    state.engineHash = engineHash;
+}
+
+export async function runBenchmarkQuestion(
+    service,
+    construction,
+    reader,
+    reference,
+    record,
+    controls,
+) {
+    try {
+        if (record.status === "failed") {
+            assert.ok(
+                controls.continueAfterImportFailure &&
+                    record.inFlight?.jobId &&
+                    !record.hypothesis,
+                "A real benchmark failure requires review before retry",
+            );
+            const job = await service.getJob(record.inFlight.jobId);
+            throw new BenchmarkImportFailure(job);
+        }
+        await executeMemoryCase(
+            service,
+            construction,
+            reader,
+            reference,
+            record,
+            controls,
+        );
+        return;
+    } catch (error) {
+        if (
+            !controls.continueAfterImportFailure ||
+            controls.signal.aborted ||
+            !(error instanceof BenchmarkImportFailure)
+        )
+            throw error;
+        record.status = "failed";
+        record.failurePhase = "import";
+        record.importFailure = error.job;
+        record.error ??= benchmarkFailure(error);
+        await controls.persist();
+    }
 }
 
 export async function persistBenchmarkProgress(
@@ -358,11 +476,7 @@ async function runWorker(spec) {
         dependencies,
         "Model/config dependencies changed",
     );
-    assert.equal(
-        state.engineHash,
-        engineHash,
-        "Benchmark implementation changed",
-    );
+    acceptBenchmarkEngine(state, engineHash, spec);
     const attempt = {
         startedEpochMs: spec.spawnedEpochMs,
         workerPid: process.pid,
@@ -375,10 +489,13 @@ async function runWorker(spec) {
                 ? null
                 : spec.spawnedEpochMs + spec.workAllowanceMs,
         maximumCompletedQuestions: spec.maximumCompletedQuestions,
-        questionIds: constructionCases
-            .filter((entry) => state.cases[entry.id]?.status !== "complete")
-            .slice(0, spec.maximumCompletedQuestions)
-            .map((entry) => entry.id),
+        continueAfterImportFailure: spec.continueAfterImportFailure === true,
+        questionIds: benchmarkQuestionIds(
+            constructionCases,
+            state,
+            spec.maximumCompletedQuestions,
+            spec.continueAfterImportFailure,
+        ),
     };
     const persist = () =>
         persistBenchmarkProgress(
@@ -493,8 +610,9 @@ async function runWorker(spec) {
                 row,
             ]),
         );
-        let completedThisBatch = 0;
-        for (const construction of constructionCases) {
+        for (const construction of constructionCases.filter((entry) =>
+            attempt.questionIds.includes(entry.id),
+        )) {
             signal.throwIfAborted();
             if (
                 await acknowledgeStopAfterQuestion(
@@ -506,11 +624,6 @@ async function runWorker(spec) {
                 break;
             const id = construction.id;
             if (state.cases[id]?.status === "complete") continue;
-            assert.notEqual(
-                state.cases[id]?.status,
-                "failed",
-                "A real benchmark failure requires review before retry",
-            );
             state.currentQuestionId = id;
             const name = `LongMemEval ${state.runId} ${id}`;
             const matches = (await service.listCorpora()).filter(
@@ -528,7 +641,7 @@ async function runWorker(spec) {
                 mappings: {},
             });
             await persist();
-            await executeMemoryCase(
+            await runBenchmarkQuestion(
                 service,
                 construction,
                 readers.get(id),
@@ -542,6 +655,7 @@ async function runWorker(spec) {
                     role: (value) => {
                         role = value;
                     },
+                    continueAfterImportFailure: spec.continueAfterImportFailure,
                 },
             );
             if (
@@ -552,9 +666,13 @@ async function runWorker(spec) {
                 )
             )
                 break;
-            if (++completedThisBatch >= spec.maximumCompletedQuestions) break;
         }
-        state.outcome = completedOutcome(constructionCases, state, selection);
+        state.outcome = completedOutcome(
+            constructionCases,
+            state,
+            selection,
+            attempt,
+        );
     } catch (error) {
         const bounded = signal.aborted || error.name === "TimeoutError";
         state.outcome = bounded
@@ -628,6 +746,8 @@ export async function main(args = process.argv.slice(2)) {
             "max-questions": { type: "string", default: "500" },
             "work-minutes": { type: "string", default: "30" },
             "question-ids": { type: "string" },
+            "continue-after-import-failure": { type: "boolean" },
+            "previous-engine-hash": { type: "string" },
         },
     });
     if (values.spec) {
@@ -639,12 +759,20 @@ export async function main(args = process.argv.slice(2)) {
             outcome.startsWith("FULL_500_") ||
             outcome === "DIAGNOSTIC_SELECTION_COMPLETED" ||
             outcome === "PARTIAL_STOP_AFTER_QUESTION" ||
-            outcome === "PARTIAL_QUESTION_LIMIT"
+            outcome === "PARTIAL_QUESTION_LIMIT" ||
+            outcome === "QUESTION_TARGET_COMPLETED_WITH_IMPORT_FAILURES"
                 ? 0
                 : 1;
         return;
     }
     assert.equal(values["authorized-live-benchmark"], true);
+    if (values["previous-engine-hash"] !== undefined)
+        assert.ok(
+            values.resume &&
+                values["continue-after-import-failure"] &&
+                /^[a-f0-9]{64}$/.test(values["previous-engine-hash"]),
+            "Prior engine authorization requires an explicit import-failure continuation",
+        );
     const maximumCompletedQuestions = Number(values["max-questions"]);
     assert.ok(
         Number.isSafeInteger(maximumCompletedQuestions) &&
@@ -694,6 +822,9 @@ export async function main(args = process.argv.slice(2)) {
             ? {}
             : { questionIds: values["question-ids"].split(",") }),
         resume: !!values.resume,
+        continueAfterImportFailure:
+            values["continue-after-import-failure"] === true,
+        previousEngineHash: values["previous-engine-hash"],
     };
     const result = await withLiveRunLock(runDirectory, async () => {
         if (spec.resume) {
@@ -709,6 +840,44 @@ export async function main(args = process.argv.slice(2)) {
                 "Previous watchdog is still present",
             );
             assert.equal(prior.receiptId, receiptId);
+            assert.equal(prior.workerExited, true);
+            assert.equal(
+                alive(prior.workerPid),
+                false,
+                "Previous worker is still present",
+            );
+            if (spec.previousEngineHash) {
+                const priorState = JSON.parse(
+                    await readFile(
+                        path.join(runDirectory, "benchmark-state.json"),
+                        "utf8",
+                    ),
+                );
+                assert.equal(priorState.engineHash, spec.previousEngineHash);
+                const archive = await mkdtemp(
+                    path.join(runDirectory, "before-harness-continuation-"),
+                );
+                for (const name of [
+                    "benchmark-state.json",
+                    "progress.json",
+                    "scorecard.json",
+                    "hypotheses.json",
+                    "termination.json",
+                    "admitted.json",
+                    "admission-verified.json",
+                ])
+                    await copyFile(
+                        path.join(runDirectory, name),
+                        path.join(archive, name),
+                    );
+                await writeJson(path.join(archive, "authorization.json"), {
+                    previousEngineHash: spec.previousEngineHash,
+                    engineHash: await engineIdentity(),
+                    policy: "continue-after-import-failure",
+                    maximumCompletedQuestions,
+                    authorizedEpochMs: Date.now(),
+                });
+            }
         }
         return supervise(
             spec,

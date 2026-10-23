@@ -135,6 +135,7 @@ export function observeProvider(
                 ? "chat"
                 : "other-production-request",
             status: response.status,
+            observedAt: new Date().toISOString(),
             durationMs: performance.now() - started,
             retryAfter: response.headers.get("retry-after"),
             serializedRequestCharacters:
@@ -150,6 +151,19 @@ export function observeProvider(
             if (response.ok) {
                 item.model = body.model;
                 item.usage = body.usage;
+                if (Array.isArray(body.choices))
+                    item.completionChoices = body.choices.map((choice) => ({
+                        finishReason:
+                            typeof choice?.finish_reason === "string"
+                                ? choice.finish_reason
+                                : undefined,
+                        contentCharacters:
+                            typeof choice?.message?.content === "string"
+                                ? choice.message.content.length
+                                : null,
+                        refusalPresent: Boolean(choice?.message?.refusal),
+                        toolCallCount: choice?.message?.tool_calls?.length ?? 0,
+                    }));
             } else {
                 item.errorCode = body.error?.code;
                 item.errorType = body.error?.type;

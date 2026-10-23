@@ -24,8 +24,82 @@ import {
     closeBenchmarkService,
     acknowledgeStopAfterQuestion,
     selectConstructionCases,
+    benchmarkQuestionIds,
+    acceptBenchmarkEngine,
+    runBenchmarkQuestion,
+    completedOutcome,
     main,
 } from "./longmemeval-live.mjs";
+
+test("import continuation freezes the original fifty including old grades and failed questions", () => {
+    const construction = Array.from({ length: 60 }, (_, i) => ({
+        id: `q${i}`,
+        sessions: [],
+    }));
+    const ids = construction.slice(0, 50).map((row) => row.id);
+    const state = {
+        attempts: [{ questionIds: ids }],
+        cases: {
+            q0: { status: "complete", autoeval_label: { label: true } },
+            q1: { status: "failed", failurePhase: "import" },
+        },
+    };
+    assert.deepEqual(benchmarkQuestionIds(construction, state, 50, true), ids);
+    assert.throws(
+        () => benchmarkQuestionIds(construction, state, 49, true),
+        /Frozen question target changed/,
+    );
+    const attempt = { questionIds: ids, continueAfterImportFailure: true };
+    const p = benchmarkProgress(construction, state, attempt);
+    assert.equal(p.targetQuestions, 50);
+    assert.equal(p.gradedQuestions, 1);
+    assert.equal(p.skippedImportQuestions, 1);
+    assert.equal(p.processedQuestions, 2);
+    assert.equal(p.processedPercentage, 4);
+    assert.equal(p.completionPercentage, 2);
+    assert.equal(p.targetProcessed, false);
+    for (const id of ids.slice(2))
+        state.cases[id] = {
+            status: "complete",
+            autoeval_label: { label: false },
+        };
+    const final = benchmarkProgress(construction, state, attempt);
+    assert.equal(final.targetProcessed, true);
+    assert.equal(final.targetGraded, false);
+    assert.equal(final.executionFailures, 1);
+    assert.equal(final.gradedQuestions, 49);
+    assert.equal(
+        completedOutcome(construction, state, undefined, attempt),
+        "QUESTION_TARGET_COMPLETED_WITH_IMPORT_FAILURES",
+    );
+});
+
+test("harness migration requires exact reviewed prior engine and does not erase identity history", () => {
+    const state = { engineHash: "old", compiledDigest: "unchanged" };
+    for (const spec of [
+        {},
+        { resume: true },
+        {
+            resume: true,
+            continueAfterImportFailure: true,
+            previousEngineHash: "wrong",
+        },
+    ])
+        assert.throws(
+            () => acceptBenchmarkEngine(state, "new", spec),
+            /explicit prior-engine authorization/,
+        );
+    acceptBenchmarkEngine(state, "new", {
+        resume: true,
+        continueAfterImportFailure: true,
+        previousEngineHash: "old",
+    });
+    assert.equal(state.engineHash, "new");
+    assert.equal(state.compiledDigest, "unchanged");
+    assert.equal(state.harnessTransitions[0].previousEngineHash, "old");
+    acceptBenchmarkEngine(state, "new", {});
+    assert.equal(state.harnessTransitions.length, 1);
+});
 
 test("progress reports question X of the invocation target and pass percentage of graded answers only", () => {
     const construction = Array.from({ length: 60 }, (_, i) => ({
@@ -593,6 +667,156 @@ test("failed ingestion never advances the completed ledger or fabricates a hypot
     assert.equal(f.record.operations.length, 0);
     assert.equal(f.record.hypothesis, undefined);
     assert.ok(f.record.inFlight);
+});
+
+test("a failed import is persisted without an answer or grade, and the next question runs", async () => {
+    const first = fixture();
+    first.controls.continueAfterImportFailure = true;
+    first.controls.waitForMemoryJob = async () => ({
+        jobId: "failed-job",
+        state: "failed",
+        progress: { stage: "extracting-knowledge", completed: 4, total: 9 },
+        error: "Response is not JSON:\n",
+    });
+    let persisted = 0;
+    first.controls.persist = async () => {
+        persisted++;
+    };
+    await runBenchmarkQuestion(
+        first.service,
+        construction,
+        reader,
+        reference,
+        first.record,
+        first.controls,
+    );
+    assert.equal(first.record.status, "failed");
+    assert.equal(first.record.failurePhase, "import");
+    assert.equal(
+        first.record.importFailure.responseFailure,
+        "empty-json-response",
+    );
+    assert.equal(first.record.importFailure.completed, 4);
+    assert.equal(first.record.operations.length, 0);
+    assert.equal(first.calls.answer.length, 0);
+    assert.equal(first.calls.judge.length, 0);
+    assert.ok(persisted > 1);
+    const next = fixture();
+    next.controls.continueAfterImportFailure = true;
+    await runBenchmarkQuestion(
+        next.service,
+        construction,
+        reader,
+        reference,
+        next.record,
+        next.controls,
+    );
+    assert.equal(next.record.status, "complete");
+    assert.equal(next.calls.judge.length, 1);
+});
+
+test("resuming reviews the saved failed import job without reimporting its partial corpus", async () => {
+    const f = fixture();
+    f.record.status = "failed";
+    f.record.inFlight = { jobId: "saved-job", sourceKey: "failed-source" };
+    f.record.error = { name: "AssertionError", code: "ERR_ASSERTION" };
+    f.controls.continueAfterImportFailure = true;
+    f.service.getJob = async (id) => {
+        assert.equal(id, "saved-job");
+        return { jobId: id, state: "failed", error: "Response is not JSON:\n" };
+    };
+    await runBenchmarkQuestion(
+        f.service,
+        construction,
+        reader,
+        reference,
+        f.record,
+        f.controls,
+    );
+    assert.equal(f.record.failurePhase, "import");
+    assert.equal(f.record.error.code, "ERR_ASSERTION");
+    assert.equal(f.calls.ingestion.length, 0);
+    assert.equal(f.calls.answer.length, 0);
+    f.service.getJob = async () => ({ state: "running" });
+    await assert.rejects(
+        runBenchmarkQuestion(
+            f.service,
+            construction,
+            reader,
+            reference,
+            f.record,
+            f.controls,
+        ),
+        /not terminally failed/,
+    );
+});
+
+test("continuation does not swallow answer, persistence, cancellation or strict-mode failures", async () => {
+    for (const mode of ["answer", "persist", "abort", "strict"]) {
+        const f = fixture();
+        f.controls.continueAfterImportFailure = mode !== "strict";
+        if (mode === "answer")
+            f.service.answer = async () => {
+                throw new Error("answer failed");
+            };
+        if (mode === "persist")
+            f.controls.persist = async () => {
+                throw new Error("write failed");
+            };
+        if (mode === "abort")
+            f.controls.signal = AbortSignal.abort(new Error("cancelled"));
+        if (mode === "strict")
+            f.controls.waitForMemoryJob = async () => ({ state: "failed" });
+        await assert.rejects(
+            runBenchmarkQuestion(
+                f.service,
+                construction,
+                reader,
+                reference,
+                f.record,
+                f.controls,
+            ),
+        );
+        assert.equal(f.record.failurePhase, undefined);
+    }
+});
+
+test("the production extractor retries empty and malformed JSON, but never fabricates success after exhaustion", async () => {
+    const { createKnowledgeExtractor } = await import(
+        "../../packages/knowledgeProcessor/dist/conversation/knowledge.js"
+    );
+    const valid = JSON.stringify({
+        entities: [],
+        actions: [],
+        inverseActions: [],
+        topics: [],
+    });
+    for (const malformed of ["", '{"entities": invalid}']) {
+        let calls = 0;
+        const extractor = createKnowledgeExtractor({
+            complete: async () => ({
+                success: true,
+                data: ++calls === 1 ? malformed : valid,
+            }),
+        });
+        const result = await extractor.extractWithRetry(
+            "Ordinary source text",
+            2,
+        );
+        assert.equal(result.success, true);
+        assert.equal(calls, 2);
+    }
+    let calls = 0;
+    const extractor = createKnowledgeExtractor({
+        complete: async () => {
+            calls++;
+            return { success: true, data: "" };
+        },
+    });
+    const result = await extractor.extractWithRetry("Ordinary source text", 2);
+    assert.equal(result.success, false);
+    assert.match(result.message, /^Response is not JSON:\s*$/);
+    assert.ok(calls >= 2 && calls <= 3);
 });
 
 test("judge prompts select original task/abstention templates and safely substitute arbitrary strings", () => {

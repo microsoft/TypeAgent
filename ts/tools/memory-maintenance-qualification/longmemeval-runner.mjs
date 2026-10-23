@@ -13,6 +13,30 @@ export const officialJudgeSha256 =
 export const digest = (value) =>
     createHash("sha256").update(value).digest("hex");
 
+export class BenchmarkImportFailure extends Error {
+    constructor(job) {
+        assert.equal(
+            job.state,
+            "failed",
+            "Import job is not terminally failed",
+        );
+        super(`Benchmark ingestion did not complete: ${job.state}`);
+        this.name = "BenchmarkImportFailure";
+        this.job = {
+            jobId: job.jobId,
+            state: job.state,
+            stage: job.progress?.stage,
+            completed: job.progress?.completed,
+            total: job.progress?.total,
+            responseFailure:
+                typeof job.error === "string" &&
+                /^Response is not JSON:\s*$/.test(job.error)
+                    ? "empty-json-response"
+                    : "other-import-failure",
+        };
+    }
+}
+
 export function officialJudgeTemplates(source) {
     assert.equal(
         digest(source),
@@ -128,6 +152,7 @@ export async function executeMemoryCase(
                   signal,
               })
             : admitted;
+        if (job.state === "failed") throw new BenchmarkImportFailure(job);
         assert.equal(
             job.state,
             "complete",
