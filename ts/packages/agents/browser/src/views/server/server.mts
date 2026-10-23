@@ -38,7 +38,7 @@ async function main() {
     }
     const send = process.send.bind(process);
     const adapter = createChannelAdapter((message, callback) =>
-        send(message, callback),
+        send(message, undefined, undefined, callback),
     );
     process.on("message", adapter.notifyMessage);
     process.on("disconnect", adapter.notifyDisconnected);

@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
-import { lstat, open, realpath } from "node:fs/promises";
+import { constants, type Stats } from "node:fs";
+import { lstat, open, realpath, type FileHandle } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type {
@@ -30,7 +30,7 @@ export interface AgentSessionPathImportOptions extends AgentSessionScope {
     timeoutMs?: number;
 }
 
-async function* readSessionChunks(options: AgentSessionPathImportOptions) {
+async function resolveSessionFile(options: AgentSessionPathImportOptions) {
     const maxBytes = options.maxTotalBytes ?? DEFAULT_MAX_BYTES;
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
         throw new Error("maxTotalBytes must be a positive safe integer");
@@ -54,6 +54,37 @@ async function* readSessionChunks(options: AgentSessionPathImportOptions) {
             `Agent session import exceeds the ${maxBytes} byte limit`,
         );
     }
+    return { maxBytes, requested, actual, info };
+}
+
+async function validateSessionFileUnchanged(
+    file: FileHandle,
+    opened: Stats,
+    requested: string,
+    actual: string,
+) {
+    const finished = await file.stat();
+    const current = await lstat(requested);
+    if (
+        finished.size !== opened.size ||
+        finished.mtimeMs !== opened.mtimeMs ||
+        finished.ctimeMs !== opened.ctimeMs ||
+        current.isSymbolicLink() ||
+        !current.isFile() ||
+        current.nlink !== 1 ||
+        current.dev !== opened.dev ||
+        current.ino !== opened.ino ||
+        (await realpath(requested)) !== actual
+    ) {
+        throw new Error(
+            "Agent session file changed while reading; import was not finalized",
+        );
+    }
+}
+
+async function* readSessionChunks(options: AgentSessionPathImportOptions) {
+    const { maxBytes, requested, actual, info } =
+        await resolveSessionFile(options);
     const file = await open(
         actual,
         constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
@@ -125,23 +156,7 @@ async function* readSessionChunks(options: AgentSessionPathImportOptions) {
             }
         }
         if (pending.byteLength > 0) yield* addLine(pending);
-        const finished = await file.stat();
-        const current = await lstat(requested);
-        if (
-            finished.size !== opened.size ||
-            finished.mtimeMs !== opened.mtimeMs ||
-            finished.ctimeMs !== opened.ctimeMs ||
-            current.isSymbolicLink() ||
-            !current.isFile() ||
-            current.nlink !== 1 ||
-            current.dev !== opened.dev ||
-            current.ino !== opened.ino ||
-            (await realpath(requested)) !== actual
-        ) {
-            throw new Error(
-                "Agent session file changed while reading; import was not finalized",
-            );
-        }
+        await validateSessionFileUnchanged(file, opened, requested, actual);
         if (chunk.length > 0) yield decoder.decode(Buffer.concat(chunk));
     } finally {
         await file.close();

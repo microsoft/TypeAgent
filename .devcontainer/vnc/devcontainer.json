@@ -30,7 +30,7 @@
       "autoPull": false
     },
     "ghcr.io/devcontainers/features/node:1": {
-      "version": "22",
+      "version": "lts",
       "nodeGypDependencies": true
     },
     "ghcr.io/devcontainers/features/python:1": {

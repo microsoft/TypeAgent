@@ -403,7 +403,9 @@ describe("durable extraction and message embedding windows", () => {
                 async () => {},
             );
             expect(extracted).toEqual(
-                expected.flatMap((part) => part.textChunks),
+                expected.flatMap((part) =>
+                    part.textChunks.map((text) => text.trim()),
+                ),
             );
             const memory = await DocMemory.readFromFile(
                 root,
@@ -538,7 +540,9 @@ describe("durable extraction and message embedding windows", () => {
             async () => {},
         );
         expect(extracted).toEqual(
-            currentParts.flatMap((part) => part.textChunks),
+            currentParts.flatMap((part) =>
+                part.textChunks.map((text) => text.trim()),
+            ),
         );
         await expect(
             index.resolveIndexedLocator("source", "r1", oldAnchor.locator),

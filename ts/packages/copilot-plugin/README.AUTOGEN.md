@@ -34,7 +34,7 @@ To set up the `@typeagent/copilot-plugin`, follow these steps:
 
 ### 1. Install Node.js and pnpm
 
-- Use Node.js 22+ and pnpm 10+ as specified in the workspace's `package.json` engines.
+- Use the latest Node.js LTS release (default) or another [supported release](../../README.md#setup), and pnpm 10+ as specified in the workspace's `package.json` engines.
 - On Windows, install Node.js via tools like `nvm-windows` or the Node.js installer.
 - On WSL, use `nvm` to install and manage Node.js versions.
 

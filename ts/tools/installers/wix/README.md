@@ -26,7 +26,7 @@ ts/tools/scripts/
 ts/tools/installers/wix/
   ├── TypeAgent-AgentServer.wxs   # WiX project definition
   ├── extract-payload.ps1         # Deferred CA: unpack payload/*.zip at install time
-  ├── install-prereqs.ps1         # Deferred CA: npm i -g claude+copilot, warn on Node<22
+  ├── install-prereqs.ps1         # Deferred CA: npm i -g claude+copilot, warn on unsupported Node
   └── register-plugin.ps1         # Deferred CA: register/unregister the Copilot CLI plugin
 
 ts/tools/installers/common/
@@ -110,10 +110,10 @@ not change machine-wide trust.
 
 ### On Your Development Machine
 
-1. **Node.js ≥ 22**
+1. The **latest Node.js LTS** release (recommended; see [supported versions](../../../README.md#setup))
 
    ```powershell
-   node --version  # Should be v22.x
+   node --version  # Should be a supported LTS release
    ```
 
 2. **WiX Toolset 3.11** (for local testing)
@@ -610,11 +610,11 @@ runs these deferred, impersonated custom actions (each **non-fatal** so a hiccup
 never rolls back the agent-server install; issues surface as warnings + the
 ExitDialog reminder):
 
-| Action             | Property gate             | What it does                                                                                                                                                                                        |
-| ------------------ | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `InstallPrereqs`   | —                         | Runs `install-prereqs.ps1`: installs `claude` (`@anthropic-ai/claude-code`) and `copilot` (`@github/copilot`) via `npm i -g` when missing, and warns if Node < 22. Mirrors `install-typeagent.ps1`. |
-| `StartAgentServer` | `STARTSERVER=1` (default) | `node typeagent-serve.mjs start` — starts the daemon.                                                                                                                                               |
-| `EnableAutostart`  | `AUTOSTART=1` (default)   | `node typeagent-serve.mjs autostart enable` — registers a per-user logon Scheduled Task. Removed on uninstall (`DisableAutostart`).                                                                 |
+| Action             | Property gate             | What it does                                                                                                                                                                                                                 |
+| ------------------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `InstallPrereqs`   | —                         | Runs `install-prereqs.ps1`: installs `claude` (`@anthropic-ai/claude-code`) and `copilot` (`@github/copilot`) via `npm i -g` when missing, and warns if no supported Node version is found. Mirrors `install-typeagent.ps1`. |
+| `StartAgentServer` | `STARTSERVER=1` (default) | `node typeagent-serve.mjs start` — starts the daemon.                                                                                                                                                                        |
+| `EnableAutostart`  | `AUTOSTART=1` (default)   | `node typeagent-serve.mjs autostart enable` — registers a per-user logon Scheduled Task. Removed on uninstall (`DisableAutostart`).                                                                                          |
 
 ```powershell
 # Skip starting/autostarting the daemon (e.g. provisioning happens later)

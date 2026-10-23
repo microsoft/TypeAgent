@@ -127,7 +127,7 @@ Four code-quality steps run in
 only**, sequenced after `Build` and before `Test`. They are skipped entirely
 unless the PR touches `ts/**` or the workflow file itself (a `dorny/paths-filter`
 guard), and — like the rest of the job — they run on every matrix cell
-(`ubuntu`/`windows`/`macos` × Node 22/24).
+(`ubuntu`/`windows`/`macos` × Node 22.23.4/24.22.1/26.12.1).
 
 Each step is a **changed-files diff against the PR's base branch**: it first
 `git fetch --no-tags origin <base_ref>`, then passes `--base origin/<base_ref>`

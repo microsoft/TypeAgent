@@ -6,7 +6,7 @@ This directory contains the documentation site for TypeAgent.
 
 ### Prerequisites
 
-- Node.js (v14 or later)
+- The latest Node.js LTS release (recommended; see [supported versions](../ts/README.md#setup))
 - npm or yarn
 
 ### Setup
