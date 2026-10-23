@@ -141,73 +141,14 @@ function handleFailures(firstFailures) {
                 ),
             ];
             for (const name of packageNames) {
-                const failures = priorFailures.filter(
-                    (failure) => failure.package === name,
+                const result = retryPackage(
+                    name,
+                    priorFailures.filter((failure) => failure.package === name),
+                    attempt,
                 );
-                const packageDir = resolvePackage(
-                    failures[0].testFilePath,
-                )?.directory;
-                if (packageDir === undefined) {
-                    retryTrusted = false;
-                    retryFailed = true;
-                    break;
-                }
-                const manifest = JSON.parse(
-                    fs.readFileSync(
-                        path.join(packageDir, "package.json"),
-                        "utf8",
-                    ),
-                );
-                let plan = planPackageRetry(
-                    manifest,
-                    failures.map((failure) =>
-                        toAbsolutePath(failure.testFilePath),
-                    ),
-                    packageDir,
-                );
-                if (
-                    plan.narrowed &&
-                    plan.args
-                        .slice(6)
-                        .some((file) => !isRegularPackageFile(file, packageDir))
-                ) {
-                    plan = {
-                        narrowed: false,
-                        reason: "failed path is not a regular file contained in the owning package",
-                        cwd: packageDir,
-                        args: ["run", "test:local"],
-                    };
-                }
-                console.error(
-                    plan.narrowed
-                        ? `Retrying failed files in ${name}`
-                        : `Full-package retry for ${name}: ${plan.reason}`,
-                );
-                const retryDirectory = makeFailuresDirectory(`retry${attempt}`);
-                failureDirectories.push(retryDirectory);
-                const retryResult = runPnpm(
-                    plan.args,
-                    retryDirectory,
-                    true,
-                    plan.cwd,
-                );
-                const observed = readFailures(retryDirectory);
-                finalFailures.push(...observed);
-                const failed =
-                    retryResult.error !== undefined ||
-                    retryResult.signal !== null ||
-                    (retryResult.status ?? 1) !== 0;
-                retryFailed ||= failed;
-                // Check each command independently: another package's artifacts
-                // cannot make a crashed or unreported invocation trustworthy.
-                if (
-                    retryResult.error !== undefined ||
-                    retryResult.signal !== null ||
-                    (failed && observed.length === 0)
-                ) {
-                    console.error(
-                        `Untrusted retry for ${name}: command failed without reliable failure artifacts.`,
-                    );
+                finalFailures.push(...result.failures);
+                retryFailed ||= result.failed;
+                if (!result.trusted) {
                     retryTrusted = false;
                     break;
                 }
@@ -257,6 +198,54 @@ function handleFailures(firstFailures) {
     }
 
     return hasHardFailures(classification) ? 1 : 0;
+}
+
+function retryPackage(name, failures, attempt) {
+    const packageDir = resolvePackage(failures[0].testFilePath)?.directory;
+    if (packageDir === undefined) {
+        return { failures: [], failed: true, trusted: false };
+    }
+    const manifest = JSON.parse(
+        fs.readFileSync(path.join(packageDir, "package.json"), "utf8"),
+    );
+    let plan = planPackageRetry(
+        manifest,
+        failures.map((failure) => toAbsolutePath(failure.testFilePath)),
+        packageDir,
+    );
+    if (
+        plan.narrowed &&
+        plan.args
+            .slice(6)
+            .some((file) => !isRegularPackageFile(file, packageDir))
+    ) {
+        plan = {
+            narrowed: false,
+            reason: "failed path is not a regular file contained in the owning package",
+            cwd: packageDir,
+            args: ["run", "test:local"],
+        };
+    }
+    console.error(
+        plan.narrowed
+            ? `Retrying failed files in ${name}`
+            : `Full-package retry for ${name}: ${plan.reason}`,
+    );
+    const retryDirectory = makeFailuresDirectory(`retry${attempt}`);
+    failureDirectories.push(retryDirectory);
+    const result = runPnpm(plan.args, retryDirectory, true, plan.cwd);
+    const observed = readFailures(retryDirectory);
+    const infrastructureFailed =
+        result.error !== undefined || result.signal !== null;
+    const failed = infrastructureFailed || (result.status ?? 1) !== 0;
+    // Each command needs its own artifacts; another package cannot establish trust.
+    const trusted = !infrastructureFailed && !(failed && observed.length === 0);
+    if (!trusted) {
+        console.error(
+            `Untrusted retry for ${name}: command failed without reliable failure artifacts.`,
+        );
+    }
+    return { failures: observed, failed, trusted };
 }
 
 function makeFailuresDirectory(label) {
