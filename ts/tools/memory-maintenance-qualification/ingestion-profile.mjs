@@ -878,6 +878,15 @@ async function runDevelopmentWorker(spec) {
     return state.outcome;
 }
 
+function developmentDiagnosticPolicyMatches(spec, state, admission) {
+    return (
+        state?.diagnosticPolicySha256 === spec.diagnosticPolicySha256 &&
+        admission?.diagnosticPolicySha256 === spec.diagnosticPolicySha256 &&
+        JSON.stringify(state?.diagnosticPolicy) ===
+            JSON.stringify(spec.diagnosticPolicy)
+    );
+}
+
 async function profileDevelopment(
     directory,
     productRoot,
@@ -957,11 +966,11 @@ async function profileDevelopment(
     )
         .then((text) => JSON.parse(text))
         .catch(() => undefined);
-    const diagnosticPolicyMatches =
-        state?.diagnosticPolicySha256 === spec.diagnosticPolicySha256 &&
-        admission?.diagnosticPolicySha256 === spec.diagnosticPolicySha256 &&
-        JSON.stringify(state?.diagnosticPolicy) ===
-            JSON.stringify(spec.diagnosticPolicy);
+    const diagnosticPolicyMatches = developmentDiagnosticPolicyMatches(
+        spec,
+        state,
+        admission,
+    );
     const complete =
         termination.exit?.code === 0 &&
         state?.outcome === "DEVELOPMENT_INGESTION_COMPLETE" &&
