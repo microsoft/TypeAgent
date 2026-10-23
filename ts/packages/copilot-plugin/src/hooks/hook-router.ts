@@ -316,7 +316,6 @@ export async function routePrompt(
     signal: AbortSignal,
     dependencies: RoutePromptDependencies = routePromptDefaults,
 ): Promise<UserPromptSubmittedOutput> {
-    if (mode === "bypass") return {};
     const owner = (dependencies.recipeOwner ?? getRecipeOwner)();
     if (owner === "off") return {};
     const recording = await dependencies.claimRecording(input);
@@ -326,6 +325,7 @@ export async function routePrompt(
                 "This turn is explicitly selected for TypeAgent macro learning. Perform the user's task normally. Only after it actually succeeds, call typeagent_recorded_task_succeeded once with a concise factual summary, before delivering your final answer. Do not call it after failed, denied, incomplete or aborted work. It records success metadata only; do not rerun the task, launch authoring agents yourself, or wait for background learning. If the receipt tool is unavailable, deliver the answer and report that child authoring is unavailable; do not invent success.",
         };
     if (recording) return {};
+    if (mode === "bypass") return {};
     return (dependencies.localRecipes ?? handleLocalRecipes)(input, signal);
 }
 
