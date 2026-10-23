@@ -230,7 +230,7 @@ export function normalizeTemporalContext(
 export function temporalContextFromHeaders(
     text: string,
 ): SourceTemporalContext | undefined {
-    const headers = [...text.matchAll(/^Session date:\s*([^\r\n]+)$/gm)];
+    const headers = [...text.matchAll(/^Session date:([^\r\n]+)$/gm)];
     if (!headers.length) return undefined;
     return normalizeTemporalContext(
         {
@@ -239,7 +239,7 @@ export function temporalContextFromHeaders(
                 ownerId: `session-header:${header.index}`,
                 start: header.index,
                 end: headers[index + 1]?.index ?? text.length,
-                messageTime: header[1],
+                messageTime: header[1].trimStart(),
             })),
         },
         text.length,
