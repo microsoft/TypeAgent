@@ -202,7 +202,8 @@ describe("retained-source rebuild with real KnowPro and deterministic embeddings
                     "utf8",
                 );
             } catch (error) {
-                if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+                if ((error as NodeJS.ErrnoException).code === "ENOENT")
+                    continue;
                 throw error;
             }
             expect(contents).not.toContain("FORGOTTEN_NEEDLE");
