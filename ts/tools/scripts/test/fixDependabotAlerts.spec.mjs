@@ -262,11 +262,7 @@ test("checkpoint rollback restores the last verified manifest and lockfile pair"
     const pnpmCommand = "pnpm";
     const pnpmOptions = { shell: process.platform === "win32" };
     const pnpmInstall = (...args) =>
-        run(
-            pnpmCommand,
-            ["--dir", directory, "install", ...args],
-            pnpmOptions,
-        );
+        run(pnpmCommand, ["--dir", directory, "install", ...args], pnpmOptions);
     const pnpmInstallResult = (...args) =>
         runResult(
             pnpmCommand,
