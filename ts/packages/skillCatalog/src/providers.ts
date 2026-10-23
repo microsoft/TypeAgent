@@ -42,6 +42,15 @@ export class LocalDirectorySkillProvider
             errorOnExist: true,
             force: false,
             verbatimSymlinks: true,
+            filter: async (entryPath) => {
+                const entryStat = await lstat(entryPath);
+                if (entryStat.isSymbolicLink()) {
+                    throw new Error(
+                        "Symbolic links and junctions are not allowed in skill directories.",
+                    );
+                }
+                return true;
+            },
         });
         return {
             root,

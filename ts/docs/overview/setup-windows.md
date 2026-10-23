@@ -8,10 +8,8 @@ steps to suit your existing environment.
 ## Build
 
 - Install [Git](https://git-scm.com/downloads/win).
-- Install [Node.js](https://nodejs.org/en/download).
-- Enable corepack:
-  - Open Command Prompt **as Administrator**.
-  - `corepack enable`
+- Install [Node.js LTS](https://nodejs.org/en/download).
+- Install pnpm: `npm install --global pnpm`
 - Clone and build:
   - `git clone https://github.com/microsoft/TypeAgent C:\src\TypeAgent`
   - `cd /d C:\src\TypeAgent\ts`

@@ -139,7 +139,7 @@ and checks that `list.listLists` is returned. That verifies the real
 MCP-to-TypeAgent discovery connection, **not Copilot's reasoning or selection**.
 It never launches Copilot, opens another console, or executes an action.
 
-Prerequisites: Windows, Node 22+ with npm, pnpm, a native Copilot CLI executable on
+Prerequisites: Windows, a [supported Node version](../../README.md#setup) with npm, pnpm, a native Copilot CLI executable on
 PATH (already signed in), and existing TypeAgent model/embedding configuration.
 The launcher does not obtain credentials, change Azure accounts, or copy files
 from another checkout. Build/install requires a provisioned `ts\.npmrc`.
@@ -434,21 +434,28 @@ See the [canonical structured-action design](../../docs/plans/copilot-direct-act
 
 ### 1. Node.js and pnpm
 
-For this workspace, use Node.js 22+ and pnpm 10+ (from `ts/package.json` engines).
+For this workspace, use the latest Node.js LTS release (default) or another
+[supported release](../../README.md#setup), and pnpm 10+ (from `ts/package.json` engines).
 
 **On Windows** — install via [nvm-windows](https://github.com/coreybutler/nvm-windows) or the [Node.js installer](https://nodejs.org/):
 
 ```powershell
-nvm install 22
-nvm use 22
-node --version  # should show v22.x.x or later
+nvm install lts
+nvm use lts
+node --version  # should show a supported LTS release
 ```
 
 **In WSL** — via nvm:
 
 ```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
-nvm install 22 && nvm use 22
+nvm install --lts && nvm use --lts
+```
+
+Install pnpm explicitly; Node 26 and later do not bundle Corepack:
+
+```bash
+npm install --global pnpm
 ```
 
 ### 2. Optional TypeAgent Server
@@ -655,7 +662,7 @@ Old TypeAgent data remains untouched as evidence, with no live alternate owner.
 
 State lives under the plugin data root's `recipes/<workspace-profile digest>/`.
 `TYPEAGENT_RECIPE_PROFILE_ID` selects a profile (default `local-default`).
-Node.js **22.13+** is required: a small SQLite writer-lock database prevents
+A [supported Node version](../../README.md#setup) is required: a small SQLite writer-lock database prevents
 two native sessions from mutating that scope. The OS releases it after a crash;
 there is no PID-based lock stealing. Close the current native session before
 transferring that workspace/profile to another. Authenticated local IPC binds
