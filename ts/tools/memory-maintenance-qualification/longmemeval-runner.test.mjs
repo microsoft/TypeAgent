@@ -22,8 +22,54 @@ import {
     closeBenchmarkService,
     acknowledgeStopAfterQuestion,
     selectConstructionCases,
+    createBenchmarkMemoryService,
+    recordBenchmarkArm,
     main,
 } from "./longmemeval-live.mjs";
+
+test("the live benchmark uses the product durable-memory factory without feature overrides", async () => {
+    const service = {};
+    const loaded = [];
+    let receivedRoot;
+    const actual = await createBenchmarkMemoryService(async (file) => {
+        loaded.push(file);
+        return {
+            createDurableMemoryService(root, ...overrides) {
+                receivedRoot = root;
+                assert.deepEqual(overrides, []);
+                return service;
+            },
+        };
+    }, "isolated-benchmark-store");
+    assert.equal(actual, service);
+    assert.equal(receivedRoot, "isolated-benchmark-store");
+    assert.deepEqual(loaded, [
+        "packages\\agentServer\\server\\dist\\durableMemoryService.js",
+    ]);
+});
+
+test("effective product capabilities are recorded and configuration changes cannot resume silently", () => {
+    const state = {};
+    const capabilities = {
+        features: { sourceSynopses: true },
+        derivedViews: { informationalWiki: true, drafts: true },
+    };
+    recordBenchmarkArm(state, capabilities, false);
+    assert.equal(state.arm.sourceSynopses, true);
+    assert.equal(state.arm.informationalViews, true);
+    assert.equal(state.arm.viewDrafts, true);
+    recordBenchmarkArm(state, capabilities, true);
+    assert.throws(
+        () =>
+            recordBenchmarkArm(
+                state,
+                { features: { sourceSynopses: false } },
+                true,
+            ),
+        /Product memory configuration changed/,
+    );
+    assert.equal(state.arm.informationalViews, true);
+});
 
 test("diagnostic selection is exact, validated and retains the frozen construction order", () => {
     const cases = ["a", "b", "c"].map((id) => ({ id }));

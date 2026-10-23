@@ -605,8 +605,9 @@ export class KnowProCorpusIndex implements CorpusIndex {
             memory,
             terms,
             requested,
-            (ordinal) => eligible.has(ordinal),
-            eligible.size,
+            (ordinal) =>
+                request.query ? eligible.has(ordinal) : this.eligible(ordinal),
+            request.query ? eligible.size : this.eligibleRanges().length,
         );
         const postingScores = request.includeDiagnostics
             ? new Map(scores)
@@ -618,6 +619,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             options.maxMessageMatches = 8;
             options.maxKnowledgeMatches = 12;
             options.messageRangesInScope = ranges;
+            options.fallbackRagOptions = { maxMessageMatches: 8 };
             const result = await memory.searchWithLanguage(query, options);
             if (!result.success) throw new Error(result.message);
             for (const match of result.data.flatMap(

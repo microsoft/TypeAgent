@@ -168,6 +168,7 @@ export async function executeMemoryCase(
         record.hypothesis = answer.answer;
         record.citations = answer.citations;
         record.readerContext = answer.readerContext;
+        record.answerPath = answer.readerContext?.answerPath ?? "knowpro";
         record.indexVersion = answer.indexVersion;
         record.warnings = answer.warnings;
         const sourceToSession = new Map(

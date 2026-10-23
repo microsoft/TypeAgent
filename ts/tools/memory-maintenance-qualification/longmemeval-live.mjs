@@ -36,6 +36,56 @@ const datasetRevision = "98d7416c24c778c2fee6e6f3006e7a073259d48f";
 const workAllowanceMs = 35 * 60 * 1000;
 const cleanupReserveMs = 5 * 60 * 1000;
 const seed = "typeagent-longmemeval-full-2026-10-20";
+const productFactory =
+    "packages\\agentServer\\server\\dist\\durableMemoryService.js";
+
+export async function createBenchmarkMemoryService(load, rootDirectory) {
+    const { createDurableMemoryService } = await load(productFactory);
+    return createDurableMemoryService(rootDirectory);
+}
+
+export function recordBenchmarkArm(state, capabilities, resume) {
+    const arm = {
+        name: "TypeAgent production document-backed conversation memory",
+        productFactory,
+        viewModelEndpointHash: digest(
+            process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT?.trim() ?? "",
+        ),
+        ingestion:
+            "One Markdown source per original session position; dates, roles and turn text preserved",
+        answerMode: "default",
+        readerProvenance:
+            "Opt-in public diagnostics identify actual indexed reader fragments and selection; citations identify supplied evidence, not independent entailment.",
+        answerLimit: "product-default",
+        preliminarySearch: false,
+        readerDate:
+            "Original question date supplied to retrieval and reader as temporal metadata",
+        judge: "Pinned official prompts; normal configured model and default generation settings, not official GPT-4o evaluator",
+        humanGold:
+            "Official LongMemEval references; no assertion of independent review of local artifact gold",
+        sourceSynopses: capabilities.features.sourceSynopses,
+        informationalViews:
+            capabilities.derivedViews?.informationalWiki === true,
+        viewDrafts: capabilities.derivedViews?.drafts === true,
+    };
+    if (resume)
+        assert.deepEqual(
+            state.arm,
+            arm,
+            "Product memory configuration changed",
+        );
+    state.arm = arm;
+}
+
+async function benchmarkCheckpoint(productRoot) {
+    const hashes = await snapshotCompiledCheckpoint(productRoot);
+    for (const file of [
+        productFactory,
+        "packages\\agentServer\\server\\dist\\viewModelOptions.js",
+    ])
+        hashes[file] = digest(await readFile(path.join(productRoot, file)));
+    return hashes;
+}
 
 function validateBenchmarkSpec(spec) {
     assert.equal(
@@ -250,7 +300,7 @@ async function runWorker(spec) {
     const templates = officialJudgeTemplates(
         await readFile(spec.judgeSourcePath, "utf8"),
     );
-    const hashes = await snapshotCompiledCheckpoint(spec.productRoot);
+    const hashes = await benchmarkCheckpoint(spec.productRoot);
     assertCheckpoint(hashes, spec.expectedCheckpoint);
     const compiledDigest = digest(JSON.stringify(hashes));
     const dependencies = await liveDependencyCheckpoint(spec.productRoot);
@@ -332,26 +382,6 @@ async function runWorker(spec) {
             "Configured model changed",
         );
     state.configuration = configuration;
-    state.arm = {
-        name: "TypeAgent FileMemoryService product defaults",
-        serviceConfiguration: "constructor-defaults",
-        ingestion:
-            "One Markdown source per original session position; typed session/turn temporal ownership, raw dates, roles and turn text preserved",
-        answerMode: "default",
-        readerProvenance:
-            "Opt-in public diagnostics identify the actual indexed fragments supplied to the product reader; citations identify supplied evidence, not independent entailment.",
-        answerLimit: "product-default",
-        preliminarySearch: false,
-        readerDate:
-            "Typed original question reference date supplied to querying and reading, never historical construction; official supplied-history eligibility",
-        temporalContractVersion: 1,
-        judge: "Pinned official prompts; normal configured model and default generation settings, not official GPT-4o evaluator",
-        humanGold:
-            "Official LongMemEval references; no assertion of independent review of local artifact gold",
-    };
-    const { FileMemoryService } = await load(
-        "packages\\memory\\service\\dist\\fileMemoryService.js",
-    );
     const { waitForMemoryJob } = await load(
         "packages\\memory\\service\\dist\\rpcFacade.js",
     );
@@ -368,7 +398,8 @@ async function runWorker(spec) {
               );
     let role = "benchmark-startup";
     const restoreObserver = observeProvider(state.providerRequests, () => role);
-    const service = new FileMemoryService(
+    const service = await createBenchmarkMemoryService(
+        load,
         path.join(spec.runDirectory, "isolated-store"),
     );
     const judge = async (reference, hypothesis, abortSignal) => {
@@ -391,7 +422,7 @@ async function runWorker(spec) {
     };
     try {
         await service.initialize();
-        state.arm.serviceCapabilities = await service.getCapabilities();
+        recordBenchmarkArm(state, await service.getCapabilities(), spec.resume);
         await persist();
         const admittedEpochMs = Date.now();
         await writeJson(path.join(spec.runDirectory, "admitted.json"), {
@@ -599,7 +630,7 @@ export async function main(args = process.argv.slice(2)) {
         JSON.stringify({ kind: "run-directory", runDirectory, receiptId }) +
             "\n",
     );
-    const hashes = await snapshotCompiledCheckpoint(values.product);
+    const hashes = await benchmarkCheckpoint(values.product);
     const spec = {
         receiptId,
         runDirectory,

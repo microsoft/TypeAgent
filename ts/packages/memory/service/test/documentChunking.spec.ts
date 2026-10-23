@@ -35,6 +35,7 @@ const options = {
 describe("durable extraction and message embedding windows", () => {
     let root: string;
     let forbidden: boolean;
+    let queryTranslation: object | undefined;
     const extracted: string[] = [];
     const embedded: string[] = [];
     const languagePrompts: string[] = [];
@@ -98,6 +99,7 @@ describe("durable extraction and message embedding windows", () => {
             }),
         };
         return {
+            useScopedSearch: true,
             embeddingModel,
             embeddingSize: 3,
             conversationSettings,
@@ -105,6 +107,11 @@ describe("durable extraction and message embedding windows", () => {
                 completionSettings: {},
                 complete: async (prompt) => {
                     languagePrompts.push(JSON.stringify(prompt));
+                    if (queryTranslation)
+                        return {
+                            success: true,
+                            data: JSON.stringify(queryTranslation),
+                        };
                     throw new Error("Unexpected chat");
                 },
             },
@@ -141,12 +148,63 @@ describe("durable extraction and message embedding windows", () => {
     beforeEach(async () => {
         root = await mkdtemp(path.join(os.tmpdir(), "document-chunking-"));
         forbidden = false;
+        queryTranslation = undefined;
         extracted.length = 0;
         embedded.length = 0;
         languagePrompts.length = 0;
     });
     afterEach(async () => {
         await rm(root, { recursive: true, force: true });
+    });
+
+    test("zero-hit rescue scopes before its eight-message limit even with twelve foreign matches ranked first", async () => {
+        queryTranslation = {
+            searchExpressions: [
+                {
+                    rewrittenQuery: "billing instructions",
+                    filters: [
+                        {
+                            entitySearchTerms: [
+                                { name: "Unextracted", isNamePronoun: false },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        };
+        const index = new KnowProCorpusIndex("test", root, settings);
+        await index.rebuild(
+            [
+                ...Array.from({ length: 12 }, (_, i) =>
+                    document(
+                        "text",
+                        "Foreign private billing instructions.",
+                        `foreign-${i}`,
+                    ),
+                ),
+                document("text", "Allowed billing instructions.", "allowed"),
+            ],
+            new AbortController().signal,
+            async () => {},
+        );
+        const selection = await index.readFragments({
+            query: "billing instructions",
+            terms: ["billing"],
+            sourceIds: ["allowed"],
+            temporalContext: { referenceTime: "2026-10-22T12:00:00Z" },
+        });
+        expect(selection.fragments.length).toBeGreaterThan(0);
+        expect(
+            selection.fragments.every(
+                (fragment) => fragment.sourceId === "allowed",
+            ),
+        ).toBe(true);
+        expect(
+            selection.fragments.map((item) => item.snippet).join(" "),
+        ).toContain("Allowed");
+        expect(languagePrompts.join(" ")).toContain("2026-10-22");
+        expect(selection.readChars).toBeLessThanOrEqual(32000);
+        expect(selection.fragments.length).toBeLessThanOrEqual(12);
     });
 
     test("query scoring keeps relevant price operands without type-wide boosts and scopes language search before ranking", async () => {
@@ -254,6 +312,7 @@ describe("durable extraction and message embedding windows", () => {
                         start: 0,
                         end: doc.content.length,
                         messageTime: "2024/02/02 12:00",
+                        role: "user",
                     },
                 ],
             },
@@ -278,6 +337,7 @@ describe("durable extraction and message embedding windows", () => {
                 kp.parseTemporalValue("2024/02/02 12:00"),
             );
             expect(fragment.temporalContext?.ownerId).toBe("message");
+            expect(fragment.temporalContext?.role).toBe("user");
             expect(
                 await reopened.resolveIndexedLocator(
                     fragment.sourceId,

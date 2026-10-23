@@ -316,7 +316,7 @@ const manifestFileName = "manifest.json";
 const eventsFileName = "events.jsonl";
 const jobsDirectoryName = "jobs";
 const indexDirectoryName = "index";
-const pipelineVersion = "1";
+const pipelineVersion = "2";
 const eventSourceKinds = new Set([
     "conversation",
     "document",

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { error, success } from "typechat";
-import type { conversation as kpLib } from "@typeagent/knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import {
     matchesTemporalRange,
     normalizeTemporalContext,
@@ -357,6 +357,58 @@ describe("canonical source temporal context", () => {
             new Set(temporal.discoveredDateEvidence?.map((entry) => entry.id))
                 .size,
         ).toBe(2);
+        const evidence = structuredClone(temporal.discoveredDateEvidence);
+        await extractKnowledgeWithTemporalContext(
+            messages,
+            [{ messageOrdinal: 0 }],
+            extractor,
+        );
+        expect(temporal.discoveredDateEvidence).toEqual(evidence);
+        messages.get(0).metadata = {
+            temporalContext: JSON.parse(JSON.stringify(temporal)),
+        };
+        const restarted = messages.get(0).metadata!.temporalContext!;
+        restarted.sourceRevisionId = "replacement";
+        await extractKnowledgeWithTemporalContext(
+            messages,
+            [{ messageOrdinal: 0 }],
+            extractor,
+        );
+        expect(
+            restarted.discoveredDateEvidence?.map((entry) => entry.id),
+        ).not.toEqual(evidence?.map((entry) => entry.id));
+    });
+
+    test("the real extractor allows temporal rejection diagnostics without rejecting source knowledge", async () => {
+        const temporal = context("2024-05-10");
+        const extractor = kpLib.createKnowledgeExtractor({
+            complete: async () =>
+                success(
+                    JSON.stringify({
+                        ...empty,
+                        dateAnchors: [
+                            {
+                                quote: "Not in the source.",
+                                date: "2024-05-01",
+                                role: "eventTime",
+                            },
+                        ],
+                    }),
+                ),
+        });
+        const messages = new MessageCollection([
+            new TemporalMessage("Original source remains available.", temporal),
+        ]);
+        const results = await extractKnowledgeWithTemporalContext(
+            messages,
+            [{ messageOrdinal: 0 }],
+            extractor,
+        );
+        expect(results[0].success).toBe(true);
+        expect(temporal.discoveredDateEvidence).toEqual([]);
+        expect(temporal.rejectedDateAnchors).toEqual([
+            { chunkOrdinal: 0, anchorOrdinal: 0, reason: "quote-not-found" },
+        ]);
     });
 
     test("retrying an earlier chunk excludes future discovered, inherited and rejected annotations", async () => {

@@ -243,3 +243,41 @@ test("QA uses its fragment budget across more than four relevant blocks before e
     expect(selected.fragments.length).toBeLessThanOrEqual(12);
     expect(selected.readChars).toBeLessThanOrEqual(32000);
 });
+
+test("QA selectors ignore possessive letters and match whole terms rather than substrings", () => {
+    expect(indexedQueryTerms("What is my property's price?")).toEqual([
+        "property",
+        "price",
+    ]);
+    const text = `${"stories passed. ".repeat(200)}price $200,000. ${"stories passed. ".repeat(200)}`;
+    const result = select(text, ["s", "price"], {
+        query: "What is the price?",
+        maxFragments: 1,
+        maxCharsPerFragment: 200,
+    });
+    expect(result.fragments[0].snippet).toContain("price $200,000.");
+});
+
+test("QA partial-overlap deduplication preserves both operands in exact nonoverlapping ranges", () => {
+    const text =
+        `${"Context ".repeat(40)}price $200,000. ` +
+        `${"Details ".repeat(40)}renovation $20,000. ` +
+        "More context. ".repeat(80);
+    const result = select(text, ["price", "renovation"], {
+        query: "Renovation cost as a percentage of the price?",
+        maxCharsPerFragment: 500,
+    });
+    const ranges = result.fragments
+        .map((fragment) => parseIndexedLocator(fragment.locator))
+        .sort((a, b) => a.start - b.start);
+    expect(ranges.length).toBeGreaterThan(1);
+    for (let index = 1; index < ranges.length; index++)
+        expect(ranges[index].start).toBeGreaterThanOrEqual(
+            ranges[index - 1].end,
+        );
+    const supplied = result.fragments
+        .map((fragment) => fragment.snippet)
+        .join("\n");
+    expect(supplied).toContain("price $200,000.");
+    expect(supplied).toContain("renovation $20,000.");
+});

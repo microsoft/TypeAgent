@@ -70,7 +70,10 @@ const queryStopWords = new Set([
 export function indexedQueryTerms(query: string): string[] {
     return [
         ...new Set(query.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ?? []),
-    ].filter((term) => term.length <= 200 && !queryStopWords.has(term));
+    ].filter(
+        (term) =>
+            term.length > 1 && term.length <= 200 && !queryStopWords.has(term),
+    );
 }
 
 export function indexedTextHash(text: string): string {
@@ -202,8 +205,10 @@ function matchedWindows(
     block: IndexedBlock,
     selectors: string[],
     window: number,
+    wholeWords: boolean,
 ): WindowCandidate[] {
     return selectors.flatMap((selector) => {
+        if (wholeWords && !/[\p{L}\p{N}]{2}/u.test(selector)) return [];
         const pattern = selector
             .trim()
             .split(/\s+/)
@@ -211,7 +216,12 @@ function matchedWindows(
             .join("\\s+");
         return representativeMatches(
             block.text,
-            new RegExp(pattern, "giu"),
+            new RegExp(
+                wholeWords
+                    ? `(?<![\\p{L}\\p{N}_])${pattern}(?![\\p{L}\\p{N}_])`
+                    : pattern,
+                "giu",
+            ),
         ).map((match) => ({
             block,
             offset: passageOffset(block.text, match.index, window),
@@ -245,11 +255,12 @@ function candidateWindows(
     terms: string[],
     selectors: string[],
     window: number,
+    wholeWords: boolean,
 ): WindowCandidate[][] {
     return blocks.map((block) => {
         const headings = [...block.text.matchAll(/^#{1,6} .+$/gm)];
-        const passages = matchedWindows(block, selectors, window);
-        const words = matchedWindows(block, terms, window);
+        const passages = matchedWindows(block, selectors, window, wholeWords);
+        const words = matchedWindows(block, terms, window, wholeWords);
         const primary = passages.length ? passages : words;
         const qualifications = representativeMatches(
             block.text,
@@ -403,6 +414,23 @@ function recordFragment(
     if (state.fragments.length >= maxFragments) state.limited = true;
 }
 
+function uncoveredRange(
+    start: number,
+    end: number,
+    ranges: Array<{ start: number; end: number }>,
+): { start: number; end: number } | undefined {
+    const gaps: Array<{ start: number; end: number }> = [];
+    for (const range of [...ranges].sort((a, b) => a.start - b.start)) {
+        if (range.end <= start) continue;
+        if (range.start >= end) break;
+        if (range.start > start) gaps.push({ start, end: range.start });
+        start = Math.max(start, range.end);
+        if (start >= end) break;
+    }
+    if (start < end) gaps.push({ start, end });
+    return gaps.sort((a, b) => b.end - b.start - (a.end - a.start))[0];
+}
+
 function readCandidate(
     item: WindowCandidate,
     request: IndexedFragmentRequest,
@@ -458,6 +486,12 @@ function readCandidate(
         state.limited = true;
         return;
     }
+    if (request.query) {
+        const uncovered = uncoveredRange(offset, end, ranges);
+        if (!uncovered) return;
+        offset = uncovered.start;
+        end = uncovered.end;
+    }
     const snippet = block.text.slice(offset, end);
     state.readChars += snippet.length;
     const lower = snippet.toLocaleLowerCase();
@@ -510,7 +544,13 @@ export function selectIndexedFragments(
               .slice(0, maxFragments)
         : diverseBlocks(candidates, Math.max(2, Math.floor(maxFragments / 3)));
     state.limited = candidates.length > selected.length;
-    const windows = candidateWindows(selected, terms, request.terms, window);
+    const windows = candidateWindows(
+        selected,
+        terms,
+        request.terms,
+        window,
+        request.query !== undefined,
+    );
     // Interleave sources so an earlier long block cannot hide a newly indexed correction.
     for (
         let index = 0;
