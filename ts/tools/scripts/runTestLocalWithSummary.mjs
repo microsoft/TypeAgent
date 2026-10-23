@@ -5,16 +5,15 @@
 //
 //  1. Run the whole suite once, capturing individual failures via the reporter
 //     that writes to TYPEAGENT_TEST_FAILURES_DIR.
-//  2. If anything failed, rerun ONLY the packages that owned a failing test up
-//     to two times, serially, with a fresh Jest cache and failures directory,
-//     stopping as soon as the package suite passes.
+//  2. Retry failed files for recognized Jest scripts, otherwise whole packages,
+//     up to twice serially, with caching disabled and fresh reporter directories.
 //  3. Classify every observed failure as flaky (absent from the final attempt)
 //     or build-blocking (present in the final attempt), then print a summary and
 //     emit GitHub annotations / a step summary. The build fails unless a retry
 //     command completes successfully.
+//  4. Run root script tests independently, even if workspace tests still fail.
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -28,6 +27,9 @@ import {
     buildStepSummaryMarkdown,
     toFsPath,
     MAX_TEST_RETRIES,
+    runLocalTestPhases,
+    planPackageRetry,
+    windowsPnpmCommand,
 } from "./lib/testRetry.mjs";
 
 // build-ts runs this from the `ts` directory, which is the pnpm workspace root.
@@ -38,16 +40,55 @@ const inGithubActions = process.env.GITHUB_ACTIONS === "true";
 const firstDirectory = makeFailuresDirectory("run1");
 const failureDirectories = [firstDirectory];
 try {
-    const firstResult = runPnpm(["run", "test:local"], firstDirectory);
+    process.exitCode = runLocalTestPhases(
+        () => {
+            const status = runWorkspaceTests();
+            reportPhase("Workspace tests (including retries)", status);
+            return status;
+        },
+        () => {
+            console.error("\nROOT SCRIPT TEST PHASE");
+            const result = runPnpm(
+                ["run", "test:local:scripts"],
+                firstDirectory,
+            );
+            checkInfrastructureFailure(result);
+            const status = result.status ?? 1;
+            reportPhase("Root script tests", status);
+            return status;
+        },
+    );
+} finally {
+    for (const directory of failureDirectories) {
+        fs.rmSync(directory, { recursive: true, force: true });
+    }
+}
 
-    // A spawn error or a killing signal is an infrastructure failure, not a
-    // test failure we can retry; surface it exactly like before.
-    if (firstResult.error !== undefined) {
-        throw firstResult.error;
+function checkInfrastructureFailure(result) {
+    if (result.error !== undefined || result.signal !== null) {
+        console.error(
+            `Test command infrastructure failure: ${result.error?.message ?? result.signal}`,
+        );
+        return true;
     }
-    if (firstResult.signal !== null) {
-        process.kill(process.pid, firstResult.signal);
+    return false;
+}
+
+function reportPhase(name, status) {
+    console.error(`\n${name}: exit ${status}`);
+    if (inGithubActions) {
+        if (status !== 0)
+            console.log(`::error::${name} failed (exit ${status}).`);
+        appendGithubSummary(
+            `### ${name}\n\nResult: **${status === 0 ? "passed" : "failed"}** (exit ${status}).`,
+        );
     }
+}
+
+function runWorkspaceTests() {
+    console.error("\nWORKSPACE TEST PHASE");
+    const firstResult = runPnpm(["run", "test:local:packages"], firstDirectory);
+    if (checkInfrastructureFailure(firstResult)) return 1;
 
     const firstFailures = dedupeFailures(
         readFailures(firstDirectory),
@@ -60,14 +101,9 @@ try {
                 "\nFAILED TEST SUMMARY\nNo individual test failures were captured. See the test output above.",
             );
         }
-        process.exitCode = firstResult.status ?? 0;
-    } else {
-        process.exitCode = handleFailures(firstFailures);
+        return firstResult.status ?? 1;
     }
-} finally {
-    for (const directory of failureDirectories) {
-        fs.rmSync(directory, { recursive: true, force: true });
-    }
+    return handleFailures(firstFailures);
 }
 
 function handleFailures(firstFailures) {
@@ -95,43 +131,89 @@ function handleFailures(firstFailures) {
 
         for (let attempt = 1; attempt <= MAX_TEST_RETRIES; attempt++) {
             console.error(`\nRetry ${attempt} of ${MAX_TEST_RETRIES}`);
-            const retryDirectory = makeFailuresDirectory(`retry${attempt}`);
-            failureDirectories.push(retryDirectory);
-            const retryResult = runPnpm(
-                [
-                    ...packages.flatMap((name) => ["--filter", name]),
-                    // Serial rerun of only the affected packages isolates
-                    // genuine failures from resource-contention flakiness.
-                    "--workspace-concurrency=1",
-                    "--no-sort",
-                    "--stream",
-                    "--no-bail",
-                    "run",
-                    "test:local",
-                ],
-                retryDirectory,
-                true,
-            );
-
-            finalFailures = dedupeFailures(
-                readFailures(retryDirectory),
-                workspaceRoot,
-            );
-            retryFailed =
-                retryResult.error !== undefined ||
-                retryResult.signal !== null ||
-                (retryResult.status ?? 1) !== 0;
-
-            // A failed command with no captured failures cannot safely be
-            // classified or cleared by another retry.
-            const retryCrashed =
-                retryResult.error !== undefined ||
-                retryResult.signal !== null ||
-                (retryFailed && finalFailures.length === 0);
-            if (retryCrashed) {
-                retryTrusted = false;
-                break;
+            finalFailures = [];
+            retryFailed = false;
+            const packageNames = [
+                ...new Set(
+                    priorFailures
+                        .map((failure) => failure.package)
+                        .filter((name) => name !== undefined),
+                ),
+            ];
+            for (const name of packageNames) {
+                const failures = priorFailures.filter(
+                    (failure) => failure.package === name,
+                );
+                const packageDir = resolvePackage(
+                    failures[0].testFilePath,
+                )?.directory;
+                if (packageDir === undefined) {
+                    retryTrusted = false;
+                    retryFailed = true;
+                    break;
+                }
+                const manifest = JSON.parse(
+                    fs.readFileSync(
+                        path.join(packageDir, "package.json"),
+                        "utf8",
+                    ),
+                );
+                let plan = planPackageRetry(
+                    manifest,
+                    failures.map((failure) =>
+                        toAbsolutePath(failure.testFilePath),
+                    ),
+                    packageDir,
+                );
+                if (
+                    plan.narrowed &&
+                    plan.args
+                        .slice(6)
+                        .some((file) => !isRegularPackageFile(file, packageDir))
+                ) {
+                    plan = {
+                        narrowed: false,
+                        reason: "failed path is not a regular file contained in the owning package",
+                        cwd: packageDir,
+                        args: ["run", "test:local"],
+                    };
+                }
+                console.error(
+                    plan.narrowed
+                        ? `Retrying failed files in ${name}`
+                        : `Full-package retry for ${name}: ${plan.reason}`,
+                );
+                const retryDirectory = makeFailuresDirectory(`retry${attempt}`);
+                failureDirectories.push(retryDirectory);
+                const retryResult = runPnpm(
+                    plan.args,
+                    retryDirectory,
+                    true,
+                    plan.cwd,
+                );
+                const observed = readFailures(retryDirectory);
+                finalFailures.push(...observed);
+                const failed =
+                    retryResult.error !== undefined ||
+                    retryResult.signal !== null ||
+                    (retryResult.status ?? 1) !== 0;
+                retryFailed ||= failed;
+                // Check each command independently: another package's artifacts
+                // cannot make a crashed or unreported invocation trustworthy.
+                if (
+                    retryResult.error !== undefined ||
+                    retryResult.signal !== null ||
+                    (failed && observed.length === 0)
+                ) {
+                    console.error(
+                        `Untrusted retry for ${name}: command failed without reliable failure artifacts.`,
+                    );
+                    retryTrusted = false;
+                    break;
+                }
             }
+            finalFailures = dedupeFailures(finalFailures, workspaceRoot);
+            if (!retryTrusted) break;
             if (!retryFailed) {
                 break;
             }
@@ -158,7 +240,7 @@ function handleFailures(firstFailures) {
     function annotatePackages(failures) {
         return failures.map((failure) => ({
             ...failure,
-            package: resolvePackageName(failure.testFilePath),
+            package: resolvePackage(failure.testFilePath)?.name,
         }));
     }
 
@@ -179,19 +261,52 @@ function handleFailures(firstFailures) {
 
 function makeFailuresDirectory(label) {
     return fs.mkdtempSync(
-        path.join(os.tmpdir(), `typeagent-test-failures-${label}-`),
+        path.join(workspaceRoot, `.typeagent-test-failures-${label}-`),
     );
 }
 
-function runPnpm(pnpmArguments, failuresDirectory, disableJestCache = false) {
+function isRegularPackageFile(file, packageDir) {
+    try {
+        const relative = path.relative(
+            fs.realpathSync(packageDir),
+            fs.realpathSync(file),
+        );
+        return (
+            relative !== "" &&
+            relative !== ".." &&
+            !relative.startsWith(`..${path.sep}`) &&
+            !path.isAbsolute(relative) &&
+            fs.statSync(file).isFile()
+        );
+    } catch {
+        return false;
+    }
+}
+
+function runPnpm(
+    pnpmArguments,
+    failuresDirectory,
+    disableJestCache = false,
+    cwd = workspaceRoot,
+) {
+    let windowsCommand;
+    try {
+        windowsCommand = isWindows
+            ? windowsPnpmCommand(pnpmArguments)
+            : undefined;
+    } catch (error) {
+        return { error, signal: null, status: null };
+    }
     const [command, commandArguments] = isWindows
         ? [
               process.env.ComSpec ?? "cmd.exe",
-              ["/d", "/s", "/c", ["pnpm", ...pnpmArguments].join(" ")],
+              ["/d", "/v:off", "/s", "/c", windowsCommand],
           ]
         : ["pnpm", pnpmArguments];
 
     return spawnSync(command, commandArguments, {
+        cwd,
+        ...(isWindows ? { windowsVerbatimArguments: true } : {}),
         env: {
             ...process.env,
             TYPEAGENT_TEST_FAILURES_DIR: failuresDirectory,
@@ -221,7 +336,7 @@ function readFailureArtifact(directory, fileName) {
     }
 }
 
-function resolvePackageName(testFilePath) {
+function resolvePackage(testFilePath) {
     const packageDir = findPackageDir(
         toAbsolutePath(testFilePath),
         workspaceRoot,
@@ -235,7 +350,7 @@ function resolvePackageName(testFilePath) {
             fs.readFileSync(path.join(packageDir, "package.json"), "utf8"),
         );
         return typeof manifest.name === "string" && manifest.name.length > 0
-            ? manifest.name
+            ? { name: manifest.name, directory: packageDir }
             : undefined;
     } catch {
         return undefined;
@@ -256,8 +371,12 @@ function emitGithubReport(classification) {
     for (const annotation of buildGithubAnnotations(classification)) {
         console.log(annotation);
     }
-    const summaryFile = process.env.GITHUB_STEP_SUMMARY;
     const markdown = buildStepSummaryMarkdown(classification);
+    appendGithubSummary(markdown);
+}
+
+function appendGithubSummary(markdown) {
+    const summaryFile = process.env.GITHUB_STEP_SUMMARY;
     if (summaryFile !== undefined && markdown.length > 0) {
         try {
             fs.appendFileSync(summaryFile, `${markdown}\n`);

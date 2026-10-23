@@ -8,6 +8,95 @@ import path from "node:path";
 
 export const MAX_TEST_RETRIES = 2;
 
+const JEST_ESM =
+    "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js";
+
+// Accept a deliberately small grammar, not arbitrary shell commands. In
+// particular, never bypass setup, lifecycle hooks or additional runner phases.
+export function planPackageRetry(manifest, files, packageDir) {
+    const scripts = manifest.scripts ?? {};
+    const fallback = (reason) => ({
+        narrowed: false,
+        reason,
+        cwd: packageDir,
+        args: ["run", "test:local"],
+    });
+    if (
+        [
+            "pretest:local",
+            "posttest:local",
+            "prejest-esm",
+            "postjest-esm",
+            "prejest",
+            "postjest",
+        ].some((name) => scripts[name])
+    ) {
+        return fallback(
+            "package script lifecycle hooks require the whole package",
+        );
+    }
+    let script = scripts["test:local"];
+    if (/^(?:npm|pnpm) run jest$/.test(script ?? "")) {
+        script = scripts.jest;
+    }
+    const invocation =
+        /^pnpm run jest-esm(?: --(?:testMatch|testPathPattern)=(?:"([^"$`\\\r\n]+)"|'([^'$`\\\r\n]+)'|([^\s"'$`\\;&|<>()]+)))?$/;
+    if (scripts["jest-esm"] !== JEST_ESM || !invocation.test(script ?? "")) {
+        return fallback(
+            "test:local is not a recognized single jest-esm invocation",
+        );
+    }
+    if (files.length === 0) {
+        return fallback("no failed files could be identified");
+    }
+    const absoluteFiles = [
+        ...new Set(
+            files.map((file) => path.resolve(packageDir, toFsPath(file))),
+        ),
+    ];
+    if (
+        absoluteFiles.some((file) => {
+            const relative = path.relative(packageDir, file);
+            return (
+                relative === "" ||
+                relative === ".." ||
+                relative.startsWith(`..${path.sep}`) ||
+                path.isAbsolute(relative)
+            );
+        })
+    ) {
+        return fallback("failed file is outside the owning package");
+    }
+    return {
+        narrowed: true,
+        cwd: packageDir,
+        args: [
+            "run",
+            "jest-esm",
+            "--runInBand",
+            "--no-cache",
+            "--passWithNoTests=false",
+            "--runTestsByPath",
+            ...absoluteFiles,
+        ],
+    };
+}
+
+export function windowsPnpmCommand(args) {
+    // cmd expands percent expressions even within quotes. Refuse these rather
+    // than accidentally running a different path or command.
+    if (args.some((arg) => /[%"\r\n\0]/.test(arg))) {
+        throw new Error("Unsafe argument for Windows pnpm invocation");
+    }
+    return `"pnpm ${args.map((arg) => `"${arg}"`).join(" ")}"`;
+}
+
+export function runLocalTestPhases(runWorkspaceTests, runScriptTests) {
+    const workspaceStatus = runWorkspaceTests();
+    const scriptStatus = runScriptTests();
+    return workspaceStatus !== 0 || scriptStatus !== 0 ? 1 : 0;
+}
+
 // Convert a possibly-file:// path into a plain filesystem path. Done manually
 // (rather than url.fileURLToPath) because on Windows fileURLToPath throws for a
 // driveless URL like file:///repo/..., and reporters run on all three OSes.
