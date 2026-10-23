@@ -170,6 +170,27 @@ const RESPONSES_OK = {
 };
 
 describe("createCopilotRuntimeConnection", () => {
+    const envKeys = ["TYPEAGENT_COPILOT_CLI_PATH", "COPILOT_CLI_PATH"] as const;
+    let savedEnv: (string | undefined)[];
+
+    beforeEach(() => {
+        savedEnv = envKeys.map((key) => process.env[key]);
+        for (const key of envKeys) {
+            delete process.env[key];
+        }
+    });
+
+    afterEach(() => {
+        envKeys.forEach((key, index) => {
+            const value = savedEnv[index];
+            if (value === undefined) {
+                delete process.env[key];
+            } else {
+                process.env[key] = value;
+            }
+        });
+    });
+
     test("uses a configured runtime URI instead of an executable path", () => {
         expect(
             createCopilotRuntimeConnection(
@@ -184,6 +205,8 @@ describe("createCopilotRuntimeConnection", () => {
     });
 
     test("preserves a concrete external executable path", () => {
+        process.env.TYPEAGENT_COPILOT_CLI_PATH = "C:\\managed\\copilot.exe";
+        process.env.COPILOT_CLI_PATH = "C:\\fallback\\copilot.exe";
         expect(
             createCopilotRuntimeConnection(undefined, "C:\\tools\\copilot.exe"),
         ).toEqual({
@@ -191,6 +214,37 @@ describe("createCopilotRuntimeConnection", () => {
             path: "C:\\tools\\copilot.exe",
             args: undefined,
             env: undefined,
+        });
+    });
+
+    test("prefers the TypeAgent runtime over the generic CLI setting", () => {
+        process.env.TYPEAGENT_COPILOT_CLI_PATH = "C:\\managed\\copilot.exe";
+        process.env.COPILOT_CLI_PATH = "C:\\fallback\\copilot.exe";
+        expect(
+            createCopilotRuntimeConnection(undefined, undefined),
+        ).toMatchObject({
+            kind: "stdio",
+            path: "C:\\managed\\copilot.exe",
+        });
+    });
+
+    test("honors the generic CLI setting when no TypeAgent runtime is configured", () => {
+        process.env.COPILOT_CLI_PATH = "C:\\fallback\\copilot.exe";
+        expect(
+            createCopilotRuntimeConnection(undefined, undefined),
+        ).toMatchObject({
+            kind: "stdio",
+            path: "C:\\fallback\\copilot.exe",
+        });
+    });
+
+    test("keeps a remote URI ahead of configured local runtimes", () => {
+        process.env.TYPEAGENT_COPILOT_CLI_PATH = "C:\\managed\\copilot.exe";
+        expect(
+            createCopilotRuntimeConnection("localhost:4321", undefined),
+        ).toMatchObject({
+            kind: "uri",
+            url: "localhost:4321",
         });
     });
 

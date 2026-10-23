@@ -15,7 +15,6 @@ import {
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import {
     CopilotClient,
-    RuntimeConnection,
     defineTool,
     type AssistantMessageEvent,
     type CopilotSession,
@@ -25,6 +24,7 @@ import {
     type MessageOptions,
     type SessionConfig,
 } from "@github/copilot-sdk";
+import { createCopilotRuntimeConnection } from "@typeagent/aiclient";
 import registerDebug from "debug";
 import os from "node:os";
 import path from "node:path";
@@ -389,9 +389,10 @@ async function createCopilotClient(
 
     const creditBudget = getCopilotCreditBudget();
     const client = new CopilotClient({
-        connection: RuntimeConnection.forStdio(
+        connection: createCopilotRuntimeConnection(
+            undefined,
             creditBudget && process.env.TYPEAGENT_GHCP_EVAL_CLI
-                ? { path: process.env.TYPEAGENT_GHCP_EVAL_CLI }
+                ? process.env.TYPEAGENT_GHCP_EVAL_CLI
                 : undefined,
         ),
         ...(creditBudget ? { requestHandler: creditBudget } : {}),

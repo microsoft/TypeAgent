@@ -182,9 +182,14 @@ export interface CopilotClientOptions {
     cliUrl?: string | undefined;
 }
 
+function configuredCopilotPath(): string | undefined {
+    return (
+        process.env.TYPEAGENT_COPILOT_CLI_PATH ?? process.env.COPILOT_CLI_PATH
+    );
+}
+
 function findCopilotPath(): string | undefined {
-    const configuredPath =
-        process.env.TYPEAGENT_COPILOT_CLI_PATH ?? process.env.COPILOT_CLI_PATH;
+    const configuredPath = configuredCopilotPath();
     if (configuredPath) {
         debug(`Using configured copilot CLI: ${configuredPath}`);
         return configuredPath;
@@ -204,7 +209,7 @@ function findCopilotPath(): string | undefined {
 
 export function createCopilotRuntimeConnection(
     cliUrl: string | undefined,
-    cliPath: string | undefined,
+    cliPath: string | undefined = configuredCopilotPath(),
 ) {
     return cliUrl
         ? RuntimeConnection.forUri(cliUrl)
