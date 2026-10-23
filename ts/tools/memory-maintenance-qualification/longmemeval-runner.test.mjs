@@ -432,6 +432,7 @@ test("product reader coverage uses actual answer diagnostics without an extra re
     f.service.answer = async (request) => ({
         ...(await originalAnswer(request)),
         readerContext: {
+            answerPath: "indexed-fragments",
             retrievedMessageOrdinals: [1],
             messageOrdinals: [],
             knowledgeMessageOrdinals: [1],
@@ -451,6 +452,7 @@ test("product reader coverage uses actual answer diagnostics without an extra re
         f.controls,
     );
     assert.equal(f.calls.search.length, 0);
+    assert.equal(f.record.answerPath, "indexed-fragments");
     assert.equal(f.record.evidenceSessionRecallAt20Matches, undefined);
     assert.equal(f.record.answerRetrievalEvidenceSessionRecall, 0.5);
     assert.equal(f.record.readerMessageEvidenceSessionRecall, 0);
