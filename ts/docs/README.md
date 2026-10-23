@@ -74,8 +74,8 @@ To publish this docset as an eng.ms wiki:
 1. **Docset root:** `ts/docs` (the directory containing `docfx.json`).
 2. **Pre-build step:** the publishing pipeline must run
    `node ts/docs/scripts/build-wiki.mjs` **before** `docfx build`, so the
-   staged content and generated TOCs exist. (Node ≥ 22 is already required to
-   build the repo.)
+   staged content and generated TOCs exist. Use the repo's default Node LTS
+   or another [supported release](../README.md#setup).
 3. **Build:** `docfx build ts/docs/docfx.json` (DocFX 2.78+). Output is
    `_site/`.
 4. **Edit links / contribution:** `docfx.json` sets `_gitContribute` to this

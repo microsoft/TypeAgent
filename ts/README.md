@@ -14,10 +14,24 @@ The main entry point to explore TypeAgent is the [TypeAgent Shell](./packages/sh
 
 To build:
 
-- Install [Node 22+](https://nodejs.org/en/download)
+- Install the latest [Node.js LTS](https://nodejs.org/en/download) release (the default).
+  Supported release lines are **22.23.4+**, **24.22.1+**, and **26.12.1+**,
+  with later patches/minors within each major accepted. Node 20 and
+  odd-numbered release lines are not supported.
   - NOTE: HPC Tools conflict with node so be sure that the node.exe you are running is the correct one!
 - Install pnpm (`npm i -g pnpm && pnpm setup`)
+  - Install pnpm explicitly; Node 26 and later do not bundle Corepack.
 - **(Linux/WSL Only)** Read TypeAgent Shell's [README.md](./packages/shell/README.md) for additional requirements
+
+These minimums include the fixes in the
+[October 21, 2026 Node.js security release](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases).
+CI builds and tests all three supported release lines. Node type definitions
+stay on the latest 22.x release so compiled code remains compatible with the
+oldest supported runtime.
+Developer setup follows the latest LTS release; CI and production container
+versions remain pinned for reproducible builds.
+Native SQLite uses `better-sqlite3` 12.11.1 and `node-abi` 3.99.0 so the
+prebuilt installer recognizes Node 26 and downloads the matching binding.
 
 ### Steps
 
@@ -28,7 +42,7 @@ In this directory:
 
 ### Docker image
 
-The production [Dockerfile](./Dockerfile) uses Node 24 on Debian Bookworm,
+The production [Dockerfile](./Dockerfile) uses Node 24.22.1 on Debian Bookworm,
 Corepack 0.36.0, and Azure CLI 2.91.0. The pnpm version comes from
 `packageManager` in [package.json](./package.json). Chrome is installed from
 Google's stable channel. The image currently targets `linux/amd64`.

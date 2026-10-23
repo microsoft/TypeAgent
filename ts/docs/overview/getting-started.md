@@ -17,7 +17,8 @@ Node and pnpm.
 
 ## Prerequisites
 
-- **Node ≥ 22** (the monorepo targets Node 22+).
+- The **latest Node LTS** (default); **22.23.4+**, **24.22.1+**, and **26.12.1+**
+  are supported within those major lines. Node 20 is no longer supported.
 - **pnpm ≥ 10** (`npm i -g pnpm && pnpm setup`).
 - On Linux/WSL, see the [WSL2](./setup-wsl2.md) / [Linux](./setup-linux.md)
   guides for extra system requirements.

@@ -62,7 +62,7 @@
     "@typeagent/websocket-channel-server": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "better-sqlite3": "12.8.0",
+    "better-sqlite3": "12.11.1",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dispatcher-node-providers": "workspace:*",

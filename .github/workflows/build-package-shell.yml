@@ -33,7 +33,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
-        version: [22]
+        version: ["24.22.1"]
 
     runs-on: ${{ matrix.os }}
 
