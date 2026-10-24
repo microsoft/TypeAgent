@@ -10,7 +10,7 @@ export async function getLocalWhisperTranscription(
     const response = await fetch("http://localhost:8001/transcribe/", {
         method: "POST",
         body: formData,
-        signal,
+        ...(signal ? { signal } : {}),
     });
     const body: unknown = await response.json();
     if (!response.ok) {
