@@ -1,13 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections, dateTime } from "@typeagent/agent-runtime";
+import { collections } from "@typeagent/agent-runtime";
 import {
     DateRange,
     IConversation,
     ListIndexingResult,
     MessageOrdinal,
 } from "./interfaces.js";
+import { matchesTemporalRange, parseTemporalValue } from "./temporal.js";
+import type {
+    MessageTemporalContext,
+    TemporalQueryRange,
+} from "./temporalSchema.js";
 import { textRangeFromMessageChunk } from "./message.js";
 import {
     ITimestampToTextRangeIndex,
@@ -22,8 +27,28 @@ import {
 export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     // Maintains ranges sorted by timestamp
     private ranges: TimestampedTextRange[] = [];
+    private temporal = new Map<
+        number,
+        Pick<
+            MessageTemporalContext,
+            "messageTime" | "eventMentions" | "discoveredDateEvidence"
+        >
+    >();
 
     constructor() {}
+
+    public addTemporalContext(
+        ordinal: number,
+        context: MessageTemporalContext,
+    ): void {
+        this.temporal.set(ordinal, context);
+    }
+
+    public lookupTemporalRange(range: TemporalQueryRange) {
+        return [...this.temporal]
+            .filter(([, context]) => matchesTemporalRange(context, range))
+            .map(([ordinal]) => textRangeFromMessageChunk(ordinal));
+    }
 
     /**
      * Looks up text ranges in given date range.
@@ -72,6 +97,10 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
             return false;
         }
         const timestampDate = new Date(timestamp);
+        if (!this.temporal.has(messageOrdinal))
+            this.temporal.set(messageOrdinal, {
+                messageTime: parseTemporalValue(timestamp),
+            });
         const entry: TimestampedTextRange = {
             range: textRangeFromMessageChunk(messageOrdinal),
             // This string is formatted to be lexically sortable
@@ -91,6 +120,7 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
 
     public clear(): void {
         this.ranges = [];
+        this.temporal.clear();
     }
 
     private compareTimestampedRange(
@@ -101,7 +131,7 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     }
 
     private dateToTimestamp(date: Date) {
-        return dateTime.timestampString(date, false);
+        return date.toISOString();
     }
 }
 
@@ -128,7 +158,13 @@ export function addToTimestampIndex(
             messageOrdinal < messageCount;
             ++messageOrdinal
         ) {
-            const timestamp = messages.get(messageOrdinal).timestamp;
+            const message = messages.get(messageOrdinal);
+            const timestamp = message.timestamp;
+            if (message.metadata?.temporalContext)
+                timestampIndex.addTemporalContext?.(
+                    messageOrdinal,
+                    message.metadata.temporalContext,
+                );
             if (timestamp) {
                 messageTimestamps.push([messageOrdinal, timestamp]);
             }

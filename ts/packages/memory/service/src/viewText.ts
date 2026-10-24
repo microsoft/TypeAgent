@@ -32,7 +32,7 @@ export function projectBriefDetailsText(details: ProjectBriefDetails): string {
             return [
                 `Project: ${details.project}`,
                 `Incident: ${details.incident} (distinct from project completion)`,
-                `Capacity: ${details.capacity === "pendingOwnerReview" ? "BLOCKED pending owner review" : details.capacity}`,
+                `Capacity: ${details.capacity === "pendingOwnerReview" ? "pending owner review" : details.capacity}`,
             ].join("\n");
         case "milestones":
             return details.items

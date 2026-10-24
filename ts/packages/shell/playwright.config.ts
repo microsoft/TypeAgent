@@ -16,9 +16,10 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
     testDir: "./test",
-    /* Exclude Jest and node:test unit tests from Playwright test discovery */
+    /* Exclude unit tests from Playwright test discovery */
     testIgnore: [
         /\/partialCompletion\//,
+        /\/unit\//,
         /\/renderer\/localWhisperClient\.spec\.ts$/,
         /\/inlinePageCapture\.test\.mjs$/,
     ],

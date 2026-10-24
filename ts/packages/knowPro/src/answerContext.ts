@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kpLib from "@typeagent/knowledge-processor";
 import {
     AnswerContext,
     RelevantKnowledge,
     RelevantMessage,
 } from "./answerContextSchema.js";
 import { jsonStringifyForPrompt } from "./common.js";
+import type { AnswerResponse } from "./answerResponseSchema.js";
 
 export function answerContextToString(
     context: AnswerContext,
@@ -46,7 +46,13 @@ export class AnswerContextChunkBuilder {
     constructor(
         public context: AnswerContext,
         public maxCharsPerChunk: number,
-    ) {}
+    ) {
+        if (!Number.isSafeInteger(maxCharsPerChunk) || maxCharsPerChunk < 4) {
+            throw new RangeError(
+                "Answer context budget must be an integer of at least four characters",
+            );
+        }
+    }
 
     public *getChunks(
         includeKnowledge: boolean = true,
@@ -106,21 +112,22 @@ export class AnswerContextChunkBuilder {
                 if (!message.messageText) {
                     continue;
                 }
-                const messageChunks = kpLib.splitLargeTextIntoChunks(
-                    message.messageText,
-                    this.maxCharsPerChunk,
-                );
-                for (const msgChunk of messageChunks) {
-                    const chunkMessage: RelevantMessage = {
-                        ...message,
-                        messageText: msgChunk,
-                    };
-                    const completedChunk = this.addToCurrentChunk(
-                        chunkMessage,
-                        "messages",
-                    );
-                    if (completedChunk) {
-                        yield completedChunk;
+                const texts =
+                    typeof message.messageText === "string"
+                        ? [message.messageText]
+                        : message.messageText;
+                for (const text of texts) {
+                    for (const chunkMessage of this.splitMessage(
+                        message,
+                        text,
+                    )) {
+                        const completedChunk = this.addToCurrentChunk(
+                            chunkMessage,
+                            "messages",
+                        );
+                        if (completedChunk) {
+                            yield completedChunk;
+                        }
                     }
                 }
             }
@@ -128,22 +135,71 @@ export class AnswerContextChunkBuilder {
     }
 
     private addToCurrentChunk(
-        item: any,
+        item: RelevantKnowledge | RelevantMessage,
         type: keyof AnswerContext,
     ): AnswerContext | undefined {
-        const itemString = jsonStringifyForPrompt(item);
-        const itemSize = itemString.length;
-        if (this.currentChunkCharCount + itemSize > this.maxCharsPerChunk) {
-            const completedChunk = this.currentChunk;
-            this.newChunk();
-            return completedChunk;
+        const singleton = { [type]: [item] };
+        if (answerContextToString(singleton).length > this.maxCharsPerChunk) {
+            throw new RangeError(
+                `Answer context ${type} item exceeds the serialized character budget`,
+            );
         }
-        if (this.currentChunk[type] === undefined) {
-            this.currentChunk[type] = [];
+        const candidate = {
+            ...this.currentChunk,
+            [type]: [...(this.currentChunk[type] ?? []), item],
+        };
+        let completedChunk: AnswerContext | undefined;
+        if (answerContextToString(candidate).length > this.maxCharsPerChunk) {
+            completedChunk = this.currentChunk;
+            this.currentChunk = singleton;
+        } else {
+            this.currentChunk = candidate;
         }
-        this.currentChunk[type]!.push(item);
-        this.currentChunkCharCount += itemSize;
-        return undefined;
+        this.currentChunkCharCount = answerContextToString(
+            this.currentChunk,
+        ).length;
+        return completedChunk;
+    }
+
+    private *splitMessage(
+        message: RelevantMessage,
+        text: string,
+    ): IterableIterator<RelevantMessage> {
+        let offset = 0;
+        while (offset < text.length) {
+            let low = 0;
+            let high = text.length - offset;
+            while (low < high) {
+                const length = Math.ceil((low + high) / 2);
+                const part = {
+                    ...message,
+                    messageText: text.slice(offset, offset + length),
+                };
+                if (
+                    answerContextToString({ messages: [part] }).length <=
+                    this.maxCharsPerChunk
+                ) {
+                    low = length;
+                } else {
+                    high = length - 1;
+                }
+            }
+            const last = text.charCodeAt(offset + low - 1);
+            if (
+                offset + low < text.length &&
+                last >= 0xd800 &&
+                last <= 0xdbff
+            ) {
+                low--;
+            }
+            if (low === 0) {
+                throw new RangeError(
+                    "Answer context message metadata or text cannot fit the serialized character budget",
+                );
+            }
+            yield { ...message, messageText: text.slice(offset, offset + low) };
+            offset += low;
+        }
     }
 
     private newChunk() {
@@ -153,6 +209,9 @@ export class AnswerContextChunkBuilder {
 }
 
 export type AnswerContextOptions = {
+    onCombination?:
+        | ((inputs: AnswerResponse[], output: AnswerResponse) => void)
+        | undefined;
     entitiesTopK?: number | undefined;
     topicsTopK?: number | undefined;
     messagesTopK?: number | undefined;

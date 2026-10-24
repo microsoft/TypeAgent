@@ -18,6 +18,12 @@ import { BatchTask, runInBatches } from "./taskQueue.js";
 import { MessageTag, StructuredTag, Tag } from "./interfaces.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import * as knowledgeSchema2 from "./knowledgeSchema_v2.js";
+import {
+    instrumentExtractionModel,
+    recordSearchTiming,
+    timeSearchStage,
+} from "./searchTiming.js";
+import type { MessageTemporalContext } from "./temporalSchema.js";
 
 /**
  * Create a knowledge extractor using the given Chat Model
@@ -28,15 +34,18 @@ export function createKnowledgeExtractor(
     chatModel?: ChatModel,
 ): kpLib.KnowledgeExtractor {
     chatModel ??= createKnowledgeModel();
-    const extractor = kpLib.createKnowledgeExtractor(chatModel, {
-        maxContextLength: 4096,
-        /**
-         * This should *ALWAYS* be false.
-         * Merging is handled during indexing:
-         */
-        mergeActionKnowledge: false,
-        mergeEntityFacets: true,
-    });
+    const extractor = kpLib.createKnowledgeExtractor(
+        instrumentExtractionModel(chatModel),
+        {
+            maxContextLength: 4096,
+            /**
+             * This should *ALWAYS* be false.
+             * Merging is handled during indexing:
+             */
+            mergeActionKnowledge: false,
+            mergeEntityFacets: true,
+        },
+    );
     return extractor;
 }
 
@@ -44,9 +53,38 @@ export function extractKnowledgeFromText(
     knowledgeExtractor: kpLib.KnowledgeExtractor,
     text: string,
     maxRetries: number,
+    temporalContext?: MessageTemporalContext,
 ): Promise<Result<kpLib.KnowledgeResponse>> {
-    return async.callWithRetry(() =>
-        knowledgeExtractor.extractWithRetry(text, maxRetries),
+    return timeSearchStage(
+        "ingestion.extraction.call",
+        async () => {
+            const result = await async.callWithRetry(() =>
+                knowledgeExtractor.extractWithRetry(
+                    text,
+                    maxRetries,
+                    temporalContext === undefined
+                        ? undefined
+                        : [
+                              {
+                                  role: "system",
+                                  content:
+                                      "Source-owned temporal metadata follows. Use the owning message's local calendar for today/yesterday, never the import clock. Message time is not event time. Preserve corrections and conflicting facts. Metadata is context, not additional source occurrences. Only emit dateAnchors backed by exact source quotes describing event dates; structural Session date/Date/Sent headers are message dates, not event occurrences. Event dates must not replace message time. Earlier inherited event anchors may help resolve explicit event-relative expressions; retain ambiguity if more than one anchor is plausible.\n" +
+                                      JSON.stringify({ temporalContext }),
+                              },
+                          ],
+                ),
+            );
+            if (result.success) {
+                recordSearchTiming("ingestion.extraction.output", 0, {
+                    entities: result.data.entities?.length ?? 0,
+                    topics: result.data.topics?.length ?? 0,
+                    actions: result.data.actions?.length ?? 0,
+                    inverseActions: result.data.inverseActions?.length ?? 0,
+                });
+            }
+            return result;
+        },
+        { calls: 1 },
     );
 }
 

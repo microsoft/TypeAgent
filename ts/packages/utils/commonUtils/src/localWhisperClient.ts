@@ -3,12 +3,14 @@
 
 export async function getLocalWhisperTranscription(
     blob: Blob,
+    signal?: AbortSignal,
 ): Promise<string> {
     const formData = new FormData();
     formData.append("file", blob);
     const response = await fetch("http://localhost:8001/transcribe/", {
         method: "POST",
         body: formData,
+        signal,
     });
     const body: unknown = await response.json();
     if (!response.ok) {

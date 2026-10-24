@@ -29,6 +29,17 @@ it("posts the audio file and returns the transcription text", async () => {
     expect(request?.body).toBeInstanceOf(FormData);
 });
 
+it("forwards an abort signal to the transcription request", async () => {
+    const controller = new AbortController();
+    let request: RequestInit | undefined;
+    globalThis.fetch = async (_input, init) => {
+        request = init;
+        return new Response(JSON.stringify({ transcription: "hello" }));
+    };
+    await getLocalWhisperTranscription(new Blob(["audio"]), controller.signal);
+    expect(request?.signal).toBe(controller.signal);
+});
+
 it.each([400, 408, 413, 422, 503])(
     "reports the service message for HTTP %s",
     async (status) => {

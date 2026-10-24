@@ -2,18 +2,52 @@
 // Licensed under the MIT License.
 
 import { createHash, randomUUID } from "node:crypto";
-import {
-    lstat,
-    mkdir,
-    open,
-    readFile,
-    readdir,
-    rename,
-    rm,
-} from "node:fs/promises";
+import * as filesystem from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { deserializeEmbeddings, serializeEmbeddings } from "./fuzzyIndex.js";
+import {
+    currentSearchTraceId,
+    recordSearchTiming,
+    timeSearchStage,
+} from "./searchTiming.js";
+
+const { lstat, mkdir, open, readFile, readdir, rename, rm } = new Proxy(
+    filesystem,
+    {
+        get(target, property) {
+            const method = Reflect.get(target, property, target);
+            if (typeof method !== "function") return method;
+            const stages: Record<string, string> = {
+                lstat: "storage.io.segment.lstat",
+                mkdir: "storage.io.segment.mkdir",
+                open: "storage.io.segment.open",
+                readFile: "storage.io.segment.read",
+                readdir: "storage.io.segment.readdir",
+                rename: "storage.io.segment.rename",
+                rm: "storage.io.segment.remove",
+            };
+            const stage = stages[String(property)];
+            if (!stage) return method;
+            return (...args: unknown[]) =>
+                timeSearchStage(stage, () =>
+                    Reflect.apply(method, target, args),
+                );
+        },
+    },
+);
+
+function stringify(value: unknown): string | undefined {
+    return timeSearchStage("storage.segment.json.serialize", () =>
+        JSON.stringify(value),
+    );
+}
+
+function parse(value: string): unknown {
+    return timeSearchStage("storage.segment.json.parse", () =>
+        JSON.parse(value),
+    );
+}
 
 export const jsonSegmentDirectory = ".segments";
 const digestPattern = /^[a-f0-9]{64}$/;
@@ -22,6 +56,7 @@ const jsonTargetBytes = 64 * 1024;
 const vectorTargetBytes = 1024 * 1024;
 const cacheLimitBytes = 64 * 1024 * 1024;
 const tails = new Map<string, Promise<void>>();
+const collectionReadConcurrency = 8;
 const cachedArtifacts = new Map<
     string,
     {
@@ -66,7 +101,15 @@ async function serialize<T>(
     root: string,
     operation: () => Promise<T>,
 ): Promise<T> {
-    const result = (tails.get(root) ?? Promise.resolve()).then(operation);
+    const queuedAt = currentSearchTraceId() ? performance.now() : undefined;
+    const result = (tails.get(root) ?? Promise.resolve()).then(() => {
+        if (queuedAt !== undefined)
+            recordSearchTiming(
+                "storage.segment.queue.wait",
+                performance.now() - queuedAt,
+            );
+        return timeSearchStage("storage.segment.queue.work", operation);
+    });
     const tail = result.then(
         () => {},
         () => {},
@@ -84,7 +127,9 @@ function directory(file: string): string {
 }
 
 function digest(bytes: Buffer): string {
-    return createHash("sha256").update(bytes).digest("hex");
+    return timeSearchStage("storage.segment.hash", () =>
+        createHash("sha256").update(bytes).digest("hex"),
+    );
 }
 
 export function isSegmentedJson(
@@ -185,7 +230,7 @@ async function readNode(
     if (!digestPattern.test(hash))
         throw new Error("Unsafe JSON segment reference");
     const bytes = await readArtifact(root, `${hash}.json`, reuseVerified);
-    const node: JsonNode = JSON.parse(bytes.toString("utf8"));
+    const node = parse(bytes.toString("utf8")) as JsonNode;
     if (
         !node ||
         ![
@@ -314,10 +359,12 @@ export async function readSegmentedJson(
 async function writeNew(file: string, bytes: Buffer): Promise<void> {
     const handle = await open(file, "wx");
     try {
-        await handle.writeFile(bytes);
-        await handle.sync();
+        await timeSearchStage("storage.io.segment.write", () =>
+            handle.writeFile(bytes),
+        );
+        await timeSearchStage("storage.io.segment.sync", () => handle.sync());
     } finally {
-        await handle.close();
+        await timeSearchStage("storage.io.segment.close", () => handle.close());
     }
 }
 
@@ -372,7 +419,7 @@ class SegmentWriter {
     }
 
     public node(value: JsonNode): Promise<string> {
-        return this.artifact(Buffer.from(`${JSON.stringify(value)}\n`), "json");
+        return this.artifact(Buffer.from(`${stringify(value)}\n`), "json");
     }
 
     private async vectors(vectors: Float32Array[]): Promise<string> {
@@ -409,14 +456,14 @@ class SegmentWriter {
             children.push(
                 await this.node({
                     kind: "value",
-                    value: JSON.parse(`[${records.join(",")}]`),
+                    value: parse(`[${records.join(",")}]`),
                 }),
             );
             records = [];
             bytes = 2;
         };
         for (const value of values) {
-            const json = JSON.stringify(value ?? null) ?? "null";
+            const json = stringify(value ?? null) ?? "null";
             const size = Buffer.byteLength(json) + 1;
             if (bytes + size > jsonTargetBytes) await flush();
             records.push(json);
@@ -452,7 +499,7 @@ class SegmentWriter {
             }
             return this.node({ kind: "object", entries });
         }
-        if (JSON.stringify(value) === undefined)
+        if (stringify(value) === undefined)
             throw new Error("Segmented JSON requires a serializable value");
         return this.node({ kind: "value", value });
     }
@@ -478,7 +525,7 @@ export async function writeSegmentedJson(
         await publish(
             file,
             Buffer.from(
-                `${JSON.stringify({
+                `${stringify({
                     segmentedJsonVersion: 2,
                     root: hash,
                     metadata,
@@ -492,29 +539,51 @@ async function retainGraph(
     root: string,
     hash: string,
     retained: Set<string>,
+    scheduled: Set<string>,
 ): Promise<void> {
-    const name = `${hash}.json`;
-    if (retained.has(name)) return;
-    const node = await readNode(root, hash);
-    retained.add(name);
+    if (scheduled.has(hash) || retained.has(`${hash}.json`)) return;
+    scheduled.add(hash);
+    const pending = [hash];
+    for (let offset = 0; offset < pending.length; ) {
+        const batch = pending.slice(offset, offset + collectionReadConcurrency);
+        offset += batch.length;
+        // Drain every read before releasing the root lock, including on failure.
+        const results = await Promise.allSettled(
+            batch.map((child) => readNode(root, child)),
+        );
+        for (let index = 0; index < results.length; index++) {
+            const result = results[index];
+            if (result.status === "rejected") throw result.reason;
+            retained.add(`${batch[index]}.json`);
+            for (const child of retainNode(result.value, retained)) {
+                if (scheduled.has(child) || retained.has(`${child}.json`))
+                    continue;
+                scheduled.add(child);
+                pending.push(child);
+            }
+        }
+    }
+}
+
+function retainNode(node: JsonNode, retained: Set<string>): string[] {
     if (node.kind === "publication") {
         validatePublication(node);
         for (const artifact of node.artifacts) retained.add(artifact);
-    } else if (node.kind === "vectors") {
+        return [];
+    }
+    if (node.kind === "vectors") {
         for (const block of node.blocks) {
             if (!digestPattern.test(block.hash))
                 throw new Error("Unsafe binary vector reference");
             retained.add(`${block.hash}.bin`);
         }
-    } else {
-        const children =
-            node.kind === "object"
-                ? node.entries.map(([, child]) => child)
-                : node.kind === "value"
-                  ? []
-                  : node.children;
-        for (const child of children) await retainGraph(root, child, retained);
+        return [];
     }
+    return node.kind === "object"
+        ? node.entries.map(([, child]) => child)
+        : node.kind === "value"
+          ? []
+          : node.children;
 }
 
 async function collectSegments(
@@ -530,12 +599,13 @@ async function collectSegments(
         throw error;
     }
     const retained = new Set<string>();
+    const scheduled = new Set<string>();
     for (const entry of entries) {
         if (!entry.isDirectory() || entry.name === jsonSegmentDirectory)
             continue;
         let value: unknown;
         try {
-            value = JSON.parse(
+            value = parse(
                 await readFile(
                     path.join(generationRoot, entry.name, baseFileName),
                     "utf8",
@@ -546,7 +616,7 @@ async function collectSegments(
             throw error;
         }
         if (isSegmentedJson(value))
-            await retainGraph(root, value.root, retained);
+            await retainGraph(root, value.root, retained, scheduled);
     }
     let files: string[];
     try {
