@@ -32,6 +32,7 @@ import {
     parseSchemaProposal,
 } from "../src/schemaViewSynthesis.js";
 import {
+    questionInventory,
     editSchemaQuestion,
     parseViewPageUri,
     renderViewPage,
@@ -41,6 +42,8 @@ import { validateConstructedGuide } from "../src/viewSynthesis.js";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { ViewHistory } from "../src/viewHistory.js";
+import { buildSummary, questionSummary } from "../src/inventory.js";
 
 const name: QuestionSlot = {
     id: "name",
@@ -157,6 +160,23 @@ function candidate(value: string): AnswerCandidate {
         support: [],
     };
 }
+test("question cards do not repeat excerpts, candidate values or support lists", () => {
+    const question = questionInventory({ head: null, views: [version()] })[0];
+    const answer = candidate("Private answer ".repeat(10000));
+    const citation = answer.citations[0];
+    citation.excerpt = "Private excerpt ".repeat(10000);
+    answer.support = [{ citation, derivedFrom: [] }];
+    question.slot.discoveryCitations = [citation];
+    question.details.candidates = [answer];
+    const summary = questionSummary(question);
+    expect(Buffer.byteLength(JSON.stringify(question))).toBeGreaterThan(500000);
+    expect(Buffer.byteLength(JSON.stringify(summary))).toBeLessThan(1000);
+    expect(summary.details.candidateCount).toBe(1);
+    expect(summary.details.hasUnreviewedCandidates).toBe(true);
+    expect(summary.slot.discoveryCitationCount).toBe(1);
+    expect(JSON.stringify(summary)).not.toContain("Private");
+});
+
 function version(): ViewVersion {
     const def = definition();
     return {
@@ -548,6 +568,180 @@ describe("ordinary-source schema lifecycle", () => {
         });
         return { corpus, request };
     }
+
+    test("paged inventories omit evidence and frozen inputs; detail and bulk publication remain authoritative", async () => {
+        const corpus = await service.createCorpus("Inventory contracts");
+        const corpusId = corpus.corpusId;
+        const targets = [20, 10].map((count, group) => ({
+            expectedVersion: 0,
+            definition: {
+                ...definition(
+                    Array.from({ length: count }, (_, index) => ({
+                        ...name,
+                        id: `question-${index}`,
+                        question: `Profile field ${index}`,
+                    })),
+                ),
+                viewId: `profile-${group}`,
+            },
+        }));
+        const job = await service.buildViews({
+            corpusId,
+            expectedHead: (await service.listViews(corpusId)).head,
+            publication: false,
+            targets,
+        });
+        await settled(job);
+        const first = await service.listQuestionSummaries({ corpusId });
+        expect(first.items).toHaveLength(25);
+        expect(first.total).toBe(30);
+        expect(first.nextContinuationToken).toBe("25");
+        const second = await service.listQuestionSummaries({
+            corpusId,
+            continuationToken: "25",
+        });
+        expect(second.items).toHaveLength(5);
+        expect(second.nextContinuationToken).toBeUndefined();
+        expect(
+            new Set(
+                [...first.items, ...second.items].map(
+                    (item) => `${item.viewId}/${item.slot.id}`,
+                ),
+            ).size,
+        ).toBe(30);
+        expect(Buffer.byteLength(JSON.stringify(first))).toBeLessThan(20000);
+        expect(first.items[0].details).not.toHaveProperty("candidates");
+        expect(first.items[0].slot).not.toHaveProperty("schema");
+        expect(first.items[0].slot).not.toHaveProperty("discoveryCitations");
+        const selected = first.items[0];
+        const detail = await service.getQuestion({
+            corpusId,
+            viewId: selected.viewId,
+            slotId: selected.slot.id,
+        });
+        expect(detail).toEqual(
+            (await service.listQuestions(corpusId)).items.find(
+                (item) =>
+                    item.viewId === selected.viewId &&
+                    item.slot.id === selected.slot.id,
+            ),
+        );
+        expect(detail?.slot.schema).toEqual(name.schema);
+        expect(
+            await service.getQuestion({
+                corpusId,
+                viewId: selected.viewId,
+                slotId: "missing",
+            }),
+        ).toBeUndefined();
+        expect(
+            (
+                await service.listQuestionSummaries({
+                    corpusId,
+                    answerFilter: "answered",
+                })
+            ).total,
+        ).toBe(0);
+        expect(
+            (
+                await service.listQuestionSummaries({
+                    corpusId,
+                    query: "field 19",
+                })
+            ).total,
+        ).toBe(1);
+        expect(
+            (
+                await service.listQuestionSummaries({
+                    corpusId,
+                    viewId: "profile-1",
+                })
+            ).total,
+        ).toBe(10);
+        const views = await service.listViewSummaries({
+            corpusId,
+            pageSize: 1,
+        });
+        expect(views.total).toBe(2);
+        expect(views.items[0].content).toEqual({
+            kind: "schemaView",
+            title: "Profile and destinations",
+        });
+        expect(views.items[0]).not.toHaveProperty("definition");
+        expect(
+            (await service.listViewSummaries({ corpusId, kind: "wiki" })).total,
+        ).toBe(0);
+        const ids = targets.map((target) => target.definition.viewId);
+        const expected = await Promise.all(
+            ids.map((viewId) =>
+                service.getViewPublication({ corpusId, viewId }),
+            ),
+        );
+        const read = ViewHistory.prototype.read;
+        let reads = 0;
+        ViewHistory.prototype.read = function (
+            this: ViewHistory<unknown>,
+            ...args: Parameters<typeof read>
+        ) {
+            reads++;
+            return read.apply(this, args);
+        };
+        try {
+            expect(
+                await service.getViewPublications({ corpusId, viewIds: ids }),
+            ).toEqual(expected);
+            expect(reads).toBe(1);
+            reads = 0;
+            await service.listViewSummaries({ corpusId });
+            expect(reads).toBe(1);
+        } finally {
+            ViewHistory.prototype.read = read;
+        }
+        await expect(
+            service.getViewPublications({
+                corpusId,
+                viewIds: [ids[0], ids[0]],
+            }),
+        ).rejects.toThrow("unique");
+        for (const pageSize of [0, -1, 101, 1.5]) {
+            await expect(
+                service.listViewSummaries({ corpusId, pageSize }),
+            ).rejects.toThrow("pageSize");
+            await expect(
+                service.listQuestionSummaries({ corpusId, pageSize }),
+            ).rejects.toThrow("pageSize");
+            await expect(
+                service.listViewBuildSummaries({ corpusId, pageSize }),
+            ).rejects.toThrow("pageSize");
+        }
+        await expect(
+            service.listQuestionSummaries({
+                corpusId,
+                continuationToken: "invalid",
+            }),
+        ).rejects.toThrow();
+        await expect(
+            service.listViewSummaries({ corpusId, continuationToken: "99" }),
+        ).rejects.toThrow("out of range");
+        await expect(
+            service.listViewSummaries({ corpusId, query: "x".repeat(1001) }),
+        ).rejects.toThrow("query");
+
+        const full = (await service.getViewBuild(job))!;
+        full.results[0].snapshot = snapshot();
+        full.results[0].snapshot.inputs[0].content =
+            "private source body ".repeat(10000);
+        const summary = buildSummary(
+            full,
+            new Map(ids.map((id) => [id, "newer-job"])),
+        );
+        expect(Buffer.byteLength(JSON.stringify(summary))).toBeLessThan(2000);
+        expect(summary.results[0].current).toBe(false);
+        expect(summary.results[0].snapshot).not.toHaveProperty("inputs");
+        expect(summary.results[0].snapshot.definition).toEqual({
+            kind: "schemaView",
+        });
+    }, 60000);
 
     async function answered(corpusId: string) {
         for (let count = 0; count < 1000; count++) {

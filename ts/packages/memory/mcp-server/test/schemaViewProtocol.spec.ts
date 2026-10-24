@@ -15,11 +15,15 @@ import {
     schemaViewToolNames,
     acquisitionToolNames,
     projectAcquisitionProgress,
+    inventoryToolNames,
+    inventoryPageRequestSchema,
+    viewPublicationBatchRequestSchema,
 } from "@typeagent/memory-client";
 import {
     FileMemoryService,
     type AcquisitionRequest,
     type QuestionInventory,
+    type QuestionReadRequest,
     type QuestionEditRequest,
     type SchemaViewPageRequest,
     type SchemaViewProposalRequest,
@@ -124,6 +128,14 @@ class SchemaFixtureService extends FileMemoryService {
     override async listQuestions(_corpusId: string) {
         return inventory;
     }
+    override async getQuestion(request: QuestionReadRequest) {
+        return inventory.items.find(
+            (item) =>
+                item.corpusId === request.corpusId &&
+                item.viewId === request.viewId &&
+                item.slot.id === request.slotId,
+        );
+    }
     override async editQuestion(request: QuestionEditRequest) {
         this.calls.push(request);
         return entry;
@@ -225,6 +237,34 @@ test("schema questions, generic views and sanitized acquisition operations survi
         expect(await client.listQuestions("corpus")).toEqual(
             await local.listQuestions("corpus"),
         );
+        const summaryRequest = { corpusId: "corpus", pageSize: 1 };
+        const summaries = await client.listQuestionSummaries(summaryRequest);
+        expect(summaries).toEqual(
+            await local.listQuestionSummaries(summaryRequest),
+        );
+        expect(summaries.items[0].details).not.toHaveProperty("candidates");
+        expect(summaries.items[0].slot).not.toHaveProperty(
+            "discoveryCitations",
+        );
+        expect(summaries.maintenanceError).toBe(inventory.maintenanceError);
+        const detailRequest = {
+            corpusId: "corpus",
+            viewId: "profile",
+            slotId: schema.slots[0].id,
+        };
+        expect(await client.getQuestion(detailRequest)).toEqual(
+            await local.getQuestion(detailRequest),
+        );
+        for (const pageSize of [0, 101, 1.5]) {
+            expect(
+                (
+                    await raw.callTool({
+                        name: inventoryToolNames.listQuestionSummaries,
+                        arguments: { corpusId: "corpus", pageSize },
+                    })
+                ).isError,
+            ).toBe(true);
+        }
         const pageRequest = {
             corpusId: "corpus",
             viewId: "profile",
@@ -356,6 +396,25 @@ test("missing optional question and acquisition capabilities fail explicitly", a
         "not supported",
     );
     await expect(
+        client.listViewSummaries({ corpusId: "corpus" }),
+    ).rejects.toThrow("not supported");
+    await expect(
+        client.listQuestionSummaries({ corpusId: "corpus" }),
+    ).rejects.toThrow("not supported");
+    await expect(
+        client.listViewBuildSummaries({ corpusId: "corpus" }),
+    ).rejects.toThrow("not supported");
+    await expect(
+        client.getViewPublications({ corpusId: "corpus", viewIds: [] }),
+    ).rejects.toThrow("not supported");
+    await expect(
+        client.getQuestion({
+            corpusId: "corpus",
+            viewId: "profile",
+            slotId: "name",
+        }),
+    ).rejects.toThrow("not supported");
+    await expect(
         client.getViewPage({ corpusId: "corpus", viewId: "profile" }),
     ).rejects.toThrow("not supported");
     await expect(client.listAcquisitionProgress("corpus")).rejects.toThrow(
@@ -363,4 +422,45 @@ test("missing optional question and acquisition capabilities fail explicitly", a
     );
     expect("requestAcquisition" in client).toBe(false);
     expect("startAcquisitionPeriodic" in client).toBe(false);
+});
+
+test("inventory input contracts reject unbounded pages and duplicate publication identities", () => {
+    for (const pageSize of [0, -1, 101, 1.5])
+        expect(
+            inventoryPageRequestSchema.safeParse({
+                corpusId: "corpus",
+                pageSize,
+            }).success,
+        ).toBe(false);
+    expect(
+        inventoryPageRequestSchema.safeParse({
+            corpusId: "corpus",
+            pageSize: 100,
+            continuationToken: "25",
+        }).success,
+    ).toBe(true);
+    expect(
+        inventoryPageRequestSchema.safeParse({
+            corpusId: "corpus",
+            continuationToken: "-1",
+        }).success,
+    ).toBe(false);
+    expect(
+        inventoryPageRequestSchema.safeParse({
+            corpusId: "corpus",
+            unexpected: true,
+        }).success,
+    ).toBe(false);
+    expect(
+        viewPublicationBatchRequestSchema.safeParse({
+            corpusId: "corpus",
+            viewIds: ["same", "same"],
+        }).success,
+    ).toBe(false);
+    expect(
+        viewPublicationBatchRequestSchema.safeParse({
+            corpusId: "corpus",
+            viewIds: Array.from({ length: 101 }, (_, index) => `view-${index}`),
+        }).success,
+    ).toBe(false);
 });

@@ -20,6 +20,22 @@ import { userInfo } from "node:os";
 import path from "node:path";
 import lockfile from "proper-lockfile";
 import { normalizeQueryTemporalContext } from "./temporalContext.js";
+import {
+    buildSummary,
+    questionSummary,
+    questionNeedsAttention,
+    validateInventoryPage,
+} from "./inventory.js";
+import type {
+    InventoryPageRequest,
+    ViewSummaryRequest,
+    QuestionSummaryRequest,
+    QuestionReadRequest,
+    ViewSummaryPage,
+    QuestionSummaryPage,
+    ViewBuildSummary,
+    ViewPublicationBatchRequest,
+} from "./inventoryTypes.js";
 import { indexedQueryTerms } from "./indexedFragments.js";
 import {
     KnowledgeCoordinator,
@@ -3662,6 +3678,172 @@ export class FileMemoryService
         );
     }
 
+    public async listViewSummaries(
+        request: ViewSummaryRequest,
+    ): Promise<ViewSummaryPage> {
+        validateInventoryPage(request);
+        const runtime = await this.requireViews(request.corpusId);
+        return runtime.access.read(() =>
+            this.viewStore.withReadSnapshot(request.corpusId, async () => {
+                const snapshot = await this.viewStore.listViews(
+                    request.corpusId,
+                );
+                const eligible = await Promise.all(
+                    snapshot.views.map((view) =>
+                        this.informationalVersionEligible(view, view),
+                    ),
+                );
+                const views = snapshot.views.filter(
+                    (_, index) => eligible[index],
+                );
+                const query = request.query?.toLowerCase() ?? "";
+                const matching = views
+                    .filter(
+                        (view) =>
+                            (!request.viewId ||
+                                view.viewId === request.viewId) &&
+                            (!request.kind ||
+                                view.content.kind === request.kind) &&
+                            view.content.title.toLowerCase().includes(query),
+                    )
+                    .sort((a, b) => a.viewId.localeCompare(b.viewId));
+                const page = pageItems(
+                    matching,
+                    request.pageSize ?? 25,
+                    request.continuationToken,
+                );
+                const items = await Promise.all(
+                    page.items.map(async (view) => ({
+                        corpusId: view.corpusId,
+                        viewId: view.viewId,
+                        revisionId: view.revisionId,
+                        state: view.state,
+                        content: {
+                            kind: view.content.kind,
+                            title: view.content.title,
+                        },
+                        maintained: !!view.definition.maintenance,
+                        publication: await this.viewStore.getViewPublication({
+                            corpusId: request.corpusId,
+                            viewId: view.viewId,
+                        }),
+                    })),
+                );
+                const latestBuild = (
+                    await this.viewStore.listViewBuilds(request.corpusId)
+                )
+                    .filter(
+                        (job) =>
+                            !request.viewId ||
+                            job.results.some(
+                                (result) => result.viewId === request.viewId,
+                            ),
+                    )
+                    .sort(
+                        (a, b) =>
+                            b.updatedAt.localeCompare(a.updatedAt) ||
+                            a.jobId.localeCompare(b.jobId),
+                    )[0];
+                return {
+                    ...page,
+                    items,
+                    head: snapshot.head,
+                    ...(latestBuild
+                        ? {
+                              latestBuild: {
+                                  jobId: latestBuild.jobId,
+                                  corpusId: latestBuild.corpusId,
+                                  state: latestBuild.state,
+                              },
+                          }
+                        : {}),
+                    ...(this.informationalWikiEnabled
+                        ? {
+                              wikiFamily: await this.wikiFamilyStatus(
+                                  request.corpusId,
+                                  "wiki",
+                                  views,
+                              ),
+                              projectFamily: await this.wikiFamilyStatus(
+                                  request.corpusId,
+                                  "projects",
+                                  views,
+                              ),
+                          }
+                        : {}),
+                };
+            }),
+        );
+    }
+
+    public async getViewPublications(
+        request: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]> {
+        const runtime = await this.requireViews(request.corpusId);
+        if (
+            !Array.isArray(request.viewIds) ||
+            request.viewIds.length > 100 ||
+            new Set(request.viewIds).size !== request.viewIds.length
+        )
+            throw new Error(
+                "Publication batches require at most 100 unique view IDs",
+            );
+        request.viewIds.forEach((id) => validateIdentifier("view ID", id));
+        return runtime.access.read(() =>
+            this.viewStore.withReadSnapshot(request.corpusId, () =>
+                Promise.all(
+                    request.viewIds.map((viewId) =>
+                        this.viewStore.getViewPublication({
+                            corpusId: request.corpusId,
+                            viewId,
+                        }),
+                    ),
+                ),
+            ),
+        );
+    }
+
+    public async listViewBuildSummaries(
+        request: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>> {
+        validateInventoryPage(request);
+        const runtime = await this.requireViews(request.corpusId);
+        return runtime.access.read(() =>
+            this.viewStore.withReadSnapshot(request.corpusId, async () => {
+                const query = request.query?.toLowerCase() ?? "";
+                const allJobs = (
+                    await this.viewStore.listViewBuilds(request.corpusId)
+                ).sort(
+                    (a, b) =>
+                        b.updatedAt.localeCompare(a.updatedAt) ||
+                        a.jobId.localeCompare(b.jobId),
+                );
+                const latest = new Map<string, string>();
+                for (const job of allJobs)
+                    for (const result of job.results)
+                        if (!latest.has(result.viewId))
+                            latest.set(result.viewId, job.jobId);
+                const jobs = allJobs.filter(
+                    (job) =>
+                        job.jobId.toLowerCase().includes(query) &&
+                        (!request.viewId ||
+                            job.results.some(
+                                (result) => result.viewId === request.viewId,
+                            )),
+                );
+                const page = pageItems(
+                    jobs,
+                    request.pageSize ?? 25,
+                    request.continuationToken,
+                );
+                return {
+                    ...page,
+                    items: page.items.map((job) => buildSummary(job, latest)),
+                };
+            }),
+        );
+    }
+
     private async listViewSnapshot(corpusId: string): Promise<ViewSnapshot> {
         const snapshot = await this.viewStore.listViews(corpusId);
         const eligible = await Promise.all(
@@ -3922,6 +4104,72 @@ export class FileMemoryService
                 ...(failure ? { maintenanceError: failure.message } : {}),
             };
         });
+    }
+
+    public async listQuestionSummaries(
+        request: QuestionSummaryRequest,
+    ): Promise<QuestionSummaryPage> {
+        validateInventoryPage(request);
+        if (request.viewId !== undefined)
+            validateIdentifier("view ID", request.viewId);
+        if (
+            request.answerFilter !== undefined &&
+            !["open", "answered"].includes(request.answerFilter)
+        )
+            throw new Error("Question answerFilter must be open or answered");
+        const inventory = await this.listQuestions(request.corpusId);
+        const query = request.query?.toLowerCase() ?? "";
+        const items = inventory.items
+            .map(questionSummary)
+            .filter(
+                (question) =>
+                    (!request.viewId || question.viewId === request.viewId) &&
+                    (!request.answerFilter ||
+                        (question.details.answerState === "answered") ===
+                            (request.answerFilter === "answered")) &&
+                    (!request.attentionOnly ||
+                        questionNeedsAttention(question)) &&
+                    `${question.slot.question} ${question.viewTitle}`
+                        .toLowerCase()
+                        .includes(query),
+            )
+            .sort(
+                (a, b) =>
+                    b.attentionScore - a.attentionScore ||
+                    a.viewId.localeCompare(b.viewId) ||
+                    a.slot.id.localeCompare(b.slot.id),
+            );
+        return {
+            ...pageItems(
+                items,
+                request.pageSize ?? 25,
+                request.continuationToken,
+            ),
+            head: inventory.head,
+            ...(inventory.maintenanceError
+                ? { maintenanceError: inventory.maintenanceError }
+                : {}),
+        };
+    }
+
+    public async getQuestion(
+        request: QuestionReadRequest,
+    ): Promise<import("./schemaViewTypes.js").MemoryQuestion | undefined> {
+        const runtime = await this.requireViews(request.corpusId);
+        validateIdentifier("view ID", request.viewId);
+        validateIdentifier("slot ID", request.slotId);
+        return runtime.access.read(() =>
+            this.viewStore.withReadSnapshot(request.corpusId, async () => {
+                const view = await this.viewStore.getView({
+                    corpusId: request.corpusId,
+                    viewId: request.viewId,
+                });
+                if (!view) return undefined;
+                return questionInventory({ head: null, views: [view] }).find(
+                    (question) => question.slot.id === request.slotId,
+                );
+            }),
+        );
     }
 
     public async requestAcquisition(

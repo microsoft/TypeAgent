@@ -2,6 +2,16 @@
 // Licensed under the MIT License.
 
 import type {
+    InventoryPageRequest,
+    ViewSummaryRequest,
+    QuestionSummaryRequest,
+    QuestionReadRequest,
+    ViewSummaryPage,
+    QuestionSummaryPage,
+    ViewBuildSummary,
+    ViewPublicationBatchRequest,
+    MemoryQuestion,
+    MemoryPage,
     KnowledgeStatus,
     KnowledgeDiscoveryUpdate,
     KnowledgeCheckpoint,
@@ -254,6 +264,21 @@ export type MemoryCenterActivityFilter = {
 };
 
 export type MemoryCenterInvokeFunctions = {
+    memoryListViewSummaries(
+        params: ViewSummaryRequest,
+    ): Promise<ViewSummaryPage>;
+    memoryListQuestionSummaries(
+        params: QuestionSummaryRequest,
+    ): Promise<QuestionSummaryPage>;
+    memoryGetQuestion(
+        params: QuestionReadRequest,
+    ): Promise<MemoryQuestion | undefined>;
+    memoryListViewBuildSummaries(
+        params: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>>;
+    memoryGetViewPublications(
+        params: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]>;
     memoryGetKnowledgeStatus(params: {
         corpusId: string;
     }): Promise<KnowledgeStatus>;

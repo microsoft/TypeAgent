@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { inventoryFixture } from "./memoryHubInventoryTestData";
+
 import type { ViewVersion, ViewBuildJob } from "@typeagent/memory-service";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -71,22 +73,24 @@ const canonical: ViewVersion = {
 };
 function configureReads(alias: ViewVersion, current = canonical) {
     invoke.mockReset();
-    invoke.mockImplementation(async (method, request) => {
-        if (method === "memoryViewCapabilities")
-            return { derivedViews: { kinds: ["wiki"], builds: true } };
-        if (method === "memoryListCorpora")
-            return [{ corpusId: current.corpusId, name: "Offline" }];
-        if (method === "memoryListViews")
-            return { head: "c".repeat(40), views: [current] };
-        if (method === "memoryListViewBuilds") return [];
-        if (method === "memoryGetViewPublicationPolicy")
-            return { revision: 0, autoPublish: true, views: {} };
-        if (method === "memoryGetViewPublication")
-            return { indexState: "absent", reason: "Offline" };
-        if (method === "memoryGetView")
-            return request.viewId === alias.viewId ? alias : current;
-        throw new Error(`Unexpected consolidation method ${method}`);
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async (method, request) => {
+            if (method === "memoryViewCapabilities")
+                return { derivedViews: { kinds: ["wiki"], builds: true } };
+            if (method === "memoryListCorpora")
+                return [{ corpusId: current.corpusId, name: "Offline" }];
+            if (method === "memoryListViews")
+                return { head: "c".repeat(40), views: [current] };
+            if (method === "memoryListViewBuilds") return [];
+            if (method === "memoryGetViewPublicationPolicy")
+                return { revision: 0, autoPublish: true, views: {} };
+            if (method === "memoryGetViewPublication")
+                return { indexState: "absent", reason: "Offline" };
+            if (method === "memoryGetView")
+                return request.viewId === alias.viewId ? alias : current;
+            throw new Error(`Unexpected consolidation method ${method}`);
+        }),
+    );
 }
 function aliasView(): ViewVersion {
     return {
@@ -325,16 +329,20 @@ test("Activity distinguishes accepted canonical effects from derivative readines
         ],
     };
     invoke.mockReset();
-    invoke.mockImplementation(async (method) => {
-        if (method === "memoryViewCapabilities")
-            return { derivedViews: { builds: true } };
-        if (method === "memoryListCorpora")
-            return [{ corpusId: "c", name: "Offline" }];
-        if (method === "memoryListViewBuilds") return [job];
-        if (method === "memoryGetViewBuild") return job;
-        if (method === "memoryListViews") return { head: null, views: [] };
-        throw new Error(`Unexpected consolidation activity method ${method}`);
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async (method) => {
+            if (method === "memoryViewCapabilities")
+                return { derivedViews: { builds: true } };
+            if (method === "memoryListCorpora")
+                return [{ corpusId: "c", name: "Offline" }];
+            if (method === "memoryListViewBuilds") return [job];
+            if (method === "memoryGetViewBuild") return job;
+            if (method === "memoryListViews") return { head: null, views: [] };
+            throw new Error(
+                `Unexpected consolidation activity method ${method}`,
+            );
+        }),
+    );
     const host = document.createElement("div");
     const onOpenView = jest.fn();
     const mounted = mountMemoryHubViewActivity(

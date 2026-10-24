@@ -5,6 +5,11 @@ import { z } from "zod";
 import { runbookImportViewSchemas } from "./runbookImportSchemas.mjs";
 import { questionSchemas } from "./questionSchemas.mjs";
 import {
+    inventoryPageRequestSchema,
+    viewSummaryRequestSchema,
+    questionSummaryRequestSchema,
+    questionReadRequestSchema,
+    viewPublicationBatchRequestSchema,
     viewReadRequestSchema,
     viewSaveRequestSchema,
     viewArchiveRequestSchema,
@@ -89,6 +94,11 @@ function protocolInput(schema: {
 
 // Each entry is an explicitly exposed domain operation, never a browser-control method.
 const schemas: Record<ViewMethod, z.ZodType> = {
+    memoryListViewSummaries: protocolInput(viewSummaryRequestSchema),
+    memoryListQuestionSummaries: protocolInput(questionSummaryRequestSchema),
+    memoryGetQuestion: protocolInput(questionReadRequestSchema),
+    memoryListViewBuildSummaries: protocolInput(inventoryPageRequestSchema),
+    memoryGetViewPublications: protocolInput(viewPublicationBatchRequestSchema),
     memoryGetKnowledgeStatus: protocolInput(knowledgeCorpusRequestSchema),
     memoryUpdateKnowledgeDiscovery: protocolInput(
         knowledgeDiscoveryUpdateSchema,

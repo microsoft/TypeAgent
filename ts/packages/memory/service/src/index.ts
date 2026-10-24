@@ -28,3 +28,4 @@ export * from "./schemaView.js";
 export * from "./knowledgeTypes.js";
 export * from "./schemaViewOperations.js";
 export * from "./deferredAcquisition.js";
+export type * from "./inventoryTypes.js";

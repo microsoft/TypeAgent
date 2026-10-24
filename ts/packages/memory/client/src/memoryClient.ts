@@ -6,6 +6,30 @@ import {
     StreamableHTTPClientTransport,
     type CallToolResult,
 } from "@modelcontextprotocol/client";
+import type {
+    InventoryPageRequest,
+    ViewSummaryRequest,
+    QuestionSummaryRequest,
+    QuestionReadRequest,
+    ViewSummaryPage,
+    QuestionSummaryPage,
+    ViewBuildSummary,
+    ViewPublicationBatchRequest,
+    MemoryQuestion,
+} from "@typeagent/memory-service";
+import {
+    inventoryToolNames,
+    inventoryPageRequestSchema,
+    viewSummaryRequestSchema,
+    questionSummaryRequestSchema,
+    questionReadRequestSchema,
+    viewPublicationBatchRequestSchema,
+    viewSummaryPageSchema,
+    questionSummaryPageSchema,
+    questionDetailSchema,
+    viewBuildSummaryPageSchema,
+    viewPublicationBatchSchema,
+} from "./inventoryProtocol.js";
 import {
     StdioClientTransport,
     getDefaultEnvironment,
@@ -214,6 +238,19 @@ export interface MemoryServiceClient
         request: KnowledgeCheckpointWait,
     ): Promise<KnowledgeCheckpoint>;
     listQuestions(corpusId: string): Promise<QuestionInventory>;
+    listViewSummaries(request: ViewSummaryRequest): Promise<ViewSummaryPage>;
+    listQuestionSummaries(
+        request: QuestionSummaryRequest,
+    ): Promise<QuestionSummaryPage>;
+    getQuestion(
+        request: QuestionReadRequest,
+    ): Promise<MemoryQuestion | undefined>;
+    listViewBuildSummaries(
+        request: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>>;
+    getViewPublications(
+        request: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]>;
     editQuestion(request: QuestionEditRequest): Promise<ViewHistoryEntry>;
     getViewPage(request: SchemaViewPageRequest): Promise<SchemaViewPage>;
     proposeSchemaView(
@@ -290,6 +327,46 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return (
             this.service.listQuestions?.(corpusId) ??
             unsupportedCapability("schema-defined questions")
+        );
+    }
+    public listViewSummaries(
+        request: ViewSummaryRequest,
+    ): Promise<ViewSummaryPage> {
+        return (
+            this.service.listViewSummaries?.(request) ??
+            unsupportedCapability("view summaries")
+        );
+    }
+    public listQuestionSummaries(
+        request: QuestionSummaryRequest,
+    ): Promise<QuestionSummaryPage> {
+        return (
+            this.service.listQuestionSummaries?.(request) ??
+            unsupportedCapability("question summaries")
+        );
+    }
+    public getQuestion(
+        request: QuestionReadRequest,
+    ): Promise<MemoryQuestion | undefined> {
+        return (
+            this.service.getQuestion?.(request) ??
+            unsupportedCapability("question details")
+        );
+    }
+    public listViewBuildSummaries(
+        request: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>> {
+        return (
+            this.service.listViewBuildSummaries?.(request) ??
+            unsupportedCapability("build summaries")
+        );
+    }
+    public getViewPublications(
+        request: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]> {
+        return (
+            this.service.getViewPublications?.(request) ??
+            unsupportedCapability("publication batches")
         );
     }
     public editQuestion(
@@ -816,6 +893,51 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             schemaViewToolNames.listQuestions,
             questionCorpusRequestSchema.parse({ corpusId }),
             questionInventorySchema,
+        );
+    }
+    public listViewSummaries(
+        request: ViewSummaryRequest,
+    ): Promise<ViewSummaryPage> {
+        return this.invoke(
+            inventoryToolNames.listViewSummaries,
+            viewSummaryRequestSchema.parse(request),
+            viewSummaryPageSchema,
+        );
+    }
+    public listQuestionSummaries(
+        request: QuestionSummaryRequest,
+    ): Promise<QuestionSummaryPage> {
+        return this.invoke(
+            inventoryToolNames.listQuestionSummaries,
+            questionSummaryRequestSchema.parse(request),
+            questionSummaryPageSchema,
+        );
+    }
+    public getQuestion(
+        request: QuestionReadRequest,
+    ): Promise<MemoryQuestion | undefined> {
+        return this.invoke(
+            inventoryToolNames.getQuestion,
+            questionReadRequestSchema.parse(request),
+            questionDetailSchema,
+        );
+    }
+    public listViewBuildSummaries(
+        request: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>> {
+        return this.invoke(
+            inventoryToolNames.listViewBuildSummaries,
+            inventoryPageRequestSchema.parse(request),
+            viewBuildSummaryPageSchema,
+        );
+    }
+    public getViewPublications(
+        request: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]> {
+        return this.invoke(
+            inventoryToolNames.getViewPublications,
+            viewPublicationBatchRequestSchema.parse(request),
+            viewPublicationBatchSchema,
         );
     }
     public editQuestion(

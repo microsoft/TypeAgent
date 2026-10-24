@@ -13,8 +13,11 @@ import type {
     DerivedViewContent,
     ViewKind,
     ViewCitation,
+    ViewSummary,
+    ViewBuildSummary,
 } from "@typeagent/memory-service";
 import { invokeMemory, invokeView } from "./viewClient";
+import { MemoryHubInventoryPager } from "./memoryHubInventoryPager";
 import {
     rbButton,
     rbError,
@@ -159,6 +162,11 @@ export function mountMemoryHubViews(
     );
     host.append(root);
     let snapshot: ViewSnapshot = { head: null, views: [] };
+    let inventory: ViewSummary[] = [];
+    const pager = new MemoryHubInventoryPager();
+    let searchQuery = "";
+    let selectedKind: ViewKind | undefined;
+    let searchTimer: ReturnType<typeof setTimeout> | undefined;
     let policy: ViewPublicationPolicy = {
         revision: 0,
         autoPublish: true,
@@ -274,17 +282,21 @@ export function mountMemoryHubViews(
         corpusNames = new Map(
             catalog.map((corpus) => [corpus.corpusId, corpus.name]),
         );
-        const corpora = corpusId ? [{ corpusId }] : catalog;
+        const corpora = (corpusId ? [{ corpusId }] : catalog).filter((corpus) =>
+            pager.includes(corpus.corpusId),
+        );
         const collections = await Promise.all(
             corpora.map(async ({ corpusId }) => {
-                const [views, jobs, savedPolicy] = await Promise.all([
-                    invokeMemory("memoryListViews", { corpusId }),
-                    invokeMemory("memoryListViewBuilds", { corpusId }),
-                    invokeMemory("memoryGetViewPublicationPolicy", {
-                        corpusId,
-                    }),
-                ]);
-                return { corpusId, views, jobs, savedPolicy };
+                const views = await invokeMemory("memoryListViewSummaries", {
+                    ...pager.request(corpusId),
+                    ...(route
+                        ? { viewId: route.viewId, pageSize: 1 }
+                        : {
+                              ...(searchQuery ? { query: searchQuery } : {}),
+                              ...(selectedKind ? { kind: selectedKind } : {}),
+                          }),
+                });
+                return { corpusId, views };
             }),
         );
         if (current !== sequence || selectedScope !== options.scope()) return;
@@ -292,25 +304,24 @@ export function mountMemoryHubViews(
         policies.clear();
         for (const collection of collections) {
             heads.set(collection.corpusId, collection.views.head);
-            policies.set(collection.corpusId, collection.savedPolicy);
         }
         snapshot = {
             head: collections.length === 1 ? collections[0].views.head : null,
-            views: collections.flatMap((collection) => collection.views.views),
+            views: [],
         };
-        policy = collections[0]?.savedPolicy ?? policy;
-        publications.clear();
-        await Promise.all(
-            snapshot.views.map(async (view) => {
-                publications.set(
-                    publicationKey(view.corpusId, view.viewId),
-                    await invokeMemory("memoryGetViewPublication", {
-                        corpusId: view.corpusId,
-                        viewId: view.viewId,
-                    }),
-                );
-            }),
+        inventory = collections.flatMap((collection) => collection.views.items);
+        pager.update(
+            collections.map((collection) => ({
+                corpusId: collection.corpusId,
+                ...collection.views,
+            })),
         );
+        publications.clear();
+        for (const view of inventory)
+            publications.set(
+                publicationKey(view.corpusId, view.viewId),
+                view.publication,
+            );
         if (current !== sequence) return;
         const build = rbButton("Build views", () => {
             exactInitialSources.clear();
@@ -322,13 +333,16 @@ export function mountMemoryHubViews(
         controls.replaceChildren(
             build,
             rbIconButton("fa-arrows-rotate", "Refresh views", () => {
+                pager.reset();
                 void action(refresh);
             }),
             ...(maintenance.length
                 ? [menuButton("Maintain collection", maintenance, "fa-gear")]
                 : []),
         );
-        const jobs = collections.flatMap((collection) => collection.jobs);
+        const jobs = collections.flatMap((collection) =>
+            collection.views.latestBuild ? [collection.views.latestBuild] : [],
+        );
         const familyStatus = collections.flatMap((collection) => [
             ...wikiStatusDescription(
                 collection.corpusId,
@@ -340,12 +354,30 @@ export function mountMemoryHubViews(
                 "Projects",
             ),
         ]);
-        await loadPendingConflicts(jobs, current);
-        if (current !== sequence) return;
         renderDrafts();
         status.textContent += familyStatus.join(" ");
-        if (jobs[0]) renderReceipt(jobs[0]);
-        else {
+        if (jobs[0]) {
+            const job = jobs[0];
+            receipt.hidden = false;
+            receipt.replaceChildren(
+                rbButton(
+                    `Latest build: ${job.state} — show operation details`,
+                    () => {
+                        void action(async () => {
+                            const full = await invokeMemory(
+                                "memoryGetViewBuild",
+                                { corpusId: job.corpusId, jobId: job.jobId },
+                            );
+                            if (!full)
+                                throw new Error(
+                                    "The selected build is unavailable.",
+                                );
+                            renderReceipt(full);
+                        });
+                    },
+                ),
+            );
+        } else {
             receipt.replaceChildren();
             receipt.hidden = true;
         }
@@ -406,14 +438,14 @@ export function mountMemoryHubViews(
                 ),
             );
         }
-        status.textContent = snapshot.views.length
-            ? `${snapshot.views.length} saved views${corpusId ? "" : " across your collections"}.`
+        status.textContent = pager.total
+            ? `Showing ${inventory.length} of ${pager.total} saved views${corpusId ? "" : " across your collections"}.`
             : "No views yet. Wiki pages and Projects are discovered automatically from indexed evidence. Update a collection family or build a timeline or guide.";
         if (route && !dirty) await renderRoute(route, current);
     }
 
     async function loadPendingConflicts(
-        jobs: ViewBuildJob[],
+        jobs: ViewBuildSummary[],
         current: number,
     ): Promise<void> {
         const references = new Map<
@@ -489,6 +521,32 @@ export function mountMemoryHubViews(
                 throw new Error("Exact view revision is unavailable");
             return;
         }
+        if (!target.revisionId) {
+            snapshot.views = [
+                ...snapshot.views.filter(
+                    (item) =>
+                        item.corpusId !== view.corpusId ||
+                        item.viewId !== view.viewId,
+                ),
+                view,
+            ];
+            if (!publications.has(publicationKey(view.corpusId, view.viewId))) {
+                const [publication] = await invokeMemory(
+                    "memoryGetViewPublications",
+                    { corpusId: view.corpusId, viewIds: [view.viewId] },
+                );
+                publications.set(
+                    publicationKey(view.corpusId, view.viewId),
+                    publication,
+                );
+            }
+        }
+        const selectedJobs = await invokeMemory(
+            "memoryListViewBuildSummaries",
+            { corpusId: view.corpusId, viewId: view.viewId, pageSize: 1 },
+        );
+        await loadPendingConflicts(selectedJobs.items, current);
+        if (disposed || current !== sequence) return;
         if (
             target.revisionId &&
             (view.revisionId !== target.revisionId ||
@@ -520,7 +578,14 @@ export function mountMemoryHubViews(
             comparison.querySelector(".hub-view-actions")?.replaceChildren(
                 rbNode(
                     "p",
-                    latest?.revisionId === view.revisionId
+                    (
+                        latest ??
+                        inventory.find(
+                            (item) =>
+                                item.corpusId === view.corpusId &&
+                                item.viewId === view.viewId,
+                        )
+                    )?.revisionId === view.revisionId
                         ? "Exact revision (read-only)"
                         : "Historical revision (read-only)",
                 ),
@@ -1298,16 +1363,18 @@ export function mountMemoryHubViews(
         search.type = "search";
         search.setAttribute("aria-label", "Find views");
         search.placeholder = "Find views";
+        search.value = searchQuery;
         const kind = document.createElement("select");
         kind.setAttribute("aria-label", "Filter view type");
         kind.append(new Option("All view types", ""));
         for (const value of supportedKinds)
             kind.append(new Option(viewKindLabels[value], value));
+        kind.value = selectedKind ?? "";
         const list = rbNode("div", undefined, "hub-view-list");
         // Kind plus one publication chip; version and index detail belong to
         // the view's own page.
         const viewStatusChips = (
-            view: ViewSnapshot["views"][number],
+            view: ViewSummary,
             publication: ReturnType<typeof publications.get>,
         ) => {
             const row = rbNode("div", undefined, "hub-chips");
@@ -1321,7 +1388,7 @@ export function mountMemoryHubViews(
         };
         const render = () => {
             list.replaceChildren();
-            const matches = snapshot.views.filter(
+            const matches = inventory.filter(
                 (view) =>
                     supportedKinds.some((kind) => view.content.kind === kind) &&
                     (!kind.value || view.content.kind === kind.value) &&
@@ -1364,8 +1431,28 @@ export function mountMemoryHubViews(
                 list.append(card);
             }
         };
-        search.oninput = kind.onchange = render;
-        drafts.replaceChildren(search, kind, list);
+        const reload = () => {
+            pager.reset();
+            void action(refresh);
+        };
+        search.oninput = () => {
+            searchQuery = search.value;
+            render();
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(reload, 250);
+        };
+        kind.onchange = () => {
+            selectedKind = supportedKinds.find((value) => value === kind.value);
+            reload();
+        };
+        drafts.replaceChildren(
+            search,
+            kind,
+            list,
+            pager.controls("views", () => {
+                void action(refresh);
+            }),
+        );
         render();
     }
 
@@ -1386,7 +1473,7 @@ export function mountMemoryHubViews(
                 renderRoute({ corpusId, viewId, revisionId }, sequence),
             );
         else if (view) showPreview(view);
-        else await action(refresh);
+        else await action(() => renderRoute({ corpusId, viewId }, sequence));
         options.onNavigate?.(
             `#/views/${encodeURIComponent(corpusId)}/${encodeURIComponent(viewId)}${revisionId ? `/revision/${encodeURIComponent(revisionId)}` : ""}`,
         );
@@ -1640,12 +1727,21 @@ export function mountMemoryHubViews(
                 );
             }),
             rbButton("Publication and search", () => {
-                const sheet = viewSheet(
-                    root,
-                    "Publication and search",
-                    () => !busy && discardChanges(),
-                );
-                sheet.body.append(publicationPanel(view));
+                void action(async () => {
+                    const current = sequence;
+                    const savedPolicy = await invokeMemory(
+                        "memoryGetViewPublicationPolicy",
+                        { corpusId: view.corpusId },
+                    );
+                    if (disposed || current !== sequence) return;
+                    policies.set(view.corpusId, savedPolicy);
+                    const sheet = viewSheet(
+                        root,
+                        "Publication and search",
+                        () => !busy && discardChanges(),
+                    );
+                    sheet.body.append(publicationPanel(view));
+                });
             }),
             rbButton("History", () => {
                 void action(async () => {
@@ -2262,6 +2358,7 @@ export function mountMemoryHubViews(
             } = {},
         ) => {
             if (!discardChanges()) return;
+            pager.reset();
             sequence++;
             visible = true;
             root.hidden = !visible;
@@ -2323,6 +2420,9 @@ export function mountMemoryHubViews(
         scopeChanged() {
             if (disposed) return;
             sequence++;
+            pager.reset();
+            clearTimeout(searchTimer);
+            snapshot = { head: null, views: [] };
             builder?.element.remove();
             builder = undefined;
             activeCorpus = undefined;

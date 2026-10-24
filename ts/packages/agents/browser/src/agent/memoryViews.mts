@@ -9,6 +9,11 @@ import type {
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import type { MemoryAcquisitionProgressService } from "@typeagent/memory-client";
 import {
+    inventoryPageRequestSchema,
+    viewSummaryRequestSchema,
+    questionSummaryRequestSchema,
+    questionReadRequestSchema,
+    viewPublicationBatchRequestSchema,
     knowledgeCorpusRequestSchema,
     knowledgeDiscoveryUpdateSchema,
     knowledgeCheckpointRequestSchema,
@@ -26,6 +31,11 @@ type ViewMethods = Pick<
     | "memoryQueryTopics"
     | "memoryRebuildTopics"
     | "memoryListViews"
+    | "memoryListViewSummaries"
+    | "memoryListQuestionSummaries"
+    | "memoryGetQuestion"
+    | "memoryListViewBuildSummaries"
+    | "memoryGetViewPublications"
     | "memoryListQuestions"
     | "memoryGetKnowledgeStatus"
     | "memoryUpdateKnowledgeDiscovery"
@@ -127,6 +137,26 @@ export function createMemoryViewFunctions(
         memoryQueryTopics: (request) => views().queryTopics(request),
         memoryRebuildTopics: ({ corpusId }) => views().rebuildTopics(corpusId),
         memoryListViews: ({ corpusId }) => views().listViews(corpusId),
+        memoryListViewSummaries: (request) => {
+            viewSummaryRequestSchema.parse(request);
+            return required("listViewSummaries")(request);
+        },
+        memoryListQuestionSummaries: (request) => {
+            questionSummaryRequestSchema.parse(request);
+            return required("listQuestionSummaries")(request);
+        },
+        memoryGetQuestion: (request) => {
+            questionReadRequestSchema.parse(request);
+            return required("getQuestion")(request);
+        },
+        memoryListViewBuildSummaries: (request) => {
+            inventoryPageRequestSchema.parse(request);
+            return required("listViewBuildSummaries")(request);
+        },
+        memoryGetViewPublications: (request) => {
+            viewPublicationBatchRequestSchema.parse(request);
+            return required("getViewPublications")(request);
+        },
         memoryListQuestions: ({ corpusId }) =>
             required("listQuestions")(corpusId),
         memoryListAcquisitions: ({ corpusId }) =>

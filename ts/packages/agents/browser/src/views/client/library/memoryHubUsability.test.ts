@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { inventoryFixture } from "./memoryHubInventoryTestData";
+
 import { mountMemoryHubQuestions } from "./memoryHubQuestions";
 import { invokeMemory, invokeView } from "./viewClient";
 import { question } from "./memoryHubQuestionsTestData";
@@ -174,14 +176,16 @@ function withCandidate() {
 
 beforeEach(() => {
     invoke.mockReset();
-    invoke.mockImplementation(async (method: string) => {
-        if (method === "memoryViewCapabilities")
-            return { derivedViews: { kinds: ["schemaView"] } };
-        if (method === "memoryListQuestions")
-            return { head: "head", items: [withCandidate()] };
-        if (method === "memoryListAcquisitions") return [];
-        throw new Error(`Unexpected operation ${method}`);
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async (method: string) => {
+            if (method === "memoryViewCapabilities")
+                return { derivedViews: { kinds: ["schemaView"] } };
+            if (method === "memoryListQuestions")
+                return { head: "head", items: [withCandidate()] };
+            if (method === "memoryListAcquisitions") return [];
+            throw new Error(`Unexpected operation ${method}`);
+        }),
+    );
 });
 
 test("the questions list passes the default-screen usability audit", async () => {
@@ -265,23 +269,25 @@ function failedJob() {
 }
 
 test("Activity and its attention cards pass the audit", async () => {
-    invoke.mockImplementation(async (method: string) => {
-        switch (method) {
-            case "memoryViewCapabilities":
-                return { derivedViews: { builds: true } };
-            case "memoryListCorpora":
-                return [{ corpusId: "alpha", name: "Alpha" }];
-            case "memoryListViewBuilds":
-            case "memoryGetViewBuild":
-                return method === "memoryListViewBuilds"
-                    ? [failedJob()]
-                    : failedJob();
-            case "memoryListViews":
-                return { head: null, views: [] };
-            default:
-                throw new Error(`Unexpected method ${method}`);
-        }
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async (method: string) => {
+            switch (method) {
+                case "memoryViewCapabilities":
+                    return { derivedViews: { builds: true } };
+                case "memoryListCorpora":
+                    return [{ corpusId: "alpha", name: "Alpha" }];
+                case "memoryListViewBuilds":
+                case "memoryGetViewBuild":
+                    return method === "memoryListViewBuilds"
+                        ? [failedJob()]
+                        : failedJob();
+                case "memoryListViews":
+                    return { head: null, views: [] };
+                default:
+                    throw new Error(`Unexpected method ${method}`);
+            }
+        }),
+    );
     const host = document.createElement("div");
     const attention = document.createElement("div");
     document.body.replaceChildren(host, attention);
@@ -317,6 +323,7 @@ test("an unknown question can be snoozed or dismissed from its detail", async ()
     [...document.querySelectorAll("button")]
         .find((button) => button.textContent === "What is the name?")!
         .click();
+    await settle();
     document
         .querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')!
         .click();

@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { inventoryFixture } from "./memoryHubInventoryTestData";
+
 import { mountMemoryHubQuestions } from "./memoryHubQuestions";
 import { invokeMemory, invokeView } from "./viewClient";
 import { question } from "./memoryHubQuestionsTestData";
@@ -24,7 +26,7 @@ function click(label: string) {
     if (!target) throw new Error(`Missing button ${label}`);
     target.click();
 }
-function setup() {
+function setup(scope: () => string | undefined = () => "corpus") {
     document.body.innerHTML = "<main></main><aside></aside>";
     const onError = jest.fn();
     return {
@@ -33,7 +35,7 @@ function setup() {
             document.querySelector("main")!,
             document.querySelector("aside")!,
             {
-                scope: () => "corpus",
+                scope,
                 corpora: () => [{ corpusId: "corpus", name: "Corpus" }],
                 hidden: {},
                 persistHidden: jest.fn(),
@@ -46,19 +48,36 @@ function setup() {
 beforeEach(() => {
     invoke.mockReset();
     viewInvoke.mockReset();
-    invoke.mockImplementation(async (method: string) => {
-        if (method === "memoryViewCapabilities")
-            return { derivedViews: { kinds: ["schemaView"] } };
-        if (method === "memoryListQuestions")
-            return { head: "head", items: [question()] };
-        if (method === "memoryEditQuestion") return {};
-        throw new Error(`Unexpected operation ${method}`);
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async (method: string) => {
+            if (method === "memoryViewCapabilities")
+                return { derivedViews: { kinds: ["schemaView"] } };
+            if (method === "memoryListQuestions")
+                return { head: "head", items: [question()] };
+            if (method === "memoryEditQuestion") return {};
+            throw new Error(`Unexpected operation ${method}`);
+        }),
+    );
+});
+test("a scope switch cannot reuse another collection's fresh cached question page", async () => {
+    let scope = "corpus";
+    const { panel } = setup(() => scope);
+    await panel.show();
+    expect(document.body.textContent).toContain("What is the name?");
+    scope = "unavailable";
+    await panel.show();
+    expect(document.body.textContent).not.toContain("What is the name?");
+    expect(
+        invoke.mock.calls.filter(
+            ([method]) => method === "memoryListQuestionSummaries",
+        ),
+    ).toHaveLength(1);
 });
 test("complete inventory opens inspector and assertions serialize optimistic concurrency identity", async () => {
     const { panel, onError } = setup();
     await panel.show();
     click("What is the name?");
+    await settle();
     const answer = document.querySelector<HTMLTextAreaElement>(
         '[aria-label="Question inspector"] textarea',
     )!;
@@ -95,17 +114,20 @@ test("policy-discovered questions retain source-backed reason without fabricated
             excerpt: "Ada",
         },
     ];
-    invoke.mockImplementation(async (method: string) => {
-        if (method === "memoryViewCapabilities")
-            return { derivedViews: { kinds: ["schemaView"] } };
-        if (method === "memoryListQuestions")
-            return { head: "head", items: [current] };
-        if (method === "memoryListAcquisitions") return [];
-        throw new Error(`Unexpected ${method}`);
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async (method: string) => {
+            if (method === "memoryViewCapabilities")
+                return { derivedViews: { kinds: ["schemaView"] } };
+            if (method === "memoryListQuestions")
+                return { head: "head", items: [current] };
+            if (method === "memoryListAcquisitions") return [];
+            throw new Error(`Unexpected ${method}`);
+        }),
+    );
     const { panel } = setup();
     await panel.show();
     click("What is the name?");
+    await settle();
     expect(document.body.textContent).toContain("Policy-discovered");
     expect(document.body.textContent).toContain("Answer review unreviewed");
     expect(document.body.textContent).toContain(
@@ -122,6 +144,7 @@ test("invalid answers and unapproved authoring do not reach service edits", asyn
     const { panel, onError } = setup();
     await panel.show();
     click("What is the name?");
+    await settle();
     const answer = document.querySelector<HTMLTextAreaElement>(
         '[aria-label="Question inspector"] textarea',
     )!;
@@ -149,9 +172,11 @@ test("unavailable capability and service errors are explicit, not empty success"
     expect(
         invoke.mock.calls.some(([method]) => method === "memoryListQuestions"),
     ).toBe(false);
-    invoke.mockImplementation(async () => {
-        throw new Error("Offline");
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async () => {
+            throw new Error("Offline");
+        }),
+    );
     await expect(panel.show()).rejects.toThrow("Offline");
 });
 
@@ -161,11 +186,13 @@ test("an inventory failure clears stale decisions and reports an incomplete resu
     expect(document.querySelector("aside")!.textContent).toContain(
         "Question decisions",
     );
-    invoke.mockImplementation(async (method: string) => {
-        if (method === "memoryViewCapabilities")
-            return { derivedViews: { kinds: ["schemaView"] } };
-        throw new Error("Inventory unavailable");
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async (method: string) => {
+            if (method === "memoryViewCapabilities")
+                return { derivedViews: { kinds: ["schemaView"] } };
+            throw new Error("Inventory unavailable");
+        }),
+    );
 
     await panel.refresh();
     expect(document.body.textContent).toContain(
@@ -177,18 +204,20 @@ test("an inventory failure clears stale decisions and reports an incomplete resu
 });
 
 test("question maintenance errors remain explicit alongside the complete inventory", async () => {
-    invoke.mockImplementation(async (method: string) => {
-        if (method === "memoryViewCapabilities")
-            return { derivedViews: { kinds: ["schemaView"] } };
-        if (method === "memoryListQuestions")
-            return {
-                head: "head",
-                items: [question()],
-                maintenanceError: "Source evaluation failed",
-            };
-        if (method === "memoryListAcquisitions") return [];
-        throw new Error(`Unexpected ${method}`);
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async (method: string) => {
+            if (method === "memoryViewCapabilities")
+                return { derivedViews: { kinds: ["schemaView"] } };
+            if (method === "memoryListQuestions")
+                return {
+                    head: "head",
+                    items: [question()],
+                    maintenanceError: "Source evaluation failed",
+                };
+            if (method === "memoryListAcquisitions") return [];
+            throw new Error(`Unexpected ${method}`);
+        }),
+    );
     const { panel } = setup();
     await panel.show();
     expect(document.body.textContent).toContain(
@@ -215,14 +244,16 @@ test("candidate review retains exact source citations and never counts mentions 
         derivedFrom: [],
         support: [{ citation, derivedFrom: [] }],
     });
-    invoke.mockImplementation(async (method: string) => {
-        if (method === "memoryViewCapabilities")
-            return { derivedViews: { kinds: ["schemaView"] } };
-        if (method === "memoryListQuestions")
-            return { head: "head", items: [current] };
-        if (method === "memoryEditQuestion") return {};
-        throw new Error(`Unexpected ${method}`);
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async (method: string) => {
+            if (method === "memoryViewCapabilities")
+                return { derivedViews: { kinds: ["schemaView"] } };
+            if (method === "memoryListQuestions")
+                return { head: "head", items: [current] };
+            if (method === "memoryEditQuestion") return {};
+            throw new Error(`Unexpected ${method}`);
+        }),
+    );
     viewInvoke.mockResolvedValue({
         available: true,
         title: "Original source",
@@ -231,6 +262,7 @@ test("candidate review retains exact source citations and never counts mentions 
     const { panel } = setup();
     await panel.show();
     click("What is the name?");
+    await settle();
     expect(document.body.textContent).toContain("not independent votes");
     click("source @ old-revision · chars:0-3");
     await settle();
@@ -266,17 +298,20 @@ test("ordinary Markdown schema-page links remain navigable and scripts remain bl
 
 test("bounded discovery configuration uses a validated service edit with optimistic version", async () => {
     const current = question();
-    invoke.mockImplementation(async (method: string) => {
-        if (method === "memoryViewCapabilities")
-            return { derivedViews: { kinds: ["schemaView"] } };
-        if (method === "memoryListQuestions")
-            return { head: "head", items: [current] };
-        if (method === "memoryEditQuestion") return {};
-        throw new Error(`Unexpected ${method}`);
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async (method: string) => {
+            if (method === "memoryViewCapabilities")
+                return { derivedViews: { kinds: ["schemaView"] } };
+            if (method === "memoryListQuestions")
+                return { head: "head", items: [current] };
+            if (method === "memoryEditQuestion") return {};
+            throw new Error(`Unexpected ${method}`);
+        }),
+    );
     const { panel, onError } = setup();
     await panel.show();
     click("What is the name?");
+    await settle();
     const checkbox = document.querySelector<HTMLInputElement>(
         '[aria-label="Question inspector"] input[type="checkbox"]',
     )!;
@@ -308,6 +343,7 @@ test.each([0, 8])(
         const { panel, onError } = setup();
         await panel.show();
         click("What is the name?");
+        await settle();
         document.querySelector<HTMLInputElement>(
             'input[aria-label="Maximum question proposals"]',
         )!.value = String(maxProposals);
@@ -327,6 +363,7 @@ test("discovery rejects an over-cap bound before sending any service edit", asyn
     const { panel, onError } = setup();
     await panel.show();
     click("What is the name?");
+    await settle();
     document.querySelector<HTMLInputElement>(
         'input[aria-label="Maximum question proposals"]',
     )!.value = "9";

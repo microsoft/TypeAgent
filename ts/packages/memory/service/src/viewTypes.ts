@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { AgentEdition } from "./agentEdition.js";
+import type { MemoryInventoryService } from "./inventoryTypes.js";
 import type { MemoryAcquisitionService } from "./acquisitionTypes.js";
 import type {
     MemoryKnowledgeService,
@@ -393,7 +394,8 @@ export interface ViewHistoryEntry {
     version: ViewVersion;
 }
 export interface MemoryViewService
-    extends Partial<MemoryTopicService>,
+    extends Partial<MemoryInventoryService>,
+        Partial<MemoryTopicService>,
         Partial<MemorySchemaViewService>,
         Partial<MemoryKnowledgeService>,
         Partial<MemoryAcquisitionService> {

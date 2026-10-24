@@ -522,7 +522,7 @@ function renderErrors(): void {
     el("hubStatus").textContent = messages.length ? "Degraded" : "Connected";
 }
 
-async function refreshSnapshot(): Promise<void> {
+async function refreshSnapshot(refreshQuestions = true): Promise<void> {
     const version = ++snapshotVersion;
     let result: MemoryHubSnapshot;
     try {
@@ -579,7 +579,11 @@ async function refreshSnapshot(): Promise<void> {
     renderAddTargets();
     renderInbox();
     renderErrors();
-    if (questionsPanel) await questionsPanel.refresh();
+    if (!refreshQuestions) return;
+    if (questionsPanel && parseRoute(location.hash).page === "questions")
+        await questionsPanel.refresh();
+    else if (questionsPanel && parseRoute(location.hash).page === "inbox")
+        await questionsPanel.refreshAttention();
 }
 
 function renderAddTargets(): void {
@@ -1210,7 +1214,7 @@ async function applyRoute(): Promise<void> {
     const version = ++routeVersion;
     const route = parseRoute(location.hash);
     if (route.page === "inbox") {
-        await refreshSnapshot();
+        await refreshSnapshot(false);
         if (version !== routeVersion) return;
     }
     const item =
@@ -1256,7 +1260,11 @@ async function applyRoute(): Promise<void> {
     }
     if (version !== routeVersion) return;
     renderInbox();
-    if (route.page === "inbox") await viewActivityPanel.refresh();
+    if (route.page === "inbox")
+        await Promise.all([
+            questionsPanel.refreshAttention(),
+            viewActivityPanel.refresh(),
+        ]);
     restoreFocus(visiblePage);
 }
 
@@ -1311,7 +1319,8 @@ export async function mountMemoryHub(): Promise<void> {
         onChanged: async () => {
             invalidateDiscovery();
             await refreshSnapshot();
-            await viewActivityPanel.refresh();
+            if (["inbox", "activity"].includes(parseRoute(location.hash).page))
+                await viewActivityPanel.refresh();
         },
     });
     viewActivityPanel = mountMemoryHubViewActivity(
@@ -1388,7 +1397,7 @@ export async function mountMemoryHub(): Promise<void> {
             localStorage.getItem("memoryHub.ask") ??
             ""
         ).trim() || undefined;
-    await hubAction(refreshSnapshot);
+    await hubAction(() => refreshSnapshot(false));
     if (snapshotAvailable) await hubAction(applyRoute);
     el("hubRefresh").onclick = null;
     const query =
@@ -1431,7 +1440,7 @@ export async function mountMemoryHub(): Promise<void> {
         if (!discardChanges()) return;
         void hubAction(async () => {
             invalidateDiscovery();
-            await refreshSnapshot();
+            await refreshSnapshot(parseRoute(location.hash).page !== "inbox");
             await applyRoute();
         });
     });

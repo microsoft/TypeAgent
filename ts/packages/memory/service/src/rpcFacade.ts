@@ -27,6 +27,21 @@ export function createMemoryServiceRpcFacade(
     MemoryTopicService &
     MemoryKnowledgeService {
     return {
+        listViewSummaries: (request) =>
+            service.listViewSummaries?.(request) ??
+            unsupportedCapability("view summaries"),
+        listQuestionSummaries: (request) =>
+            service.listQuestionSummaries?.(request) ??
+            unsupportedCapability("question summaries"),
+        getQuestion: (request) =>
+            service.getQuestion?.(request) ??
+            unsupportedCapability("question details"),
+        listViewBuildSummaries: (request) =>
+            service.listViewBuildSummaries?.(request) ??
+            unsupportedCapability("build summaries"),
+        getViewPublications: (request) =>
+            service.getViewPublications?.(request) ??
+            unsupportedCapability("publication batches"),
         getKnowledgeStatus: (corpusId) =>
             service.getKnowledgeStatus?.(corpusId) ??
             unsupportedCapability("knowledge status"),

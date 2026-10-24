@@ -303,6 +303,29 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
             expect(search[0].view.revisionId).toBe(result.revisionId);
             expect(search[0].review).toBe("unreviewed");
             const current = await client.listViews(corpus.corpusId);
+            const request = { corpusId: corpus.corpusId, pageSize: 1 };
+            const summaries = await client.listViewSummaries(request);
+            expect(summaries.items[0].revisionId).toBe(
+                current.views[0].revisionId,
+            );
+            expect(summaries.items[0].content).toEqual({
+                kind,
+                title: current.views[0].content.title,
+            });
+            expect(summaries.items[0]).not.toHaveProperty("definition");
+            expect(summaries.latestBuild?.jobId).toBe(job.jobId);
+            expect(
+                await client.getViewPublications({
+                    corpusId: corpus.corpusId,
+                    viewIds: ["guide"],
+                }),
+            ).toEqual([publication]);
+            const builds = await client.listViewBuildSummaries(request);
+            expect(builds.items[0].jobId).toBe(job.jobId);
+            expect(builds.items[0].results[0].snapshot).toEqual({
+                pipeline: result.snapshot.pipeline,
+                definition: { kind },
+            });
             await client.updateViewPublicationPolicy({
                 corpusId: corpus.corpusId,
                 expectedHead: current.head,

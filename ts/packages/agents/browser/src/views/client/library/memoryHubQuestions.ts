@@ -4,10 +4,11 @@
 import type {
     MemoryQuestion,
     QuestionEdit,
-    QuestionInventory,
+    QuestionSummaryPage,
     ViewCitation,
 } from "@typeagent/memory-service";
 import { invokeMemory, invokeView } from "./viewClient";
+import { MemoryHubInventoryPager } from "./memoryHubInventoryPager";
 import {
     rbButton,
     rbChip,
@@ -22,6 +23,8 @@ import {
     questionIdentity,
     questionReason,
     parseQuestionAssertion,
+    questionCandidateCount,
+    type QuestionListItem,
 } from "./memoryHubQuestionsModel";
 import { routeHash, type HiddenItems } from "./memoryHubModel";
 import { schemaViewPageBrowserLink } from "./memoryHubViewPages";
@@ -41,7 +44,11 @@ export function mountMemoryHubQuestions(
         onAttentionCount?: (count: number) => void;
     },
 ) {
-    let inventories = new Map<string, QuestionInventory>();
+    let inventories = new Map<string, QuestionSummaryPage>();
+    const pager = new MemoryHubInventoryPager();
+    let attentionOnly = false;
+    let searchTimer: ReturnType<typeof setTimeout> | undefined;
+    const pagination = rbNode("div");
     let sequence = 0;
     let selectedView: string | undefined;
     let selectedCorpus: string | undefined;
@@ -52,6 +59,7 @@ export function mountMemoryHubQuestions(
     let filter: Filter = "all";
     let search = "";
     let loadedAt = 0;
+    let loadedScope: string | undefined;
     let schemaViewsSupported = false;
     let failureLines: string[] = [];
     const status = rbChip("");
@@ -98,6 +106,8 @@ export function mountMemoryHubQuestions(
             for (const other of chips.querySelectorAll("button"))
                 other.setAttribute("aria-pressed", String(other === chip));
             renderList();
+            pager.reset();
+            void refresh().catch(options.onError);
         });
         chip.setAttribute("aria-pressed", String(value === filter));
         chips.append(chip);
@@ -109,6 +119,11 @@ export function mountMemoryHubQuestions(
     searchBox.addEventListener("input", () => {
         search = searchBox.value.trim().toLowerCase();
         renderList();
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+            pager.reset();
+            void refresh().catch(options.onError);
+        }, 250);
     });
     const head = rbNode("div", undefined, "hub-page-head hub-qhead");
     head.append(
@@ -141,7 +156,7 @@ export function mountMemoryHubQuestions(
     filters.append(chips, searchBox);
     const split = rbNode("div", undefined, "hub-split");
     split.append(list, inspector);
-    host.append(head, notice, author, filters, split, panel);
+    host.append(head, notice, author, filters, split, pagination, panel);
 
     function action(work: () => Promise<void>) {
         if (busy) return;
@@ -224,22 +239,26 @@ export function mountMemoryHubQuestions(
         const current = all().find(
             (item) => questionIdentity(item) === questionIdentity(question),
         );
-        if (current) inspect(current);
+        if (current) inspect(await fetchQuestion(current));
         else
             inspector.replaceChildren(
                 rbNode("p", "This question is no longer available."),
             );
     }
-    function originLabel(question: MemoryQuestion) {
+    function originLabel(question: QuestionListItem) {
         return question.slot.admission?.actor === "policy"
             ? "Policy-discovered"
             : question.slot.admission?.actor === "user"
               ? "User-defined"
-              : question.slot.discoveryCitations.length
+              : (
+                      "discoveryCitationCount" in question.slot
+                          ? question.slot.discoveryCitationCount
+                          : question.slot.discoveryCitations.length
+                  )
                 ? "Source-proposed"
                 : "Origin not recorded";
     }
-    function questionKey(question: MemoryQuestion) {
+    function questionKey(question: QuestionListItem) {
         return questionIdentity(question);
     }
     function valueNode(value: unknown): HTMLElement {
@@ -262,7 +281,7 @@ export function mountMemoryHubQuestions(
         );
     }
     // List rows: the answer state, plus a count only when it is not 1.
-    function rowChips(question: MemoryQuestion) {
+    function rowChips(question: QuestionListItem) {
         const row = rbNode("div", undefined, "hub-chips");
         row.append(
             rbChip(
@@ -274,14 +293,26 @@ export function mountMemoryHubQuestions(
                       : undefined,
             ),
         );
-        const count = question.details.candidates.length;
+        const count = questionCandidateCount(question);
         if (count > 1) row.append(rbChip(`${count} candidates`));
         return row;
     }
-    function select(question: MemoryQuestion) {
+    async function fetchQuestion(question: QuestionListItem) {
+        const detail = await invokeMemory("memoryGetQuestion", {
+            corpusId: question.corpusId,
+            viewId: question.viewId,
+            slotId: question.slot.id,
+        });
+        if (!detail) throw new Error("This question is no longer available.");
+        return detail;
+    }
+    function select(question: QuestionListItem) {
         if (dirty && !confirm("Discard unsaved question edits?")) return;
         selectedKey = questionKey(question);
-        inspect(question);
+        action(async () => {
+            const detail = await fetchQuestion(question);
+            if (selectedKey === questionKey(question)) inspect(detail);
+        });
         renderList();
         if (window.matchMedia?.("(max-width: 900px)").matches)
             inspector.scrollIntoView?.({ block: "start" });
@@ -747,7 +778,7 @@ export function mountMemoryHubQuestions(
         );
         inspector.append(assertion, contract, advanced);
     }
-    function hideQuestions(questions: MemoryQuestion[], until?: number) {
+    function hideQuestions(questions: QuestionListItem[], until?: number) {
         for (const question of questions)
             options.hidden[questionIdentity(question)] = {
                 fingerprint: question.fingerprint,
@@ -765,8 +796,10 @@ export function mountMemoryHubQuestions(
             ),
             options.hidden,
         );
-        options.onAttentionCount?.(groups.length);
-        if (!groups.length) return;
+        options.onAttentionCount?.(
+            groups.length + (attentionOnly && pager.hasNext ? 1 : 0),
+        );
+        if (!groups.length && !pager.hasNext) return;
         attentionHost.append(rbNode("h3", "Question decisions"));
         const byReason = new Map<string, typeof groups>();
         for (const group of groups) {
@@ -808,6 +841,12 @@ export function mountMemoryHubQuestions(
             }
             attentionHost.append(card);
         }
+        if (attentionOnly)
+            attentionHost.append(
+                pager.controls("question decisions", () => {
+                    void refresh().catch(options.onError);
+                }),
+            );
     }
     function renderAuthor() {
         author.replaceChildren();
@@ -893,8 +932,16 @@ export function mountMemoryHubQuestions(
                 async (corpus) =>
                     [
                         corpus.corpusId,
-                        await invokeMemory("memoryListQuestions", {
-                            corpusId: corpus.corpusId,
+                        await invokeMemory("memoryListQuestionSummaries", {
+                            ...pager.request(corpus.corpusId),
+                            ...(selectedView ? { viewId: selectedView } : {}),
+                            ...(!attentionOnly && search
+                                ? { query: search }
+                                : {}),
+                            ...(!attentionOnly && filter !== "all"
+                                ? { answerFilter: filter }
+                                : {}),
+                            ...(attentionOnly ? { attentionOnly: true } : {}),
                         }),
                     ] as const,
             ),
@@ -902,7 +949,7 @@ export function mountMemoryHubQuestions(
         return results;
     }
     function applyInventory(
-        results: PromiseSettledResult<readonly [string, QuestionInventory]>[],
+        results: PromiseSettledResult<readonly [string, QuestionSummaryPage]>[],
         corpora: Array<{ corpusId: string; name: string }>,
         corpusId: string | undefined,
     ) {
@@ -910,6 +957,9 @@ export function mountMemoryHubQuestions(
             results.flatMap((result) =>
                 result.status === "fulfilled" ? [result.value] : [],
             ),
+        );
+        pager.update(
+            [...inventories].map(([corpusId, page]) => ({ corpusId, ...page })),
         );
         failureLines = results.flatMap((result, index) =>
             result.status === "rejected"
@@ -920,7 +970,12 @@ export function mountMemoryHubQuestions(
         );
         renderAuthor();
         const questions = all();
-        status.textContent = `${questions.length} ${questions.length === 1 ? "question" : "questions"}`;
+        status.textContent = `Showing ${questions.length} of ${pager.total} questions`;
+        pagination.replaceChildren(
+            pager.controls("questions", () => {
+                void refresh().catch(options.onError);
+            }),
+        );
         if (!corpora.length && corpusId) {
             status.textContent = "";
             failureLines = [
@@ -931,6 +986,7 @@ export function mountMemoryHubQuestions(
         renderList();
         renderAttention();
         loadedAt = Date.now();
+        loadedScope = corpusId;
     }
     function scopedCorpora() {
         const corpusId = options.scope();
@@ -947,7 +1003,9 @@ export function mountMemoryHubQuestions(
     // when their panel is opened, not on every question edit.
     async function refreshInventory() {
         const version = ++sequence;
-        const corpora = scopedCorpora();
+        const corpora = scopedCorpora().filter((corpus) =>
+            pager.includes(corpus.corpusId),
+        );
         const results = await loadQuestions(corpora);
         if (version !== sequence) return;
         applyInventory(results, corpora, options.scope());
@@ -955,7 +1013,9 @@ export function mountMemoryHubQuestions(
     async function refresh() {
         const version = ++sequence;
         status.textContent = "Loading questions…";
-        const corpora = scopedCorpora();
+        const corpora = scopedCorpora().filter((corpus) =>
+            pager.includes(corpus.corpusId),
+        );
         let supported = schemaViewsSupported;
         try {
             if (!supported) {
@@ -1018,9 +1078,15 @@ export function mountMemoryHubQuestions(
     }
     return {
         async show(viewId?: string, corpusId?: string) {
-            const same = selectedView === viewId && selectedCorpus === corpusId;
+            const same =
+                !attentionOnly &&
+                loadedScope === options.scope() &&
+                selectedView === viewId &&
+                selectedCorpus === corpusId;
             selectedView = viewId;
             selectedCorpus = corpusId;
+            attentionOnly = false;
+            if (!same) pager.reset();
             inspector.replaceChildren();
             selectedKey = undefined;
             if (same && inventories.size && Date.now() - loadedAt < 5000) {
@@ -1030,6 +1096,14 @@ export function mountMemoryHubQuestions(
             await refresh();
         },
         refresh,
+        async refreshAttention() {
+            attentionOnly = true;
+            selectedView = undefined;
+            selectedCorpus = undefined;
+            clearTimeout(searchTimer);
+            pager.reset();
+            await refresh();
+        },
         discardChanges() {
             if (!dirty) return true;
             if (!confirm("Discard unsaved question edits?")) return false;

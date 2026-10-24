@@ -4,11 +4,18 @@
 import type {
     AnswerSchema,
     MemoryQuestion,
+    MemoryQuestionSummary,
     SchemaValue,
 } from "@typeagent/memory-service";
 import type { HiddenItems } from "./memoryHubModel";
 
-export function questionIdentity(question: MemoryQuestion): string {
+export type QuestionListItem = MemoryQuestion | MemoryQuestionSummary;
+export function questionCandidateCount(question: QuestionListItem): number {
+    return "candidateCount" in question.details
+        ? question.details.candidateCount
+        : question.details.candidates.length;
+}
+export function questionIdentity(question: QuestionListItem): string {
     return JSON.stringify([
         "question",
         question.corpusId,
@@ -17,16 +24,18 @@ export function questionIdentity(question: MemoryQuestion): string {
     ]);
 }
 
-export function questionReason(question: MemoryQuestion): string | undefined {
+export function questionReason(question: QuestionListItem): string | undefined {
     if (question.slot.approval === "rejected") return undefined;
     if (question.slot.approval === "proposed")
         return "Approve proposed question";
     if (question.details.answerState === "conflicted")
         return "Resolve conflicting candidates";
     if (
-        question.details.candidates.some(
-            (candidate) => candidate.review === "unreviewed",
-        ) &&
+        ("hasUnreviewedCandidates" in question.details
+            ? question.details.hasUnreviewedCandidates
+            : question.details.candidates.some(
+                  (candidate) => candidate.review === "unreviewed",
+              )) &&
         question.slot.rubric.requireConfirmation
     )
         return "Review candidate evidence";
@@ -39,7 +48,7 @@ export function questionReason(question: MemoryQuestion): string | undefined {
     return undefined;
 }
 
-function priority(question: MemoryQuestion): number {
+function priority(question: QuestionListItem): number {
     return (
         (question.details.answerState === "conflicted" ? 400 : 0) +
         (question.slot.approval === "proposed" ? 300 : 0) +
@@ -59,13 +68,13 @@ function priority(question: MemoryQuestion): number {
     );
 }
 
-export function questionAttention(
-    questions: MemoryQuestion[],
+export function questionAttention<T extends QuestionListItem>(
+    questions: T[],
     hidden: HiddenItems,
     now = Date.now(),
     allowance = 5,
-): Array<{ id: string; title: string; questions: MemoryQuestion[] }> {
-    const groups = new Map<string, MemoryQuestion[]>();
+): Array<{ id: string; title: string; questions: T[] }> {
+    const groups = new Map<string, T[]>();
     for (const question of [...questions].sort(
         (a, b) =>
             priority(b) - priority(a) ||

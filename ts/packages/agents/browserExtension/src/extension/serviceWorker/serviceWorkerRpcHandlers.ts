@@ -75,6 +75,15 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryRebuildTopics: (params) => forward("memoryRebuildTopics", params),
         memoryListViews: (params) => forward("memoryListViews", params),
         memoryListQuestions: (params) => forward("memoryListQuestions", params),
+        memoryListViewSummaries: (params) =>
+            forward("memoryListViewSummaries", params),
+        memoryListQuestionSummaries: (params) =>
+            forward("memoryListQuestionSummaries", params),
+        memoryGetQuestion: (params) => forward("memoryGetQuestion", params),
+        memoryListViewBuildSummaries: (params) =>
+            forward("memoryListViewBuildSummaries", params),
+        memoryGetViewPublications: (params) =>
+            forward("memoryGetViewPublications", params),
         memoryGetKnowledgeStatus: (params) =>
             forward("memoryGetKnowledgeStatus", params),
         memoryUpdateKnowledgeDiscovery: (params) =>
