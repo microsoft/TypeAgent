@@ -103,7 +103,7 @@
     "jsdom": "^28.1.0",
     "jsonpath": "^1.2.0",
     "katex": "^0.16.21",
-    "markdown-it": "^14.3.2",
+    "markdown-it": "^14.3.3",
     "mermaid": "^11.16.1",
     "pdfjs-dist": "5.3.31",
     "prismjs": "^1.30.0",
