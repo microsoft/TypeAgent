@@ -187,10 +187,7 @@ export function mountMemoryHubViewActivity(
             if (result.wikiConsolidation) {
                 const effect = result.wikiConsolidation;
                 row.append(
-                    rbNode(
-                        "p",
-                        `Consolidation effect: ${effect.stage}; derivative readiness is separate from canonical acceptance.`,
-                    ),
+                    rbChip(`Consolidation: ${effect.stage}`),
                     rbIconButton(
                         "fa-arrow-up-right-from-square",
                         "Open canonical article",
@@ -445,17 +442,14 @@ export function mountMemoryHubViewActivity(
         if (!rendered.current) return;
         const { total, running } = rendered;
         status.textContent = total
-            ? `${total} view operations. Results are recorded per target.`
+            ? `${total} view ${total === 1 ? "operation" : "operations"}`
             : "No view builds yet.";
         options.onAttentionCount?.(attentionHost.childElementCount);
         if (attentionHost.childElementCount) {
-            attentionHost.prepend(
-                rbNode("h3", "View attention"),
-                rbNode(
-                    "p",
-                    "Current view and build issues in this scope. The filters above apply to source and guide notifications.",
-                ),
-            );
+            const heading = rbNode("h3", "View attention");
+            heading.title =
+                "Current view and build issues in this scope. The filters above apply to source and guide notifications.";
+            attentionHost.prepend(heading);
         }
         if (selected) {
             const job = await invokeMemory("memoryGetViewBuild", selected);

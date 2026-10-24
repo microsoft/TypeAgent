@@ -184,7 +184,7 @@ test("ready source selection passes exact revisions to a scoped multi-view build
     expect(select.disabled).toBe(false);
     select.click();
     const build = Array.from(document.querySelectorAll("button")).find(
-        (button) => button.textContent === "Build views from selection",
+        (button) => button.textContent === "Build views",
     )!;
     build.click();
     await settle();

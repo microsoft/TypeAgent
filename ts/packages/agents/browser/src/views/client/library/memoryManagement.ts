@@ -19,7 +19,7 @@ import { renderMarkdown } from "./utils/markdownRenderer";
 import { renderMermaidIn } from "./utils/mermaidView";
 import { renderMathIn } from "./utils/mathView";
 import { canEditWysiwyg } from "./utils/wysiwygEligibility";
-import { iconButton } from "./memoryHubUi";
+import { icon, iconButton, setIconButton } from "./memoryHubUi";
 
 const PAGE_SIZE = 25;
 const CONTENT_PAGE_SIZE = 12_000;
@@ -107,7 +107,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     const buildSelected = document.createElement("button");
     buildSelected.type = "button";
     buildSelected.className = "primary";
-    buildSelected.textContent = "Build views from selection";
+    buildSelected.append(icon("fa-plus"), "Build views");
     buildSelected.onclick = () => {
         void run(async () => {
             const selected = [...buildSelection.values()];
@@ -123,7 +123,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     };
     const clearSelected = document.createElement("button");
     clearSelected.type = "button";
-    clearSelected.textContent = "Clear selection";
+    setIconButton(clearSelected, "fa-xmark", "Clear selection");
     clearSelected.onclick = () => {
         buildSelection.clear();
         renderSources();
@@ -377,7 +377,9 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         }
         sourceCount.textContent = `${sourcePage.total} total`;
         selectionBar.hidden = buildSelection.size === 0;
-        selectionCount.textContent = `${buildSelection.size} of 32 sources selected · one collection per build`;
+        selectionCount.textContent = `${buildSelection.size} selected`;
+        selectionCount.title =
+            "Up to 32 sources from one collection per build.";
         element<HTMLSpanElement>("sourcePageLabel").textContent =
             `Page ${sourcePageIndex + 1}`;
         element<HTMLButtonElement>("sourcePrevious").disabled =

@@ -349,9 +349,7 @@ test("Activity distinguishes accepted canonical effects from derivative readines
     );
     try {
         await mounted.show({ corpusId: "c", jobId: "job" });
-        expect(host.textContent).toContain(
-            "Consolidation effect: accepted; derivative readiness is separate",
-        );
+        expect(host.textContent).toContain("Consolidation: accepted");
         expect(host.textContent).toContain(
             "Exact derivative index awaiting repair",
         );

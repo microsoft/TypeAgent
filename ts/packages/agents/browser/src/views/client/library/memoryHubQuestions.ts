@@ -303,8 +303,20 @@ export function mountMemoryHubQuestions(
                     }),
             },
         ];
-        inspector.append(
+        const headerActions = rbNode("div", undefined, "hub-row-actions");
+        headerActions.append(
+            rbIconButton("fa-bell-slash", "Snooze one day", () => {
+                hideQuestions([question], Date.now() + 86400000);
+                inspector.replaceChildren();
+            }),
+            rbIconButton("fa-xmark", "Dismiss", () => {
+                hideQuestions([question]);
+                inspector.replaceChildren();
+            }),
             menuButton("More question actions", menuItems),
+        );
+        inspector.append(
+            headerActions,
             evidence(
                 question.corpusId,
                 question.slot.discoveryCitations,
@@ -355,7 +367,11 @@ export function mountMemoryHubQuestions(
             ),
         );
         advanced.append(discovery);
-        inspector.append(rbNode("h4", "Candidates"));
+        inspector.append(
+            details.candidates.length
+                ? rbNode("h4", "Candidates")
+                : rbNode("p", "No candidate answers yet."),
+        );
         for (const candidate of details.candidates) {
             const card = rbNode("article", undefined, "card");
             const selected = details.selectedCandidateIds.includes(
@@ -380,17 +396,18 @@ export function mountMemoryHubQuestions(
                 ["rejected", "fa-ban", "Reject candidate"],
                 ["unreviewed", "fa-rotate-left", "Reset review candidate"],
             ] as const)
-                heading.append(
-                    rbIconButton(glyph, label, () =>
-                        action(() =>
-                            edit(question, {
-                                kind: "review",
-                                candidateId: candidate.id,
-                                review,
-                            }),
+                if (review !== candidate.review)
+                    heading.append(
+                        rbIconButton(glyph, label, () =>
+                            action(() =>
+                                edit(question, {
+                                    kind: "review",
+                                    candidateId: candidate.id,
+                                    review,
+                                }),
+                            ),
                         ),
-                    ),
-                );
+                    );
             card.append(
                 heading,
                 rbNode(
@@ -437,14 +454,13 @@ export function mountMemoryHubQuestions(
         const changed = () => {
             dirty = true;
         };
-        inspector.append(
-            rbNode("h4", "Assert or correct an answer"),
-            rbNode(
-                "p",
-                "This creates a user assertion; it never rewrites original source evidence.",
-            ),
+        const assertion = rbNode("details");
+        assertion.append(rbNode("summary", "Add my answer"));
+        assertion.querySelector("summary")!.title =
+            "Saved as your own assertion. It never rewrites original source evidence.";
+        assertion.append(
             rbField(
-                "Answer (schema-validated JSON)",
+                "Your answer",
                 answer,
                 (value) => {
                     answer = value;
@@ -454,13 +470,13 @@ export function mountMemoryHubQuestions(
             ),
         );
         if (question.slot.cardinality === "collection")
-            inspector.append(
+            assertion.append(
                 rbField("Stable item key", itemKey, (value) => {
                     itemKey = value;
                     changed();
                 }),
             );
-        inspector.append(
+        assertion.append(
             rbButton("Save user assertion", () =>
                 action(async () => {
                     const value = parseQuestionAssertion(question, answer);
@@ -478,15 +494,14 @@ export function mountMemoryHubQuestions(
                     });
                 }),
             ),
-            rbNode("h4", "Edit question and rubric"),
-            rbNode(
-                "p",
-                "Saving a question or rubric requires reevaluation; it is not a source edit.",
-            ),
-            rbField("Question", meaning, (value) => {
-                meaning = value;
-                changed();
-            }),
+        );
+        const contract = rbNode("details");
+        contract.append(rbNode("summary", "How answers are chosen"));
+        contract.querySelector("summary")!.title =
+            "Saving the question or rubric requires reevaluation. It is not a source edit.";
+        const rubricAdvanced = rbNode("details");
+        rubricAdvanced.append(
+            rbNode("summary", "Advanced"),
             rbField(
                 "Versioned rubric (JSON)",
                 rubric,
@@ -496,6 +511,13 @@ export function mountMemoryHubQuestions(
                 },
                 { multiline: true },
             ),
+        );
+        contract.append(
+            rbField("Question", meaning, (value) => {
+                meaning = value;
+                changed();
+            }),
+            rubricAdvanced,
             rbButton("Save question and rubric", () =>
                 action(async () => {
                     const parsed: unknown = JSON.parse(rubric);
@@ -515,8 +537,17 @@ export function mountMemoryHubQuestions(
                     });
                 }),
             ),
-            advanced,
         );
+        inspector.append(assertion, contract, advanced);
+    }
+    function hideQuestions(questions: MemoryQuestion[], until?: number) {
+        for (const question of questions)
+            options.hidden[questionIdentity(question)] = {
+                fingerprint: question.fingerprint,
+                ...(until ? { until } : {}),
+            };
+        options.persistHidden();
+        renderAttention();
     }
     function renderAttention() {
         attentionHost.replaceChildren();
@@ -556,15 +587,9 @@ export function mountMemoryHubQuestions(
                 ["Snooze one day", "fa-bell-slash", Date.now() + 86400000],
             ] as const)
                 card.append(
-                    rbIconButton(glyph, label, () => {
-                        for (const question of group.questions)
-                            options.hidden[questionIdentity(question)] = {
-                                fingerprint: question.fingerprint,
-                                ...(until ? { until } : {}),
-                            };
-                        options.persistHidden();
-                        renderAttention();
-                    }),
+                    rbIconButton(glyph, label, () =>
+                        hideQuestions(group.questions, until),
+                    ),
                 );
             attentionHost.append(card);
         }
@@ -595,10 +620,6 @@ export function mountMemoryHubQuestions(
                 "summary",
                 "Propose a view from prose, a form, or an example",
             ),
-            rbNode(
-                "p",
-                "Examples are specifications, never facts about you. Generated slots remain proposals until individually approved.",
-            ),
             rbField("New view ID", viewId, (value) => {
                 viewId = value;
                 dirty = true;
@@ -612,8 +633,14 @@ export function mountMemoryHubQuestions(
                 },
                 { multiline: true },
             ),
+        );
+        disclosure.querySelector("summary")!.title =
+            "Examples are specifications, never facts about you. Generated slots remain proposals until individually approved.";
+        const scope = rbNode("details");
+        scope.append(
+            rbNode("summary", "Advanced"),
             rbField(
-                "Explicit maintenance scope (JSON: pinned, currentSources, or scopedSources with tags)",
+                "Maintenance scope (JSON: pinned, currentSources or scopedSources)",
                 maintenance,
                 (value) => {
                     maintenance = value;
@@ -622,15 +649,13 @@ export function mountMemoryHubQuestions(
                 { multiline: true },
             ),
         );
+        disclosure.append(scope);
         const consent = rbNode("input");
         consent.type = "checkbox";
         consent.onchange = () => {
             approved = consent.checked;
         };
-        const label = rbNode(
-            "label",
-            "I approve generating a proposal (not approving its answers).",
-        );
+        const label = rbNode("label", "Approve generating a proposal");
         label.prepend(consent);
         disclosure.append(
             label,
