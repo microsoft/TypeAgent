@@ -55,7 +55,9 @@ export function validateTopicBuildOutput(
         JSON.stringify(snapshot.occurrences) !==
             JSON.stringify(input.topicInput?.occurrences) ||
         JSON.stringify(snapshot.influenceSources) !==
-            JSON.stringify(input.influenceSources ?? [])
+            JSON.stringify(input.influenceSources ?? []) ||
+        JSON.stringify(snapshot.influenceEvents ?? []) !==
+            JSON.stringify(input.influenceEvents ?? [])
     )
         throw new Error(
             "Topic output changed complete captured incidence or influence",

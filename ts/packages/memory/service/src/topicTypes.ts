@@ -11,6 +11,11 @@ export interface MemoryTopicService {
 export interface TopicSourceReference {
     sourceId: string;
     revisionId: string;
+    evidence?: { kind: "event"; eventId: string };
+}
+export interface TopicEventReference {
+    eventId: string;
+    fingerprint: string;
 }
 export interface TopicOccurrence extends TopicSourceReference {
     id: string;
@@ -43,6 +48,7 @@ export interface TopicSnapshot {
     generatedAt: string;
     occurrences: TopicOccurrence[];
     influenceSources: TopicSourceReference[];
+    influenceEvents?: TopicEventReference[];
     nodes: TopicNode[];
     parents: Array<{ parentId: string; childId: string }>;
     related: Array<{ fromId: string; toId: string; kind: "related" }>;

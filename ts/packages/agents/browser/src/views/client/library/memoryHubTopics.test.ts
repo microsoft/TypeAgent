@@ -3,6 +3,9 @@
 
 import type { TopicQueryPage } from "@typeagent/memory-service";
 import { mountTopicBrowser } from "./memoryHubTopics";
+import { invokeView } from "./viewClient";
+
+jest.mock("./viewClient", () => ({ invokeView: jest.fn() }));
 
 function page(): TopicQueryPage {
     return {
@@ -99,6 +102,62 @@ test("topic browser shows scoped identity, original evidence, generation and omi
             continuationToken: "next",
         });
         expect(onError).not.toHaveBeenCalled();
+    } finally {
+        view.dispose();
+    }
+});
+
+test("event-backed topic citations open original events without document-source navigation", async () => {
+    const data = page();
+    data.nodes[0]!.citations[0] = {
+        sourceId: "event-1",
+        revisionId: "event-1",
+        locator: "indexed:0:hash:0-4",
+        excerpt: "text",
+        evidence: { kind: "event", eventId: "event-1" },
+    };
+    (invokeView as jest.Mock).mockResolvedValue({
+        title: "Original turn",
+        content: '{"authority":"evidence-only"}',
+        offset: 0,
+        totalChars: 29,
+    });
+    const onOpenSource = jest.fn();
+    const onError = jest.fn();
+    const view = mountTopicBrowser(document.body, {
+        corpusId: () => "corpus",
+        query: async () => data,
+        rebuild: async () => {
+            throw new Error("unused");
+        },
+        onOpenSource,
+        onError,
+    });
+    try {
+        const root = document.querySelector(
+            'section[aria-label="Maintained topics"]',
+        )!;
+        root.querySelector<HTMLButtonElement>("button")!.click();
+        await settle();
+        [...root.querySelectorAll("button")]
+            .find(
+                (button) =>
+                    button.textContent === "Event event-1 · original evidence",
+            )!
+            .click();
+        await settle();
+        expect(invokeView).toHaveBeenCalledWith("memoryHubGraphEvent", {
+            corpusId: "corpus",
+            eventId: "event-1",
+            offset: 0,
+        });
+        expect(document.body.textContent).toContain("evidence-only");
+        expect(onOpenSource).not.toHaveBeenCalled();
+        expect(onError).not.toHaveBeenCalled();
+        view.hide();
+        expect(document.querySelector<HTMLElement>(".hub-flyout")!.hidden).toBe(
+            true,
+        );
     } finally {
         view.dispose();
     }

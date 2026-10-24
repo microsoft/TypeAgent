@@ -13,6 +13,7 @@ import { invokeView, invokeMemory } from "./viewClient";
 import { mountMemoryManagement } from "./memoryManagement";
 import { mountMemoryHubSearch } from "./memoryHubSearch";
 import { mountMemoryHubExplore } from "./memoryHubExplore";
+import { mountMemoryHubGraph } from "./memoryHubGraph";
 import { mountMemoryHubChanges } from "./memoryHubChanges";
 import { mountMemoryHubImports } from "./memoryHubImports";
 import { mountMemoryHubCapture } from "./memoryHubCapture";
@@ -68,6 +69,7 @@ let focusReturn: { corpusId: string; sourceId: string } | undefined;
 let manager: ReturnType<typeof mountMemoryManagement>;
 let searchPanel: ReturnType<typeof mountMemoryHubSearch>;
 let explorePanel: ReturnType<typeof mountMemoryHubExplore>;
+let graphPanel: ReturnType<typeof mountMemoryHubGraph>;
 let changesPanel: ReturnType<typeof mountMemoryHubChanges>;
 let importsPanel: ReturnType<typeof mountMemoryHubImports>;
 let capturePanel: ReturnType<typeof mountMemoryHubCapture>;
@@ -87,6 +89,7 @@ let pendingSearchQuery: string | undefined;
 function invalidateDiscovery(): void {
     searchPanel.scopeChanged();
     explorePanel.scopeChanged();
+    graphPanel?.scopeChanged();
 }
 
 const PDF_CHIP = "pdf";
@@ -209,6 +212,31 @@ function mountPhaseTwo(): void {
         scope: selectedScope,
         onOpenSource,
         onError,
+    });
+    graphPanel = mountMemoryHubGraph(el("hubWebExplore"), {
+        scope: selectedScope,
+        onOpenSource,
+        onError,
+        onRouteChanged: (kind, selection) => {
+            if (parseRoute(location.hash).page !== "explore") return;
+            const route: HubRoute =
+                kind === "entities"
+                    ? {
+                          page: "explore",
+                          webView: "entities",
+                          webEntity: selection,
+                      }
+                    : {
+                          page: "explore",
+                          webView: "topics",
+                          webTopic: `${kind === "hierarchy" ? "hierarchy" : "cooccurrence"}:${selection ?? ""}`,
+                      };
+            const hash = routeHash(route);
+            if (hash !== location.hash) {
+                history.pushState(history.state, "", hash);
+                lastHash = hash;
+            }
+        },
     });
     changesPanel = mountMemoryHubChanges(el("hubChanges"), {
         scope: selectedScope,
@@ -1041,7 +1069,7 @@ function updateExploreScope(
 ): void {
     if (visiblePage !== "explore") return;
     const badge = el("exploreScopeBadge");
-    const browserOnly = !!route.webView;
+    const browserOnly = route.webView === "analytics";
     badge.classList.toggle("warn", browserOnly);
     badge.title = browserOnly
         ? "This view always reads TypeAgent Browser Memory and ignores the scope selector."
@@ -1056,7 +1084,14 @@ function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
     if (visiblePage !== "questions") questionsPanel.hide();
     if (visiblePage !== "activity") viewActivityPanel.hide();
     if (visiblePage !== "settings") webMaintenancePanel.hide();
-    if (visiblePage !== "explore" || !route.webView) webExplorePanel.hide();
+    if (visiblePage !== "explore" || route.webView !== "analytics")
+        webExplorePanel.hide();
+    if (
+        visiblePage !== "explore" ||
+        !route.webView ||
+        route.webView === "analytics"
+    )
+        graphPanel.hide();
     if (visiblePage !== "explore" || route.webView) explorePanel.hide();
     el("hubExplore").hidden = !!route.webView;
     updateExploreNavigation(route.webView);
@@ -1159,7 +1194,12 @@ async function showManagedRoute(
     item: MemoryHubInboxItem | undefined,
     version: number,
 ): Promise<void> {
-    if (!route.webView && !route.corpusId && scope && !namedScopeAvailable())
+    if (
+        route.webView !== "analytics" &&
+        !route.corpusId &&
+        scope &&
+        !namedScopeAvailable()
+    )
         throw new Error(
             "The selected corpus no longer exists. Choose another scope.",
         );
@@ -1240,7 +1280,7 @@ async function applyRoute(): Promise<void> {
         await searchPanel.show(query);
     } else if (route.page === "explore") {
         if (!route.webView) await explorePanel.show();
-        else
+        else if (route.webView === "analytics")
             await webExplorePanel.show({
                 view: route.webView,
                 ...(route.webEntity === undefined
@@ -1249,6 +1289,14 @@ async function applyRoute(): Promise<void> {
                 ...(route.webTopic === undefined
                     ? {}
                     : { topic: route.webTopic }),
+            });
+        else
+            await graphPanel.show({
+                view: route.webView,
+                selection:
+                    route.webView === "entities"
+                        ? route.webEntity
+                        : route.webTopic,
             });
     } else if (route.page === "activity") {
         await viewActivityPanel.show(
@@ -1464,7 +1512,10 @@ export async function mountMemoryHub(): Promise<void> {
         renderErrors();
         inboxPage = 0;
         const route = parseRoute(location.hash);
-        location.hash = routeHash({ page: route.page });
+        location.hash = routeHash({
+            page: route.page,
+            ...(route.webView ? { webView: route.webView } : {}),
+        });
         void hubAction(applyRoute);
     });
     el("inboxDismissed").addEventListener("change", () => {
@@ -1583,6 +1634,7 @@ export async function mountMemoryHub(): Promise<void> {
         webMaintenancePanel.dispose();
         viewPreferencesPanel.dispose();
         webExplorePanel.dispose();
+        graphPanel.dispose();
         window.removeEventListener("beforeunload", guardPreferences);
     });
     const initialRoute = parseRoute(location.hash);

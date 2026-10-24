@@ -1,0 +1,45 @@
+.hub-scoped-graph {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.hub-scoped-graph[hidden] {
+  display: none;
+}
+.hub-graph-controls,
+.hub-graph-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+}
+.hub-graph-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.hub-graph-controls details label {
+  margin: 0.5rem 0;
+}
+.hub-scoped-graph-canvas {
+  height: min(65vh, 650px);
+  min-height: 360px;
+  position: relative;
+  border: 1px solid var(--border, #d5d9e0);
+  border-radius: 0.5rem;
+}
+.hub-scoped-graph [role="status"] {
+  white-space: pre-wrap;
+}
+.hub-graph-items,
+.hub-graph-support {
+  padding-left: 1.25rem;
+}
+.hub-graph-items li,
+.hub-graph-support li {
+  margin-bottom: 0.5rem;
+}
+.hub-graph-evidence pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

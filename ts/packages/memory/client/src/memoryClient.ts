@@ -127,6 +127,19 @@ import type {
     TopicQueryPage,
 } from "@typeagent/memory-service";
 import { topicQueryPageSchema, topicToolNames } from "./topicProtocol.js";
+import type {
+    MemoryGraphQueryRequest,
+    MemoryGraphQueryResult,
+    MemoryGraphSupportRequest,
+    MemoryGraphSupportPage,
+} from "@typeagent/memory-service";
+import {
+    graphQueryRequestSchema,
+    graphQueryResultSchema,
+    graphSupportRequestSchema,
+    graphSupportPageSchema,
+    graphToolNames,
+} from "./graphProtocol.js";
 import {
     agentMemorySearchRequestSchema,
     agentMemorySearchResultSchema,
@@ -271,6 +284,12 @@ export interface MemoryServiceClient
     searchAgentMemories(
         request: AgentMemorySearchRequest,
     ): Promise<AgentMemorySearchResult>;
+    queryKnowledgeGraph(
+        request: MemoryGraphQueryRequest,
+    ): Promise<MemoryGraphQueryResult>;
+    queryGraphSupport(
+        request: MemoryGraphSupportRequest,
+    ): Promise<MemoryGraphSupportPage>;
     queryTopics(request: TopicQueryRequest): Promise<TopicQueryPage>;
     rebuildTopics(corpusId: string): Promise<ViewBuildJob>;
     ingestDocument(
@@ -462,6 +481,30 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return (
             this.service.searchAgentMemories?.(request) ??
             unsupportedCapability("agent memory search")
+        );
+    }
+    public queryKnowledgeGraph(
+        request: MemoryGraphQueryRequest,
+    ): Promise<MemoryGraphQueryResult> {
+        return (
+            this.service.queryKnowledgeGraph?.(
+                graphQueryRequestSchema.parse(
+                    request,
+                ) as MemoryGraphQueryRequest,
+            ) ??
+            Promise.reject(new Error("Memory graph queries are not supported"))
+        );
+    }
+    public queryGraphSupport(
+        request: MemoryGraphSupportRequest,
+    ): Promise<MemoryGraphSupportPage> {
+        return (
+            this.service.queryGraphSupport?.(
+                graphSupportRequestSchema.parse(
+                    request,
+                ) as MemoryGraphSupportRequest,
+            ) ??
+            Promise.reject(new Error("Memory graph support is not supported"))
         );
     }
     public queryTopics(request: TopicQueryRequest): Promise<TopicQueryPage> {
@@ -1038,6 +1081,24 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             agentSessionToolNames.searchAgentMemories,
             agentMemorySearchRequestSchema.parse(request),
             agentMemorySearchResultSchema,
+        );
+    }
+    public queryKnowledgeGraph(
+        request: MemoryGraphQueryRequest,
+    ): Promise<MemoryGraphQueryResult> {
+        return this.invoke(
+            graphToolNames.queryKnowledgeGraph,
+            graphQueryRequestSchema.parse(request),
+            graphQueryResultSchema,
+        );
+    }
+    public queryGraphSupport(
+        request: MemoryGraphSupportRequest,
+    ): Promise<MemoryGraphSupportPage> {
+        return this.invoke(
+            graphToolNames.queryGraphSupport,
+            graphSupportRequestSchema.parse(request),
+            graphSupportPageSchema,
         );
     }
     public queryTopics(request: TopicQueryRequest): Promise<TopicQueryPage> {

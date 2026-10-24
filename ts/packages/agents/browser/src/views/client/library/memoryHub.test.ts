@@ -10,6 +10,7 @@ import {
 import { invokeMemory, invokeView } from "./viewClient";
 import { hubAction, mountMemoryHub } from "./memoryHub";
 import * as webExplore from "./memoryHubWebExplore";
+import * as graphExplore from "./memoryHubGraph";
 
 jest.mock("./viewClient", () => ({
     invokeMemory: jest.fn(),
@@ -21,6 +22,7 @@ jest.mock("./memoryHubImports.css", () => ({}));
 jest.mock("./memoryHubRunbookImports.css", () => ({}));
 jest.mock("./memoryHubViewPreferences.css", () => ({}));
 jest.mock("./memoryHubWebExplore.css", () => ({}));
+jest.mock("./memoryHubGraph.css", () => ({}));
 jest.mock(
     "./memoryHubWebExploreAnalytics.html?raw",
     () =>
@@ -554,6 +556,19 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
             ...mountWeb(host, options),
             show: showWeb,
         }));
+    const mountGraph = graphExplore.mountMemoryHubGraph;
+    const showGraph = jest.fn(
+        async (_request: {
+            view: "entities" | "topics";
+            selection?: string;
+        }) => {},
+    );
+    const mountedGraph = jest
+        .spyOn(graphExplore, "mountMemoryHubGraph")
+        .mockImplementation((host, options) => ({
+            ...mountGraph(host, options),
+            show: showGraph,
+        }));
     history.replaceState({}, "", "#/library/a/source");
     const hubHtml = readFileSync(
         resolve(process.cwd(), "src/views/client/library/memoryHub.html"),
@@ -902,6 +917,11 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     await settle();
     const webCalls = showWeb.mock.calls.length;
     expect(value("hubExplore").hidden).toBe(false);
+    expect(
+        document.querySelector(
+            '#hubExploreNavigation [data-explore-view="analytics"]',
+        ),
+    ).toBeNull();
     expect(value("hubExplore").querySelector("svg")).toBeNull();
     expect(
         document.querySelector('#hubExploreNavigation a[aria-current="page"]')
@@ -929,10 +949,9 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         );
         window.dispatchEvent(new HashChangeEvent("hashchange"));
         await settle();
-        expect(showWeb).toHaveBeenLastCalledWith(
-            view === "entities"
-                ? { view, entity: selection }
-                : { view, topic: selection },
+        expect(showGraph).toHaveBeenLastCalledWith({ view, selection });
+        expect(value("exploreScopeBadge").textContent).toBe(
+            "Scope: All memory",
         );
         expect(value("hubExplore").hidden).toBe(true);
         expect(
@@ -946,7 +965,12 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         invoke.mock.calls.filter(([method]) => method === "memoryGetCorpus"),
     ).toHaveLength(overviewCorpusReads);
     expect(overviewCorpusReads).toBeGreaterThanOrEqual(corpusReads);
-    expect(showWeb.mock.calls.length).toBe(webCalls + 2);
+    expect(showWeb.mock.calls.length).toBe(webCalls);
+    history.replaceState({}, "", "#/explore/web/analytics");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
+    expect(showWeb).toHaveBeenLastCalledWith({ view: "analytics" });
+    expect(value("exploreScopeBadge").textContent).toBe("Browser memory only");
     expect(
         viewInvoke.mock.calls.filter(
             ([method]) => method === "memoryHubExplore",
@@ -1005,6 +1029,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     confirm.mockRestore();
     window.dispatchEvent(new Event("pagehide"));
     mountedWeb.mockRestore();
+    mountedGraph.mockRestore();
     jest.clearAllTimers();
     jest.useRealTimers();
 });

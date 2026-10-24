@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import { topicBuildInputSchema } from "./topicProtocol.js";
+import {
+    topicBuildInputSchema,
+    topicEventReferenceSchema,
+} from "./topicProtocol.js";
 import {
     schemaViewDefinitionSchema,
     schemaViewContentSchema,
@@ -701,6 +704,7 @@ const snapshot = z.object({
         .array()
         .max(32),
     influenceSources: source.array().optional(),
+    influenceEvents: topicEventReferenceSchema.array().optional(),
     topicInput: topicBuildInputSchema.optional(),
     pipeline: z.enum([
         "troubleshooting-v1",

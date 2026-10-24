@@ -274,6 +274,72 @@ test("view validation rejects generic operations and malformed domain payloads",
             },
         },
         { method: "memoryHubExplore", params: { maxNodes: 5001 } },
+        {
+            method: "memoryHubGraph",
+            params: { kind: "entities", maxNodes: 251 },
+        },
+        { method: "memoryHubGraph", params: { kind: "topics", maxEdges: 501 } },
+        {
+            method: "memoryHubGraph",
+            params: { kind: "hierarchy", maxNodes: 0 },
+        },
+        { method: "memoryHubGraph", params: { kind: "unknown" } },
+        {
+            method: "memoryHubGraph",
+            params: {
+                corpusId: "c",
+                kind: "entities",
+                pageBy: "edges",
+                maxNodes: 1,
+            },
+        },
+        {
+            method: "memoryHubGraph",
+            params: { corpusId: "c", kind: "entities", pageBy: "invalid" },
+        },
+        {
+            method: "memoryHubGraph",
+            params: { kind: "entities", continuationToken: "unscoped-page" },
+        },
+        {
+            method: "memoryHubGraph",
+            params: {
+                kind: "topics",
+                expectedGeneration: "unscoped-generation",
+            },
+        },
+        {
+            method: "memoryHubGraph",
+            params: { kind: "entities", corpusId: null },
+        },
+        {
+            method: "memoryHubGraph",
+            params: {
+                kind: "entities",
+                eventFilter: { authorities: ["trusted"] },
+            },
+        },
+        {
+            method: "memoryHubGraphSupport",
+            params: {
+                corpusId: "c",
+                generation: "g",
+                nodeId: "n",
+                pageSize: 51,
+            },
+        },
+        {
+            method: "memoryHubGraphSupport",
+            params: { corpusId: "c", generation: "g" },
+        },
+        {
+            method: "memoryHubGraphEvent",
+            params: { corpusId: "c", eventId: "e", offset: -1 },
+        },
+        {
+            method: "memoryHubGraphEvent",
+            params: { corpusId: "c", eventId: "e", revisionId: "document" },
+        },
         { method: "memoryHubKnowledge", params: { kind: "unknown" } },
         {
             method: "memoryHubKnowledge",
@@ -320,7 +386,11 @@ test("view validation rejects generic operations and malformed domain payloads",
             params: { folderPath: "folder", options: { mode: "full" } },
         },
     ]) {
-        assert.throws(() => validateViewRequest(body));
+        assert.throws(
+            () => validateViewRequest(body),
+            undefined,
+            JSON.stringify(body),
+        );
     }
     assert.deepEqual(
         validateViewRequest({
@@ -336,6 +406,34 @@ test("view validation rejects generic operations and malformed domain payloads",
         }),
         { method: "memoryHubSnapshot", params: {} },
     );
+    for (const body of [
+        { method: "memoryHubGraph", params: { kind: "entities" } },
+        {
+            method: "memoryHubGraph",
+            params: {
+                kind: "hierarchy",
+                corpusId: "c",
+                evidenceKinds: ["document", "event"],
+                maxNodes: 250,
+                maxEdges: 500,
+            },
+        },
+        {
+            method: "memoryHubGraphSupport",
+            params: {
+                corpusId: "c",
+                generation: "g",
+                nodeId: "n",
+                pageSize: 50,
+            },
+        },
+        {
+            method: "memoryHubGraphEvent",
+            params: { corpusId: "c", eventId: "e", offset: 0 },
+        },
+    ]) {
+        assert.deepEqual(validateViewRequest(body), body);
+    }
     assert.doesNotThrow(() =>
         validateViewRequest({
             method: "importHtmlFolder",
@@ -374,6 +472,7 @@ test(
                 await exited;
             }
         });
+        const graphCalls = [];
         const rpc = createRpc("view-test-parent", child, {
             memoryListCorpora: async () => [
                 { corpusId: "c", name: "Test corpus" },
@@ -401,6 +500,28 @@ test(
                 counts: { sources: 0 },
                 errors: [],
             }),
+            memoryHubGraph: async (params) => {
+                graphCalls.push(["memoryHubGraph", params]);
+                return {
+                    corpora: [],
+                    errors: [],
+                    omittedCorpora: 0,
+                    presetLayout: { elements: [] },
+                };
+            },
+            memoryHubGraphSupport: async (params) => {
+                graphCalls.push(["memoryHubGraphSupport", params]);
+                return { generation: params.generation, items: [], total: 0 };
+            },
+            memoryHubGraphEvent: async (params) => {
+                graphCalls.push(["memoryHubGraphEvent", params]);
+                return {
+                    title: "Original event",
+                    content: "{}",
+                    offset: params.offset ?? 0,
+                    totalChars: 2,
+                };
+            },
             memoryHubChanges: async () => ({ items: [], total: 0, errors: [] }),
             memoryHubCapturePage: async () => ({
                 corpusId: "c",
@@ -470,6 +591,41 @@ test(
                         errors: [],
                     },
                 });
+            },
+        );
+        await t.test(
+            "scoped graphs and lazy event evidence cross HTTP and parent RPC",
+            async () => {
+                const requests = [
+                    [
+                        "memoryHubGraph",
+                        {
+                            kind: "entities",
+                            corpusId: "c",
+                            maxNodes: 250,
+                            maxEdges: 500,
+                        },
+                    ],
+                    [
+                        "memoryHubGraphSupport",
+                        {
+                            corpusId: "c",
+                            generation: "g",
+                            nodeId: "n",
+                            pageSize: 50,
+                        },
+                    ],
+                    [
+                        "memoryHubGraphEvent",
+                        { corpusId: "c", eventId: "e", offset: 0 },
+                    ],
+                ];
+                for (const [method, params] of requests) {
+                    const response = await invoke({ method, params });
+                    assert.equal(response.status, 200);
+                    assert.equal((await response.json()).success, true);
+                }
+                assert.deepEqual(graphCalls, requests);
             },
         );
         await t.test(

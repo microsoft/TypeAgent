@@ -7,6 +7,8 @@ import type {
     TopicIndexReader,
     TopicSnapshot,
     TopicSourceReference,
+    TopicOccurrence,
+    TopicEventReference,
 } from "./topicTypes.js";
 import type { ViewBuildSnapshot } from "./viewTypes.js";
 import { viewHash } from "./viewMerge.js";
@@ -36,6 +38,7 @@ export function topicInputFingerprint(
     indexGeneration: string | undefined,
     suppressions: SourceKnowledgeSuppression[],
     model: string,
+    events: TopicEventReference[] = [],
 ): string {
     return viewHash({
         sources: [...sources].sort((a, b) =>
@@ -44,6 +47,7 @@ export function topicInputFingerprint(
         indexGeneration: indexGeneration ?? null,
         suppressions,
         model,
+        ...(events.length ? { events } : {}),
         recipe: "topics-v1:editorial-v1",
     });
 }
@@ -57,6 +61,8 @@ export async function captureTopicBuild(options: {
     suppressions: SourceKnowledgeSuppression[];
     model: string;
     current?: TopicSnapshot;
+    eventOccurrences?: TopicOccurrence[];
+    influenceEvents?: TopicEventReference[];
 }): Promise<ViewBuildSnapshot> {
     const {
         corpusId,
@@ -70,7 +76,7 @@ export async function captureTopicBuild(options: {
     const active = new Map(
         sources.map((source) => [source.sourceId, source.revisionId]),
     );
-    const occurrences = (
+    const documentOccurrences = (
         await requireTopicIndex(options.index).getTopicOccurrences(
             new Set(active.keys()),
         )
@@ -85,6 +91,10 @@ export async function captureTopicBuild(options: {
                         occurrence.label.trim().toLocaleLowerCase(),
             ),
     );
+    const occurrences = [
+        ...documentOccurrences,
+        ...(options.eventOccurrences ?? []),
+    ];
     const nodes = initialTopicNodes(corpusId, occurrences);
     const reusableSummaries =
         current?.corpusId === corpusId &&
@@ -146,6 +156,9 @@ export async function captureTopicBuild(options: {
         bounds: {},
         inputs: [],
         influenceSources: sources,
+        ...(options.influenceEvents?.length
+            ? { influenceEvents: options.influenceEvents }
+            : {}),
         pipeline: "topics-v1",
         model,
         fingerprint: topicInputFingerprint(
@@ -153,6 +166,7 @@ export async function captureTopicBuild(options: {
             indexGeneration,
             suppressions,
             model,
+            options.influenceEvents,
         ),
         topicInput: {
             occurrences,

@@ -268,6 +268,84 @@ describe("Memory Center preview-first views", () => {
         click(host, "Compare and resolve conflict");
         await settle();
     }
+    test("gallery shows an accessible spinner before capabilities or inventory finish", async () => {
+        const original = invoke.getMockImplementation()!;
+        let releaseCapabilities!: (value: unknown) => void;
+        let releaseInventory!: (value: unknown) => void;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryViewCapabilities"
+                ? new Promise((resolve) => {
+                      releaseCapabilities = resolve;
+                  })
+                : method === "memoryListViewSummaries"
+                  ? new Promise((resolve) => {
+                        releaseInventory = resolve;
+                    })
+                  : original(method, params),
+        );
+        const pending = panel.show();
+        const loading = host.querySelector<HTMLElement>(".hub-view-loading")!;
+        expect(loading.hidden).toBe(false);
+        expect(loading.getAttribute("role")).toBe("status");
+        expect(loading.textContent).toContain("Loading views...");
+        expect(loading.querySelector(".fa-spin")).not.toBeNull();
+        releaseCapabilities(await original("memoryViewCapabilities", {}));
+        await settle();
+        expect(loading.hidden).toBe(false);
+        releaseInventory(
+            await original("memoryListViewSummaries", { corpusId: "c" }),
+        );
+        await pending;
+        expect(loading.hidden).toBe(true);
+        expect(host.textContent).toContain("Guide");
+        expect(errors).toEqual([]);
+    });
+    test("a late inventory cannot hide loading for a newer scope", async () => {
+        const original = invoke.getMockImplementation()!;
+        const pendingInventories = new Map<string, (value: unknown) => void>();
+        invoke.mockImplementation((method, params) =>
+            method === "memoryListViewSummaries"
+                ? new Promise((resolve) => {
+                      pendingInventories.set(
+                          (params as { corpusId: string }).corpusId,
+                          resolve,
+                      );
+                  })
+                : original(method, params),
+        );
+        const first = panel.show();
+        await settle();
+        scope = "other";
+        panel.scopeChanged();
+        pendingInventories.get("c")!(
+            await original("memoryListViewSummaries", { corpusId: "c" }),
+        );
+        await first;
+        await settle();
+        const loading = host.querySelector<HTMLElement>(".hub-view-loading")!;
+        expect(loading.hidden).toBe(false);
+        expect(pendingInventories.has("other")).toBe(true);
+        pendingInventories.get("other")!(
+            await original("memoryListViewSummaries", { corpusId: "other" }),
+        );
+        await settle();
+        expect(loading.hidden).toBe(true);
+        expect(errors).toEqual([]);
+    });
+    test("gallery loading indicator clears on failure and preserves the error", async () => {
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryListViewSummaries"
+                ? Promise.reject(new Error("Inventory unavailable"))
+                : original(method, params),
+        );
+        await panel.show();
+        expect(
+            host.querySelector<HTMLElement>(".hub-view-loading")!.hidden,
+        ).toBe(true);
+        expect(host.textContent).toContain("Inventory unavailable");
+        expect(errors).toHaveLength(1);
+    });
     test("card clicks navigate and show a loading reader before detail completes, with no duplicate route request", async () => {
         await panel.refresh();
         const original = invoke.getMockImplementation()!;
@@ -285,6 +363,9 @@ describe("Memory Center preview-first views", () => {
         click(host, "Guide");
         expect(navigate).toHaveBeenLastCalledWith("#/views/c/guide");
         expect(host.textContent).toContain("Loading view details...");
+        expect(
+            host.querySelector(".hub-view-loading:not([hidden]) .fa-spin"),
+        ).not.toBeNull();
         await settle();
         expect(
             invoke.mock.calls.filter(([method]) => method === "memoryGetView"),

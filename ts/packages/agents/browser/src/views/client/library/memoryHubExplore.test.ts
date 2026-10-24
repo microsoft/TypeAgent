@@ -126,6 +126,7 @@ test("overview retains counts and corpus-qualified provenance without plotting a
         corpusId: "a",
         maxNodes: 6,
     });
+
     expect(host.querySelector(".phase2-counts")!.textContent).toContain(
         "120 sources",
     );
@@ -151,6 +152,34 @@ test("overview retains counts and corpus-qualified provenance without plotting a
         .click();
     expect(onSource).toHaveBeenLastCalledWith("b", "same");
     expect(host.querySelector("a")).toBeNull();
+});
+
+test("event-aware Overview cards open lazy graph support instead of fake document sources", async () => {
+    const data = result();
+    const support = {
+        corpusId: "a",
+        generation: "g1",
+        nodeId: "graph:a:entity:1",
+    };
+    data.entities[0]!.sources = [];
+    data.entities[0]!.graphSupport = support;
+    data.sourceInventory = "documents";
+    invoke.mockImplementation((method) => {
+        if (method === "memoryHubExplore") return Promise.resolve(data);
+        if (method === "memoryHubGraphSupport")
+            return Promise.resolve({ generation: "g1", total: 0, items: [] });
+        throw new Error(`Unexpected event overview call: ${method}`);
+    });
+    await mounted.show();
+    click("<b>Worker</b> · 7 mentions");
+    await settle();
+    expect(invoke).toHaveBeenLastCalledWith("memoryHubGraphSupport", {
+        ...support,
+        pageSize: 50,
+    });
+    expect(onSource).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("Document sources");
+    expect(onError).not.toHaveBeenCalled();
 });
 
 test("bounded previews retain real totals and cached navigation avoids refetch", async () => {

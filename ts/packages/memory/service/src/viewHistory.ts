@@ -103,6 +103,13 @@ export class ViewHistory<T> {
         return git.resolveRef({ ...this.options(), ref });
     }
 
+    public async readHead(): Promise<string | null> {
+        await this.assertReadable();
+        const head = await this.head();
+        await this.assertReadable();
+        return head;
+    }
+
     public async read(
         oid?: string,
         bypassGate = false,

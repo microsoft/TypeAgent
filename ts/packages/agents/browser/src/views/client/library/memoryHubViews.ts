@@ -122,6 +122,13 @@ function publicationChoice(label: string, inherit: boolean): HTMLSelectElement {
     return select;
 }
 
+function viewLoadingStatus(label: string): HTMLParagraphElement {
+    const status = rbNode("p", label, "hub-view-loading");
+    status.setAttribute("role", "status");
+    status.prepend(icon("fa-spinner fa-spin"), document.createTextNode(" "));
+    return status;
+}
+
 export function mountMemoryHubViews(
     host: HTMLElement,
     options: {
@@ -144,6 +151,8 @@ export function mountMemoryHubViews(
     root.setAttribute("aria-label", "Derived views");
     const status = rbNode("p");
     status.setAttribute("role", "status");
+    const loading = viewLoadingStatus("Loading views...");
+    loading.hidden = true;
     const controls = rbNode("div", undefined, "hub-view-controls");
     const receipt = rbNode("div", undefined, "hub-view-build-receipt");
     let flyout: ReturnType<typeof mountFlyout> | undefined;
@@ -162,6 +171,7 @@ export function mountMemoryHubViews(
             "p",
             "Read reusable documents built from your memory. Choose a view to preview it, or build new views from ready evidence.",
         ),
+        loading,
         status,
         drafts,
         comparison,
@@ -260,6 +270,16 @@ export function mountMemoryHubViews(
 
     async function refresh(): Promise<void> {
         const current = ++sequence;
+        loading.hidden = false;
+        status.textContent = "";
+        try {
+            await refreshInventory(current);
+        } finally {
+            if (current === sequence) loading.hidden = true;
+        }
+    }
+
+    async function refreshInventory(current: number): Promise<void> {
         const capabilities = await invokeMemory("memoryViewCapabilities", {});
         if (current !== sequence) return;
         capabilitiesLoaded = true;
@@ -656,11 +676,12 @@ export function mountMemoryHubViews(
             return detailRequest.work;
         const current = ++sequence;
         route = target;
+        loading.hidden = true;
         drafts.hidden = controls.hidden = true;
         comparison.setAttribute("aria-busy", "true");
         comparison.replaceChildren(
             rbButton("Back to views", backToViews),
-            rbNode("p", "Loading view details..."),
+            viewLoadingStatus("Loading view details..."),
         );
         const work = renderRoute(target, current)
             .catch((error: unknown) => {
@@ -730,6 +751,7 @@ export function mountMemoryHubViews(
         route = undefined;
         comparison.replaceChildren();
         drafts.hidden = controls.hidden = false;
+        loading.hidden = false;
         if (busy) refreshPending = true;
         else void action(refresh);
         if (options.onNavigate) options.onNavigate("#/views");
@@ -2528,6 +2550,7 @@ export function mountMemoryHubViews(
         hide: () => {
             visible = false;
             sequence++;
+            loading.hidden = true;
             if (timer) clearTimeout(timer);
             root.hidden = true;
             for (const dialog of root.querySelectorAll("dialog"))
@@ -2571,6 +2594,9 @@ export function mountMemoryHubViews(
                           itemKey: value.itemKey,
                       }
                     : undefined;
+            comparison.replaceChildren();
+            drafts.hidden = controls.hidden = false;
+            loading.hidden = false;
             if (busy) refreshPending = true;
             else await action(refresh);
             if (!buildsSupported) return;
@@ -2632,6 +2658,7 @@ export function mountMemoryHubViews(
             clearReceipt();
             comparison.replaceChildren();
             root.hidden = !visible;
+            loading.hidden = !visible;
             if (busy) refreshPending = true;
             else void action(refresh);
         },

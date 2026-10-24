@@ -6,6 +6,7 @@ import type {
     TopicQueryRequest,
     ViewBuildJob,
 } from "@typeagent/memory-service";
+import { mountGraphDetails } from "./memoryHubGraphDetails";
 
 export interface TopicBrowserOptions {
     corpusId: () => string | undefined;
@@ -61,6 +62,7 @@ export function mountTopicBrowser(
         next,
     );
     host.append(root);
+    const eventDetails = mountGraphDetails(host, options);
     let epoch = 0;
     let disposed = false;
     let request: TopicQueryRequest | undefined;
@@ -103,18 +105,28 @@ export function mountTopicBrowser(
                 ),
             );
             for (const citation of topic.citations) {
+                const eventId =
+                    citation.evidence?.kind === "event"
+                        ? citation.evidence.eventId
+                        : undefined;
                 const source = element(
                     "button",
-                    `Source ${citation.sourceId} · manage source`,
+                    eventId
+                        ? `Event ${eventId} · original evidence`
+                        : `Source ${citation.sourceId} · manage source`,
                 );
                 source.addEventListener("click", () =>
-                    options.onOpenSource(corpusId, citation.sourceId),
+                    eventId
+                        ? eventDetails.openEvent(corpusId, eventId)
+                        : options.onOpenSource(corpusId, citation.sourceId),
                 );
                 const evidence = element("details");
                 evidence.append(
                     element(
                         "summary",
-                        `Original indexed evidence · revision ${citation.revisionId}`,
+                        eventId
+                            ? `Original indexed event evidence · ${eventId}`
+                            : `Original indexed evidence · revision ${citation.revisionId}`,
                     ),
                     element("blockquote", citation.excerpt),
                     element("code", citation.locator),
@@ -245,6 +257,7 @@ export function mountTopicBrowser(
     return {
         refresh: () => {
             epoch++;
+            eventDetails.close();
             request = undefined;
             continuation = undefined;
             list.replaceChildren();
@@ -256,9 +269,11 @@ export function mountTopicBrowser(
             status.textContent =
                 "Browse maintained topics for the selected corpus.";
         },
+        hide: () => eventDetails.close(),
         dispose: () => {
             disposed = true;
             epoch++;
+            eventDetails.dispose();
             root.remove();
         },
     };

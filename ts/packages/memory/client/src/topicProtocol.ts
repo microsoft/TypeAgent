@@ -7,12 +7,19 @@ const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/);
 const text = z.string().max(120000);
 const count = z.number().int().nonnegative();
 const source = z.strictObject({ sourceId: id, revisionId: id });
+const eventEvidence = z.strictObject({ kind: z.literal("event"), eventId: id });
+export const topicEventReferenceSchema = z.strictObject({
+    eventId: id,
+    fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+});
 const citation = source.extend({
     locator: z.string().regex(/^indexed:\d+:[0-9a-f]{64}:\d+-\d+$/),
     excerpt: z.string().min(1).max(2000),
+    evidence: eventEvidence.optional(),
 });
 const alias = z.strictObject({ label: text, scope: text });
 export const topicOccurrenceSchema = source.extend({
+    evidence: eventEvidence.optional(),
     id,
     ordinal: count,
     label: text,
@@ -112,6 +119,7 @@ export const topicSnapshotSchema = z.strictObject({
     generatedAt: text,
     occurrences: topicOccurrenceSchema.array(),
     influenceSources: source.array(),
+    influenceEvents: topicEventReferenceSchema.array().optional(),
     nodes: topicNodeSchema.array(),
     parents: parent.array(),
     related: related.array(),

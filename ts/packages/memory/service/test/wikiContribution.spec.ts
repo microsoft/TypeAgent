@@ -737,6 +737,7 @@ async function rehearsal(
     };
     const open = () =>
         new FileMemoryService(root, {
+            discoveryPolicy: "off",
             indexFactory: (_id, directory) => new ContributionIndex(directory),
             eventIndexFactory: (_id, directory) =>
                 new FakeSemanticCorpusIndex(directory),

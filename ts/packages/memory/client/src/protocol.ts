@@ -459,20 +459,46 @@ export const eventAppendResultSchema = z.object({
     replayed: z.boolean(),
 });
 
-export const eventFilterSchema = z.object({
-    sourceKinds: z.array(eventSourceKindSchema).optional(),
-    producerIds: z.array(identifierSchema).optional(),
-    eventTypes: z.array(identifierSchema).optional(),
-    conversationIds: z.array(identifierSchema).optional(),
-    runIds: z.array(identifierSchema).optional(),
-    linkedSourceIds: z.array(identifierSchema).optional(),
-    observedFrom: z.string().optional(),
-    observedTo: z.string().optional(),
-    eventFrom: z.string().optional(),
-    eventTo: z.string().optional(),
-});
+export const eventAuthoritySchema = z.enum([
+    "user-assertion",
+    "evidence-only",
+    "verified-observation",
+    "explicit",
+    "producer-reported",
+]);
+const eventFilterTimestamp = z.string().datetime({ offset: true });
+export const eventFilterSchema = z
+    .strictObject({
+        sourceKinds: z.array(eventSourceKindSchema).max(5).optional(),
+        authorities: z.array(eventAuthoritySchema).max(5).optional(),
+        producerIds: z.array(identifierSchema).max(200).optional(),
+        eventTypes: z.array(identifierSchema).max(200).optional(),
+        conversationIds: z.array(identifierSchema).max(200).optional(),
+        turnIds: z.array(identifierSchema).max(200).optional(),
+        runIds: z.array(identifierSchema).max(200).optional(),
+        linkedSourceIds: z.array(identifierSchema).max(200).optional(),
+        observedFrom: eventFilterTimestamp.optional(),
+        observedTo: eventFilterTimestamp.optional(),
+        eventFrom: eventFilterTimestamp.optional(),
+        eventTo: eventFilterTimestamp.optional(),
+    })
+    .superRefine((filter, context) => {
+        for (const [from, to] of [
+            ["observedFrom", "observedTo"],
+            ["eventFrom", "eventTo"],
+        ] as const) {
+            const fromTime = filter[from];
+            const toTime = filter[to];
+            if (fromTime && toTime && Date.parse(fromTime) > Date.parse(toTime))
+                context.addIssue({
+                    code: "custom",
+                    path: [to],
+                    message: "Event filter time range is inverted",
+                });
+        }
+    });
 
-export const eventListRequestSchema = eventFilterSchema.extend({
+export const eventListRequestSchema = eventFilterSchema.safeExtend({
     corpusId: identifierSchema,
     ...pageRequestSchema.shape,
 });
@@ -483,7 +509,7 @@ export const eventPageSchema = z.object({
     nextContinuationToken: z.string().optional(),
 });
 
-export const eventSearchRequestSchema = eventFilterSchema.extend({
+export const eventSearchRequestSchema = eventFilterSchema.safeExtend({
     corpusId: identifierSchema,
     query: z.string().min(1),
     limit: z.number().int().positive().max(100).optional(),
@@ -500,7 +526,7 @@ export const eventSearchResultSchema = z.object({
     ),
 });
 
-export const eventForgetRequestSchema = eventFilterSchema.extend({
+export const eventForgetRequestSchema = eventFilterSchema.safeExtend({
     corpusId: identifierSchema,
     eventIds: z.array(identifierSchema).optional(),
     forgetLinkedSources: z.boolean().optional(),

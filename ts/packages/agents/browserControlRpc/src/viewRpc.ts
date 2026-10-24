@@ -17,7 +17,9 @@ import type {
     AnswerRetrievalPolicy,
 } from "@typeagent/memory-service";
 import type { MemoryHubRunbookImportFunctions } from "./runbookImportViewTypes.js";
+import type { MemoryHubGraphFunctions } from "./memoryGraphViewTypes.js";
 export type * from "./runbookImportViewTypes.js";
+export type * from "./memoryGraphViewTypes.js";
 
 export type MemoryHubSearchRequest = {
     query: string;
@@ -148,6 +150,7 @@ export type MemoryHubKnowledgeItem = {
     subtitle?: string;
     mentions?: number;
     sources: MemoryHubGraphSource[];
+    graphSupport?: import("@typeagent/memory-service").MemoryGraphSupportRequest;
 };
 export type MemoryHubKnowledgeRequest = {
     corpusId?: string;
@@ -167,6 +170,7 @@ export type MemoryHubExploreResult = {
     corpora: MemoryCenterCorpusStatus[];
     counts: {
         sources: number;
+        events?: number;
         entities: number;
         topics: number;
         relationships: number;
@@ -177,12 +181,14 @@ export type MemoryHubExploreResult = {
         types: string[];
         mentionCount: number;
         sources: MemoryHubGraphSource[];
+        graphSupport?: import("@typeagent/memory-service").MemoryGraphSupportRequest;
     }>;
     topics: Array<{
         id: string;
         name: string;
         mentionCount: number;
         sources: MemoryHubGraphSource[];
+        graphSupport?: import("@typeagent/memory-service").MemoryGraphSupportRequest;
     }>;
     relationships: Array<{
         id: string;
@@ -193,10 +199,12 @@ export type MemoryHubExploreResult = {
         toName?: string;
         count: number;
         sources: MemoryHubGraphSource[];
+        graphSupport?: import("@typeagent/memory-service").MemoryGraphSupportRequest;
     }>;
     omittedEntities: number;
     contributingSources?: MemoryHubGraphSource[];
     contributingSourceCount?: number;
+    sourceInventory?: "documents";
     errors: MemoryHubError[];
 };
 
@@ -289,6 +297,8 @@ export type ViewSourceUsageRequest = {
 };
 
 export type MemoryHubFunctions = {
+    [M in keyof MemoryHubGraphFunctions]: MemoryHubGraphFunctions[M];
+} & {
     memoryHubViewUsedBy(
         params: ViewSourceUsageRequest,
     ): Promise<ViewSourceUsagePage>;
@@ -405,6 +415,9 @@ export type ViewCancelResult = {
 
 export type ViewMethod = keyof ViewInvokeFunctions;
 export const viewMethods = [
+    "memoryHubGraph",
+    "memoryHubGraphSupport",
+    "memoryHubGraphEvent",
     "memoryHubViewUsedBy",
     "memoryHubSourceOriginal",
     "memoryHubStartRunbookImport",

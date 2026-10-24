@@ -487,6 +487,7 @@ export interface ViewBuildSnapshot {
     bounds: ViewBuildBounds;
     inputs: ViewRetainedInput[];
     influenceSources?: Array<{ sourceId: string; revisionId: string }>;
+    influenceEvents?: import("./topicTypes.js").TopicEventReference[];
     selectionFingerprint?: string;
     informationalRetrieval?: {
         readonly indexGeneration: string;

@@ -27,6 +27,12 @@ export function createMemoryServiceRpcFacade(
     MemoryTopicService &
     MemoryKnowledgeService {
     return {
+        ...(service.queryKnowledgeGraph
+            ? { queryKnowledgeGraph: service.queryKnowledgeGraph.bind(service) }
+            : {}),
+        ...(service.queryGraphSupport
+            ? { queryGraphSupport: service.queryGraphSupport.bind(service) }
+            : {}),
         listViewSummaries: (request) =>
             service.listViewSummaries?.(request) ??
             unsupportedCapability("view summaries"),

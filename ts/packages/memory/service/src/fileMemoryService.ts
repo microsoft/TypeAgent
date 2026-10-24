@@ -145,6 +145,30 @@ import {
 } from "./indexSchema.js";
 import { createKnowProCorpusIndex } from "./knowProCorpusIndex.js";
 import {
+    boundGraphInventory,
+    graphIdentity,
+    graphInventory,
+    graphCoverageState,
+    graphSupportCounts,
+    graphSupportIdentity,
+    graphLimit,
+    type GraphInventory,
+    type GraphProjection,
+} from "./graphQuery.js";
+import {
+    GraphProjectionUnavailable,
+    graphProjectionLimits,
+    readGraphProjection,
+} from "./graphProjection.js";
+import type {
+    GraphSupport,
+    GraphSupportPage,
+    GraphSupportRequest,
+    KnowledgeGraphRequest,
+    KnowledgeGraphResponse,
+    KnowledgeGraphCoverage,
+} from "./graphTypes.js";
+import {
     RevisionAssetStore,
     revisionDigest,
     validateAssetInputs,
@@ -168,6 +192,7 @@ import type {
     DocumentIngestRequest,
     DocumentIngestResult,
     IndexedDocument,
+    IndexedFragmentRequest,
     IngestionJobStatus,
     JobListRequest,
     JobProgress,
@@ -1204,6 +1229,34 @@ export class FileMemoryService
     private readonly indexedReads = new Set<Promise<unknown>>();
     private readonly reindexWork = new Set<Promise<ReindexResult>>();
     private readonly documentRepairs = new Map<string, Promise<void>>();
+    private readonly graphEventWork = new Map<string, Promise<void>>();
+    private readonly graphEventErrors = new Map<string, string>();
+    private readonly graphEventIndexes = new Map<
+        string,
+        { generation: string; index: CorpusIndex }
+    >();
+    private readonly graphDocumentWork = new Map<string, Promise<void>>();
+    private readonly graphDocumentErrors = new Map<string, string>();
+    private readonly documentGraphCache = new Map<
+        string,
+        { fingerprint: string; projection: GraphProjection }
+    >();
+    private readonly eventIndexControllers = new Map<string, AbortController>();
+    private readonly eventIndexPreparationWork = new Map<
+        string,
+        Promise<void>
+    >();
+    private readonly graphSnapshots = new Map<
+        string,
+        {
+            corpusId: string;
+            kind: KnowledgeGraphRequest["kind"];
+            fingerprint: string;
+            binding: string;
+            inventory: GraphInventory;
+            coverage: KnowledgeGraphCoverage;
+        }
+    >();
     private readonly detachedRebuilds = new Map<
         string,
         {
@@ -1836,6 +1889,11 @@ export class FileMemoryService
 
     private async closeService(): Promise<void> {
         this.closed = true;
+        for (const controller of this.eventIndexControllers.values())
+            controller.abort(new Error("Memory service is closing"));
+        this.graphSnapshots.clear();
+        this.documentGraphCache.clear();
+        this.graphEventIndexes.clear();
         this.viewBuilds.cancelAll();
         for (const preparation of this.viewIndexPreparations.values())
             preparation.controller.abort(
@@ -1852,6 +1910,8 @@ export class FileMemoryService
             controller.abort(new Error("Memory service is closing"));
         }
         await this.agentSessionStore.close();
+        await Promise.allSettled(this.graphEventWork.values());
+        await Promise.allSettled(this.graphDocumentWork.values());
         await this.batchStore.close();
         await Promise.allSettled(this.schemaWork.values());
 
@@ -3336,6 +3396,17 @@ export class FileMemoryService
             await this.eventStore(request.corpusId).append(event);
             runtime.events.push(event);
             runtime.eventIdempotency.set(key, event);
+            if (this.informationalWikiEnabled) {
+                const { family } = await this.viewStore.getTopicState(
+                    request.corpusId,
+                );
+                delete family.error;
+                await this.viewStore.saveTopicFamily(request.corpusId, {
+                    ...family,
+                    dirty: true,
+                });
+                this.scheduleTopics(request.corpusId, runtime);
+            }
             result = { event: structuredClone(event), replayed: false };
         });
         return result!;
@@ -6522,6 +6593,14 @@ export class FileMemoryService
         runtime: CorpusRuntime,
         operation: () => Promise<T>,
     ): Promise<T> {
+        this.eventIndexControllers
+            .get(corpusId)
+            ?.abort(
+                new ViewBuildStaleError("Event evidence is being forgotten"),
+            );
+        this.graphSnapshots.clear();
+        this.documentGraphCache.clear();
+        this.graphEventIndexes.delete(corpusId);
         this.viewIndexRemovalBarriers.set(
             corpusId,
             (this.viewIndexRemovalBarriers.get(corpusId) ?? 0) + 1,
@@ -6534,6 +6613,12 @@ export class FileMemoryService
                 new ViewBuildStaleError("View evidence is being forgotten"),
             );
         try {
+            const eventPreparation =
+                this.eventIndexPreparationWork.get(corpusId);
+            if (eventPreparation)
+                await runtime.access.outsideWrite(async () => {
+                    await Promise.allSettled([eventPreparation]);
+                });
             if (preparations.length)
                 await runtime.access.outsideWrite(() =>
                     this.drainViewIndexPreparations(preparations),
@@ -6729,11 +6814,36 @@ export class FileMemoryService
         });
     }
 
+    private async detachedInformationalFragments(
+        runtime: CorpusRuntime,
+        request: IndexedFragmentRequest,
+    ) {
+        const index = runtime.index;
+        const read = index.readFragments;
+        if (!read)
+            throw new Error(
+                "Host does not support bounded informational wiki retrieval",
+            );
+        const fingerprint = await this.graphDocumentFingerprint(runtime);
+        const selection = await runtime.access.outsideWrite(() =>
+            read.call(index, request),
+        );
+        if (
+            runtime.index !== index ||
+            fingerprint !== (await this.graphDocumentFingerprint(runtime))
+        )
+            throw new ViewBuildStaleError(
+                "Indexed informational evidence changed during detached retrieval",
+            );
+        return selection;
+    }
+
     private async snapshotInformationalTarget(
         corpusId: string,
         target: ViewBuildTarget,
         current?: ViewVersion,
         retrieval?: ViewBuildSnapshot["informationalRetrieval"] | false,
+        detachedRetrieval = false,
     ): Promise<ViewBuildSnapshot> {
         if (!this.informationalWikiEnabled)
             throw new Error(
@@ -6787,7 +6897,7 @@ export class FileMemoryService
             wiki.excludedSourceIds,
             retrieval,
         );
-        const selection = await runtime.index.readFragments({
+        const request = {
             terms: [wiki.query, ...wiki.aliases],
             ...(followSources.length ? { followSources } : {}),
             sourceIds: (context?.sources ?? selected)
@@ -6795,7 +6905,10 @@ export class FileMemoryService
                 .filter(
                     (sourceId) => !wiki.excludedSourceIds.includes(sourceId),
                 ),
-        });
+        };
+        const selection = await (detachedRetrieval
+            ? this.detachedInformationalFragments(runtime, request)
+            : runtime.index.readFragments(request));
         if (!selection.fragments.length)
             throw new Error(
                 "No substantive indexed fragments matched this wiki selector",
@@ -7916,16 +8029,32 @@ export class FileMemoryService
                         const snapshot =
                             await this.viewStore.listViews(corpusId);
                         if (this.maintenance.isDeferred(corpusId)) return;
-                        return this.maintainWikiFamily(
-                            runtime,
-                            {
+                        try {
+                            return await this.maintainWikiFamily(
+                                runtime,
+                                {
+                                    corpusId,
+                                    expectedHead: snapshot.head,
+                                    family: kind,
+                                    operation: "update",
+                                },
+                                true,
+                            );
+                        } catch (error) {
+                            if (!(error instanceof ViewBuildStaleError))
+                                throw error;
+                            const current = await this.viewStore.getWikiFamily(
                                 corpusId,
-                                expectedHead: snapshot.head,
-                                family: kind,
-                                operation: "update",
-                            },
-                            true,
-                        );
+                                kind,
+                            );
+                            if (
+                                current.enabled &&
+                                current.dirty &&
+                                !current.error
+                            )
+                                this.scheduleWikiMaintenance(corpusId, kind);
+                            return;
+                        }
                     },
                     true,
                 );
@@ -8141,11 +8270,31 @@ export class FileMemoryService
     }
 
     private async assertInfluenceEligible(
-        input?: Pick<ViewBuildSnapshot, "corpusId" | "influenceSources">,
+        input?: Pick<
+            ViewBuildSnapshot,
+            "corpusId" | "influenceSources" | "influenceEvents"
+        >,
     ): Promise<void> {
-        if (!input?.influenceSources?.length) return;
+        if (
+            !input ||
+            (!input.influenceSources?.length && !input.influenceEvents?.length)
+        )
+            return;
         const runtime = await this.getCorpusRuntime(input.corpusId);
-        for (const influence of input.influenceSources) {
+        for (const influence of input.influenceEvents ?? []) {
+            const event = runtime.events.find(
+                (entry) => entry.eventId === influence.eventId,
+            );
+            if (
+                !event ||
+                isSuppressedEvent(runtime, event) ||
+                viewHash(event) !== influence.fingerprint
+            )
+                throw new ViewBuildStaleError(
+                    "Topic event evidence changed or was forgotten",
+                );
+        }
+        for (const influence of input.influenceSources ?? []) {
             const source = runtime.manifest.sources.find(
                 (entry) => entry.sourceId === influence.sourceId,
             );
@@ -8492,12 +8641,7 @@ export class FileMemoryService
                     selector: target.definition.selector,
                 });
             } catch (error) {
-                if (
-                    error instanceof ViewBuildStaleError ||
-                    !(error instanceof Error) ||
-                    "code" in error
-                )
-                    throw error;
+                if (!this.isTechnicalTargetRejection(error)) throw error;
                 plan.targets.push({
                     viewId: descriptor.viewId,
                     expectedVersion: target.expectedVersion,
@@ -8513,6 +8657,14 @@ export class FileMemoryService
             }
         }
         return { targets, snapshots };
+    }
+
+    private isTechnicalTargetRejection(error: unknown): error is Error {
+        return (
+            error instanceof Error &&
+            !(error instanceof ViewBuildStaleError) &&
+            !("code" in error)
+        );
     }
 
     private wikiPassNeedsContinuation(
@@ -8580,6 +8732,8 @@ export class FileMemoryService
             corpusId,
             target,
             current,
+            undefined,
+            true,
         );
         const query =
             input.definition.wiki?.query ??
@@ -8877,7 +9031,69 @@ export class FileMemoryService
             runtime.manifest.indexGeneration,
             runtime.manifest.knowledgeSuppressions ?? [],
             this.viewAdapter.identity,
+            this.topicEvents(runtime),
         );
+    }
+
+    private topicEvents(runtime: CorpusRuntime) {
+        return runtime.events
+            .filter(
+                (event) =>
+                    !isSuppressedEvent(runtime, event) &&
+                    !!event.content?.trim(),
+            )
+            .map((event) => ({
+                eventId: event.eventId,
+                fingerprint: viewHash(event),
+            }))
+            .sort((a, b) => a.eventId.localeCompare(b.eventId));
+    }
+
+    private async topicEventOccurrences(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ) {
+        const events = this.topicEvents(runtime);
+        if (!events.length) return [];
+        const index = requireTopicIndex(
+            await this.getEventIndex(corpusId, runtime),
+        );
+        const byId = new Map(
+            runtime.events.map((event) => [event.eventId, event]),
+        );
+        return (
+            await index.getTopicOccurrences(
+                new Set(events.map((event) => event.eventId)),
+            )
+        )
+            .filter((occurrence) => byId.has(occurrence.sourceId))
+            .filter(
+                (occurrence) =>
+                    !this.eventHeaderGraphNames(
+                        byId.get(occurrence.sourceId)!,
+                    ).has(occurrence.label.trim().toLowerCase()),
+            )
+            .map((occurrence) => {
+                const event = byId.get(occurrence.sourceId)!;
+                const evidence = {
+                    kind: "event" as const,
+                    eventId: event.eventId,
+                };
+                return {
+                    ...occurrence,
+                    id: graphIdentity(
+                        corpusId,
+                        "event-occurrence",
+                        occurrence.id,
+                    ),
+                    evidence,
+                    scope: `event:${corpusId}:${event.conversationId ?? event.eventId}:${eventAuthority(event) ?? event.sender ?? event.sourceKind}`,
+                    citations: occurrence.citations.map((citation) => ({
+                        ...citation,
+                        evidence,
+                    })),
+                };
+            });
     }
 
     public async queryTopics(
@@ -8958,6 +9174,10 @@ export class FileMemoryService
         )
             return this.viewStore.recordViewMaintenance(plan);
         await this.ensureDocumentIndex(request.corpusId, runtime);
+        const eventOccurrences = await this.topicEventOccurrences(
+            request.corpusId,
+            runtime,
+        );
         const input = await captureTopicBuild({
             corpusId: request.corpusId,
             actor: userInfo().username,
@@ -8965,6 +9185,8 @@ export class FileMemoryService
             sources: this.topicSources(runtime),
             suppressions: runtime.manifest.knowledgeSuppressions ?? [],
             model: this.viewAdapter.identity,
+            eventOccurrences,
+            influenceEvents: this.topicEvents(runtime),
             ...(runtime.manifest.indexGeneration
                 ? { indexGeneration: runtime.manifest.indexGeneration }
                 : {}),
@@ -9063,7 +9285,7 @@ export class FileMemoryService
             !this.informationalWikiEnabled ||
             this.closed ||
             this.knowledgeMaintenance.has(corpusId) ||
-            !runtime.manifest.sources.length ||
+            (!runtime.manifest.sources.length && !runtime.events.length) ||
             !supportsTopicIndex(runtime.index)
         )
             return;
@@ -10343,6 +10565,730 @@ export class FileMemoryService
             indexVersion: result.indexVersion,
             warnings: result.warnings,
         };
+    }
+
+    private async graphDocumentFingerprint(
+        runtime: CorpusRuntime,
+    ): Promise<string> {
+        const corpusId = runtime.manifest.corpus.corpusId;
+        return viewHash({
+            indexGeneration: runtime.manifest.indexGeneration,
+            indexFiles: runtime.manifest.sources.length
+                ? await indexFingerprint(
+                      this.indexDirectory(
+                          corpusId,
+                          runtime.manifest.indexGeneration,
+                      ),
+                      "documents",
+                  )
+                : null,
+            sources: this.graphSources(runtime),
+            sourceCount: runtime.manifest.sources.length,
+            suppressions: runtime.manifest.knowledgeSuppressions ?? [],
+        });
+    }
+
+    private async graphFingerprint(
+        runtime: CorpusRuntime,
+        kind: KnowledgeGraphRequest["kind"],
+        documentFingerprint?: string,
+    ): Promise<string> {
+        const corpusId = runtime.manifest.corpus.corpusId;
+        const viewHead = await this.viewStore.getCommittedHead(corpusId);
+        return viewHash({
+            documents:
+                documentFingerprint ??
+                (await this.graphDocumentFingerprint(runtime)),
+            events: await this.eventStore(corpusId).version(),
+            eventIndex: runtime.events.length
+                ? await readJson<EventIndexState>(
+                      path.join(this.eventIndexRoot(corpusId), "state.json"),
+                  )
+                : null,
+            viewHead: kind === "hierarchy" ? viewHead : undefined,
+        });
+    }
+
+    private scheduleGraphEvents(corpusId: string): void {
+        if (
+            this.closed ||
+            this.graphEventWork.has(corpusId) ||
+            this.eventIndexControllers.has(corpusId)
+        )
+            return;
+        this.graphEventErrors.delete(corpusId);
+        const work = this.enqueueWrite(corpusId, async () => {
+            await this.getEventIndex(
+                corpusId,
+                await this.getCorpusRuntime(corpusId),
+            );
+        })
+            .then(
+                () => undefined,
+                (error: unknown) => {
+                    if (!this.closed && !(error instanceof ViewBuildStaleError))
+                        this.graphEventErrors.set(corpusId, safeError(error));
+                },
+            )
+            .finally(() => this.graphEventWork.delete(corpusId));
+        this.graphEventWork.set(corpusId, work);
+    }
+
+    private scheduleGraphDocuments(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): void {
+        if (
+            this.closed ||
+            this.graphDocumentWork.has(corpusId) ||
+            this.graphDocumentErrors.has(corpusId)
+        )
+            return;
+        const work = this.prepareDocumentReadIndex(corpusId, runtime)
+            .catch((error: unknown) => {
+                if (!this.closed && !(error instanceof ViewBuildStaleError))
+                    this.graphDocumentErrors.set(corpusId, safeError(error));
+            })
+            .finally(() => this.graphDocumentWork.delete(corpusId));
+        this.graphDocumentWork.set(corpusId, work);
+    }
+
+    private async preparedGraphEvents(
+        corpusId: string,
+    ): Promise<CorpusIndex | undefined> {
+        const state = await readJson<EventIndexState>(
+            path.join(this.eventIndexRoot(corpusId), "state.json"),
+        );
+        const version = await this.eventStore(corpusId).version();
+        if (
+            !state ||
+            state.sequence !== version.sequence ||
+            state.eligibilityRevision !== version.eligibilityRevision
+        )
+            return undefined;
+        const cached = this.graphEventIndexes.get(corpusId);
+        return cached?.generation === state.generation
+            ? cached.index
+            : undefined;
+    }
+
+    private graphEventSupport(event: MemoryEvent): GraphSupport {
+        const authority = eventAuthority(event);
+        return {
+            kind: "event",
+            corpusId: event.corpusId,
+            eventId: event.eventId,
+            eventTime: event.eventTime,
+            title: event.eventType,
+            ...(event.conversationId
+                ? { conversationId: event.conversationId }
+                : {}),
+            ...(event.turnId ? { turnId: event.turnId } : {}),
+            ...(event.sender ? { sender: event.sender } : {}),
+            ...(authority ? { authority } : {}),
+        };
+    }
+
+    private async documentGraphProjections(
+        runtime: CorpusRuntime,
+        kind: KnowledgeGraphRequest["kind"],
+        coverage: KnowledgeGraphCoverage,
+        fingerprint: string,
+    ): Promise<GraphProjection[]> {
+        if (kind === "hierarchy") return [];
+        const key = JSON.stringify([runtime.manifest.corpus.corpusId, kind]);
+        const cached = this.documentGraphCache.get(key);
+        if (cached?.fingerprint === fingerprint) return [cached.projection];
+        const sources = this.graphSources(runtime);
+        const supports = new Map<string, GraphSupport>(
+            sources.map((source) => [
+                source.sourceId,
+                {
+                    kind: "document",
+                    corpusId: runtime.manifest.corpus.corpusId,
+                    ...source,
+                    title: runtime.manifest.sources
+                        .find((entry) => entry.sourceId === source.sourceId)!
+                        .title.slice(0, 500),
+                },
+            ]),
+        );
+        const exclusions = new Map<string, Set<string>>();
+        for (const entry of runtime.manifest.knowledgeSuppressions ?? []) {
+            const key = `${entry.sourceId}\0${entry.kind}`;
+            const names = exclusions.get(key) ?? new Set<string>();
+            names.add(normalizedKnowledgeName(entry.name));
+            exclusions.set(key, names);
+        }
+        try {
+            const projection: GraphProjection = {
+                graph: await readGraphProjection(
+                    runtime.index,
+                    new Set(supports.keys()),
+                    kind === "entities" ? "entities" : "topics",
+                    exclusions,
+                ),
+                supports,
+            };
+            this.documentGraphCache.set(key, { fingerprint, projection });
+            while (this.documentGraphCache.size > 16)
+                this.documentGraphCache.delete(
+                    this.documentGraphCache.keys().next().value!,
+                );
+            return [projection];
+        } catch (error) {
+            coverage.documents.state =
+                error instanceof GraphProjectionUnavailable
+                    ? "unsupported"
+                    : "error";
+            coverage.documents.indexed = 0;
+            coverage.reasons.push(safeError(error));
+            return [];
+        }
+    }
+
+    private async hierarchyGraph(
+        request: KnowledgeGraphRequest,
+        runtime: CorpusRuntime,
+        events: MemoryEvent[],
+        coverage: KnowledgeGraphCoverage,
+    ): Promise<GraphInventory> {
+        const state = await this.viewStore.getTopicState(request.corpusId);
+        const snapshot = state.snapshot;
+        if (
+            snapshot &&
+            (snapshot.nodes.length > graphProjectionLimits.nodes ||
+                snapshot.occurrences.length >
+                    graphProjectionLimits.semanticReferences ||
+                snapshot.parents.length + snapshot.related.length >
+                    graphProjectionLimits.edges)
+        ) {
+            coverage.topics = {
+                state: "unsupported",
+                generation: snapshot.generation,
+            };
+            coverage.reasons.push(
+                "Maintained topic projection exceeds bounded graph read budgets; the snapshot remains available through topic pages.",
+            );
+            return { nodes: [], edges: [], supports: new Map() };
+        }
+        const current =
+            snapshot?.inputFingerprint === this.topicFingerprint(runtime);
+        coverage.topics = {
+            state: current ? "ready" : snapshot ? "stale" : "building",
+            ...(snapshot ? { generation: snapshot.generation } : {}),
+        };
+        if (!current || !snapshot) {
+            coverage.reasons.push(
+                "Maintained topic incidence is not current; rebuild topics to populate the hierarchy.",
+            );
+            return { nodes: [], edges: [], supports: new Map() };
+        }
+        const eventById = new Map(
+            events.map((event) => [event.eventId, event]),
+        );
+        const documentIds = new Set(
+            this.topicSources(runtime).map((source) => source.sourceId),
+        );
+        const supports = new Map<string, GraphSupport[]>();
+        const nodes = snapshot.nodes.flatMap((node) => {
+            const occurrences = snapshot.occurrences.filter((entry) =>
+                node.occurrenceIds.includes(entry.id),
+            );
+            const selected: GraphSupport[] = [];
+            for (const occurrence of occurrences) {
+                const eventId = occurrence.citations[0]?.evidence?.eventId;
+                if (eventId) {
+                    const event = eventById.get(eventId);
+                    if (
+                        event &&
+                        request.evidenceKinds?.includes("event") !== false
+                    )
+                        selected.push(this.graphEventSupport(event));
+                } else if (
+                    documentIds.has(occurrence.sourceId) &&
+                    request.evidenceKinds?.includes("document") !== false
+                ) {
+                    selected.push({
+                        kind: "document",
+                        corpusId: request.corpusId,
+                        sourceId: occurrence.sourceId,
+                        revisionId: occurrence.revisionId,
+                        locator: occurrence.citations[0]?.locator,
+                    });
+                }
+            }
+            if (!selected.length) return [];
+            const id = graphIdentity(
+                request.corpusId,
+                "maintained-topic",
+                node.id,
+            );
+            const unique = [
+                ...new Map(
+                    selected.map((entry) => [
+                        graphSupportIdentity(entry),
+                        entry,
+                    ]),
+                ).values(),
+            ];
+            supports.set(id, unique);
+            return [
+                {
+                    id,
+                    kind: "topic" as const,
+                    label: node.label,
+                    scope: node.scope,
+                    topicId: node.id,
+                    summaryState: node.summaryState,
+                    types: [],
+                    mentionCount: selected.length,
+                    supportCount: unique.length,
+                    ...graphSupportCounts(unique),
+                },
+            ];
+        });
+        const ids = new Set(nodes.map((node) => node.id));
+        const rawEdges = [
+            ...snapshot.parents.map((edge) => ({
+                from: edge.parentId,
+                to: edge.childId,
+                type: "parent",
+            })),
+            ...snapshot.related.map((edge) => ({
+                from: edge.fromId,
+                to: edge.toId,
+                type: "related",
+            })),
+        ];
+        const edges = rawEdges.flatMap((edge) => {
+            const source = graphIdentity(
+                request.corpusId,
+                "maintained-topic",
+                edge.from,
+            );
+            const target = graphIdentity(
+                request.corpusId,
+                "maintained-topic",
+                edge.to,
+            );
+            if (!ids.has(source) || !ids.has(target)) return [];
+            const id = graphIdentity(request.corpusId, "edge", [
+                source,
+                target,
+                edge.type,
+            ]);
+            const evidence = [
+                ...new Map(
+                    [
+                        ...(supports.get(source) ?? []),
+                        ...(supports.get(target) ?? []),
+                    ].map((entry) => [graphSupportIdentity(entry), entry]),
+                ).values(),
+            ];
+            supports.set(id, evidence);
+            return [
+                {
+                    id,
+                    source,
+                    target,
+                    type: edge.type,
+                    count: 1,
+                    supportCount: evidence.length,
+                    ...graphSupportCounts(evidence),
+                },
+            ];
+        });
+        return { nodes, edges, supports };
+    }
+
+    public async queryKnowledgeGraph(
+        request: KnowledgeGraphRequest,
+    ): Promise<KnowledgeGraphResponse> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        if (!["entities", "topics", "hierarchy"].includes(request.kind))
+            throw new Error("Invalid graph kind");
+        graphLimit(request.maxNodes, 100, 250);
+        graphLimit(request.maxEdges, 200, 500);
+        if (
+            request.pageBy !== undefined &&
+            !["nodes", "edges"].includes(request.pageBy)
+        )
+            throw new Error("Invalid graph paging mode");
+        if (request.pageBy === "edges" && (request.maxNodes ?? 100) < 2)
+            throw new Error("Edge paging requires at least two endpoint nodes");
+        if (
+            request.evidenceKinds?.some(
+                (kind) => kind !== "document" && kind !== "event",
+            )
+        )
+            throw new Error("Invalid graph evidence kind");
+        this.validateEventFilterRequest({
+            corpusId: request.corpusId,
+            ...request.eventFilter,
+        });
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        let prepareEvents = false;
+        let prepareDocuments = false;
+        const result = await runtime.access.read(async () => {
+            const documentFingerprint =
+                await this.graphDocumentFingerprint(runtime);
+            const fingerprint = await this.graphFingerprint(
+                runtime,
+                request.kind,
+                documentFingerprint,
+            );
+            const binding = viewHash({
+                corpusId: request.corpusId,
+                kind: request.kind,
+                evidenceKinds: request.evidenceKinds ?? ["document", "event"],
+                eventFilter: request.eventFilter ?? {},
+            });
+            const cached = [...this.graphSnapshots.values()].find(
+                (snapshot) =>
+                    snapshot.fingerprint === fingerprint &&
+                    snapshot.binding === binding &&
+                    graphCoverageState(snapshot.coverage) === "ready",
+            );
+            if (cached)
+                return this.graphQueryResult(
+                    request,
+                    fingerprint,
+                    binding,
+                    cached.inventory,
+                    cached.coverage,
+                );
+            const documents =
+                request.evidenceKinds?.includes("document") !== false;
+            const includeEvents =
+                request.evidenceKinds?.includes("event") !== false;
+            const eligible = includeEvents
+                ? runtime.events.filter(
+                      (event) =>
+                          !isSuppressedEvent(runtime, event) &&
+                          !!event.content?.trim() &&
+                          matchesEventFilter(event, request.eventFilter ?? {}),
+                  )
+                : [];
+            const documentReady = await this.documentGraphReady(
+                runtime,
+                request,
+            );
+            const coverage: KnowledgeGraphCoverage = {
+                documents: {
+                    state: documentReady ? "ready" : "building",
+                    total: runtime.manifest.sources.length,
+                    eligible: documents ? this.graphSources(runtime).length : 0,
+                    indexed:
+                        documentReady && documents
+                            ? this.graphSources(runtime).length
+                            : 0,
+                },
+                events: {
+                    state: "ready",
+                    total: runtime.events.length,
+                    eligible: eligible.length,
+                    indexed: 0,
+                },
+                reasons: [],
+            };
+            if (runtime.events.some((event) => !event.content?.trim()))
+                coverage.reasons.push(
+                    "Events without content are excluded; activity and housekeeping metadata are not factual graph evidence.",
+                );
+            if (!documentReady) {
+                prepareDocuments = true;
+                coverage.documents.state = this.graphDocumentErrors.has(
+                    request.corpusId,
+                )
+                    ? "error"
+                    : "building";
+                coverage.reasons.push(
+                    this.graphDocumentErrors.get(request.corpusId) ??
+                        "Document projection preparation is running independently of graph reads.",
+                );
+            }
+            const projections =
+                documentReady && documents && this.graphSources(runtime).length
+                    ? await this.documentGraphProjections(
+                          runtime,
+                          request.kind,
+                          coverage,
+                          documentFingerprint,
+                      )
+                    : [];
+            if (runtime.manifest.knowledgeSuppressions?.length)
+                coverage.reasons.push(
+                    "Source knowledge suppressions are applied before graph aggregation.",
+                );
+            prepareEvents = await this.addEventGraphProjection(
+                request.corpusId,
+                eligible,
+                request.kind,
+                coverage,
+                projections,
+            );
+            const inventory =
+                request.kind === "hierarchy"
+                    ? await this.hierarchyGraph(
+                          request,
+                          runtime,
+                          eligible,
+                          coverage,
+                      )
+                    : this.readGraphInventory(request, projections, coverage);
+            return this.graphQueryResult(
+                request,
+                fingerprint,
+                binding,
+                inventory,
+                coverage,
+            );
+        });
+        if (prepareEvents) this.scheduleGraphEvents(request.corpusId);
+        if (prepareDocuments)
+            this.scheduleGraphDocuments(request.corpusId, runtime);
+        return result;
+    }
+
+    private graphQueryResult(
+        request: KnowledgeGraphRequest,
+        fingerprint: string,
+        binding: string,
+        inventory: GraphInventory,
+        coverage: KnowledgeGraphCoverage,
+    ): KnowledgeGraphResponse {
+        const generation = viewHash({
+            fingerprint,
+            request: {
+                ...request,
+                expectedGeneration: undefined,
+                continuationToken: undefined,
+            },
+            coverage,
+        });
+        if (
+            request.expectedGeneration &&
+            request.expectedGeneration !== generation
+        )
+            throw new ViewBuildStaleError(
+                "Graph generation changed; reload the graph",
+            );
+        const bounded = boundGraphInventory(request, inventory, generation);
+        this.graphSnapshots.set(generation, {
+            corpusId: request.corpusId,
+            kind: request.kind,
+            fingerprint,
+            binding,
+            inventory,
+            coverage: structuredClone(coverage),
+        });
+        while (this.graphSnapshots.size > 16)
+            this.graphSnapshots.delete(
+                this.graphSnapshots.keys().next().value!,
+            );
+        return {
+            corpusId: request.corpusId,
+            generation,
+            state: graphCoverageState(coverage),
+            ...bounded,
+            coverage: structuredClone(coverage),
+        };
+    }
+
+    private readGraphInventory(
+        request: KnowledgeGraphRequest,
+        projections: GraphProjection[],
+        coverage: KnowledgeGraphCoverage,
+    ): GraphInventory {
+        try {
+            return graphInventory(request, projections);
+        } catch (error) {
+            const state =
+                error instanceof GraphProjectionUnavailable
+                    ? "unsupported"
+                    : "error";
+            coverage.documents.state = state;
+            coverage.events.state = state;
+            coverage.reasons.push(safeError(error));
+            return { nodes: [], edges: [], supports: new Map() };
+        }
+    }
+
+    private async addEventGraphProjection(
+        corpusId: string,
+        eligible: MemoryEvent[],
+        kind: KnowledgeGraphRequest["kind"],
+        coverage: KnowledgeGraphCoverage,
+        projections: GraphProjection[],
+    ): Promise<boolean> {
+        if (kind === "hierarchy") {
+            coverage.events.indexed = eligible.length;
+            return false;
+        }
+
+        if (!eligible.length) return false;
+        const index = await this.preparedGraphEvents(corpusId);
+        if (index) {
+            try {
+                projections.push({
+                    graph: await readGraphProjection(
+                        index,
+                        new Set(eligible.map((event) => event.eventId)),
+                        kind === "entities" ? "entities" : "topics",
+                        new Map(
+                            eligible.map((event) => [
+                                event.eventId,
+                                this.eventHeaderGraphNames(event),
+                            ]),
+                        ),
+                    ),
+                    supports: new Map(
+                        eligible.map((event) => [
+                            event.eventId,
+                            this.graphEventSupport(event),
+                        ]),
+                    ),
+                });
+                coverage.events.indexed = eligible.length;
+            } catch (error) {
+                coverage.events.state =
+                    error instanceof GraphProjectionUnavailable
+                        ? "unsupported"
+                        : "error";
+                coverage.reasons.push(safeError(error));
+            }
+            return false;
+        }
+        coverage.events.state = this.graphEventErrors.has(corpusId)
+            ? "error"
+            : "building";
+        coverage.reasons.push(
+            this.graphEventErrors.get(corpusId) ??
+                "Event projection preparation is running independently of graph reads.",
+        );
+        return !this.graphEventErrors.has(corpusId);
+    }
+
+    private async documentGraphReady(
+        runtime: CorpusRuntime,
+        request: KnowledgeGraphRequest,
+    ): Promise<boolean> {
+        return (
+            request.kind === "hierarchy" ||
+            request.evidenceKinds?.includes("document") === false ||
+            this.graphSources(runtime).length === 0 ||
+            this.documentIndexReady(request.corpusId, runtime)
+        );
+    }
+
+    private graphSources(runtime: CorpusRuntime) {
+        return runtime.manifest.sources
+            .filter((source) =>
+                source.revisions.some(
+                    (revision) =>
+                        revision.revisionId === source.activeRevisionId &&
+                        revision.state === "ready",
+                ),
+            )
+            .map((source) => ({
+                sourceId: source.sourceId,
+                revisionId: source.activeRevisionId,
+            }));
+    }
+
+    private eventHeaderGraphNames(event: MemoryEvent): ReadonlySet<string> {
+        const content = event.content?.toLowerCase() ?? "";
+        return new Set(
+            [
+                event.eventId,
+                event.corpusId,
+                event.eventType,
+                event.sourceKind,
+                event.producer.producerId,
+                event.producer.producerType,
+                event.conversationId,
+                event.turnId,
+                event.runId,
+                event.sender,
+                event.actionName,
+                eventAuthority(event),
+                event.eventTime,
+                event.observedAt,
+                ...(event.linkedSourceIds ?? []),
+            ]
+                .filter(
+                    (name): name is string =>
+                        !!name && !content.includes(name.toLowerCase()),
+                )
+                .map((name) => name.trim().toLowerCase()),
+        );
+    }
+
+    public async queryGraphSupport(
+        request: GraphSupportRequest,
+    ): Promise<GraphSupportPage> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        const size = graphLimit(request.pageSize, 20, 50);
+        if (!!request.nodeId === !!request.edgeId)
+            throw new Error("Select exactly one graph node or edge");
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        return runtime.access.read(async () => {
+            const snapshot = this.graphSnapshots.get(request.generation);
+            if (
+                !snapshot ||
+                snapshot.corpusId !== request.corpusId ||
+                snapshot.fingerprint !==
+                    (await this.graphFingerprint(runtime, snapshot.kind))
+            )
+                throw new ViewBuildStaleError(
+                    "Graph generation changed or expired; reload the graph",
+                );
+            const id = request.nodeId ?? request.edgeId!;
+            const items = snapshot.inventory.supports.get(id);
+            if (!items)
+                throw new Error(
+                    "Unknown graph node or edge in this generation",
+                );
+            const binding = viewHash([
+                request.corpusId,
+                request.generation,
+                id,
+                size,
+            ]);
+            let offset = 0;
+            if (request.continuationToken) {
+                const token = JSON.parse(
+                    Buffer.from(
+                        request.continuationToken,
+                        "base64url",
+                    ).toString("utf8"),
+                ) as { binding: string; offset: number };
+                if (
+                    token.binding !== binding ||
+                    !Number.isSafeInteger(token.offset) ||
+                    token.offset < 0 ||
+                    token.offset >= items.length
+                )
+                    throw new Error("Invalid graph support continuation token");
+                offset = token.offset;
+            }
+            const end = offset + size;
+            return {
+                generation: request.generation,
+                items: structuredClone(items.slice(offset, end)),
+                total: items.length,
+                ...(end < items.length
+                    ? {
+                          nextContinuationToken: Buffer.from(
+                              JSON.stringify({ binding, offset: end }),
+                          ).toString("base64url"),
+                      }
+                    : {}),
+            };
+        });
     }
 
     public async getKnowledgeGraph(
@@ -12205,11 +13151,26 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<CorpusIndex> {
+        const pending = this.eventIndexPreparationWork.get(corpusId);
+        if (pending)
+            await runtime.access.outsideWrite(async () => {
+                await Promise.allSettled([pending]);
+            });
+        if (this.eventIndexControllers.has(corpusId))
+            throw new ViewBuildStaleError(
+                "Event index preparation is already running",
+            );
+        if (this.viewIndexRemovalBarriers.has(corpusId))
+            throw new ViewBuildStaleError(
+                "Event evidence removal is in progress",
+            );
         const root = this.eventIndexRoot(corpusId);
         const store = this.eventStore(corpusId);
         const version = await store.version();
         let state = await this.purgeObsoleteEventIndex(corpusId, runtime);
         if (state !== undefined && state.sequence === version.sequence) {
+            const cached = this.graphEventIndexes.get(corpusId);
+            if (cached?.generation === state.generation) return cached.index;
             try {
                 await access(
                     path.join(
@@ -12221,7 +13182,20 @@ export class FileMemoryService
                     corpusId,
                     this.eventIndexDirectory(corpusId, state.generation),
                 );
-                await index.initialize();
+                await this.loadReadyEventIndex(corpusId, runtime, index);
+                const current = await store.version();
+                if (
+                    this.closed ||
+                    current.sequence !== version.sequence ||
+                    current.eligibilityRevision !== version.eligibilityRevision
+                )
+                    throw new ViewBuildStaleError(
+                        "Event eligibility changed while loading the projection",
+                    );
+                this.graphEventIndexes.set(corpusId, {
+                    generation: state.generation,
+                    index,
+                });
                 return index;
             } catch (error) {
                 if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -12232,39 +13206,61 @@ export class FileMemoryService
             state = undefined;
         }
         await mkdir(root, { recursive: true });
+        if (this.closed)
+            throw new ViewBuildStaleError("Memory service is closing");
+        const controller = new AbortController();
+        this.eventIndexControllers.set(corpusId, controller);
+        const events = runtime.events
+            .filter((event) => !isSuppressedEvent(runtime, event))
+            .map((event) => structuredClone(event));
         const generation = randomUUID();
         const directory = this.eventIndexDirectory(corpusId, generation);
-        await mkdir(directory);
         try {
+            await mkdir(directory);
             const index = this.eventIndexFactory(corpusId, directory);
+            const preparation = Promise.resolve().then(async () => {
+                if (
+                    state &&
+                    index.append &&
+                    state.eligibilityRevision === version.eligibilityRevision
+                ) {
+                    await cp(
+                        this.eventIndexDirectory(corpusId, state.generation),
+                        directory,
+                        { recursive: true },
+                    );
+                    await index.append(
+                        events
+                            .filter(
+                                (event) =>
+                                    store.sequenceFor(event.eventId) >
+                                    (state.sequence ?? 0),
+                            )
+                            .map((event) => this.eventDocument(event)),
+                        controller.signal,
+                        async () => {},
+                    );
+                } else {
+                    await index.rebuild(
+                        events.map((event) => this.eventDocument(event)),
+                        controller.signal,
+                        async () => {},
+                    );
+                }
+            });
+            this.eventIndexPreparationWork.set(corpusId, preparation);
+            await runtime.access.outsideWrite(() => preparation);
+            controller.signal.throwIfAborted();
+            const currentVersion = await store.version();
             if (
-                state &&
-                index.append &&
-                state.eligibilityRevision === version.eligibilityRevision
-            ) {
-                await cp(
-                    this.eventIndexDirectory(corpusId, state.generation),
-                    directory,
-                    { recursive: true },
+                this.closed ||
+                currentVersion.sequence !== version.sequence ||
+                currentVersion.eligibilityRevision !==
+                    version.eligibilityRevision
+            )
+                throw new ViewBuildStaleError(
+                    "Event eligibility changed during index preparation",
                 );
-                await index.append(
-                    runtime.events
-                        .filter(
-                            (event) =>
-                                store.sequenceFor(event.eventId) >
-                                (state.sequence ?? 0),
-                        )
-                        .map((event) => this.eventDocument(event)),
-                    this.maintenance.signal,
-                    async () => {},
-                );
-            } else {
-                await index.rebuild(
-                    runtime.events.map((event) => this.eventDocument(event)),
-                    this.maintenance.signal,
-                    async () => {},
-                );
-            }
             await stampIndexSchema(
                 directory,
                 "conversation-events",
@@ -12300,10 +13296,36 @@ export class FileMemoryService
                 });
             }
             await collectJsonSegments(root);
+            this.graphEventIndexes.set(corpusId, { generation, index });
             return index;
         } catch (error) {
             await rm(directory, { recursive: true, force: true });
+            controller.signal.throwIfAborted();
             throw error;
+        } finally {
+            if (this.eventIndexControllers.get(corpusId) === controller)
+                this.eventIndexControllers.delete(corpusId);
+            this.eventIndexPreparationWork.delete(corpusId);
+        }
+    }
+
+    private async loadReadyEventIndex(
+        corpusId: string,
+        runtime: CorpusRuntime,
+        index: CorpusIndex,
+    ): Promise<void> {
+        if (this.closed)
+            throw new ViewBuildStaleError("Memory service is closing");
+        const controller = new AbortController();
+        this.eventIndexControllers.set(corpusId, controller);
+        const preparation = Promise.resolve().then(() => index.initialize());
+        this.eventIndexPreparationWork.set(corpusId, preparation);
+        try {
+            await runtime.access.outsideWrite(() => preparation);
+            controller.signal.throwIfAborted();
+        } finally {
+            this.eventIndexControllers.delete(corpusId);
+            this.eventIndexPreparationWork.delete(corpusId);
         }
     }
 

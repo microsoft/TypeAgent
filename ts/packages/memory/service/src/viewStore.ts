@@ -427,6 +427,10 @@ export class TypedViewStore {
         return structuredClone(viewVersions(state, request.viewId)).reverse();
     }
 
+    public getCommittedHead(corpusId: string): Promise<string | null> {
+        return this.history(corpusId).readHead();
+    }
+
     public async getTopicState(corpusId: string): Promise<{
         head: string | null;
         snapshot?: TopicSnapshot;
@@ -1816,6 +1820,10 @@ export class TypedViewStore {
         }
         if (
             clearingDerived ||
+            (forgottenEvents &&
+                state.topics?.influenceEvents?.some((event) =>
+                    forgottenEvents.has(event.eventId),
+                )) ||
             (!forgottenEvents &&
                 state.topics?.influenceSources.some(
                     (source) => source.sourceId === sourceId,
@@ -1888,10 +1896,11 @@ export class TypedViewStore {
                     !job.results.some(
                         (result) =>
                             result.snapshot.inputs.some(matches) ||
-                            (!forgottenEvents &&
-                                result.snapshot.influenceSources?.some(
-                                    matches,
-                                )) ||
+                            this.forgottenTopicInfluence(
+                                result.snapshot,
+                                sourceId,
+                                forgottenEvents,
+                            ) ||
                             result.wikiContribution?.input.inputs.some(
                                 matches,
                             ) ||
@@ -1986,6 +1995,20 @@ export class TypedViewStore {
 
     public async forgetEvent(corpusId: string, eventId: string): Promise<void> {
         await this.forgetEvents(corpusId, [eventId]);
+    }
+
+    private forgottenTopicInfluence(
+        input: ViewBuildSnapshot,
+        sourceId: string,
+        forgottenEvents: Set<string> | undefined,
+    ): boolean {
+        return forgottenEvents
+            ? (input.influenceEvents?.some((event) =>
+                  forgottenEvents.has(event.eventId),
+              ) ?? false)
+            : (input.influenceSources?.some(
+                  (source) => source.sourceId === sourceId,
+              ) ?? false);
     }
 
     public async forgetEvents(

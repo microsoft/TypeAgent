@@ -24,6 +24,7 @@ export function occurrenceIdentity(occurrence: TopicOccurrence): string {
         occurrence.citations[0].locator,
     ).blockOrdinal;
     return JSON.stringify([
+        ...(occurrence.evidence ? ["event", occurrence.evidence.eventId] : []),
         occurrence.sourceId,
         occurrence.scope,
         blockOrdinal,
@@ -68,6 +69,14 @@ function validateOccurrence(
     snapshot: TopicSnapshot,
 ): void {
     if (
+        occurrence.evidence &&
+        (occurrence.sourceId !== occurrence.evidence.eventId ||
+            occurrence.revisionId !== occurrence.evidence.eventId)
+    )
+        throw new Error(
+            "Event topic incidence must retain canonical event identity",
+        );
+    if (
         !occurrence.label.trim() ||
         !occurrence.scope ||
         !Number.isSafeInteger(occurrence.ordinal) ||
@@ -82,7 +91,8 @@ function validateOccurrence(
                 citation.revisionId !== occurrence.revisionId ||
                 !citation.locator ||
                 !citation.excerpt ||
-                citation.evidence !== undefined,
+                JSON.stringify(citation.evidence) !==
+                    JSON.stringify(occurrence.evidence),
         )
     )
         throw new Error(
@@ -96,11 +106,15 @@ function validateOccurrence(
             );
     }
     if (
-        !snapshot.influenceSources.some(
-            (source) =>
-                source.sourceId === occurrence.sourceId &&
-                source.revisionId === occurrence.revisionId,
-        )
+        occurrence.evidence
+            ? !snapshot.influenceEvents?.some(
+                  (event) => event.eventId === occurrence.evidence?.eventId,
+              )
+            : !snapshot.influenceSources.some(
+                  (source) =>
+                      source.sourceId === occurrence.sourceId &&
+                      source.revisionId === occurrence.revisionId,
+              )
     )
         throw new Error(
             "Topic occurrence absent from captured source influence",
@@ -210,6 +224,16 @@ export function validateTopicSnapshot(snapshot: TopicSnapshot): void {
         throw new Error("Unsupported topic snapshot schema");
     assertViewIdentifier("corpus ID", snapshot.corpusId);
     assertViewIdentifier("topic generation", snapshot.generation);
+    const eventIds = new Set<string>();
+    for (const event of snapshot.influenceEvents ?? []) {
+        assertViewIdentifier("topic event ID", event.eventId);
+        if (
+            eventIds.has(event.eventId) ||
+            !/^[0-9a-f]{64}$/.test(event.fingerprint)
+        )
+            throw new Error("Invalid or duplicate topic event influence");
+        eventIds.add(event.eventId);
+    }
     const occurrences = new Map(
         snapshot.occurrences.map((entry) => [entry.id, entry]),
     );

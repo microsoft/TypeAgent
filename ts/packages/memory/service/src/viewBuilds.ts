@@ -136,12 +136,14 @@ export class ViewBuildRunner {
                 ]),
             ),
             events: new Set(
-                job.results.flatMap(
-                    (result) =>
-                        result.snapshot.definition.selector.events?.map(
-                            (event) => event.eventId,
-                        ) ?? [],
-                ),
+                job.results.flatMap((result) => [
+                    ...(result.snapshot.definition.selector.events?.map(
+                        (event) => event.eventId,
+                    ) ?? []),
+                    ...(result.snapshot.influenceEvents?.map(
+                        (event) => event.eventId,
+                    ) ?? []),
+                ]),
             ),
         };
         this.controllers.set(job.jobId, { ...scope, controller });

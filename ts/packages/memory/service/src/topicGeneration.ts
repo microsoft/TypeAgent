@@ -61,6 +61,9 @@ export function createTopicSnapshot(
         generatedAt: new Date().toISOString(),
         occurrences: structuredClone(input.topicInput.occurrences),
         influenceSources: structuredClone(input.influenceSources ?? []),
+        ...(input.influenceEvents?.length
+            ? { influenceEvents: structuredClone(input.influenceEvents) }
+            : {}),
         nodes,
         parents: [],
         related: [],

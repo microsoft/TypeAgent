@@ -1518,6 +1518,150 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         30000,
     );
 
+    test.each([false, true])(
+        "maintenance retrieval admits graph reads and rejects changed evidence: %s",
+        async (suppress) => {
+            const { corpusId } =
+                await service.createCorpus("Detached retrieval");
+            await update(corpusId, "pause");
+            await add(
+                corpusId,
+                "source",
+                "Acquisition has governing qualifications.",
+            );
+            let entered!: () => void;
+            let release!: () => void;
+            let timeout: ReturnType<typeof setTimeout> | undefined;
+            const started = new Promise<void>((resolve) => {
+                entered = resolve;
+            });
+            const gate = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            const read = MockIndexedCorpus.prototype.readFragments;
+            const clock = (import.meta as ImportMeta & { jest: typeof jest })
+                .jest;
+            const blocked = clock
+                .spyOn(MockIndexedCorpus.prototype, "readFragments")
+                .mockImplementationOnce(async function (
+                    this: MockIndexedCorpus,
+                    request,
+                ) {
+                    entered();
+                    await gate;
+                    return read.call(this, request);
+                });
+            const head = (await service.listViews(corpusId)).head;
+            const maintaining = service
+                .maintainViews({
+                    corpusId,
+                    expectedHead: head,
+                    family: "wiki",
+                    operation: "resume",
+                })
+                .then(
+                    (result) => ({ result, error: undefined }),
+                    (error: unknown) => ({ result: undefined, error }),
+                );
+            try {
+                await started;
+                await Promise.race([
+                    Promise.all([
+                        service.queryKnowledgeGraph({
+                            corpusId,
+                            kind: "entities",
+                        }),
+                        service.listViews(corpusId),
+                    ]),
+                    new Promise<never>((_resolve, reject) => {
+                        timeout = setTimeout(
+                            () =>
+                                reject(
+                                    new Error(
+                                        "Reads blocked behind wiki fragment retrieval",
+                                    ),
+                                ),
+                            1500,
+                        );
+                    }),
+                ]);
+                if (suppress)
+                    await service.suppressSourceKnowledge({
+                        corpusId,
+                        sourceId: "source",
+                        kind: "entity",
+                        name: "Acquisition",
+                    });
+                release();
+                const outcome = await maintaining;
+                if (suppress) {
+                    expect(outcome.error).toBeInstanceOf(ViewBuildStaleError);
+                    expect(outcome.result).toBeUndefined();
+                } else {
+                    expect(outcome.error).toBeUndefined();
+                    expect(outcome.result?.job).toBeDefined();
+                    expect(
+                        (await waitForViewBuild(service, outcome.result!.job!))
+                            .state,
+                    ).toBe("complete");
+                }
+            } finally {
+                clearTimeout(timeout);
+                release();
+                await maintaining;
+                blocked.mockRestore();
+            }
+        },
+    );
+    test("pausing automatic maintenance during detached retrieval preserves the paused head", async () => {
+        await service.close();
+        rehearsalBudget = false;
+        service = open();
+        let entered!: () => void;
+        let release!: () => void;
+        const started = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const read = MockIndexedCorpus.prototype.readFragments;
+        const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+        const blocked = clock
+            .spyOn(MockIndexedCorpus.prototype, "readFragments")
+            .mockImplementationOnce(async function (
+                this: MockIndexedCorpus,
+                request,
+            ) {
+                entered();
+                await gate;
+                return read.call(this, request);
+            });
+        try {
+            const { corpusId } = await service.createCorpus(
+                "Paused detached retrieval",
+            );
+            await add(
+                corpusId,
+                "source",
+                "Acquisition has governing qualifications.",
+            );
+            await started;
+            await update(corpusId, "pause");
+            const head = (await service.listViews(corpusId)).head;
+            release();
+            await service.close();
+            const store = new TypedViewStore(root);
+            const snapshot = await store.listViews(corpusId);
+            const family = await store.getWikiFamily(corpusId);
+            expect(snapshot.head).toBe(head);
+            expect(family.enabled).toBe(false);
+            expect(family.error).toBeUndefined();
+        } finally {
+            release();
+            blocked.mockRestore();
+        }
+    });
     test("automatic wiki builds without rehearsal variables and family pause survives reopen", async () => {
         await service.close();
         rehearsalBudget = false;
