@@ -14,6 +14,7 @@ import {
     type DocMemorySettings,
 } from "@typeagent/conversation-memory";
 import type { EmbeddingRole, TextEmbeddingModel } from "@typeagent/aiclient";
+import { countEmbeddingTokens } from "@typeagent/aiclient";
 import { createEmbeddingCache } from "@typeagent/knowledge-processor";
 import * as kp from "@typeagent/knowpro";
 import { KnowProCorpusIndex } from "../src/knowProCorpusIndex.js";
@@ -45,6 +46,7 @@ describe("durable extraction and message embedding windows", () => {
             if (forbidden) throw new Error("Unexpected provider call");
             embedded.push(text);
             expect(countDocTokens(text)).toBeLessThanOrEqual(7500);
+            expect(countEmbeddingTokens(text)).toBeLessThanOrEqual(7500);
             return [1, 0, 0];
         };
         return {
@@ -392,9 +394,9 @@ describe("durable extraction and message embedding windows", () => {
                           options,
                       )
                     : type === "text"
-                      ? docPartsFromText(content, 8000, uri)
+                      ? docPartsFromText(content, 8000, uri, options)
                       : type === "vtt"
-                        ? docPartsFromVtt(content, uri)
+                        ? docPartsFromVtt(content, uri, options)
                         : docPartsFromMarkdown(content, 8000, uri, options);
             const index = new KnowProCorpusIndex("test", root, settings);
             await index.rebuild(

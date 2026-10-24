@@ -15,6 +15,7 @@ import { ConversationThreads } from "../src/conversationThread.js";
 import {
     createTextEmbeddingIndexSettings,
     TextEmbeddingIndex,
+    generateTextEmbeddingsForIndex,
 } from "../src/fuzzyIndex.js";
 import { buildMessageIndex, MessageTextIndex } from "../src/messageIndex.js";
 import { TermEmbeddingIndex } from "../src/relatedTermsIndex.js";
@@ -23,7 +24,10 @@ import { searchConversationByTextSimilarity } from "../src/search.js";
 import { IConversation, TextRange } from "../src/interfaces.js";
 import { createTestMessages } from "./testMessage.js";
 import { SemanticRefCollection } from "../src/storage.js";
-import { TermToSemanticRefIndex } from "../src/conversationIndex.js";
+import {
+    addKnowledgeToSemanticRefIndex,
+    TermToSemanticRefIndex,
+} from "../src/conversationIndex.js";
 
 describe("KnowPro embedding roles (synthetic/offline)", () => {
     let calls: string[];
@@ -64,6 +68,23 @@ describe("KnowPro embedding roles (synthetic/offline)", () => {
     }
     beforeEach(() => {
         calls = [];
+    });
+
+    test("indexing rejects oversized inputs before invoking any embedding model", async () => {
+        const exact = " word".repeat(8_000);
+        const result = await generateTextEmbeddingsForIndex(model(), [
+            "short",
+            exact + " word",
+        ]);
+        expect(result).toEqual({
+            success: false,
+            message:
+                "Embedding input[1] has 8001 tokens; maximum is 8000 (cl100k_base)",
+        });
+        expect(calls).toEqual([]);
+        const accepted = await generateTextEmbeddingsForIndex(model(), exact);
+        expect(accepted.success).toBe(true);
+        expect(calls).toEqual([`document:${exact}`]);
     });
 
     test("conversation derives resolved identity dimensions without default switch", () => {
@@ -429,6 +450,40 @@ describe("KnowPro embedding roles (synthetic/offline)", () => {
         const result = await index.addText(["one", "two"]);
         expect(result.error).toMatch(/cardinality/);
         expect(index.size).toBe(0);
+    });
+
+    test("empty extracted topics never enter keyword or incremental embedding batches", async () => {
+        const conversation: IConversation = {
+            nameTag: "empty-topics",
+            tags: [],
+            secondaryIndexes: {},
+            messages: createTestMessages(1),
+            semanticRefs: new SemanticRefCollection(),
+            semanticRefIndex: new TermToSemanticRefIndex(),
+        };
+        const termsAdded = new Set<string>();
+        addKnowledgeToSemanticRefIndex(
+            conversation,
+            0,
+            0,
+            {
+                entities: [],
+                actions: [],
+                inverseActions: [],
+                topics: ["", " \t\n", "tea"],
+            },
+            termsAdded,
+        );
+        expect([...termsAdded]).toEqual(["tea"]);
+        expect(conversation.semanticRefIndex?.getTerms()).toEqual(["tea"]);
+        expect(conversation.semanticRefs?.length).toBe(3);
+        const index = new TermEmbeddingIndex(
+            createTextEmbeddingIndexSettings(model(), 2),
+        );
+        expect(await index.addTerms([...termsAdded])).toMatchObject({
+            numberCompleted: 1,
+        });
+        expect(calls).toEqual(["document:tea"]);
     });
 
     test("legacy term cache keeps raw key behavior", async () => {

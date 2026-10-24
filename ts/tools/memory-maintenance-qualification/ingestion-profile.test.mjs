@@ -675,6 +675,24 @@ test("reports preserve repeated calls and failures, count items by layer and dis
 });
 
 test("actual source embedding logical hook counts retries and marks validation failures without changing Result semantics", async () => {
+    const embeddingInput = await readFile(
+        new URL(
+            "../../packages/aiclient/src/embeddingInput.ts",
+            import.meta.url,
+        ),
+        "utf8",
+    );
+    const embeddingInputExports = {};
+    new Function(
+        "require",
+        "exports",
+        ts.transpileModule(embeddingInput, {
+            compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+            },
+        }).outputText,
+    )(require, embeddingInputExports);
     const fuzzy = await readFile(
         new URL("../../packages/knowPro/src/fuzzyIndex.ts", import.meta.url),
         "utf8",
@@ -700,6 +718,7 @@ test("actual source embedding logical hook counts retries and marks validation f
         "validateEmbeddingVector",
         "success",
         "error",
+        "embeddingInputLimitError",
         code + "\nreturn generateTextEmbeddingsForIndex;",
     )(
         instrumentEmbeddingModel,
@@ -720,6 +739,7 @@ test("actual source embedding logical hook counts retries and marks validation f
         },
         (data) => ({ success: true, data }),
         (message) => ({ success: false, message }),
+        embeddingInputExports.embeddingInputLimitError,
     );
     const embeddings = [
         [1, 0],

@@ -10,6 +10,47 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Document import token budgets
+
+Text, Markdown, HTML/web and VTT retain their format-specific parsers and then
+use the shared [`chunkDocParts`](../conversation/src/docImport.ts) stage. Plain
+text is literal: it is neither escaped nor interpreted as Markdown. HTML still
+converts to Markdown; VTT still uses the transcript parser.
+
+Durable imports split oversized blocks, including unbroken words, then pack
+compatible adjacent blocks within **24,000 extraction tokens (`o200k_base`)**.
+Message-text embeddings use separate lossless windows bounded to **7,500 tokens
+under both `o200k_base` and `cl100k_base`**. Shared indexing and hosted embedding
+requests retain the **8,000-token `cl100k_base`** final guard, below the hosted
+models' 8,192-token limit. Structural character targets are not the final token
+budget.
+
+Splitting slices original Unicode code points without truncation or decoding
+partial token bytes. Plain-text whitespace and literal markup survive exactly.
+Source/revision metadata, tags, deletion information and existing knowledge are
+retained; pre-collected knowledge is attached once, not duplicated on every
+fragment. Packing does not cross different sources/revisions, timed transcript
+turns or deletion boundaries. Split transcript fragments retain their original
+turn's timestamp; no new cue timings are invented.
+
+Public parser helpers default to 7,500 extraction tokens and 8,000 embedding
+tokens per part; supplying `maxTokensPerPart` additionally enables packing.
+Extraction targets above the embedding ceiling require separate embedding
+windows, as configured by the durable service. The legacy `mergeDocParts`
+helper is deprecated and now retains per-part metadata instead of flattening
+all parts under one metadata object.
+
+Shared KnowPro document/term indexing and the hosted embedding API also check
+each complete input immediately before model/API work. Oversized inputs fail
+explicitly with their batch index, token count and limit; they are never
+silently shortened, skipped or embedded in partial form. The cl100k ceiling is
+a shared safety policy, not a substitute for another provider's native
+tokenizer or any smaller model-specific context limit.
+
+Existing stored messages are not silently rechunked because that would change
+indexed locators. Reimport/rebuild from retained sources when adopting the new
+chunking policy; benchmark comparisons require fresh stores and fingerprints.
+
 ## Offline test fixtures
 
 Memory maintenance regressions use the bundled synthetic

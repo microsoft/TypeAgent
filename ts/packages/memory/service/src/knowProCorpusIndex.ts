@@ -217,10 +217,19 @@ function parseDocParts(document: IndexedDocument): DocPart[] {
             );
             break;
         case "vtt":
-            parts = docPartsFromVtt(document.content, uri);
+            parts = docPartsFromVtt(
+                document.content,
+                uri,
+                durableDocPartOptions,
+            );
             break;
         case "text":
-            parts = docPartsFromText(document.content, chunkCharacters, uri);
+            parts = docPartsFromText(
+                document.content,
+                chunkCharacters,
+                uri,
+                durableDocPartOptions,
+            );
             break;
     }
     for (const part of parts) {

@@ -1,0 +1,181 @@
+# Conversation-memory benchmarks
+
+TypeScript BEAM evaluation against the durable TypeAgent memory service.
+No Python interpreter, environment, package or subprocess is required.
+
+## Build and offline tests
+
+From the TypeAgent checkout:
+
+```powershell
+if (Test-Path $PROFILE) { . $PROFILE }
+$repo = (git rev-parse --show-toplevel).Trim()
+$reposRoot = Split-Path $repo
+Set-Location (Join-Path $repo 'ts')
+pnpm run build
+pnpm --filter @typeagent/benchmarks run jest-esm --runInBand --testPathPattern='memoryBench[.]spec[.]js'
+```
+
+The offline suite covers normalization, gold separation, isolation, durable
+readiness/restart, native citations, judge-failure resume, progress and numerical
+parity with synthetic Python-reference fixtures. It does not require the AMB
+checkout or model authentication.
+
+## Prepare the protocol once
+
+The upstream checkout must be pinned to AMB commit
+`16fcebb0066537e890c6015c9d4a2b2eac952249`. The Node preparation command reads
+templates from that Git revision as data; it never imports or executes Python.
+It writes a local JSON artifact rather than redistribute complete upstream
+prompts without an upstream license file.
+
+```powershell
+$amb = Join-Path $reposRoot 'agent-memory-benchmark'
+$output = Join-Path $reposRoot 'memory-benchmark-runs\typescript'
+$protocol = Join-Path $output 'protocol.json'
+
+# For a new checkout only:
+git clone https://github.com/vectorize-io/agent-memory-benchmark.git $amb
+git -C $amb switch --detach 16fcebb0066537e890c6015c9d4a2b2eac952249
+
+pnpm --filter @typeagent/benchmarks memory-bench prepare-protocol `
+    --amb-root $amb --output $protocol
+```
+
+Reuse an existing pinned checkout as-is. No upstream provider-registry patch or
+Python dependency installation is needed. Subsequent runs only need the prepared
+protocol JSON, not the upstream checkout.
+
+## Run
+
+The in-process service uses normal TypeAgent configuration for extraction,
+embeddings, search, native answers and common answer/judge generation.
+`TYPEAGENT_BENCHMARK_MODEL` can select an existing configured model.
+For Azure CLI authentication, ensure `Get-Command az` succeeds in the launching
+shell and the existing Azure sign-in is usable. Never put keys in commands or
+result files.
+
+```powershell
+$progress = Join-Path $reposRoot 'codeDocs\TypeAgent\forAgent\projects\inProgress\2026-10-22_memory-benchmarks\progress.json'
+$cache = Join-Path $output 'datasets'
+
+pnpm --filter @typeagent/benchmarks memory-bench run `
+    --repo $repo --output $output --progress $progress --protocol $protocol `
+    --cache $cache --dataset beam --stage suite
+```
+
+The suite uses pinned Hugging Face Parquet shards, downloaded/decoded directly
+in Node. Cache metadata records the immutable dataset revision, shard hashes
+and JSON-export hash. A cache-provenance mismatch fails explicitly.
+
+Order: 100k, 500k, 1m, 10m. Within each split: smoke, qualification, full.
+Within each stage: BM25 RAG, content RAG, native content, event RAG. The suite
+stops on import, retrieval, authentication, network/service outages, persistence
+errors or invalid configuration. These are infrastructure failures, not
+question outcomes.
+
+Provider content filtering and malformed model JSON/schema responses are
+logged and saved as terminal per-question failures. The suite continues to
+later questions, providers and stages without changing prompts, switching
+models, bypassing filters or fabricating predictions. A failed judge retains
+the generated prediction and native citations for later analysis.
+
+Per-run and per-category reports distinguish:
+
+- `completed`: scored questions plus terminal question failures.
+- `scored`, `blocked`, `failed`: counts of scored answers, provider-blocked
+  responses and malformed responses, respectively.
+- `coverage`: scored questions divided by all selected questions.
+- `accuracy`: correct divided by scored questions, explicitly labeled
+  `accuracyDenominator: "scored-questions"`; `null` when nothing was scored.
+- `correctOverTotal`: correct divided by all selected questions, including
+  unanswered questions in the denominator. It is not a fabricated zero score.
+
+Do not compare scored-only accuracy without coverage or present it as complete
+benchmark accuracy. Categories with no scored answers also have null accuracy.
+A run with question failures finishes as `complete-with-errors`; this advances
+the suite but is not a claim that every question produced a valid score.
+
+For one stage:
+
+```powershell
+pnpm --filter @typeagent/benchmarks memory-bench run `
+    --repo $repo --output $output --progress $progress --protocol $protocol `
+    --cache $cache --dataset beam --split 100k --stage smoke `
+    --provider content --mode rag
+```
+
+`--input <json-file>` accepts a local dataset export for a single stage and
+labels its provenance `local-json-sha256`. It is rejected for suites so one
+local split cannot accidentally stand in for other length tiers.
+`--unit <id>` selects the complete smoke/qualification conversation. Smoke asks
+one question per category, qualification asks all that conversation's questions,
+and full asks all split questions. Documents are never truncated.
+
+## Resume and outputs
+
+Rerun the same command to reuse ready imports and saved predictions under the
+same fingerprint. A judge outage does not force answer regeneration; native
+citations are saved with the pending prediction. Changed data, product code,
+compiled adapter, protocol or model configuration requires a fresh output root.
+Python outputs are historical evidence, not compatible TypeScript checkpoints.
+The v2 question-outcome policy requires a fresh output root; v1 fail-fast
+checkpoints are not migrated or silently combined with it. Within the same v2
+fingerprint, scored questions and terminal failures are not retried on resume.
+Infrastructure failures still preserve pending predictions for judge-only
+resume without regenerating answers.
+
+The harness supports only BEAM's 100k, 500k, 1m and 10m splits. After the
+BEAM-only scope cleanup, rebuild and prepare a fresh protocol artifact. Adapter
+and protocol fingerprints change, so use a fresh output root rather than
+resuming or combining previously fingerprinted results.
+
+- `progress.json`: active stage, exact question counts, scores, licensing and
+  explicit failures; previous run entries remain available.
+- `<run>/results.json`: predictions/citations, `questionFailures` with phase,
+  kind, error and timestamp, per-category metrics, provenance,
+  retrieval aliases, timings, process resource usage and run-directory size.
+- `<run>/provider-state.json`: isolated corpora, source hashes, readiness and
+  ingestion timings.
+- `<run>/memory`: run-owned durable memory. Personal profile corpora are unused.
+- `<run>/run.lock`: prevents concurrent writers to the same run. It is removed
+  on normal completion/failure. After a hard process termination, inspect its
+  recorded PID and remove only that specific stale lock before resuming.
+
+SIGINT/SIGTERM request graceful interruption at the next operation boundary;
+the current service request is allowed to finish before cleanup.
+
+## Protocol and limits
+
+Answer/judge prompts match the pinned AMB protocol. BEAM reports mean
+0/0.5/1 rubric compliance and `correct = score >= 0.5`, including event ordering.
+The additional ordering diagnostic uses AMB semantic alignment followed by F1
+and normalized Kendall tau-b; it is not full original BEAM evaluator parity.
+Configured non-Gemini models remain explicitly diagnostic, not comparable
+Gemini-leaderboard submissions.
+
+BM25 preserves rank-bm25's formula, stable ties and 512-token `cl100k_base`
+chunks, including independent UTF-8 decoding at chunk boundaries. Retrieval
+aliases are retained for diagnostics; the upstream Python BM25 provider dropped
+those aliases. This corrects recall reporting, not answer ranking.
+
+Content batches are bounded below 6 MiB before overhead; events are appended
+in bounded groups with stable turn identities. Content/event RAG evidence is
+bounded to 24,000 characters. Native content answers retain the product's
+12-fragment / 24,000-character evidence budgets and cannot silently become
+extractive answers. Native event answering is unsupported.
+
+Content imports remain `sourceType: "text"`; they do not bypass literal-text
+handling by masquerading as Markdown. The product now uses shared lossless
+DocPart splitting/packing for text, Markdown/HTML and VTT. Durable extraction
+uses a 24,000-token `o200k_base` budget; message embeddings use separate
+7,500-token windows under both extraction and embedding tokenizers. Shared
+indexing and hosted embedding requests also enforce the final 8,000-token
+`cl100k_base` ceiling. This product change requires a fresh fingerprint/output
+root; do not resume or combine the old oversized-input run with new results.
+
+Normalization preserves speaker/role, original IDs, source timestamps, session
+boundaries, including sparse BEAM session anchors. QA/rubrics/gold
+answers are never indexed. BEAM retrieval recall is conversation-level, not
+validated turn coverage. Whole-dataset hydration remains nonstreaming.
+Confidence intervals and whole-process-tree sampling remain follow-up work.

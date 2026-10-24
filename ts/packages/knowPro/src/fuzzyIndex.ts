@@ -15,6 +15,7 @@ import {
     EmbeddingRole,
     embeddingModelForRole,
     validateEmbeddingVector,
+    embeddingInputLimitError,
 } from "@typeagent/aiclient";
 import levenshtein from "fast-levenshtein";
 import { Scored } from "./common.js";
@@ -205,6 +206,10 @@ export async function generateTextEmbeddingsForIndex(
     texts: string | string[],
 ): Promise<Result<NormalizedEmbedding[]>> {
     const textsToEmbed = Array.isArray(texts) ? texts : [texts];
+    const inputError = embeddingInputLimitError(textsToEmbed);
+    if (inputError !== undefined) {
+        return error(inputError);
+    }
     return timeSearchStage(
         "ingestion.embedding.call",
         async () => {
