@@ -47,6 +47,28 @@ export const webapi: ClientAPI = {
         // local whisper not supported on mobile
         return false;
     },
+    getSpeechProvider: async () => "azure",
+    startLocalAsr: async () => {
+        throw new Error(
+            "Nemotron speech is currently available only in Electron Shell.",
+        );
+    },
+    appendLocalAsr: async () => {
+        throw new Error(
+            "Nemotron speech is currently available only in Electron Shell.",
+        );
+    },
+    endLocalAsr: async () => {
+        throw new Error(
+            "Nemotron speech is currently available only in Electron Shell.",
+        );
+    },
+    onLocalAsrEvent: () => () => {},
+    onSpeechProviderChanged: () => () => {},
+    reportSpeechError: async (message) => {
+        console.error("Speech recognition:", message);
+        window.alert(message);
+    },
     openImageFile: () => {
         // not supported on mobile
     },

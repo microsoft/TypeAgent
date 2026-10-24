@@ -23,6 +23,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js";
+import { getSpeechProviderCommandHandlers } from "./speechProvider.js";
 import { ShellWindow } from "./shellWindow.js";
 import {
     getObjectProperty,
@@ -389,6 +390,7 @@ const handlers: CommandHandlerTable = {
         },
         topmost: new ShellSetTopMostCommandHandler(),
         localWhisper: getLocalWhisperCommandHandlers(),
+        speechProvider: getSpeechProviderCommandHandlers(),
         theme: getThemeCommandHandlers(),
         voice: getVoiceCommandHandlers(),
         update: updateHandlerTable,

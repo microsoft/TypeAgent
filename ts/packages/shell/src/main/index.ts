@@ -19,6 +19,7 @@ import {
 } from "./shellSettings.js";
 import { readFileSync } from "node:fs";
 import { closeLocalWhisper } from "./localWhisperCommandHandler.js";
+import { localAsrHost } from "./localAsrHost.js";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     initializeInstance,
@@ -465,6 +466,7 @@ function initializeQuit() {
         globalShortcut.unregisterAll();
 
         closeLocalWhisper();
+        await localAsrHost.dispose();
 
         debugShellCleanup("Closing instance");
 
