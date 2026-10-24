@@ -15,6 +15,7 @@ import {
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
     tsRoot,
     QualificationError,
@@ -1225,6 +1226,31 @@ test("global runner deadline persists a failed receipt for an unresponsive contr
         JSON.parse(await readFile(path.join(f.root, "run", "receipt.json")))
             .failure,
         receipt.failure,
+    );
+});
+
+test("CLI default output is exactly one newline-terminated JSON result on stdout", () => {
+    const moduleUrl = new URL("./evaluate.mjs", import.meta.url).href;
+    const child = spawnSync(
+        process.execPath,
+        [
+            "--input-type=module",
+            "-e",
+            `import { runCli } from ${JSON.stringify(moduleUrl)};
+const { exitCode } = await runCli(
+    ["--fixture-root", ".", "--run-directory", "unused"],
+    { evaluateRun: async () => ({ state: "complete", cases: [], elapsedMs: 12 }) },
+);
+process.exitCode = exitCode;`,
+        ],
+        { encoding: "utf8" },
+    );
+    assert.equal(child.error, undefined);
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stderr, "");
+    assert.equal(
+        child.stdout,
+        '{"state":"complete","cases":0,"elapsedMs":12}\n',
     );
 });
 

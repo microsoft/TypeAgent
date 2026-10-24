@@ -18,24 +18,14 @@ type RejectedDateAnchor = NonNullable<
     MessageTemporalContext["rejectedDateAnchors"]
 >[number];
 
-function quoteRejection(
-    text: string,
-    quote: string,
-    date: string,
-): RejectedDateAnchor["reason"] | undefined {
-    const start = text.indexOf(quote);
-    if (!quote || start < 0) return "quote-not-found";
-    if (text.indexOf(quote, start + 1) >= 0) return "ambiguous-quote";
-    if (!quote.includes(date)) return "date-not-in-quote";
-    return undefined;
-}
-
 function uniqueEvidence(evidence: DateEvidence[]): DateEvidence[] {
     const entries = new Map<string, DateEvidence>();
     for (const entry of evidence) {
         const previous = entries.get(entry.id);
         if (previous && JSON.stringify(previous) !== JSON.stringify(entry))
-            throw new Error("Conflicting inherited temporal evidence");
+            throw new Error(
+                `Conflicting inherited temporal evidence: ${entry.id}`,
+            );
         entries.set(entry.id, entry);
     }
     return [...entries.values()];
@@ -56,7 +46,7 @@ function discoveredDates(
             chunkOrdinal: location.chunkOrdinal ?? 0,
             anchorOrdinal,
         };
-        const reason = quoteRejection(text, anchor.quote, anchor.date);
+        const reason = kpLib.dateAnchorQuoteRejection(text, anchor);
         if (reason) {
             rejected.push({ ...rejection, reason });
             continue;
@@ -70,10 +60,13 @@ function discoveredDates(
             continue;
         }
         const start = text.indexOf(anchor.quote);
+        const locator = `source-part:${context.sourceRevisionId}:${encodeURIComponent(context.ownerId)}:${context.partOrdinal ?? 0}:chunk:${location.chunkOrdinal ?? 0}:${start}:${start + anchor.quote.length}`;
         dates.push({
-            id: `${context.ownerId}:${context.partOrdinal ?? 0}:${location.chunkOrdinal ?? 0}:${start}:${start + anchor.quote.length}:${anchor.date}`,
+            id: `event-v2:${createHash("sha256")
+                .update(JSON.stringify([locator, "eventTime", value]))
+                .digest("hex")}`,
             role: "eventTime",
-            locator: `source-part:${context.sourceRevisionId}:${encodeURIComponent(context.ownerId)}:${context.partOrdinal ?? 0}:chunk:${location.chunkOrdinal ?? 0}:${start}:${start + anchor.quote.length}`,
+            locator,
             value,
             quote: anchor.quote,
             chunkOrdinal: location.chunkOrdinal ?? 0,

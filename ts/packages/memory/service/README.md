@@ -37,6 +37,30 @@ Project status rendering keeps capacity review pending distinct from a supported
 blocked condition. A `pendingOwnerReview` enum alone does not establish blockage;
 any actual blocker and its scope must remain in evidence-backed section prose.
 
+## Test suites
+
+Build from the TypeScript workspace root before running compiled tests:
+
+```powershell
+pnpm run build @typeagent/memory-service
+pnpm --filter @typeagent/memory-service run test:local
+pnpm --filter @typeagent/memory-service run test:regression
+```
+
+`test:local` runs the offline `.spec.ts` correctness suite used by PR CI.
+View-history ordering, exact records, authorship and selective parsing are checked
+with ten commits; privacy-purge, recovery and concurrent-read cases remain in
+that suite. The same assertions run against 100 and 1,000 commits in
+`test:regression`, which selects only `.regression.ts` files and runs serially.
+These scaling cases are excluded from normal Jest discovery and `test:local`;
+no tests are skipped.
+
+The [memory-regression workflow](../../../../../.github/workflows/memory-regression.yml)
+runs both suites every Monday at 08:23 UTC and on manual dispatch, on Ubuntu,
+Windows and macOS with Node 24.22.1. Each OS uploads Jest JSON results, including
+individual test durations. No model credentials or external fixture checkout
+are required. Model-backed `.test.ts` rehearsals remain separately opt-in.
+
 ## Automatic maintenance foundation
 
 When a Wiki candidate overlaps an existing page, the service checks the page's
@@ -321,9 +345,16 @@ provider calls never mutate the live index. Its serialized commit rechecks the
 captured generation and source revisions and merges current metadata. Stale,
 cancelled or forgotten candidates cannot replace the published generation.
 Forgetting also cancels and purges affected prepared candidates.
+Unpublished reindex cleanup uses the same corpus write reservation as source
+removal, preventing concurrent recursive deletion of a candidate generation.
 Each async read retains its snapshot until completion. Cold runtime
 loading is single-flight, and shutdown drains the complete preparation/read
 lifetime before releasing storage.
+
+Agent-session receipt stamps and file reads serialize with checkpoint publication
+for that session. Source eligibility is checked after releasing that queue, so
+source removal cannot deadlock behind a receipt read. Invalid or unsafe checkpoint
+files still fail explicitly; receipt polling does not relax file validation.
 
 Set `TYPEAGENT_MEMORY_SEARCH_TRACE=1` on the host process to enable correlated
 Memory Hub search diagnostics on stderr. Lines prefixed `[memory-search-timing]` contain

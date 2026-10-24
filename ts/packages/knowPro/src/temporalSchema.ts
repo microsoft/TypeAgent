@@ -64,6 +64,7 @@ export type MessageTemporalContext = {
         chunkOrdinal: number;
         anchorOrdinal: number;
         reason:
+            | "empty-quote"
             | "quote-not-found"
             | "ambiguous-quote"
             | "date-not-in-quote"

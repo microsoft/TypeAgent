@@ -30,6 +30,8 @@ import {
     archiveBenchmarkArtifacts,
     runBenchmarkQuestion,
     completedOutcome,
+    createBenchmarkMemoryService,
+    recordBenchmarkArm,
     main,
 } from "./longmemeval-live.mjs";
 
@@ -285,6 +287,50 @@ test("persistence writes the ledger then lightweight progress using atomic file 
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
+});
+
+test("the live benchmark uses the product durable-memory factory without feature overrides", async () => {
+    const service = {};
+    const loaded = [];
+    let receivedRoot;
+    const actual = await createBenchmarkMemoryService(async (file) => {
+        loaded.push(file);
+        return {
+            createDurableMemoryService(root, ...overrides) {
+                receivedRoot = root;
+                assert.deepEqual(overrides, []);
+                return service;
+            },
+        };
+    }, "isolated-benchmark-store");
+    assert.equal(actual, service);
+    assert.equal(receivedRoot, "isolated-benchmark-store");
+    assert.deepEqual(loaded, [
+        "packages\\agentServer\\server\\dist\\durableMemoryService.js",
+    ]);
+});
+
+test("effective product capabilities are recorded and configuration changes cannot resume silently", () => {
+    const state = {};
+    const capabilities = {
+        features: { sourceSynopses: true },
+        derivedViews: { informationalWiki: true, drafts: true },
+    };
+    recordBenchmarkArm(state, capabilities, false);
+    assert.equal(state.arm.sourceSynopses, true);
+    assert.equal(state.arm.informationalViews, true);
+    assert.equal(state.arm.viewDrafts, true);
+    recordBenchmarkArm(state, capabilities, true);
+    assert.throws(
+        () =>
+            recordBenchmarkArm(
+                state,
+                { features: { sourceSynopses: false } },
+                true,
+            ),
+        /Product memory configuration changed/,
+    );
+    assert.equal(state.arm.informationalViews, true);
 });
 
 test("diagnostic selection is exact, validated and retains the frozen construction order", () => {
@@ -648,6 +694,7 @@ test("product reader coverage uses actual answer diagnostics without an extra re
     f.service.answer = async (request) => ({
         ...(await originalAnswer(request)),
         readerContext: {
+            answerPath: "indexed-fragments",
             retrievedMessageOrdinals: [1],
             messageOrdinals: [],
             knowledgeMessageOrdinals: [1],
@@ -667,6 +714,7 @@ test("product reader coverage uses actual answer diagnostics without an extra re
         f.controls,
     );
     assert.equal(f.calls.search.length, 0);
+    assert.equal(f.record.answerPath, "indexed-fragments");
     assert.equal(f.record.evidenceSessionRecallAt20Matches, undefined);
     assert.equal(f.record.answerRetrievalEvidenceSessionRecall, 0.5);
     assert.equal(f.record.readerMessageEvidenceSessionRecall, 0);
@@ -951,14 +999,37 @@ test("partial scorecards report observed denominators but never a full-suite sco
         fullScheduleAccuracy: null,
     });
 
-    test("the live benchmark entrypoint imports safely and refuses inference without explicit authorization", async () => {
-        const { main } = await import("./longmemeval-live.mjs");
-        await assert.rejects(main([]));
-        await assert.rejects(main(["--authorized-live-benchmark"]));
-    });
     assert.equal(result.abstention.scored, 0);
     assert.equal(result.abstention.observedAccuracy, null);
     assert.equal(result.knownTotalTokens, 12);
     assert.equal(result.dollarCost, null);
     assert.equal(result.answerLatencyMs.p95, 100);
+});
+
+test("the live benchmark entrypoint refuses inference without explicit authorization", async () => {
+    const unused = path.join(os.tmpdir(), "longmemeval-unauthorized-input");
+    await assert.rejects(
+        main([
+            "--product",
+            unused,
+            "--dataset",
+            unused,
+            "--judge-source",
+            unused,
+            "--output",
+            unused,
+        ]),
+        {
+            code: "ERR_ASSERTION",
+            actual: undefined,
+            expected: true,
+            operator: "strictEqual",
+        },
+    );
+});
+
+test("the live benchmark entrypoint rejects authorized invocations with missing inputs", async () => {
+    await assert.rejects(main(["--authorized-live-benchmark"]), {
+        code: "ERR_ASSERTION",
+    });
 });

@@ -2,14 +2,16 @@
 // Licensed under the MIT License.
 
 import { error, success } from "typechat";
-import type { conversation as kpLib } from "@typeagent/knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import {
     matchesTemporalRange,
     normalizeTemporalContext,
     parseTemporalValue,
     resolveRelativeDate,
+    temporalContextFromHeaders,
     temporalMentions,
     temporalSegments,
+    TemporalValueError,
     validateTemporalValue,
 } from "../src/temporal.js";
 import type { MessageTemporalContext } from "../src/temporalSchema.js";
@@ -120,6 +122,64 @@ describe("canonical source temporal context", () => {
             "2024-03-11",
         );
         expect(resolveRelativeDate("today", undefined)).toBeUndefined();
+    });
+
+    test.each(["\n", "\r\n"])(
+        "session date headers preserve source spelling and scope offsets with %j line endings",
+        (newline) => {
+            const first = "Session date:\t \t2024-05-10  ";
+            const second = "Session date:2024-05-11";
+            const text = [
+                "Preamble",
+                first,
+                "First session",
+                second,
+                "Second session",
+            ].join(newline);
+            const firstStart = text.indexOf(first);
+            const secondStart = text.indexOf(second);
+            expect(temporalContextFromHeaders(text)).toEqual({
+                version: 1,
+                scopes: [
+                    {
+                        ownerId: `session-header:${firstStart}`,
+                        start: firstStart,
+                        end: secondStart,
+                        messageTime: parseTemporalValue("2024-05-10  "),
+                    },
+                    {
+                        ownerId: `session-header:${secondStart}`,
+                        start: secondStart,
+                        end: text.length,
+                        messageTime: parseTemporalValue("2024-05-11"),
+                    },
+                ],
+            });
+        },
+    );
+
+    test.each(["\n", "\r\n"])(
+        "empty session date headers do not borrow dates from the next line with %j line endings",
+        (newline) => {
+            expect(
+                temporalContextFromHeaders(`Session date:${newline}2024-05-10`),
+            ).toBeUndefined();
+        },
+    );
+
+    test("session date parsing handles long whitespace prefixes and rejects whitespace-only dates promptly", () => {
+        const padding = "\t".repeat(100_000);
+        const started = performance.now();
+        const context = temporalContextFromHeaders(
+            `Session date:${padding}2024-05-10\nSession text`,
+        );
+        expect(context?.scopes[0].messageTime).toEqual(
+            parseTemporalValue("2024-05-10"),
+        );
+        expect(() =>
+            temporalContextFromHeaders(`Session date:${padding}\nSession text`),
+        ).toThrow(TemporalValueError);
+        expect(performance.now() - started).toBeLessThan(2000);
     });
 
     test("nested source owners inherit dates without crossing quotation boundaries", () => {
@@ -377,6 +437,58 @@ describe("canonical source temporal context", () => {
             new Set(temporal.discoveredDateEvidence?.map((entry) => entry.id))
                 .size,
         ).toBe(2);
+        const evidence = structuredClone(temporal.discoveredDateEvidence);
+        await extractKnowledgeWithTemporalContext(
+            messages,
+            [{ messageOrdinal: 0 }],
+            extractor,
+        );
+        expect(temporal.discoveredDateEvidence).toEqual(evidence);
+        messages.get(0).metadata = {
+            temporalContext: JSON.parse(JSON.stringify(temporal)),
+        };
+        const restarted = messages.get(0).metadata!.temporalContext!;
+        restarted.sourceRevisionId = "replacement";
+        await extractKnowledgeWithTemporalContext(
+            messages,
+            [{ messageOrdinal: 0 }],
+            extractor,
+        );
+        expect(
+            restarted.discoveredDateEvidence?.map((entry) => entry.id),
+        ).not.toEqual(evidence?.map((entry) => entry.id));
+    });
+
+    test("the real extractor allows temporal rejection diagnostics without rejecting source knowledge", async () => {
+        const temporal = context("2024-05-10");
+        const extractor = kpLib.createKnowledgeExtractor({
+            complete: async () =>
+                success(
+                    JSON.stringify({
+                        ...empty,
+                        dateAnchors: [
+                            {
+                                quote: "Not in the source.",
+                                date: "2024-05-01",
+                                role: "eventTime",
+                            },
+                        ],
+                    }),
+                ),
+        });
+        const messages = new MessageCollection([
+            new TemporalMessage("Original source remains available.", temporal),
+        ]);
+        const results = await extractKnowledgeWithTemporalContext(
+            messages,
+            [{ messageOrdinal: 0 }],
+            extractor,
+        );
+        expect(results[0].success).toBe(true);
+        expect(temporal.discoveredDateEvidence).toEqual([]);
+        expect(temporal.rejectedDateAnchors).toEqual([
+            { chunkOrdinal: 0, anchorOrdinal: 0, reason: "quote-not-found" },
+        ]);
     });
 
     test("retrying an earlier chunk excludes future discovered, inherited and rejected annotations", async () => {

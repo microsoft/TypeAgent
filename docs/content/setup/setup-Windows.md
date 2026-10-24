@@ -9,11 +9,10 @@ This is a list of step-by-step instructions to set up a Windows environment from
 ## Build
 
 - Install Git ([instructions](https://git-scm.com/downloads/win))
-- Install NodeJS ([instructions](https://nodejs.org/en/download))
+- Install Node.js LTS ([instructions](https://nodejs.org/en/download))
   - NOTE: During installation, at the "Tools for Native Modules" step, make sure you select "Automatically install the necessary tools"
-- Enable corepack
-  - Open Command Prompt as Administrator
-  - `corepack enable`
+- Install pnpm
+  - `npm install --global pnpm`
 - Clone and build:
   - Open command prompt
   - `git clone https://github.com/microsoft/TypeAgent C:\src\TypeAgent` (Note: you can clone this to any location and does not have to be C:\src)

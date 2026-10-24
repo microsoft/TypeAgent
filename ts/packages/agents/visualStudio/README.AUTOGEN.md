@@ -40,7 +40,7 @@ To set up the `visualstudio-agent`, follow these steps:
 1. **Install Required Software**:
 
    - Install Visual Studio 2022 (or later) with the **Visual Studio extension development** workload.
-   - Install Node.js (version 22 or later) and pnpm (version 10 or later).
+   - Install the latest Node.js LTS release (recommended; see [supported versions](../../../README.md#setup)) and pnpm (version 10 or later).
 
 2. **Configure Environment Variables**:
 

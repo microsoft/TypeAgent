@@ -14,10 +14,24 @@ The main entry point to explore TypeAgent is the [TypeAgent Shell](./packages/sh
 
 To build:
 
-- Install [Node 22+](https://nodejs.org/en/download)
+- Install the latest [Node.js LTS](https://nodejs.org/en/download) release (the default).
+  Supported release lines are **22.23.4+**, **24.22.1+**, and **26.12.1+**,
+  with later patches/minors within each major accepted. Node 20 and
+  odd-numbered release lines are not supported.
   - NOTE: HPC Tools conflict with node so be sure that the node.exe you are running is the correct one!
 - Install pnpm (`npm i -g pnpm && pnpm setup`)
+  - Install pnpm explicitly; Node 26 and later do not bundle Corepack.
 - **(Linux/WSL Only)** Read TypeAgent Shell's [README.md](./packages/shell/README.md) for additional requirements
+
+These minimums include the fixes in the
+[October 21, 2026 Node.js security release](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases).
+CI builds and tests all three supported release lines. Node type definitions
+stay on the latest 22.x release so compiled code remains compatible with the
+oldest supported runtime.
+Developer setup follows the latest LTS release; CI and production container
+versions remain pinned for reproducible builds.
+Native SQLite uses `better-sqlite3` 12.11.1 and `node-abi` 3.99.0 so the
+prebuilt installer recognizes Node 26 and downloads the matching binding.
 
 ### Steps
 
@@ -28,7 +42,7 @@ In this directory:
 
 ### Docker image
 
-The production [Dockerfile](./Dockerfile) uses Node 24 on Debian Bookworm,
+The production [Dockerfile](./Dockerfile) uses Node 24.22.1 on Debian Bookworm,
 Corepack 0.36.0, and Azure CLI 2.91.0. The pnpm version comes from
 `packageManager` in [package.json](./package.json). Chrome is installed from
 Google's stable channel. The image currently targets `linux/amd64`.
@@ -263,6 +277,66 @@ All commands run from the `ts/` directory using `pnpm`.
 pnpm run test:local   # Unit tests (*.spec.ts) — no API keys required
 pnpm run test:live    # Integration tests (*.test.ts) — requires API keys in ts/config.local.yaml
 pnpm run test         # Both local + live + shell tests
+```
+
+CI uses `node tools/scripts/runTestLocalWithSummary.mjs`. It runs
+`test:local:packages`, retries failing files or packages serially up to twice, then runs
+`test:local:scripts` independently. A failed workspace phase cannot skip the
+script phase or be hidden by a successful script phase; both phases must pass.
+Infrastructure failures (such as a process signal or spawn error) stop the run.
+Root script failures are not retried.
+
+For recognized single-invocation Jest package scripts, retries run the accumulated
+failed files through that package's `jest-esm` wrapper. Packages with chained
+phases, setup hooks, or unrecognized runners explicitly fall back to their
+complete `test:local` command. This preserves setup and does not assume every
+package is a standalone Jest suite.
+
+Shared and standalone Jest configurations use one worker when `CI=true`, and
+disable their Jest cache when `TYPEAGENT_JEST_NO_CACHE=true` during package
+retries. These settings do not change local worker defaults.
+
+#### macOS blocking and nightly coverage
+
+The [build-ts workflow](../.github/workflows/build-ts.yml) keeps full local
+correctness coverage on Ubuntu and Windows across all supported Node versions.
+For pull requests, merge queues, and pushes, macOS runs the explicit
+`macos-compat` selection in
+[runLocalTestPackages.mjs](./tools/scripts/runLocalTestPackages.mjs), plus **all
+root script tests**, across the same Node versions:
+
+| Area                                                              | Selected package suites                                                                                   |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Config/file URLs                                                  | `fileLink`                                                                                                |
+| Native SQLite                                                     | `sqliteCollection`, `sqliteDataFrame`                                                                     |
+| Memory locking, publication, persistence, privacy and Git history | `corpusAccess`, `filesystemPublication`, `markdownPersistence`, `revisionTextStore`, `viewHistoryRecords` |
+| Dispatcher locking and session lifecycle                          | `instanceLock`, `sessionContext`, `codingSessionLifecycle`                                                |
+| Cache round trips                                                 | `constructionCacheRoundTrip1`, `constructionCacheRoundTripMerge1`                                         |
+
+Root script tests retain generated-file healing, aliased-directory containment
+and subprocess/installer coverage. The smaller package selection is deliberate;
+it is not full macOS correctness coverage. Keep it a positive list with contract
+tests, and update it when new platform-sensitive behavior is introduced.
+
+Every day at **08:17 UTC**, the same workflow runs the **full** local correctness
+suite on macOS for all supported Node versions. Scheduled runs use the default
+branch. Manual dispatch runs full coverage on all three operating systems.
+These runs exclude the separately scheduled memory scaling regressions.
+Test logs are uploaded for 14 days and phase/failure summaries appear in GitHub.
+Scheduled failures do not block an already merged PR: TypeAgent maintainers
+should triage them before subsequent merges and add a blocking regression to
+the compatibility selection when a missing platform-sensitive case is found.
+
+The default developer profile remains `full`. To validate the compatibility
+selection locally after building, run from `ts` in PowerShell:
+
+```powershell
+$env:TYPEAGENT_TEST_PROFILE = 'macos-compat'
+try {
+    pnpm run test:local
+} finally {
+    Remove-Item Env:TYPEAGENT_TEST_PROFILE
+}
 ```
 
 To run tests for a single package:

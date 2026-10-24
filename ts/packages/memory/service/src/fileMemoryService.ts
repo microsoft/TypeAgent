@@ -316,7 +316,7 @@ const manifestFileName = "manifest.json";
 const eventsFileName = "events.jsonl";
 const jobsDirectoryName = "jobs";
 const indexDirectoryName = "index";
-const pipelineVersion = "1";
+const pipelineVersion = "2";
 const eventSourceKinds = new Set([
     "conversation",
     "document",
@@ -7419,11 +7419,13 @@ export class FileMemoryService
             finishPreparation = resolve;
         });
         let published = false;
+        let runtimeForCleanup: CorpusRuntime | undefined;
         try {
             const capture = await this.enqueueWrite(corpusId, async () => {
                 if (this.closed) throw new Error("Memory service is closed");
                 this.throwIfAborted(bounded);
                 const runtime = await this.getCorpusRuntime(corpusId);
+                runtimeForCleanup = runtime;
                 if (
                     sourceId !== undefined &&
                     !runtime.manifest.sources.some(
@@ -7532,11 +7534,17 @@ export class FileMemoryService
             );
         } finally {
             finishPreparation();
-            if (!published)
-                await rm(directory, { recursive: true, force: true });
             this.preparingIndexes.delete(directory);
             this.detachedRebuilds.delete(directory);
             this.controllers.delete(generation);
+            if (!published) {
+                const remove = () =>
+                    rm(directory, { recursive: true, force: true });
+                // Source removal also collects generations under this reservation.
+                if (runtimeForCleanup)
+                    await runtimeForCleanup.access.write(remove);
+                else await remove();
+            }
         }
     }
 
@@ -7690,18 +7698,22 @@ export class FileMemoryService
                     });
                 }),
         );
-        if (
-            ![
-                ...this.preparingIndexes.keys(),
-                ...this.detachedRebuilds.keys(),
-            ].some(
-                (directory) =>
-                    path.dirname(directory) === root &&
-                    directory !==
-                        this.indexDirectory(corpusId, activeGeneration),
-            )
-        )
+        if (!this.hasUnpublishedIndex(corpusId, root))
             await this.reclaimIndexSegments(corpusId, root, forceCollection);
+    }
+
+    private hasUnpublishedIndex(corpusId: string, root: string): boolean {
+        const generation = this.corpora.get(corpusId)?.manifest.indexGeneration;
+        const active = generation
+            ? this.indexDirectory(corpusId, generation)
+            : undefined;
+        return [
+            ...this.preparingIndexes.keys(),
+            ...this.detachedRebuilds.keys(),
+        ].some(
+            (directory) =>
+                path.dirname(directory) === root && directory !== active,
+        );
     }
 
     private async reclaimIndexSegments(
@@ -7728,16 +7740,25 @@ export class FileMemoryService
     private scheduleIndexCollection(corpusId: string, root: string): void {
         if (this.segmentCollectionWork.has(root)) return;
         const key = `${corpusId}:segment-collection`;
+        let retry = false;
         const work = new Promise<void>((resolve) => setTimeout(resolve, 250))
             .then(() =>
                 this.enqueueWrite(
                     corpusId,
-                    () => this.collectIndexSegments(root),
+                    async () => {
+                        // Preparation can start after this collection was scheduled.
+                        if (this.hasUnpublishedIndex(corpusId, root)) {
+                            retry = true;
+                            return;
+                        }
+                        await this.collectIndexSegments(root);
+                        this.wikiMaintenanceFailures.delete(key);
+                    },
                     true,
                 ),
             )
             .then(
-                () => this.wikiMaintenanceFailures.delete(key),
+                () => {},
                 (error: unknown) => {
                     this.wikiMaintenanceFailures.set(
                         key,
@@ -7745,7 +7766,11 @@ export class FileMemoryService
                     );
                 },
             )
-            .finally(() => this.segmentCollectionWork.delete(root));
+            .finally(() => {
+                this.segmentCollectionWork.delete(root);
+                if (retry && !this.closed)
+                    this.scheduleIndexCollection(corpusId, root);
+            });
         this.segmentCollectionWork.set(
             root,
             work.then(() => {}),

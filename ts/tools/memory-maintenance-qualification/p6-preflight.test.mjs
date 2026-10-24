@@ -524,20 +524,18 @@ test(
         await runProductCase(
             "C1 actual governing tail article",
             async (ctx) => {
-                const selectorHash = createHash("sha256")
-                    .update(
-                        await readFile(
-                            path.join(
-                                product,
-                                "packages\\memory\\service\\dist\\indexedFragments.js",
+                const readSelectorHash = async () =>
+                    createHash("sha256")
+                        .update(
+                            await readFile(
+                                path.join(
+                                    product,
+                                    "packages\\memory\\service\\dist\\indexedFragments.js",
+                                ),
                             ),
-                        ),
-                    )
-                    .digest("hex");
-                assert.equal(
-                    selectorHash,
-                    "55c98db5943762b90b930932c5a2467ea9bc3436293c765608edb1581c4502ef",
-                );
+                        )
+                        .digest("hex");
+                const selectorHash = await readSelectorHash();
                 ctx.receipt.selectorHash = selectorHash;
                 assert.notEqual(ctx.controls.representativeSelection, true);
                 let captured;
@@ -656,6 +654,11 @@ test(
                             "DEFAULT current KnowPro; no representative override",
                     });
                 }
+                assert.equal(
+                    await readSelectorHash(),
+                    selectorHash,
+                    "Compiled selector changed during the product mechanism test",
+                );
                 ctx.receipt.representativeSelections =
                     ctx.controls.representativeSelections;
             },

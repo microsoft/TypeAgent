@@ -244,143 +244,16 @@ export async function loadRescoreInputs(options, pinned) {
     );
     const cases = [];
     for (const entry of selected) {
-        const results = await sourceFile(
-            root,
-            path.join(entry.caseId, "results.json"),
+        cases.push(
+            await loadRescoreCase(
+                root,
+                entry,
+                manifest,
+                options,
+                pinned,
+                inputs,
+            ),
         );
-        const gold = await sourceFile(
-            root,
-            path.join(entry.caseId, "gold.evaluator-only.json"),
-        );
-        const fixture = manifest.value.find(
-            (item) => item.caseId === entry.caseId,
-        );
-        ensure(
-            fixture &&
-                fixture.provenance?.public === true &&
-                typeof fixture.provenance.license === "string" &&
-                fixture.provenance.license.trim(),
-            "rescore-public-licensed-fixture-required",
-        );
-        ensure(
-            results.value.caseId === entry.caseId &&
-                Array.isArray(results.value.questions) &&
-                Array.isArray(gold.value.questions),
-            "rescore-invalid-case-snapshot",
-        );
-        const goldHashes = [
-            fixture.goldSha256,
-            entry.goldSha256,
-            results.value.goldSha256,
-        ].filter((hash) => hash !== undefined);
-        for (const expected of goldHashes)
-            ensure(
-                typeof expected === "string" &&
-                    /^[a-f0-9]{64}$/i.test(expected) &&
-                    expected.toLowerCase() === gold.sha256,
-                "rescore-gold-sha256-mismatch",
-            );
-        inputs.push(
-            ...[results, gold].map(({ relativePath, sha256: hash }) => ({
-                relativePath,
-                sha256: hash,
-            })),
-        );
-        const questions = [];
-        const ids = new Set();
-        const skipped = [];
-        for (const q of gold.value.questions.slice(0, options.maxQuestions)) {
-            ensure(
-                typeof q.questionId === "string" && !ids.has(q.questionId),
-                "rescore-duplicate-or-invalid-question-id",
-            );
-            ids.add(q.questionId);
-            const answered = results.value.questions.filter(
-                (item) => item.questionId === q.questionId,
-            );
-            ensure(answered.length <= 1, "rescore-duplicate-source-question");
-            if (!answered.length) {
-                skipped.push({
-                    questionId: q.questionId,
-                    reason: "no-retained-source-answers",
-                });
-                continue;
-            }
-            ensure(
-                answered[0].question === q.question &&
-                    Array.isArray(answered[0].arms),
-                "rescore-source-question-mismatch",
-            );
-            const arms = [];
-            for (const name of options.arms.length
-                ? [...new Set(options.arms)]
-                : allArms) {
-                const matches = answered[0].arms.filter(
-                    (arm) => arm.arm === name,
-                );
-                ensure(matches.length <= 1, "rescore-duplicate-source-arm");
-                const arm = matches[0];
-                if (!arm || arm.state !== "complete") {
-                    skipped.push({
-                        questionId: q.questionId,
-                        arm: name,
-                        reason: arm?.state ?? "missing-arm",
-                    });
-                    continue;
-                }
-                ensure(
-                    typeof arm.answer?.answer === "string",
-                    "rescore-source-answer-missing",
-                );
-                const sourceReceiptQuestion = entry.questions?.find(
-                    (item) => item.questionId === q.questionId,
-                );
-                const receiptArm = sourceReceiptQuestion?.arms?.find(
-                    (item) => item.arm === name,
-                );
-                if (receiptArm)
-                    ensure(
-                        receiptArm.answer?.answer === arm.answer.answer,
-                        "rescore-source-receipt-answer-mismatch",
-                    );
-                arms.push({
-                    arm: name,
-                    state: "pending",
-                    questionId: q.questionId,
-                    prediction: {
-                        question_id: q.questionId,
-                        hypothesis: arm.answer.answer,
-                    },
-                    predictionSha256: sha256(
-                        JSON.stringify({
-                            question_id: q.questionId,
-                            hypothesis: arm.answer.answer,
-                        }),
-                    ),
-                    goldAnswer: q.answer,
-                    goldSha256: gold.sha256,
-                    originalJudgment: arm.judgment,
-                    originalScores: arm.scores,
-                    originalEvidenceEventIds: arm.answer.evidenceEventIds,
-                    ...rubricPrompt(pinned.rubric, q, arm.answer.answer),
-                });
-            }
-            questions.push({ questionId: q.questionId, arms });
-        }
-        cases.push({
-            caseId: entry.caseId,
-            sourceCaseState: results.value.state,
-            goldSha256: gold.sha256,
-            goldHashVerification: goldHashes.length
-                ? "verified-against-retained-hashes"
-                : "computed-now; no-earlier-gold-hash-retained",
-            originalArtifactSupport:
-                results.value.artifactSupport ?? entry.artifactSupport,
-            supportAssessment:
-                "preserved, not rescored; answer correctness does not establish evidence support",
-            questions,
-            skipped,
-        });
     }
     return {
         cases,
@@ -388,6 +261,162 @@ export async function loadRescoreInputs(options, pinned) {
         sourceReceiptSha256: receipt.sha256,
         sourceRunState: receipt.value.state,
     };
+}
+
+async function loadRescoreCase(root, entry, manifest, options, pinned, inputs) {
+    const results = await sourceFile(
+        root,
+        path.join(entry.caseId, "results.json"),
+    );
+    const gold = await sourceFile(
+        root,
+        path.join(entry.caseId, "gold.evaluator-only.json"),
+    );
+    const fixture = manifest.value.find((item) => item.caseId === entry.caseId);
+    ensure(
+        fixture &&
+            fixture.provenance?.public === true &&
+            typeof fixture.provenance.license === "string" &&
+            fixture.provenance.license.trim(),
+        "rescore-public-licensed-fixture-required",
+    );
+    ensure(
+        results.value.caseId === entry.caseId &&
+            Array.isArray(results.value.questions) &&
+            Array.isArray(gold.value.questions),
+        "rescore-invalid-case-snapshot",
+    );
+    const goldHashes = [
+        fixture.goldSha256,
+        entry.goldSha256,
+        results.value.goldSha256,
+    ].filter((hash) => hash !== undefined);
+    for (const expected of goldHashes)
+        ensure(
+            typeof expected === "string" &&
+                /^[a-f0-9]{64}$/i.test(expected) &&
+                expected.toLowerCase() === gold.sha256,
+            "rescore-gold-sha256-mismatch",
+        );
+    inputs.push(
+        ...[results, gold].map(({ relativePath, sha256: hash }) => ({
+            relativePath,
+            sha256: hash,
+        })),
+    );
+    const { questions, skipped } = rescoreQuestions(results, gold, {
+        entry,
+        options,
+        pinned,
+    });
+    return {
+        caseId: entry.caseId,
+        sourceCaseState: results.value.state,
+        goldSha256: gold.sha256,
+        goldHashVerification: goldHashes.length
+            ? "verified-against-retained-hashes"
+            : "computed-now; no-earlier-gold-hash-retained",
+        originalArtifactSupport:
+            results.value.artifactSupport ?? entry.artifactSupport,
+        supportAssessment:
+            "preserved, not rescored; answer correctness does not establish evidence support",
+        questions,
+        skipped,
+    };
+}
+
+function rescoreQuestions(results, gold, { entry, options, pinned }) {
+    const questions = [];
+    const ids = new Set();
+    const skipped = [];
+    for (const q of gold.value.questions.slice(0, options.maxQuestions)) {
+        ensure(
+            typeof q.questionId === "string" && !ids.has(q.questionId),
+            "rescore-duplicate-or-invalid-question-id",
+        );
+        ids.add(q.questionId);
+        const answered = results.value.questions.filter(
+            (item) => item.questionId === q.questionId,
+        );
+        ensure(answered.length <= 1, "rescore-duplicate-source-question");
+        if (!answered.length) {
+            skipped.push({
+                questionId: q.questionId,
+                reason: "no-retained-source-answers",
+            });
+            continue;
+        }
+        ensure(
+            answered[0].question === q.question &&
+                Array.isArray(answered[0].arms),
+            "rescore-source-question-mismatch",
+        );
+        const arms = rescoreArms(q, answered[0], {
+            entry,
+            options,
+            pinned,
+            gold,
+            skipped,
+        });
+        questions.push({ questionId: q.questionId, arms });
+    }
+    return { questions, skipped };
+}
+
+function rescoreArms(q, answered, { entry, options, pinned, gold, skipped }) {
+    const arms = [];
+    for (const name of options.arms.length
+        ? [...new Set(options.arms)]
+        : allArms) {
+        const matches = answered.arms.filter((arm) => arm.arm === name);
+        ensure(matches.length <= 1, "rescore-duplicate-source-arm");
+        const arm = matches[0];
+        if (!arm || arm.state !== "complete") {
+            skipped.push({
+                questionId: q.questionId,
+                arm: name,
+                reason: arm?.state ?? "missing-arm",
+            });
+            continue;
+        }
+        ensure(
+            typeof arm.answer?.answer === "string",
+            "rescore-source-answer-missing",
+        );
+        const sourceReceiptQuestion = entry.questions?.find(
+            (item) => item.questionId === q.questionId,
+        );
+        const receiptArm = sourceReceiptQuestion?.arms?.find(
+            (item) => item.arm === name,
+        );
+        if (receiptArm)
+            ensure(
+                receiptArm.answer?.answer === arm.answer.answer,
+                "rescore-source-receipt-answer-mismatch",
+            );
+        arms.push({
+            arm: name,
+            state: "pending",
+            questionId: q.questionId,
+            prediction: {
+                question_id: q.questionId,
+                hypothesis: arm.answer.answer,
+            },
+            predictionSha256: sha256(
+                JSON.stringify({
+                    question_id: q.questionId,
+                    hypothesis: arm.answer.answer,
+                }),
+            ),
+            goldAnswer: q.answer,
+            goldSha256: gold.sha256,
+            originalJudgment: arm.judgment,
+            originalScores: arm.scores,
+            originalEvidenceEventIds: arm.answer.evidenceEventIds,
+            ...rubricPrompt(pinned.rubric, q, arm.answer.answer),
+        });
+    }
+    return arms;
 }
 
 export function rescoreMetrics(cases) {
@@ -670,13 +699,13 @@ if (
 ) {
     try {
         const result = await rescore(parseRescoreArgs(process.argv.slice(2)));
-        console.log(
+        process.stdout.write(
             JSON.stringify({
                 state: result.state,
                 failure: result.failure,
                 modelCalls: result.modelCalls,
                 metrics: result.metrics,
-            }),
+            }) + "\n",
         );
         process.exitCode = result.state === "failed" ? 1 : 0;
     } catch (error) {

@@ -84,7 +84,7 @@ variables:
   - name: buildDirectory
     value: $(Build.SourcesDirectory)/ts
   - name: nodeVersion
-    value: "22"
+    value: "24.22.1"
   # Unified version — every artifact from this run shares the same version.
   - name: packageVersion
     value: 0.0.1-$(Build.BuildId)
