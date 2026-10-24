@@ -108,6 +108,22 @@ export function symbolicIdentity(identity?: IndexedSubjectIdentity): boolean {
 
 type WikiDescriptor = WikiFamilyState["descriptors"][number];
 
+export function rankWikiCandidates(
+    descriptors: readonly WikiDescriptor[],
+    views: readonly ViewVersion[],
+    enabled: boolean,
+): readonly WikiDescriptor[] {
+    if (!enabled) return descriptors;
+    const existing = new Set(views.map((view) => view.viewId));
+    return [...descriptors].sort(
+        (left, right) =>
+            Number(existing.has(right.viewId)) -
+                Number(existing.has(left.viewId)) ||
+            right.sourceIds.length - left.sourceIds.length ||
+            left.query.localeCompare(right.query),
+    );
+}
+
 function viewRetrieval(view: ViewVersion, kind: "wiki" | "projects") {
     return kind === "wiki"
         ? view.definition.wiki

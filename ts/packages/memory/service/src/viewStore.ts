@@ -101,11 +101,21 @@ export interface WikiFamilyState {
     cursor: number;
     indexVersion?: string;
     error?: string;
+    automaticPasses?: {
+        generation: string | undefined;
+        policy: string;
+        count: number;
+    };
     descriptors: Array<{
         viewId: string;
         query: string;
         sourceIds: string[];
         identity?: import("./types.js").IndexedSubjectIdentity;
+        admission?: {
+            generation: string | undefined;
+            policy: string;
+            reason: string;
+        };
     }>;
 }
 

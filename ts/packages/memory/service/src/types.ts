@@ -621,6 +621,12 @@ export interface ProcedureVersion {
 export interface MemoryService {
     initialize?(): Promise<void>;
     close?(): Promise<void>;
+    deferMaintenance?(): () => void;
+    getMaintenanceStatus?(): import("./maintenanceScheduler.js").MaintenanceStatus;
+    drainMaintenance?(
+        timeoutMs?: number,
+        signal?: AbortSignal,
+    ): Promise<import("./maintenanceScheduler.js").MaintenanceStatus>;
     importAgentSession?(
         request: AgentSessionImportRequest,
     ): Promise<AgentSessionImportReceipt>;
@@ -759,6 +765,11 @@ export interface AnswerContextDiagnostics {
     answerPath?: "indexed-fragments" | "knowpro";
     indexedAnswer?: {
         selection?: IndexedSelectionDiagnostics;
+        refinement?: {
+            queries: string[];
+            initialContext?: AnswerContextDiagnostics;
+            selections: IndexedSelectionDiagnostics[];
+        };
         temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
         fragments: MemoryEvidence[];
         response: {

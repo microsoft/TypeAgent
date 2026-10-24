@@ -3,6 +3,7 @@
 
 import { PromptSection, Result, success } from "typechat";
 import { timeSearchStage } from "./searchTiming.js";
+import { withQueryEmbeddingCache } from "./queryEmbeddingCache.js";
 import {
     IConversation,
     KnowledgeType,
@@ -107,6 +108,15 @@ export type LanguageSearchFilter = {
  * @returns {ConversationSearchResult} Conversation search results.
  */
 export async function searchConversationWithLanguage(
+    ...args: Parameters<typeof searchConversationWithLanguageCore>
+): Promise<Result<ConversationSearchResult[]>> {
+    return withQueryEmbeddingCache(
+        () => searchConversationWithLanguageCore(...args),
+        args[3]?.reuseQueryEmbeddings !== false,
+    );
+}
+
+async function searchConversationWithLanguageCore(
     conversation: IConversation,
     searchText: string,
     queryTranslator: SearchQueryTranslator,
@@ -312,6 +322,7 @@ export function createLanguageQueryCompileOptions(): LanguageQueryCompileOptions
 }
 
 export interface LanguageSearchOptions extends SearchOptions {
+    reuseQueryEmbeddings?: boolean;
     compileOptions: LanguageQueryCompileOptions;
     fallbackRagOptions?: LanguageSearchRagOptions | undefined;
     modelInstructions?: PromptSection[] | undefined;
@@ -1162,15 +1173,19 @@ export async function searchConversationWithLanguage2(
     langSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<ConversationSearchResult[]>> {
-    return timeSearchStage("knowpro.language.total", () =>
-        searchConversationWithLanguage2Core(
-            conversation,
-            searchText,
-            queryTranslator,
-            options,
-            langSearchFilter,
-            debugContext,
-        ),
+    return withQueryEmbeddingCache(
+        () =>
+            timeSearchStage("knowpro.language.total", () =>
+                searchConversationWithLanguage2Core(
+                    conversation,
+                    searchText,
+                    queryTranslator,
+                    options,
+                    langSearchFilter,
+                    debugContext,
+                ),
+            ),
+        options?.reuseQueryEmbeddings !== false,
     );
 }
 
