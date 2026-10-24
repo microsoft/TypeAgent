@@ -53,6 +53,11 @@ it. Without admission, existing routing and permission behavior are unchanged.
 The plugin's `hooks.json` registers the compiled `userPromptSubmitted` router.
 It reads mode per request, claims selected recordings, then uses only the local
 recipe matcher. A miss stays with Copilot; bypass disables recipe admission.
+Explicitly armed recordings are still claimed in bypass mode, without matching
+or executing a recipe or delegating the task to TypeAgent. Recording feature
+flags and `recipeOwner: off` still disable recording.
+An absent session recording endpoint is normal and silent; invalid endpoints
+and other recording failures still produce diagnostics.
 There is no PowerShell pre-tool redirect or alternate MCP/dev macro owner.
 Actual native per-invocation receipts are still required.
 
@@ -139,7 +144,7 @@ and checks that `list.listLists` is returned. That verifies the real
 MCP-to-TypeAgent discovery connection, **not Copilot's reasoning or selection**.
 It never launches Copilot, opens another console, or executes an action.
 
-Prerequisites: Windows, Node 22+ with npm, pnpm, a native Copilot CLI executable on
+Prerequisites: Windows, a [supported Node version](../../README.md#setup) with npm, pnpm, a native Copilot CLI executable on
 PATH (already signed in), and existing TypeAgent model/embedding configuration.
 The launcher does not obtain credentials, change Azure accounts, or copy files
 from another checkout. Build/install requires a provisioned `ts\.npmrc`.
@@ -434,21 +439,28 @@ See the [canonical structured-action design](../../docs/plans/copilot-direct-act
 
 ### 1. Node.js and pnpm
 
-For this workspace, use Node.js 22+ and pnpm 10+ (from `ts/package.json` engines).
+For this workspace, use the latest Node.js LTS release (default) or another
+[supported release](../../README.md#setup), and pnpm 10+ (from `ts/package.json` engines).
 
 **On Windows** — install via [nvm-windows](https://github.com/coreybutler/nvm-windows) or the [Node.js installer](https://nodejs.org/):
 
 ```powershell
-nvm install 22
-nvm use 22
-node --version  # should show v22.x.x or later
+nvm install lts
+nvm use lts
+node --version  # should show a supported LTS release
 ```
 
 **In WSL** — via nvm:
 
 ```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
-nvm install 22 && nvm use 22
+nvm install --lts && nvm use --lts
+```
+
+Install pnpm explicitly; Node 26 and later do not bundle Corepack:
+
+```bash
+npm install --global pnpm
 ```
 
 ### 2. Optional TypeAgent Server
@@ -639,7 +651,8 @@ No owner setting is required: the default and only enabled owner is `plugin`.
 `TYPEAGENT_RECIPE_OWNER` overrides config `recipeOwner`; supported values are
 `plugin` and `off`. Close and restart the native session after changing it.
 An obsolete explicit `typeagent` value is an actionable error, not a different
-catalog selection. `off` disables recipes; `bypass` disables hook/MCP routing.
+catalog selection. `off` disables recipes, including recording; `bypass` disables
+recipe matching/execution and MCP calls, but permits explicitly armed recordings.
 Unmatched ordinary prompts go to native Copilot, not the
 TypeAgent planner. Explicit TypeAgent commands/tools remain optional backend
 operations; they are not required by the local recipe path.
@@ -655,7 +668,7 @@ Old TypeAgent data remains untouched as evidence, with no live alternate owner.
 
 State lives under the plugin data root's `recipes/<workspace-profile digest>/`.
 `TYPEAGENT_RECIPE_PROFILE_ID` selects a profile (default `local-default`).
-Node.js **22.13+** is required: a small SQLite writer-lock database prevents
+A [supported Node version](../../README.md#setup) is required: a small SQLite writer-lock database prevents
 two native sessions from mutating that scope. The OS releases it after a crash;
 there is no PID-based lock stealing. Close the current native session before
 transferring that workspace/profile to another. Authenticated local IPC binds
@@ -796,8 +809,13 @@ set a workspace learning preference, then arm the next interaction:
 /typeagent-macro-record
 ```
 
-Send this as the next ordinary message, rather than using the natural-language
-file-reading shortcut:
+To record Copilot-native or third-party MCP tools without recipe routing, use
+`/typeagent-mode bypass` instead. The selected task stays with Copilot, including
+the success receipt required for learning. TypeAgent workspace and macro MCP
+calls remain disabled in bypass; use the extension recording/status commands.
+
+For the MCP-mode example, send this as the next ordinary message, rather than
+using the natural-language file-reading shortcut:
 
 ```text
 Use the typeagent-workspace read tool with {"path":"package.json"}. Do not use typeagent-processCommand.
@@ -1074,7 +1092,8 @@ that mode selection requires natural-language dispatch.
 
 Ordinary prompts use local checked-program matching followed by Copilot on a
 miss, in `direct`, `mcp` and `dev`. None of these modes selects a backend macro
-owner or author. `bypass` disables recipe hook/MCP routing.
+owner or author. `bypass` disables recipe matching/execution and MCP calls,
+while still allowing explicitly armed recordings.
 
 The settings remain for explicit TypeAgent commands and MCP availability.
 `@typeagent run <request>` intentionally delegates to the TypeAgent dispatcher;

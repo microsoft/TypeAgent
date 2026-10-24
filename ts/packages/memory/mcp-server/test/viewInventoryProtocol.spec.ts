@@ -163,6 +163,7 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
             new FileMemoryService(root, {
                 viewDrafts: true,
                 discoveryPolicy: "off",
+                sourceSynopses: false,
                 informationalViews: kind === "projectBrief",
                 viewModelEndpoint: `openai:${endpoint}`,
                 viewSynthesisAdapter: createConfiguredViewSynthesisAdapter(

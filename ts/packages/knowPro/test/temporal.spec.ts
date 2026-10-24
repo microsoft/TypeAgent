@@ -8,8 +8,10 @@ import {
     normalizeTemporalContext,
     parseTemporalValue,
     resolveRelativeDate,
+    temporalContextFromHeaders,
     temporalMentions,
     temporalSegments,
+    TemporalValueError,
     validateTemporalValue,
 } from "../src/temporal.js";
 import type { MessageTemporalContext } from "../src/temporalSchema.js";
@@ -100,6 +102,64 @@ describe("canonical source temporal context", () => {
             "2024-03-11",
         );
         expect(resolveRelativeDate("today", undefined)).toBeUndefined();
+    });
+
+    test.each(["\n", "\r\n"])(
+        "session date headers preserve source spelling and scope offsets with %j line endings",
+        (newline) => {
+            const first = "Session date:\t \t2024-05-10  ";
+            const second = "Session date:2024-05-11";
+            const text = [
+                "Preamble",
+                first,
+                "First session",
+                second,
+                "Second session",
+            ].join(newline);
+            const firstStart = text.indexOf(first);
+            const secondStart = text.indexOf(second);
+            expect(temporalContextFromHeaders(text)).toEqual({
+                version: 1,
+                scopes: [
+                    {
+                        ownerId: `session-header:${firstStart}`,
+                        start: firstStart,
+                        end: secondStart,
+                        messageTime: parseTemporalValue("2024-05-10  "),
+                    },
+                    {
+                        ownerId: `session-header:${secondStart}`,
+                        start: secondStart,
+                        end: text.length,
+                        messageTime: parseTemporalValue("2024-05-11"),
+                    },
+                ],
+            });
+        },
+    );
+
+    test.each(["\n", "\r\n"])(
+        "empty session date headers do not borrow dates from the next line with %j line endings",
+        (newline) => {
+            expect(
+                temporalContextFromHeaders(`Session date:${newline}2024-05-10`),
+            ).toBeUndefined();
+        },
+    );
+
+    test("session date parsing handles long whitespace prefixes and rejects whitespace-only dates promptly", () => {
+        const padding = "\t".repeat(100_000);
+        const started = performance.now();
+        const context = temporalContextFromHeaders(
+            `Session date:${padding}2024-05-10\nSession text`,
+        );
+        expect(context?.scopes[0].messageTime).toEqual(
+            parseTemporalValue("2024-05-10"),
+        );
+        expect(() =>
+            temporalContextFromHeaders(`Session date:${padding}\nSession text`),
+        ).toThrow(TemporalValueError);
+        expect(performance.now() - started).toBeLessThan(2000);
     });
 
     test("nested source owners inherit dates without crossing quotation boundaries", () => {

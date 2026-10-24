@@ -19,6 +19,14 @@ The KnowPro implementation of Structured RAG is used to explore types of [**memo
 - [Natural language querying](./src/searchLang.ts)
 - [Answer generation](./src/answerGenerator.ts)
 
+### Temporal source headers
+
+Retained text can supply source dates through single-line headers such as
+`Session date: 2024-05-10`. Leading spaces and tabs after the colon are allowed.
+Each recognized header owns the text through the next header or the end of the
+source. The date must be on the header's own line; an empty header does not
+borrow a date from the following line.
+
 ### Embedding batches
 
 Default conversation settings batch up to 128 distinct vocabulary terms,

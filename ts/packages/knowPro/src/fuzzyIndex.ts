@@ -15,6 +15,9 @@ import {
     EmbeddingRole,
     embeddingModelForRole,
     validateEmbeddingVector,
+    embeddingInputLimitError,
+    countEmbeddingTokens,
+    maxEmbeddingInputTokens,
 } from "@typeagent/aiclient";
 import levenshtein from "fast-levenshtein";
 import { Scored } from "./common.js";
@@ -25,7 +28,7 @@ import {
 } from "./interfaces.js";
 import { error, Result, success } from "typechat";
 import { instrumentEmbeddingModel, timeSearchStage } from "./searchTiming.js";
-import { countTokens } from "gpt-tokenizer/encoding/cl100k_base";
+import { queryEmbedding, queryEmbeddings } from "./queryEmbeddingCache.js";
 
 export interface IEmbeddingIndex {
     readonly size: number;
@@ -205,6 +208,10 @@ export async function generateTextEmbeddingsForIndex(
     texts: string | string[],
 ): Promise<Result<NormalizedEmbedding[]>> {
     const textsToEmbed = Array.isArray(texts) ? texts : [texts];
+    const inputError = embeddingInputLimitError(textsToEmbed);
+    if (inputError !== undefined) {
+        return error(inputError);
+    }
     return timeSearchStage(
         "ingestion.embedding.call",
         async () => {
@@ -212,12 +219,19 @@ export async function generateTextEmbeddingsForIndex(
                 embeddingModel = instrumentEmbeddingModel(
                     embeddingModelForRole(embeddingModel, "document"),
                 );
-                const embeddings = await generateTextEmbeddingsWithRetry(
-                    embeddingModel,
+                const embeddings: NormalizedEmbedding[] = [];
+                for (const batch of getEmbeddingBatches(
                     textsToEmbed,
-                );
-                if (embeddings.length !== textsToEmbed.length) {
-                    throw new Error("Embedding batch cardinality mismatch");
+                    textsToEmbed.length || 1,
+                    embeddingModel,
+                )) {
+                    const vectors = await generateTextEmbeddingsWithRetry(
+                        embeddingModel,
+                        batch.values,
+                    );
+                    if (vectors.length !== batch.values.length)
+                        throw new Error("Embedding batch cardinality mismatch");
+                    embeddings.push(...vectors);
                 }
                 const dimensions =
                     embeddingModel.embeddingIdentity?.dimensions ??
@@ -304,10 +318,11 @@ function* getEmbeddingBatches(
         let start = 0;
         let tokens = 0;
         for (let index = 0; index < batch.values.length; index++) {
-            const inputTokens = countTokens(batch.values[index], {
-                disallowedSpecial: new Set(),
-            });
-            if (index > start && tokens + inputTokens > 300_000) {
+            const inputTokens = countEmbeddingTokens(batch.values[index]);
+            if (
+                index > start &&
+                tokens + inputTokens > maxEmbeddingInputTokens
+            ) {
                 yield {
                     startAt: batch.startAt + start,
                     values: batch.values.slice(start, index),
@@ -332,10 +347,11 @@ export async function indexOfNearestTextInIndex(
     minScore?: number,
     role: EmbeddingRole = "query",
 ): Promise<Scored[]> {
-    const textEmbedding = await generateEmbedding(
-        embeddingModelForRole(embeddingModel, role),
-        text,
-    );
+    const generate = () =>
+        generateEmbedding(embeddingModelForRole(embeddingModel, role), text);
+    const textEmbedding = await (role === "query"
+        ? queryEmbedding(embeddingModel, text, generate)
+        : generate());
     return embeddingIndex.getIndexesOfNearest(
         textEmbedding,
         maxMatches,
@@ -351,9 +367,8 @@ export async function indexOfNearestTextInIndexSubset(
     maxMatches?: number,
     minScore?: number,
 ): Promise<Scored[]> {
-    const textEmbedding = await generateEmbedding(
-        embeddingModelForRole(embeddingModel, "query"),
-        text,
+    const textEmbedding = await queryEmbedding(embeddingModel, text, () =>
+        generateEmbedding(embeddingModelForRole(embeddingModel, "query"), text),
     );
     return embeddingIndex.getIndexesOfNearestInSubset(
         textEmbedding,
@@ -371,10 +386,14 @@ export async function indexesOfNearestTextBatchInIndex(
     minScore?: number,
     role: EmbeddingRole = "query",
 ): Promise<Scored[][]> {
-    const textEmbeddings = await generateTextEmbeddings(
-        embeddingModelForRole(embeddingModel, role),
-        textArray,
-    );
+    const generate = (texts: string[]) =>
+        generateTextEmbeddings(
+            embeddingModelForRole(embeddingModel, role),
+            texts,
+        );
+    const textEmbeddings = await (role === "query"
+        ? queryEmbeddings(embeddingModel, textArray, generate)
+        : generate(textArray));
     const results = [];
     for (const embedding of textEmbeddings) {
         results.push(

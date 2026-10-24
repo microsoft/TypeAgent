@@ -45,6 +45,7 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
   exifreader: true
+  foundry-local-sdk: true
   keytar: true
   koffi: true
   node-pty: false

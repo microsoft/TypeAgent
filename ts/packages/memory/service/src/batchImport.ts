@@ -11,6 +11,7 @@ import type {
 import { assetDigest } from "./revisionAssetStore.js";
 import { writeRunbookJson } from "./durableRunbookJson.js";
 import { redactRunbookText } from "./runbookRedaction.js";
+import { runWithSearchTiming, timeSearchStage } from "@typeagent/knowpro";
 
 export interface MemoryBatchImportRequest {
     corpusId: string;
@@ -89,7 +90,11 @@ interface StoredBatch extends MemoryBatchImport {
 }
 
 interface BatchHost {
-    withIngestionGroup?(operation: () => Promise<void>): Promise<void>;
+    withIngestionGroup?(
+        operation: () => Promise<void>,
+        expectedItems?: number,
+    ): Promise<void>;
+    isCommitted?(job: IngestionJobStatus): Promise<boolean>;
     ingestDocument(
         request: DocumentIngestRequest,
         signal?: AbortSignal,
@@ -112,6 +117,32 @@ function encoded(value: unknown): string {
 }
 
 export const batchImportRequestByteLimit = 8 * 1024 * 1024;
+
+export interface IngestionCommitPolicy {
+    maxDocuments: number;
+    maxBytes: number;
+    admissionWaitMs: number;
+}
+
+export function resolveIngestionCommitPolicy(
+    policy: Partial<IngestionCommitPolicy> = {},
+): IngestionCommitPolicy {
+    const resolved = {
+        maxDocuments: policy.maxDocuments ?? 2,
+        maxBytes: policy.maxBytes ?? batchImportRequestByteLimit,
+        admissionWaitMs: policy.admissionWaitMs ?? 25,
+    };
+    for (const value of Object.values(resolved))
+        if (!Number.isSafeInteger(value) || value < 1)
+            throw new Error(
+                "Ingestion commit limits must be positive integers",
+            );
+    if (resolved.maxDocuments > 100)
+        throw new Error("Ingestion commits support at most 100 documents");
+    if (resolved.maxBytes > batchImportRequestByteLimit)
+        throw new Error("Ingestion commit byte limit exceeds batch byte limit");
+    return resolved;
+}
 
 export function measureBatchImportBytes(
     request: MemoryBatchImportRequest,
@@ -337,6 +368,7 @@ export class MemoryBatchStore {
         private readonly root: string,
         private readonly host: BatchHost,
         private readonly onCorpusSettled?: (corpusId: string) => void,
+        private readonly commitPolicy = resolveIngestionCommitPolicy(),
     ) {}
 
     public hasActiveImports(corpusId: string): boolean {
@@ -429,33 +461,67 @@ export class MemoryBatchStore {
 
     public async recover(): Promise<void> {
         for await (const batch of this.stored()) {
-            if (!["running", "cancelling"].includes(batch.state)) continue;
+            if (
+                ![
+                    "running",
+                    "cancelling",
+                    "failed",
+                    "partial",
+                    "interrupted",
+                ].includes(batch.state)
+            )
+                continue;
             batch.state = "interrupted";
+            await this.reconcileCommittedMembers(batch);
             for (const member of batch.members) {
                 if (["pending", "ingesting"].includes(member.state)) {
-                    const job =
-                        member.jobId === undefined
-                            ? undefined
-                            : (JSON.parse(
-                                  await readFile(
-                                      path.join(
-                                          this.root,
-                                          "jobs",
-                                          `${member.jobId}.json`,
-                                      ),
-                                      "utf8",
-                                  ).catch(() => "{}"),
-                              ) as IngestionJobStatus);
-                    member.state =
-                        job?.state === "complete" ? "complete" : "interrupted";
-                    if (member.state === "complete")
-                        this.releaseAcquiredContent(batch, member);
+                    member.state = "interrupted";
                     member.reason =
                         "Batch interrupted by service restart; retry failed/interrupted members";
                 }
             }
             this.linkDuplicates(batch);
+            if (
+                batch.members.every(
+                    (member) =>
+                        member.state === "complete" ||
+                        (member.state === "duplicate" && !!member.jobId),
+                )
+            )
+                batch.state = "complete";
             await this.persist(batch);
+        }
+    }
+
+    private async reconcileCommittedMembers(batch: StoredBatch): Promise<void> {
+        for (const member of batch.members) {
+            if (!member.jobId || member.state === "duplicate") continue;
+            let job: IngestionJobStatus;
+            try {
+                job = JSON.parse(
+                    await readFile(
+                        path.join(this.root, "jobs", `${member.jobId}.json`),
+                        "utf8",
+                    ),
+                ) as IngestionJobStatus;
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code === "ENOENT")
+                    continue;
+                throw error;
+            }
+            if (
+                job.corpusId !== batch.corpusId ||
+                job.sourceId !== member.sourceId ||
+                job.revisionId !== member.revisionId
+            )
+                throw new Error("Batch member job identity does not match");
+            const committed = this.host.isCommitted
+                ? await this.host.isCommitted(job)
+                : job.state === "complete" || job.state === "partial";
+            if (!committed) continue;
+            member.state = "complete";
+            member.reason = "Recovered committed source revision";
+            this.releaseAcquiredContent(batch, member);
         }
     }
 
@@ -696,7 +762,15 @@ export class MemoryBatchStore {
 
     private launch(batch: StoredBatch): void {
         const controller = new AbortController();
-        const task = this.run(batch, controller.signal)
+        const task = runWithSearchTiming(
+            batch.batchId,
+            "memory.batch",
+            () =>
+                timeSearchStage("ingestion.batch.total", () =>
+                    this.run(batch, controller.signal),
+                ),
+            { corpusId: batch.corpusId, batchId: batch.batchId },
+        )
             .catch(async (error: unknown) => {
                 batch.state = "failed";
                 for (const member of batch.members) {
@@ -721,10 +795,27 @@ export class MemoryBatchStore {
         const pending = batch.members.filter(
             (member) => member.state === "pending",
         );
-        for (let index = 0; index < pending.length; index += 2) {
+        for (let index = 0; index < pending.length; ) {
+            const members: MemoryBatchMember[] = [];
+            let bytes = 0;
+            while (index < pending.length) {
+                const member = pending[index]!;
+                const size = Buffer.byteLength(
+                    encoded(batch.request.documents[Number(member.memberId)]),
+                );
+                if (
+                    members.length &&
+                    (members.length >= this.commitPolicy.maxDocuments ||
+                        bytes + size > this.commitPolicy.maxBytes)
+                )
+                    break;
+                members.push(member);
+                bytes += size;
+                index++;
+            }
             const ingest = async () => {
                 await Promise.all(
-                    pending.slice(index, index + 2).map(async (member) => {
+                    members.map(async (member) => {
                         if (signal.aborted || member.state === "cancelled") {
                             member.state = "cancelled";
                             return;
@@ -733,9 +824,14 @@ export class MemoryBatchStore {
                     }),
                 );
             };
-            if (this.host.withIngestionGroup)
-                await this.host.withIngestionGroup(ingest);
-            else await ingest();
+            await timeSearchStage(
+                "ingestion.batch.commitGroup",
+                () =>
+                    this.host.withIngestionGroup
+                        ? this.host.withIngestionGroup(ingest, members.length)
+                        : ingest(),
+                { groupSize: members.length, sourceBytes: bytes },
+            );
             await this.persist(batch);
         }
         this.linkDuplicates(batch);
@@ -886,6 +982,8 @@ export class MemoryBatchStore {
                 "At most four acquired batches may run concurrently",
             );
         const batch = await this.load(batchId);
+        await this.reconcileCommittedMembers(batch);
+        this.linkDuplicates(batch);
         const retryable = batch.members.filter(
             (member) =>
                 member.stage !== "acquisition" &&
@@ -914,7 +1012,18 @@ export class MemoryBatchStore {
             throw new Error(
                 "Forgotten-source members require newly acquired content before retry",
             );
-        if (!retryable.length) return this.get(batchId);
+        if (!retryable.length) {
+            if (
+                batch.members.every(
+                    (member) =>
+                        member.state === "complete" ||
+                        (member.state === "duplicate" && !!member.jobId),
+                )
+            )
+                batch.state = "complete";
+            await this.persist(batch);
+            return this.get(batchId);
+        }
         for (const member of retryable) member.state = "pending";
         batch.state = "running";
         await this.persistAndLaunch(batch);

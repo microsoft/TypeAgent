@@ -281,3 +281,55 @@ test("QA partial-overlap deduplication preserves both operands in exact nonoverl
     expect(supplied).toContain("price $200,000.");
     expect(supplied).toContain("renovation $20,000.");
 });
+
+test("QA balances relevant sources without admitting low-score novelty ahead of a complementary operand", () => {
+    const blocks: IndexedBlock[] = [
+        ...Array.from({ length: 14 }, (_, ordinal) => ({
+            sourceId: "trip-a",
+            revisionId: "r",
+            blockOrdinal: ordinal,
+            score: 24,
+            text: "March flight with carrier Alpha. General flight advice.",
+        })),
+        {
+            sourceId: "trip-b",
+            revisionId: "r",
+            blockOrdinal: 0,
+            score: 14,
+            text: "April flight with carrier Beta.",
+        },
+        {
+            sourceId: "unrelated",
+            revisionId: "r",
+            blockOrdinal: 0,
+            score: 0.01,
+            text: "Success observed; qualification corrected.",
+        },
+    ];
+    const result = selectIndexedFragments(blocks, {
+        query: "Compare my March and April flights.",
+        terms: ["march", "april", "flight"],
+        sourceIds: blocks.map((block) => block.sourceId),
+        maxFragments: 4,
+    });
+    expect(result.fragments.map((fragment) => fragment.sourceId)).toContain(
+        "trip-b",
+    );
+    expect(result.fragments.map((fragment) => fragment.sourceId)).not.toContain(
+        "unrelated",
+    );
+});
+
+test("QA first passage maximizes query coverage instead of matching an early generic word", () => {
+    const text =
+        "Property rules. " +
+        "Background. ".repeat(400) +
+        "Countryside property price is 320000. " +
+        "Later. ".repeat(100);
+    const result = select(text, ["property", "countryside", "price"], {
+        query: "What is the countryside property price?",
+        maxFragments: 1,
+        maxCharsPerFragment: 500,
+    });
+    expect(result.fragments[0].snippet).toContain("price is 320000");
+});

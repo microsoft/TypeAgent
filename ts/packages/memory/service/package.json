@@ -14,6 +14,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./rpc": "./dist/rpcFacade.js",
+    "./benchmark": "./dist/benchmarkBridge.js",
     "./agent-edition-validation": "./dist/agentEditionValidation.js",
     "./procedure-markdown": "./dist/procedureMarkdown.js",
     "./procedureMarkdown": "./dist/procedureMarkdown.js",
@@ -28,6 +29,7 @@
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "test": "npm run test:local",
     "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "test:regression": "pnpm run jest-esm --runInBand --testMatch=\"**/dist/test/**/*.regression.js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {

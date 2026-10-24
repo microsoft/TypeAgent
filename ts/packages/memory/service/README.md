@@ -10,6 +10,47 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Document import token budgets
+
+Text, Markdown, HTML/web and VTT retain their format-specific parsers and then
+use the shared [`chunkDocParts`](../conversation/src/docImport.ts) stage. Plain
+text is literal: it is neither escaped nor interpreted as Markdown. HTML still
+converts to Markdown; VTT still uses the transcript parser.
+
+Durable imports split oversized blocks, including unbroken words, then pack
+compatible adjacent blocks within **24,000 extraction tokens (`o200k_base`)**.
+Message-text embeddings use separate lossless windows bounded to **7,500 tokens
+under both `o200k_base` and `cl100k_base`**. Shared indexing and hosted embedding
+requests retain the **8,000-token `cl100k_base`** final guard, below the hosted
+models' 8,192-token limit. Structural character targets are not the final token
+budget.
+
+Splitting slices original Unicode code points without truncation or decoding
+partial token bytes. Plain-text whitespace and literal markup survive exactly.
+Source/revision metadata, tags, deletion information and existing knowledge are
+retained; pre-collected knowledge is attached once, not duplicated on every
+fragment. Packing does not cross different sources/revisions, timed transcript
+turns or deletion boundaries. Split transcript fragments retain their original
+turn's timestamp; no new cue timings are invented.
+
+Public parser helpers default to 7,500 extraction tokens and 8,000 embedding
+tokens per part; supplying `maxTokensPerPart` additionally enables packing.
+Extraction targets above the embedding ceiling require separate embedding
+windows, as configured by the durable service. The legacy `mergeDocParts`
+helper is deprecated and now retains per-part metadata instead of flattening
+all parts under one metadata object.
+
+Shared KnowPro document/term indexing and the hosted embedding API also check
+each complete input immediately before model/API work. Oversized inputs fail
+explicitly with their batch index, token count and limit; they are never
+silently shortened, skipped or embedded in partial form. The cl100k ceiling is
+a shared safety policy, not a substitute for another provider's native
+tokenizer or any smaller model-specific context limit.
+
+Existing stored messages are not silently rechunked because that would change
+indexed locators. Reimport/rebuild from retained sources when adopting the new
+chunking policy; benchmark comparisons require fresh stores and fingerprints.
+
 ## Offline test fixtures
 
 Memory maintenance regressions use the bundled synthetic
@@ -37,6 +78,30 @@ Project status rendering keeps capacity review pending distinct from a supported
 blocked condition. A `pendingOwnerReview` enum alone does not establish blockage;
 any actual blocker and its scope must remain in evidence-backed section prose.
 
+## Test suites
+
+Build from the TypeScript workspace root before running compiled tests:
+
+```powershell
+pnpm run build @typeagent/memory-service
+pnpm --filter @typeagent/memory-service run test:local
+pnpm --filter @typeagent/memory-service run test:regression
+```
+
+`test:local` runs the offline `.spec.ts` correctness suite used by PR CI.
+View-history ordering, exact records, authorship and selective parsing are checked
+with ten commits; privacy-purge, recovery and concurrent-read cases remain in
+that suite. The same assertions run against 100 and 1,000 commits in
+`test:regression`, which selects only `.regression.ts` files and runs serially.
+These scaling cases are excluded from normal Jest discovery and `test:local`;
+no tests are skipped.
+
+The [memory-regression workflow](../../../../../.github/workflows/memory-regression.yml)
+runs both suites every Monday at 08:23 UTC and on manual dispatch, on Ubuntu,
+Windows and macOS with Node 24.22.1. Each OS uploads Jest JSON results, including
+individual test durations. No model credentials or external fixture checkout
+are required. Model-backed `.test.ts` rehearsals remain separately opt-in.
+
 ## Automatic maintenance foundation
 
 When a Wiki candidate overlaps an existing page, the service checks the page's
@@ -55,7 +120,7 @@ Target timeout is a technical failure, not cancellation of its peers or a user
 decision. Job cancellation remains explicit. Job completion and family checkpoint
 share the serialized write boundary so readers cannot observe a false-idle gap.
 Startup and a 30-second reconciliation sweep repair missed source/index dirty hints.
-During a durable bulk import, automatic topic and Wiki/project maintenance remains
+During a durable bulk import, automatic source-synopsis, topic and Wiki/project maintenance remains
 pending rather than repeatedly constructing snapshots of an unfinished batch.
 Settlement of the last active batch for that corpus resumes maintenance using
 current eligible sources. Overlapping batches, retries, cancellation and startup
@@ -64,6 +129,96 @@ privacy invalidation and late-write eligibility checks are not deferred.
 Committed informational revisions repair exact publication/index effects without
 repeating synthesis or creating a new revision. A clean restart does not create
 an unnecessary history commit.
+
+### Foreground scopes and bounded autonomous work
+
+Maintenance execution is independent of `informationalViews`, `viewDrafts` and
+native answer selection. `maintenanceMode: "automatic"` is the normal service
+policy. `maintenanceMode: "manual"` retains dirty work without starting automatic
+model/view builds; explicit `maintainViews` remains available.
+
+```typescript
+const service = new FileMemoryService(store, {
+  maintenanceMode: "automatic",
+  ingestionCommitPolicy: {
+    maxDocuments: 10,
+    maxBytes: 8 * 1024 * 1024,
+    admissionWaitMs: 250,
+  },
+});
+const release = service.deferMaintenance();
+try {
+  // Import and query any loaded corpora without starting new autonomous work.
+} finally {
+  release();
+}
+const status = await service.drainMaintenance(30_000, signal);
+if (!status.settled) {
+  // Report pending, deferred and failed work rather than claiming completion.
+}
+```
+
+Foreground holds nest and release idempotently. They apply across loaded corpora,
+including earlier imports. Already-running work may finish; acquiring a hold is
+not an interruption of a committed build. One family can have one running request
+and one coalesced latest-generation request. Pending work is reconstructed from
+durable source/family state after restart, not from an in-memory timer journal.
+Reconciliation does not enqueue duplicate passes behind an occupied corpus.
+Privacy removal and eligibility checks are never postponed by this policy.
+
+Non-privacy segment collection uses the same coalesced queue and admission
+guards. Manual mode, foreground holds and shutdown may leave that cleanup
+pending; startup reconstructs it while retaining index generations and integrity
+checks. Drain maintenance when cleanup completion matters. Authorized forgetting
+and corpus-clear collection remain immediate rather than waiting for this queue.
+
+`getMaintenanceStatus()` reports queue keys, active work, coalesced request count,
+budget deferrals and failures. A drain temporarily executes manual-mode work;
+it does not override foreground holds or active imports. `reason: "deadline"`,
+`"paused"` or `"budget"` and `settled: false` describe incomplete work explicitly.
+Deadline/abort signals reach automatic view builds and synopsis generation.
+Partial view builds retain their durable per-target errors without blocking
+independent targets or the family's continuation. Unchanged failed informational
+inputs retain the existing two-attempt automatic retry limit. Unresolved target
+failures appear in `failures` under a corpus/family/target key and keep
+`settled: false`, even after the queue is empty; a drain then returns promptly
+rather than spinning until its deadline. A successful retry clears only that
+target's diagnostic. Infrastructure and persistence failures still block the
+affected family until its existing retry conditions are met.
+Shutdown cancels their linked work before releasing storage. A provider that
+ignores cancellation must still be drained before storage ownership is released.
+
+Optional `maintenanceLimits` bound `maxTargetsPerPass` (at most 12),
+`maxCandidatesPerPass`, `maxPassesPerGeneration`, and a shared `requestBudget`
+using the existing client attempt/token/elapsed admission checks. No new optimal
+budget is assumed: limits other than the existing 12-target cap are opt-in.
+Configured ranking prioritizes existing pages and source-supported subjects,
+without requiring multiple sources or blacklisting filenames, routes or dates.
+Unchanged rejected candidates are checkpointed before another expensive capture;
+source generation, page versions or admission/model policy changes invalidate
+that decision. Explicit manual maintenance bypasses automatic pass/read limits.
+Pass counters and deferred descriptors survive restart. A pass budget defers
+derived output, not the underlying source facts.
+
+Publication limits are independent of model concurrency. The product retains
+two-document commits by default; hosts can opt into larger document/byte-bounded
+groups. The admission timer prevents a missing/slow peer from blocking progress,
+so a delayed admission can form a smaller safe checkpoint. A source larger than
+the group byte budget is processed alone, never truncated. Grouped append/rebuild
+continues to use the index's existing bounded extraction/embedding settings.
+Unsupported grouped updates fall back to serialized single-source ingestion.
+Manifest publication remains atomic and source eligibility is rechecked.
+Recovery/retry reconciles committed revision identities even when job/member
+acknowledgments failed; missing or corrupt storage is not fabricated as success.
+
+KnowPro partitions hosted index embedding inputs into sequential subbatches totaling at
+most 8,000 `cl100k_base` tokens, in addition to the per-input 8,000-token guard.
+This aggregate work budget prevents a larger publication group from becoming one
+quota-sized embedding request; inputs remain intact and ordered. The runtime's
+default embedding attempt budget is 180 seconds, matching the hosted HTTP budget
+and allowing a provider's 60-second rate-limit wait to finish before an outer
+retry starts. Explicit caller deadlines remain supported. Character-bounded
+runtime embedding batches retain serial default concurrency.
 
 `ViewBuildSnapshot.influenceSources` records source/revision identities of nominated
 page context read during admission, including inputs not cited by the output.
@@ -235,6 +390,24 @@ fail explicitly. Quotes and source line endings are never normalized or matched
 approximately. Persisted evidence keeps the same coordinate shape; the recipe
 change invalidates older semantic fingerprints.
 
+Indexed source answers balance relevant query coverage across sources. Ordered
+conversation questions can retrieve neighboring nonempty blocks from the same
+eligible source revision; the reader uses source-owned turn metadata and block
+ordinals, never retrieval rank, to establish order. Recommendation answers may
+transfer remembered preferences into conditional criteria, but cannot invent
+named inventory or availability.
+
+When missing historical evidence causes `noAnswer`, the reader may propose up
+to two focused searches. The service performs only one refinement round, using
+the original source scope, temporal context, search bounds and request budget.
+New and original evidence are interleaved with overlapping ranges removed,
+retaining the default final limit of twelve fragments and 24,000 snippet
+characters. A final `noAnswer` is not retried. Refinement can add two searches
+and one reader call, so aggregate retrieval and provider cost can increase;
+per-search indexed reads remain bounded at 32,000 characters. Diagnostics retain
+both reader contexts and the refinement queries and selection receipts. The
+product and qualification harness use this same answer path.
+
 All memory synthesis, topic, indexed-answer and hub-answer calls now omit
 optional OpenAI completion limits. Their prompts express approximate final-JSON
 length targets separately from reasoning; citation and coverage validators are
@@ -310,7 +483,7 @@ Document indexes are reused in memory while their published
 generation and persisted-file fingerprint remain unchanged. Fingerprints check
 schema, semantic-data, embedding-file and projection/readiness-marker metadata;
 schema validation and recovery still run when these change. A restart loads
-the published generation again. This does not cache queries or model responses.
+the published generation again. This does not persistently cache queries or model responses.
 
 Prepared document searches, source knowledge, corpus knowledge and
 document answering can share a per-corpus read reservation. Published-index
@@ -321,9 +494,16 @@ provider calls never mutate the live index. Its serialized commit rechecks the
 captured generation and source revisions and merges current metadata. Stale,
 cancelled or forgotten candidates cannot replace the published generation.
 Forgetting also cancels and purges affected prepared candidates.
+Unpublished reindex cleanup uses the same corpus write reservation as source
+removal, preventing concurrent recursive deletion of a candidate generation.
 Each async read retains its snapshot until completion. Cold runtime
 loading is single-flight, and shutdown drains the complete preparation/read
 lifetime before releasing storage.
+
+Agent-session receipt stamps and file reads serialize with checkpoint publication
+for that session. Source eligibility is checked after releasing that queue, so
+source removal cannot deadlock behind a receipt read. Invalid or unsafe checkpoint
+files still fail explicitly; receipt polling does not relax file validation.
 
 Set `TYPEAGENT_MEMORY_SEARCH_TRACE=1` on the host process to enable correlated
 Memory Hub search diagnostics on stderr. Lines prefixed `[memory-search-timing]` contain
@@ -340,6 +520,16 @@ Queries, source excerpts, prompts, tokens and raw error messages are excluded.
 Tracing does not change retrieval limits, model selection or when the Hub
 returns its evidence and answer.
 
+Natural-language searches reuse identical query embeddings within that request
+and its compatible fallback passes. Cache identity includes the model object,
+declared embedding identity (including normalization), and exact input text.
+Document embeddings, other requests and different models are not shared.
+Concurrent duplicates share one attempt; failed attempts are removed so a later
+fallback can retry. The per-model request cache is bounded to 256 terms; overflow
+uses the normal provider path without dropping terms. `LanguageSearchOptions`
+accepts `reuseQueryEmbeddings: false` for controlled comparisons. Translation,
+similarity thresholds, candidate limits and evidence selection are unchanged.
+
 Build and ingestion diagnostics reuse this opt-in timing sink. With
 `TYPEAGENT_MEMORY_SEARCH_TRACE=1`, `memory.build`, `memory.build.<pipeline>`,
 `memory.ingestion` and `memory.synopsis` scopes also report build queue waits,
@@ -352,6 +542,13 @@ ID; per-topic calls carry numeric node ordinals and counts, not labels or text.
 Model spans include client retry waits. Target totals and nested stages overlap;
 do not add them as independent wall time. A returned target rejection remains
 in its durable receipt even when the enclosing job runner finishes normally.
+
+Batch traces add `batchId`, commit-group source counts/bytes and the enclosing
+batch total. Maintenance traces add generation identity, queue wait, pending and
+coalesced counts, and work duration. Query-embedding reuse records hit/miss counts
+without recording terms. These augment the existing copy/load, serialization,
+publication, invalidation, text-purge and segment-collection spans; parent/child
+spans remain overlapping, not additive.
 
 ## Qualified generated Wiki consolidation
 

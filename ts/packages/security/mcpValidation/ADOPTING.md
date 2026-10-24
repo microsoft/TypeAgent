@@ -157,7 +157,7 @@ For running `python -c`, arbitrary scripts, or untrusted code:
 {
   "container": {
     "enabled": true,
-    "image": "node:22-slim",
+    "image": "node:24.22.1-slim",
     "networkMode": "none",
     "readOnly": true,
     "memoryLimit": "512m"

@@ -5,7 +5,7 @@
 .SYNOPSIS
   Provisions the runtime prerequisites the external agent-server variant needs:
   Claude Code from PATH, the TypeAgent-managed GitHub Copilot runtime, and a
-  Node.js >= 22 check. Mirrors install-typeagent.ps1 so MSI and standalone
+  Supported Node.js check. Mirrors install-typeagent.ps1 so MSI and standalone
   installs use the same runtime contract.
 
 .DESCRIPTION
@@ -211,21 +211,16 @@ if ($RuntimeRoot) {
 # so a bare `node`/`npm` on the interactive PATH is found here too.
 $nodeExe = Resolve-NodeExe
 
-# --- Node.js >= 22 (warn only; the MSI does not bundle Node) ------------------
+# --- Supported Node.js (warn only; the MSI does not bundle Node) -------------
 if (-not $nodeExe) {
-    Write-Log "  WARNING: Node.js >= 22 was not found. The agent-server requires it. Install it (e.g. 'winget install OpenJS.NodeJS.LTS') and re-run provisioning."
+    Write-Log "  WARNING: Node.js 22.23.4+, 24.22.1+, or 26.12.1+ was not found. The agent-server requires it. Install it (e.g. 'winget install OpenJS.NodeJS.LTS') and re-run provisioning."
 } else {
-    $nodeMajor = Get-NodeMajor $nodeExe
-    if ($nodeMajor -lt 22) {
-        Write-Log "  WARNING: Node.js >= 22 required; found $(& $nodeExe --version) at $nodeExe. Upgrade (e.g. 'winget install OpenJS.NodeJS.LTS')."
-    } else {
-        Write-Log "  Node $(& $nodeExe --version) ($nodeExe)"
-    }
+    Write-Log "  Node $(& $nodeExe --version) ($nodeExe)"
 }
 
 # --- External runtimes -------------------------------------------------------
 if (-not (Test-Command npm)) {
-    Write-Log "  WARNING: npm (ships with Node.js) was not found; cannot install Claude or the managed Copilot runtime. Install Node.js >= 22 and retry TypeAgent setup."
+    Write-Log "  WARNING: npm (ships with Node.js) was not found; cannot install Claude or the managed Copilot runtime. Install Node.js 22.23.4+, 24.22.1+, or 26.12.1+ and retry TypeAgent setup."
 } else {
     # Authenticate to the Azure feed non-interactively (public npmjs is blocked
     # by policy; the feed proxies it). The interactive broker tokenHelper in the

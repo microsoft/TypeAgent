@@ -1,7 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+    mkdir,
+    mkdtemp,
+    readdir,
+    readFile,
+    rm,
+    writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { mock } from "node:test";
@@ -132,6 +139,7 @@ describe("detached coalesced batch ingestion", () => {
               aborted: ReturnType<typeof deferred>;
               ignoreAbort: boolean;
               fail: boolean;
+              partialWrite: boolean;
           }
         | undefined;
     let publicationFailure = false;
@@ -139,6 +147,9 @@ describe("detached coalesced batch ingestion", () => {
 
     class Index extends FakeSemanticCorpusIndex {
         private appending = false;
+        public constructor(private readonly generationDirectory: string) {
+            super(generationDirectory);
+        }
         public override async rebuild(documents: IndexedDocument[]) {
             if (!this.appending)
                 rebuilds.push(
@@ -155,6 +166,11 @@ describe("detached coalesced batch ingestion", () => {
             const pending = hold;
             hold = undefined;
             if (pending) {
+                if (pending.partialWrite)
+                    await writeFile(
+                        path.join(this.generationDirectory, "corpus_data.json"),
+                        '{"messages":[',
+                    );
                 pending.entered.resolve();
                 const onAbort = () => {
                     pending.aborted.resolve();
@@ -216,13 +232,14 @@ describe("detached coalesced batch ingestion", () => {
         await rm(root, { recursive: true, force: true });
     });
 
-    function block(ignoreAbort = false, fail = false) {
+    function block(ignoreAbort = false, fail = false, partialWrite = false) {
         const pending = {
             entered: deferred(),
             release: deferred(),
             aborted: deferred(),
             ignoreAbort,
             fail,
+            partialWrite,
         };
         releases.push(pending.release.resolve);
         hold = pending;
@@ -267,6 +284,67 @@ describe("detached coalesced batch ingestion", () => {
                 ),
             ),
         );
+    test.each([false, true])(
+        "deferred segment collection waits for an unpublished index (failure=%s)",
+        async (fail) => {
+            const retryScheduled = deferred();
+            const callbacks: Array<() => void> = [];
+            const originalSetTimeout = globalThis.setTimeout;
+            const timer = import.meta.jest
+                .spyOn(globalThis, "setTimeout")
+                .mockImplementation((callback, milliseconds, ...args) => {
+                    if (milliseconds !== 250)
+                        return originalSetTimeout(
+                            callback,
+                            milliseconds,
+                            ...args,
+                        );
+                    callbacks.push(() => callback(...args));
+                    if (callbacks.length === 2) retryScheduled.resolve();
+                    return originalSetTimeout(() => {}, 0);
+                });
+            try {
+                await ingest("seed");
+                expect(callbacks).toHaveLength(1);
+                const segments = path.join(
+                    root,
+                    corpusId,
+                    "index",
+                    ".segments",
+                );
+                const orphan = path.join(segments, `${"a".repeat(64)}.json`);
+                await mkdir(segments, { recursive: true });
+                await writeFile(orphan, "{}");
+                const pending = block(false, fail, true);
+                const accepted = await admit();
+                await within(pending.entered.promise);
+                callbacks[0]!();
+                await within(retryScheduled.promise);
+                expect(await readFile(orphan, "utf8")).toBe("{}");
+                expect(
+                    (await service.listSources(corpusId)).map(
+                        (item) => item.sourceId,
+                    ),
+                ).toEqual(["seed"]);
+                pending.release.resolve();
+                const results = await settle(accepted);
+                expect(
+                    results.every(
+                        (job) => job.state === (fail ? "failed" : "complete"),
+                    ),
+                ).toBe(true);
+                timer.mockRestore();
+                callbacks.at(-1)!();
+                expect((await service.drainMaintenance()).settled).toBe(true);
+            } finally {
+                timer.mockRestore();
+                await service.close();
+            }
+            await expect(
+                readdir(path.join(root, corpusId, "index", ".segments")),
+            ).resolves.toEqual([]);
+        },
+    );
     async function terminal(batch: MemoryBatchImport) {
         let polls = 0;
         while (["running", "cancelling"].includes(batch.state)) {
@@ -630,10 +708,14 @@ describe("detached coalesced batch ingestion", () => {
             service = open();
             await service.initialize();
             const recovered = await service.getBatchImport(batch.batchId);
-            expect(recovered.state).toBe("interrupted");
+            expect(recovered.state).toBe(
+                published ? "complete" : "interrupted",
+            );
             expect(
                 recovered.members.every(
-                    (member) => member.state === "interrupted",
+                    (member) =>
+                        member.state ===
+                        (published ? "complete" : "interrupted"),
                 ),
             ).toBe(true);
             for (const member of recovered.members)

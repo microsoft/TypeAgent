@@ -2,6 +2,12 @@
 
 Action-translation eval for TypeAgent: pinned catalogs, model prices, and scoring harness.
 
+## Conversation-memory benchmarks
+
+The [BEAM runbook](src/memoryBench/README.md) covers the TypeScript
+memory harness, offline tests, pinned protocol preparation, live execution and
+resume. It calls the durable memory service directly and requires no Python.
+
 ## Catalog + action-parameters grader
 
 Pinned `catalog.generated.json` and `action-parameters-grader.generated.json`. Code/script parameters use verify mode `llmAsAJudge` (not exact); synthesizer exclusions are derived from those fields. Regenerate with `pnpm run gen-catalog` (`--force` full rebuild). Tests: `pnpm run test:local`.

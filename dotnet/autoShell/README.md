@@ -29,7 +29,7 @@ AutoShell is part of the [TypeAgent](https://github.com/microsoft/TypeAgent) pro
 - .NET 8
 - [Microsoft.WindowsAPICodePack.Shell](https://www.nuget.org/packages/Microsoft.WindowsAPICodePack.Shell) NuGet package
 - [System.Text.Json](https://learn.microsoft.com/en-us/dotnet/api/system.text.json) (built-in)
-- Node.js ≥ 20 and pnpm (for generating `.pas.json` schemas from TypeScript)
+- The latest Node.js LTS release (recommended; see [supported versions](../../ts/README.md#setup)) and pnpm (for generating `.pas.json` schemas from TypeScript)
 
 ## Building
 
