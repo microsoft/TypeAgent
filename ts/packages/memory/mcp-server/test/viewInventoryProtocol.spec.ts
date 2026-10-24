@@ -162,6 +162,7 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
         const open = () =>
             new FileMemoryService(root, {
                 viewDrafts: true,
+                discoveryPolicy: "off",
                 informationalViews: kind === "projectBrief",
                 viewModelEndpoint: `openai:${endpoint}`,
                 viewSynthesisAdapter: createConfiguredViewSynthesisAdapter(
@@ -201,6 +202,15 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
             const corpus = await client.createCorpus(
                 "Inventory transport synthetic fixture",
             );
+            if (kind === "projectBrief")
+                for (const family of ["wiki", "projects"] as const)
+                    await client.maintainViews({
+                        corpusId: corpus.corpusId,
+                        expectedHead: (await client.listViews(corpus.corpusId))
+                            .head,
+                        family,
+                        operation: "pause",
+                    });
             const source = await client.ingestDocument({
                 corpusId: corpus.corpusId,
                 source: {

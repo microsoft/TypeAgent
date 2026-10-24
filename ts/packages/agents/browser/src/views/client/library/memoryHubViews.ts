@@ -180,9 +180,13 @@ export function mountMemoryHubViews(
     let busy = false;
     let refreshPending = false;
     let disposed = false;
+    let detailRequest:
+        | { key: string; sequence: number; work: Promise<void> }
+        | undefined;
     let supportedKinds: ViewKind[] = ["troubleshootingGuide"];
     let maintenanceSupported = false;
     let buildsSupported = false;
+    let capabilitiesLoaded = false;
     let route:
         | {
               corpusId: string;
@@ -252,6 +256,7 @@ export function mountMemoryHubViews(
         const current = ++sequence;
         const capabilities = await invokeMemory("memoryViewCapabilities", {});
         if (current !== sequence) return;
+        capabilitiesLoaded = true;
         root.hidden = !visible;
         maintenanceSupported = capabilities.derivedViews?.maintenance === true;
         buildsSupported = capabilities.derivedViews?.builds === true;
@@ -484,16 +489,29 @@ export function mountMemoryHubViews(
                 pendingConflicts.set(key, conflict);
     }
 
-    async function renderRoute(
-        target: {
-            corpusId: string;
-            viewId: string;
-            revisionId?: string;
-            pageId?: string;
-            itemKey?: string;
-        },
-        current: number,
-    ): Promise<void> {
+    async function ensureReaderCapabilities(current: number): Promise<boolean> {
+        if (!capabilitiesLoaded) {
+            const capabilities = await invokeMemory(
+                "memoryViewCapabilities",
+                {},
+            );
+            if (disposed || current !== sequence) return false;
+            capabilitiesLoaded = true;
+            buildsSupported = capabilities.derivedViews?.builds === true;
+            maintenanceSupported =
+                capabilities.derivedViews?.maintenance === true;
+            supportedKinds = capabilities.derivedViews?.kinds ?? [];
+        }
+        if (!buildsSupported)
+            throw new Error(
+                "The connected memory service does not provide view building.",
+            );
+        return true;
+    }
+
+    async function readRouteView(
+        target: Parameters<typeof renderRoute>[0],
+    ): Promise<ViewVersion> {
         const latest = snapshot.views.find(
             (view) =>
                 view.corpusId === target.corpusId &&
@@ -509,44 +527,12 @@ export function mountMemoryHubViews(
                           : {}),
                   })
                 : latest;
-        if (disposed || current !== sequence) return;
-        if (!view) {
-            comparison.replaceChildren(
-                rbNode(
-                    "p",
-                    "This view revision is unavailable in the selected collection.",
-                ),
+        if (!view)
+            throw new Error(
+                target.revisionId
+                    ? "Exact view revision is unavailable"
+                    : "This view is unavailable in the selected collection.",
             );
-            if (target.revisionId)
-                throw new Error("Exact view revision is unavailable");
-            return;
-        }
-        if (!target.revisionId) {
-            snapshot.views = [
-                ...snapshot.views.filter(
-                    (item) =>
-                        item.corpusId !== view.corpusId ||
-                        item.viewId !== view.viewId,
-                ),
-                view,
-            ];
-            if (!publications.has(publicationKey(view.corpusId, view.viewId))) {
-                const [publication] = await invokeMemory(
-                    "memoryGetViewPublications",
-                    { corpusId: view.corpusId, viewIds: [view.viewId] },
-                );
-                publications.set(
-                    publicationKey(view.corpusId, view.viewId),
-                    publication,
-                );
-            }
-        }
-        const selectedJobs = await invokeMemory(
-            "memoryListViewBuildSummaries",
-            { corpusId: view.corpusId, viewId: view.viewId, pageSize: 1 },
-        );
-        await loadPendingConflicts(selectedJobs.items, current);
-        if (disposed || current !== sequence) return;
         if (
             target.revisionId &&
             (view.revisionId !== target.revisionId ||
@@ -556,16 +542,49 @@ export function mountMemoryHubViews(
             throw new Error(
                 "The service did not return the requested exact view revision",
             );
+        return view;
+    }
+
+    async function renderRoute(
+        target: {
+            corpusId: string;
+            viewId: string;
+            revisionId?: string;
+            pageId?: string;
+            itemKey?: string;
+        },
+        current: number,
+    ): Promise<void> {
+        if (!(await ensureReaderCapabilities(current))) return;
+        const view = await readRouteView(target);
+        if (disposed || current !== sequence) return;
+        if (!target.revisionId) {
+            snapshot.views = [
+                ...snapshot.views.filter(
+                    (item) =>
+                        item.corpusId !== view.corpusId ||
+                        item.viewId !== view.viewId,
+                ),
+                view,
+            ];
+        }
         if (view.redirect && !target.revisionId) {
             await renderCurrentWikiRedirect(view.redirect, target, current);
             return;
         }
-        showPreview(view);
+        const enableActions = showPreview(view, false);
         if (
             view.content.kind === "schemaView" &&
             (target.pageId || target.itemKey)
         ) {
             await showSchemaPage(target, current);
+            if (disposed || current !== sequence) return;
+            comparison
+                .querySelector(".hub-view-actions")
+                ?.replaceChildren(
+                    rbButton("Back to views", backToViews),
+                    rbNode("p", "Structured page (read-only)"),
+                );
             return;
         }
         if (target.pageId)
@@ -575,30 +594,108 @@ export function mountMemoryHubViews(
                 )?.to ?? target.pageId,
             );
         if (target.revisionId) {
-            comparison.querySelector(".hub-view-actions")?.replaceChildren(
-                rbNode(
-                    "p",
-                    (
-                        latest ??
-                        inventory.find(
-                            (item) =>
-                                item.corpusId === view.corpusId &&
-                                item.viewId === view.viewId,
-                        )
-                    )?.revisionId === view.revisionId
-                        ? "Exact revision (read-only)"
-                        : "Historical revision (read-only)",
-                ),
-                rbNode("p", `Revision: ${view.revisionId}`),
-                rbButton("Back to views", backToViews),
-                rbButton("Open current view", () => {
-                    void showView(
-                        view.corpusId,
-                        view.redirect?.viewId ?? view.viewId,
-                    );
-                }),
-            );
+            await showExactRevisionControls(view, current);
+            return;
         }
+        await loadReaderActions(view, current);
+        if (disposed || current !== sequence) return;
+        enableActions?.();
+    }
+
+    async function showExactRevisionControls(
+        view: ViewVersion,
+        current: number,
+    ): Promise<void> {
+        const revisionLabel = rbNode("p", "Selected revision (read-only)");
+        comparison.querySelector(".hub-view-actions")?.replaceChildren(
+            revisionLabel,
+            rbNode("p", `Revision: ${view.revisionId}`),
+            rbButton("Back to views", backToViews),
+            rbButton("Open current view", () => {
+                void showView(
+                    view.corpusId,
+                    view.redirect?.viewId ?? view.viewId,
+                );
+            }),
+        );
+        const summary = await invokeMemory("memoryListViewSummaries", {
+            corpusId: view.corpusId,
+            viewId: view.viewId,
+            pageSize: 1,
+        });
+        if (disposed || current !== sequence) return;
+        revisionLabel.textContent =
+            summary.items.find((item) => item.viewId === view.viewId)
+                ?.revisionId === view.revisionId
+                ? "Exact revision (read-only)"
+                : "Historical revision (read-only)";
+    }
+
+    async function loadReaderActions(
+        view: ViewVersion,
+        current: number,
+    ): Promise<void> {
+        const [summary, selectedJobs] = await Promise.all([
+            invokeMemory("memoryListViewSummaries", {
+                corpusId: view.corpusId,
+                viewId: view.viewId,
+                pageSize: 1,
+            }),
+            invokeMemory("memoryListViewBuildSummaries", {
+                corpusId: view.corpusId,
+                viewId: view.viewId,
+                pageSize: 1,
+            }),
+        ]);
+        if (disposed || current !== sequence) return;
+        const latestSummary = summary.items.find(
+            (item) => item.viewId === view.viewId,
+        );
+        if (!latestSummary || latestSummary.revisionId !== view.revisionId)
+            throw new Error(
+                "The current view changed; reopen it before editing.",
+            );
+        await loadPendingConflicts(selectedJobs.items, current);
+        if (disposed || current !== sequence) return;
+        heads.set(view.corpusId, summary.head);
+        publications.set(
+            publicationKey(view.corpusId, view.viewId),
+            latestSummary.publication,
+        );
+    }
+
+    function loadDetail(
+        target: Parameters<typeof renderRoute>[0],
+    ): Promise<void> {
+        const key = JSON.stringify(target);
+        if (detailRequest?.key === key && detailRequest.sequence === sequence)
+            return detailRequest.work;
+        const current = ++sequence;
+        route = target;
+        drafts.hidden = controls.hidden = true;
+        comparison.setAttribute("aria-busy", "true");
+        comparison.replaceChildren(
+            rbButton("Back to views", backToViews),
+            rbNode("p", "Loading view details..."),
+        );
+        const work = renderRoute(target, current)
+            .catch((error: unknown) => {
+                if (disposed || current !== sequence) return;
+                const alert = rbNode(
+                    "p",
+                    `View details unavailable: ${rbError(error)}. Editing remains unavailable.`,
+                );
+                alert.setAttribute("role", "alert");
+                comparison.append(alert);
+                options.onError(error);
+            })
+            .finally(() => {
+                if (disposed || current !== sequence) return;
+                comparison.setAttribute("aria-busy", "false");
+                detailRequest = undefined;
+            });
+        detailRequest = { key, sequence: current, work };
+        return work;
     }
 
     async function showSchemaPage(
@@ -645,6 +742,7 @@ export function mountMemoryHubViews(
 
     function backToViews(): void {
         if (!discardChanges()) return;
+        sequence++;
         route = undefined;
         comparison.replaceChildren();
         drafts.hidden = controls.hidden = false;
@@ -1462,22 +1560,12 @@ export function mountMemoryHubViews(
         revisionId?: string,
     ): Promise<void> {
         if (!discardChanges()) return;
-        sequence++;
-        route = { corpusId, viewId, revisionId };
-        const view = snapshot.views.find(
-            (view) => view.corpusId === corpusId && view.viewId === viewId,
-        );
-        if (busy) refreshPending = true;
-        else if (revisionId)
-            await action(() =>
-                renderRoute({ corpusId, viewId, revisionId }, sequence),
-            );
-        else if (view) showPreview(view);
-        else await action(() => renderRoute({ corpusId, viewId }, sequence));
+        const work = loadDetail({ corpusId, viewId, revisionId });
         options.onNavigate?.(
             `#/views/${encodeURIComponent(corpusId)}/${encodeURIComponent(viewId)}${revisionId ? `/revision/${encodeURIComponent(revisionId)}` : ""}`,
         );
         options.onOpenView?.(corpusId, viewId, revisionId);
+        await work;
     }
 
     function appendEditorialControls(
@@ -1549,7 +1637,10 @@ export function mountMemoryHubViews(
             );
     }
 
-    function showPreview(view: ViewVersion): void {
+    function showPreview(
+        view: ViewVersion,
+        actionsReady = true,
+    ): (() => void) | undefined {
         if (!supportedKinds.includes(view.content.kind)) {
             comparison.replaceChildren(
                 rbNode(
@@ -1686,143 +1777,158 @@ export function mountMemoryHubViews(
             article.append(citations);
         }
         const actions = rbNode("div", undefined, "hub-view-actions");
-        const more = rbNode("details", undefined, "hub-view-more-actions");
-        const moreSummary = rbNode("summary", "More actions");
-        more.append(moreSummary);
-        appendEditorialControls(view, article, more);
-        more.addEventListener("keydown", (event) => {
-            if (event.key !== "Escape" || !more.open) return;
-            event.preventDefault();
-            more.open = false;
-            moreSummary.focus();
-        });
-        const pendingConflict = pendingConflicts.get(
-            publicationKey(view.corpusId, view.viewId),
-        );
-        if (pendingConflict)
-            more.append(
-                rbButton("Review pending conflict", () => {
-                    void action(() =>
-                        showConflict(view.corpusId, pendingConflict.conflictId),
-                    );
-                }),
-            );
         const back = rbButton("Back to views", backToViews);
         back.prepend(icon("fa-arrow-left"));
-        const editButton = rbButton("Edit", () => showEditor(view));
-        editButton.classList.add("primary");
-        editButton.prepend(icon("fa-pen"));
-        actions.append(back, editButton);
-        more.append(
-            rbButton("Rebuild from evidence", () => {
-                exactInitialSources.clear();
-                void action(() =>
-                    openBuilder(
-                        view.corpusId,
-                        view.definition.selector.sources.map(
-                            (source) => source.sourceId,
-                        ),
-                        view,
-                    ),
-                );
-            }),
-            rbButton("Publication and search", () => {
-                void action(async () => {
-                    const current = sequence;
-                    const savedPolicy = await invokeMemory(
-                        "memoryGetViewPublicationPolicy",
-                        { corpusId: view.corpusId },
-                    );
-                    if (disposed || current !== sequence) return;
-                    policies.set(view.corpusId, savedPolicy);
-                    const sheet = viewSheet(
-                        root,
-                        "Publication and search",
-                        () => !busy && discardChanges(),
-                    );
-                    sheet.body.append(publicationPanel(view));
-                });
-            }),
-            rbButton("History", () => {
-                void action(async () => {
-                    const history = await invokeMemory("memoryViewHistory", {
-                        corpusId: view.corpusId,
-                        viewId: view.viewId,
-                    });
-                    if (disposed) return;
-                    const sheet = viewSheet(root, "View history");
-                    for (const entry of history)
-                        sheet.body.append(
-                            rbNode(
-                                "h3",
-                                `Version ${entry.version.version} (${entry.version.state}) @ ${entry.version.revisionId}`,
-                            ),
-                            rbMarkdown(
-                                viewContentToText(entry.version.content),
-                            ),
-                            rbIconButton(
-                                "fa-arrow-up-right-from-square",
-                                "Open exact revision",
-                                () => {
-                                    sheet.close();
-                                    void showView(
-                                        view.corpusId,
-                                        view.viewId,
-                                        entry.version.revisionId,
-                                    );
-                                },
-                            ),
-                        );
-                });
-            }),
+        actions.append(
+            back,
+            rbNode("p", "Checking publication and conflicts..."),
         );
-        if (
-            maintenanceSupported &&
-            view.state !== "archived" &&
-            !view.definition.wiki
-        )
-            more.append(
-                rbButton("Update view", () => {
-                    if (!discardChanges()) return;
-                    const sheet = viewSheet(
-                        root,
-                        "Update view",
-                        () => !busy && discardChanges(),
-                    );
-                    const panel = createMaintenancePanel(
-                        view,
-                        heads.get(view.corpusId) ?? null,
-                        {
-                            action: (operation) => {
-                                void action(async () => {
-                                    await operation();
-                                    await changed();
-                                });
-                            },
-                            onChange: markDirty,
-                            dirty: () => dirty,
-                            saved: async () => {
-                                dirty = false;
-                                sheet.close();
-                                await refresh();
-                            },
-                            onBuild: (job) => {
-                                renderReceipt(job);
-                                options.onBuildStarted?.(
-                                    job.corpusId,
-                                    job.jobId,
-                                );
-                            },
-                            isCurrent: () =>
-                                !disposed && sheet.element.isConnected,
-                        },
-                    );
-                    sheet.body.append(panel);
-                }),
-            );
-        actions.append(more);
         comparison.replaceChildren(actions, article);
         title.focus();
+        function enableActions() {
+            actions.replaceChildren();
+            const more = rbNode("details", undefined, "hub-view-more-actions");
+            const moreSummary = rbNode("summary", "More actions");
+            more.append(moreSummary);
+            appendEditorialControls(view, article, more);
+            more.addEventListener("keydown", (event) => {
+                if (event.key !== "Escape" || !more.open) return;
+                event.preventDefault();
+                more.open = false;
+                moreSummary.focus();
+            });
+            const pendingConflict = pendingConflicts.get(
+                publicationKey(view.corpusId, view.viewId),
+            );
+            if (pendingConflict)
+                more.append(
+                    rbButton("Review pending conflict", () => {
+                        void action(() =>
+                            showConflict(
+                                view.corpusId,
+                                pendingConflict.conflictId,
+                            ),
+                        );
+                    }),
+                );
+            const editButton = rbButton("Edit", () => showEditor(view));
+            editButton.classList.add("primary");
+            editButton.prepend(icon("fa-pen"));
+            actions.append(back, editButton);
+            more.append(
+                rbButton("Rebuild from evidence", () => {
+                    exactInitialSources.clear();
+                    void action(() =>
+                        openBuilder(
+                            view.corpusId,
+                            view.definition.selector.sources.map(
+                                (source) => source.sourceId,
+                            ),
+                            view,
+                        ),
+                    );
+                }),
+                rbButton("Publication and search", () => {
+                    void action(async () => {
+                        const current = sequence;
+                        const savedPolicy = await invokeMemory(
+                            "memoryGetViewPublicationPolicy",
+                            { corpusId: view.corpusId },
+                        );
+                        if (disposed || current !== sequence) return;
+                        policies.set(view.corpusId, savedPolicy);
+                        const sheet = viewSheet(
+                            root,
+                            "Publication and search",
+                            () => !busy && discardChanges(),
+                        );
+                        sheet.body.append(publicationPanel(view));
+                    });
+                }),
+                rbButton("History", () => {
+                    void action(async () => {
+                        const history = await invokeMemory(
+                            "memoryViewHistory",
+                            {
+                                corpusId: view.corpusId,
+                                viewId: view.viewId,
+                            },
+                        );
+                        if (disposed) return;
+                        const sheet = viewSheet(root, "View history");
+                        for (const entry of history)
+                            sheet.body.append(
+                                rbNode(
+                                    "h3",
+                                    `Version ${entry.version.version} (${entry.version.state}) @ ${entry.version.revisionId}`,
+                                ),
+                                rbMarkdown(
+                                    viewContentToText(entry.version.content),
+                                ),
+                                rbIconButton(
+                                    "fa-arrow-up-right-from-square",
+                                    "Open exact revision",
+                                    () => {
+                                        sheet.close();
+                                        void showView(
+                                            view.corpusId,
+                                            view.viewId,
+                                            entry.version.revisionId,
+                                        );
+                                    },
+                                ),
+                            );
+                    });
+                }),
+            );
+            if (
+                maintenanceSupported &&
+                view.state !== "archived" &&
+                !view.definition.wiki
+            )
+                more.append(
+                    rbButton("Update view", () => {
+                        if (!discardChanges()) return;
+                        const sheet = viewSheet(
+                            root,
+                            "Update view",
+                            () => !busy && discardChanges(),
+                        );
+                        const panel = createMaintenancePanel(
+                            view,
+                            heads.get(view.corpusId) ?? null,
+                            {
+                                action: (operation) => {
+                                    void action(async () => {
+                                        await operation();
+                                        await changed();
+                                    });
+                                },
+                                onChange: markDirty,
+                                dirty: () => dirty,
+                                saved: async () => {
+                                    dirty = false;
+                                    sheet.close();
+                                    await refresh();
+                                },
+                                onBuild: (job) => {
+                                    renderReceipt(job);
+                                    options.onBuildStarted?.(
+                                        job.corpusId,
+                                        job.jobId,
+                                    );
+                                },
+                                isCurrent: () =>
+                                    !disposed && sheet.element.isConnected,
+                            },
+                        );
+                        sheet.body.append(panel);
+                    }),
+                );
+            actions.append(more);
+        }
+        if (actionsReady) enableActions();
+        return enableActions;
     }
 
     function showTimelineEvidence(
@@ -2358,6 +2464,18 @@ export function mountMemoryHubViews(
             } = {},
         ) => {
             if (!discardChanges()) return;
+            visible = true;
+            root.hidden = false;
+            if (value.corpusId && value.viewId) {
+                await loadDetail({
+                    corpusId: value.corpusId,
+                    viewId: value.viewId,
+                    revisionId: value.revisionId,
+                    pageId: value.pageId,
+                    itemKey: value.itemKey,
+                });
+                return;
+            }
             pager.reset();
             sequence++;
             visible = true;
@@ -2391,8 +2509,7 @@ export function mountMemoryHubViews(
             sequence++;
             route = value;
             if (value) {
-                if (busy) refreshPending = true;
-                else await action(refresh);
+                await loadDetail(value);
             } else {
                 comparison.replaceChildren();
                 drafts.hidden = controls.hidden = false;

@@ -131,6 +131,8 @@ describe("Memory Center preview-first views", () => {
                         return [{ corpusId: "c", name: "My collection" }];
                     case "memoryListViews":
                         return snapshot;
+                    case "memoryGetView":
+                        return view;
                     case "memoryListViewBuilds":
                         return [];
                     case "memoryGetViewPublicationPolicy":
@@ -266,6 +268,178 @@ describe("Memory Center preview-first views", () => {
         click(host, "Compare and resolve conflict");
         await settle();
     }
+    test("card clicks navigate and show a loading reader before detail completes, with no duplicate route request", async () => {
+        await panel.refresh();
+        const original = invoke.getMockImplementation()!;
+        let resolve!: (value: unknown) => void;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryGetView"
+                ? new Promise((done) => {
+                      resolve = done;
+                  })
+                : original(method, params),
+        );
+        openView.mockImplementation((corpusId, viewId) => {
+            void panel.show({ corpusId, viewId });
+        });
+        click(host, "Guide");
+        expect(navigate).toHaveBeenLastCalledWith("#/views/c/guide");
+        expect(host.textContent).toContain("Loading view details...");
+        await settle();
+        expect(
+            invoke.mock.calls.filter(([method]) => method === "memoryGetView"),
+        ).toHaveLength(1);
+        resolve(view);
+        await settle();
+        expect(host.querySelector(".hub-view-document")?.textContent).toContain(
+            "Original body",
+        );
+        expect(errors).toEqual([]);
+    });
+    test("document renders before conflict metadata and edit controls wait for that metadata", async () => {
+        await panel.refresh();
+        const original = invoke.getMockImplementation()!;
+        let resolve!: (value: unknown) => void;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryListViewBuildSummaries"
+                ? new Promise((done) => {
+                      resolve = done;
+                  })
+                : original(method, params),
+        );
+        const pending = panel.showView("c", "guide");
+        await settle();
+        const article = host.querySelector(".hub-view-document");
+        expect(article?.textContent).toContain("Original body");
+        expect(host.textContent).toContain(
+            "Checking publication and conflicts...",
+        );
+        expect(
+            [...host.querySelectorAll("button")].some(
+                (button) => button.textContent === "Edit",
+            ),
+        ).toBe(false);
+        resolve({ head, total: 0, items: [] });
+        await pending;
+        expect(host.querySelector(".hub-view-document")).toBe(article);
+        expect(
+            [...host.querySelectorAll("button")].some(
+                (button) => button.textContent === "Edit",
+            ),
+        ).toBe(true);
+        expect(errors).toEqual([]);
+    });
+    test("back navigation invalidates late metadata and never reopens the old reader", async () => {
+        await panel.refresh();
+        const original = invoke.getMockImplementation()!;
+        let resolve!: (value: unknown) => void;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryListViewBuildSummaries"
+                ? new Promise((done) => {
+                      resolve = done;
+                  })
+                : original(method, params),
+        );
+        const pending = panel.showView("c", "guide");
+        await settle();
+        click(host, "Back to views");
+        await settle();
+        resolve({ head, total: 0, items: [] });
+        await pending;
+        expect(host.querySelector(".hub-view-document")).toBeNull();
+        expect(navigate).toHaveBeenLastCalledWith("#/views");
+        expect(openView).toHaveBeenCalledTimes(1);
+        expect(errors).toEqual([]);
+    });
+    test("failed secondary metadata retains the document without enabling unsafe edits", async () => {
+        await panel.refresh();
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryListViewBuildSummaries"
+                ? Promise.reject(new Error("Conflict status unavailable"))
+                : original(method, params),
+        );
+        await panel.showView("c", "guide");
+        expect(host.querySelector(".hub-view-document")?.textContent).toContain(
+            "Original body",
+        );
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+            "Conflict status unavailable",
+        );
+        expect(
+            [...host.querySelectorAll("button")].some(
+                (button) => button.textContent === "Edit",
+            ),
+        ).toBe(false);
+        expect(errors).toHaveLength(1);
+    });
+    test("a late reader response cannot hijack a newer view route", async () => {
+        await panel.refresh();
+        const original = invoke.getMockImplementation()!;
+        let resolveOld!: (value: unknown) => void;
+        const other = {
+            ...view,
+            viewId: "other",
+            content: { ...content, title: "Other guide" },
+        };
+        invoke.mockImplementation((method, params) => {
+            const request = params as { viewId?: string };
+            if (method === "memoryGetView")
+                return request.viewId === "guide"
+                    ? new Promise((resolve) => {
+                          resolveOld = resolve;
+                      })
+                    : Promise.resolve(other);
+            if (
+                method === "memoryListViewSummaries" &&
+                request.viewId === "other"
+            )
+                return Promise.resolve({
+                    head,
+                    total: 1,
+                    items: [
+                        {
+                            ...other,
+                            publication: {
+                                viewId: "other",
+                                indexState: "absent",
+                                reason: "Draft",
+                            },
+                        },
+                    ],
+                });
+            return original(method, params);
+        });
+        const old = panel.showView("c", "guide");
+        await settle();
+        await panel.showView("c", "other");
+        resolveOld(view);
+        await old;
+        expect(host.querySelector(".hub-view-document h2")?.textContent).toBe(
+            "Other guide",
+        );
+        expect(navigate).toHaveBeenLastCalledWith("#/views/c/other");
+        expect(openView).toHaveBeenLastCalledWith("c", "other", undefined);
+        expect(errors).toEqual([]);
+    });
+    test("reader detail failures are visible and retain back navigation", async () => {
+        await panel.refresh();
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryGetView"
+                ? Promise.reject(new Error("View revision unavailable"))
+                : original(method, params),
+        );
+        await panel.showView("c", "guide");
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+            "View revision unavailable",
+        );
+        expect(host.querySelector(".hub-view-document")).toBeNull();
+        click(host, "Back to views");
+        await settle();
+        expect(navigate).toHaveBeenLastCalledWith("#/views");
+        expect(errors).toHaveLength(1);
+    });
     test("disabled capability is informative and visible, never an empty vanished destination", async () => {
         enabled = false;
         await panel.refresh();
@@ -456,7 +630,7 @@ describe("Memory Center preview-first views", () => {
         );
     });
     test.each([undefined, "old"])(
-        "direct reader revision %s loads corpus names before returning to the complete All-memory list",
+        "direct reader revision %s skips gallery loading and returns to the named complete All-memory list",
         async (revisionId) => {
             scope = undefined;
             const original = invoke.getMockImplementation()!;
@@ -470,8 +644,15 @@ describe("Memory Center preview-first views", () => {
                     if (method === "memoryGetView")
                         return Promise.resolve({
                             ...view,
-                            revisionId: "old",
-                            content: { ...content, title: "Historical guide" },
+                            ...(revisionId
+                                ? {
+                                      revisionId,
+                                      content: {
+                                          ...content,
+                                          title: "Historical guide",
+                                      },
+                                  }
+                                : {}),
                         });
                     if (
                         method === "memoryListViews" &&
@@ -494,22 +675,12 @@ describe("Memory Center preview-first views", () => {
                 }),
             );
             await panel.show({ corpusId: "c", viewId: "guide", revisionId });
-            const initialCard = host.querySelector(".hub-view-card")!;
-            expect(initialCard.textContent).toContain(
-                "Collection: Engineering demo",
-            );
-            expect(initialCard.textContent).not.toContain(
-                "Collection name unavailable",
-            );
+            expect(host.querySelector(".hub-view-card")).toBeNull();
             expect(
-                invoke.mock.calls.findIndex(
+                invoke.mock.calls.some(
                     ([method]) => method === "memoryListCorpora",
                 ),
-            ).toBeLessThan(
-                invoke.mock.calls.findIndex(
-                    ([method]) => method === "memoryListViewSummaries",
-                ),
-            );
+            ).toBe(false);
             click(host, "Back to views");
             await settle();
             const cards = [...host.querySelectorAll(".hub-view-card")];

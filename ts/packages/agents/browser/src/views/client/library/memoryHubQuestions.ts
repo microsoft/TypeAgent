@@ -306,13 +306,44 @@ export function mountMemoryHubQuestions(
         if (!detail) throw new Error("This question is no longer available.");
         return detail;
     }
+    let detailSequence = 0;
     function select(question: QuestionListItem) {
+        if (busy) return;
         if (dirty && !confirm("Discard unsaved question edits?")) return;
+        dirty = false;
+        const current = ++detailSequence;
+        const scope = options.scope();
         selectedKey = questionKey(question);
-        action(async () => {
-            const detail = await fetchQuestion(question);
-            if (selectedKey === questionKey(question)) inspect(detail);
-        });
+        const isCurrent = () =>
+            current === detailSequence &&
+            selectedKey === questionKey(question) &&
+            scope === options.scope();
+        inspector.setAttribute("aria-busy", "true");
+        inspector.replaceChildren(
+            rbNode("h3", question.slot.question),
+            rbNode("p", "Loading question details..."),
+        );
+        void fetchQuestion(question)
+            .then((detail) => {
+                if (isCurrent()) inspect(detail);
+            })
+            .catch((error: unknown) => {
+                if (!isCurrent()) return;
+                const alert = rbNode(
+                    "p",
+                    `Question details unavailable: ${rbError(error)}`,
+                );
+                alert.setAttribute("role", "alert");
+                inspector.replaceChildren(
+                    rbNode("h3", question.slot.question),
+                    alert,
+                    rbButton("Retry question details", () => select(question)),
+                );
+                options.onError(error);
+            })
+            .finally(() => {
+                if (isCurrent()) inspector.setAttribute("aria-busy", "false");
+            });
         renderList();
         if (window.matchMedia?.("(max-width: 900px)").matches)
             inspector.scrollIntoView?.({ block: "start" });
@@ -1078,6 +1109,8 @@ export function mountMemoryHubQuestions(
     }
     return {
         async show(viewId?: string, corpusId?: string) {
+            detailSequence++;
+            inspector.setAttribute("aria-busy", "false");
             const same =
                 !attentionOnly &&
                 loadedScope === options.scope() &&
@@ -1096,6 +1129,10 @@ export function mountMemoryHubQuestions(
             await refresh();
         },
         refresh,
+        hide() {
+            detailSequence++;
+            inspector.setAttribute("aria-busy", "false");
+        },
         async refreshAttention() {
             attentionOnly = true;
             selectedView = undefined;

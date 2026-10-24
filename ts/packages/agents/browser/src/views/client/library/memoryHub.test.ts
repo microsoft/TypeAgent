@@ -554,7 +554,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
             ...mountWeb(host, options),
             show: showWeb,
         }));
-    history.replaceState({}, "", "#/inbox");
+    history.replaceState({}, "", "#/library/a/source");
     const hubHtml = readFileSync(
         resolve(process.cwd(), "src/views/client/library/memoryHub.html"),
         "utf8",
@@ -601,14 +601,24 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         score: 1,
         rank: 1,
     };
+    let resolveInitialSnapshot!: (value: unknown) => void;
+    const initialSnapshot = new Promise((resolve) => {
+        resolveInitialSnapshot = resolve;
+    });
+    let initialSnapshotPending = true;
     viewInvoke.mockImplementation(
         async (method: string, params: { query?: string } = {}) => {
-            if (method === "memoryHubSnapshot")
+            if (method === "memoryHubSnapshot") {
+                if (initialSnapshotPending) {
+                    initialSnapshotPending = false;
+                    return initialSnapshot;
+                }
                 return {
                     corpora: [corpus],
                     inbox: [inboxItem],
                     errors: [],
                 };
+            }
             if (method === "memoryHubSearch")
                 return {
                     query: params.query,
@@ -641,7 +651,36 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
             return { items: [source], total: 1, errors: [] };
         },
     );
-    await mountMemoryHub();
+    const initialImplementation = invoke.getMockImplementation()!;
+    let resolveInitialSource!: (item: unknown) => void;
+    invoke.mockImplementation((method: string, params: unknown) =>
+        method === "memoryGetSource"
+            ? new Promise((resolve) => {
+                  resolveInitialSource = resolve;
+              })
+            : initialImplementation(method, params),
+    );
+    const mounting = mountMemoryHub();
+    await settle();
+    expect(value("hubDrawer").classList.contains("hidden")).toBe(false);
+    expect(value("contentPreview").textContent).toContain(
+        "Loading source details...",
+    );
+    history.replaceState({}, "", "#/library");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
+    expect(value("page-library").classList.contains("hidden")).toBe(false);
+    expect(value("hubDrawer").classList.contains("hidden")).toBe(true);
+    resolveInitialSource(source);
+    invoke.mockImplementation(initialImplementation);
+    history.replaceState({}, "", "#/inbox");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    resolveInitialSnapshot({
+        corpora: [corpus],
+        inbox: [inboxItem],
+        errors: [],
+    });
+    await mounting;
     expect(value<HTMLSelectElement>("hubCorpus").value).toBe("");
     expect(value("inboxBadge").textContent).toBe("1");
     expect(value("hubSources").querySelector("#sourceList")).not.toBeNull();
@@ -661,9 +700,39 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         .querySelector<HTMLButtonElement>('[aria-label="Restore"]')!
         .click();
     expect(value("inboxBadge").textContent).toBe("1");
+    const detailImplementation = invoke.getMockImplementation()!;
+    let resolveSource!: (item: unknown) => void;
+    invoke.mockImplementation((method: string, params: unknown) =>
+        method === "memoryGetSource"
+            ? new Promise((resolve) => {
+                  resolveSource = resolve;
+              })
+            : detailImplementation(method, params),
+    );
+    const jobsBeforeDetail = invoke.mock.calls.filter(
+        ([method]) => method === "memoryListJobs",
+    ).length;
+    const inventoriesBeforeDetail = viewInvoke.mock.calls.filter(
+        ([method]) => method === "memoryHubSources",
+    ).length;
     history.replaceState({}, "", "#/library/a/source");
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     await settle();
+    expect(value("hubDrawer").classList.contains("hidden")).toBe(false);
+    expect(value("contentPreview").textContent).toContain(
+        "Loading source details...",
+    );
+    expect(
+        invoke.mock.calls.filter(([method]) => method === "memoryListJobs"),
+    ).toHaveLength(jobsBeforeDetail);
+    expect(
+        viewInvoke.mock.calls.filter(
+            ([method]) => method === "memoryHubSources",
+        ),
+    ).toHaveLength(inventoriesBeforeDetail);
+    resolveSource(source);
+    await settle();
+    invoke.mockImplementation(detailImplementation);
     expect({
         visible: !value("hubDrawer").classList.contains("hidden"),
         error: value("hubError").textContent,

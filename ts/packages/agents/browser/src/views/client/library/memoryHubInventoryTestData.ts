@@ -65,7 +65,13 @@ export function inventoryFixture(legacy: Fixture): Fixture {
             return {
                 ...snapshot,
                 views: undefined,
-                ...page(items, request),
+                ...page(
+                    items.filter(
+                        (item) =>
+                            !request.viewId || item.viewId === request.viewId,
+                    ),
+                    request,
+                ),
                 ...(latestBuild
                     ? {
                           latestBuild: {

@@ -1851,7 +1851,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             .jest;
         const historyRead = jestApi.spyOn(ViewHistory.prototype, "read");
         const accepted = await service.listViews(corpusId);
-        expect(historyRead).toHaveBeenCalledTimes(1);
+        expect(historyRead).not.toHaveBeenCalled();
         historyRead.mockRestore();
         expect(accepted.wikiFamily).toEqual({
             enabled: true,

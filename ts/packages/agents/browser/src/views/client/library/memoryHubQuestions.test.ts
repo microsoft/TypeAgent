@@ -73,6 +73,91 @@ test("a scope switch cannot reuse another collection's fresh cached question pag
         ),
     ).toHaveLength(1);
 });
+test("question selection immediately shows a loading inspector and late details cannot replace a newer selection", async () => {
+    const first = question();
+    const second = question();
+    second.slot.id = "second";
+    second.slot.question = "Where is the office?";
+    const original = invoke.getMockImplementation()!;
+    invoke.mockImplementation(
+        inventoryFixture((method, params) =>
+            method === "memoryListQuestions"
+                ? { head: "head", items: [first, second] }
+                : original(method, params),
+        ),
+    );
+    const { panel, onError } = setup();
+    await panel.show();
+    let resolveFirst!: (value: unknown) => void;
+    invoke.mockImplementation((method, params) =>
+        method === "memoryGetQuestion"
+            ? params.slotId === "slot"
+                ? new Promise((resolve) => {
+                      resolveFirst = resolve;
+                  })
+                : Promise.resolve(second)
+            : original(method, params),
+    );
+    click(first.slot.question);
+    const inspector = document.querySelector(
+        '[aria-label="Question inspector"]',
+    )!;
+    expect(inspector.getAttribute("aria-busy")).toBe("true");
+    expect(inspector.textContent).toContain("Loading question details...");
+    expect(inspector.querySelector("textarea")).toBeNull();
+    click(second.slot.question);
+    await settle();
+    expect(inspector.textContent).toContain(second.slot.question);
+    resolveFirst(first);
+    await settle();
+    expect(inspector.textContent).toContain(second.slot.question);
+    expect(inspector.getAttribute("aria-busy")).toBe("false");
+    expect(onError).not.toHaveBeenCalled();
+});
+test("question failures are visible in the inspector and retry loads the actual details", async () => {
+    const { panel, onError } = setup();
+    await panel.show();
+    const original = invoke.getMockImplementation()!;
+    let failed = false;
+    invoke.mockImplementation((method, params) => {
+        if (method !== "memoryGetQuestion") return original(method, params);
+        if (failed) return Promise.resolve(question());
+        failed = true;
+        return Promise.reject(new Error("Read unavailable"));
+    });
+    click("What is the name?");
+    await settle();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+        "Read unavailable",
+    );
+    click("Retry question details");
+    await settle();
+    expect(
+        document.querySelector('[aria-label="Question inspector"] textarea'),
+    ).not.toBeNull();
+    expect(onError).toHaveBeenCalledTimes(1);
+});
+test("leaving questions invalidates pending detail failures", async () => {
+    const { panel, onError } = setup();
+    await panel.show();
+    let reject!: (error: Error) => void;
+    invoke.mockImplementation(
+        () =>
+            new Promise((_, failure) => {
+                reject = failure;
+            }),
+    );
+    click("What is the name?");
+    panel.hide();
+    reject(new Error("Old request failed"));
+    await settle();
+    expect(onError).not.toHaveBeenCalled();
+    expect(
+        document
+            .querySelector('[aria-label="Question inspector"]')
+            ?.getAttribute("aria-busy"),
+    ).toBe("false");
+});
 test("complete inventory opens inspector and assertions serialize optimistic concurrency identity", async () => {
     const { panel, onError } = setup();
     await panel.show();

@@ -43,6 +43,7 @@ import { FileMemoryService } from "../src/fileMemoryService.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { ViewHistory } from "../src/viewHistory.js";
+import { TypedViewStore } from "../src/viewStore.js";
 import { buildSummary, questionSummary } from "../src/inventory.js";
 
 const name: QuestionSlot = {
@@ -429,11 +430,13 @@ describe("ordinary-source schema lifecycle", () => {
     let modelCalls = 0;
     let fetchCalls = 0;
     let discoveryCalls = 0;
+    let expectedCloseFailure: string | undefined;
     beforeEach(async () => {
         root = await mkdtemp(path.join(os.tmpdir(), "memory-schema-views-"));
         modelCalls = 0;
         fetchCalls = 0;
         discoveryCalls = 0;
+        expectedCloseFailure = undefined;
         const adapter: ViewSynthesisAdapter = {
             identity: "offline-schema-fixture-v1",
             proposeSchema: async () => ({
@@ -511,8 +514,15 @@ describe("ordinary-source schema lifecycle", () => {
         });
     });
     afterEach(async () => {
-        await service.close();
-        await rm(root, { recursive: true, force: true });
+        try {
+            if (expectedCloseFailure)
+                await expect(service.close()).rejects.toThrow(
+                    expectedCloseFailure,
+                );
+            else await service.close();
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
     });
     async function settled(job: ViewBuildJob) {
         for (let count = 0; count < 1000; count++) {
@@ -678,7 +688,9 @@ describe("ordinary-source schema lifecycle", () => {
             ),
         );
         const read = ViewHistory.prototype.read;
+        const readEntry = ViewHistory.prototype.readEntry;
         let reads = 0;
+        let projectionReads = 0;
         ViewHistory.prototype.read = function (
             this: ViewHistory<unknown>,
             ...args: Parameters<typeof read>
@@ -686,16 +698,26 @@ describe("ordinary-source schema lifecycle", () => {
             reads++;
             return read.apply(this, args);
         };
+        ViewHistory.prototype.readEntry = function <T>(
+            this: ViewHistory<unknown>,
+            ...args: Parameters<typeof readEntry>
+        ) {
+            if (args[0] === "view-read-projection.json") projectionReads++;
+            return (readEntry<T>).apply(this, args);
+        };
         try {
             expect(
                 await service.getViewPublications({ corpusId, viewIds: ids }),
             ).toEqual(expected);
-            expect(reads).toBe(1);
-            reads = 0;
+            expect(reads).toBe(0);
+            expect(projectionReads).toBe(1);
+            projectionReads = 0;
             await service.listViewSummaries({ corpusId });
-            expect(reads).toBe(1);
+            expect(reads).toBe(0);
+            expect(projectionReads).toBe(1);
         } finally {
             ViewHistory.prototype.read = read;
+            ViewHistory.prototype.readEntry = readEntry;
         }
         await expect(
             service.getViewPublications({
@@ -850,6 +872,65 @@ describe("ordinary-source schema lifecycle", () => {
         );
         expect(fetchCalls).toBe(0);
     }, 60000);
+
+    test.each([
+        { conflicts: 1, exhausted: false },
+        { conflicts: 4, exhausted: true },
+    ])(
+        "automatic reconciliation replans $conflicts stale admissions with bounded retries (exhausted: $exhausted)",
+        async ({ conflicts, exhausted }) => {
+            const { corpus } = await overlappingFixture();
+            const plan = service.planViewMaintenance.bind(service);
+            let rebuildPlans = 0;
+            service.planViewMaintenance = async (request) => {
+                const current = await plan(request);
+                if (
+                    current.targets.some((target) => target.state === "rebuild")
+                ) {
+                    rebuildPlans++;
+                    if (rebuildPlans <= conflicts)
+                        await new TypedViewStore(root).recordViewMaintenance(
+                            current,
+                        );
+                }
+                return current;
+            };
+            const admitted = await service.ingestDocument({
+                corpusId: corpus.corpusId,
+                source: {
+                    sourceId: "replanning-evidence",
+                    sourceType: "text",
+                    title: "Fresh profile",
+                    text: "Preferred name is Ada.",
+                    tags: ["profile"],
+                },
+            });
+            await waitForMemoryJob(service, admitted.jobId);
+            if (!exhausted) {
+                await answered(corpus.corpusId);
+                expect(rebuildPlans).toBeGreaterThan(conflicts);
+                return;
+            }
+            let failure: string | undefined;
+            for (let count = 0; count < 1000; count++) {
+                failure = (await service.listQuestions(corpus.corpusId))
+                    .maintenanceError;
+                if (failure) break;
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+            expect(failure).toBe(
+                "Maintenance head or target version changed; inspect a fresh plan",
+            );
+            expect(rebuildPlans).toBe(4);
+            expect(await service.listViewBuilds(corpus.corpusId)).toHaveLength(
+                1,
+            );
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            expect(rebuildPlans).toBe(4);
+            expectedCloseFailure = failure;
+        },
+        60000,
+    );
 
     test("assisted authoring requires approval and bounded discovered proposals retain rejection history", async () => {
         const corpus = await service.createCorpus("Assisted contracts");

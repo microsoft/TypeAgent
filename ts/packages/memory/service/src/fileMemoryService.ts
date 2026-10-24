@@ -21,7 +21,6 @@ import path from "node:path";
 import lockfile from "proper-lockfile";
 import { normalizeQueryTemporalContext } from "./temporalContext.js";
 import {
-    buildSummary,
     questionSummary,
     questionNeedsAttention,
     validateInventoryPage,
@@ -227,7 +226,13 @@ import {
     assertMaintenanceMembership,
     validateMaintenanceRequest,
 } from "./viewMaintenanceValidation.js";
-import { mergeView, sameViewBuildEvidence, viewHash } from "./viewMerge.js";
+import {
+    mergeView,
+    sameViewBuildEvidence,
+    viewHash,
+    viewBuildEvidenceFingerprint,
+} from "./viewMerge.js";
+import type { ViewInventoryBuild } from "./viewReadProjection.js";
 import {
     captureEditorialContext,
     editorialArticle,
@@ -1202,6 +1207,18 @@ export class FileMemoryService
         string,
         { corpusId: string; jobId: string; sourceIds: Set<string> }
     >();
+    private readonly viewIndexPreparations = new Map<
+        string,
+        {
+            corpusId: string;
+            directory: string;
+            controller: AbortController;
+            work: Promise<string | undefined>;
+            installed: boolean;
+        }
+    >();
+    private readonly viewIndexRemovalBarriers = new Map<string, number>();
+    private readonly viewIndexCleanup = new Map<string, Promise<void>>();
     private readonly jobs = new Map<string, IngestionJobStatus>();
     private readonly pendingSourceScopes = new Map<
         string,
@@ -1213,6 +1230,7 @@ export class FileMemoryService
     private releaseLock: (() => Promise<void>) | undefined;
     private rootWriteTail: Promise<void> = Promise.resolve();
     private closed = false;
+    private closePromise: Promise<void> | undefined;
     private reconciliationTimer: ReturnType<typeof setInterval> | undefined;
     private readonly wikiTimers = new Map<
         string,
@@ -1404,7 +1422,7 @@ export class FileMemoryService
                                     "Accepted informational page is missing",
                                 );
                             await this.viewStore.makeInformationalVisible(view);
-                            await this.indexViewLocked(view);
+                            await this.indexViewLocked(view, signal);
                         } else if (
                             !conflicts.length &&
                             saved.revisionId &&
@@ -1424,13 +1442,17 @@ export class FileMemoryService
                                 throw new Error(
                                     "Materialized build target is missing",
                                 );
-                            const publication = await this.publishViewLocked({
-                                corpusId: job.corpusId,
-                                viewId: view.viewId,
-                                revisionId: view.revisionId,
-                                expectedVersion: view.version,
-                                expectedHead: snapshot.head,
-                            });
+                            const publication = await this.publishViewLocked(
+                                {
+                                    corpusId: job.corpusId,
+                                    viewId: view.viewId,
+                                    revisionId: view.revisionId,
+                                    expectedVersion: view.version,
+                                    expectedHead: snapshot.head,
+                                },
+                                signal,
+                            );
+                            signal.throwIfAborted();
                             await this.viewStore.updateViewBuild(
                                 job.corpusId,
                                 job.jobId,
@@ -1438,9 +1460,13 @@ export class FileMemoryService
                                     const receipt = current.results.find(
                                         (entry) => entry.viewId === view.viewId,
                                     );
-                                    if (!receipt)
-                                        throw new Error(
-                                            "Publication receipt target is missing",
+                                    if (
+                                        !receipt ||
+                                        current.state !== "running" ||
+                                        receipt.revisionId !== view.revisionId
+                                    )
+                                        throw new ViewBuildStaleError(
+                                            "Publication receipt target changed during indexing",
                                         );
                                     receipt.publication = publication;
                                     receipt.state =
@@ -1646,9 +1672,14 @@ export class FileMemoryService
                     /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(directory.name)
                 ) {
                     await this.cleanManifestStaging(directory.name);
+                    await rm(this.viewIndexStagingDirectory(directory.name), {
+                        recursive: true,
+                        force: true,
+                    });
                     await this.viewStore.recover(directory.name);
                     await this.cleanArchivedViewIndexes(directory.name);
                     await this.viewStore.recoverViewBuilds(directory.name);
+                    await this.viewStore.ensureReadProjection(directory.name);
                     let manifest:
                         | Pick<
                               CorpusManifest,
@@ -1726,11 +1757,17 @@ export class FileMemoryService
         return this.initializePromise;
     }
 
-    public async close(): Promise<void> {
-        if (this.closed) {
-            return;
-        }
+    public close(): Promise<void> {
+        return (this.closePromise ??= this.closeService());
+    }
+
+    private async closeService(): Promise<void> {
         this.closed = true;
+        this.viewBuilds.cancelAll();
+        for (const preparation of this.viewIndexPreparations.values())
+            preparation.controller.abort(
+                new ViewBuildStaleError("Memory service is closing"),
+            );
         await this.knowledge.close();
         await this.acquisition.close();
         if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
@@ -1760,6 +1797,9 @@ export class FileMemoryService
         await Promise.allSettled(
             [...this.corpusAccesses.values()].map((access) => access.idle()),
         );
+        await this.drainViewIndexPreparations([
+            ...this.viewIndexPreparations.values(),
+        ]);
         await this.releaseLock?.();
         this.releaseLock = undefined;
         const viewFailure = viewClosure[0];
@@ -1910,7 +1950,7 @@ export class FileMemoryService
         validateIdentifier("corpus ID", corpusId);
         await this.batchStore.purge(corpusId);
         this.viewBuilds.forget(corpusId);
-        return this.enqueueWrite(corpusId, async () => {
+        return this.enqueueViewIndexRemoval(corpusId, async () => {
             const runtime = await this.getCorpusRuntime(corpusId);
             await this.acquisition.suppress(corpusId, {
                 viewIds: (await this.viewStore.listViews(corpusId)).views.map(
@@ -2850,6 +2890,15 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<SourceForgetResult> {
+        return this.withViewIndexRemoval(corpusId, runtime, () =>
+            this.completeAuthorizedSourceRemovalLocked(corpusId, runtime),
+        );
+    }
+
+    private async completeAuthorizedSourceRemovalLocked(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<SourceForgetResult> {
         const removal = runtime.manifest.authorizedSourceRemoval;
         if (!removal)
             throw new Error("No authorized source removal to recover");
@@ -3335,7 +3384,7 @@ export class FileMemoryService
             throw new Error("At least one event forget selector is required");
         }
         let result: MemoryEventForgetResult | undefined;
-        await this.enqueueWrite(request.corpusId, async () => {
+        await this.enqueueViewIndexRemoval(request.corpusId, async () => {
             const runtime = await this.getCorpusRuntime(request.corpusId);
             const deleted = runtime.events.filter(
                 (event) =>
@@ -3672,7 +3721,7 @@ export class FileMemoryService
     public async listViews(corpusId: string): Promise<ViewSnapshot> {
         const runtime = await this.requireViews(corpusId);
         return runtime.access.read(() =>
-            this.viewStore.withReadSnapshot(corpusId, () =>
+            this.viewStore.withInventorySnapshot(corpusId, () =>
                 this.listViewSnapshot(corpusId),
             ),
         );
@@ -3684,7 +3733,7 @@ export class FileMemoryService
         validateInventoryPage(request);
         const runtime = await this.requireViews(request.corpusId);
         return runtime.access.read(() =>
-            this.viewStore.withReadSnapshot(request.corpusId, async () => {
+            this.viewStore.withInventorySnapshot(request.corpusId, async () => {
                 const snapshot = await this.viewStore.listViews(
                     request.corpusId,
                 );
@@ -3730,7 +3779,9 @@ export class FileMemoryService
                     })),
                 );
                 const latestBuild = (
-                    await this.viewStore.listViewBuilds(request.corpusId)
+                    await this.viewStore.listViewInventoryBuilds(
+                        request.corpusId,
+                    )
                 )
                     .filter(
                         (job) =>
@@ -3790,7 +3841,7 @@ export class FileMemoryService
             );
         request.viewIds.forEach((id) => validateIdentifier("view ID", id));
         return runtime.access.read(() =>
-            this.viewStore.withReadSnapshot(request.corpusId, () =>
+            this.viewStore.withInventorySnapshot(request.corpusId, () =>
                 Promise.all(
                     request.viewIds.map((viewId) =>
                         this.viewStore.getViewPublication({
@@ -3809,10 +3860,12 @@ export class FileMemoryService
         validateInventoryPage(request);
         const runtime = await this.requireViews(request.corpusId);
         return runtime.access.read(() =>
-            this.viewStore.withReadSnapshot(request.corpusId, async () => {
+            this.viewStore.withInventorySnapshot(request.corpusId, async () => {
                 const query = request.query?.toLowerCase() ?? "";
                 const allJobs = (
-                    await this.viewStore.listViewBuilds(request.corpusId)
+                    await this.viewStore.listViewInventoryBuilds(
+                        request.corpusId,
+                    )
                 ).sort(
                     (a, b) =>
                         b.updatedAt.localeCompare(a.updatedAt) ||
@@ -3838,7 +3891,21 @@ export class FileMemoryService
                 );
                 return {
                     ...page,
-                    items: page.items.map((job) => buildSummary(job, latest)),
+                    items: page.items.map((job) => ({
+                        ...job,
+                        results: job.results.map(
+                            ({
+                                inputFingerprint: _input,
+                                evidenceFingerprint: _evidence,
+                                wikiAssessment: _assessment,
+                                ...result
+                            }) => ({
+                                ...result,
+                                current:
+                                    latest.get(result.viewId) === job.jobId,
+                            }),
+                        ),
+                    })),
                 };
             }),
         );
@@ -3891,7 +3958,7 @@ export class FileMemoryService
     ): Promise<Array<[ViewVersion, ViewVersion]>> {
         const runtime = await this.requireViews(corpusId);
         return runtime.access.read(() =>
-            this.viewStore.withReadSnapshot(corpusId, () =>
+            this.viewStore.withInventorySnapshot(corpusId, () =>
                 this.consolidationPairs(corpusId, targetId),
             ),
         );
@@ -3903,7 +3970,7 @@ export class FileMemoryService
         currentViews: ViewVersion[],
     ): Promise<NonNullable<ViewSnapshot["wikiFamily"]>> {
         const family = await this.viewStore.getWikiFamily(corpusId, kind);
-        const jobs = await this.viewStore.listViewBuilds(corpusId);
+        const jobs = await this.viewStore.listViewInventoryBuilds(corpusId);
         const active = jobs.some(
             (job) =>
                 job.state === "running" &&
@@ -3915,7 +3982,7 @@ export class FileMemoryService
                             : "informational-project-summary-v1"),
                 ),
         );
-        const latest = new Map<string, ViewBuildTargetResult>();
+        const latest = new Map<string, ViewInventoryBuild["results"][number]>();
         for (const job of jobs.sort((a, b) =>
             b.updatedAt.localeCompare(a.updatedAt),
         ))
@@ -3977,7 +4044,7 @@ export class FileMemoryService
 
     private async familyConflictResolution(
         corpusId: string,
-        result: ViewBuildTargetResult,
+        result: ViewInventoryBuild["results"][number],
         jobId: string,
         currentViews: ViewVersion[],
     ): Promise<"unresolved" | "ready" | "indexPending"> {
@@ -4000,8 +4067,9 @@ export class FileMemoryService
             conflict.jobId !== jobId ||
             conflict.human.viewId !== result.viewId ||
             conflict.human.revisionId !== conflict.expectedRevisionId ||
-            conflict.input.fingerprint !== result.snapshot.fingerprint ||
-            !sameViewBuildEvidence(conflict.input, result.snapshot)
+            conflict.input.fingerprint !== result.inputFingerprint ||
+            viewBuildEvidenceFingerprint(conflict.input) !==
+                result.evidenceFingerprint
         )
             return "unresolved";
         const current = await this.familyResolutionVersion(
@@ -4095,15 +4163,17 @@ export class FileMemoryService
 
     public async listQuestions(corpusId: string): Promise<QuestionInventory> {
         const runtime = await this.requireViews(corpusId);
-        return runtime.access.read(async () => {
-            const snapshot = await this.viewStore.listViews(corpusId);
-            const failure = this.schemaMaintenanceFailures.get(corpusId);
-            return {
-                head: snapshot.head,
-                items: questionInventory(snapshot),
-                ...(failure ? { maintenanceError: failure.message } : {}),
-            };
-        });
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(corpusId, async () => {
+                const snapshot = await this.viewStore.listViews(corpusId);
+                const failure = this.schemaMaintenanceFailures.get(corpusId);
+                return {
+                    head: snapshot.head,
+                    items: questionInventory(snapshot),
+                    ...(failure ? { maintenanceError: failure.message } : {}),
+                };
+            }),
+        );
     }
 
     public async listQuestionSummaries(
@@ -4159,7 +4229,7 @@ export class FileMemoryService
         validateIdentifier("view ID", request.viewId);
         validateIdentifier("slot ID", request.slotId);
         return runtime.access.read(() =>
-            this.viewStore.withReadSnapshot(request.corpusId, async () => {
+            this.viewStore.withInventorySnapshot(request.corpusId, async () => {
                 const view = await this.viewStore.getView({
                     corpusId: request.corpusId,
                     viewId: request.viewId,
@@ -5394,8 +5464,15 @@ export class FileMemoryService
             return;
         }
         const retries = this.schemaMaintenanceRetries.get(corpusId) ?? 0;
+        const stalePlan =
+            error instanceof ViewBuildStaleError &&
+            failure.message ===
+                "Maintenance head or target version changed; inspect a fresh plan";
         if (
-            /^View (history head|version) conflict/.test(failure.message) &&
+            (stalePlan ||
+                /^View (history head|version) conflict/.test(
+                    failure.message,
+                )) &&
             retries < 3
         ) {
             this.schemaMaintenanceRetries.set(corpusId, retries + 1);
@@ -5557,35 +5634,39 @@ export class FileMemoryService
         request: ViewReadRequest,
     ): Promise<ViewVersion | undefined> {
         const runtime = await this.requireViews(request.corpusId);
-        return runtime.access.read(async () => {
-            const view = await this.viewStore.getView(request);
-            if (view?.redirect)
-                return this.readWikiRedirect(
-                    view,
-                    request.revisionId !== undefined,
-                );
-            if (view && !(await this.informationalVersionEligible(view)))
-                return undefined;
-            if (view?.generation && editorialArticle(view.content)) {
-                const snapshot = await this.viewStore.listViews(
-                    request.corpusId,
-                );
-                const eligible = await Promise.all(
-                    snapshot.views.map((entry) =>
-                        this.informationalVersionEligible(entry, entry),
-                    ),
-                );
-                return {
-                    ...view,
-                    protectedTargets: editorialProtection(view),
-                    relatedArticles: relatedEditorialArticles(
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(request.corpusId, async () => {
+                const view = await this.viewStore.getView(request);
+                if (view?.redirect)
+                    return this.readWikiRedirect(
                         view,
-                        snapshot.views.filter((_, index) => eligible[index]),
-                    ),
-                };
-            }
-            return view;
-        });
+                        request.revisionId !== undefined,
+                    );
+                if (view && !(await this.informationalVersionEligible(view)))
+                    return undefined;
+                if (view?.generation && editorialArticle(view.content)) {
+                    const snapshot = await this.viewStore.listViews(
+                        request.corpusId,
+                    );
+                    const eligible = await Promise.all(
+                        snapshot.views.map((entry) =>
+                            this.informationalVersionEligible(entry, entry),
+                        ),
+                    );
+                    return {
+                        ...view,
+                        protectedTargets: editorialProtection(view),
+                        relatedArticles: relatedEditorialArticles(
+                            view,
+                            snapshot.views.filter(
+                                (_, index) => eligible[index],
+                            ),
+                        ),
+                    };
+                }
+                return view;
+            }),
+        );
     }
 
     public async saveViewDraft(
@@ -5877,7 +5958,9 @@ export class FileMemoryService
         const runtime = await this.requireViews(request.corpusId);
         validateIdentifier("view ID", request.viewId);
         return runtime.access.read(() =>
-            this.viewStore.getViewPublication(request),
+            this.viewStore.withInventorySnapshot(request.corpusId, () =>
+                this.viewStore.getViewPublication(request),
+            ),
         );
     }
 
@@ -6026,6 +6109,7 @@ export class FileMemoryService
 
     private async publishViewLocked(
         request: ViewPublishRequest,
+        signal?: AbortSignal,
     ): Promise<ViewPublicationStatus> {
         const view = await this.viewStore.getView(request);
         if (!view) throw new Error("Publication revision is missing");
@@ -6033,7 +6117,7 @@ export class FileMemoryService
         const publication = await this.viewStore.publishView(request);
         if (publication.indexState === "ready") return publication;
         await this.viewPublicationCheckpoint?.("intent");
-        return this.indexViewLocked(view);
+        return this.indexViewLocked(view, signal);
     }
 
     public async retryViewIndex(
@@ -6083,10 +6167,157 @@ export class FileMemoryService
 
     private async indexViewLocked(
         view: ViewVersion,
+        signal?: AbortSignal,
     ): Promise<ViewPublicationStatus> {
-        const directory = this.viewIndexDirectory(view);
+        signal?.throwIfAborted();
+        if (this.closed || this.viewIndexRemovalBarriers.has(view.corpusId))
+            throw new ViewBuildStaleError(
+                "View indexing is closing or being purged",
+            );
+        const runtime = await this.getCorpusRuntime(view.corpusId);
+        const manifest = runtime.manifest;
+        const events = runtime.events;
+        const target = await this.viewStore.getView({
+            corpusId: view.corpusId,
+            viewId: view.viewId,
+        });
+        if (!target)
+            throw new ViewBuildStaleError("Current view target is missing");
+        const key = this.viewIndexDirectory(view);
+        let preparation = this.viewIndexPreparations.get(key);
+        if (!preparation) {
+            const controller = new AbortController();
+            const directory = path.join(
+                this.viewIndexStagingDirectory(view.corpusId),
+                randomUUID(),
+            );
+            preparation = {
+                corpusId: view.corpusId,
+                directory,
+                controller,
+                work: Promise.resolve().then(() =>
+                    this.buildViewIndex(
+                        view,
+                        path.join(directory, "index"),
+                        controller.signal,
+                    ),
+                ),
+                installed: false,
+            };
+            this.viewIndexPreparations.set(key, preparation);
+        }
+        const pending = preparation;
+        const cancel = () =>
+            pending.controller.abort(
+                signal?.reason ??
+                    new ViewBuildStaleError("View indexing cancelled"),
+            );
+        signal?.addEventListener("abort", cancel, { once: true });
+        try {
+            let error = await runtime.access.outsideWrite(() => pending.work);
+            signal?.throwIfAborted();
+            pending.controller.signal.throwIfAborted();
+            if (this.closed || this.viewIndexRemovalBarriers.has(view.corpusId))
+                throw new ViewBuildStaleError(
+                    "View indexing was closed or purged",
+                );
+            this.assertRemovalComplete(runtime);
+            const current = await this.viewStore.listViews(view.corpusId);
+            if (
+                runtime.manifest !== manifest ||
+                runtime.events !== events ||
+                current.views.find((entry) => entry.viewId === view.viewId)
+                    ?.revisionId !== target.revisionId
+            )
+                throw new ViewBuildStaleError(
+                    "Corpus or view changed during derivative preparation; retry the current exact revision",
+                );
+            await this.assertViewPublicationFresh(view);
+            const publication = await this.viewStore.getViewPublication(view);
+            if (
+                publication.publishedRevisionId !== view.revisionId ||
+                publication.blockedReason
+            )
+                throw new ViewBuildStaleError(
+                    "Publication changed during derivative preparation",
+                );
+            if (pending.installed) return publication;
+            if (!error) {
+                error = await this.installPreparedViewIndex(
+                    pending.directory,
+                    key,
+                );
+                if (!error) await this.viewPublicationCheckpoint?.("index");
+            }
+            const status = await this.viewStore.updateViewIndex(
+                view.corpusId,
+                view.viewId,
+                view.revisionId,
+                error,
+            );
+            pending.installed = true;
+            return status;
+        } finally {
+            signal?.removeEventListener("abort", cancel);
+            await this.removeViewIndexPreparation(pending.directory);
+            if (this.viewIndexPreparations.get(key) === pending)
+                this.viewIndexPreparations.delete(key);
+        }
+    }
+
+    private viewIndexStagingDirectory(corpusId: string): string {
+        return path.join(
+            this.rootDirectory,
+            corpusId,
+            "views",
+            "view-search-index-staging",
+        );
+    }
+
+    private async installPreparedViewIndex(
+        preparation: string,
+        destination: string,
+    ): Promise<string | undefined> {
+        try {
+            await rm(destination, { recursive: true, force: true });
+            await mkdir(path.dirname(destination), { recursive: true });
+            await this.installViewIndexSegments(
+                preparation,
+                path.dirname(destination),
+            );
+            await rename(path.join(preparation, "index"), destination);
+        } catch (error) {
+            await rm(destination, { recursive: true, force: true });
+            return `Indexing failed: ${redactRunbookText(error instanceof Error ? error.message : String(error))}`;
+        }
+        return undefined;
+    }
+
+    private async installViewIndexSegments(
+        preparation: string,
+        destination: string,
+    ): Promise<void> {
+        const segments = path.join(preparation, jsonSegmentDirectory);
+        try {
+            await access(segments);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+            throw error;
+        }
+        await cp(segments, path.join(destination, jsonSegmentDirectory), {
+            recursive: true,
+            force: false,
+        });
+    }
+
+    private async buildViewIndex(
+        view: ViewVersion,
+        directory: string,
+        signal: AbortSignal,
+    ): Promise<string | undefined> {
         const content = viewContentToText(view.content);
         try {
+            signal.throwIfAborted();
             await mkdir(directory, { recursive: true });
             const index = this.indexFactory(view.corpusId, directory);
             await index.rebuild(
@@ -6111,9 +6342,10 @@ export class FileMemoryService
                         pipeline: { mode: "content" },
                     },
                 ],
-                new AbortController().signal,
+                signal,
                 async () => {},
             );
+            signal.throwIfAborted();
             await stampIndexSchema(directory, "views", true);
             await writeFile(
                 path.join(directory, "ready"),
@@ -6122,20 +6354,89 @@ export class FileMemoryService
             );
         } catch (error) {
             await rm(directory, { recursive: true, force: true });
-            return this.viewStore.updateViewIndex(
-                view.corpusId,
-                view.viewId,
-                view.revisionId,
-                `Indexing failed: ${redactRunbookText(error instanceof Error ? error.message : String(error))}`,
-            );
+            return `Indexing failed: ${redactRunbookText(error instanceof Error ? error.message : String(error))}`;
         }
+        return undefined;
+    }
 
-        await this.viewPublicationCheckpoint?.("index");
-        return this.viewStore.updateViewIndex(
-            view.corpusId,
-            view.viewId,
-            view.revisionId,
+    private async drainViewIndexPreparations(
+        preparations: Iterable<{
+            directory: string;
+            work: Promise<string | undefined>;
+        }>,
+    ): Promise<void> {
+        await Promise.all(
+            [...preparations].map(async (preparation) => {
+                try {
+                    await preparation.work;
+                } finally {
+                    await this.removeViewIndexPreparation(
+                        preparation.directory,
+                    );
+                }
+            }),
         );
+    }
+
+    private removeViewIndexPreparation(directory: string): Promise<void> {
+        const existing = this.viewIndexCleanup.get(directory);
+        if (existing) return existing;
+        clearJsonSegmentCache(directory);
+        const work = rm(directory, {
+            recursive: true,
+            force: true,
+            maxRetries: 5,
+            retryDelay: 25,
+        });
+        this.viewIndexCleanup.set(directory, work);
+        const remove = () => {
+            if (this.viewIndexCleanup.get(directory) === work)
+                this.viewIndexCleanup.delete(directory);
+        };
+        void work.then(remove, remove);
+        return work;
+    }
+
+    private enqueueViewIndexRemoval<T>(
+        corpusId: string,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        return this.enqueueWrite(corpusId, async () =>
+            this.withViewIndexRemoval(
+                corpusId,
+                await this.getCorpusRuntime(corpusId),
+                operation,
+            ),
+        );
+    }
+
+    private async withViewIndexRemoval<T>(
+        corpusId: string,
+        runtime: CorpusRuntime,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        this.viewIndexRemovalBarriers.set(
+            corpusId,
+            (this.viewIndexRemovalBarriers.get(corpusId) ?? 0) + 1,
+        );
+        const preparations = [...this.viewIndexPreparations.values()].filter(
+            (entry) => entry.corpusId === corpusId,
+        );
+        for (const preparation of preparations)
+            preparation.controller.abort(
+                new ViewBuildStaleError("View evidence is being forgotten"),
+            );
+        try {
+            if (preparations.length)
+                await runtime.access.outsideWrite(() =>
+                    this.drainViewIndexPreparations(preparations),
+                );
+            return await operation();
+        } finally {
+            const count = this.viewIndexRemovalBarriers.get(corpusId)! - 1;
+            if (count) this.viewIndexRemovalBarriers.set(corpusId, count);
+            else this.viewIndexRemovalBarriers.delete(corpusId);
+        }
     }
 
     private async informationalIndexReady(view: ViewVersion): Promise<boolean> {
@@ -6156,7 +6457,10 @@ export class FileMemoryService
         );
     }
 
-    private async recoverInformationalEffect(view: ViewVersion): Promise<void> {
+    private async recoverInformationalEffect(
+        view: ViewVersion,
+        signal?: AbortSignal,
+    ): Promise<ViewPublicationStatus> {
         await this.assertViewPublicationFresh(view);
         let publication = await this.viewStore.getViewPublication({
             corpusId: view.corpusId,
@@ -6168,7 +6472,8 @@ export class FileMemoryService
             publication.indexState !== "ready" ||
             !(await this.informationalIndexReady(view))
         )
-            await this.indexViewLocked(view);
+            publication = await this.indexViewLocked(view, signal);
+        return publication;
     }
 
     private async cleanArchivedViewIndexes(corpusId: string): Promise<void> {
@@ -7017,20 +7322,44 @@ export class FileMemoryService
         await this.viewStore.activateWikiRedirect(corpusId, jobId, targetId);
         signal?.throwIfAborted();
         await this.cleanArchivedViewIndexes(corpusId);
-        await this.recoverInformationalEffect(canonical);
-        await this.acknowledgeWikiConsolidation(corpusId, jobId, targetId);
+        const publication = await this.recoverInformationalEffect(
+            canonical,
+            signal,
+        );
+        signal?.throwIfAborted();
+        if (
+            publication.indexState !== "ready" ||
+            publication.publishedRevisionId !== canonical.revisionId ||
+            publication.blockedReason
+        )
+            throw new Error(
+                `Consolidation cannot bind before the current derivative index is ready: ${publication.reason}`,
+            );
+        await this.acknowledgeWikiConsolidation(
+            corpusId,
+            jobId,
+            targetId,
+            canonical.revisionId,
+        );
     }
 
     private async acknowledgeWikiConsolidation(
         corpusId: string,
         jobId: string,
         targetId: string,
+        acceptedRevisionId?: string,
     ): Promise<void> {
         await this.viewStore.updateViewBuild(corpusId, jobId, (current) => {
             const target = current.results.find(
                 (entry) => entry.viewId === targetId,
             );
-            if (!target?.wikiConsolidation)
+            if (
+                !target?.wikiConsolidation ||
+                target.wikiConsolidation.stage === "stale" ||
+                (acceptedRevisionId !== undefined &&
+                    target.wikiConsolidation.acceptedRevisionId !==
+                        acceptedRevisionId)
+            )
                 throw new ViewBuildStaleError(
                     "Consolidation receipt was forgotten",
                 );
@@ -7247,8 +7576,19 @@ export class FileMemoryService
             publication.indexState !== "ready" ||
             !(await this.informationalIndexReady(canonical))
         )
-            publication = await this.indexViewLocked(canonical);
+            publication = await this.indexViewLocked(canonical, signal);
         signal.throwIfAborted();
+        await this.recheckViewInput(result.snapshot);
+        await this.checkWikiContributionInput(contribution.input, false);
+        const currentCanonical = await this.viewStore.getView({
+            corpusId: job.corpusId,
+            viewId: canonical.viewId,
+        });
+        if (currentCanonical?.revisionId !== canonical.revisionId)
+            throw new ViewBuildStaleError(
+                "Canonical Wiki contribution changed during derivative preparation",
+            );
+        await this.assertViewPublicationFresh(canonical);
         if (
             publication.indexState !== "ready" ||
             publication.blockedReason ||
@@ -7725,7 +8065,7 @@ export class FileMemoryService
         };
         await this.applyInformationalFamilyOperation(request, family);
         if (!family.enabled) return this.viewStore.recordViewMaintenance(plan);
-        const active = await this.viewStore.listViewBuilds(corpusId);
+        const active = await this.viewStore.listViewInventoryBuilds(corpusId);
         if (active.some((job) => job.state === "running"))
             return this.viewStore.recordViewMaintenance(plan);
         if (
@@ -7786,6 +8126,9 @@ export class FileMemoryService
             snapshot.views,
             kind,
         );
+        const familyVersion = viewHash(
+            await this.viewStore.getWikiFamily(corpusId, kind),
+        );
         const { targets, snapshots } = await this.prepareWikiTargets(
             corpusId,
             family,
@@ -7794,6 +8137,12 @@ export class FileMemoryService
             request.operation === "rebuild",
             plan,
             kind,
+        );
+        await this.assertWikiPlanCurrent(
+            corpusId,
+            kind,
+            familyVersion,
+            snapshot.views,
         );
         // Save discovered identities while leaving unadmitted work retryable.
         await this.viewStore.saveWikiFamily(corpusId, family, kind);
@@ -7880,6 +8229,24 @@ export class FileMemoryService
             family,
             request.family,
         );
+    }
+
+    private async assertWikiPlanCurrent(
+        corpusId: string,
+        kind: "wiki" | "projects",
+        familyVersion: string,
+        views: ViewVersion[],
+    ): Promise<void> {
+        const family = await this.viewStore.getWikiFamily(corpusId, kind);
+        const current = await this.viewStore.listViews(corpusId);
+        if (
+            viewHash(family) !== familyVersion ||
+            viewHash(current.views.map((view) => view.revisionId)) !==
+                viewHash(views.map((view) => view.revisionId))
+        )
+            throw new ViewBuildStaleError(
+                "Informational maintenance plan changed during derivative preparation",
+            );
     }
 
     private async prepareWikiTargets(
@@ -7981,7 +8348,12 @@ export class FileMemoryService
                     selector: target.definition.selector,
                 });
             } catch (error) {
-                if (!(error instanceof Error) || "code" in error) throw error;
+                if (
+                    error instanceof ViewBuildStaleError ||
+                    !(error instanceof Error) ||
+                    "code" in error
+                )
+                    throw error;
                 plan.targets.push({
                     viewId: descriptor.viewId,
                     expectedVersion: target.expectedVersion,
