@@ -23,6 +23,8 @@ import { indexedQueryTerms } from "./indexedFragments.js";
 
 import {
     MemoryBatchStore,
+    resolveIngestionCommitPolicy,
+    type IngestionCommitPolicy,
     type MemoryBatchImport,
     type MemoryBatchImportLookup,
     type MemoryBatchImportRequest,
@@ -36,6 +38,10 @@ import {
 import { CorpusAccess } from "./corpusAccess.js";
 import { EventSegmentStore } from "./eventSegmentStore.js";
 import { BoundedIngestionGroup } from "./boundedIngestionGroup.js";
+import {
+    MaintenanceScheduler,
+    type MaintenanceStatus,
+} from "./maintenanceScheduler.js";
 import { AgentSessionStore } from "./agentSessionStore.js";
 import { configuredAgentSessionModel } from "./agentSessionDistillation.js";
 import type {
@@ -231,6 +237,7 @@ import type {
 } from "./viewTypes.js";
 import {
     discoverInformationalDescriptors,
+    rankWikiCandidates,
     retireWikiCandidate,
     usefulWikiSubject,
     usefulWikiSubjectLabel,
@@ -450,6 +457,14 @@ interface PreparedCorpusIndex {
 }
 
 export interface FileMemoryServiceOptions {
+    maintenanceMode?: "automatic" | "manual";
+    ingestionCommitPolicy?: Partial<IngestionCommitPolicy>;
+    maintenanceLimits?: {
+        maxTargetsPerPass?: number;
+        maxCandidatesPerPass?: number;
+        maxPassesPerGeneration?: number;
+        requestBudget?: RequestBudgetLimits;
+    };
     agentSessionImports?: boolean;
     agentSessionDistillationModel?: AgentSessionDistillationModel;
     revisionTextCheckpoint?: (point: RevisionTextFaultPoint) => Promise<void>;
@@ -1080,11 +1095,10 @@ export class FileMemoryService
         }
     >();
     private readonly ingestionTails = new Map<string, Promise<void>>();
-    private readonly segmentCollectionWork = new Map<string, Promise<void>>();
-    private readonly ingestionGroups =
-        new BoundedIngestionGroup<AcceptedIngestion>((entries) =>
-            this.dispatchIngestionGroup(entries),
-        );
+    private readonly ingestionGroups: BoundedIngestionGroup<AcceptedIngestion>;
+    private readonly maintenance: MaintenanceScheduler;
+    private readonly maintenanceLimits: FileMemoryServiceOptions["maintenanceLimits"];
+    private readonly admissionPolicy: string;
     private readonly preparingIndexes = new Map<
         string,
         { corpusId: string; jobId: string; sourceIds: Set<string> }
@@ -1097,10 +1111,7 @@ export class FileMemoryService
     private rootWriteTail: Promise<void> = Promise.resolve();
     private closed = false;
     private reconciliationTimer: ReturnType<typeof setInterval> | undefined;
-    private readonly wikiTimers = new Map<
-        string,
-        ReturnType<typeof setTimeout>
-    >();
+    private readonly reconciliationWork = new Set<string>();
     private readonly wikiMaintenanceFailures = new Map<string, Error>();
     private readonly informationalWikiEnabled: boolean;
     private readonly wikiBudget: RequestBudgetLimits | undefined;
@@ -1109,7 +1120,6 @@ export class FileMemoryService
     private readonly sourceSynopsesEnabled: boolean;
     private synopsisModel: SourceSynopsisModel | undefined;
     private synopsisModelFailure: string | undefined;
-    private readonly synopsisWork = new Map<string, Promise<void>>();
     private readonly textStores = new Map<string, RevisionTextStore>();
     private readonly revisionTextCheckpoint: FileMemoryServiceOptions["revisionTextCheckpoint"];
     private readonly agentSessionStore: AgentSessionStore;
@@ -1119,6 +1129,34 @@ export class FileMemoryService
         private readonly rootDirectory: string,
         options: FileMemoryServiceOptions = {},
     ) {
+        const commitPolicy = resolveIngestionCommitPolicy(
+            options.ingestionCommitPolicy,
+        );
+        this.ingestionGroups = new BoundedIngestionGroup(
+            (entries) => this.dispatchIngestionGroup(entries),
+            commitPolicy.maxDocuments,
+            commitPolicy.admissionWaitMs,
+        );
+        this.maintenance = new MaintenanceScheduler(
+            (corpusId) => this.batchStore.hasActiveImports(corpusId),
+            options.maintenanceMode,
+            options.maintenanceLimits?.requestBudget,
+        );
+        this.maintenanceLimits = options.maintenanceLimits;
+        for (const limit of [
+            options.maintenanceLimits?.maxTargetsPerPass,
+            options.maintenanceLimits?.maxCandidatesPerPass,
+            options.maintenanceLimits?.maxPassesPerGeneration,
+        ])
+            if (
+                limit !== undefined &&
+                (!Number.isSafeInteger(limit) || limit < 1)
+            )
+                throw new Error(
+                    "Maintenance work limits must be positive integers",
+                );
+        if ((options.maintenanceLimits?.maxTargetsPerPass ?? 12) > 12)
+            throw new Error("Maintenance target limit cannot exceed 12");
         this.revisionTextCheckpoint = options.revisionTextCheckpoint;
         this.viewPublicationCheckpoint = options.viewPublicationCheckpoint;
         this.viewDrafts = options.viewDrafts !== false;
@@ -1137,6 +1175,13 @@ export class FileMemoryService
                 Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
             );
         this.viewAdapter = adapter;
+        this.admissionPolicy = hashContent(
+            JSON.stringify([
+                "bounded-admission-v1",
+                options.maintenanceLimits,
+                adapter.identity,
+            ]),
+        );
         this.viewBuilds = new ViewBuildRunner(
             this.viewAdapter,
             {
@@ -1306,8 +1351,32 @@ export class FileMemoryService
         this.assetStore = new RevisionAssetStore(rootDirectory);
         this.batchStore = new MemoryBatchStore(
             rootDirectory,
-            this,
+            {
+                ingestDocument: (request, signal) =>
+                    this.ingestDocument(request, signal),
+                getJob: (jobId) => this.getJob(jobId),
+                cancelJob: (jobId) => this.cancelJob(jobId),
+                withIngestionGroup: (operation, expectedItems) =>
+                    this.withIngestionGroup(operation, expectedItems),
+                isCommitted: async (job) => {
+                    const manifest = await this.readManifest(job.corpusId);
+                    return (
+                        manifest?.sources.some(
+                            (source) =>
+                                source.sourceId === job.sourceId &&
+                                source.activeRevisionId === job.revisionId &&
+                                source.revisions.some(
+                                    (revision) =>
+                                        revision.revisionId ===
+                                            job.revisionId &&
+                                        revision.state === "ready",
+                                ),
+                        ) ?? false
+                    );
+                },
+            },
             (corpusId) => this.resumeBatchMaintenance(corpusId),
+            commitPolicy,
         );
         this.viewStore = new TypedViewStore(rootDirectory, userInfo().username);
         this.agentSessionImportsEnabled = options.agentSessionImports !== false;
@@ -1425,6 +1494,10 @@ export class FileMemoryService
                         const runtime = await this.getCorpusRuntime(
                             directory.name,
                         );
+                        this.scheduleIndexCollection(
+                            directory.name,
+                            this.indexDirectory(directory.name),
+                        );
                         await this.textStore(directory.name).purge(
                             runtime.manifest.sources,
                         );
@@ -1468,14 +1541,12 @@ export class FileMemoryService
         }
         this.closed = true;
         if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
-        for (const timer of this.wikiTimers.values()) clearTimeout(timer);
-        this.wikiTimers.clear();
+        const maintenanceClosure = this.maintenance.close();
         await this.initializePromise?.catch(() => undefined);
         for (const controller of this.controllers.values()) {
             controller.abort(new Error("Memory service is closing"));
         }
         await this.agentSessionStore.close();
-        await Promise.allSettled(this.synopsisWork.values());
         await this.batchStore.close();
 
         this.viewBuilds.cancelAll();
@@ -1485,7 +1556,6 @@ export class FileMemoryService
             ...this.indexedReads,
             ...this.reindexWork,
         ]);
-        await Promise.allSettled(this.segmentCollectionWork.values());
         // Family maintenance may admit a new build while tracked reads drain.
         const viewClosure = await Promise.allSettled([this.viewBuilds.close()]);
         await Promise.allSettled(
@@ -1494,9 +1564,43 @@ export class FileMemoryService
         await this.releaseLock?.();
         this.releaseLock = undefined;
         const viewFailure = viewClosure[0];
+        await maintenanceClosure;
         if (viewFailure.status === "rejected") throw viewFailure.reason;
         for (const failure of this.wikiMaintenanceFailures.values())
             throw failure;
+    }
+
+    public deferMaintenance(): () => void {
+        return this.maintenance.defer();
+    }
+
+    public getMaintenanceStatus(): MaintenanceStatus {
+        const status = this.maintenance.status();
+        for (const [corpusId, runtime] of this.corpora)
+            for (const source of runtime.manifest.sources) {
+                const synopsis = source.revisions.find(
+                    (revision) =>
+                        revision.revisionId === source.activeRevisionId,
+                )?.synopsis;
+                if (synopsis?.status !== "failed") continue;
+                status.failures.push({
+                    key: `${corpusId}:synopsis:${source.sourceId}`,
+                    error: synopsis.reason ?? "Source synopsis failed",
+                });
+            }
+        status.settled &&= status.failures.length === 0;
+        return status;
+    }
+
+    public async drainMaintenance(
+        timeoutMs?: number,
+        signal?: AbortSignal,
+    ): Promise<MaintenanceStatus> {
+        await this.initialize();
+        for (const corpusId of this.corpora.keys())
+            this.resumeBatchMaintenance(corpusId);
+        const drained = await this.maintenance.drain(timeoutMs, signal);
+        return { ...drained, ...this.getMaintenanceStatus() };
     }
 
     public async createCorpus(
@@ -1658,7 +1762,7 @@ export class FileMemoryService
             const candidateIndex = this.createIndex(corpusId, indexGeneration);
             await candidateIndex.rebuild(
                 [],
-                new AbortController().signal,
+                this.maintenance.signal,
                 async () => {},
             );
             await stampIndexSchema(
@@ -2351,8 +2455,11 @@ export class FileMemoryService
         };
     }
 
-    public withIngestionGroup(operation: () => Promise<void>): Promise<void> {
-        return this.ingestionGroups.run(operation);
+    public withIngestionGroup(
+        operation: () => Promise<void>,
+        expectedItems?: number,
+    ): Promise<void> {
+        return this.ingestionGroups.run(operation, expectedItems);
     }
 
     private async dispatchIngestionGroup(
@@ -2372,7 +2479,7 @@ export class FileMemoryService
         }
         await this.enqueueIngestion(corpusId, async () => {
             if (
-                entries.length === 2 &&
+                entries.length > 1 &&
                 !this.wikiBudget &&
                 (await this.processIngestionGroup(corpusId, entries))
             )
@@ -2599,7 +2706,7 @@ export class FileMemoryService
                 corpusId,
                 runtime,
                 candidateManifest,
-                new AbortController().signal,
+                this.maintenance.signal,
             );
         } else if (runtime.manifest.indexGeneration) {
             await this.removeInactiveIndexGenerations(
@@ -2641,7 +2748,7 @@ export class FileMemoryService
 
     public async reindexCorpus(
         corpusId: string,
-        signal: AbortSignal = new AbortController().signal,
+        signal: AbortSignal = this.maintenance.signal,
     ): Promise<ReindexResult> {
         return this.reindex(corpusId, undefined, signal);
     }
@@ -2649,7 +2756,7 @@ export class FileMemoryService
     public async reindexSource(
         corpusId: string,
         sourceId: string,
-        signal: AbortSignal = new AbortController().signal,
+        signal: AbortSignal = this.maintenance.signal,
     ): Promise<ReindexResult> {
         validateIdentifier("source ID", sourceId);
         return this.reindex(corpusId, sourceId, signal);
@@ -3088,7 +3195,7 @@ export class FileMemoryService
                     request.corpusId,
                     runtime,
                     candidateManifest,
-                    new AbortController().signal,
+                    this.maintenance.signal,
                 );
             }
             if (
@@ -3775,7 +3882,7 @@ export class FileMemoryService
                 : await this.viewAdapter.validate(
                       prior.generation.input,
                       output,
-                      new AbortController().signal,
+                      this.maintenance.signal,
                   );
             if (support) {
                 validateSupport(output, support);
@@ -4219,7 +4326,7 @@ export class FileMemoryService
                         pipeline: { mode: "content" },
                     },
                 ],
-                new AbortController().signal,
+                this.maintenance.signal,
                 async () => {},
             );
             await stampIndexSchema(directory, "views", true);
@@ -5539,38 +5646,32 @@ export class FileMemoryService
         corpusId: string,
         kind: "wiki" | "projects" = "wiki",
     ): void {
-        const key = `${corpusId}:${kind}`;
-        if (
-            !this.informationalWikiEnabled ||
-            this.closed ||
-            this.batchStore.hasActiveImports(corpusId) ||
-            this.wikiTimers.has(key)
-        )
-            return;
-        const timer = setTimeout(() => {
-            this.wikiTimers.delete(key);
-            if (this.closed || this.batchStore.hasActiveImports(corpusId))
-                return;
-            const work = this.enqueueWrite(
-                corpusId,
-                async () => {
-                    if (
-                        this.closed ||
-                        this.batchStore.hasActiveImports(corpusId)
-                    )
-                        return;
-                    const runtime = await this.getCorpusRuntime(corpusId, true);
-                    if (runtime.manifest.authorizedSourceRemoval) return;
-                    const family = await this.viewStore.getWikiFamily(
-                        corpusId,
-                        kind,
-                    );
-                    if (!family.enabled || !family.dirty || family.error)
-                        return;
-                    const snapshot = await this.viewStore.listViews(corpusId);
-                    if (this.batchStore.hasActiveImports(corpusId)) return;
-                    try {
-                        await this.maintainWikiFamily(
+        if (!this.informationalWikiEnabled || this.closed) return;
+        this.maintenance.request(
+            corpusId,
+            kind,
+            this.corpora.get(corpusId)?.manifest.indexGeneration,
+            async (signal) => {
+                const result = await this.enqueueWrite(
+                    corpusId,
+                    async () => {
+                        if (this.maintenance.isDeferred(corpusId)) return;
+                        signal.throwIfAborted();
+                        const runtime = await this.getCorpusRuntime(
+                            corpusId,
+                            true,
+                        );
+                        if (runtime.manifest.authorizedSourceRemoval) return;
+                        const family = await this.viewStore.getWikiFamily(
+                            corpusId,
+                            kind,
+                        );
+                        if (!family.enabled || !family.dirty || family.error)
+                            return;
+                        const snapshot =
+                            await this.viewStore.listViews(corpusId);
+                        if (this.maintenance.isDeferred(corpusId)) return;
+                        return this.maintainWikiFamily(
                             runtime,
                             {
                                 corpusId,
@@ -5580,48 +5681,42 @@ export class FileMemoryService
                             },
                             true,
                         );
-                    } catch (error) {
-                        const family = await this.viewStore.getWikiFamily(
-                            corpusId,
-                            kind,
-                        );
-                        family.dirty = true;
-                        family.error = safeError(error);
-                        await this.viewStore.saveWikiFamily(
-                            corpusId,
-                            family,
-                            kind,
-                        );
-                    }
-                },
-                true,
+                    },
+                    true,
+                );
+                await this.waitForMaintenanceBuild(result, signal);
+            },
+        );
+    }
+
+    private async waitForMaintenanceBuild(
+        result: ViewMaintenanceResult | undefined,
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (!result?.job) return;
+        await this.viewBuilds.wait(result.job.jobId, signal);
+        const job = (
+            await this.viewStore.listViewBuilds(result.job.corpusId)
+        ).find((job) => job.jobId === result.job!.jobId);
+        if (job && ["failed", "partial", "cancelled"].includes(job.state))
+            throw new Error(
+                `Autonomous maintenance build ${job.state}: ${job.jobId}`,
             );
-            this.indexedReads.add(work);
-            void work.then(
-                () => this.indexedReads.delete(work),
-                (error: unknown) => {
-                    this.indexedReads.delete(work);
-                    this.wikiMaintenanceFailures.set(
-                        key,
-                        new Error(safeError(error)),
-                    );
-                },
-            );
-        }, 250);
-        this.wikiTimers.set(key, timer);
     }
 
     private deferBatchMaintenance(
         corpusId: string,
         automatic: boolean,
     ): boolean {
-        return automatic && this.batchStore.hasActiveImports(corpusId);
+        return automatic && this.maintenance.isDeferred(corpusId);
     }
 
     private resumeBatchMaintenance(corpusId: string): void {
-        if (this.closed || this.batchStore.hasActiveImports(corpusId)) return;
+        if (this.closed) return;
+        this.maintenance.wake();
         const runtime = this.corpora.get(corpusId);
         if (!runtime) return;
+        this.scheduleSourceSynopses(corpusId);
         this.scheduleTopics(corpusId, runtime);
         if (!runtime.index.listSubjects || !runtime.index.readFragments) return;
         for (const kind of ["projects", "wiki"] as const)
@@ -5633,11 +5728,18 @@ export class FileMemoryService
         this.reconciliationTimer = setInterval(() => {
             for (const [corpusId, runtime] of this.corpora) {
                 if (
+                    this.reconciliationWork.has(corpusId) ||
+                    (this.maintenance.isDeferred(corpusId) &&
+                        !runtime.manifest.authorizedSourceRemoval)
+                )
+                    continue;
+                if (
                     !this.informationalWikiEnabled &&
                     !this.sourceSynopsesEnabled &&
                     !runtime.manifest.authorizedSourceRemoval
                 )
                     continue;
+                this.reconciliationWork.add(corpusId);
                 const work = this.enqueueWrite(
                     corpusId,
                     async () => {
@@ -5646,6 +5748,7 @@ export class FileMemoryService
                                 corpusId,
                                 runtime,
                             );
+                        if (this.maintenance.isDeferred(corpusId)) return;
                         this.scheduleSourceSynopses(corpusId);
                         await this.reconcileTopics(corpusId, runtime);
                         if (!this.informationalWikiEnabled) return;
@@ -5669,12 +5772,14 @@ export class FileMemoryService
                 this.indexedReads.add(work);
                 void work.then(
                     () => {
+                        this.reconciliationWork.delete(corpusId);
                         this.indexedReads.delete(work);
                         this.wikiMaintenanceFailures.delete(
                             `${corpusId}:reconciliation`,
                         );
                     },
                     (error: unknown) => {
+                        this.reconciliationWork.delete(corpusId);
                         this.indexedReads.delete(work);
                         this.wikiMaintenanceFailures.set(
                             `${corpusId}:reconciliation`,
@@ -5852,6 +5957,15 @@ export class FileMemoryService
             await this.viewStore.saveWikiFamily(corpusId, family, kind);
             return this.viewStore.recordViewMaintenance(plan);
         }
+        if (
+            !(await this.admitMaintenancePass(
+                corpusId,
+                kind,
+                family,
+                automatic,
+            ))
+        )
+            return this.viewStore.recordViewMaintenance(plan);
         await this.ensureDocumentIndex(corpusId, runtime);
         const page = await runtime.index.listSubjects(
             family.cursor,
@@ -5895,6 +6009,7 @@ export class FileMemoryService
             request.operation === "rebuild",
             plan,
             kind,
+            automatic,
         );
         // Save discovered identities while leaving unadmitted work retryable.
         await this.viewStore.saveWikiFamily(corpusId, family, kind);
@@ -5916,8 +6031,12 @@ export class FileMemoryService
         if (runtime.manifest.indexGeneration)
             nextFamily.indexVersion = runtime.manifest.indexGeneration;
         else delete nextFamily.indexVersion;
-        nextFamily.dirty =
-            !!page.nextContinuationToken || targets.length === 12;
+        nextFamily.dirty = this.wikiPassNeedsContinuation(
+            plan,
+            targets.length,
+            automatic,
+            !!page.nextContinuationToken,
+        );
         if (!nextFamily.dirty) {
             const decisions = plan.targets.filter(
                 (target) =>
@@ -5991,14 +6110,53 @@ export class FileMemoryService
         rebuild: boolean,
         plan: ViewMaintenancePlan,
         kind: "wiki" | "projects",
+        automatic: boolean,
     ): Promise<{ targets: ViewBuildTarget[]; snapshots: ViewBuildSnapshot[] }> {
         const targets: ViewBuildTarget[] = [];
         const snapshots: ViewBuildSnapshot[] = [];
-        for (const descriptor of family.descriptors) {
-            if (targets.length === 12) break;
+        const generation = (await this.getCorpusRuntime(corpusId)).manifest
+            .indexGeneration;
+        const policy = hashContent(
+            JSON.stringify([
+                this.admissionPolicy,
+                views.map((view) => [
+                    view.viewId,
+                    view.version,
+                    view.revisionId,
+                ]),
+            ]),
+        );
+        const limits = automatic ? this.maintenanceLimits : undefined;
+        const targetLimit = limits?.maxTargetsPerPass ?? 12;
+        const candidateLimit = limits?.maxCandidatesPerPass ?? Infinity;
+        const descriptors = rankWikiCandidates(
+            family.descriptors,
+            views,
+            Boolean(limits),
+        );
+        let inspected = 0;
+        for (const descriptor of descriptors) {
+            if (targets.length === targetLimit) break;
             const current = views.find(
                 (view) => view.viewId === descriptor.viewId,
             );
+            if (
+                automatic &&
+                !rebuild &&
+                !current &&
+                descriptor.admission?.policy === policy &&
+                descriptor.admission.generation === generation
+            )
+                continue;
+            if (inspected >= candidateLimit) {
+                plan.targets.push({
+                    viewId: descriptor.viewId,
+                    expectedVersion: 0,
+                    state: "blocked",
+                    reason: "Automatic candidate-read budget exhausted",
+                });
+                break;
+            }
             if (
                 !current &&
                 kind === "wiki" &&
@@ -6015,63 +6173,26 @@ export class FileMemoryService
                 plan,
             );
             if (!target) continue;
+            inspected++;
             try {
-                const input = await this.snapshotInformationalTarget(
+                const input = await this.inspectWikiTarget(
                     corpusId,
+                    family,
                     target,
                     current,
+                    rebuild,
+                    plan,
+                    kind,
                 );
-                if (
-                    !current &&
-                    kind === "wiki" &&
-                    !usefulWikiSubject(
-                        descriptor.query,
-                        input.inputs
-                            .map((source) => source.content)
-                            .join("\n\n"),
-                    )
-                ) {
-                    retireWikiCandidate(family, descriptor.viewId, plan);
+                if (!input) {
+                    if (automatic)
+                        descriptor.admission = {
+                            generation,
+                            policy,
+                            reason: "Retained admission decision or unchanged indexed evidence",
+                        };
                     continue;
                 }
-                target.definition = input.definition;
-                const contributionConflict =
-                    kind === "wiki" && !current
-                        ? await this.viewStore.pendingWikiContributionConflict(
-                              input,
-                          )
-                        : undefined;
-                if (
-                    contributionConflict &&
-                    (await this.informationalVersionEligible(
-                        contributionConflict.human,
-                    ))
-                ) {
-                    plan.targets.push({
-                        viewId: descriptor.viewId,
-                        expectedVersion: 0,
-                        state: "blocked",
-                        reason: `User decision required: resolve canonical edit conflict ${contributionConflict.conflictId}`,
-                    });
-                    continue;
-                }
-                if (
-                    current &&
-                    sameViewBuildEvidence(current?.generation?.input, input) &&
-                    !rebuild
-                ) {
-                    await this.recoverInformationalEffect(current);
-                    continue;
-                }
-                if (
-                    !rebuild &&
-                    (await this.viewStore.hasPendingInformationalInput(
-                        corpusId,
-                        descriptor.viewId,
-                        input,
-                    ))
-                )
-                    continue;
                 targets.push(target);
                 snapshots.push(input);
                 plan.targets.push({
@@ -6089,9 +6210,133 @@ export class FileMemoryService
                     state: "blocked",
                     reason: `Technical target rejection: ${safeError(error)}`,
                 });
+                if (automatic)
+                    descriptor.admission = {
+                        generation,
+                        policy,
+                        reason: `Technical target rejection: ${safeError(error)}`,
+                    };
             }
         }
         return { targets, snapshots };
+    }
+
+    private wikiPassNeedsContinuation(
+        plan: ViewMaintenancePlan,
+        targetCount: number,
+        automatic: boolean,
+        hasNextPage: boolean,
+    ): boolean {
+        const limit = automatic
+            ? (this.maintenanceLimits?.maxTargetsPerPass ?? 12)
+            : 12;
+        return (
+            hasNextPage ||
+            targetCount === limit ||
+            plan.targets.some(
+                (target) =>
+                    target.reason ===
+                    "Automatic candidate-read budget exhausted",
+            )
+        );
+    }
+
+    private async admitMaintenancePass(
+        corpusId: string,
+        kind: "wiki" | "projects",
+        family: WikiFamilyState,
+        automatic: boolean,
+    ): Promise<boolean> {
+        const maxPasses = this.maintenanceLimits?.maxPassesPerGeneration;
+        if (!automatic || maxPasses === undefined) return true;
+        const generation = this.corpora.get(corpusId)?.manifest.indexGeneration;
+        const prior = family.automaticPasses;
+        const count =
+            prior?.policy === this.admissionPolicy &&
+            prior.generation === generation
+                ? prior.count
+                : 0;
+        if (count >= maxPasses) {
+            this.maintenance.park(
+                corpusId,
+                kind,
+                "Automatic pass budget exhausted; changed evidence or explicit maintenance is required",
+            );
+            return false;
+        }
+        family.automaticPasses = {
+            generation,
+            policy: this.admissionPolicy,
+            count: count + 1,
+        };
+        await this.viewStore.saveWikiFamily(corpusId, family, kind);
+        return true;
+    }
+
+    private async inspectWikiTarget(
+        corpusId: string,
+        family: WikiFamilyState,
+        target: ViewBuildTarget,
+        current: ViewVersion | undefined,
+        rebuild: boolean,
+        plan: ViewMaintenancePlan,
+        kind: "wiki" | "projects",
+    ): Promise<ViewBuildSnapshot | undefined> {
+        const input = await this.snapshotInformationalTarget(
+            corpusId,
+            target,
+            current,
+        );
+        const query =
+            input.definition.wiki?.query ??
+            input.definition.projectSummary?.query;
+        if (!query) throw new Error("Informational target query is missing");
+        if (
+            !current &&
+            kind === "wiki" &&
+            !usefulWikiSubject(
+                query,
+                input.inputs.map((source) => source.content).join("\n\n"),
+            )
+        ) {
+            retireWikiCandidate(family, target.definition.viewId, plan);
+            return undefined;
+        }
+        target.definition = input.definition;
+        const conflict =
+            kind === "wiki" && !current
+                ? await this.viewStore.pendingWikiContributionConflict(input)
+                : undefined;
+        if (
+            conflict &&
+            (await this.informationalVersionEligible(conflict.human))
+        ) {
+            plan.targets.push({
+                viewId: target.definition.viewId,
+                expectedVersion: 0,
+                state: "blocked",
+                reason: `User decision required: resolve canonical edit conflict ${conflict.conflictId}`,
+            });
+            return undefined;
+        }
+        if (
+            current &&
+            sameViewBuildEvidence(current.generation?.input, input) &&
+            !rebuild
+        ) {
+            await this.recoverInformationalEffect(current);
+            return undefined;
+        }
+        if (
+            !rebuild &&
+            (await this.viewStore.hasPendingInformationalInput(
+                corpusId,
+                target.definition.viewId,
+                input,
+            ))
+        )
+            return undefined;
+        return input;
     }
 
     private informationalFamilyTarget(
@@ -6508,38 +6753,36 @@ export class FileMemoryService
     }
 
     private scheduleTopics(corpusId: string, runtime: CorpusRuntime): void {
-        const key = `${corpusId}:topics`;
         if (
             !this.informationalWikiEnabled ||
             this.closed ||
-            this.batchStore.hasActiveImports(corpusId) ||
-            this.wikiTimers.has(key) ||
             !runtime.manifest.sources.length ||
             !supportsTopicIndex(runtime.index)
         )
             return;
-        const timer = setTimeout(() => {
-            this.wikiTimers.delete(key);
-            if (this.closed || this.batchStore.hasActiveImports(corpusId))
-                return;
-            const work = this.enqueueWrite(
-                corpusId,
-                async () => {
-                    if (
-                        this.closed ||
-                        this.batchStore.hasActiveImports(corpusId) ||
-                        runtime.manifest.authorizedSourceRemoval
-                    )
-                        return;
-                    const state = await this.viewStore.getTopicState(corpusId);
-                    const family = reconcileTopicFamily(
-                        state.family,
-                        runtime.manifest.indexGeneration,
-                    );
-                    if (!topicFamilyCanSchedule(family)) return;
-                    if (this.batchStore.hasActiveImports(corpusId)) return;
-                    try {
-                        await this.maintainTopics(
+        this.maintenance.request(
+            corpusId,
+            "topics",
+            runtime.manifest.indexGeneration,
+            async (signal) => {
+                const result = await this.enqueueWrite(
+                    corpusId,
+                    async () => {
+                        if (
+                            this.maintenance.isDeferred(corpusId) ||
+                            runtime.manifest.authorizedSourceRemoval
+                        )
+                            return;
+                        signal.throwIfAborted();
+                        const state =
+                            await this.viewStore.getTopicState(corpusId);
+                        const family = reconcileTopicFamily(
+                            state.family,
+                            runtime.manifest.indexGeneration,
+                        );
+                        if (!topicFamilyCanSchedule(family)) return;
+                        if (this.maintenance.isDeferred(corpusId)) return;
+                        return this.maintainTopics(
                             runtime,
                             {
                                 corpusId,
@@ -6549,29 +6792,12 @@ export class FileMemoryService
                             },
                             true,
                         );
-                    } catch (error) {
-                        await this.viewStore.saveTopicFamily(corpusId, {
-                            ...family,
-                            dirty: true,
-                            error: safeError(error),
-                        });
-                    }
-                },
-                true,
-            );
-            this.indexedReads.add(work);
-            void work.then(
-                () => this.indexedReads.delete(work),
-                (error: unknown) => {
-                    this.indexedReads.delete(work);
-                    this.wikiMaintenanceFailures.set(
-                        key,
-                        new Error(safeError(error)),
-                    );
-                },
-            );
-        }, 250);
-        this.wikiTimers.set(key, timer);
+                    },
+                    true,
+                );
+                await this.waitForMaintenanceBuild(result, signal);
+            },
+        );
     }
 
     private async recheckViewInput(input: ViewBuildSnapshot): Promise<void> {
@@ -6746,10 +6972,7 @@ export class FileMemoryService
         validateMaintenanceRequest(request, true);
         const runtime = await this.requireViews(request.corpusId);
         if ("family" in request) {
-            const key = `${request.corpusId}:${request.family}`;
-            const timer = this.wikiTimers.get(key);
-            if (timer) clearTimeout(timer);
-            this.wikiTimers.delete(key);
+            this.maintenance.cancel(request.corpusId, request.family);
             return this.enqueueWrite(request.corpusId, () =>
                 request.family === "topics"
                     ? this.maintainTopics(runtime, request)
@@ -7083,7 +7306,7 @@ export class FileMemoryService
         const support = await this.viewAdapter.validate(
             conflict.input,
             output,
-            new AbortController().signal,
+            this.maintenance.signal,
         );
         validateSupport(output, support);
         return this.enqueueWrite(request.corpusId, async () => {
@@ -7738,42 +7961,38 @@ export class FileMemoryService
     }
 
     private scheduleIndexCollection(corpusId: string, root: string): void {
-        if (this.segmentCollectionWork.has(root)) return;
+        const generation = this.corpora.get(corpusId)?.manifest.indexGeneration;
+        if (!generation) return;
         const key = `${corpusId}:segment-collection`;
-        let retry = false;
-        const work = new Promise<void>((resolve) => setTimeout(resolve, 250))
-            .then(() =>
-                this.enqueueWrite(
-                    corpusId,
-                    async () => {
-                        // Preparation can start after this collection was scheduled.
-                        if (this.hasUnpublishedIndex(corpusId, root)) {
-                            retry = true;
-                            return;
-                        }
-                        await this.collectIndexSegments(root);
-                        this.wikiMaintenanceFailures.delete(key);
-                    },
-                    true,
-                ),
-            )
-            .then(
-                () => {},
-                (error: unknown) => {
+        this.maintenance.request(
+            corpusId,
+            `segments:${hashContent(root)}`,
+            generation,
+            async (signal) => {
+                try {
+                    await this.enqueueWrite(
+                        corpusId,
+                        async () => {
+                            if (this.maintenance.isDeferred(corpusId)) return;
+                            signal.throwIfAborted();
+                            // Preparation can start after this collection was scheduled.
+                            if (this.hasUnpublishedIndex(corpusId, root)) {
+                                this.scheduleIndexCollection(corpusId, root);
+                                return;
+                            }
+                            await this.collectIndexSegments(root);
+                            this.wikiMaintenanceFailures.delete(key);
+                        },
+                        true,
+                    );
+                } catch (error) {
                     this.wikiMaintenanceFailures.set(
                         key,
                         new Error(safeError(error)),
                     );
-                },
-            )
-            .finally(() => {
-                this.segmentCollectionWork.delete(root);
-                if (retry && !this.closed)
-                    this.scheduleIndexCollection(corpusId, root);
-            });
-        this.segmentCollectionWork.set(
-            root,
-            work.then(() => {}),
+                    throw error;
+                }
+            },
         );
     }
 
@@ -7977,7 +8196,7 @@ export class FileMemoryService
                     completed: 0,
                     total: 1,
                     operation: append ? "append" : "rebuild",
-                    message: "Building shared two-source index",
+                    message: `Building shared ${entries.length}-source index`,
                 });
             return {
                 runtime,
@@ -8049,7 +8268,7 @@ export class FileMemoryService
                         value.stage ?? "building-indexes",
                         {
                             ...value,
-                            message: `Shared two-source index: ${value.message ?? "preparing"}`,
+                            message: `Shared ${entries.length}-source index: ${value.message ?? "preparing"}`,
                         },
                     );
                 }
@@ -8837,7 +9056,7 @@ export class FileMemoryService
                     await this.reindex(
                         corpusId,
                         undefined,
-                        new AbortController().signal,
+                        this.maintenance.signal,
                     );
             })();
             this.documentRepairs.set(corpusId, repair);
@@ -9013,7 +9232,7 @@ export class FileMemoryService
                     corpusId,
                     runtime,
                     structuredClone(runtime.manifest),
-                    new AbortController().signal,
+                    this.maintenance.signal,
                 ),
             { corpusId, indexKind: "documents" },
         );
@@ -9220,13 +9439,13 @@ export class FileMemoryService
                                 (state.sequence ?? 0),
                         )
                         .map((event) => this.eventDocument(event)),
-                    new AbortController().signal,
+                    this.maintenance.signal,
                     async () => {},
                 );
             } else {
                 await index.rebuild(
                     runtime.events.map((event) => this.eventDocument(event)),
-                    new AbortController().signal,
+                    this.maintenance.signal,
                     async () => {},
                 );
             }
@@ -9484,34 +9703,13 @@ export class FileMemoryService
     }
 
     private scheduleSourceSynopses(corpusId: string): void {
-        const key = `${corpusId}:synopsis`;
-        if (
-            !this.sourceSynopsesEnabled ||
-            this.closed ||
-            this.wikiTimers.has(key) ||
-            this.synopsisWork.has(corpusId)
-        )
-            return;
-        const timer = setTimeout(() => {
-            this.wikiTimers.delete(key);
-            const work = this.maintainSourceSynopses(corpusId);
-            this.synopsisWork.set(corpusId, work);
-            void work.then(
-                () => {
-                    this.synopsisWork.delete(corpusId);
-                    this.wikiMaintenanceFailures.delete(key);
-                },
-                (error: unknown) => {
-                    this.synopsisWork.delete(corpusId);
-                    this.wikiMaintenanceFailures.set(
-                        key,
-                        new Error(safeError(error)),
-                    );
-                },
-            );
-        }, 250);
-        timer.unref();
-        this.wikiTimers.set(key, timer);
+        if (!this.sourceSynopsesEnabled || this.closed) return;
+        this.maintenance.request(
+            corpusId,
+            "synopsis",
+            this.corpora.get(corpusId)?.manifest.indexGeneration,
+            () => this.maintainSourceSynopses(corpusId),
+        );
     }
 
     private async maintainSourceSynopses(corpusId: string): Promise<void> {
@@ -9519,10 +9717,11 @@ export class FileMemoryService
         if (runtime.manifest.authorizedSourceRemoval) return;
         const ids = runtime.manifest.sources.map((source) => source.sourceId);
         for (const sourceId of ids) {
-            if (this.closed) return;
+            if (this.maintenance.isDeferred(corpusId)) return;
             const capture = await this.enqueueWrite(
                 corpusId,
                 async () => {
+                    if (this.maintenance.isDeferred(corpusId)) return undefined;
                     const current = await this.getCorpusRuntime(corpusId, true);
                     if (current.manifest.authorizedSourceRemoval)
                         return undefined;
@@ -9593,6 +9792,7 @@ export class FileMemoryService
             this.controllers.set(key, controller);
             const signal = AbortSignal.any([
                 controller.signal,
+                this.maintenance.signal,
                 AbortSignal.timeout(90_000),
             ]);
             let generated:

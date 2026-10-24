@@ -11,6 +11,7 @@ import { createInterface } from "node:readline";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { FileMemoryService } from "./fileMemoryService.js";
+import { batchImportRequestByteLimit } from "./batchImport.js";
 import { waitForMemoryJob } from "./rpcFacade.js";
 import type { MemoryService, MemoryEventSender } from "./types.js";
 export { writeRunbookJson as writeBenchmarkJson } from "./durableRunbookJson.js";
@@ -101,6 +102,14 @@ export class BenchmarkBridge {
                 );
             case "usage":
                 return process.resourceUsage();
+            case "maintenanceStatus":
+                if (!this.service.getMaintenanceStatus)
+                    throw new Error("Maintenance status is unavailable");
+                return this.service.getMaintenanceStatus();
+            case "drainMaintenance":
+                if (!this.service.drainMaintenance)
+                    throw new Error("Maintenance draining is unavailable");
+                return this.service.drainMaintenance();
             case "ingest":
                 return this.ingest(request);
             case "ingestBatch":
@@ -323,9 +332,28 @@ export class BenchmarkBridge {
 export async function createBenchmarkRuntime(store: string) {
     loadConfigSync();
     initRuntimeConfigFromProcessEnv();
-    const service = new FileMemoryService(resolve(store));
+    const mode = process.env.TYPEAGENT_BENCHMARK_MAINTENANCE_MODE ?? "manual";
+    if (mode !== "manual" && mode !== "automatic")
+        throw new Error(
+            "Benchmark maintenance mode must be manual or automatic",
+        );
+    const ingestionCommitPolicy = {
+        maxDocuments: Number(
+            process.env.TYPEAGENT_BENCHMARK_COMMIT_DOCUMENTS ?? 10,
+        ),
+        maxBytes: batchImportRequestByteLimit,
+        admissionWaitMs: 250,
+    };
+    const service = new FileMemoryService(resolve(store), {
+        maintenanceMode: mode,
+        ingestionCommitPolicy,
+    });
     try {
-        const bridge = configuredBenchmarkBridge(service);
+        const bridge = configuredBenchmarkBridge(service, {
+            maintenanceMode: mode,
+            ingestionCommitPolicy,
+            queryEmbeddingReuse: "request-local-v1",
+        });
         await service.initialize();
         return { bridge, close: () => service.close() };
     } catch (error) {
@@ -334,7 +362,10 @@ export async function createBenchmarkRuntime(store: string) {
     }
 }
 
-function configuredBenchmarkBridge(service: MemoryService) {
+function configuredBenchmarkBridge(
+    service: MemoryService,
+    processingPolicy: Record<string, unknown>,
+) {
     const model = openai.createChatModel(
         process.env.TYPEAGENT_BENCHMARK_MODEL,
         { response_format: { type: "json_object" } },
@@ -358,10 +389,12 @@ function configuredBenchmarkBridge(service: MemoryService) {
                     embeddingProvider: process.env.TYPEAGENT_EMBEDDING_PROVIDER,
                     embeddingModel: process.env.TYPEAGENT_EMBEDDING_MODEL,
                     embeddingSize: process.env.TYPEAGENT_EMBEDDING_SIZE,
+                    processingPolicy,
                 }),
             )
             .digest("hex"),
         informationalViews: true,
+        processingPolicy,
         evidenceLimit: 12,
         evidenceCharacters: 24000,
     });

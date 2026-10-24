@@ -621,6 +621,12 @@ export interface ProcedureVersion {
 export interface MemoryService {
     initialize?(): Promise<void>;
     close?(): Promise<void>;
+    deferMaintenance?(): () => void;
+    getMaintenanceStatus?(): import("./maintenanceScheduler.js").MaintenanceStatus;
+    drainMaintenance?(
+        timeoutMs?: number,
+        signal?: AbortSignal,
+    ): Promise<import("./maintenanceScheduler.js").MaintenanceStatus>;
     importAgentSession?(
         request: AgentSessionImportRequest,
     ): Promise<AgentSessionImportReceipt>;

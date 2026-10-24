@@ -4,7 +4,10 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { FileMemoryService } from "../src/fileMemoryService.js";
+import {
+    FileMemoryService,
+    type FileMemoryServiceOptions,
+} from "../src/fileMemoryService.js";
 import { ViewHistory } from "../src/viewHistory.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { hydrateInformational } from "../src/informationalWiki.js";
@@ -246,6 +249,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
     let beforeGeneration: (() => Promise<void>) | undefined;
     let indexedAnswerModel: ChatModel | undefined;
     let rehearsalBudget = true;
+    let maintenanceMode: "automatic" | "manual" = "automatic";
+    let maintenanceLimits: FileMemoryServiceOptions["maintenanceLimits"];
     let summaryLimits =
         "Only selected indexed evidence; owner approval unknown";
     const adapter: ViewSynthesisAdapter = {
@@ -305,6 +310,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
     };
     const open = () =>
         new FileMemoryService(root, {
+            maintenanceMode,
+            ...(maintenanceLimits ? { maintenanceLimits } : {}),
             ...(indexedAnswerModel ? { indexedAnswerModel } : {}),
             viewSynthesisAdapter: adapter,
             indexFactory: (_corpusId, directory) =>
@@ -339,6 +346,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         beforeGeneration = undefined;
         indexedAnswerModel = undefined;
         rehearsalBudget = true;
+        maintenanceMode = "automatic";
+        maintenanceLimits = undefined;
         root = path.resolve(".wiki-unit-owned", randomUUID());
         await mkdir(root, { recursive: true });
         service = open();
@@ -1096,11 +1105,55 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         expect(edited.edits?.length).toBeGreaterThan(0);
     });
 
-    test.each([false, true])(
-        "normal source answer consumes exact expanded fragments with rehearsal envelope=%s (mock model)",
-        async (budgetEnabled) => {
+    test("automatic candidate budgets retain deferred work across restart without hiding source facts", async () => {
+        await service.close();
+        maintenanceMode = "manual";
+        maintenanceLimits = {
+            maxTargetsPerPass: 1,
+            maxCandidatesPerPass: 1,
+            maxPassesPerGeneration: 1,
+        };
+        rehearsalBudget = false;
+        service = open();
+        MockIndexedCorpus.subjects = ["acquisition", "capacity", "incident"];
+        const { corpusId } = await service.createCorpus(
+            "Bounded autonomous work",
+        );
+        await add(
+            corpusId,
+            "source",
+            "acquisition owner approval is withheld. capacity remains limited. incident review is pending.",
+        );
+        const status = await service.drainMaintenance(10_000);
+        expect(status.settled).toBe(false);
+        expect(status.reason).toBe("budget");
+        expect(
+            status.deferred.some((entry) => entry.key === `${corpusId}:wiki`),
+        ).toBe(true);
+        expect(generated).toBe(1);
+        expect((await service.listViews(corpusId)).views).toHaveLength(1);
+        expect(
+            (await service.getSourceContent({ corpusId, sourceId: "source" }))
+                .content,
+        ).toContain("incident review is pending");
+        await service.close();
+        service = open();
+        const resumed = await service.drainMaintenance(10_000);
+        expect(resumed.reason).toBe("budget");
+        expect(generated).toBe(1);
+    });
+
+    test.each([
+        [false, "automatic"],
+        [true, "automatic"],
+        [false, "manual"],
+        [true, "manual"],
+    ] as const)(
+        "normal source answer consumes exact expanded fragments with rehearsal envelope=%s and maintenance=%s (mock model)",
+        async (budgetEnabled, mode) => {
             await service.close();
             rehearsalBudget = budgetEnabled;
+            maintenanceMode = mode;
             let prompt = "";
             let answerCalls = 0;
             indexedAnswerModel = {

@@ -26,6 +26,7 @@ import {
 } from "./interfaces.js";
 import { error, Result, success } from "typechat";
 import { instrumentEmbeddingModel, timeSearchStage } from "./searchTiming.js";
+import { queryEmbedding, queryEmbeddings } from "./queryEmbeddingCache.js";
 import { countTokens } from "gpt-tokenizer/encoding/cl100k_base";
 
 export interface IEmbeddingIndex {
@@ -337,10 +338,11 @@ export async function indexOfNearestTextInIndex(
     minScore?: number,
     role: EmbeddingRole = "query",
 ): Promise<Scored[]> {
-    const textEmbedding = await generateEmbedding(
-        embeddingModelForRole(embeddingModel, role),
-        text,
-    );
+    const generate = () =>
+        generateEmbedding(embeddingModelForRole(embeddingModel, role), text);
+    const textEmbedding = await (role === "query"
+        ? queryEmbedding(embeddingModel, text, generate)
+        : generate());
     return embeddingIndex.getIndexesOfNearest(
         textEmbedding,
         maxMatches,
@@ -356,9 +358,8 @@ export async function indexOfNearestTextInIndexSubset(
     maxMatches?: number,
     minScore?: number,
 ): Promise<Scored[]> {
-    const textEmbedding = await generateEmbedding(
-        embeddingModelForRole(embeddingModel, "query"),
-        text,
+    const textEmbedding = await queryEmbedding(embeddingModel, text, () =>
+        generateEmbedding(embeddingModelForRole(embeddingModel, "query"), text),
     );
     return embeddingIndex.getIndexesOfNearestInSubset(
         textEmbedding,
@@ -376,10 +377,14 @@ export async function indexesOfNearestTextBatchInIndex(
     minScore?: number,
     role: EmbeddingRole = "query",
 ): Promise<Scored[][]> {
-    const textEmbeddings = await generateTextEmbeddings(
-        embeddingModelForRole(embeddingModel, role),
-        textArray,
-    );
+    const generate = (texts: string[]) =>
+        generateTextEmbeddings(
+            embeddingModelForRole(embeddingModel, role),
+            texts,
+        );
+    const textEmbeddings = await (role === "query"
+        ? queryEmbeddings(embeddingModel, textArray, generate)
+        : generate(textArray));
     const results = [];
     for (const embedding of textEmbeddings) {
         results.push(

@@ -55,6 +55,35 @@ For Azure CLI authentication, ensure `Get-Command az` succeeds in the launching
 shell and the existing Azure sign-in is usable. Never put keys in commands or
 result files.
 
+### Maintenance and publication policy
+
+New benchmark runtimes default to `maintenanceMode: "manual"` and ten-document,
+8 MiB publication groups with a 250 ms bounded admission window. This defers
+autonomous maintenance across conversations without disabling informational
+views or changing native indexed-fragment answers. Model/extraction concurrency
+remains controlled by the existing index settings, not publication group size.
+Slow admissions may produce smaller checkpoints; an oversized source is never
+truncated to meet a group budget.
+
+For controlled comparisons, set `TYPEAGENT_BENCHMARK_MAINTENANCE_MODE` to
+`automatic` or `manual`, and `TYPEAGENT_BENCHMARK_COMMIT_DOCUMENTS` to a positive
+integer up to 100 (`2` selects the previous publication boundary). Effective
+processing policy is recorded in capabilities and the configuration fingerprint.
+Use separate fresh output roots for each variant; do not resume the historical
+stopped run under this changed policy.
+
+At completion, results record maintenance status and explicitly state
+`drainPerformed: false`, `drainSeconds: null`. Foreground completion is not a
+claim that deferred work is finished or eliminated. The bridge exposes
+`maintenanceStatus` and bounded `drainMaintenance` operations for separately
+measuring maintenance completion. A drain can report pending/deferred/failed work;
+report that state and elapsed drain time rather than treating it as success.
+Keep the fixed BEAM questions and recall thresholds unchanged in comparisons.
+
+Resume preserves the original per-unit `ingestionSeconds`; subsequent
+ready-store ingestion/replay durations are recorded separately in
+`ingestionReplaySeconds`. Replays must not replace cold-ingestion measurements.
+
 ```powershell
 $progress = Join-Path $reposRoot 'codeDocs\TypeAgent\forAgent\projects\inProgress\2026-10-22_memory-benchmarks\progress.json'
 $cache = Join-Path $output 'datasets'

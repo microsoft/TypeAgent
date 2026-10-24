@@ -105,6 +105,7 @@ export class ViewBuildRunner {
     >();
     private readonly purged = new Set<string>();
     private reservations = 0;
+    private readonly tasks = new Map<string, Promise<void>>();
     private tail: Promise<void> = Promise.resolve();
     public constructor(
         private readonly adapter: ViewSynthesisAdapter,
@@ -174,7 +175,24 @@ export class ViewBuildRunner {
                     ),
                 });
             })
-            .finally(() => this.controllers.delete(job.jobId));
+            .finally(() => {
+                this.controllers.delete(job.jobId);
+                this.tasks.delete(job.jobId);
+            });
+        this.tasks.set(job.jobId, this.tail);
+    }
+
+    public async wait(jobId: string, signal: AbortSignal): Promise<void> {
+        const cancel = () => this.cancel(jobId, "Maintenance drain cancelled");
+        signal.addEventListener("abort", cancel, { once: true });
+        if (signal.aborted) cancel();
+        try {
+            await this.tasks.get(jobId);
+            this.assertPersistence(jobId);
+            signal.throwIfAborted();
+        } finally {
+            signal.removeEventListener("abort", cancel);
+        }
     }
 
     public assertCapacity(): void {
