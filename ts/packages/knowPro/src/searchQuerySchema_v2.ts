@@ -57,6 +57,10 @@ export type ScopeFilter = {
     entitySearchTerms?: EntityTerm[] | undefined;
     // Use only if request explicitly asks for time range, particular year, month etc.
     timeRange?: DateTimeRange | undefined; // in this time range
+    // Do not constrain message dates merely because the question asks when an event occurred.
+    timeDimension?: "message" | "event";
+    // Compare source-local calendar dates unless an actual UTC instant range is explicitly requested.
+    timeDomain?: "calendar" | "instant";
 };
 
 //

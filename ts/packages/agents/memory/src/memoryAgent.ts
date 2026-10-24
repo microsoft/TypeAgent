@@ -35,6 +35,7 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { importMarkdownPath, type ImportBatchManifest } from "./importer.js";
+import { importAgentSessionPath } from "./agentSessionImporter.js";
 import type { MemoryAction } from "./memorySchema.js";
 
 interface ClearPreview {
@@ -1006,8 +1007,76 @@ async function getImportBatchStatus(
 }
 
 const importCommands: CommandHandlerTable = {
-    description: "Import Markdown files and manage import batches",
+    description:
+        "Import Markdown files or explicit agent sessions and manage import batches",
     commands: {
+        session: parameters(
+            {
+                args: {
+                    path: {
+                        description: "Local agent session JSONL file",
+                        implicitQuotes: true,
+                    },
+                },
+                flags: {
+                    type: {
+                        description:
+                            "agent-session-jsonl or copilot-session-jsonl",
+                        type: "string",
+                    },
+                    session: {
+                        description: "Explicit session ID",
+                        type: "string",
+                    },
+                    repository: {
+                        description: "Optional repository scope",
+                        type: "string",
+                    },
+                    commit: {
+                        description: "Optional commit scope",
+                        type: "string",
+                    },
+                    environment: {
+                        description: "Optional environment scope",
+                        type: "string",
+                    },
+                    maxBytes: {
+                        description: "Maximum file bytes (default 50 MiB)",
+                        type: "number",
+                    },
+                },
+            },
+            async (context, params) => {
+                const values = flags(params);
+                const importType = stringValue(values.type, "type");
+                if (
+                    importType !== "agent-session-jsonl" &&
+                    importType !== "copilot-session-jsonl"
+                ) {
+                    throw new Error(
+                        "--type must be agent-session-jsonl or copilot-session-jsonl",
+                    );
+                }
+                const repository = optionalString(values.repository);
+                const commit = optionalString(values.commit);
+                const environment = optionalString(values.environment);
+                const maxTotalBytes = optionalNumber(values.maxBytes);
+                return markdown(
+                    await importAgentSessionPath(context.service, {
+                        corpusId: requireActiveCorpus(context),
+                        path: stringValue(args(params).path, "path"),
+                        importType,
+                        sessionId: stringValue(values.session, "session"),
+                        ...(repository === undefined ? {} : { repository }),
+                        ...(commit === undefined ? {} : { commit }),
+                        ...(environment === undefined ? {} : { environment }),
+                        ...(maxTotalBytes === undefined
+                            ? {}
+                            : { maxTotalBytes }),
+                    }),
+                );
+            },
+        ),
         file: parameters(importParameters, (context, params) =>
             beginImport(context, params, "file"),
         ),

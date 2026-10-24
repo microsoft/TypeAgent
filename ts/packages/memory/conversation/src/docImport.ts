@@ -19,21 +19,61 @@ import {
 } from "@typeagent/aiclient";
 import { Result, success } from "typechat";
 import * as kp from "@typeagent/knowpro";
-import { encode } from "gpt-tokenizer/encoding/o200k_base";
+import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
 
 export const defaultDocPartTokenLimit = 7_500;
 
 export interface DocPartOptions {
     collectLinkKnowledge?: boolean;
     collectStructuralKnowledge?: boolean;
+    /** Extraction budget; budgets above the embedding ceiling require separate embedding windows. */
     maxTokensPerPart?: number;
 }
 
+const literalTokenOptions = {
+    allowedSpecial: new Set<string>(),
+    disallowedSpecial: new Set<string>(),
+};
+
 export function countDocTokens(text: string): number {
-    return encode(text, {
-        allowedSpecial: new Set(),
-        disallowedSpecial: new Set(),
-    }).length;
+    return countTokens(text, literalTokenOptions);
+}
+
+export function splitDocPartTextForEmbedding(
+    text: string,
+): kp.TextEmbeddingChunk[] {
+    const fits = (value: string) =>
+        countDocTokens(value) <= 7_500 && countEmbeddingTokens(value) <= 7_500;
+    if (fits(text)) return [{ text, start: 0, end: text.length }];
+
+    // Search UTF-16 offsets only at code-point boundaries; token decoding can
+    // otherwise cut a multi-byte character and introduce replacement text.
+    const offsets = [0];
+    for (const character of text)
+        offsets.push(offsets[offsets.length - 1] + character.length);
+    const chunks: kp.TextEmbeddingChunk[] = [];
+    let start = 0;
+    while (start < offsets.length - 1) {
+        let low = start + 1;
+        let high = offsets.length - 1;
+        while (low < high) {
+            const middle = Math.ceil((low + high) / 2);
+            if (fits(text.slice(offsets[start], offsets[middle]))) low = middle;
+            else high = middle - 1;
+        }
+        const chunk = {
+            text: text.slice(offsets[start], offsets[low]),
+            start: offsets[start],
+            end: offsets[low],
+        };
+        if (!fits(chunk.text))
+            throw new Error(
+                "Cannot create a bounded document embedding window",
+            );
+        chunks.push(chunk);
+        start = low;
+    }
+    return chunks;
 }
 
 /**
@@ -243,10 +283,14 @@ export function docPartsFromMarkdown(
     knowledgeOptions.collectLinks = options?.collectLinkKnowledge ?? true;
     knowledgeOptions.collectStructuralKnowledge =
         options?.collectStructuralKnowledge ?? true;
-    const [textBlocks, knowledgeBlocks] = tp.markdownToTextAndKnowledgeBlocks(
-        markdown,
-        maxCharsPerChunk,
-        knowledgeOptions,
+    const [textBlocks, knowledgeBlocks] = kp.timeSearchStage(
+        "ingestion.document.parse",
+        () =>
+            tp.markdownToTextAndKnowledgeBlocks(
+                markdown,
+                maxCharsPerChunk,
+                knowledgeOptions,
+            ),
     );
     if (textBlocks.length !== knowledgeBlocks.length) {
         throw new Error(
@@ -277,7 +321,9 @@ export function docPartsFromMarkdown(
         );
         parts.push(part);
     }
-    return chunkDocParts(parts, options);
+    return kp.timeSearchStage("ingestion.document.chunk", () =>
+        chunkDocParts(parts, options),
+    );
 }
 
 export function aggregateDocParts(
@@ -288,8 +334,9 @@ export function aggregateDocParts(
 }
 
 /**
- * Apply both extraction and embedding budgets after format parsing.
+ * Apply extraction and default embedding budgets after format parsing.
  * An explicit extraction budget also packs adjacent, compatible source parts.
+ * Larger extraction targets use separately bounded message embedding windows.
  */
 export function chunkDocParts(
     parts: DocPart[],
@@ -351,7 +398,8 @@ export function chunkDocParts(
 function fitsDocTokenBudget(text: string, maxTokens: number): boolean {
     return (
         countDocTokens(text) <= maxTokens &&
-        countEmbeddingTokens(text) <= maxEmbeddingInputTokens
+        (maxTokens > maxEmbeddingInputTokens ||
+            countEmbeddingTokens(text) <= maxEmbeddingInputTokens)
     );
 }
 

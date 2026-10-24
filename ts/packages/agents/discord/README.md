@@ -4,7 +4,7 @@ The Discord agent is a TypeAgent plugin that lets you interact with Discord serv
 
 ## Prerequisites
 
-- Node >= 20, pnpm >= 10
+- The latest Node LTS (recommended; see [supported versions](../../../README.md#setup)), pnpm >= 10
 - A Discord account and a server (guild) you manage
 - A Discord bot token
 

@@ -24,7 +24,7 @@ The onboarding agent's actions (`startOnboarding`, `crawlDocUrl`, `generateSchem
 
 ### Prerequisites
 
-- Node.js ≥ 20 installed
+- The latest Node.js LTS release installed (recommended; see [supported versions](../../../README.md#setup))
 - The TypeAgent repo cloned and built: `cd ts && pnpm install && pnpm run build`
 - The TypeAgent agent-server running (started automatically on first use, or via `node packages/agentServer/server/dist/server.js` from `ts/`)
 - `ts/.env` configured with your Azure OpenAI or OpenAI API keys

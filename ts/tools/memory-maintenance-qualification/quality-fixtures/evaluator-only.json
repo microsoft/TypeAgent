@@ -1,0 +1,463 @@
+{
+  "schemaVersion": 1,
+  "evaluatorOnly": true,
+  "reviewStatus": "pending-independent-human-review",
+  "cases": [
+    {
+      "id": "w01",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "w01-design",
+          "revision": "r1",
+          "quote": "A successful command does not renew the lease.",
+          "requirement": "Keep command completion distinct from lease renewal."
+        },
+        {
+          "id": "q2",
+          "sourceId": "w01-ops",
+          "revision": "r2",
+          "quote": "After lease expiry the worker must stop accepting commands",
+          "requirement": "Preserve the post-expiry stop condition."
+        }
+      ]
+    },
+    {
+      "id": "w02",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "w02-catalog",
+          "revision": "r1",
+          "quote": "Both use the same transport trace.",
+          "requirement": "Shared evidence does not erase the separate routing and retry purposes."
+        },
+        {
+          "id": "q2",
+          "sourceId": "w02-review",
+          "revision": "r1",
+          "quote": "Preserve retry limits",
+          "requirement": "Do not drop the retry-limit distinction on merge."
+        }
+      ]
+    },
+    {
+      "id": "w03",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "w03-policy",
+          "revision": "r2",
+          "quote": "thirty days is historical, not current guidance.",
+          "requirement": "Current guidance is fourteen days, with the supersession explicit."
+        },
+        {
+          "id": "q2",
+          "sourceId": "w03-audit",
+          "revision": "r1",
+          "quote": "does not release a legal hold.",
+          "requirement": "Preserve the legal-hold exception."
+        }
+      ]
+    },
+    {
+      "id": "w04",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "w04-roster",
+          "revision": "r1",
+          "quote": "absence of a scanner owner is not evidence that nobody owns it.",
+          "requirement": "Distinguish unknown scanner ownership from explicitly unassigned queue."
+        },
+        {
+          "id": "q2",
+          "sourceId": "w04-followup",
+          "revision": "r1",
+          "quote": "does not appoint Mina as the scanner owner.",
+          "requirement": "Do not promote investigator to owner."
+        }
+      ]
+    },
+    {
+      "id": "w05",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "w05-workflow",
+          "revision": "r1",
+          "quote": "Admission alone never makes an article searchable.",
+          "requirement": "Separate admission, publication and searchability."
+        },
+        {
+          "id": "q2",
+          "sourceId": "w05-recovery",
+          "revision": "r1",
+          "quote": "rather than marking the failed article published.",
+          "requirement": "Failure remains parked pending actual validation."
+        }
+      ]
+    },
+    {
+      "id": "w06",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "w06-lifecycle",
+          "revision": "r1",
+          "quote": "must not resurrect removed evidence",
+          "requirement": "Preserve source-removal invalidation across rebuild."
+        },
+        {
+          "id": "q2",
+          "sourceId": "w06-editing",
+          "revision": "r1",
+          "quote": "Protection does not preserve the validity of a citation",
+          "requirement": "Distinguish edit protection from citation validity."
+        }
+      ]
+    },
+    {
+      "id": "w07",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "w07-archive",
+          "revision": "r1",
+          "quote": "may include products withdrawn since that date.",
+          "requirement": "Keep snapshot date and withdrawn-product caveat."
+        },
+        {
+          "id": "q2",
+          "sourceId": "w07-catalog",
+          "revision": "r3",
+          "quote": "not for order eligibility.",
+          "requirement": "Use only the current catalog for order authorization."
+        }
+      ]
+    },
+    {
+      "id": "w08",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "w08-quota",
+          "revision": "r1",
+          "quote": "cannot be transferred automatically to south.",
+          "requirement": "Retain regional nontransferability."
+        },
+        {
+          "id": "q2",
+          "sourceId": "w08-exception",
+          "revision": "r1",
+          "quote": "does not change the permanent regional quotas.",
+          "requirement": "Incident allocation is temporary and requires approval."
+        }
+      ]
+    },
+    {
+      "id": "w09",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "w09-lab",
+          "revision": "r2",
+          "quote": "Earlier readings must retain the old offset",
+          "requirement": "Do not retroactively apply the new offset."
+        },
+        {
+          "id": "q2",
+          "sourceId": "w09-gap",
+          "revision": "r1",
+          "quote": "must not be presented as a measured temperature.",
+          "requirement": "Label interpolated outage values as estimates."
+        }
+      ]
+    },
+    {
+      "id": "w10",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "w10-auth",
+          "revision": "r1",
+          "quote": "unless separately revoked.",
+          "requirement": "Rotation does not automatically invalidate existing sessions."
+        },
+        {
+          "id": "q2",
+          "sourceId": "w10-response",
+          "revision": "r1",
+          "quote": "requires explicit session revocation.",
+          "requirement": "Preserve compromise-specific revocation."
+        }
+      ]
+    },
+    {
+      "id": "w11",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "w11-cache",
+          "revision": "r1",
+          "quote": "cannot authorize an account suspension.",
+          "requirement": "Cache freshness does not confer decision authority."
+        },
+        {
+          "id": "q2",
+          "sourceId": "w11-authority",
+          "revision": "r1",
+          "quote": "at decision time.",
+          "requirement": "Read authoritative state when deciding suspension."
+        }
+      ]
+    },
+    {
+      "id": "w12",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "w12-payment",
+          "revision": "r1",
+          "quote": "A timeout does not establish that settlement failed",
+          "requirement": "Preserve unknown timeout outcome and ledger check."
+        },
+        {
+          "id": "q2",
+          "sourceId": "w12-retry",
+          "revision": "r1",
+          "quote": "A different key can create a second settlement",
+          "requirement": "Reuse the original key; do not imply arbitrary retry safety."
+        }
+      ]
+    },
+    {
+      "id": "b01",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "b01-status",
+          "revision": "r1",
+          "quote": "blocked until the capacity review approves peak-load headroom.",
+          "requirement": "Functional success must not erase the capacity block."
+        },
+        {
+          "id": "q2",
+          "sourceId": "b01-roles",
+          "revision": "r1",
+          "quote": "not ownership transfer",
+          "requirement": "Keep delivery owner and capacity reviewer distinct."
+        }
+      ]
+    },
+    {
+      "id": "b02",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "b02-incident",
+          "revision": "r1",
+          "quote": "general rollout remains paused",
+          "requirement": "Incident resolution must not imply rollout readiness."
+        },
+        {
+          "id": "q2",
+          "sourceId": "b02-plan",
+          "revision": "r1",
+          "quote": "closure does not approve the general rollout.",
+          "requirement": "Do not promote incident commander's closure to release approval."
+        }
+      ]
+    },
+    {
+      "id": "b03",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "b03-roster",
+          "revision": "r1",
+          "quote": "has not accepted delivery ownership.",
+          "requirement": "Security reviewer is not delivery owner."
+        },
+        {
+          "id": "q2",
+          "sourceId": "b03-review",
+          "revision": "r1",
+          "quote": "scheduled, not completed.",
+          "requirement": "Preserve pending release approval despite isolated implementation permission."
+        }
+      ]
+    },
+    {
+      "id": "b04",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "b04-maple",
+          "revision": "r1",
+          "quote": "Birch uses the same library but is not blocked",
+          "requirement": "Do not spread Maple's blocked status to Birch."
+        },
+        {
+          "id": "q2",
+          "sourceId": "b04-release",
+          "revision": "r1",
+          "quote": "retain separate release decisions",
+          "requirement": "Separate dependency ownership and initiative release decisions."
+        }
+      ]
+    },
+    {
+      "id": "b05",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "b05-schedule",
+          "revision": "r2",
+          "quote": "not a committed shipment date.",
+          "requirement": "Retain revised target and noncommitment."
+        },
+        {
+          "id": "q2",
+          "sourceId": "b05-risk",
+          "revision": "r1",
+          "quote": "contingent on that arrival",
+          "requirement": "Preserve vendor uncertainty; retire obsolete target."
+        }
+      ]
+    },
+    {
+      "id": "b06",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "b06-log",
+          "revision": "r1",
+          "quote": "not assigned accountable ownership.",
+          "requirement": "Owner discovery does not assign ownership."
+        },
+        {
+          "id": "q2",
+          "sourceId": "b06-task",
+          "revision": "r1",
+          "quote": "separate unresolved tasks.",
+          "requirement": "Keep unknown owner distinct from unassigned checklist."
+        }
+      ]
+    },
+    {
+      "id": "b07",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "b07-east",
+          "revision": "r1",
+          "quote": "West launch is blocked by residency approval",
+          "requirement": "Preserve west-only residency block."
+        },
+        {
+          "id": "q2",
+          "sourceId": "b07-approval",
+          "revision": "r1",
+          "quote": "cannot grant the required legal approval.",
+          "requirement": "Reviewer is neither legal approver nor launch owner."
+        }
+      ]
+    },
+    {
+      "id": "b08",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "b08-demo",
+          "revision": "r1",
+          "quote": "not a readiness signoff.",
+          "requirement": "Keep accessibility gap despite demo success."
+        },
+        {
+          "id": "q2",
+          "sourceId": "b08-handoff",
+          "revision": "r1",
+          "quote": "does not make Noor the delivery owner.",
+          "requirement": "Separate tester coordination from ownership."
+        }
+      ]
+    },
+    {
+      "id": "b09",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "b09-rollback",
+          "revision": "r1",
+          "quote": "has not been cancelled.",
+          "requirement": "Research remains active despite production rollback."
+        },
+        {
+          "id": "q2",
+          "sourceId": "b09-gate",
+          "revision": "r1",
+          "quote": "fresh latency evidence and separate approval.",
+          "requirement": "Preserve the gate for a new production attempt."
+        }
+      ]
+    },
+    {
+      "id": "b10",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "b10-finance",
+          "revision": "r1",
+          "quote": "does not cover full-volume procurement.",
+          "requirement": "Keep budget scope limited to trial."
+        },
+        {
+          "id": "q2",
+          "sourceId": "b10-supply",
+          "revision": "r1",
+          "quote": "supplier has not committed a date.",
+          "requirement": "Preserve tentative timing and certification block."
+        }
+      ]
+    },
+    {
+      "id": "b11",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "b11-copy",
+          "revision": "r1",
+          "quote": "source deletion is prohibited until audit reconciliation passes.",
+          "requirement": "Copy completion must not permit premature deletion."
+        },
+        {
+          "id": "q2",
+          "sourceId": "b11-audit",
+          "revision": "r1",
+          "quote": "A completed copy is not a completed migration.",
+          "requirement": "Preserve delivery/review separation and incomplete migration."
+        }
+      ]
+    },
+    {
+      "id": "b12",
+      "expectations": [
+        {
+          "id": "q1",
+          "sourceId": "b12-quartz",
+          "revision": "r1",
+          "quote": "until its own renewal completes.",
+          "requirement": "Quartz completion must not erase Iris's release block."
+        },
+        {
+          "id": "q2",
+          "sourceId": "b12-coordination",
+          "revision": "r1",
+          "quote": "do not infer it from coordination.",
+          "requirement": "Iris owner stays unknown despite shared coordinator."
+        }
+      ]
+    }
+  ]
+}

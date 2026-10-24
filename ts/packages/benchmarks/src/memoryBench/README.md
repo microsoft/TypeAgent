@@ -167,10 +167,11 @@ extractive answers. Native event answering is unsupported.
 
 Content imports remain `sourceType: "text"`; they do not bypass literal-text
 handling by masquerading as Markdown. The product now uses shared lossless
-DocPart splitting/packing for text, Markdown/HTML and VTT, with 7,500
-`o200k_base` extraction tokens and 8,000 `cl100k_base` embedding tokens per
-input. Shared indexing and hosted embedding requests also reject oversized
-inputs explicitly. This product change requires a fresh fingerprint/output
+DocPart splitting/packing for text, Markdown/HTML and VTT. Durable extraction
+uses a 24,000-token `o200k_base` budget; message embeddings use separate
+7,500-token windows under both extraction and embedding tokenizers. Shared
+indexing and hosted embedding requests also enforce the final 8,000-token
+`cl100k_base` ceiling. This product change requires a fresh fingerprint/output
 root; do not resume or combine the old oversized-input run with new results.
 
 Normalization preserves speaker/role, original IDs, source timestamps, session

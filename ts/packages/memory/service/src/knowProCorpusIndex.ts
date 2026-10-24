@@ -6,11 +6,11 @@ import {
     DocPart,
     type DocMemorySettings,
     createDocMemorySettings,
-    defaultDocPartTokenLimit,
     docPartsFromHtml,
     docPartsFromMarkdown,
     docPartsFromText,
     docPartsFromVtt,
+    splitDocPartTextForEmbedding,
 } from "@typeagent/conversation-memory";
 import * as kp from "@typeagent/knowpro";
 import { isInitiativeSubject } from "./initiativeDiscovery.js";
@@ -20,6 +20,8 @@ import { symbolicIdentity, usefulWikiSubject } from "./wikiGrouping.js";
 import { access, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { writeRunbookJson } from "./durableRunbookJson.js";
+import { projectRetainedIndex } from "./retainedIndex.js";
+import { temporalQuestion } from "./temporalContext.js";
 import {
     indexedTextHash,
     parseIndexedLocator,
@@ -29,6 +31,7 @@ import {
 import type {
     CorpusIndex,
     CorpusIndexAnswer,
+    AnswerContextDiagnostics,
     CorpusIndexMatch,
     IndexedDocument,
     IndexedSubject,
@@ -42,10 +45,11 @@ import type {
 
 const indexBaseName = "corpus";
 const structuralChunkCharacters = 8_000;
+const extractionChunkTokens = 24_000;
 const durableDocPartOptions = {
     collectLinkKnowledge: false,
     collectStructuralKnowledge: false,
-    maxTokensPerPart: defaultDocPartTokenLimit,
+    maxTokensPerPart: extractionChunkTokens,
 };
 
 interface EntityKnowledge {
@@ -135,12 +139,10 @@ function collectPostingScores(
     memory: DocMemory,
     terms: string[],
     requested: Set<string>,
-    typedQuery: boolean,
     eligible: (ordinal: number) => boolean,
     messageCount: number,
-): { scores: Map<number, number>; typedSubjects: Map<string, Set<number>> } {
+): Map<number, number> {
     const matches = new Map<number, Set<string>>();
-    const typedSubjects = new Map<string, Set<number>>();
     for (const term of terms) {
         const matchedWords = indexedWords(term).filter((word) =>
             requested.has(word),
@@ -153,24 +155,12 @@ function collectPostingScores(
                 ? ref.range.end.messageOrdinal -
                   ((ref.range.end.chunkOrdinal ?? 0) === 0 ? 1 : 0)
                 : start;
-            if (typedQuery && ref.knowledgeType === "entity") {
-                const entity = ref.knowledge as EntityKnowledge;
-                if (
-                    entity.type.some((type) =>
-                        requested.has(type.toLocaleLowerCase()),
-                    )
-                ) {
-                    const ordinals =
-                        typedSubjects.get(entity.name) ?? new Set<number>();
-                    ordinals.add(start);
-                    typedSubjects.set(entity.name, ordinals);
-                }
-            }
             for (
                 let ordinal = start;
                 ordinal <= Math.min(end, start + 4);
                 ordinal++
             ) {
+                if (!eligible(ordinal)) continue;
                 const words = matches.get(ordinal) ?? new Set<string>();
                 matchedWords.forEach((word) => words.add(word));
                 matches.set(ordinal, words);
@@ -194,14 +184,14 @@ function collectPostingScores(
                 0,
             ),
         );
-    return { scores, typedSubjects };
+    return scores;
 }
 
 function sourceUri(document: IndexedDocument): string {
     return `typeagent-memory://sources/${encodeURIComponent(document.source.sourceId)}/revisions/${encodeURIComponent(document.revision.revisionId)}`;
 }
 
-function toDocParts(document: IndexedDocument): DocPart[] {
+function parseDocParts(document: IndexedDocument): DocPart[] {
     const uri = sourceUri(document);
     const chunkCharacters =
         document.pipeline.maxCharsPerChunk ?? structuralChunkCharacters;
@@ -246,6 +236,40 @@ function toDocParts(document: IndexedDocument): DocPart[] {
         part.tags.push(...(document.indexTags ?? []));
     }
     return parts;
+}
+
+function toDocParts(document: IndexedDocument): DocPart[] {
+    const temporal: kp.SourceTemporalContext = document.revision
+        .temporalContext ?? {
+        version: 1,
+        scopes: [
+            { ownerId: "document", start: 0, end: document.content.length },
+        ],
+    };
+    const ordinals = new Map<string, number>();
+    return kp
+        .temporalSegments(
+            document.content,
+            temporal,
+            document.revision.revisionId,
+        )
+        .flatMap((segment) => {
+            const parts = parseDocParts({ ...document, content: segment.text });
+            for (const part of parts) {
+                if (!segment.context) continue;
+                const context = structuredClone(segment.context);
+                const partOrdinal = ordinals.get(context.ownerId) ?? 0;
+                ordinals.set(context.ownerId, partOrdinal + 1);
+                context.partOrdinal = partOrdinal;
+                context.eventMentions = kp.temporalMentions(
+                    part.textChunks.join("\n"),
+                    context,
+                );
+                part.metadata.temporalContext = context;
+                part.timestamp = context.messageTime?.instantUtc;
+            }
+            return parts;
+        });
 }
 
 function parseSourceUri(
@@ -394,6 +418,13 @@ export class KnowProCorpusIndex implements CorpusIndex {
         private readonly settingsFactory?: () => DocMemorySettings,
     ) {}
 
+    private createSettings(): DocMemorySettings {
+        const settings = this.settingsFactory?.() ?? createDocMemorySettings();
+        settings.conversationSettings.messageTextIndexSettings.splitText ??=
+            splitDocPartTextForEmbedding;
+        return settings;
+    }
+
     public async initialize(): Promise<void> {
         const semanticIndexPath = path.join(
             this.indexDirectory,
@@ -404,20 +435,23 @@ export class KnowProCorpusIndex implements CorpusIndex {
             () => false,
         );
         if (this.settingsFactory !== undefined || hasSemanticIndex) {
-            const settings =
-                this.settingsFactory?.() ?? createDocMemorySettings();
+            const settings = this.createSettings();
             const indexes = settings.conversationSettings;
-            this.memory = await DocMemory.readFromFile(
-                this.indexDirectory,
-                indexBaseName,
-                settings,
-                {
-                    loadEmbeddings: [
-                        indexes.relatedTermIndexSettings.embeddingIndexSettings,
-                        indexes.messageTextIndexSettings.embeddingIndexSettings,
-                        indexes.threadSettings,
-                    ].some((lane) => lane?.embeddingModel !== undefined),
-                },
+            this.memory = await kp.timeSearchStage("ingestion.index.load", () =>
+                DocMemory.readFromFile(
+                    this.indexDirectory,
+                    indexBaseName,
+                    settings,
+                    {
+                        loadEmbeddings: [
+                            indexes.relatedTermIndexSettings
+                                .embeddingIndexSettings,
+                            indexes.messageTextIndexSettings
+                                .embeddingIndexSettings,
+                            indexes.threadSettings,
+                        ].some((lane) => lane?.embeddingModel !== undefined),
+                    },
+                ),
             );
             this.refreshSourceMessages(this.memory);
             await this.loadEligibility();
@@ -551,8 +585,12 @@ export class KnowProCorpusIndex implements CorpusIndex {
             yield {
                 ...source,
                 blockOrdinal,
+                messageOrdinal,
                 text: message.textChunks.join("\n"),
                 score: scores?.get(messageOrdinal) ?? 1,
+                ...(message.metadata.temporalContext
+                    ? { temporalContext: message.metadata.temporalContext }
+                    : {}),
             };
         }
     }
@@ -560,101 +598,143 @@ export class KnowProCorpusIndex implements CorpusIndex {
     public async readFragments(
         request: IndexedFragmentRequest,
     ): Promise<IndexedFragmentSelection> {
+        const query = temporalQuestion(
+            request.query ?? request.terms.join(" "),
+            request.temporalContext,
+        );
         const memory = this.memory;
         if (!memory) return { fragments: [], readChars: 0, limited: false };
+        const ranges = this.eligibleRanges(new Set(request.sourceIds));
+        const eligible = new Set(
+            ranges.map((range) => range.start.messageOrdinal),
+        );
+        if (!eligible.size) return selectIndexedFragments([], request);
         const { requested, terms } = matchingIndexTerms(memory, request);
-        const { scores, typedSubjects } = collectPostingScores(
+        const scores = collectPostingScores(
             memory,
             terms,
             requested,
-            request.query !== undefined,
-            (ordinal) => this.eligible(ordinal),
-            this.eligibleRanges().reduce(
-                (count, range) =>
-                    count +
-                    range.end!.messageOrdinal -
-                    range.start.messageOrdinal,
-                0,
-            ),
+            (ordinal) =>
+                request.query ? eligible.has(ordinal) : this.eligible(ordinal),
+            request.query ? eligible.size : this.eligibleRanges().length,
         );
+        const postingScores = request.includeDiagnostics
+            ? new Map(scores)
+            : undefined;
+        const languageScores = new Map<number, number>();
         const followed = this.sourceFollowingScores(request, scores);
         if (request.query) {
             const options = kp.createLanguageSearchOptionsTypical();
             options.maxMessageMatches = 8;
             options.maxKnowledgeMatches = 12;
-            options.messageRangesInScope = this.eligibleRanges();
-            const result = await memory.searchWithLanguage(
-                request.query ?? request.terms.join(" "),
-                options,
-            );
+            options.messageRangesInScope = ranges;
+            options.fallbackRagOptions = { maxMessageMatches: 8 };
+            const result = await memory.searchWithLanguage(query, options);
             if (!result.success) throw new Error(result.message);
             for (const match of result.data.flatMap(
                 (item) => item.messageMatches,
-            ))
+            )) {
+                if (!eligible.has(match.messageOrdinal)) continue;
+                const score = Math.max(1, match.score);
+                languageScores.set(
+                    match.messageOrdinal,
+                    (languageScores.get(match.messageOrdinal) ?? 0) + score,
+                );
                 scores.set(
                     match.messageOrdinal,
-                    (scores.get(match.messageOrdinal) ?? 0) +
-                        Math.max(1, match.score),
+                    (scores.get(match.messageOrdinal) ?? 0) + score,
                 );
-        }
-        const preferred = new Set(
-            [...typedSubjects.values()].map(
-                (ordinals) =>
-                    [...ordinals].sort(
-                        (a, b) => (scores.get(b) ?? 0) - (scores.get(a) ?? 0),
-                    )[0],
-            ),
-        );
-        if (request.query) {
-            const graph = await this.getKnowledgeGraph();
-            const matchedSources = new Set(
-                graph.entities
-                    .filter((item) =>
-                        (
-                            item.name
-                                .toLocaleLowerCase()
-                                .match(/[\p{L}\p{N}-]+/gu) ?? []
-                        ).some((word) => requested.has(word)),
-                    )
-                    .flatMap((item) => item.sourceIds),
-            );
-            for (const entity of graph.entities.filter(
-                (item) =>
-                    item.types.some((type) =>
-                        /correction|follow.?up|qualification/i.test(type),
-                    ) &&
-                    item.sourceIds.some((sourceId) =>
-                        matchedSources.has(sourceId),
-                    ),
-            )) {
-                for (
-                    let ordinal = memory.messages.length - 1;
-                    ordinal >= 0;
-                    ordinal--
-                ) {
-                    const source = parseSourceUri(
-                        memory.messages.get(ordinal).metadata.sourceUrl,
-                    );
-                    if (
-                        source &&
-                        this.eligible(ordinal) &&
-                        entity.sourceIds.includes(source.sourceId)
-                    )
-                        preferred.add(ordinal);
-                }
             }
         }
+        const preferred = new Set<number>();
+        if (request.query)
+            for (const ordinal of await this.preferredFollowupMessages(
+                requested,
+                memory,
+                eligible,
+            ))
+                preferred.add(ordinal);
         const highest = Math.max(0, ...scores.values());
         for (const ordinal of preferred)
             scores.set(ordinal, highest + (scores.get(ordinal) ?? 0));
+        const blocks = [...this.indexedBlocks(memory, scores)];
+        if (postingScores)
+            this.fragmentScoreDiagnostics(
+                blocks,
+                postingScores,
+                languageScores,
+                preferred,
+                highest,
+            );
         const selection = selectIndexedFragments(
-            [...this.indexedBlocks(memory, scores)].sort(
-                (a, b) => b.score - a.score,
-            ),
+            blocks.sort((a, b) => b.score - a.score),
             request,
         );
         selection.limited ||= followed.limited;
+        if (selection.diagnostics)
+            selection.diagnostics.limited = selection.limited;
         return selection;
+    }
+
+    private fragmentScoreDiagnostics(
+        blocks: IndexedBlock[],
+        postingScores: Map<number, number>,
+        languageScores: Map<number, number>,
+        preferred: Set<number>,
+        boost: number,
+    ): void {
+        for (const block of blocks) {
+            const ordinal = block.messageOrdinal;
+            if (ordinal === undefined)
+                throw new Error("Indexed diagnostic block is unavailable");
+            block.postingScore = postingScores.get(ordinal) ?? 0;
+            block.languageScore = languageScores.get(ordinal) ?? 0;
+            block.preferenceBoost = preferred.has(ordinal) ? boost : 0;
+        }
+    }
+
+    private async preferredFollowupMessages(
+        requested: Set<string>,
+        memory: DocMemory,
+        eligible: Set<number>,
+    ): Promise<Set<number>> {
+        const preferred = new Set<number>();
+        const graph = await this.getKnowledgeGraph();
+        const matchedSources = new Set(
+            graph.entities
+                .filter((item) =>
+                    (
+                        item.name
+                            .toLocaleLowerCase()
+                            .match(/[\p{L}\p{N}-]+/gu) ?? []
+                    ).some((word) => requested.has(word)),
+                )
+                .flatMap((item) => item.sourceIds),
+        );
+        for (const entity of graph.entities.filter(
+            (item) =>
+                item.types.some((type) =>
+                    /correction|follow.?up|qualification/i.test(type),
+                ) &&
+                item.sourceIds.some((sourceId) => matchedSources.has(sourceId)),
+        )) {
+            for (
+                let ordinal = memory.messages.length - 1;
+                ordinal >= 0;
+                ordinal--
+            ) {
+                const source = parseSourceUri(
+                    memory.messages.get(ordinal).metadata.sourceUrl,
+                );
+                if (
+                    source &&
+                    eligible.has(ordinal) &&
+                    entity.sourceIds.includes(source.sourceId)
+                )
+                    preferred.add(ordinal);
+            }
+        }
+        return preferred;
     }
 
     private sourceFollowingScores(
@@ -725,13 +805,114 @@ export class KnowProCorpusIndex implements CorpusIndex {
         );
     }
 
+    public async rebuildRetained(
+        previous: CorpusIndex,
+        documents: IndexedDocument[],
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<boolean> {
+        signal.throwIfAborted();
+        const unavailable = (reason: string): false => {
+            console.warn(
+                `Memory retained-index reuse unavailable: ${reason}; rebuilding canonical retained sources`,
+            );
+            return false;
+        };
+        if (
+            !(previous instanceof KnowProCorpusIndex) ||
+            previous.corpusId !== this.corpusId
+        )
+            return unavailable("Incompatible corpus index");
+        if (!documents.length) {
+            await this.rebuild(documents, signal, onProgress);
+            return true;
+        }
+        if (!previous.memory) await previous.initialize();
+        const source = previous.memory;
+        if (!source?.hasCompleteIndex)
+            return unavailable(
+                "Committed indexing completion is unknown or partial",
+            );
+        if (
+            documents.some(
+                (document) =>
+                    previous.activeRevisions.get(document.source.sourceId) !==
+                    document.revision.revisionId,
+            )
+        )
+            return unavailable("Retained revision eligibility changed");
+        const parts = documents.flatMap(toDocParts);
+        const memory = new DocMemory(this.corpusId, [], this.createSettings());
+        const settings = memory.settings.conversationSettings;
+        const projection = projectRetainedIndex(
+            await source.serialize(),
+            parts,
+            {
+                related:
+                    settings.relatedTermIndexSettings.embeddingIndexSettings
+                        ?.embeddingModel !== undefined,
+                message:
+                    settings.messageTextIndexSettings.embeddingIndexSettings
+                        .embeddingModel !== undefined,
+            },
+        );
+        if (!projection.data) return unavailable(projection.reason);
+        signal.throwIfAborted();
+        await memory.deserialize(projection.data);
+        if (projection.missingTermVectors) {
+            console.warn(
+                `Memory retained-index projection requires ${projection.missingTermVectors} missing retained term vectors; backfilling without knowledge extraction`,
+            );
+            await onProgress({
+                completed: 0,
+                total: projection.missingTermVectors,
+                stage: "embedding",
+                operation: "rebuild",
+                message: "Backfilling missing retained term vectors",
+                documentCount: documents.length,
+                docPartCount: parts.length,
+            });
+        }
+        const result = await kp.buildRelatedTermsIndex(
+            memory,
+            settings.relatedTermIndexSettings,
+        );
+        if (result.error) throw new Error(result.error);
+        signal.throwIfAborted();
+        await onProgress({
+            completed: parts.length,
+            total: parts.length,
+            stage: "persisting",
+            operation: "rebuild",
+            message: "Persisting projected retained-source index",
+            documentCount: documents.length,
+            docPartCount: parts.length,
+        });
+        await memory.writeToFile(this.indexDirectory, indexBaseName, true);
+        signal.throwIfAborted();
+        this.memory = memory;
+        this.refreshSourceMessages(memory);
+        this.activeRevisions = new Map(
+            documents.map((document) => [
+                document.source.sourceId,
+                document.revision.revisionId,
+            ]),
+        );
+        await this.saveEligibility();
+        return true;
+    }
+
     public async rebuild(
         documents: IndexedDocument[],
         signal: AbortSignal,
         onProgress: (progress: JobProgress) => Promise<void>,
     ): Promise<void> {
         const startedAt = performance.now();
-        const parts = documents.flatMap(toDocParts);
+        const parts = kp.timeSearchStage(
+            "ingestion.document.prepare",
+            () => documents.flatMap(toDocParts),
+            { count: documents.length },
+        );
         await onProgress({
             completed: parts.length,
             total: parts.length,
@@ -765,7 +946,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         const memory = new DocMemory(
             this.corpusId,
             parts,
-            this.settingsFactory?.(),
+            this.createSettings(),
         );
         let completed = 0;
         let progressTail = Promise.resolve();
@@ -822,7 +1003,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             documentCount: documents.length,
             docPartCount: parts.length,
         });
-        await kp.timeSearchStage("knowpro.index.persist", () =>
+        await kp.timeSearchStage("ingestion.index.persist", () =>
             memory.writeToFile(this.indexDirectory, indexBaseName, true),
         );
         this.memory = memory;
@@ -853,12 +1034,12 @@ export class KnowProCorpusIndex implements CorpusIndex {
     ): Promise<void> {
         const startedAt = performance.now();
         await this.initialize();
-        const parts = documents.flatMap(toDocParts);
-        this.memory ??= new DocMemory(
-            this.corpusId,
-            [],
-            this.settingsFactory?.(),
+        const parts = kp.timeSearchStage(
+            "ingestion.document.prepare",
+            () => documents.flatMap(toDocParts),
+            { count: documents.length },
         );
+        this.memory ??= new DocMemory(this.corpusId, [], this.createSettings());
         await onProgress({
             completed: parts.length,
             total: parts.length,
@@ -869,9 +1050,14 @@ export class KnowProCorpusIndex implements CorpusIndex {
             documentCount: documents.length,
             docPartCount: parts.length,
         });
-        for (const part of parts) {
-            this.memory.messages.append(part);
-        }
+        const messages = this.memory.messages;
+        kp.timeSearchStage(
+            "ingestion.index.populate",
+            () => {
+                for (const part of parts) messages.append(part);
+            },
+            { count: parts.length },
+        );
         let completed = 0;
         let progressTail = Promise.resolve();
         const total = Math.max(parts.length, 1);
@@ -928,7 +1114,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             documentCount: documents.length,
             docPartCount: parts.length,
         });
-        await kp.timeSearchStage("knowpro.index.persist", () =>
+        await kp.timeSearchStage("ingestion.index.persist", () =>
             memory.writeToFile(this.indexDirectory, indexBaseName, true),
         );
         this.refreshSourceMessages(this.memory);
@@ -954,10 +1140,16 @@ export class KnowProCorpusIndex implements CorpusIndex {
         query: string,
         limit: number,
         tags?: string[],
+        temporalContext?: kp.TemporalQueryContext,
     ): Promise<CorpusIndexMatch[]> {
         return kp.timeSearchStage(
             "knowpro.index.search",
-            () => this.searchCore(query, limit, tags),
+            () =>
+                this.searchCore(
+                    temporalQuestion(query, temporalContext),
+                    limit,
+                    tags,
+                ),
             { limit, tagCount: tags?.length ?? 0 },
         );
     }
@@ -1040,6 +1232,12 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     {
                         ...source,
                         snippet: message.textChunks.join("\n"),
+                        ...(message.metadata.temporalContext
+                            ? {
+                                  temporalContext:
+                                      message.metadata.temporalContext,
+                              }
+                            : {}),
                         score,
                         locator: `message:${messageOrdinal}`,
                     },
@@ -1051,7 +1249,10 @@ export class KnowProCorpusIndex implements CorpusIndex {
         query: string,
         limit: number,
         sourceIds?: ReadonlySet<string>,
+        temporalContext?: kp.TemporalQueryContext,
+        includeDiagnostics = false,
     ): Promise<CorpusIndexAnswer> {
+        query = temporalQuestion(query, temporalContext);
         const memory = this.memory;
         if (memory === undefined) {
             return { matches: [], whyNoAnswer: "The corpus has no index." };
@@ -1060,13 +1261,35 @@ export class KnowProCorpusIndex implements CorpusIndex {
         options.messageRangesInScope = this.eligibleRanges(sourceIds);
         options.maxMessageMatches = limit;
         options.maxKnowledgeMatches = limit;
-        const searched = await memory.searchWithLanguage(query, options);
+        const queryPlan: kp.LanguageSearchDebugContext | undefined =
+            includeDiagnostics ? {} : undefined;
+        const searched = await memory.searchWithLanguage(
+            query,
+            options,
+            undefined,
+            queryPlan,
+        );
         if (!searched.success) {
             throw new Error(searched.message);
         }
         const matches = new Map<number, number>();
-        const answers: string[] = [];
-        const reasons: string[] = [];
+        const readMessages = new Set<number>();
+        const readKnowledge = new Set<number>();
+        const readerContext: AnswerContextDiagnostics = {
+            answerPath: "knowpro",
+            retrievedMessageOrdinals: [],
+            messageOrdinals: [],
+            knowledgeMessageOrdinals: [],
+            completedChunks: 0,
+            serializedContextChars: 0,
+            retrievedSourceIds: [],
+            messageSourceIds: [],
+            knowledgeSourceIds: [],
+            ...(queryPlan === undefined
+                ? {}
+                : { queryPlan, chunks: [], combinations: [] }),
+        };
+        const scopedResults: kp.ConversationSearchResult[] = [];
         for (const searchResult of searched.data) {
             let scoped = searchResult;
             if (sourceIds !== undefined) {
@@ -1099,28 +1322,116 @@ export class KnowProCorpusIndex implements CorpusIndex {
             ) {
                 continue;
             }
+            scopedResults.push(scoped);
+        }
+        let response: kp.AnswerResponse | undefined;
+        if (scopedResults.length) {
             const generated = await memory.getAnswerFromSearchResults(
-                scoped,
+                scopedResults,
                 query,
+                (context, _index, result) => {
+                    if (!result.success) return;
+                    readerContext.completedChunks++;
+                    readerContext.serializedContextChars +=
+                        kp.answerContextToString(context).length;
+                    readerContext.chunks?.push({
+                        ordinal: readerContext.chunks.length,
+                        messageOrdinals: [
+                            ...new Set(
+                                (context.messages ?? []).flatMap(
+                                    (message) =>
+                                        message.sourceMessageOrdinals ?? [],
+                                ),
+                            ),
+                        ],
+                        semanticRefOrdinals: [
+                            ...new Set(
+                                [
+                                    ...(context.entities ?? []),
+                                    ...(context.topics ?? []),
+                                ].flatMap(
+                                    (knowledge) =>
+                                        knowledge.evidence?.map(
+                                            (evidence) =>
+                                                evidence.semanticRefOrdinal,
+                                        ) ?? [],
+                                ),
+                            ),
+                        ],
+                        serializedChars:
+                            kp.answerContextToString(context).length,
+                        response: result.data,
+                    });
+                    for (const message of context.messages ?? []) {
+                        for (const ordinal of message.sourceMessageOrdinals ??
+                            [])
+                            readMessages.add(ordinal);
+                    }
+                    for (const knowledge of [
+                        ...(context.entities ?? []),
+                        ...(context.topics ?? []),
+                    ]) {
+                        for (const ordinal of knowledge.sourceMessageOrdinals ??
+                            [])
+                            readKnowledge.add(ordinal);
+                    }
+                },
+                includeDiagnostics
+                    ? {
+                          onCombination: (inputs, output) => {
+                              readerContext.combinations!.push({
+                                  ordinal: readerContext.combinations!.length,
+                                  inputs,
+                                  output,
+                              });
+                          },
+                      }
+                    : undefined,
             );
             if (!generated.success) {
                 throw new Error(generated.message);
             }
-            if (generated.data === undefined) {
-                continue;
-            }
-            if (generated.data.type === "Answered") {
-                if (generated.data.answer) {
-                    answers.push(generated.data.answer);
-                }
-            } else if (generated.data.whyNoAnswer) {
-                reasons.push(generated.data.whyNoAnswer);
-            }
+            response = generated.data;
         }
         return {
-            matches: this.toCorpusMatches(matches, limit),
-            answer: answers.length === 0 ? undefined : answers.join("\n\n"),
-            whyNoAnswer: reasons.length === 0 ? undefined : reasons.join(" "),
+            matches: this.toCorpusMatches(
+                new Map(
+                    [...new Set([...readMessages, ...readKnowledge])].map(
+                        (ordinal) => [ordinal, matches.get(ordinal) ?? 0],
+                    ),
+                ),
+                limit,
+            ),
+            answer: response?.type === "Answered" ? response.answer : undefined,
+            whyNoAnswer: response?.whyNoAnswer,
+            readerContext: {
+                ...readerContext,
+                retrievedMessageOrdinals: [...matches.keys()],
+                messageOrdinals: [...readMessages],
+                knowledgeMessageOrdinals: [...readKnowledge],
+                retrievedSourceIds: this.toCorpusMatches(
+                    matches,
+                    matches.size,
+                ).map((match) => match.sourceId),
+                messageSourceIds: this.toCorpusMatches(
+                    new Map(
+                        [...readMessages].map((ordinal) => [
+                            ordinal,
+                            matches.get(ordinal) ?? 0,
+                        ]),
+                    ),
+                    readMessages.size,
+                ).map((match) => match.sourceId),
+                knowledgeSourceIds: this.toCorpusMatches(
+                    new Map(
+                        [...readKnowledge].map((ordinal) => [
+                            ordinal,
+                            matches.get(ordinal) ?? 0,
+                        ]),
+                    ),
+                    readKnowledge.size,
+                ).map((match) => match.sourceId),
+            },
         };
     }
 

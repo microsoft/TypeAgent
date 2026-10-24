@@ -466,14 +466,14 @@ if ($BootstrapPrereqs) {
     Invoke-PrereqBootstrap
 }
 
-# --- 1. Node >= 22 -----------------------------------------------------------
+# --- 1. Supported Node.js ----------------------------------------------------
 Write-Step "Checking Node.js"
 if (-not (Test-Command node)) {
-    Fail "Node.js >= 22 is required and was not found on PATH. Install it (e.g. 'winget install OpenJS.NodeJS.LTS') and re-run."
+    Fail "Node.js 22.23.4+, 24.22.1+, or 26.12.1+ is required and was not found on PATH. Install it (e.g. 'winget install OpenJS.NodeJS.LTS') and re-run."
 }
-$nodeMajor = (& node -e "process.stdout.write(String(process.versions.node.split('.')[0]))")
-if ([int]$nodeMajor -lt 22) {
-    Fail "Node.js >= 22 required; found v$(& node --version). Upgrade and re-run."
+& node -e "const [major, minor, patch] = process.versions.node.split('.').map(Number); const minimum = {22: [23, 4], 24: [22, 1], 26: [12, 1]}[major]; process.exit(/^\d+\.\d+\.\d+$/.test(process.versions.node) && minimum && (minor > minimum[0] || (minor === minimum[0] && patch >= minimum[1])) ? 0 : 1);"
+if ($LASTEXITCODE -ne 0) {
+    Fail "Node.js 22.23.4+, 24.22.1+, or 26.12.1+ required; found $(& node --version). Upgrade and re-run."
 }
 Write-Host "  Node $(& node --version)"
 

@@ -10,7 +10,6 @@ import {
     docPartsFromMarkdown,
     countDocTokens,
 } from "@typeagent/conversation-memory";
-import { countEmbeddingTokens } from "@typeagent/aiclient";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { createKnowProCorpusIndex } from "../src/knowProCorpusIndex.js";
 import type { IngestionSource, SourceType } from "../src/types.js";
@@ -169,7 +168,7 @@ describe("Markdown source persistence with stubbed KnowPro", () => {
                 {
                     collectLinkKnowledge: false,
                     collectStructuralKnowledge: false,
-                    maxTokensPerPart: 7500,
+                    maxTokensPerPart: 24000,
                 },
             ).map((part) => part.textChunks.join("\n"));
             expect(expectedSnippets).toContain(evidence.snippet);
@@ -237,10 +236,9 @@ describe("Markdown source persistence with stubbed KnowPro", () => {
             const { corpusId } = await service.createCorpus("Token budget");
             const job = await service.ingestDocument({ corpusId, source });
             await waitForJob(service, job.jobId);
-            expect(extracted.length).toBeGreaterThan(1);
+            expect(extracted.length).toBeGreaterThan(0);
             for (const input of extracted) {
-                expect(countDocTokens(input)).toBeLessThanOrEqual(7_500);
-                expect(countEmbeddingTokens(input)).toBeLessThanOrEqual(8_000);
+                expect(countDocTokens(input)).toBeLessThanOrEqual(24_000);
             }
             expect(
                 (

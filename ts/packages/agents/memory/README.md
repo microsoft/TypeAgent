@@ -66,6 +66,7 @@ cancel those durable jobs explicitly.
 
 - `@memory corpus create|list|use|info|clear`
 - `@memory import file|folder|status|cancel`
+- `@memory import session <path> --type agent-session-jsonl|copilot-session-jsonl --session <id> [--repository <repository>] [--commit <commit>] [--environment <environment>] [--maxBytes <bytes>]`
 - `@memory sources list|show|knowledge|replace|forget`
 - `@memory search`, `@memory ask`, `@memory explain`
 - `@memory jobs list|show|cancel`
@@ -89,6 +90,38 @@ Run the command once, inspect the preview, then repeat it with `--confirm
 <token>`. Clear and replacement tokens expire after five minutes; source-forget
 tokens expire after ten minutes. Replacement confirmation also fails if the
 source revision or file content changed.
+
+## Explicit agent-session import
+
+After selecting an active corpus, explicitly opt in with, for example:
+
+```text
+@memory import session "sessions\events.jsonl" --type copilot-session-jsonl --session session-42 --repository example/repo --commit abc123 --environment development
+```
+
+`agent-session-jsonl` is also supported. The trusted host streams the selected
+regular file into sequential chunks of at most 512 KiB UTF-8 and 1,000 lines,
+polling each receipt before advancing its expected cursor and sealing the
+session. The default file limit is 50 MiB; `--maxBytes` can lower it.
+Optional `--repository`, `--commit`, and `--environment` scope flags are
+forwarded unchanged on every chunk and the finalization request.
+The reader reuses native import containment checks, refuses linked files,
+rejects oversized individual lines and invalid UTF-8, and detects file changes
+before finalization. Paths never cross MCP. The exported
+`importAgentSessionPath(service, options)` helper also accepts optional scope,
+an abort signal, polling interval, and polling timeout.
+
+The command waits for completion and displays the durable import receipt.
+Use `getAgentSessionImport({ corpusId, sessionId })` and
+`cancelAgentSessionImport({ corpusId, sessionId })` on the injected service or
+typed client for subsequent status/cancellation. A retry must replay the
+unchanged file with the same session ID; stable positional chunk keys and the
+store's request hashes make exact retries idempotent and reject changed
+content. Replays validate every earlier chunk even when an old key returns a
+newer receipt; the reader retains each chunk's original expected cursor.
+Import errors leave already accepted chunks observable.
+Unsupported hosts fail explicitly. Ordinary Markdown imports and
+natural-language ingestion do not infer agent sessions.
 
 ## Markdown import
 

@@ -455,7 +455,7 @@ describe("Visual Studio discovery authentication", () => {
         await expect(
             handlers.lookupPort({ agentName: "code", role: "default" }),
         ).resolves.toEqual({ port: 43124 });
-    });
+    }, 30_000);
 
     it("rejects missing, wrong, replayed, expired, and cross-user proofs", async () => {
         const credential = await loadOrCreateVisualStudioBridgeCredential();

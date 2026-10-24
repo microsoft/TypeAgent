@@ -18,10 +18,12 @@ text is literal: it is neither escaped nor interpreted as Markdown. HTML still
 converts to Markdown; VTT still uses the transcript parser.
 
 Durable imports split oversized blocks, including unbroken words, then pack
-compatible adjacent blocks within **7,500 extraction tokens (`o200k_base`)**
-and **8,000 embedding tokens (`cl100k_base`) per input**. The embedding ceiling
-deliberately leaves room below the hosted models' 8,192-token limit. Structural
-character targets are not the final token budget.
+compatible adjacent blocks within **24,000 extraction tokens (`o200k_base`)**.
+Message-text embeddings use separate lossless windows bounded to **7,500 tokens
+under both `o200k_base` and `cl100k_base`**. Shared indexing and hosted embedding
+requests retain the **8,000-token `cl100k_base`** final guard, below the hosted
+models' 8,192-token limit. Structural character targets are not the final token
+budget.
 
 Splitting slices original Unicode code points without truncation or decoding
 partial token bytes. Plain-text whitespace and literal markup survive exactly.
@@ -31,8 +33,10 @@ fragment. Packing does not cross different sources/revisions, timed transcript
 turns or deletion boundaries. Split transcript fragments retain their original
 turn's timestamp; no new cue timings are invented.
 
-Public parser helpers always enforce both token ceilings; supplying
-`maxTokensPerPart` additionally enables packing. The legacy `mergeDocParts`
+Public parser helpers default to 7,500 extraction tokens and 8,000 embedding
+tokens per part; supplying `maxTokensPerPart` additionally enables packing.
+Extraction targets above the embedding ceiling require separate embedding
+windows, as configured by the durable service. The legacy `mergeDocParts`
 helper is deprecated and now retains per-part metadata instead of flattening
 all parts under one metadata object.
 
@@ -59,6 +63,44 @@ supplied to synthesis or extraction. Qualification-tool tests use the same
 snapshot; actual qualification runs still require an explicit fixture root.
 No generated memory stores, recordings, provider responses or run receipts are
 included in these fixtures.
+
+### Memory quality evaluation
+
+The [offline quality tools](../../../tools/memory-maintenance-qualification/quality-README.md)
+prepare frozen artifact bundles, a category-stratified LongMemEval diagnostic,
+and BenchmarkQED/AP-news inputs with separate construction and evaluator packets.
+Run their deterministic checks from the TypeScript workspace with
+`pnpm run test:memory-quality`; they are also included in `test:local`.
+These checks do not run production inference or certify factual quality.
+The authored artifact pilot requires independent human review before scoring.
+
+Project status rendering keeps capacity review pending distinct from a supported
+blocked condition. A `pendingOwnerReview` enum alone does not establish blockage;
+any actual blocker and its scope must remain in evidence-backed section prose.
+
+## Test suites
+
+Build from the TypeScript workspace root before running compiled tests:
+
+```powershell
+pnpm run build @typeagent/memory-service
+pnpm --filter @typeagent/memory-service run test:local
+pnpm --filter @typeagent/memory-service run test:regression
+```
+
+`test:local` runs the offline `.spec.ts` correctness suite used by PR CI.
+View-history ordering, exact records, authorship and selective parsing are checked
+with ten commits; privacy-purge, recovery and concurrent-read cases remain in
+that suite. The same assertions run against 100 and 1,000 commits in
+`test:regression`, which selects only `.regression.ts` files and runs serially.
+These scaling cases are excluded from normal Jest discovery and `test:local`;
+no tests are skipped.
+
+The [memory-regression workflow](../../../../../.github/workflows/memory-regression.yml)
+runs both suites every Monday at 08:23 UTC and on manual dispatch, on Ubuntu,
+Windows and macOS with Node 24.22.1. Each OS uploads Jest JSON results, including
+individual test durations. No model credentials or external fixture checkout
+are required. Model-backed `.test.ts` rehearsals remain separately opt-in.
 
 ## Automatic maintenance foundation
 
@@ -248,6 +290,16 @@ budgets remain enforced locally. Required evidence, character bounds and
 governing qualifications are still validated, and overlong or invalid fields
 are rejected rather than silently shortened.
 
+Recipe `source-synopsis-v3` resolves exact evidence quotes to retained UTF-16
+coordinates in the host. Models may omit offsets instead of computing character
+counts. Existing exact supplied ranges remain valid and can disambiguate repeated
+quotes; otherwise a quote must have exactly one eligible occurrence. Section
+evidence is restricted to that supplied section, and composition can select only
+evidence supplied by its input summaries. Missing, invented, or ambiguous quotes
+fail explicitly. Quotes and source line endings are never normalized or matched
+approximately. Persisted evidence keeps the same coordinate shape; the recipe
+change invalidates older semantic fingerprints.
+
 All memory synthesis, topic, indexed-answer and hub-answer calls now omit
 optional OpenAI completion limits. Their prompts express approximate final-JSON
 length targets separately from reasoning; citation and coverage validators are
@@ -334,9 +386,16 @@ provider calls never mutate the live index. Its serialized commit rechecks the
 captured generation and source revisions and merges current metadata. Stale,
 cancelled or forgotten candidates cannot replace the published generation.
 Forgetting also cancels and purges affected prepared candidates.
+Unpublished reindex cleanup uses the same corpus write reservation as source
+removal, preventing concurrent recursive deletion of a candidate generation.
 Each async read retains its snapshot until completion. Cold runtime
 loading is single-flight, and shutdown drains the complete preparation/read
 lifetime before releasing storage.
+
+Agent-session receipt stamps and file reads serialize with checkpoint publication
+for that session. Source eligibility is checked after releasing that queue, so
+source removal cannot deadlock behind a receipt read. Invalid or unsafe checkpoint
+files still fail explicitly; receipt polling does not relax file validation.
 
 Set `TYPEAGENT_MEMORY_SEARCH_TRACE=1` on the host process to enable correlated
 Memory Hub search diagnostics on stderr. Lines prefixed `[memory-search-timing]` contain

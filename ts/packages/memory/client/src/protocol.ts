@@ -630,6 +630,10 @@ export const capabilitiesSchema = z.object({
         management: z.boolean(),
         groundedAnswer: z.boolean(),
         sourceSynopses: z.boolean().optional(),
+        agentSessionImportTypes: z
+            .enum(["agent-session-jsonl", "copilot-session-jsonl"])
+            .array()
+            .optional(),
     }),
     warnings: z.array(z.string()),
 });

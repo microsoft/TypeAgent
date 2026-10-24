@@ -2,6 +2,10 @@
 // Licensed under the MIT License.
 
 import { conversation as kpLib } from "@typeagent/knowledge-processor";
+import type {
+    MessageTemporalContext,
+    TemporalQueryRange,
+} from "./temporalSchema.js";
 
 /**
  * A Knowledge Source is any object that returns knowledge
@@ -24,6 +28,7 @@ export type MessageOrdinal = number;
  * Metadata associated with a message.
  */
 export interface IMessageMetadata {
+    readonly temporalContext?: MessageTemporalContext | undefined;
     /**
      * The source ("sender/s") of the message
      */
@@ -418,6 +423,11 @@ export interface ITimestampToTextRangeIndex {
      * @returns An array of timestamped text ranges.
      */
     lookupRange(dateRange: DateRange): TimestampedTextRange[];
+    addTemporalContext?(
+        messageOrdinal: MessageOrdinal,
+        context: MessageTemporalContext,
+    ): void;
+    lookupTemporalRange?(range: TemporalQueryRange): TextRange[];
 }
 
 /**
@@ -633,7 +643,7 @@ export type WhenFilter = {
     /**
      * Match only in this date range
      */
-    dateRange?: DateRange | undefined;
+    dateRange?: DateRange | TemporalQueryRange | undefined;
     /**
      * If a thread index is available, match in a thread closest to ths description
      */
