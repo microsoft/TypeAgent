@@ -14,6 +14,24 @@ injected answers must not be scored as production results. No new mock memory,
 fallback answer, keyword factual judge, or alternate production execution path
 has been introduced.
 
+## Blocking CI checks
+
+Run the offline suite from `ts` with `pnpm run test:memory-quality`. It is also
+included in the root script phase of `test:local` and the summarized CI runner.
+These deterministic contract, fixture, resume, and entrypoint checks belong in
+blocking CI on every supported Node version; they do not require model access
+or a local API configuration.
+
+Keep asynchronous entrypoint checks independent, or explicitly await nested
+`t.test` calls. An unawaited asynchronous test inside a synchronous parent can be
+cancelled when the parent finishes on Node 22. Authorization checks assert the
+expected validation error, not just any rejection, so missing files or product
+dependencies cannot masquerade as a successful authorization check.
+
+Live inference, external-dataset downloads, factual-quality judging, and
+wall-clock benchmark comparisons remain separate, explicitly authorized work.
+Passing the offline suite does not establish LongMemEval answer accuracy.
+
 ## Frozen pilot and custody
 
 The source baseline is B0, commit

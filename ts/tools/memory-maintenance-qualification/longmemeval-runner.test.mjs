@@ -587,14 +587,37 @@ test("partial scorecards report observed denominators but never a full-suite sco
         fullScheduleAccuracy: null,
     });
 
-    test("the live benchmark entrypoint imports safely and refuses inference without explicit authorization", async () => {
-        const { main } = await import("./longmemeval-live.mjs");
-        await assert.rejects(main([]));
-        await assert.rejects(main(["--authorized-live-benchmark"]));
-    });
     assert.equal(result.abstention.scored, 0);
     assert.equal(result.abstention.observedAccuracy, null);
     assert.equal(result.knownTotalTokens, 12);
     assert.equal(result.dollarCost, null);
     assert.equal(result.answerLatencyMs.p95, 100);
+});
+
+test("the live benchmark entrypoint refuses inference without explicit authorization", async () => {
+    const unused = path.join(os.tmpdir(), "longmemeval-unauthorized-input");
+    await assert.rejects(
+        main([
+            "--product",
+            unused,
+            "--dataset",
+            unused,
+            "--judge-source",
+            unused,
+            "--output",
+            unused,
+        ]),
+        {
+            code: "ERR_ASSERTION",
+            actual: undefined,
+            expected: true,
+            operator: "strictEqual",
+        },
+    );
+});
+
+test("the live benchmark entrypoint rejects authorized invocations with missing inputs", async () => {
+    await assert.rejects(main(["--authorized-live-benchmark"]), {
+        code: "ERR_ASSERTION",
+    });
 });
