@@ -45,6 +45,7 @@ import {
 } from "../shared/plugin-config.js";
 import { handleRecipeCommand } from "../shared/recipe-commands.js";
 import { connectToMacroOwner } from "../shared/macro-owner.js";
+import { localRecipeEndpoint } from "../shared/recipe-local-paths.js";
 import { handleLocalRecipes } from "./hook-local-recipes.js";
 import { makeTurnId, writeDemoState } from "./demo-state.js";
 import { handleDirect, type DirectHandlingOptions } from "./hook-direct.js";
@@ -345,6 +346,14 @@ async function claimMacroRecording(
         });
         return token?.learning ? "child" : token !== undefined;
     } catch (error) {
+        if (
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT" &&
+            "path" in error &&
+            error.path === localRecipeEndpoint(input.cwd, input.sessionId)
+        )
+            return false;
         console.error(
             `[macro] Unable to claim recording: ${error instanceof Error ? error.message : String(error)}`,
         );

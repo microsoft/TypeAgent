@@ -56,6 +56,8 @@ recipe matcher. A miss stays with Copilot; bypass disables recipe admission.
 Explicitly armed recordings are still claimed in bypass mode, without matching
 or executing a recipe or delegating the task to TypeAgent. Recording feature
 flags and `recipeOwner: off` still disable recording.
+An absent session recording endpoint is normal and silent; invalid endpoints
+and other recording failures still produce diagnostics.
 There is no PowerShell pre-tool redirect or alternate MCP/dev macro owner.
 Actual native per-invocation receipts are still required.
 
