@@ -103,6 +103,10 @@ that suite. The same assertions run against 100 and 1,000 commits in
 These scaling cases are excluded from normal Jest discovery and `test:local`;
 no tests are skipped.
 
+Retained-index privacy checks drain deferred maintenance before enumerating the
+segment directory, so background reclamation cannot remove an obsolete segment
+between directory listing and inspection.
+
 The [memory-regression workflow](../../../../../.github/workflows/memory-regression.yml)
 runs both suites every Monday at 08:23 UTC and on manual dispatch, on Ubuntu,
 Windows and macOS with Node 24.22.1. Each OS uploads Jest JSON results, including

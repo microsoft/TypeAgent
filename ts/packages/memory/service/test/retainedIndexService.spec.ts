@@ -168,6 +168,7 @@ describe("retained-source rebuild with real KnowPro and deterministic embeddings
     }
 
     async function verify(corpusId: string, messageCount = 1): Promise<void> {
+        expect((await service.drainMaintenance()).settled).toBe(true);
         expect(await service.getSource(corpusId, "private")).toBeUndefined();
         expect(await service.getSource(corpusId, "retained")).toBeDefined();
         const manifest = JSON.parse(
