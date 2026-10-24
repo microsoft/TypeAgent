@@ -44,6 +44,7 @@ npm's token helper does not authenticate NuGet.
 Explicit `FOUNDRY_LOCAL_NUGET_FEEDS` and `FOUNDRY_LOCAL_NUGET_MODE`
 environment variables take precedence. Setup passes the derived settings only
 to its install process; it does not persist machine configuration or credentials.
+Setup logs do not include the derived feed URL or environment-provided mode.
 Non-Azure npm registries retain the native installer's defaults.
 
 For a direct `pnpm install`, global package installation, or a standalone

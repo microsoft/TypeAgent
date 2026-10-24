@@ -224,8 +224,7 @@ if (
     log(
         "native feed",
         "Foundry uses the configured Azure Artifacts feed's NuGet endpoint " +
-            `(${installEnv.FOUNDRY_LOCAL_NUGET_MODE} mode). ` +
-            "NuGet authentication is separate from npm authentication.",
+            "for installation. NuGet authentication is separate from npm authentication.",
     );
 run("pnpm install", installEnv);
 
