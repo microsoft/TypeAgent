@@ -21,6 +21,7 @@ import {
     observedJudgeModel,
     benchmarkFailure,
     benchmarkInvocationAllowance,
+    benchmarkStartupAllowance,
     closeBenchmarkService,
     acknowledgeStopAfterQuestion,
     selectConstructionCases,
@@ -30,6 +31,21 @@ import {
     completedOutcome,
     main,
 } from "./longmemeval-live.mjs";
+
+test("startup extensions are explicit and bounded independently of benchmark work", async () => {
+    assert.equal(benchmarkStartupAllowance("2"), 120000);
+    assert.equal(benchmarkStartupAllowance("10"), 600000);
+    assert.equal(benchmarkStartupAllowance("1"), 60000);
+    for (const value of ["0", "11", "unlimited", "1.5", "NaN", ""])
+        assert.throws(
+            () => benchmarkStartupAllowance(value),
+            /Startup minutes/,
+        );
+    await assert.rejects(
+        main(["--authorized-live-benchmark", "--startup-minutes", "11"]),
+        /Startup minutes/,
+    );
+});
 
 test("import continuation freezes the original fifty including old grades and failed questions", () => {
     const construction = Array.from({ length: 60 }, (_, i) => ({

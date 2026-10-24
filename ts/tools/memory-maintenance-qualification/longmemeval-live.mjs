@@ -45,7 +45,13 @@ function validateBenchmarkSpec(spec) {
         "Explicit benchmark inference authorization is required",
     );
     assert.equal(spec.mode, "longmemeval-full500");
-    assert.equal(spec.startupAllowanceMs, 120000);
+    assert.ok(
+        Number.isSafeInteger(spec.startupAllowanceMs) &&
+            spec.startupAllowanceMs >= 60000 &&
+            spec.startupAllowanceMs <= 600000 &&
+            spec.startupAllowanceMs % 60000 === 0,
+        "Startup allowance must be an integer from 1 to 10 minutes",
+    );
     assert.ok(
         spec.workAllowanceMs === null ||
             (Number.isSafeInteger(spec.workAllowanceMs) &&
@@ -88,6 +94,15 @@ export function benchmarkInvocationAllowance(value) {
         "Invocation work minutes must be an integer from 1 to 30, or unlimited",
     );
     return minutes * 60000 + cleanupReserveMs;
+}
+
+export function benchmarkStartupAllowance(value) {
+    const minutes = Number(value);
+    assert.ok(
+        Number.isSafeInteger(minutes) && minutes >= 1 && minutes <= 10,
+        "Startup minutes must be an integer from 1 to 10",
+    );
+    return minutes * 60000;
 }
 
 export async function acknowledgeStopAfterQuestion(
@@ -549,6 +564,9 @@ async function runWorker(spec) {
     const { waitForMemoryJob } = await load(
         "packages\\memory\\service\\dist\\rpcFacade.js",
     );
+    const { runWithSearchTiming, timeSearchStage } = await load(
+        "packages\\knowPro\\dist\\index.js",
+    );
     const model = observedRoles(
         client.openai.createChatModel(),
         "benchmarkJudge",
@@ -584,7 +602,9 @@ async function runWorker(spec) {
         return { model: actual, label: /^yes/i.test(result.data.trim()) };
     };
     try {
-        await service.initialize();
+        await runWithSearchTiming(state.runId, "benchmark.initialize", () =>
+            timeSearchStage("service.initialize", () => service.initialize()),
+        );
         state.arm.serviceCapabilities = await service.getCapabilities();
         await persist();
         const admittedEpochMs = Date.now();
@@ -745,6 +765,7 @@ export async function main(args = process.argv.slice(2)) {
             "authorized-live-benchmark": { type: "boolean" },
             "max-questions": { type: "string", default: "500" },
             "work-minutes": { type: "string", default: "30" },
+            "startup-minutes": { type: "string", default: "2" },
             "question-ids": { type: "string" },
             "continue-after-import-failure": { type: "boolean" },
             "previous-engine-hash": { type: "string" },
@@ -783,6 +804,9 @@ export async function main(args = process.argv.slice(2)) {
     const invocationAllowanceMs = benchmarkInvocationAllowance(
         values["work-minutes"],
     );
+    const startupAllowanceMs = benchmarkStartupAllowance(
+        values["startup-minutes"],
+    );
     for (const key of ["product", "dataset", "judge-source", "output"])
         assert.ok(values[key] && path.isAbsolute(values[key]));
     const runDirectory = values.resume
@@ -814,7 +838,7 @@ export async function main(args = process.argv.slice(2)) {
         judgeSourcePath: values["judge-source"],
         expectedCheckpoint: { name: "longmemeval-production-frozen", hashes },
         authorizedLiveBenchmark: true,
-        startupAllowanceMs: 120000,
+        startupAllowanceMs,
         workAllowanceMs: invocationAllowanceMs,
         totalAllowanceMs: invocationAllowanceMs,
         maximumCompletedQuestions,

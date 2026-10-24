@@ -716,6 +716,18 @@ It may overlap earlier development questions; it is not a new holdout.
 
 ### Continue past failed question imports
 
+Startup retains its default two-minute allowance. An explicitly larger retained
+store can use `--startup-minutes 10`; only integer allowances from one to ten
+minutes are accepted, before opening a run. This changes only the watchdog's
+initialization/admission deadline, not work duration, request limits or product
+settings. There is no unlimited-startup mode. Specs/admission receipts preserve
+the chosen allowance. A startup timeout is not evidence of resumed ingestion
+throughput, and the last progress snapshot can remain stale after a forced exit.
+With `TYPEAGENT_MEMORY_SEARCH_TRACE=1`, the harness also gives initialization
+an existing product timing context and emits `service.initialize` duration;
+otherwise that wrapper is inactive. Enabling diagnostics adds observation
+overhead and should be recorded when comparing restart throughput.
+
 With explicit `--continue-after-import-failure`, a terminally failed ingestion
 job fails that question, records its job/stage/progress and failure category,
 and continues to the next question's independent corpus. The incomplete corpus
