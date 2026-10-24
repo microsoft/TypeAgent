@@ -120,7 +120,7 @@ Target timeout is a technical failure, not cancellation of its peers or a user
 decision. Job cancellation remains explicit. Job completion and family checkpoint
 share the serialized write boundary so readers cannot observe a false-idle gap.
 Startup and a 30-second reconciliation sweep repair missed source/index dirty hints.
-During a durable bulk import, automatic topic and Wiki/project maintenance remains
+During a durable bulk import, automatic source-synopsis, topic and Wiki/project maintenance remains
 pending rather than repeatedly constructing snapshots of an unfinished batch.
 Settlement of the last active batch for that corpus resumes maintenance using
 current eligible sources. Overlapping batches, retries, cancellation and startup
@@ -129,6 +129,82 @@ privacy invalidation and late-write eligibility checks are not deferred.
 Committed informational revisions repair exact publication/index effects without
 repeating synthesis or creating a new revision. A clean restart does not create
 an unnecessary history commit.
+
+### Foreground scopes and bounded autonomous work
+
+Maintenance execution is independent of `informationalViews`, `viewDrafts` and
+native answer selection. `maintenanceMode: "automatic"` is the normal service
+policy. `maintenanceMode: "manual"` retains dirty work without starting automatic
+model/view builds; explicit `maintainViews` remains available.
+
+```typescript
+const service = new FileMemoryService(store, {
+  maintenanceMode: "automatic",
+  ingestionCommitPolicy: {
+    maxDocuments: 10,
+    maxBytes: 8 * 1024 * 1024,
+    admissionWaitMs: 250,
+  },
+});
+const release = service.deferMaintenance();
+try {
+  // Import and query any loaded corpora without starting new autonomous work.
+} finally {
+  release();
+}
+const status = await service.drainMaintenance(30_000, signal);
+if (!status.settled) {
+  // Report pending, deferred and failed work rather than claiming completion.
+}
+```
+
+Foreground holds nest and release idempotently. They apply across loaded corpora,
+including earlier imports. Already-running work may finish; acquiring a hold is
+not an interruption of a committed build. One family can have one running request
+and one coalesced latest-generation request. Pending work is reconstructed from
+durable source/family state after restart, not from an in-memory timer journal.
+Reconciliation does not enqueue duplicate passes behind an occupied corpus.
+Privacy removal and eligibility checks are never postponed by this policy.
+
+Non-privacy segment collection uses the same coalesced queue and admission
+guards. Manual mode, foreground holds and shutdown may leave that cleanup
+pending; startup reconstructs it while retaining index generations and integrity
+checks. Drain maintenance when cleanup completion matters. Authorized forgetting
+and corpus-clear collection remain immediate rather than waiting for this queue.
+
+`await getMaintenanceStatus()` reports queue keys, active work, coalesced request count,
+budget deferrals and failures, including retained informational target failures.
+Independent targets and bounded per-target retries continue after a partial
+informational build; parked failures remain visible and prevent a settled result.
+A drain temporarily executes manual-mode work;
+it does not override foreground holds or active imports. `reason: "deadline"`,
+`"paused"` or `"budget"` and `settled: false` describe incomplete work explicitly.
+Deadline/abort signals reach automatic view builds and synopsis generation.
+Shutdown cancels their linked work before releasing storage. A provider that
+ignores cancellation must still be drained before storage ownership is released.
+
+Optional `maintenanceLimits` bound `maxTargetsPerPass` (at most 12),
+`maxCandidatesPerPass`, `maxPassesPerGeneration`, and a shared `requestBudget`
+using the existing client attempt/token/elapsed admission checks. No new optimal
+budget is assumed: limits other than the existing 12-target cap are opt-in.
+Configured ranking prioritizes existing pages and source-supported subjects,
+without requiring multiple sources or blacklisting filenames, routes or dates.
+Unchanged rejected candidates are checkpointed before another expensive capture;
+source generation, page versions or admission/model policy changes invalidate
+that decision. Explicit manual maintenance bypasses automatic pass/read limits.
+Pass counters and deferred descriptors survive restart. A pass budget defers
+derived output, not the underlying source facts.
+
+Publication limits are independent of model concurrency. The product retains
+two-document commits by default; hosts can opt into larger document/byte-bounded
+groups. The admission timer prevents a missing/slow peer from blocking progress,
+so a delayed admission can form a smaller safe checkpoint. A source larger than
+the group byte budget is processed alone, never truncated. Grouped append/rebuild
+continues to use the index's existing bounded extraction/embedding settings.
+Unsupported grouped updates fall back to serialized single-source ingestion.
+Manifest publication remains atomic and source eligibility is rechecked.
+Recovery/retry reconciles committed revision identities even when job/member
+acknowledgments failed; missing or corrupt storage is not fabricated as success.
 
 `ViewBuildSnapshot.influenceSources` records source/revision identities of nominated
 page context read during admission, including inputs not cited by the output.
@@ -375,7 +451,7 @@ Document indexes are reused in memory while their published
 generation and persisted-file fingerprint remain unchanged. Fingerprints check
 schema, semantic-data, embedding-file and projection/readiness-marker metadata;
 schema validation and recovery still run when these change. A restart loads
-the published generation again. This does not cache queries or model responses.
+the published generation again. This does not persistently cache queries or model responses.
 
 Prepared document searches, source knowledge, corpus knowledge and
 document answering can share a per-corpus read reservation. Published-index
@@ -412,6 +488,16 @@ Queries, source excerpts, prompts, tokens and raw error messages are excluded.
 Tracing does not change retrieval limits, model selection or when the Hub
 returns its evidence and answer.
 
+Natural-language searches reuse identical query embeddings within that request
+and its compatible fallback passes. Cache identity includes the model object,
+declared embedding identity (including normalization), and exact input text.
+Document embeddings, other requests and different models are not shared.
+Concurrent duplicates share one attempt; failed attempts are removed so a later
+fallback can retry. The per-model request cache is bounded to 256 terms; overflow
+uses the normal provider path without dropping terms. `LanguageSearchOptions`
+accepts `reuseQueryEmbeddings: false` for controlled comparisons. Translation,
+similarity thresholds, candidate limits and evidence selection are unchanged.
+
 Build and ingestion diagnostics reuse this opt-in timing sink. With
 `TYPEAGENT_MEMORY_SEARCH_TRACE=1`, `memory.build`, `memory.build.<pipeline>`,
 `memory.ingestion` and `memory.synopsis` scopes also report build queue waits,
@@ -424,6 +510,13 @@ ID; per-topic calls carry numeric node ordinals and counts, not labels or text.
 Model spans include client retry waits. Target totals and nested stages overlap;
 do not add them as independent wall time. A returned target rejection remains
 in its durable receipt even when the enclosing job runner finishes normally.
+
+Batch traces add `batchId`, commit-group source counts/bytes and the enclosing
+batch total. Maintenance traces add generation identity, queue wait, pending and
+coalesced counts, and work duration. Query-embedding reuse records hit/miss counts
+without recording terms. These augment the existing copy/load, serialization,
+publication, invalidation, text-purge and segment-collection spans; parent/child
+spans remain overlapping, not additive.
 
 ## Qualified generated Wiki consolidation
 

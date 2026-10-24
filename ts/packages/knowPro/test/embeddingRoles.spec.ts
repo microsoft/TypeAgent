@@ -16,7 +16,10 @@ import {
     createTextEmbeddingIndexSettings,
     TextEmbeddingIndex,
     generateTextEmbeddingsForIndex,
+    EmbeddingIndex,
+    indexesOfNearestTextBatchInIndex,
 } from "../src/fuzzyIndex.js";
+import { withQueryEmbeddingCache } from "../src/queryEmbeddingCache.js";
 import { buildMessageIndex, MessageTextIndex } from "../src/messageIndex.js";
 import { TermEmbeddingIndex } from "../src/relatedTermsIndex.js";
 import { TextToTextLocationIndex } from "../src/textLocationIndex.js";
@@ -68,6 +71,30 @@ describe("KnowPro embedding roles (synthetic/offline)", () => {
     }
     beforeEach(() => {
         calls = [];
+    });
+
+    test("language-query scope reuses message and term embeddings without caching document work", async () => {
+        const shared = model();
+        const messages = new MessageTextIndex({
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(shared, 2),
+        });
+        await withQueryEmbeddingCache(async () => {
+            await messages.generateEmbedding("shared");
+            await indexesOfNearestTextBatchInIndex(
+                new EmbeddingIndex(),
+                shared,
+                ["shared", "alias", "shared"],
+            );
+            await messages.generateEmbedding("shared");
+            await generateTextEmbeddingsForIndex(shared, "shared");
+            await generateTextEmbeddingsForIndex(shared, "shared");
+        });
+        expect(calls).toEqual([
+            "query:shared",
+            "query:alias",
+            "document:shared",
+            "document:shared",
+        ]);
     });
 
     test("indexing rejects oversized inputs before invoking any embedding model", async () => {

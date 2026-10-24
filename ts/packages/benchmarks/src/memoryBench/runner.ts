@@ -507,6 +507,17 @@ function validateSavedOutcomes(status: Status, queries: Query[]) {
         );
 }
 
+function recordIngestionTiming(status: Status, unit: string, elapsed: number) {
+    const timings = object(status.ingestionSeconds ?? {});
+    if (timings[unit] === undefined) timings[unit] = elapsed;
+    else {
+        const replay = object(status.ingestionReplaySeconds ?? {});
+        replay[unit] = elapsed;
+        status.ingestionReplaySeconds = replay;
+    }
+    status.ingestionSeconds = timings;
+}
+
 export async function runStage(
     options: RunOptions,
     dependencies: Dependencies = {},
@@ -635,9 +646,11 @@ export async function runStage(
             const started = performance.now(),
                 unitDocuments = documents.filter((doc) => doc.unit === unit);
             await provider?.ingest(unitDocuments);
-            const timings = object(status.ingestionSeconds ?? {});
-            timings[unit] = (performance.now() - started) / 1000;
-            status.ingestionSeconds = timings;
+            recordIngestionTiming(
+                status,
+                unit,
+                (performance.now() - started) / 1000,
+            );
             status.state = "answering";
             await saveJson(resultPath, status);
             await evaluateUnit(
@@ -653,6 +666,14 @@ export async function runStage(
         }
         status.state = "settling";
         status.resourceUsage = process.resourceUsage();
+        if (benchmark.processingPolicy !== undefined)
+            status.maintenance = {
+                status: await runtime.bridge.execute({
+                    operation: "maintenanceStatus",
+                }),
+                drainPerformed: false,
+                drainSeconds: null,
+            };
         await saveJson(resultPath, status);
         await updateProgress(options.progress, {
             activeRun: run,

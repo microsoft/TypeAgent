@@ -660,12 +660,25 @@ describe("memory benchmark provider and orchestration", () => {
             runStage(options, { openRuntime: runtime(host) }),
         ).rejects.toThrow(/judge outage/);
         expect(host.answerCalls).toBe(1);
+        const file = path.join(
+            options.output,
+            "beam-100k-smoke-content-rag",
+            "results.json",
+        );
+        const saved = JSON.parse(await readFile(file, "utf8"));
+        const units = Object.keys(saved.ingestionSeconds);
+        saved.ingestionSeconds = Object.fromEntries(
+            units.map((unit) => [unit, 123]),
+        );
+        await saveJson(file, saved);
         host.failJudge = false;
         const result = await runStage(options, { openRuntime: runtime(host) });
         expect(result.state).toBe("complete");
         expect(host.answerCalls).toBe(1);
         expect(result.error).toBeUndefined();
         expect(result.previousFailures).toHaveLength(1);
+        expect(result.ingestionSeconds).toEqual(saved.ingestionSeconds);
+        expect(Object.keys(result.ingestionReplaySeconds ?? {})).toEqual(units);
     });
     test("native citations survive a judge failure and prediction resume", async () => {
         options.mode = "agent";

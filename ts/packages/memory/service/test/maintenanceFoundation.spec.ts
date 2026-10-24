@@ -245,6 +245,15 @@ test.each(["semantic", "transient", "derivative"] as const)(
             }
             const recovered = await service.listViews(corpusId);
             expect(recovered.wikiFamily?.pending).toBe(false);
+            const maintenance = await service.drainMaintenance(5000);
+            expect(
+                maintenance.failures.some(
+                    (failure) =>
+                        failure.key === `${corpusId}:wiki` &&
+                        failure.error.includes("technical targets parked"),
+                ),
+            ).toBe(mode !== "derivative");
+            if (mode !== "derivative") expect(maintenance.settled).toBe(false);
             expect(
                 recovered.views.map((view) => view.revisionId).sort(),
             ).toEqual(versions);
@@ -287,6 +296,11 @@ test.each(["semantic", "transient", "derivative"] as const)(
                 expect((await service.listViews(corpusId)).views).toHaveLength(
                     14,
                 );
+                expect(
+                    (await service.getMaintenanceStatus()).failures.some(
+                        (failure) => failure.key === `${corpusId}:wiki`,
+                    ),
+                ).toBe(false);
             }
         } finally {
             FoundationIndex.failDerivative = false;

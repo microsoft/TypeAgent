@@ -333,11 +333,12 @@ describe("detached coalesced batch ingestion", () => {
                         (job) => job.state === (fail ? "failed" : "complete"),
                     ),
                 ).toBe(true);
-            } finally {
-                const closing = service.close();
-                for (const callback of callbacks) callback();
                 timer.mockRestore();
-                await closing;
+                callbacks.at(-1)!();
+                expect((await service.drainMaintenance()).settled).toBe(true);
+            } finally {
+                timer.mockRestore();
+                await service.close();
             }
             await expect(
                 readdir(path.join(root, corpusId, "index", ".segments")),
@@ -707,10 +708,14 @@ describe("detached coalesced batch ingestion", () => {
             service = open();
             await service.initialize();
             const recovered = await service.getBatchImport(batch.batchId);
-            expect(recovered.state).toBe("interrupted");
+            expect(recovered.state).toBe(
+                published ? "complete" : "interrupted",
+            );
             expect(
                 recovered.members.every(
-                    (member) => member.state === "interrupted",
+                    (member) =>
+                        member.state ===
+                        (published ? "complete" : "interrupted"),
                 ),
             ).toBe(true);
             for (const member of recovered.members)
