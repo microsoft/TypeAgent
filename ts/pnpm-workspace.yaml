@@ -52,6 +52,12 @@ allowBuilds:
   protobufjs: false
   puppeteer: false
   sharp: true
+  # Grammars ship prebuilt .wasm; skillgraph never loads their native addons.
+  tree-sitter-bash: false
+  tree-sitter-javascript: false
+  tree-sitter-powershell: false
+  tree-sitter-python: false
+  tree-sitter-typescript: false
 
 # Moved out of the deprecated `pnpm` field in package.json (pnpm v11 no longer reads it).
 peerDependencyRules:

@@ -1,8 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Turns code fences and inline code into simple commands. Deterministic and
-// conservative: anything not clearly a command is skipped, never guessed.
+import { parse, unquote, type Grammar, type Node } from "./parsers.js";
+
+// Turns code fences and inline code into simple commands, using the bash and
+// PowerShell tree-sitter grammars. Conservative: commands with syntax errors
+// are skipped, never guessed.
 //
 //   "$ rtk proxy gh pr view <n> --json comments | jq ."
 //     → [{ argv: ["gh","pr","view","<n>","--json","comments"], opaque: {3} },
@@ -13,19 +16,46 @@ const SHELL_LANGS = new Set(["bash", "sh", "shell", "zsh"]);
 const PWSH_LANGS = new Set(["powershell", "pwsh", "ps1", "ps"]);
 const CONSOLE_LANGS = new Set(["console", "shell-session"]);
 
-/**
- * Syntax that differs between POSIX shells and PowerShell.
- *   posix: `$ cmd \`        pwsh: `PS C:\> cmd ``
- */
 type Dialect = "posix" | "pwsh";
+/** Transcript prompts, e.g. `$ gh pr view` and `PS C:\> ./x.ps1`. */
 const PROMPT: Record<Dialect, RegExp> = {
     posix: /^\s*\$ /,
     pwsh: /^\s*PS(?: [^>]*)?> /,
 };
-/** Escape and line-continuation character. */
-const ESCAPE: Record<Dialect, string> = { posix: "\\", pwsh: "`" };
+const GRAMMAR: Record<Dialect, Grammar> = { posix: "bash", pwsh: "powershell" };
+/** Line-continuation character: a prompted line ending in it continues. */
+const CONTINUATION: Record<Dialect, string> = { posix: "\\", pwsh: "`" };
 /** PowerShell cmdlets are Verb-Noun (Get-ChildItem): not PATH tools. */
 const CMDLET = /^[A-Z][a-z]+-[A-Z][A-Za-z]*$/;
+/** Doc placeholders, e.g. `<pr>`, `{baseDir}`, `[flags]`, `...`. */
+const PLACEHOLDER = /^<.*>$|^\{[^}]*\}$|\.\.\.|^\[.*\]$|^…$/;
+/**
+ * Doc placeholders that are shell syntax: `<a|b>` (redirection, pipe) and
+ * `{baseDir}` (brace group). Masked innermost first before parsing.
+ */
+const MASKED_PLACEHOLDER = /<[^<>\s]+>|\{\w+\}/g;
+/** HTTP examples (`GET /api/items`) are not shell, even in a mislabeled fence. */
+const HTTP_METHODS = new Set([
+    "GET",
+    "HEAD",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+    "CONNECT",
+    "TRACE",
+]);
+/** Bash nodes whose value is only known at run time. */
+const BASH_EXPANSIONS = [
+    "simple_expansion",
+    "expansion",
+    "command_substitution",
+    "process_substitution",
+    "arithmetic_expansion",
+];
+/** PowerShell nodes whose value is only known at run time. */
+const PWSH_EXPANSIONS = ["variable", "sub_expression"];
 /** Interpreter options whose value is inline code, not a script path. */
 const INLINE_CODE_FLAGS = new Set([
     "-m",
@@ -150,202 +180,158 @@ export function commandsFromCode(
     col: number,
 ): Command[] {
     if (lang === "inline") {
-        const cmds = commandsFromLine(value, line, col, "posix");
-        return cmds.filter((c) => c.args.length > 0);
+        return parseCommands(value, line, col, "posix", true).filter(
+            (c) => c.args.length > 0,
+        );
     }
     if (!isShellLang(lang)) return [];
-    const consoleMode = CONSOLE_LANGS.has(lang);
     const dialect: Dialect = PWSH_LANGS.has(lang) ? "pwsh" : "posix";
-    const esc = ESCAPE[dialect];
-    const out: Command[] = [];
-    const lines = value.split("\n");
-    // A fence with prompts is a transcript: unprompted lines are output.
-    const hasPrompts = lines.some((l) => PROMPT[dialect].test(l));
-    let heredocEnd: string | undefined;
-    let pending = "";
-    let pendingLine = line;
-    let pendingCol = col;
-    for (let i = 0; i < lines.length; i++) {
-        let text = lines[i];
-        if (heredocEnd !== undefined) {
-            if (text.trim() === heredocEnd) heredocEnd = undefined;
-            continue;
-        }
-        // mdast strips the fence's indent (list items): add it back.
-        let offset = col;
-        const prompt = PROMPT[dialect].exec(text);
-        if (prompt) {
-            offset += prompt[0].length;
-            text = text.slice(prompt[0].length);
-        } else if ((consoleMode || hasPrompts) && !pending) {
-            continue; // output line in a transcript
-        }
-        if (!pending) {
-            pendingLine = line + i;
-            pendingCol = offset;
-        }
-        if (text.endsWith(esc)) {
-            pending += text + "\n";
-            continue;
-        }
-        const full = pending + text;
-        const fullOffset = pending ? pendingCol : offset;
-        // A multiline quoted -c program is one argument, not shell commands.
-        if (hasOpenQuote(full, esc)) {
-            pending = full + "\n";
-            continue;
-        }
-        pending = "";
-        const heredoc =
-            dialect === "posix" && /<<-?\s*['"]?(\w+)['"]?/.exec(full);
-        if (heredoc) heredocEnd = heredoc[1];
-        out.push(...commandsFromLine(full, pendingLine, fullOffset, dialect));
-    }
-    return out;
+    return parseCommands(
+        transcriptToScript(value, dialect, CONSOLE_LANGS.has(lang)),
+        line,
+        col,
+        dialect,
+        false,
+    );
 }
 
-function hasOpenQuote(text: string, esc: string): boolean {
-    let quote: string | undefined;
-    for (let i = 0; i < text.length; i++) {
-        const c = text[i];
-        if (c === esc && quote !== "'") {
-            i++;
-        } else if (quote) {
-            if (c === quote) quote = undefined;
-        } else if (c === "#" && (i === 0 || /[\s|;&]/.test(text[i - 1]))) {
-            break;
-        } else if (c === "'" || c === '"') {
-            quote = c;
-        }
-    }
-    return quote !== undefined;
+/**
+ * A fence with prompts is a transcript: keep prompted lines (and their
+ * continuations), blank everything else. Same length, so positions hold.
+ *   "$ gh pr list\n#1 fix" → "  gh pr list\n     "
+ */
+function transcriptToScript(
+    text: string,
+    dialect: Dialect,
+    consoleMode: boolean,
+): string {
+    const lines = text.split("\n");
+    if (!consoleMode && !lines.some((l) => PROMPT[dialect].test(l)))
+        return text;
+    let continues = false;
+    return lines
+        .map((l) => {
+            const prompt = PROMPT[dialect].exec(l);
+            const keep = prompt !== null || continues;
+            continues = keep && l.trimEnd().endsWith(CONTINUATION[dialect]);
+            if (!keep) return " ".repeat(l.length);
+            return prompt
+                ? " ".repeat(prompt[0].length) + l.slice(prompt[0].length)
+                : l;
+        })
+        .join("\n");
 }
 
-function commandsFromLine(
+/** Parse with the dialect's grammar and convert each simple command. */
+function parseCommands(
     text: string,
     line: number,
     col: number,
     dialect: Dialect,
+    strict: boolean,
 ): Command[] {
-    // HTTP examples are not shell invocations, even in a mislabeled fence.
-    if (
-        /^\s*(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS|CONNECT|TRACE)\s+(?:\/|https?:\/\/)/.test(
-            text,
-        )
-    )
-        return [];
-    const tokens = tokenize(text, line, col, dialect);
-    if (!tokens) return [];
-    // Split on control operators into simple commands.
-    const groups: Token[][] = [[]];
-    for (const t of tokens) {
-        if (["|", "||", "&&", ";", "&"].includes(t.text)) groups.push([]);
-        else groups[groups.length - 1].push(t);
+    // `tab <new|<index>>` → `tab ____________`: same length, so tokens map
+    // back to the original `<…>` text.
+    let masked = text;
+    for (let prev = ""; prev !== masked; ) {
+        prev = masked;
+        masked = masked.replace(MASKED_PLACEHOLDER, (m) =>
+            "_".repeat(m.length),
+        );
     }
-    const out: Command[] = [];
-    for (const g of groups) {
-        const cmd = toCommand(g, dialect);
-        if (cmd) out.push(cmd);
-    }
-    return out;
+    return parse(GRAMMAR[dialect], masked, (root) => {
+        // Inline prose that is not valid shell is not a command.
+        if (strict && root.hasError) return [];
+        const out: Command[] = [];
+        for (const node of root.descendantsOfType("command")) {
+            if (insideError(node)) continue; // claim nothing about broken syntax
+            const tokens =
+                dialect === "posix"
+                    ? bashTokens(node, text)
+                    : pwshTokens(node, text);
+            const at = (t: Omit<Token, "line" | "col">, n: Node): Token => ({
+                ...t,
+                line: line + n.startPosition.row,
+                col: col + n.startPosition.column,
+            });
+            if (!tokens.length || HTTP_METHODS.has(tokens[0].node.text))
+                continue;
+            const cmd = toCommand(
+                tokens.map((t) => at(t, t.node)),
+                dialect,
+            );
+            if (cmd) out.push(cmd);
+        }
+        return out;
+    });
 }
 
-/** Quote-aware tokenizer. Returns undefined for constructs we don't model. */
-function tokenize(
-    text: string,
-    line: number,
-    col: number,
-    dialect: Dialect,
-): Token[] | undefined {
-    // Preserve physical locations across quoted programs and continuations.
-    const location = (index: number) => {
-        const before = text.slice(0, index);
-        const last = before.lastIndexOf("\n");
-        return {
-            line: line + before.split("\n").length - 1,
-            col: last < 0 ? col + index : col + index - last - 1,
-        };
-    };
-    const out: Token[] = [];
-    let i = 0;
-    while (i < text.length) {
-        const c = text[i];
-        if (/\s/.test(c)) {
-            i++;
-            continue;
-        }
-        if (c === ESCAPE[dialect] && text[i + 1] === "\n") {
-            i += 2;
-            continue;
-        }
-        // PowerShell call operator: `& ./x.ps1 -Name a` runs ./x.ps1.
-        if (dialect === "pwsh" && c === "&" && text[i + 1] !== "&") {
-            i++;
-            continue;
-        }
-        if (c === "#") break; // comments only start at a token boundary
-        const op = /^(\|\||&&|\||;|&)/.exec(text.slice(i));
-        if (op) {
-            out.push({ text: op[1], ...location(i), opaque: false });
-            i += op[1].length;
-            continue;
-        }
-        if (c === "(" || c === ")" || (c === "{" && text[i + 1] === " ")) {
-            return undefined; // subshells / groups
-        }
-        const start = i;
-        let value = "";
-        let opaque = false;
-        while (i < text.length && !" \t\n|;&".includes(text[i])) {
-            const ch = text[i];
-            if (ch === "'" || ch === '"') {
-                const end = text.indexOf(ch, i + 1);
-                if (end < 0) return undefined;
-                const inner = text.slice(i + 1, end);
-                if (ch === '"' && /\$/.test(inner)) opaque = true;
-                value += inner;
-                i = end + 1;
-            } else if (ch === "$") {
-                opaque = true;
-                if (text[i + 1] === "(") {
-                    const end = text.indexOf(")", i);
-                    if (end < 0) return undefined;
-                    value += text.slice(i, end + 1);
-                    i = end + 1;
-                } else {
-                    value += ch;
-                    i++;
-                }
-            } else if (ch === ">" || ch === "<") {
-                // Redirection: drop it and its target.
-                if (value === "" || /^\d$/.test(value)) {
-                    const m = /^[<>]+&?\d*\s*\S*/.exec(text.slice(i));
-                    i += m ? m[0].length : 1;
-                    value = "";
-                    opaque = false;
-                    break;
-                }
-                value += ch;
-                i++;
-            } else {
-                value += ch;
-                i++;
-            }
-        }
-        if (value === "") continue;
-        if (/^<[^>]*>$|^\{[^}]*\}$|\.\.\.|^\[.*\]$|^…$/.test(value)) {
-            opaque = true;
-        }
-        out.push({ text: value, ...location(start), opaque });
+/** The command has a syntax error, or the parser recovered it from one. */
+function insideError(node: Node): boolean {
+    if (node.hasError) return true;
+    for (let n = node.parent; n; n = n.parent) {
+        if (n.type === "ERROR") return true;
     }
-    return out;
+    return false;
+}
+
+type NodeToken = Omit<Token, "line" | "col"> & { node: Node };
+
+/** bash `command`: name + arguments; assignments (`FOO=1 cmd`) are fields we skip. */
+function bashTokens(cmd: Node, original: string): NodeToken[] {
+    const name = cmd.childForFieldName("name");
+    if (!name) return [];
+    return [name, ...cmd.childrenForFieldName("argument")].map((n) =>
+        token(n, original, bashValue(n), BASH_EXPANSIONS),
+    );
+}
+
+/** PowerShell `command`: name (or `& path`) + elements, minus separators. */
+function pwshTokens(cmd: Node, original: string): NodeToken[] {
+    const name = cmd.childForFieldName("command_name");
+    if (!name) return [];
+    const elements =
+        cmd
+            .childForFieldName("command_elements")
+            ?.namedChildren.filter((n) => n.type !== "command_argument_sep") ??
+        [];
+    return [name, ...elements].map((n) => {
+        const str = n.descendantsOfType("string_literal")[0];
+        const value = str && str.text === n.text ? unquote(n) : n.text;
+        return token(n, original, value, PWSH_EXPANSIONS);
+    });
+}
+
+/** Word value with quotes removed: `--since="$D"` → `--since=$D`. */
+function bashValue(n: Node): string {
+    if (
+        n.type === "string" ||
+        n.type === "raw_string" ||
+        n.type === "ansi_c_string"
+    )
+        return unquote(n).replace(/^\$?['"]|['"]$/g, "");
+    if (n.type === "concatenation")
+        return n.namedChildren.map(bashValue).join("");
+    return n.text;
+}
+
+function token(
+    n: Node,
+    original: string,
+    value: string,
+    expansions: string[],
+): NodeToken {
+    // Unmasked source text for placeholders like `<n>`.
+    const raw = original.slice(n.startIndex, n.endIndex);
+    const text = raw !== n.text ? raw : value;
+    const opaque =
+        PLACEHOLDER.test(text) || n.descendantsOfType(expansions).length > 0;
+    return { node: n, text, opaque };
 }
 
 function toCommand(tokens: Token[], dialect: Dialect): Command | undefined {
     const raw = tokens.map((x) => x.text).join(" ");
     let t = [...tokens];
-    // Leading env assignments: FOO=1 BAR=x cmd
-    while (t.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t[0].text)) t.shift();
     if (t[0]?.text === "env") {
         t.shift();
         while (t.length && /^[A-Za-z_][A-Za-z0-9_]*=|^-/.test(t[0].text)) {
