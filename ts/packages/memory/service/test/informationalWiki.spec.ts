@@ -246,7 +246,9 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
     let service: FileMemoryService;
     let generated = 0;
     let failNext = false;
-    let beforeGeneration: (() => Promise<void>) | undefined;
+    let beforeGeneration:
+        | ((input: ViewBuildSnapshot) => Promise<void>)
+        | undefined;
     let indexedAnswerModel: ChatModel | undefined;
     let rehearsalBudget = true;
     let maintenanceMode: "automatic" | "manual" = "automatic";
@@ -268,7 +270,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 failNext = false;
                 throw new Error("Injected synthesis failure");
             }
-            await beforeGeneration?.();
+            await beforeGeneration?.(input);
             if (input.pipeline === "informational-project-summary-v1") {
                 return hydrateProjectSummary(input, {
                     title:
@@ -914,6 +916,104 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             failed?.viewId,
         );
         await waitForViewBuild(service, next.job!);
+    });
+
+    test("automatic partial builds retain their errors while independent targets and retries settle", async () => {
+        const release = service.deferMaintenance();
+        const corpusId = (await service.createCorpus("Automatic fair backlog"))
+            .corpusId;
+        try {
+            MockIndexedCorpus.subjects = Array.from(
+                { length: 13 },
+                (_, i) => `acquisition candidate ${i}`,
+            );
+            await add(
+                corpusId,
+                "source",
+                MockIndexedCorpus.subjects
+                    .map(
+                        (subject) =>
+                            `${subject} is a distinct acquisition condition and awaits its own review.`,
+                    )
+                    .join("\n\n"),
+            );
+            failNext = true;
+        } finally {
+            release();
+        }
+        expect((await service.drainMaintenance(15_000)).settled).toBe(true);
+        const jobs = await service.listViewBuilds(corpusId);
+        const partial = jobs.find((job) => job.state === "partial");
+        expect(partial).toBeDefined();
+        expect(
+            partial?.results.find((result) => result.state === "failed")
+                ?.reason,
+        ).toContain("Injected synthesis failure");
+        expect(
+            jobs.some(
+                (job) =>
+                    job.state === "complete" &&
+                    job.results[0]?.snapshot.definition.wiki?.query ===
+                        "acquisition candidate 12",
+            ),
+        ).toBe(true);
+        expect((await service.listViews(corpusId)).views).toHaveLength(13);
+        expect(
+            (await new TypedViewStore(root).getWikiFamily(corpusId)).dirty,
+        ).toBe(false);
+        expect(generated).toBe(14);
+    });
+
+    test("automatic target failures remain visible after bounded retries without starving independent targets", async () => {
+        const release = service.deferMaintenance();
+        const corpusId = (await service.createCorpus("Bounded failed backlog"))
+            .corpusId;
+        try {
+            MockIndexedCorpus.subjects = Array.from(
+                { length: 13 },
+                (_, i) => `acquisition candidate ${i}`,
+            );
+            beforeGeneration = async (input) => {
+                if (
+                    input.definition.wiki?.query ===
+                    MockIndexedCorpus.subjects[0]
+                )
+                    throw new Error("Persistent synthesis failure");
+            };
+            await add(
+                corpusId,
+                "source",
+                MockIndexedCorpus.subjects
+                    .map(
+                        (subject) =>
+                            `${subject} is a distinct acquisition condition and awaits its own review.`,
+                    )
+                    .join("\n\n"),
+            );
+        } finally {
+            release();
+        }
+        const status = await service.drainMaintenance(15_000);
+        expect(status.settled).toBe(false);
+        expect(status.reason).toBeUndefined();
+        expect(status.pending).toEqual([]);
+        expect(status.running).toEqual([]);
+        expect(status.failures).toHaveLength(1);
+        const jobs = await service.listViewBuilds(corpusId);
+        expect(
+            jobs
+                .flatMap((job) => job.results)
+                .filter((result) =>
+                    result.reason.includes("Persistent synthesis failure"),
+                ),
+        ).toHaveLength(2);
+        expect((await service.listViews(corpusId)).views).toHaveLength(12);
+        expect(
+            (await new TypedViewStore(root).getWikiFamily(corpusId)).dirty,
+        ).toBe(false);
+        expect(generated).toBe(14);
+        expect((await service.drainMaintenance(2_000)).reason).toBeUndefined();
+        expect(generated).toBe(14);
     });
 
     test("published informational search uses one current snapshot and indexed postings without per-page language inference", async () => {

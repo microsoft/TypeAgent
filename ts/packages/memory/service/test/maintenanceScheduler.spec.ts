@@ -107,6 +107,61 @@ describe("coalesced maintenance execution", () => {
         }
     });
 
+    test("reported target failures stay visible without blocking a queued continuation", async () => {
+        const scheduler = new MaintenanceScheduler(() => false, "manual");
+        let calls = 0;
+        scheduler.request("corpus", "wiki", "generation", async () => {
+            calls++;
+            scheduler.reportFailure(
+                "corpus",
+                "wiki",
+                "target",
+                "Target synthesis failed",
+            );
+            expect(scheduler.status().failures).toEqual([
+                { key: "corpus:wiki:target", error: "Target synthesis failed" },
+            ]);
+            scheduler.request("corpus", "wiki", "generation", async () => {
+                calls++;
+                scheduler.reportFailure("corpus", "wiki", "target");
+            });
+        });
+        try {
+            expect((await scheduler.drain(2_000)).settled).toBe(true);
+            expect(calls).toBe(2);
+            expect(scheduler.status().failures).toEqual([]);
+        } finally {
+            await scheduler.close();
+        }
+    });
+
+    test("reported exhausted targets do not spin or masquerade as a settled success", async () => {
+        const scheduler = new MaintenanceScheduler(() => false, "manual");
+        let calls = 0;
+        scheduler.request("corpus", "wiki", "generation", async () => {
+            calls++;
+            scheduler.reportFailure(
+                "corpus",
+                "wiki",
+                "target",
+                "Retry budget exhausted",
+            );
+        });
+        try {
+            const status = await scheduler.drain(2_000);
+            expect(status.settled).toBe(false);
+            expect(status.pending).toEqual([]);
+            expect(status.reason).toBeUndefined();
+            expect(status.failures).toHaveLength(1);
+            await scheduler.drain(100);
+            expect(calls).toBe(1);
+            scheduler.cancel("corpus", "wiki");
+            expect(scheduler.status().failures).toEqual([]);
+        } finally {
+            await scheduler.close();
+        }
+    });
+
     test("budget deferral is visible and changed input becomes eligible", async () => {
         const scheduler = new MaintenanceScheduler(() => false, "manual");
         try {

@@ -177,6 +177,14 @@ budget deferrals and failures. A drain temporarily executes manual-mode work;
 it does not override foreground holds or active imports. `reason: "deadline"`,
 `"paused"` or `"budget"` and `settled: false` describe incomplete work explicitly.
 Deadline/abort signals reach automatic view builds and synopsis generation.
+Partial view builds retain their durable per-target errors without blocking
+independent targets or the family's continuation. Unchanged failed informational
+inputs retain the existing two-attempt automatic retry limit. Unresolved target
+failures appear in `failures` under a corpus/family/target key and keep
+`settled: false`, even after the queue is empty; a drain then returns promptly
+rather than spinning until its deadline. A successful retry clears only that
+target's diagnostic. Infrastructure and persistence failures still block the
+affected family until its existing retry conditions are met.
 Shutdown cancels their linked work before releasing storage. A provider that
 ignores cancellation must still be drained before storage ownership is released.
 

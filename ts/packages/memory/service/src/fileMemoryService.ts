@@ -5684,13 +5684,14 @@ export class FileMemoryService
                     },
                     true,
                 );
-                await this.waitForMaintenanceBuild(result, signal);
+                await this.waitForMaintenanceBuild(result, kind, signal);
             },
         );
     }
 
     private async waitForMaintenanceBuild(
         result: ViewMaintenanceResult | undefined,
+        family: "wiki" | "projects" | "topics",
         signal: AbortSignal,
     ): Promise<void> {
         if (!result?.job) return;
@@ -5698,9 +5699,23 @@ export class FileMemoryService
         const job = (
             await this.viewStore.listViewBuilds(result.job.corpusId)
         ).find((job) => job.jobId === result.job!.jobId);
-        if (job && ["failed", "partial", "cancelled"].includes(job.state))
-            throw new Error(
-                `Autonomous maintenance build ${job.state}: ${job.jobId}`,
+        if (!job) return;
+        // Target outcomes remain visible without blocking the family's bounded continuation.
+        for (const target of job.results)
+            this.maintenance.reportFailure(
+                job.corpusId,
+                family,
+                target.viewId,
+                [
+                    "failed",
+                    "cancelled",
+                    "interrupted",
+                    "blocked",
+                    "conflicted",
+                    "stale",
+                ].includes(target.state)
+                    ? `Autonomous maintenance build ${job.state}: ${job.jobId} (${target.state})`
+                    : undefined,
             );
     }
 
@@ -6795,7 +6810,7 @@ export class FileMemoryService
                     },
                     true,
                 );
-                await this.waitForMaintenanceBuild(result, signal);
+                await this.waitForMaintenanceBuild(result, "topics", signal);
             },
         );
     }
