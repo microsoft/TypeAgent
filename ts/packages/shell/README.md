@@ -105,7 +105,7 @@ To read the chat view from another device, such as a phone on a trusted home net
 
 ### Azure Speech to Text service (Optional)
 
-Currently, TypeAgent Shell optionally supports voice input via Azure Speech Services or [Local Whisper Service](../../../python/stt/whisperService/) in addition to keyboard input.
+Voice input supports Azure (default), Python [Whisper](../../../python/stt/whisperService/), and Windows x64 Nemotron. Select with `@shell speechProvider azure|whisper|nemotron`; Nemotron downloads on first selection.
 
 To set up Azure [Speech to Text service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/index-speech-to-text), the following variables in `config.local.yaml` (under `speech`) or the legacy `.env` are needed:
 
