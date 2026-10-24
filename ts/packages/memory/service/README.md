@@ -74,6 +74,13 @@ Run their deterministic checks from the TypeScript workspace with
 These checks do not run production inference or certify factual quality.
 The authored artifact pilot requires independent human review before scoring.
 
+The ingestion profiler's source-level regression tests run through
+`pnpm run test:memory-quality`, or directly with
+`node --test tools/memory-maintenance-qualification/ingestion-profile.test.mjs`.
+The embedding timing harness loads the production input-token checks and batching
+helpers alongside the instrumented function. It verifies retries, vector validation
+failures and rejection of oversized inputs before model calls, without a provider.
+
 Project status rendering keeps capacity review pending distinct from a supported
 blocked condition. A `pendingOwnerReview` enum alone does not establish blockage;
 any actual blocker and its scope must remain in evidence-backed section prose.
