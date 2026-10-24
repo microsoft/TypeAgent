@@ -204,13 +204,13 @@ it("reports only one failure when interim and final requests both fail", async (
     const interimResult = recorder.emitData();
     recognizer.stopRecording();
     const finalResult = recorder.emitData();
-    const failure = new Error("Transcription failed.");
-    interim.reject(failure);
+    interim.reject(new Error("Transcription failed."));
     await interimResult;
-    final.reject(new Error("Final transcription failed."));
+    const finalFailure = new Error("Final transcription failed.");
+    final.reject(finalFailure);
     await finalResult;
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(onError).toHaveBeenCalledWith(failure);
+    expect(onError).toHaveBeenCalledWith(finalFailure);
     expect(console.error).toHaveBeenCalledTimes(1);
     expect(recognizing).not.toHaveBeenCalled();
     expect(recognized).not.toHaveBeenCalled();
