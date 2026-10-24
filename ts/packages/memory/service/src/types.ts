@@ -422,6 +422,11 @@ export type AnswerEvidence =
 
 export interface IntegratedAnswerDiagnostics {
     sourceSelection?: IndexedSelectionDiagnostics;
+    refinement?: {
+        queries: string[];
+        initialEvidence: AnswerEvidence[];
+        selections: IndexedSelectionDiagnostics[];
+    };
     retrievalPolicy: AnswerRetrievalPolicy | "default";
     retrievalMode: "sourcesOnly" | "sourcesAndViews" | "degraded";
     suppliedEvidence: AnswerEvidence[];

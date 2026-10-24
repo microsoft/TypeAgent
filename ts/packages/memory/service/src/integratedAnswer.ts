@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { ChatModel } from "@typeagent/aiclient";
+import { mergeIndexedAnswerEvidence } from "./indexedAnswer.js";
 import {
     readIntegratedEvidence,
     serializeAnswerEvidence,
@@ -429,8 +430,10 @@ export async function answerIntegratedEvidence(
             warnings: [],
             reconstructionCount: attempt,
         };
-        const { original, views } = await retrieve(request, host, diagnostics);
-        const evidence = await assembleEvidence(
+        const retrieved = await retrieve(request, host, diagnostics);
+        const { views } = retrieved;
+        let original = retrieved.original;
+        let evidence = await assembleEvidence(
             request,
             host,
             original.matches,
@@ -438,15 +441,59 @@ export async function answerIntegratedEvidence(
             budget,
             diagnostics,
         );
-        const response = await readIntegratedEvidence(
-            request,
-            evidence,
-            options,
-        );
+        let response = await readIntegratedEvidence(request, evidence, options);
+        const initialEvidence = evidence;
+        if (response.retrievalQueries?.length) {
+            const groups: MemoryEvidence[][] = [];
+            const refinement: NonNullable<
+                IntegratedAnswerDiagnostics["refinement"]
+            > = {
+                queries: response.retrievalQueries,
+                initialEvidence,
+                selections: [],
+            };
+            for (const question of refinement.queries) {
+                const followup = await host.searchOriginal({
+                    ...request,
+                    question,
+                });
+                groups.push(followup.matches);
+                diagnostics.warnings.push(...followup.warnings);
+                if (followup.indexedSelection)
+                    refinement.selections.push(followup.indexedSelection);
+            }
+            groups.push(original.matches);
+            original = {
+                ...original,
+                matches: mergeIndexedAnswerEvidence(
+                    groups,
+                    budget.sources,
+                    budget.chars,
+                ),
+            };
+            diagnostics.refinement = refinement;
+            evidence = await assembleEvidence(
+                request,
+                host,
+                original.matches,
+                views,
+                budget,
+                diagnostics,
+            );
+            response = await readIntegratedEvidence(request, evidence, options);
+        }
         const selected = selectedEvidence(evidence, response.evidenceIds);
         // Validate everything supplied, not only what the reader chose: omitted
         // context can still influence prose, and forget barriers take precedence.
-        if (!(await host.validateEvidence({ request, evidence }))) continue;
+        if (
+            !(await host.validateEvidence({
+                request,
+                evidence: diagnostics.refinement
+                    ? [...initialEvidence, ...evidence]
+                    : evidence,
+            }))
+        )
+            continue;
         const citations = selected.flatMap((item) =>
             item.kind === "source" ? [item.source] : [],
         );

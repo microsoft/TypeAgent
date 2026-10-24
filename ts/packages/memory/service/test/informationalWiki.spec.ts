@@ -313,6 +313,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
     const open = () =>
         new FileMemoryService(root, {
             discoveryPolicy: "off",
+            sourceSynopses: false,
             maintenanceMode,
             ...(maintenanceLimits ? { maintenanceLimits } : {}),
             ...(indexedAnswerModel ? { indexedAnswerModel } : {}),
@@ -1340,15 +1341,28 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         },
     );
 
-    test.each(["answered", "noAnswer"] as const)(
-        "source-only answer performs only one scoped evidence refinement and preserves final status %s",
-        async (finalStatus) => {
+    test.each([
+        ["sourcesOnly", "answered"],
+        ["sourcesOnly", "noAnswer"],
+        ["sourcesAndViews", "answered"],
+        ["sourcesAndViews", "noAnswer"],
+    ] as const)(
+        "%s answer performs only one scoped evidence refinement and preserves final status %s",
+        async (retrievalPolicy, finalStatus) => {
             let calls = 0;
             indexedAnswerModel = {
                 completionSettings: {},
                 complete: async (input) => {
                     calls++;
                     const prompt = JSON.stringify(input);
+                    if (typeof input === "string")
+                        throw new Error("Expected typed answer messages");
+                    const content = input[input.length - 1].content;
+                    if (typeof content !== "string")
+                        throw new Error("Expected serialized answer evidence");
+                    const envelope: {
+                        evidence: { kind: string; id: string }[];
+                    } = JSON.parse(content);
                     if (calls === 2) {
                         expect(prompt).toContain("Property price 200000");
                         expect(prompt).toContain("Renovation cost 20000");
@@ -1362,9 +1376,13 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                                 calls === 1
                                     ? "Missing price"
                                     : "Final response",
-                            citationIds:
+                            evidenceIds:
                                 calls === 2 && finalStatus === "answered"
-                                    ? ["f0", "f1"]
+                                    ? envelope.evidence
+                                          .filter(
+                                              (item) => item.kind === "source",
+                                          )
+                                          .map((item) => item.id)
                                     : [],
                             retrievalQueries:
                                 calls === 1 || finalStatus === "noAnswer"
@@ -1385,7 +1403,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             const result = await service.answer({
                 corpusId,
                 question: "Renovation cost",
-                retrievalPolicy: "sourcesOnly",
+                retrievalPolicy,
                 sourceIds: ["cost", "price"],
                 includeDiagnostics: true,
                 limit: 4,
@@ -1395,19 +1413,16 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 },
             });
             expect(calls).toBe(2);
-            expect(result.readerContext?.indexedAnswer?.response.status).toBe(
-                finalStatus,
-            );
             expect(
-                result.readerContext?.indexedAnswer?.refinement?.queries,
+                result.readerContext?.integratedAnswer?.refinement?.queries,
             ).toEqual(["property price"]);
             expect(
-                result.readerContext?.indexedAnswer?.refinement?.initialContext
-                    ?.indexedAnswer?.fragments,
+                result.readerContext?.integratedAnswer?.refinement
+                    ?.initialEvidence,
             ).toHaveLength(1);
-            expect(result.readerContext?.indexedAnswer?.fragments).toHaveLength(
-                2,
-            );
+            expect(
+                result.readerContext?.integratedAnswer?.suppliedEvidence,
+            ).toHaveLength(2);
             const followup = MockIndexedCorpus.fragmentRequests.find(
                 (request) => request.query === "property price",
             )!;

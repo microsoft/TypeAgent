@@ -10024,54 +10024,61 @@ export class FileMemoryService
             request.answerMode !== "extractive" &&
             answerRuntime.index.readFragments
         ) {
-            return answerIntegratedEvidence(
-                request,
-                {
-                    searchOriginal: (input) =>
-                        this.search({
-                            corpusId: input.corpusId,
-                            query: input.question,
-                            ...(input.sourceIds
-                                ? { sourceIds: input.sourceIds }
-                                : {}),
-                            ...(input.temporalContext
-                                ? { temporalContext: input.temporalContext }
-                                : {}),
-                            ...(input.includeDiagnostics
-                                ? { includeDiagnostics: true }
-                                : {}),
-                            indexedFragments: true,
-                            limit: Math.min(input.limit ?? 12, 12),
-                            maxResponseChars: Math.min(
-                                input.maxResponseChars ?? 24000,
-                                24000,
-                            ),
-                        }),
-                    ...(this.viewDrafts
-                        ? {
-                              getEligibleViewMatches: (
-                                  input: MemoryAnswerRequest,
-                              ) => this.eligibleAnswerViews(input),
-                          }
-                        : {}),
-                    expandSource: (reference, input) =>
-                        this.expandAnswerSource(reference, input),
-                    validateEvidence: ({ request: input, evidence }) =>
-                        this.validateAnswerEvidence(input, evidence),
-                },
-                {
-                    ...(this.wikiModelEndpoint
-                        ? { endpoint: this.wikiModelEndpoint }
-                        : {}),
-                    ...(this.indexedAnswerModel
-                        ? { model: this.indexedAnswerModel }
-                        : {}),
-                    outputTokens: Math.min(
-                        this.wikiBudget?.outputTokens ?? 4000,
-                        4000,
-                    ),
-                },
-            );
+            const answer = () =>
+                answerIntegratedEvidence(
+                    request,
+                    {
+                        searchOriginal: (input) =>
+                            this.search({
+                                corpusId: input.corpusId,
+                                query: input.question,
+                                ...(input.sourceIds
+                                    ? { sourceIds: input.sourceIds }
+                                    : {}),
+                                ...(input.temporalContext
+                                    ? { temporalContext: input.temporalContext }
+                                    : {}),
+                                ...(input.includeDiagnostics
+                                    ? { includeDiagnostics: true }
+                                    : {}),
+                                indexedFragments: true,
+                                limit: Math.min(input.limit ?? 12, 12),
+                                maxResponseChars: Math.min(
+                                    input.maxResponseChars ?? 24000,
+                                    24000,
+                                ),
+                            }),
+                        ...(this.viewDrafts
+                            ? {
+                                  getEligibleViewMatches: (
+                                      input: MemoryAnswerRequest,
+                                  ) => this.eligibleAnswerViews(input),
+                              }
+                            : {}),
+                        expandSource: (reference, input) =>
+                            this.expandAnswerSource(reference, input),
+                        validateEvidence: ({ request: input, evidence }) =>
+                            this.validateAnswerEvidence(input, evidence),
+                    },
+                    {
+                        ...(this.wikiModelEndpoint
+                            ? { endpoint: this.wikiModelEndpoint }
+                            : {}),
+                        ...(this.indexedAnswerModel
+                            ? { model: this.indexedAnswerModel }
+                            : {}),
+                        outputTokens: Math.min(
+                            this.wikiBudget?.outputTokens ?? 4000,
+                            4000,
+                        ),
+                    },
+                );
+            return this.wikiBudget
+                ? runWithRequestBudget(
+                      new RequestBudget(this.wikiBudget),
+                      answer,
+                  )
+                : answer();
         }
         if (
             request.retrievalPolicy === "sourcesAndViews" &&

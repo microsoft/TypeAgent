@@ -120,6 +120,82 @@ function fixture(
 }
 
 describe("bounded source-plus-view answering", () => {
+    test("revalidates evidence that prompted refinement even after replacement", async () => {
+        const initial = source(
+            "initial",
+            "The launch date needs confirmation.",
+        );
+        const followup = source("confirmation", "Launch is in June.");
+        const { host, model, calls } = fixture([initial], []);
+        host.searchOriginal = async (input) => ({
+            query: input.question,
+            matches:
+                input.question === "launch confirmation"
+                    ? [followup]
+                    : [initial],
+            warnings: [],
+            capabilitiesUsed: ["originals"],
+            indexVersion: "index1",
+        });
+        const complete = model.complete.bind(model);
+        let completions = 0;
+        model.complete = async (...args) => {
+            const result = await complete(...args);
+            completions++;
+            return completions % 2 === 1
+                ? {
+                      success: true,
+                      data: JSON.stringify({
+                          status: "noAnswer",
+                          answer: "Confirmation is missing.",
+                          evidenceIds: [],
+                          retrievalQueries: ["launch confirmation"],
+                      }),
+                  }
+                : result;
+        };
+        const validations: AnswerEvidence[][] = [];
+        host.validateEvidence = async ({ evidence }) => {
+            validations.push(evidence);
+            return false;
+        };
+        await expect(
+            answerIntegratedEvidence(request, host, {
+                model,
+                maxSourceFragments: 1,
+            }),
+        ).rejects.toThrow();
+        expect(completions).toBe(4);
+        expect(calls[1]).toMatchObject([
+            { kind: "source", source: { sourceId: "confirmation" } },
+        ]);
+        expect(validations).toHaveLength(2);
+        for (const evidence of validations)
+            expect(evidence).toMatchObject([
+                { kind: "source", source: { sourceId: "initial" } },
+                { kind: "source", source: { sourceId: "confirmation" } },
+            ]);
+    });
+
+    test.each([[""], ["one", "two", "three"], ["x".repeat(241)]])(
+        "rejects invalid integrated refinement queries %j",
+        async (...retrievalQueries) => {
+            const { host, model } = fixture();
+            model.complete = async () => ({
+                success: true,
+                data: JSON.stringify({
+                    status: "noAnswer",
+                    answer: "Evidence is missing.",
+                    evidenceIds: [],
+                    retrievalQueries,
+                }),
+            });
+            await expect(
+                answerIntegratedEvidence(request, host, { model }),
+            ).rejects.toThrow("Invalid indexed answer retrieval queries");
+        },
+    );
+
     test("actually supplies typed originals and exact view references to the reader", async () => {
         const { host, model, calls } = fixture();
         const result = await answerIntegratedEvidence(request, host, { model });

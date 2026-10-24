@@ -25,6 +25,11 @@ export function mergeIndexedAnswerEvidence(
     const overlaps = (a: MemoryEvidence, b: MemoryEvidence) => {
         if (a.sourceId !== b.sourceId || a.revisionId !== b.revisionId)
             return false;
+        if (
+            !a.locator?.startsWith("indexed:") ||
+            !b.locator?.startsWith("indexed:")
+        )
+            return a.locator === b.locator && a.snippet === b.snippet;
         const left = parseIndexedLocator(a.locator!);
         const right = parseIndexedLocator(b.locator!);
         return (
@@ -51,7 +56,13 @@ export function mergeIndexedAnswerEvidence(
     return selected;
 }
 
-function indexedRetrievalQueries(value: unknown, status: string): string[] {
+export const indexedEvidenceRetrievalInstructions =
+    "Return retrievalQueries as an empty array when answered or when further search cannot help. When noAnswer is caused by missing historical evidence, supply at most two focused search questions for the missing operand, event, or conversation context. Use only the user's question and supplied evidence to formulate them. Do not guess the missing value, name or date, and do not search for a hoped-for answer.";
+
+export function indexedRetrievalQueries(
+    value: unknown,
+    status: string,
+): string[] {
     if (
         !Array.isArray(value) ||
         value.length > 2 ||
@@ -197,13 +208,11 @@ export async function answerIndexedEvidence(
     model ??= createIndexedAnswerModel(endpoint);
     const taskInstructions =
         "For recommendations, use recorded preferences to give supported criteria or conditional guidance even when the requested destination or item is new. Distinguish remembered preferences from verified inventory; never invent named offerings, availability or amenities. For conversation-relative references such as first or second, reconstruct order within the same source and revision using blockOrdinal and source-owned turn metadata, not retrieval order. Adjacent user requests can establish which response is a revision or a subsequent item. When the user's terminology is imprecise, report the supported source content with a brief clarification instead of refusing solely over terminology. Still abstain when identity, ordering or a required fact is unsupported.";
-    const retrievalInstructions =
-        "Return retrievalQueries as an empty array when answered or when further search cannot help. When noAnswer is caused by missing historical evidence, supply at most two focused search questions for the missing operand, event, or conversation context. Use only the user's question and supplied evidence to formulate them. Do not guess the missing value, name or date, and do not search for a hoped-for answer.";
     const result = await model.complete(
         [
             {
                 role: "system",
-                content: `Aim for approximately ${outputTokens} tokens in the final JSON only, excluding reasoning. Preserve required evidence even when that needs a longer answer. Answer only from supplied bounded indexed fragments. ${retrievalInstructions} ${indexedEvidenceGroundingInstructions} ${taskInstructions} Return status answered with a complete but concise answer and supplied citation IDs, or status noAnswer explaining insufficient evidence with no citations.`,
+                content: `Aim for approximately ${outputTokens} tokens in the final JSON only, excluding reasoning. Preserve required evidence even when that needs a longer answer. Answer only from supplied bounded indexed fragments. ${indexedEvidenceRetrievalInstructions} ${indexedEvidenceGroundingInstructions} ${taskInstructions} Return status answered with a complete but concise answer and supplied citation IDs, or status noAnswer explaining insufficient evidence with no citations.`,
             },
             {
                 role: "user",

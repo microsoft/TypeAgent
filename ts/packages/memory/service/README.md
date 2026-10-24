@@ -408,6 +408,15 @@ per-search indexed reads remain bounded at 32,000 characters. Diagnostics retain
 both reader contexts and the refinement queries and selection receipts. The
 product and qualification harness use this same answer path.
 
+The bounded refinement also applies to integrated source-plus-view answers,
+including `sourcesOnly`. Follow-up searches retain the original access scope
+and temporal constraints; views are still evaluated against the original
+question. Delivery validation rechecks evidence from both reader calls, even
+when the final bounded pool omits an initial passage. A delivery-race
+reconstruction remains limited to one retry and may repeat that bounded
+refinement. Integrated diagnostics expose the initial typed evidence and the
+follow-up selection receipts under `integratedAnswer.refinement`.
+
 All memory synthesis, topic, indexed-answer and hub-answer calls now omit
 optional OpenAI completion limits. Their prompts express approximate final-JSON
 length targets separately from reasoning; citation and coverage validators are
