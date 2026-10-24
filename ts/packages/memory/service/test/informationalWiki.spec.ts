@@ -1332,6 +1332,87 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         },
     );
 
+    test.each(["answered", "noAnswer"] as const)(
+        "default answer performs only one scoped evidence refinement and preserves final status %s",
+        async (finalStatus) => {
+            let calls = 0;
+            indexedAnswerModel = {
+                completionSettings: {},
+                complete: async (input) => {
+                    calls++;
+                    const prompt = JSON.stringify(input);
+                    if (calls === 2) {
+                        expect(prompt).toContain("Property price 200000");
+                        expect(prompt).toContain("Renovation cost 20000");
+                        expect(prompt).not.toContain("Foreign price 999999");
+                    }
+                    return {
+                        success: true,
+                        data: JSON.stringify({
+                            status: calls === 1 ? "noAnswer" : finalStatus,
+                            answer:
+                                calls === 1
+                                    ? "Missing price"
+                                    : "Final response",
+                            citationIds:
+                                calls === 2 && finalStatus === "answered"
+                                    ? ["f0", "f1"]
+                                    : [],
+                            retrievalQueries:
+                                calls === 1 || finalStatus === "noAnswer"
+                                    ? ["property price"]
+                                    : [],
+                        }),
+                    };
+                },
+            };
+            await service.close();
+            service = open();
+            const corpusId = (await service.createCorpus("Refinement"))
+                .corpusId;
+            await update(corpusId, "pause");
+            await add(corpusId, "cost", "Renovation cost 20000");
+            await add(corpusId, "price", "Property price 200000");
+            await add(corpusId, "foreign", "Foreign price 999999");
+            const result = await service.answer({
+                corpusId,
+                question: "Renovation cost",
+                sourceIds: ["cost", "price"],
+                includeDiagnostics: true,
+                limit: 4,
+                temporalContext: {
+                    referenceTime: "2024/02/01 12:00",
+                    availabilityPolicy: "supplied-history",
+                },
+            });
+            expect(calls).toBe(2);
+            expect(result.readerContext?.indexedAnswer?.response.status).toBe(
+                finalStatus,
+            );
+            expect(
+                result.readerContext?.indexedAnswer?.refinement?.queries,
+            ).toEqual(["property price"]);
+            expect(
+                result.readerContext?.indexedAnswer?.refinement?.initialContext
+                    ?.indexedAnswer?.fragments,
+            ).toHaveLength(1);
+            expect(result.readerContext?.indexedAnswer?.fragments).toHaveLength(
+                2,
+            );
+            const followup = MockIndexedCorpus.fragmentRequests.find(
+                (request) => request.query === "property price",
+            )!;
+            expect(followup.sourceIds).toEqual(["cost", "price"]);
+            expect(followup.temporalContext?.availabilityPolicy).toBe(
+                "supplied-history",
+            );
+            expect(result.citations).toHaveLength(
+                finalStatus === "answered" ? 2 : 0,
+            );
+            expect(result).not.toHaveProperty("retrievalQueries");
+        },
+    );
+
     test.each([false, true])(
         "default answer nominates early operands across 40 sources, independently of import order reversed=%s (mock models)",
         async (reversed) => {

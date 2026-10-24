@@ -8,6 +8,7 @@ import {
 import {
     answerIndexedEvidence,
     createIndexedAnswerModel,
+    mergeIndexedAnswerEvidence,
 } from "../src/indexedAnswer.js";
 import {
     setRuntimeConfig,
@@ -154,7 +155,12 @@ test("indexed answer serializes the strict citation schema on Azure chat complet
                     strict: true,
                     schema: {
                         additionalProperties: false,
-                        required: ["status", "answer", "citationIds"],
+                        required: [
+                            "status",
+                            "answer",
+                            "citationIds",
+                            "retrievalQueries",
+                        ],
                         properties: {
                             citationIds: { items: { enum: ["f0"] } },
                         },
@@ -328,6 +334,10 @@ test("indexed answers separate source calendars from question time and diagnosti
         { temporalContext, includeDiagnostics: true },
     );
     expect(prompts[0]).toBe(prompts[1]);
+    expect(prompts[0]).toContain("recorded preferences");
+    expect(prompts[0]).toContain("never invent named offerings");
+    expect(prompts[0]).toContain("not retrieval order");
+    expect(prompts[0]).toContain("Still abstain when identity");
     expect(ordinary.readerContext).toBeUndefined();
     expect(observed.answer).toBe(ordinary.answer);
     expect(observed.citations).toEqual(ordinary.citations);
@@ -362,6 +372,74 @@ test("indexed answers separate source calendars from question time and diagnosti
     );
     expect(observed.readerContext?.messageSourceIds).toEqual(["source"]);
 });
+
+test("refined indexed context is round-robin, bounded and nonoverlapping", () => {
+    const evidence = (sourceId: string, start: number): MemoryEvidence => ({
+        evidenceId: `${sourceId}:${start}`,
+        corpusId: "corpus",
+        sourceId,
+        revisionId: "r",
+        title: sourceId,
+        locator: `indexed:0:${"a".repeat(64)}:${start}-${start + 10}`,
+        snippet: "0123456789",
+        score: 1,
+        sourceType: "text",
+        indexedAt: "2026-10-23T00:00:00Z",
+    });
+    const result = mergeIndexedAnswerEvidence(
+        [
+            [evidence("price", 0), evidence("price", 5), evidence("price", 20)],
+            [evidence("renovation", 0), evidence("other", 0)],
+        ],
+        3,
+        30,
+    );
+    expect(result.map((item) => item.evidenceId)).toEqual([
+        "price:0",
+        "renovation:0",
+        "other:0",
+    ]);
+    expect(mergeIndexedAnswerEvidence([result], 12, 19)).toHaveLength(1);
+});
+
+test.each([null, ["one", "two", "three"], [""], ["x".repeat(241)], [4]])(
+    "indexed reader rejects invalid follow-up searches %j",
+    async (retrievalQueries) => {
+        const model: ChatModel = {
+            completionSettings: {},
+            complete: async () => ({
+                success: true,
+                data: JSON.stringify({
+                    status: "noAnswer",
+                    answer: "Missing evidence",
+                    citationIds: [],
+                    retrievalQueries,
+                }),
+            }),
+        };
+        const evidence: MemoryEvidence = {
+            evidenceId: "e",
+            corpusId: "c",
+            sourceId: "s",
+            revisionId: "r",
+            title: "Evidence",
+            locator: "indexed:0:anchor:0-4",
+            snippet: "Fact",
+            score: 1,
+            sourceType: "text",
+            indexedAt: "2026-10-23T00:00:00Z",
+        };
+        await expect(
+            answerIndexedEvidence(
+                "Question",
+                [evidence],
+                4000,
+                undefined,
+                model,
+            ),
+        ).rejects.toThrow("Invalid indexed answer retrieval queries");
+    },
+);
 
 test.each([
     [{ availabilityPolicy: "as-of" as const }, /Strict as-of/],
