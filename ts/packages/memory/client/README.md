@@ -1,5 +1,21 @@
 # @typeagent/memory-client
 
+## Schema-defined questions
+
+Generic View protocols include `schemaView` definitions, candidates, support
+lineage and `schema-defined-v1` build receipts. Both typed clients expose
+`listQuestions`, `editQuestion`, `getViewPage`, `proposeSchemaView` and
+`discoverSchemaQuestions`. Page results preserve deterministic `memory-view:`
+URIs and exact revisions. Proposals are drafts, not facts; slot approval and
+bounded discovery remain explicit guarded edits.
+
+`listAcquisitionProgress`, `runAcquisitionProgress` and
+`cancelAcquisitionProgress` return sanitized progress only, including the
+`ingested` (indexed but not yet resolved) state. They do not return staged
+content, host authority, outbound arguments or raw request errors. Acquisition
+admission and periodic scheduling remain host-only. Unsupported capabilities
+fail explicitly.
+
 ## Explicit agent-session imports
 
 Both clients and the RPC facade expose optional `importAgentSession`,

@@ -12,6 +12,7 @@ import { assertViewIdentifier } from "./viewContent.js";
 import { validateIsoTimestamp } from "./timestampValidation.js";
 import { emptyProjectBrief } from "./projectBrief.js";
 import { validateProjectSelector } from "./informationalProject.js";
+import { emptySchemaView } from "./schemaView.js";
 
 export function parseViewDraftCapability(
     value: string | undefined,
@@ -69,40 +70,45 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
             expectedVersion: target.expectedVersion,
             expectedHead: request.expectedHead,
             definition: target.definition,
-            content: target.definition?.wiki
-                ? {
-                      kind: "wiki",
-                      construction: "informational-wiki-v1",
-                      title: "Selection validation",
-                      summary:
-                          "Limited summary: selected indexed fragments only; validation",
-                      sections: [
-                          {
-                              id: target.definition.viewId,
-                              role: "page",
-                              heading: "Selection validation",
-                              body: "Selection validation",
-                              details: {
-                                  kind: "page",
-                                  construction: "informational-wiki-v1",
-                                  taxonomy: "concept",
-                                  note: "",
-                                  mergedPageIds: [],
-                              },
-                          },
-                      ],
-                      index: [
-                          {
-                              pageId: target.definition.viewId,
-                              title: "Selection validation",
-                              taxonomy: "concept",
-                          },
-                      ],
-                      citations: [],
-                  }
-                : target.definition?.projectSummary
-                  ? emptyProjectBrief()
-                  : selectionValidationContent(target.definition?.kind),
+            content: target.definition?.schemaView
+                ? emptySchemaView(
+                      target.definition.schemaView,
+                      target.definition.selector.sources,
+                  )
+                : target.definition?.wiki
+                  ? {
+                        kind: "wiki",
+                        construction: "informational-wiki-v1",
+                        title: "Selection validation",
+                        summary:
+                            "Limited summary: selected indexed fragments only; validation",
+                        sections: [
+                            {
+                                id: target.definition.viewId,
+                                role: "page",
+                                heading: "Selection validation",
+                                body: "Selection validation",
+                                details: {
+                                    kind: "page",
+                                    construction: "informational-wiki-v1",
+                                    taxonomy: "concept",
+                                    note: "",
+                                    mergedPageIds: [],
+                                },
+                            },
+                        ],
+                        index: [
+                            {
+                                pageId: target.definition.viewId,
+                                title: "Selection validation",
+                                taxonomy: "concept",
+                            },
+                        ],
+                        citations: [],
+                    }
+                  : target.definition?.projectSummary
+                    ? emptyProjectBrief()
+                    : selectionValidationContent(target.definition?.kind),
             relationships: [],
         });
         const id = target.definition.viewId;
@@ -120,7 +126,12 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
         const count =
             target.definition.selector.sources.length +
             (target.definition.selector.events?.length ?? 0);
-        return count <= 32 && (count > 0 || !!target.definition.projectSummary);
+        return (
+            count <= 32 &&
+            (count > 0 ||
+                !!target.definition.projectSummary ||
+                !!target.definition.schemaView)
+        );
     }
 
     function selectionValidationContent(kind: ViewKind): DerivedViewContent {

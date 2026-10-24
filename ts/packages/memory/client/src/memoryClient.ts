@@ -12,6 +12,12 @@ import {
     type StdioServerParameters,
 } from "@modelcontextprotocol/client/stdio";
 import type {
+    QuestionInventory,
+    QuestionEditRequest,
+    SchemaViewPageRequest,
+    SchemaViewPage,
+    SchemaViewProposalRequest,
+    SchemaQuestionDiscoveryRequest,
     AgentMemorySearchRequest,
     AgentMemorySearchResult,
     AgentSessionImportReceipt,
@@ -142,6 +148,27 @@ import {
     viewToolNames,
     viewVersionSchema,
 } from "./viewProtocol.js";
+import {
+    questionInventorySchema,
+    questionEditRequestSchema,
+    questionCorpusRequestSchema,
+    schemaViewPageRequestSchema,
+    schemaViewPageSchema,
+    schemaViewProposalRequestSchema,
+    schemaQuestionDiscoveryRequestSchema,
+    schemaViewToolNames,
+} from "./schemaViewProtocol.js";
+import {
+    type AcquisitionProgress,
+    type MemoryAcquisitionProgressService,
+    acquisitionCorpusRequestSchema,
+    acquisitionCancelRequestSchema,
+    acquisitionProgressSchema,
+    acquisitionProgressListSchema,
+    acquisitionToolNames,
+    projectAcquisitionProgress,
+    safeAcquisitionOperation,
+} from "./acquisitionProtocol.js";
 
 function unsupportedCapability(operation: string): Promise<never> {
     return Promise.reject(new Error(`Memory ${operation} are not supported`));
@@ -152,7 +179,19 @@ export interface MemoryClientCallOptions {
     onProgress?: (progress: JobProgress) => void;
 }
 
-export interface MemoryServiceClient extends MemoryService, MemoryViewService {
+export interface MemoryServiceClient
+    extends MemoryService,
+        MemoryViewService,
+        MemoryAcquisitionProgressService {
+    listQuestions(corpusId: string): Promise<QuestionInventory>;
+    editQuestion(request: QuestionEditRequest): Promise<ViewHistoryEntry>;
+    getViewPage(request: SchemaViewPageRequest): Promise<SchemaViewPage>;
+    proposeSchemaView(
+        request: SchemaViewProposalRequest,
+    ): Promise<ViewHistoryEntry>;
+    discoverSchemaQuestions(
+        request: SchemaQuestionDiscoveryRequest,
+    ): Promise<ViewHistoryEntry>;
     importAgentSession(
         request: AgentSessionImportRequest,
     ): Promise<AgentSessionImportReceipt>;
@@ -179,6 +218,75 @@ export interface MemoryServiceClient extends MemoryService, MemoryViewService {
 }
 
 export class InProcessMemoryServiceClient implements MemoryServiceClient {
+    public listQuestions(corpusId: string): Promise<QuestionInventory> {
+        return (
+            this.service.listQuestions?.(corpusId) ??
+            unsupportedCapability("schema-defined questions")
+        );
+    }
+    public editQuestion(
+        request: QuestionEditRequest,
+    ): Promise<ViewHistoryEntry> {
+        return (
+            this.service.editQuestion?.(request) ??
+            unsupportedCapability("question edits")
+        );
+    }
+    public getViewPage(
+        request: SchemaViewPageRequest,
+    ): Promise<SchemaViewPage> {
+        return (
+            this.service.getViewPage?.(request) ??
+            unsupportedCapability("schema view pages")
+        );
+    }
+    public proposeSchemaView(
+        request: SchemaViewProposalRequest,
+    ): Promise<ViewHistoryEntry> {
+        return (
+            this.service.proposeSchemaView?.(request) ??
+            unsupportedCapability("schema view proposals")
+        );
+    }
+    public discoverSchemaQuestions(
+        request: SchemaQuestionDiscoveryRequest,
+    ): Promise<ViewHistoryEntry> {
+        return (
+            this.service.discoverSchemaQuestions?.(request) ??
+            unsupportedCapability("question discovery")
+        );
+    }
+    public listAcquisitionProgress(
+        corpusId: string,
+    ): Promise<AcquisitionProgress[]> {
+        return safeAcquisitionOperation(async () =>
+            (
+                await (this.service.listAcquisitions?.(corpusId) ??
+                    unsupportedCapability("acquisition progress"))
+            ).map(projectAcquisitionProgress),
+        );
+    }
+    public runAcquisitionProgress(
+        corpusId: string,
+    ): Promise<AcquisitionProgress[]> {
+        return safeAcquisitionOperation(async () =>
+            (
+                await (this.service.runAcquisitions?.(corpusId) ??
+                    unsupportedCapability("acquisition progress"))
+            ).map(projectAcquisitionProgress),
+        );
+    }
+    public cancelAcquisitionProgress(request: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<AcquisitionProgress> {
+        return safeAcquisitionOperation(async () =>
+            projectAcquisitionProgress(
+                await (this.service.cancelAcquisition?.(request) ??
+                    unsupportedCapability("acquisition cancellation")),
+            ),
+        );
+    }
     public importAgentSession(
         request: AgentSessionImportRequest,
     ): Promise<AgentSessionImportReceipt> {
@@ -592,6 +700,77 @@ export type MemoryMcpTransportConfig =
 type MemoryMcpTransport = StdioClientTransport | StreamableHTTPClientTransport;
 
 export class McpMemoryServiceClient implements MemoryServiceClient {
+    public listQuestions(corpusId: string): Promise<QuestionInventory> {
+        return this.invoke(
+            schemaViewToolNames.listQuestions,
+            questionCorpusRequestSchema.parse({ corpusId }),
+            questionInventorySchema,
+        );
+    }
+    public editQuestion(
+        request: QuestionEditRequest,
+    ): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            schemaViewToolNames.editQuestion,
+            questionEditRequestSchema.parse(request),
+            viewHistoryEntrySchema,
+        );
+    }
+    public getViewPage(
+        request: SchemaViewPageRequest,
+    ): Promise<SchemaViewPage> {
+        return this.invoke(
+            schemaViewToolNames.getViewPage,
+            schemaViewPageRequestSchema.parse(request),
+            schemaViewPageSchema,
+        );
+    }
+    public proposeSchemaView(
+        request: SchemaViewProposalRequest,
+    ): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            schemaViewToolNames.proposeSchemaView,
+            schemaViewProposalRequestSchema.parse(request),
+            viewHistoryEntrySchema,
+        );
+    }
+    public discoverSchemaQuestions(
+        request: SchemaQuestionDiscoveryRequest,
+    ): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            schemaViewToolNames.discoverSchemaQuestions,
+            schemaQuestionDiscoveryRequestSchema.parse(request),
+            viewHistoryEntrySchema,
+        );
+    }
+    public listAcquisitionProgress(
+        corpusId: string,
+    ): Promise<AcquisitionProgress[]> {
+        return this.invoke(
+            acquisitionToolNames.listAcquisitionProgress,
+            acquisitionCorpusRequestSchema.parse({ corpusId }),
+            acquisitionProgressListSchema,
+        );
+    }
+    public runAcquisitionProgress(
+        corpusId: string,
+    ): Promise<AcquisitionProgress[]> {
+        return this.invoke(
+            acquisitionToolNames.runAcquisitionProgress,
+            acquisitionCorpusRequestSchema.parse({ corpusId }),
+            acquisitionProgressListSchema,
+        );
+    }
+    public cancelAcquisitionProgress(request: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<AcquisitionProgress> {
+        return this.invoke(
+            acquisitionToolNames.cancelAcquisitionProgress,
+            acquisitionCancelRequestSchema.parse(request),
+            acquisitionProgressSchema,
+        );
+    }
     public importAgentSession(
         request: AgentSessionImportRequest,
     ): Promise<AgentSessionImportReceipt> {

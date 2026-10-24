@@ -606,6 +606,7 @@ export const capabilitiesSchema = z.object({
                     "projectBrief",
                     "timeline",
                     "wiki",
+                    "schemaView",
                 ])
                 .array(),
             drafts: z.literal(true),

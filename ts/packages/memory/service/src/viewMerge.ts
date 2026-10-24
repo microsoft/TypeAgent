@@ -1,10 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { diff3Merge, diffIndices } from "node-diff3";
-import { canonicalizeProcedure } from "./agentEdition.js";
-import { viewSourceKey } from "./viewContent.js";
+import { viewSourceKey, viewHash } from "./viewContent.js";
 import type {
     DerivedViewContent,
     ViewSection,
@@ -20,13 +19,10 @@ import type {
 import { authoredRelationships, edgeIdentity } from "./viewRelationships.js";
 import { informationalView } from "./informationalView.js";
 import { wikiIndex } from "./viewContent.js";
+import { mergeSchemaAnswers } from "./schemaView.js";
 export { edgeIdentity } from "./viewRelationships.js";
 
-export function viewHash(value: unknown): string {
-    return createHash("sha256")
-        .update(canonicalizeProcedure(value ?? null))
-        .digest("hex");
-}
+export { viewHash } from "./viewContent.js";
 
 export function sameViewBuildEvidence(
     prior: ViewBuildSnapshot | undefined,
@@ -190,24 +186,7 @@ function mergeSection(
             : mergeValue(base.heading, human.heading, generated.heading);
     const body = mergeValue(base.body, human.body, generated.body);
     const role = mergeValue(base.role, human.role, generated.role);
-    const details =
-        base.details?.kind === "page" ||
-        human.details?.kind === "page" ||
-        generated.details?.kind === "page"
-            ? mergeWikiDetails(base.details, human.details, generated.details)
-            : base.details?.kind === "event" ||
-                human.details?.kind === "event" ||
-                generated.details?.kind === "event"
-              ? mergeTimelineDetails(
-                    base.details,
-                    human.details,
-                    generated.details,
-                )
-              : mergeProjectDetails(
-                    base.details,
-                    human.details,
-                    generated.details,
-                );
+    const details = mergeSectionDetails(base, human, generated);
     if (
         typeof heading !== "string" ||
         typeof body !== "string" ||
@@ -225,6 +204,34 @@ function mergeSection(
             ? { details: details as NonNullable<ViewSection["details"]> }
             : {}),
     };
+}
+
+function mergeSectionDetails(
+    base: ViewSection,
+    human: ViewSection,
+    generated: ViewSection,
+): unknown {
+    return base.details?.kind === "question" ||
+        human.details?.kind === "question" ||
+        generated.details?.kind === "question"
+        ? mergeValue(base.details, human.details, generated.details)
+        : base.details?.kind === "page" ||
+            human.details?.kind === "page" ||
+            generated.details?.kind === "page"
+          ? mergeWikiDetails(base.details, human.details, generated.details)
+          : base.details?.kind === "event" ||
+              human.details?.kind === "event" ||
+              generated.details?.kind === "event"
+            ? mergeTimelineDetails(
+                  base.details,
+                  human.details,
+                  generated.details,
+              )
+            : mergeProjectDetails(
+                  base.details,
+                  human.details,
+                  generated.details,
+              );
 }
 
 function mergeWikiDetails(
@@ -385,6 +392,11 @@ export function mergeView(
     conflicts: string[];
 } {
     if (!current) return { output: structuredClone(candidate), conflicts: [] };
+    if (
+        current.content.kind === "schemaView" &&
+        candidate.content.kind === "schemaView"
+    )
+        return mergeSchemaAnswers(current, candidate);
     if (current.content.kind !== candidate.content.kind)
         return { output: structuredClone(candidate), conflicts: ["view-kind"] };
     if (!current.generation)
@@ -505,6 +517,7 @@ function mergeContentSection(
             !section.details ||
             section.details.kind === "event" ||
             section.details.kind === "page" ||
+            section.details.kind === "question" ||
             section.role !== section.details.kind
         ) {
             conflicts.push(target);
@@ -533,6 +546,19 @@ function mergeContentSection(
         upsertSection(content.sections, {
             ...section,
             role: "page",
+            details: section.details,
+        });
+    } else if (content.kind === "schemaView") {
+        if (
+            section.role !== "question" ||
+            section.details?.kind !== "question"
+        ) {
+            conflicts.push(target);
+            return;
+        }
+        upsertSection(content.sections, {
+            ...section,
+            role: "question",
             details: section.details,
         });
     } else upsertSection(content.sections, section);

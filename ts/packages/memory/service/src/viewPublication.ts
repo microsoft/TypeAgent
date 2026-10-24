@@ -68,11 +68,15 @@ export function publicationProof(
 export function assertPublicationProof(version: ViewVersion): void {
     const output = publicationArtifact(version);
     const input = version.generation!.input!;
-    if (!output.inventory || !output.inventoryAudit || !output.coverage)
+    if (
+        input.pipeline !== "schema-defined-v1" &&
+        (!output.inventory || !output.inventoryAudit || !output.coverage)
+    )
         throw new Error(
             "Publication requires complete source inventory, independent source checking and final artifact coverage; rebuild with an evidence-first adapter",
         );
-    validateInventoryAudit(input, output.inventory, output.inventoryAudit);
+    if (output.inventory && output.inventoryAudit)
+        validateInventoryAudit(input, output.inventory, output.inventoryAudit);
     validateConstructedGuide(input, output);
     const proof = version.validation;
     if (

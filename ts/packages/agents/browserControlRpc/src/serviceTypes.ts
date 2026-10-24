@@ -2,6 +2,13 @@
 // Licensed under the MIT License.
 
 import type {
+    AcquisitionRequest,
+    QuestionInventory,
+    QuestionEditRequest,
+    SchemaViewPageRequest,
+    SchemaViewPage,
+    SchemaViewProposalRequest,
+    SchemaQuestionDiscoveryRequest,
     MemoryServiceCapabilities,
     ViewBuildRequest,
     ViewBuildJobRequest,
@@ -35,6 +42,25 @@ import type {
     TopicQueryRequest,
     TopicQueryPage,
 } from "@typeagent/memory-service";
+
+export type MemoryAcquisitionProgress = Pick<
+    AcquisitionRequest,
+    | "corpusId"
+    | "requestId"
+    | "sourceId"
+    | "state"
+    | "createdAt"
+    | "updatedAt"
+    | "calls"
+    | "retries"
+    | "consumers"
+> & {
+    hasError: boolean;
+    receipt?: Pick<
+        NonNullable<AcquisitionRequest["receipt"]>,
+        "jobId" | "revisionId" | "state"
+    >;
+};
 
 // =============================================
 // Agent-side operations (forwarded via WebSocket)
@@ -242,6 +268,27 @@ export type MemoryCenterInvokeFunctions = {
     memoryQueryTopics(params: TopicQueryRequest): Promise<TopicQueryPage>;
     memoryRebuildTopics(params: { corpusId: string }): Promise<ViewBuildJob>;
     memoryListViews(params: { corpusId: string }): Promise<ViewSnapshot>;
+    memoryListQuestions(params: {
+        corpusId: string;
+    }): Promise<QuestionInventory>;
+    memoryListAcquisitions(params: {
+        corpusId: string;
+    }): Promise<MemoryAcquisitionProgress[]>;
+    memoryRunAcquisitions(params: {
+        corpusId: string;
+    }): Promise<MemoryAcquisitionProgress[]>;
+    memoryCancelAcquisition(params: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<MemoryAcquisitionProgress>;
+    memoryEditQuestion(params: QuestionEditRequest): Promise<ViewHistoryEntry>;
+    memoryGetViewPage(params: SchemaViewPageRequest): Promise<SchemaViewPage>;
+    memoryProposeSchemaView(
+        params: SchemaViewProposalRequest,
+    ): Promise<ViewHistoryEntry>;
+    memoryDiscoverSchemaQuestions(
+        params: SchemaQuestionDiscoveryRequest,
+    ): Promise<ViewHistoryEntry>;
     memoryGetView(params: ViewReadRequest): Promise<ViewVersion | undefined>;
     memorySaveViewDraft(params: ViewSaveRequest): Promise<ViewHistoryEntry>;
     memoryArchiveView(params: ViewArchiveRequest): Promise<ViewHistoryEntry>;

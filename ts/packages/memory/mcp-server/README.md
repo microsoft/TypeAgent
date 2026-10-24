@@ -24,6 +24,25 @@ for refresh behavior.
 
 ## Tool details
 
+Schema-defined Views round-trip through generic View tools. The bounded tools
+`memory_questions_list`, `memory_question_edit`, `memory_view_page`,
+`memory_schema_view_propose` and `memory_schema_questions_discover` expose the
+question inventory, guarded review, deterministic pages and explicit authoring.
+Proposals are not facts: approve slots explicitly and configure finite discovery
+before requesting discovery.
+
+`memory_acquisitions_list`, `memory_acquisitions_run` and
+`memory_acquisition_cancel` expose sanitized acquisition progress and explicit
+run/cancel controls. They omit staged content, outbound arguments, host
+authority and raw request errors. No acquisition admission or periodic-scheduler
+tool is registered. Unsupported or disabled capabilities fail explicitly.
+
+The loopback HTTP host uses a fresh connection per stateless MCP request.
+Tool-catalog validation in SDK clients can synchronously outlast the HTTP
+keep-alive window; explicit connection closure prevents the next request from
+reusing an expired pooled socket. Tool schemas and output validation remain
+enabled.
+
 Agent-session import is opt-in and separate from ordinary ingestion:
 
 - `memory_agent_session_import`: explicit session ID, import type

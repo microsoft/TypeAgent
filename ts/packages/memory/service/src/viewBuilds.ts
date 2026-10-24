@@ -441,9 +441,11 @@ export class ViewBuildRunner {
                 ))
             )
                 return true;
-            const evidence = informational
-                ? undefined
-                : await this.prepareInventory(job, result, signal);
+            const evidence =
+                informational ||
+                result.snapshot.pipeline === "schema-defined-v1"
+                    ? undefined
+                    : await this.prepareInventory(job, result, signal);
             const inventory = evidence?.inventory;
             validation = false;
             await this.result(
