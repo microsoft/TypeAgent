@@ -35,6 +35,9 @@ export function recordBenchmarkArm(state, capabilities, resume) {
     const arm = {
         name: "TypeAgent production document-backed conversation memory",
         productFactory,
+        ...(capabilities.accessAdmissionPolicy
+            ? { accessAdmissionPolicy: capabilities.accessAdmissionPolicy }
+            : {}),
         viewModelEndpointHash: digest(
             process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT?.trim() ?? "",
         ),

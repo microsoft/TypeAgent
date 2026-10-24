@@ -552,6 +552,7 @@ export interface SourceKnowledgeSuppressionRequest
 }
 
 export interface MemoryServiceCapabilities {
+    accessAdmissionPolicy?: string;
     derivedViews?: {
         kinds: Array<
             "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki"

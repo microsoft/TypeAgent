@@ -13,6 +13,7 @@ import type {
     WikiSubjectAssessment,
 } from "./viewTypes.js";
 import { parseWikiAssessment, wikiPageContext } from "./wikiAdmission.js";
+import { withCorpusAccessPriority } from "./corpusAccess.js";
 import { publicationProof } from "./viewPublication.js";
 import { validateInventoryAudit } from "./viewInventory.js";
 import {
@@ -159,7 +160,9 @@ export class ViewBuildRunner {
                             performance.now() - queuedAt,
                         );
                     return timeSearchStage("build.job.total", () =>
-                        this.run(job, controller.signal),
+                        withCorpusAccessPriority("maintenance", () =>
+                            this.run(job, controller.signal),
+                        ),
                     );
                 },
                 { corpusId: job.corpusId },

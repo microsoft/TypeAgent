@@ -73,6 +73,7 @@ describe("search timing", () => {
                         query: "never log this",
                         sourceId: "source-1",
                         access: "read",
+                        priority: "ingestion",
                         indexKind: "documents",
                         error: "private error",
                     });
@@ -107,12 +108,27 @@ describe("search timing", () => {
             count: 3,
             sourceId: "source-1",
             access: "read",
+            priority: "ingestion",
             indexKind: "documents",
         });
         expect(logs.join("\n")).not.toContain("private");
         expect(logs.join("\n")).not.toContain("never log this");
         expect(logs.join("\n")).not.toContain("private error");
         expect(currentSearchTraceId()).toBeUndefined();
+    });
+
+    test("arbitrary priority text is not a permitted diagnostic enum", () => {
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        runWithSearchTiming("priority", "test", () =>
+            recordSearchTiming("manual", 1, {
+                priority: "private arbitrary text",
+            }),
+        );
+        expect(logs).toHaveLength(1);
+        expect(
+            JSON.parse(logs[0].replace("[memory-search-timing] ", "")).metadata,
+        ).toEqual({});
+        expect(logs[0]).not.toContain("private");
     });
 
     test("concurrent requests keep distinct IDs across awaits and nested stages", async () => {

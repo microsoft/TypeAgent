@@ -35,7 +35,11 @@ import {
     pageChangeReceipts,
     pruneChangeReceipts,
 } from "./changeReceipts.js";
-import { CorpusAccess } from "./corpusAccess.js";
+import {
+    CorpusAccess,
+    corpusAccessPolicy,
+    withCorpusAccessPriority,
+} from "./corpusAccess.js";
 import { EventSegmentStore } from "./eventSegmentStore.js";
 import { BoundedIngestionGroup } from "./boundedIngestionGroup.js";
 import {
@@ -1108,7 +1112,7 @@ export class FileMemoryService
     private readonly controllers = new Map<string, AbortController>();
     private initializePromise: Promise<void> | undefined;
     private releaseLock: (() => Promise<void>) | undefined;
-    private rootWriteTail: Promise<void> = Promise.resolve();
+    private readonly rootAccess = new CorpusAccess();
     private closed = false;
     private reconciliationTimer: ReturnType<typeof setInterval> | undefined;
     private readonly reconciliationWork = new Set<string>();
@@ -1443,96 +1447,106 @@ export class FileMemoryService
         if (this.closed) {
             return Promise.reject(new Error("Memory service is closed"));
         }
-        this.initializePromise ??= this.acquireStorageLock().then(async () => {
-            await this.batchStore.recover();
-            const directories = await readdir(this.rootDirectory, {
-                withFileTypes: true,
-            });
-            for (const directory of directories) {
-                if (
-                    directory.isDirectory() &&
-                    /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(directory.name)
-                ) {
-                    await this.cleanManifestStaging(directory.name);
-                    await this.viewStore.recover(directory.name);
-                    await this.cleanArchivedViewIndexes(directory.name);
-                    await this.viewStore.recoverViewBuilds(directory.name);
-                    let manifest:
-                        | Pick<
-                              CorpusManifest,
-                              | "authorizedSourceRemoval"
-                              | "pendingCorpusClear"
-                              | "indexGeneration"
-                          >
-                        | undefined = await this.readSerializedManifest(
-                        directory.name,
-                    );
-                    if (manifest) {
-                        await this.agentSessionStore.recover(directory.name);
-                        if (manifest.pendingCorpusClear) {
-                            const runtime = await this.getCorpusRuntime(
-                                directory.name,
-                                true,
-                            );
-                            await this.completeCorpusClear(
-                                directory.name,
-                                runtime,
-                            );
-                            manifest = runtime.manifest;
-                        }
-                        if (manifest.authorizedSourceRemoval) {
-                            const runtime = await this.getCorpusRuntime(
-                                directory.name,
-                                true,
-                            );
-                            await this.completeAuthorizedSourceRemoval(
-                                directory.name,
-                                runtime,
-                            );
-                            manifest = runtime.manifest;
-                        }
-                        this.scheduleSourceSynopses(directory.name);
-                        const runtime = await this.getCorpusRuntime(
+        this.initializePromise ??= withCorpusAccessPriority("critical", () =>
+            this.acquireStorageLock().then(async () => {
+                await this.batchStore.recover();
+                const directories = await readdir(this.rootDirectory, {
+                    withFileTypes: true,
+                });
+                for (const directory of directories) {
+                    if (
+                        directory.isDirectory() &&
+                        /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(
+                            directory.name,
+                        )
+                    ) {
+                        await this.cleanManifestStaging(directory.name);
+                        await this.viewStore.recover(directory.name);
+                        await this.cleanArchivedViewIndexes(directory.name);
+                        await this.viewStore.recoverViewBuilds(directory.name);
+                        let manifest:
+                            | Pick<
+                                  CorpusManifest,
+                                  | "authorizedSourceRemoval"
+                                  | "pendingCorpusClear"
+                                  | "indexGeneration"
+                              >
+                            | undefined = await this.readSerializedManifest(
                             directory.name,
                         );
-                        this.scheduleIndexCollection(
-                            directory.name,
-                            this.indexDirectory(directory.name),
-                        );
-                        await this.textStore(directory.name).purge(
-                            runtime.manifest.sources,
-                        );
-                        await this.reconcileTopics(directory.name, runtime);
-                        if (!this.informationalWikiEnabled) continue;
-                        await this.enqueueWrite(directory.name, () =>
-                            this.recoverWikiConsolidationsLocked(
+                        if (manifest) {
+                            await this.agentSessionStore.recover(
                                 directory.name,
-                            ),
-                        );
-                        const views = (
-                            await this.viewStore.listViews(directory.name)
-                        ).views;
-                        for (const kind of ["projects", "wiki"] as const) {
-                            const family =
-                                await this.reconcileInformationalFamily(
+                            );
+                            if (manifest.pendingCorpusClear) {
+                                const runtime = await this.getCorpusRuntime(
                                     directory.name,
-                                    kind,
-                                    manifest.indexGeneration,
-                                    views,
+                                    true,
                                 );
-                            if (family.enabled && family.dirty && !family.error)
-                                this.scheduleWikiMaintenance(
+                                await this.completeCorpusClear(
                                     directory.name,
-                                    kind,
+                                    runtime,
                                 );
+                                manifest = runtime.manifest;
+                            }
+                            if (manifest.authorizedSourceRemoval) {
+                                const runtime = await this.getCorpusRuntime(
+                                    directory.name,
+                                    true,
+                                );
+                                await this.completeAuthorizedSourceRemoval(
+                                    directory.name,
+                                    runtime,
+                                );
+                                manifest = runtime.manifest;
+                            }
+                            this.scheduleSourceSynopses(directory.name);
+                            const runtime = await this.getCorpusRuntime(
+                                directory.name,
+                            );
+                            this.scheduleIndexCollection(
+                                directory.name,
+                                this.indexDirectory(directory.name),
+                            );
+                            await this.textStore(directory.name).purge(
+                                runtime.manifest.sources,
+                            );
+                            await this.reconcileTopics(directory.name, runtime);
+                            if (!this.informationalWikiEnabled) continue;
+                            await this.enqueueWrite(directory.name, () =>
+                                this.recoverWikiConsolidationsLocked(
+                                    directory.name,
+                                ),
+                            );
+                            const views = (
+                                await this.viewStore.listViews(directory.name)
+                            ).views;
+                            for (const kind of ["projects", "wiki"] as const) {
+                                const family =
+                                    await this.reconcileInformationalFamily(
+                                        directory.name,
+                                        kind,
+                                        manifest.indexGeneration,
+                                        views,
+                                    );
+                                if (
+                                    family.enabled &&
+                                    family.dirty &&
+                                    !family.error
+                                )
+                                    this.scheduleWikiMaintenance(
+                                        directory.name,
+                                        kind,
+                                    );
+                            }
                         }
                     }
                 }
-            }
-            await this.pruneStoredChanges();
-            await this.recoverInterruptedJobs();
-            this.startMaintenanceReconciliation();
-        });
+                await this.pruneStoredChanges();
+                await this.recoverInterruptedJobs();
+                this.startMaintenanceReconciliation();
+            }),
+        );
         return this.initializePromise;
     }
 
@@ -1552,7 +1566,7 @@ export class FileMemoryService
 
         this.viewBuilds.cancelAll();
         await Promise.allSettled([
-            this.rootWriteTail,
+            this.rootAccess.idle(),
             ...this.corpusLoads.values(),
             ...this.indexedReads,
             ...this.reindexWork,
@@ -1759,7 +1773,13 @@ export class FileMemoryService
         };
     }
 
-    public async clearCorpus(corpusId: string): Promise<number> {
+    public clearCorpus(corpusId: string): Promise<number> {
+        return withCorpusAccessPriority("critical", () =>
+            this.clearCorpusWithAccess(corpusId),
+        );
+    }
+
+    private async clearCorpusWithAccess(corpusId: string): Promise<number> {
         await this.initialize();
         validateIdentifier("corpus ID", corpusId);
         await this.batchStore.purge(corpusId);
@@ -1926,7 +1946,9 @@ export class FileMemoryService
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
         await this.getCorpusRuntime(request.corpusId);
-        return this.enqueueRootWrite(() => this.batchStore.start(request));
+        return withCorpusAccessPriority("ingestion", () =>
+            this.enqueueRootWrite(() => this.batchStore.start(request)),
+        );
     }
 
     private async requireAgentSessionImports(corpusId: string): Promise<void> {
@@ -1943,8 +1965,10 @@ export class FileMemoryService
         request: AgentSessionImportRequest,
     ): Promise<AgentSessionImportReceipt> {
         await this.requireAgentSessionImports(request.corpusId);
-        return this.enqueueWrite(request.corpusId, () =>
-            this.agentSessionStore.import(request),
+        return withCorpusAccessPriority("ingestion", () =>
+            this.enqueueWrite(request.corpusId, () =>
+                this.agentSessionStore.import(request),
+            ),
         );
     }
 
@@ -1997,10 +2021,12 @@ export class FileMemoryService
     public async retryBatchImport(batchId: string): Promise<MemoryBatchImport> {
         await this.initialize();
         const batch = await this.getBatchImport(batchId);
-        return this.enqueueRootWrite(async () => {
-            await this.getCorpusRuntime(batch.corpusId);
-            return this.batchStore.retry(batchId);
-        });
+        return withCorpusAccessPriority("ingestion", () =>
+            this.enqueueRootWrite(async () => {
+                await this.getCorpusRuntime(batch.corpusId);
+                return this.batchStore.retry(batchId);
+            }),
+        );
     }
 
     public async cancelBatchImport(
@@ -2271,14 +2297,16 @@ export class FileMemoryService
         signal?: AbortSignal,
     ): Promise<DocumentIngestResult> {
         const jobId = randomUUID();
-        return runWithSearchTiming(jobId, "memory.ingestion", () => {
-            const admittedAt = currentSearchTraceId()
-                ? performance.now()
-                : undefined;
-            return timeSearchStage("ingestion.admission", () =>
-                this.acceptDocument(request, signal, jobId, admittedAt),
-            );
-        });
+        return withCorpusAccessPriority("ingestion", () =>
+            runWithSearchTiming(jobId, "memory.ingestion", () => {
+                const admittedAt = currentSearchTraceId()
+                    ? performance.now()
+                    : undefined;
+                return timeSearchStage("ingestion.admission", () =>
+                    this.acceptDocument(request, signal, jobId, admittedAt),
+                );
+            }),
+        );
     }
 
     private async acceptDocument(
@@ -2484,7 +2512,9 @@ export class FileMemoryService
         operation: () => Promise<void>,
         expectedItems?: number,
     ): Promise<void> {
-        return this.ingestionGroups.run(operation, expectedItems);
+        return withCorpusAccessPriority("ingestion", () =>
+            this.ingestionGroups.run(operation, expectedItems),
+        );
     }
 
     private async dispatchIngestionGroup(
@@ -2589,7 +2619,15 @@ export class FileMemoryService
         return preview!;
     }
 
-    public async forgetSource(
+    public forgetSource(
+        request: SourceForgetRequest,
+    ): Promise<SourceForgetResult> {
+        return withCorpusAccessPriority("critical", () =>
+            this.forgetSourceWithAccess(request),
+        );
+    }
+
+    private async forgetSourceWithAccess(
         request: SourceForgetRequest,
     ): Promise<SourceForgetResult> {
         await this.initialize();
@@ -2775,7 +2813,9 @@ export class FileMemoryService
         corpusId: string,
         signal: AbortSignal = this.maintenance.signal,
     ): Promise<ReindexResult> {
-        return this.reindex(corpusId, undefined, signal);
+        return withCorpusAccessPriority("ingestion", () =>
+            this.reindex(corpusId, undefined, signal),
+        );
     }
 
     public async reindexSource(
@@ -2784,7 +2824,9 @@ export class FileMemoryService
         signal: AbortSignal = this.maintenance.signal,
     ): Promise<ReindexResult> {
         validateIdentifier("source ID", sourceId);
-        return this.reindex(corpusId, sourceId, signal);
+        return withCorpusAccessPriority("ingestion", () =>
+            this.reindex(corpusId, sourceId, signal),
+        );
     }
 
     public async getJob(
@@ -3135,7 +3177,15 @@ export class FileMemoryService
         });
     }
 
-    public async forgetEvents(
+    public forgetEvents(
+        request: MemoryEventForgetRequest,
+    ): Promise<MemoryEventForgetResult> {
+        return withCorpusAccessPriority("critical", () =>
+            this.forgetEventsWithAccess(request),
+        );
+    }
+
+    private async forgetEventsWithAccess(
         request: MemoryEventForgetRequest,
     ): Promise<MemoryEventForgetResult> {
         await this.initialize();
@@ -3442,6 +3492,7 @@ export class FileMemoryService
         delete capabilities.derivedViews;
         return {
             ...capabilities,
+            accessAdmissionPolicy: corpusAccessPolicy,
             features: {
                 ...capabilities.features,
                 sourceSynopses: this.sourceSynopsesEnabled,
@@ -5789,34 +5840,54 @@ export class FileMemoryService
                 )
                     continue;
                 this.reconciliationWork.add(corpusId);
-                const work = this.enqueueWrite(
-                    corpusId,
-                    async () => {
-                        if (runtime.manifest.authorizedSourceRemoval)
-                            await this.completeAuthorizedSourceRemoval(
-                                corpusId,
-                                runtime,
-                            );
-                        if (this.maintenance.isDeferred(corpusId)) return;
-                        this.scheduleSourceSynopses(corpusId);
-                        await this.reconcileTopics(corpusId, runtime);
-                        if (!this.informationalWikiEnabled) return;
-                        await this.recoverWikiConsolidationsLocked(corpusId);
-                        const views = (await this.viewStore.listViews(corpusId))
-                            .views;
-                        for (const kind of ["projects", "wiki"] as const) {
-                            const family =
-                                await this.reconcileInformationalFamily(
+                const work = withCorpusAccessPriority(
+                    runtime.manifest.authorizedSourceRemoval
+                        ? "critical"
+                        : "maintenance",
+                    () =>
+                        this.enqueueWrite(
+                            corpusId,
+                            async () => {
+                                if (runtime.manifest.authorizedSourceRemoval)
+                                    await this.completeAuthorizedSourceRemoval(
+                                        corpusId,
+                                        runtime,
+                                    );
+                                if (this.maintenance.isDeferred(corpusId))
+                                    return;
+                                this.scheduleSourceSynopses(corpusId);
+                                await this.reconcileTopics(corpusId, runtime);
+                                if (!this.informationalWikiEnabled) return;
+                                await this.recoverWikiConsolidationsLocked(
                                     corpusId,
-                                    kind,
-                                    runtime.manifest.indexGeneration,
-                                    views,
                                 );
-                            if (family.enabled && family.dirty && !family.error)
-                                this.scheduleWikiMaintenance(corpusId, kind);
-                        }
-                    },
-                    true,
+                                const views = (
+                                    await this.viewStore.listViews(corpusId)
+                                ).views;
+                                for (const kind of [
+                                    "projects",
+                                    "wiki",
+                                ] as const) {
+                                    const family =
+                                        await this.reconcileInformationalFamily(
+                                            corpusId,
+                                            kind,
+                                            runtime.manifest.indexGeneration,
+                                            views,
+                                        );
+                                    if (
+                                        family.enabled &&
+                                        family.dirty &&
+                                        !family.error
+                                    )
+                                        this.scheduleWikiMaintenance(
+                                            corpusId,
+                                            kind,
+                                        );
+                                }
+                            },
+                            true,
+                        ),
                 );
                 this.indexedReads.add(work);
                 void work.then(
@@ -8135,12 +8206,7 @@ export class FileMemoryService
     }
 
     private enqueueRootWrite<T>(operation: () => Promise<T>): Promise<T> {
-        const result = this.rootWriteTail.then(operation, operation);
-        this.rootWriteTail = result.then(
-            () => undefined,
-            () => undefined,
-        );
-        return result;
+        return this.rootAccess.write(operation);
     }
 
     private assertSourceIngestionAllowed(
@@ -8964,7 +9030,9 @@ export class FileMemoryService
                     "ingestion.wait",
                     performance.now() - queuedAt,
                 );
-            return timeSearchStage("ingestion.queue.work", operation);
+            return withCorpusAccessPriority("ingestion", () =>
+                timeSearchStage("ingestion.queue.work", operation),
+            );
         });
         const settled = work.then(
             () => undefined,

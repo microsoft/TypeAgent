@@ -238,6 +238,53 @@ LongMemEval uses the normal configured reader and judge models, recording the
 `TYPEAGENT_BENCHMARK_MODEL` is a BEAM bridge override, not a LongMemEval judge
 override. Authorization is explicit, and no credentials belong in artifacts.
 
+### LongMemEval latency qualification
+
+To measure a fresh fixed first-20 S-cleaned target with complete histories:
+
+```powershell
+$env:TYPEAGENT_MEMORY_SEARCH_TRACE = '1'
+pnpm --filter @typeagent/benchmarks memory-bench run `
+    --dataset longmemeval --variant s-cleaned --repo $repo `
+    --input (Join-Path $inputs 'longmemeval_s_cleaned.json') `
+    --judge-source (Join-Path $inputs 'evaluate_qa.py') `
+    --output $lmeOutput --progress (Join-Path $lmeOutput 'progress.json') `
+    --max-questions 20 --work-minutes unlimited --startup-minutes 10 `
+    --continue-after-import-failure --authorized-live-benchmark
+```
+
+Use a fresh output/store; do not resume a pre-policy run. The frozen arm records
+the observed `accessAdmissionPolicy`, currently `foreground-fair-v1`. This is a
+shared product policy, not a benchmark-only priority override. Automatic
+maintenance, normal model configuration and all original history sessions stay
+enabled; no run-wide maintenance hold or manual BEAM policy is applied.
+
+The owned run writes `latency-progress.json` at startup, every 15 seconds using
+single-flight atomic snapshots, and at final shutdown. It includes grading
+progress, current import elapsed time, worker PID/memory, completed-history
+source bytes and cumulative input bytes, per-history driver/job elapsed times,
+and ingestion read/write reservation wait/hold sums, maxima and counts.
+Completed histories retain their worker memory sample in the durable ledger.
+Per-question and whole-run p50/p95/max distributions include first-five/last-five
+cohorts and their median input sizes. `nonOverlappingCohorts` is false below ten
+completed histories. Source bytes are logical imported Markdown bytes, not
+physical index/disk size.
+
+`accessByPriority` retains traced reservation counts, totals and maxima for each
+access kind/class. Ingestion measurements exclude maintenance even when it
+inherits the same trace ID. Only the new access stages feed these aggregates;
+legacy overlapping `queue.*` stages are not added again. Missing measurements
+are null, not zero; without the trace flag, only driver/job/memory observations
+are available. Invalid timing records or report-write errors are explicit run
+failures, not fabricated zero-latency results.
+
+Compare within-question trends first: each question has a separate corpus.
+Across-question cohorts also mix corpus sizes, source lengths, extraction costs,
+provider retries and background debt. Driver wall time includes admission,
+polling and, after recovery, downtime; it is not exclusive product work.
+Neither a flat latency curve nor a successful run proves UI SLOs, completed
+maintenance, answer quality or a causal speedup against the historical run.
+
 ### LongMemEval progress, interruption and resume
 
 The CLI prints a `run-directory` JSON record identifying its new

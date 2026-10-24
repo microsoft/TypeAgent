@@ -103,6 +103,10 @@ export async function executeMemoryCase(
     for (const entry of plan.slice(applied)) {
         signal.throwIfAborted();
         role(`ingestion:${construction.id}`);
+        const startedEpochMs =
+            record.inFlight?.sourceKey === entry.sourceKey
+                ? (record.inFlight.startedEpochMs ?? Date.now())
+                : Date.now();
         const admitted = await reconcileLiveSource(
             service,
             record.corpusId,
@@ -115,6 +119,8 @@ export async function executeMemoryCase(
             phase: entry.phase,
             sourceKey: entry.sourceKey,
             fixtureSha256: entry.sha256,
+            startedEpochMs,
+            sourceBytes: Buffer.byteLength(entry.source.text, "utf8"),
             ...admitted,
         };
         await persist();
@@ -129,7 +135,27 @@ export async function executeMemoryCase(
             "complete",
             `Benchmark ingestion did not complete: ${job.state}`,
         );
-        record.operations.push({ ...record.inFlight, state: "complete" });
+        const completedEpochMs = Date.now();
+        const jobElapsedMs =
+            job.createdAt && job.updatedAt
+                ? Date.parse(job.updatedAt) - Date.parse(job.createdAt)
+                : null;
+        if (jobElapsedMs !== null)
+            assert.ok(
+                Number.isFinite(jobElapsedMs) && jobElapsedMs >= 0,
+                "Invalid ingestion job timestamps",
+            );
+        record.operations.push({
+            ...record.inFlight,
+            state: "complete",
+            latency: {
+                completedEpochMs,
+                driverElapsedMs: completedEpochMs - startedEpochMs,
+                jobElapsedMs,
+                memoryBytes: process.memoryUsage(),
+                ...(controls.ingestionTimings?.(admitted.jobId) ?? {}),
+            },
+        });
         record.mappings[entry.sourceKey] = {
             sourceId: admitted.sourceId,
             revisionId: admitted.revisionId,
@@ -207,7 +233,7 @@ export async function executeMemoryCase(
     await persist();
 }
 
-function percentile(values, fraction) {
+export function percentile(values, fraction) {
     if (!values.length) return null;
     const sorted = [...values].sort((a, b) => a - b);
     const position = (sorted.length - 1) * fraction;

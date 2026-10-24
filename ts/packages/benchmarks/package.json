@@ -35,7 +35,7 @@
     "prettier:fix": "prettier --write package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
     "test": "npm run test:local",
     "test:local": "pnpm run build && pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
-    "test:memory": "pnpm run build && pnpm run jest-esm --runInBand --testPathPattern=\"memory(Bench|LongMemEval)[.]spec[.]js\" && node --test test/memoryLongMemEval.lifecycle.test.mjs test/memoryLongMemEval.campaign.test.mjs",
+    "test:memory": "pnpm run build && pnpm run jest-esm --runInBand --testPathPattern=\"memory(Bench|LongMemEval)[.]spec[.]js\" && node --test test/memoryLongMemEval.lifecycle.test.mjs test/memoryLongMemEval.campaign.test.mjs test/memoryLongMemEval.latency.test.mjs",
     "tsc": "tsc -b"
   },
   "dependencies": {

@@ -72,6 +72,13 @@ function emitTiming(
                     ].includes(key) ||
                         (key === "access" &&
                             ["read", "write"].includes(value)) ||
+                        (key === "priority" &&
+                            [
+                                "critical",
+                                "interactive",
+                                "ingestion",
+                                "maintenance",
+                            ].includes(value)) ||
                         (key === "indexKind" &&
                             [
                                 "document",

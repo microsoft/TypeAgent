@@ -44,6 +44,7 @@ import {
     closeBenchmarkService,
 } from "./state.mjs";
 import { assertPackageState } from "./state.mjs";
+import { createLatencyReporter } from "./latency.mjs";
 
 export async function runWorker(spec) {
     const prepared = await loadPrepared(spec);
@@ -121,16 +122,26 @@ export async function runWorker(spec) {
             spec.continueAfterImportFailure,
         ),
     };
-    const persist = () =>
-        persistBenchmarkProgress(
+    const latency = createLatencyReporter({
+        runDirectory: spec.runDirectory,
+        construction: constructionCases,
+        state,
+        attempt,
+    });
+    const persist = () => {
+        latency.assertHealthy();
+        return persistBenchmarkProgress(
             spec.runDirectory,
             constructionCases,
             state,
             attempt,
         );
+    };
     state.attempts.push(attempt);
     state.outcome = "IN_PROGRESS";
     await persist();
+    await latency.flush();
+    latency.assertHealthy();
     await writeJson(
         path.join(spec.runDirectory, "manifest.json"),
         prepared.manifest,
@@ -261,6 +272,7 @@ export async function runWorker(spec) {
                     persist,
                     signal,
                     waitForMemoryJob,
+                    ingestionTimings: latency.timings,
                     judge,
                     role: (value) => {
                         role = value;
@@ -295,49 +307,57 @@ export async function runWorker(spec) {
             record.error = benchmarkFailure(error);
         }
     } finally {
-        state.scorecard = benchmarkScorecard(
-            prepared,
-            state.cases,
-            state.providerRequests,
-        );
-        await closeBenchmarkService(
-            service,
-            state,
-            attempt,
-            persist,
-            safeFailure,
-        );
-        restoreObserver();
-        attempt.finishedEpochMs = Date.now();
-        attempt.elapsedMs = attempt.finishedEpochMs - attempt.startedEpochMs;
-        attempt.outcome = state.outcome;
-        state.scorecard = benchmarkScorecard(
-            prepared,
-            state.cases,
-            state.providerRequests,
-        );
-        await persist();
-        await writeJson(
-            path.join(spec.runDirectory, `attempt-${spec.spawnedEpochMs}.json`),
-            attempt,
-        );
-        await writeJson(
-            path.join(spec.runDirectory, "scorecard.json"),
-            state.scorecard,
-        );
-        const hypotheses = Object.entries(state.cases)
-            .filter(([, record]) => record.hypothesis)
-            .map(([question_id, record]) => ({
-                question_id,
-                hypothesis: record.hypothesis,
-                ...(record.autoeval_label
-                    ? { autoeval_label: record.autoeval_label }
-                    : {}),
-            }));
-        await writeJson(
-            path.join(spec.runDirectory, "hypotheses.json"),
-            hypotheses,
-        );
+        try {
+            state.scorecard = benchmarkScorecard(
+                prepared,
+                state.cases,
+                state.providerRequests,
+            );
+            await closeBenchmarkService(
+                service,
+                state,
+                attempt,
+                persist,
+                safeFailure,
+            );
+            attempt.finishedEpochMs = Date.now();
+            attempt.elapsedMs =
+                attempt.finishedEpochMs - attempt.startedEpochMs;
+            attempt.outcome = state.outcome;
+            state.scorecard = benchmarkScorecard(
+                prepared,
+                state.cases,
+                state.providerRequests,
+            );
+            await persist();
+            await writeJson(
+                path.join(
+                    spec.runDirectory,
+                    `attempt-${spec.spawnedEpochMs}.json`,
+                ),
+                attempt,
+            );
+            await writeJson(
+                path.join(spec.runDirectory, "scorecard.json"),
+                state.scorecard,
+            );
+            const hypotheses = Object.entries(state.cases)
+                .filter(([, record]) => record.hypothesis)
+                .map(([question_id, record]) => ({
+                    question_id,
+                    hypothesis: record.hypothesis,
+                    ...(record.autoeval_label
+                        ? { autoeval_label: record.autoeval_label }
+                        : {}),
+                }));
+            await writeJson(
+                path.join(spec.runDirectory, "hypotheses.json"),
+                hypotheses,
+            );
+        } finally {
+            restoreObserver();
+            await latency.close();
+        }
     }
     return state.outcome;
 }

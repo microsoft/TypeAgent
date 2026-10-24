@@ -3,6 +3,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { setTimeout as delay } from "node:timers/promises";
+import { withCorpusAccessPriority } from "./corpusAccess.js";
 import {
     RequestBudget,
     runWithRequestBudget,
@@ -173,8 +174,10 @@ export class MaintenanceScheduler {
                                 },
                             );
                             const execute = () =>
-                                timeSearchStage("maintenance.work", () =>
-                                    work.execute(signal),
+                                withCorpusAccessPriority("maintenance", () =>
+                                    timeSearchStage("maintenance.work", () =>
+                                        work.execute(signal),
+                                    ),
                                 );
                             await (this.budget
                                 ? runWithRequestBudget(

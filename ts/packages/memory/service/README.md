@@ -10,6 +10,34 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Foreground and maintenance admission
+
+The service reports `accessAdmissionPolicy: "foreground-fair-v1"` in its
+capabilities. Pending access is ordered **interactive > ingestion > maintenance**,
+with critical initialization and authorized removal/recovery ahead of ordinary
+work. Imports, batch retries and reindexing stay ingestion even when initiated
+from a UI; automatic reconciliation and asynchronous view builds are maintenance.
+Root metadata writes and per-corpus read/write reservations share this policy.
+
+FIFO is preserved within each class. Compatible readers overlap; writers remain
+exclusive. A class waiting through eight ordinary admissions becomes eligible
+ahead of fresh high-priority work, with the oldest eligible class served first.
+An aged writer stops further ordinary readers from extending its wait.
+This is an aging threshold, not an eight-admission maximum or wall-clock SLA.
+Critical work and already-admitted reservations are not preempted.
+
+A foreground read can observe the last committed generation before a queued
+lower-priority import commits. Await the import job for read-after-import
+causality. Removal checks still run on read admission; priority does not bypass
+privacy, revision validation, coalescing or supported shutdown.
+
+With `TYPEAGENT_MEMORY_SEARCH_TRACE=1`, `access.queue.wait` and `access.work`
+report metadata-only reservation timings, including access kind, priority and
+pending count. These are elapsed, potentially nested timings; do not sum them
+with the existing `queue.*` stages as if they were exclusive work.
+Priority reduces avoidable waiting behind queued maintenance, but cannot shorten
+a long active holder or remove maintenance debt.
+
 ## Document import token budgets
 
 Text, Markdown, HTML/web and VTT retain their format-specific parsers and then
