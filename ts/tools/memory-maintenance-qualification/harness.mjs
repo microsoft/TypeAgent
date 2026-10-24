@@ -1,16 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import {
+    checkpointExpectationHash,
+    assertCheckpoint,
+    snapshotCompiledCheckpoint,
+    writeJson,
+} from "../../packages/benchmarks/src/memoryBench/shared/checkpoint.mjs";
+export {
+    checkpointExpectationHash,
+    assertCheckpoint,
+    snapshotCompiledCheckpoint,
+    writeJson,
+};
+
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import {
-    readFile,
-    realpath,
-    rename,
-    writeFile,
-    readdir,
-} from "node:fs/promises";
+import { readFile, realpath, rename } from "node:fs/promises";
 import { appendFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -34,54 +41,6 @@ import {
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 const families = ["wiki", "projects", "topics"];
-const checkpointRoots = [
-    "packages\\memory\\service\\dist",
-    "packages\\memory\\client\\dist",
-    "packages\\memory\\conversation\\dist",
-    "packages\\knowPro\\dist",
-];
-const requiredCheckpointFiles = [
-    "indexedFragments.js",
-    "informationalView.js",
-    "fileMemoryService.js",
-].map((name) => path.join("packages", "memory", "service", "dist", name));
-
-export function checkpointExpectationHash(checkpoint) {
-    return sha(JSON.stringify(checkpoint));
-}
-
-export function assertCheckpoint(actual, expected) {
-    assert.ok(expected?.name && typeof expected.name === "string");
-    assert.ok(expected.hashes && typeof expected.hashes === "object");
-    for (const file of requiredCheckpointFiles)
-        assert.match(expected.hashes[file] ?? "", /^[a-f0-9]{64}$/);
-    for (const [file, hash] of Object.entries(expected.hashes)) {
-        assert.match(hash, /^[a-f0-9]{64}$/);
-        assert.equal(
-            actual[file],
-            hash,
-            `Compiled checkpoint mismatch: ${file}`,
-        );
-    }
-}
-
-export async function snapshotCompiledCheckpoint(productRoot) {
-    const hashes = {};
-    const visit = async (relative) => {
-        for (const entry of await readdir(path.join(productRoot, relative), {
-            withFileTypes: true,
-        })) {
-            const next = path.join(relative, entry.name);
-            if (entry.isDirectory()) await visit(next);
-            else if (entry.name.endsWith(".js"))
-                hashes[next] = sha(
-                    await readFile(path.join(productRoot, next)),
-                );
-        }
-    };
-    for (const root of checkpointRoots) await visit(root);
-    return hashes;
-}
 
 export function initialReadiness(snapshot, jobs, sources, topic) {
     const errors = [
@@ -954,12 +913,6 @@ export const phases = [
     "t2",
 ];
 
-export async function writeJson(file, value) {
-    const temporary = `${file}.${process.pid}.tmp`;
-    await writeFile(temporary, JSON.stringify(value, null, 2));
-    await rename(temporary, file);
-}
-
 export function validateSpec(spec) {
     assert.equal(
         spec.mode,
@@ -1279,6 +1232,8 @@ export async function runOffline(spec) {
                 "offline-models.mjs",
                 "p6-preflight.mjs",
                 "watchdog.mjs",
+                "../../packages/benchmarks/src/memoryBench/shared/checkpoint.mjs",
+                "../../packages/benchmarks/src/memoryBench/shared/supervisor.mjs",
             ])
                 receipt.harnessHashes[name] = sha(
                     await readFile(path.join(import.meta.dirname, name)),

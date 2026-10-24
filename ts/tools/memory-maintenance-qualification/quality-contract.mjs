@@ -1,48 +1,24 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import {
+    sha256,
+    identity,
+    clone,
+    check,
+    text,
+    hash,
+    unique,
+    ratio,
+} from "../../packages/benchmarks/src/memoryBench/shared/data.mjs";
+export { sha256, identity, clone, check, text, hash, unique, ratio };
+
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 export const fixtureRoot = new URL("./quality-fixtures/", import.meta.url);
 export const frozenManifestHash =
     "5cc1a0c51a8feadf26028c8e4bb4207b5bbfee0cb604242c2ed1658a8ca63f77";
-
-export const sha256 = (value) =>
-    createHash("sha256").update(value).digest("hex");
-export const identity = (value) => sha256(JSON.stringify(value));
-export const clone = (value) => structuredClone(value);
-export const check = (condition, message) => assert.ok(condition, message);
-export function text(value, name) {
-    check(
-        typeof value === "string" && value.trim().length > 0,
-        `${name}: required text`,
-    );
-    return value;
-}
-export function hash(value, name) {
-    check(
-        typeof value === "string" && /^[a-f0-9]{64}$/.test(value),
-        `${name}: SHA-256 required`,
-    );
-    return value;
-}
-export function unique(rows, key, name) {
-    check(Array.isArray(rows), `${name}: array required`);
-    const result = new Map();
-    for (const row of rows) {
-        const id = text(row[key], `${name}.${key}`);
-        check(!result.has(id), `${name}: duplicate ${id}`);
-        result.set(id, row);
-    }
-    return result;
-}
-export const ratio = (numerator, denominator) => ({
-    numerator,
-    denominator,
-    value: denominator === 0 ? null : numerator / denominator,
-});
 
 export async function readJson(filename) {
     return JSON.parse(

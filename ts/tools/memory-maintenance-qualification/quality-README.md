@@ -1,5 +1,14 @@
 # Memory quality: offline contracts and preparation
 
+Public BEAM/LongMemEval inference now belongs to the general
+[memory benchmark package](../../packages/benchmarks/src/memoryBench/README.md).
+Use `pnpm --filter @typeagent/benchmarks memory-bench run --dataset longmemeval`
+with its documented pinned inputs and explicit authorization. The former
+LongMemEval live/runner/campaign modules here are compatibility delegates;
+build the benchmark package first. Historical stores cannot resume under the
+new package engine. Product readiness, fault injection, recovery probes and
+profiling remain in this directory.
+
 This lane adds **offline evaluation utilities**, not a memory implementation,
 inference runner, factual judge, or new lifecycle harness. It makes no model calls,
 reads no credentials, and opens no production stores. No LongMemEval, AP-news,

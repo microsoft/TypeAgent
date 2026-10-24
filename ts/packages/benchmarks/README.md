@@ -4,9 +4,20 @@ Action-translation eval for TypeAgent: pinned catalogs, model prices, and scorin
 
 ## Conversation-memory benchmarks
 
-The [BEAM runbook](src/memoryBench/README.md) covers the TypeScript
-memory harness, offline tests, pinned protocol preparation, live execution and
-resume. It calls the durable memory service directly and requires no Python.
+The [memory benchmark runbook](src/memoryBench/README.md) covers **BEAM and
+LongMemEval**, offline tests, pinned inputs/protocols, live execution, progress
+and resume. Both run from `pnpm --filter @typeagent/benchmarks memory-bench run
+--dataset <beam|longmemeval>` and require no Python runtime.
+
+BEAM supports BM25/content/event RAG and native content answering. LongMemEval
+preserves the configured production factory, original session/time metadata,
+native answers and official pinned judge prompts. Its `s-cleaned` and
+evidence-only `oracle` variants are distinct experimental arms.
+
+Use `pnpm --filter @typeagent/benchmarks memory-bench run --help` for dataset-aware
+options and `pnpm --filter @typeagent/benchmarks test:memory` for offline tests.
+Readiness/fault-injection and profiling remain in qualification tools; the
+former LongMemEval tools are compatibility launchers, not a second evaluator.
 
 ## Catalog + action-parameters grader
 

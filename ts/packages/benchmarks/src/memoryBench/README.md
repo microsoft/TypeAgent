@@ -1,7 +1,18 @@
 # Conversation-memory benchmarks
 
-TypeScript BEAM evaluation against the durable TypeAgent memory service.
-No Python interpreter, environment, package or subprocess is required.
+BEAM and LongMemEval evaluation against the durable TypeAgent memory service.
+No Python interpreter, environment, package or subprocess is required. Python
+judge files are read as pinned data, never executed.
+
+| Dataset          | Run selection                                             | Runtime and scoring                                                         |
+| ---------------- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `beam` (default) | `--split`, `--stage`, optional `--unit`                   | BM25/content/event RAG, or native content answering; BEAM rubric            |
+| `longmemeval`    | `--variant`, `--max-questions`, optional `--question-ids` | Production-native content memory and pinned official yes/no judge templates |
+
+Options specific to the other dataset are rejected. `--mode agent` means the
+native memory-service answer, not an autonomous tool loop. LongMemEval does not
+inherit BEAM's `100k` split, smoke sampling, external RAG, batch imports or
+two-hour bridge deadline. Existing BEAM commands and artifacts are unchanged.
 
 ## Build and offline tests
 
@@ -14,6 +25,7 @@ $reposRoot = Split-Path $repo
 Set-Location (Join-Path $repo 'ts')
 pnpm run build
 pnpm --filter @typeagent/benchmarks run jest-esm --runInBand --testPathPattern='memoryBench[.]spec[.]js'
+pnpm --filter @typeagent/benchmarks test:memory
 ```
 
 The offline suite covers normalization, gold separation, isolation, durable
@@ -21,7 +33,7 @@ readiness/restart, native citations, judge-failure resume, progress and numerica
 parity with synthetic Python-reference fixtures. It does not require the AMB
 checkout or model authentication.
 
-## Prepare the protocol once
+## Prepare the BEAM protocol once
 
 The upstream checkout must be pinned to AMB commit
 `16fcebb0066537e890c6015c9d4a2b2eac952249`. The Node preparation command reads
@@ -46,7 +58,7 @@ Reuse an existing pinned checkout as-is. No upstream provider-registry patch or
 Python dependency installation is needed. Subsequent runs only need the prepared
 protocol JSON, not the upstream checkout.
 
-## Run
+## Run BEAM
 
 The in-process service uses normal TypeAgent configuration for extraction,
 embeddings, search, native answers and common answer/judge generation.
@@ -112,7 +124,151 @@ local split cannot accidentally stand in for other length tiers.
 one question per category, qualification asks all that conversation's questions,
 and full asks all split questions. Documents are never truncated.
 
-## Resume and outputs
+## Run LongMemEval
+
+LongMemEval uses the configured **agent-server production durable-memory
+factory**, including normal extraction, informational views, drafts and
+synopses. It creates corpora lazily and imports original sessions sequentially,
+with one Markdown source per original session position. Repeated session IDs,
+empty cleaned turns, roles and original dates are preserved. The question date
+is supplied as typed temporal metadata; there is no preliminary search or
+BEAM-style external RAG. Questions, reference answers and evidence labels are
+not included in indexed construction payloads.
+
+The default `--variant s-cleaned` uses the same pinned dataset as the previous
+qualification-tools runner. `--variant oracle` uses the **official evidence-only
+variant**, not a hand-truncated S history. It is useful for a small operational
+smoke test, but cannot establish full-history retrieval quality or S accuracy.
+Both variants validate all 500 questions before selection.
+
+| Variant     | File                         | Raw SHA-256                                                        |
+| ----------- | ---------------------------- | ------------------------------------------------------------------ |
+| `s-cleaned` | `longmemeval_s_cleaned.json` | `d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442` |
+| `oracle`    | `longmemeval_oracle.json`    | `821a2034d219ab45846873dd14c14f12cfe7776e73527a483f9dac095d38620c` |
+
+Dataset repository: `xiaowu0162/longmemeval-cleaned` on Hugging Face, immutable
+revision `98d7416c24c778c2fee6e6f3006e7a073259d48f`.
+The judge is `src/evaluation/evaluate_qa.py` from
+`xiaowu0162/LongMemEval`, revision
+`9e0b455f4ef0e2ab8f2e582289761153549043fc`, raw SHA-256
+`ecce9c4c79dc89d99534ac17b383a5cbb5b9f0c69ee98adaf0684742e3d95251`.
+Five templates are extracted and routed by question type/abstention; the Python
+file is never executed. No separate `prepare-protocol` step is needed.
+`--protocol` can alias `--judge-source` for this dataset, but not both.
+
+Reuse already verified local inputs. If missing, acquire the immutable files
+outside the source tree; each run checks the raw hashes:
+
+```powershell
+$inputs = Join-Path $reposRoot 'memory-benchmark-artifacts\inputs'
+$lmeOutput = Join-Path $reposRoot 'memory-benchmark-runs\longmemeval'
+New-Item -ItemType Directory -Force $inputs, $lmeOutput | Out-Null
+$revision = '98d7416c24c778c2fee6e6f3006e7a073259d48f'
+$file = 'longmemeval_s_cleaned.json' # or longmemeval_oracle.json
+Invoke-WebRequest `
+    "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/$revision/$file" `
+    -OutFile (Join-Path $inputs $file)
+Invoke-WebRequest `
+    'https://raw.githubusercontent.com/xiaowu0162/LongMemEval/9e0b455f4ef0e2ab8f2e582289761153549043fc/src/evaluation/evaluate_qa.py' `
+    -OutFile (Join-Path $inputs 'evaluate_qa.py')
+```
+
+One question with all of its supplied histories:
+
+```powershell
+pnpm --filter @typeagent/benchmarks memory-bench run `
+    --dataset longmemeval --variant s-cleaned --repo $repo `
+    --input (Join-Path $inputs 'longmemeval_s_cleaned.json') `
+    --judge-source (Join-Path $inputs 'evaluate_qa.py') `
+    --output $lmeOutput --progress (Join-Path $lmeOutput 'progress.json') `
+    --max-questions 1 --work-minutes 30 --authorized-live-benchmark
+```
+
+For an oracle smoke test, change **both** `--variant oracle` and the input file
+to `longmemeval_oracle.json`. Question IDs/order and all supplied evidence
+sessions are retained. `--question-ids id1,id2` selects diagnostic cases in the
+original deterministic seeded order, not caller order. Duplicate/unknown IDs
+fail. No failed case is replaced to improve coverage.
+
+For the original fixed first-50 target, use `--max-questions 50`; omit
+`--question-ids`. A sufficiently long authorized invocation can use
+`--work-minutes unlimited`; this removes only the external work bound, not the
+startup, ownership, frozen-identity or close checks. Normal work values are
+1-30 minutes plus a five-minute cleanup reserve. Startup is separately bounded
+by `--startup-minutes 1` through `10` (default `2`). There is no hidden BEAM
+two-hour import limit on this path.
+
+LongMemEval uses the normal configured reader and judge models, recording the
+**observed** judge model; it does not claim the official GPT-4o evaluator.
+`TYPEAGENT_BENCHMARK_MODEL` is a BEAM bridge override, not a LongMemEval judge
+override. Authorization is explicit, and no credentials belong in artifacts.
+
+### LongMemEval progress, interruption and resume
+
+The CLI prints a `run-directory` JSON record identifying its new
+`memory-longmemeval-*` child. That directory owns its isolated store, lock,
+manifest, worker spec/logs, process admission/termination receipts,
+`benchmark-state.json`, `progress.json`, `hypotheses.json` and `scorecard.json`.
+An optional shared `--progress` registry receives a namespaced
+`longmemeval:<runId>` entry. Worker logs are not a heartbeat; durable progress
+advances at source, answer and grade transitions.
+
+Progress includes question X of Y, histories completed/total, graded count,
+passed/incorrect count, graded-only pass percentage, skipped imports and
+supported close. A one-question pass is **not** 500-question accuracy:
+the scorecard retains the complete dataset denominator and reports
+`fullScheduleAccuracy: null` while coverage is incomplete.
+
+To stop safely after the current question, write this inside the owned run:
+
+```powershell
+@{ stop = $true } | ConvertTo-Json |
+    Set-Content -Encoding utf8 (Join-Path $runDirectory 'stop-after-question.json')
+```
+
+Wait for acknowledgement, supported close and worker exit. Remove that specific
+request file only when intentionally continuing. To resume a compatible package
+run, repeat the same dataset/model/options command with
+`--resume $runDirectory`. The previous worker/watchdog must have exited.
+Stale locks require ownership inspection; do not delete them blindly.
+
+The new package state schema is `typeagent-memory-longmemeval-v1`. Changes to
+dataset, protocol, compiled product/dependencies, engine, model/configuration or
+construction reject incompatible resume. Existing qualification-tools stores
+and the stopped 50-question run remain historical, **not** resumable by the new
+engine. Do not bypass this by supplying a previous engine hash.
+
+`--continue-after-import-failure` permits only verified terminal import failures:
+the case is marked skipped-import, no answer is generated from incomplete
+history, and the fixed target is not replenished. Cancellation, provenance,
+judge/provider outages and other failures remain failures. Hypotheses, native
+citations and reader diagnostics persist before judging, allowing judge-only
+recovery without regenerating the answer.
+
+### Qualification tools versus benchmarks
+
+LongMemEval dataset preparation, official-template routing, case execution,
+scorecards, supervision and campaign orchestration now live in this package.
+The old `longmemeval-live.mjs`, `longmemeval-runner.mjs` and
+`longmemeval-campaign.mjs` paths are temporary delegating compatibility modules;
+build the package before using them. Old launcher flags are retained, including
+the file-valued legacy `--dataset`; the unified CLI instead uses
+`--dataset longmemeval --input <file>`.
+
+Readiness/fault-injection gates, crash probes, component/storage
+microbenchmarks, ingestion profiling, tracing and AP/QED qualification remain
+under `tools/memory-maintenance-qualification`. They reuse neutral checkpoint,
+source-recovery, observer and watchdog helpers from `memoryBench/shared`.
+The benchmark package never imports qualification tools. The tested lifecycle
+and execution implementations remain ESM JavaScript compiled/copied by `tsc`
+with declarations; dataset/protocol contracts and CLI are TypeScript. This avoids
+rewriting supervision/recovery policy during relocation.
+
+The compatibility campaign module now delegates to the package campaign;
+it keeps its prior allowance, disk-reserve and supported-close policy. It is
+not a way to restart an old-engine artifact.
+
+## BEAM resume and outputs
 
 Rerun the same command to reuse ready imports and saved predictions under the
 same fingerprint. A judge outage does not force answer regeneration; native
