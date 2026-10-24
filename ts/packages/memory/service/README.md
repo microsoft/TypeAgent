@@ -37,6 +37,30 @@ Project status rendering keeps capacity review pending distinct from a supported
 blocked condition. A `pendingOwnerReview` enum alone does not establish blockage;
 any actual blocker and its scope must remain in evidence-backed section prose.
 
+## Test suites
+
+Build from the TypeScript workspace root before running compiled tests:
+
+```powershell
+pnpm run build @typeagent/memory-service
+pnpm --filter @typeagent/memory-service run test:local
+pnpm --filter @typeagent/memory-service run test:regression
+```
+
+`test:local` runs the offline `.spec.ts` correctness suite used by PR CI.
+View-history ordering, exact records, authorship and selective parsing are checked
+with ten commits; privacy-purge, recovery and concurrent-read cases remain in
+that suite. The same assertions run against 100 and 1,000 commits in
+`test:regression`, which selects only `.regression.ts` files and runs serially.
+These scaling cases are excluded from normal Jest discovery and `test:local`;
+no tests are skipped.
+
+The [memory-regression workflow](../../../../../.github/workflows/memory-regression.yml)
+runs both suites every Monday at 08:23 UTC and on manual dispatch, on Ubuntu,
+Windows and macOS with Node 24.22.1. Each OS uploads Jest JSON results, including
+individual test durations. No model credentials or external fixture checkout
+are required. Model-backed `.test.ts` rehearsals remain separately opt-in.
+
 ## Automatic maintenance foundation
 
 When a Wiki candidate overlaps an existing page, the service checks the page's
