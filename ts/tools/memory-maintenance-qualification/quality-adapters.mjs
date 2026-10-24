@@ -20,7 +20,6 @@ import {
     unique,
     identity,
     clone,
-    ratio,
 } from "./quality-contract.mjs";
 
 export const publicPins = Object.freeze({
