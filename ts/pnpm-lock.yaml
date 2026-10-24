@@ -5589,6 +5589,9 @@ importers:
       fast-levenshtein:
         specifier: ^3.0.0
         version: 3.0.0
+      gpt-tokenizer:
+        specifier: ^2.9.0
+        version: 2.9.0
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)

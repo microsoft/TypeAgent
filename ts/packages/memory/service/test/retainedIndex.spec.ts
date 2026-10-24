@@ -89,6 +89,57 @@ function fixture(): DocMemoryData {
 const lanes = { related: true, message: true };
 
 describe("retained-source index projection", () => {
+    test("retains validated derived dates without mistaking them for changed source metadata", () => {
+        const data = fixture();
+        const kept = data.messages[1];
+        const canonical = kp.temporalSegments(
+            "alpha\nbeta",
+            {
+                version: 1,
+                scopes: [
+                    {
+                        ownerId: "session",
+                        start: 0,
+                        end: 10,
+                        messageTime: "2024-05-10",
+                    },
+                ],
+            },
+            "r1",
+        )[0].context!;
+        const expected = part("kept", ["alpha", "beta"]);
+        expected.metadata.temporalContext = structuredClone(canonical);
+        kept.metadata.temporalContext = {
+            ...canonical,
+            contextHash: "derived-input",
+            rejectedDateAnchors: [
+                {
+                    chunkOrdinal: 0,
+                    anchorOrdinal: 0,
+                    reason: "quote-not-found",
+                },
+            ],
+            discoveredDateEvidence: [
+                {
+                    id: "event",
+                    role: "eventTime",
+                    locator: "source-part:r1:session:0",
+                    value: kp.parseTemporalValue("2024-05-01"),
+                    quote: "Launch was 2024-05-01.",
+                },
+            ],
+        };
+        const result = projectRetainedIndex(data, [expected], lanes);
+        if (!result.data) throw new Error(result.reason);
+        expect(result.data.messages[0].metadata.temporalContext).toEqual(
+            kept.metadata.temporalContext,
+        );
+        expected.metadata.temporalContext.sourceContextHash =
+            "changed-source-context";
+        expect(
+            projectRetainedIndex(data, [expected], lanes).data,
+        ).toBeUndefined();
+    });
     test("retains exact knowledge, scores and vectors, remaps all ordinals, and isolates mutable backing", () => {
         const data = fixture();
         const expected = [data.messages[3], data.messages[1], data.messages[2]];

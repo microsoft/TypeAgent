@@ -19,6 +19,7 @@ import {
     readSegmentedJson,
     writeSegmentedJson,
 } from "../src/segmentedJson.js";
+import { runWithSearchTiming } from "../src/searchTiming.js";
 
 describe("immutable segmented JSON publication", () => {
     let root: string;
@@ -88,6 +89,72 @@ describe("immutable segmented JSON publication", () => {
         expect(await readSegmentedJson(next, await descriptor(next))).toEqual(
             JSON.parse(JSON.stringify(data)),
         );
+    });
+
+    test("binary publication and collection preserve safe ingestion profiling", async () => {
+        const originalFlag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        const originalWarn = console.warn;
+        const logs: string[] = [];
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        console.warn = (line: unknown) => logs.push(String(line));
+        const data = {
+            text: "Private source content must never appear in timing logs",
+            vectors: [new Float32Array([0.6, 0.8])],
+        };
+        try {
+            await runWithSearchTiming(
+                "segment-profile",
+                "ingestion",
+                async () => {
+                    await writeSegmentedJson(file, data, {});
+                    expect(
+                        await readSegmentedJson(file, await descriptor(file)),
+                    ).toEqual(data);
+                    await collectJsonSegments(root);
+                },
+            );
+            const entries: Array<{
+                stage: string;
+                traceId: string;
+                status: string;
+            }> = logs.map((line) =>
+                JSON.parse(line.replace("[memory-search-timing] ", "")),
+            );
+            expect(entries.map((entry) => entry.stage)).toEqual(
+                expect.arrayContaining([
+                    "storage.io.segment.open",
+                    "storage.io.segment.write",
+                    "storage.io.segment.sync",
+                    "storage.io.segment.close",
+                    "storage.io.segment.read",
+                    "storage.segment.hash",
+                    "storage.segment.json.serialize",
+                    "storage.segment.json.parse",
+                    "storage.segment.queue.wait",
+                    "storage.segment.queue.work",
+                ]),
+            );
+            expect(
+                entries.every((entry) => entry.traceId === "segment-profile"),
+            ).toBe(true);
+            expect(
+                entries
+                    .filter((entry) =>
+                        [
+                            "storage.io.segment.write",
+                            "storage.io.segment.sync",
+                            "storage.io.segment.close",
+                        ].includes(entry.stage),
+                    )
+                    .every((entry) => entry.status === "success"),
+            ).toBe(true);
+            expect(logs.join("\n")).not.toContain(data.text);
+        } finally {
+            if (originalFlag === undefined)
+                delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+            else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = originalFlag;
+            console.warn = originalWarn;
+        }
     });
 
     test.each(["segment-written", "descriptor-prepared"] as const)(
@@ -220,6 +287,63 @@ describe("immutable segmented JSON publication", () => {
             vectors: [new Float32Array([1, 0])],
         });
         expect(await readdir(blobs)).not.toContain(path.basename(staging));
+    });
+
+    test("collection preserves wide legacy graphs with shared children beside binary publications", async () => {
+        const blobs = path.join(root, ".segments");
+        await mkdir(blobs, { recursive: true });
+        const node = async (value: unknown) => {
+            const bytes = Buffer.from(`${JSON.stringify(value)}\n`);
+            const hash = createHash("sha256").update(bytes).digest("hex");
+            await writeFile(path.join(blobs, `${hash}.json`), bytes);
+            return hash;
+        };
+        const values = Array.from({ length: 33 }, (_, ordinal) => ({
+            ordinal,
+            text: `Retained legacy record ${ordinal}`,
+        }));
+        const children = await Promise.all(
+            values.map((value) => node({ kind: "value", value })),
+        );
+        const items = await node({ kind: "items", children });
+        const hash = await node({
+            kind: "object",
+            entries: [
+                ["records", items],
+                ["first", children[0]],
+                ["duplicate", items],
+            ],
+        });
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(
+            file,
+            JSON.stringify({
+                segmentedJsonVersion: 1,
+                root: hash,
+                metadata: {},
+            }),
+        );
+        const orphan = await node({
+            kind: "value",
+            value: "Forgotten legacy payload",
+        });
+        const next = path.join(root, "next", "corpus_data.json");
+        const vectors = { vectors: [new Float32Array([1, 0])] };
+        await writeSegmentedJson(next, vectors, {});
+        await collectJsonSegments(root);
+        expect(await readSegmentedJson(file, await descriptor(file))).toEqual({
+            records: values,
+            first: values[0],
+            duplicate: values,
+        });
+        expect(await readSegmentedJson(next, await descriptor(next))).toEqual(
+            vectors,
+        );
+        await expect(
+            readFile(path.join(blobs, `${orphan}.json`)),
+        ).rejects.toMatchObject({
+            code: "ENOENT",
+        });
     });
 
     test("date metadata preserves JSON serialization without normalizing the whole generation", async () => {

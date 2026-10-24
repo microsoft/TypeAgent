@@ -5,7 +5,76 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { alive, supervise } from "./watchdog.mjs";
+import {
+    alive,
+    supervise,
+    validateAdmission,
+    workerDeadline,
+} from "./watchdog.mjs";
+
+test("baseline19 watchdog includes startup and preflight in the exact thirty-five-minute cap", () => {
+    const spec = {
+        sourceScope: "baseline19",
+        spawnedEpochMs: 1000,
+        workAllowanceMs: 2100000,
+    };
+    const admission = { workDeadlineEpochMs: 2160000 };
+    assert.equal(workerDeadline(spec, admission, 121000), 2101000);
+    assert.equal(workerDeadline(spec, undefined, 121000), 121000);
+    assert.equal(
+        workerDeadline({ ...spec, sourceScope: undefined }, admission, 121000),
+        2160000,
+    );
+});
+
+test("a separately validated benchmark total allowance also includes startup", () => {
+    assert.equal(
+        workerDeadline(
+            { spawnedEpochMs: 1000, totalAllowanceMs: 2100000 },
+            { workDeadlineEpochMs: 2160000 },
+            121000,
+        ),
+        2101000,
+    );
+});
+
+test("explicit unlimited work retains startup checks without inheriting an expired startup deadline", () => {
+    const spec = {
+        receiptId: "unlimited-evaluation",
+        spawnedEpochMs: 1000,
+        workAllowanceMs: null,
+        totalAllowanceMs: null,
+    };
+    const admission = {
+        receiptId: spec.receiptId,
+        workerPid: 42,
+        admittedEpochMs: 2000,
+        workDeadlineEpochMs: null,
+    };
+    validateAdmission(admission, spec, 42, 2100);
+    assert.equal(workerDeadline(spec, undefined, 121000), 121000);
+    assert.equal(workerDeadline(spec, admission, 121000), Infinity);
+    assert.throws(() =>
+        validateAdmission(
+            admission,
+            { ...spec, workAllowanceMs: 60000 },
+            42,
+            2100,
+        ),
+    );
+    assert.throws(() =>
+        validateAdmission(
+            { ...admission, workDeadlineEpochMs: 999999 },
+            spec,
+            42,
+            2100,
+        ),
+    );
+    assert.equal(
+        workerDeadline({ ...spec, totalAllowanceMs: 5000 }, admission, 121000),
+        6000,
+    );
+});
 
 async function createRun(t, mode, extra = {}) {
     const runDirectory = await mkdtemp(
@@ -33,15 +102,19 @@ const spec = JSON.parse(await readFile(process.argv[3], "utf8"));
 const mode = ${JSON.stringify(mode)};
 process.stdout.write("worker stdout\\n");
 process.stderr.write("worker stderr\\n");
-if (mode === "admitted") {
+if (mode === "admitted" || mode === "unlimited") {
     const admittedEpochMs = Date.now();
     await writeFile(path.join(spec.runDirectory, "admitted.json"), JSON.stringify({
         receiptId: spec.receiptId,
         workerPid: process.pid,
         admittedEpochMs,
-        workDeadlineEpochMs: admittedEpochMs + spec.workAllowanceMs,
+        workDeadlineEpochMs: spec.workAllowanceMs === null ? null : admittedEpochMs + spec.workAllowanceMs,
     }));
-    setInterval(() => {}, 1000);
+    if (mode === "unlimited") {
+        await new Promise(resolve => setTimeout(resolve, 400));
+    } else {
+        setInterval(() => {}, 1000);
+    }
 } else if (mode === "malformed") {
     await writeFile(path.join(spec.runDirectory, "admitted.json"), "{");
     setInterval(() => {}, 1000);
@@ -125,6 +198,22 @@ test("watchdog waits past admission until bounded work exits and preserves the s
     );
     assert.equal(admission.workerPid, receipt.workerPid);
     assert.equal(admission.watchdogPid, process.pid);
+});
+
+test("unlimited work exits normally after its short startup window has elapsed", async (t) => {
+    const { run } = await createRun(t, "unlimited", {
+        startupAllowanceMs: 300,
+        workAllowanceMs: null,
+        totalAllowanceMs: null,
+    });
+    const receipt = await run();
+    assert.equal(receipt.outcome, "WORKER_COMPLETED");
+    assert.equal(receipt.phase, "admitted-work");
+    assert.equal(receipt.workDeadlineEpochMs, null);
+    assert.equal(receipt.forced, false);
+    assert.equal(receipt.workerExited, true);
+    assert.ok(receipt.finishedEpochMs > receipt.startupDeadlineEpochMs);
+    assert.equal(alive(receipt.workerPid), false);
 });
 
 test("watchdog rejects malformed admission only after its owned worker exits", async (t) => {

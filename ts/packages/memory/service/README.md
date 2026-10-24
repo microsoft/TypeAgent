@@ -23,6 +23,20 @@ snapshot; actual qualification runs still require an explicit fixture root.
 No generated memory stores, recordings, provider responses or run receipts are
 included in these fixtures.
 
+### Memory quality evaluation
+
+The [offline quality tools](../../../tools/memory-maintenance-qualification/quality-README.md)
+prepare frozen artifact bundles, a category-stratified LongMemEval diagnostic,
+and BenchmarkQED/AP-news inputs with separate construction and evaluator packets.
+Run their deterministic checks from the TypeScript workspace with
+`pnpm run test:memory-quality`; they are also included in `test:local`.
+These checks do not run production inference or certify factual quality.
+The authored artifact pilot requires independent human review before scoring.
+
+Project status rendering keeps capacity review pending distinct from a supported
+blocked condition. A `pendingOwnerReview` enum alone does not establish blockage;
+any actual blocker and its scope must remain in evidence-backed section prose.
+
 ## Test suites
 
 Build from the TypeScript workspace root before running compiled tests:
@@ -235,6 +249,16 @@ budgets remain enforced locally. Required evidence, character bounds and
 governing qualifications are still validated, and overlong or invalid fields
 are rejected rather than silently shortened.
 
+Recipe `source-synopsis-v3` resolves exact evidence quotes to retained UTF-16
+coordinates in the host. Models may omit offsets instead of computing character
+counts. Existing exact supplied ranges remain valid and can disambiguate repeated
+quotes; otherwise a quote must have exactly one eligible occurrence. Section
+evidence is restricted to that supplied section, and composition can select only
+evidence supplied by its input summaries. Missing, invented, or ambiguous quotes
+fail explicitly. Quotes and source line endings are never normalized or matched
+approximately. Persisted evidence keeps the same coordinate shape; the recipe
+change invalidates older semantic fingerprints.
+
 All memory synthesis, topic, indexed-answer and hub-answer calls now omit
 optional OpenAI completion limits. Their prompts express approximate final-JSON
 length targets separately from reasoning; citation and coverage validators are
@@ -321,9 +345,16 @@ provider calls never mutate the live index. Its serialized commit rechecks the
 captured generation and source revisions and merges current metadata. Stale,
 cancelled or forgotten candidates cannot replace the published generation.
 Forgetting also cancels and purges affected prepared candidates.
+Unpublished reindex cleanup uses the same corpus write reservation as source
+removal, preventing concurrent recursive deletion of a candidate generation.
 Each async read retains its snapshot until completion. Cold runtime
 loading is single-flight, and shutdown drains the complete preparation/read
 lifetime before releasing storage.
+
+Agent-session receipt stamps and file reads serialize with checkpoint publication
+for that session. Source eligibility is checked after releasing that queue, so
+source removal cannot deadlock behind a receipt read. Invalid or unsafe checkpoint
+files still fail explicitly; receipt polling does not relax file validation.
 
 Set `TYPEAGENT_MEMORY_SEARCH_TRACE=1` on the host process to enable correlated
 Memory Hub search diagnostics on stderr. Lines prefixed `[memory-search-timing]` contain

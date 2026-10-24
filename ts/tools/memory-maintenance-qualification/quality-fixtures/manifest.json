@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "memory-quality-pilot-v1",
+  "frozenAt": "2026-10-20",
+  "goldReviewStatus": "pending-independent-human-review",
+  "baselineCommit": "6c5d8dc89190a3602376bdb4cc9d4b87930587ac",
+  "hashEncoding": "SHA-256 raw UTF-8 file bytes; LF, pinned Prettier before freeze",
+  "files": {
+    "construction.json": "b22ba5c1424aa6c6b76afc7ae114a404efb29ce74c08963d04b7a5fa0306bfe3",
+    "contract.json": "34e66c03bfc3aa2ac73c9e108064baeab67c686bb979633298b9c483e4845360",
+    "evaluator-only.json": "2da9fb365479303cb7e74cf957f444f1ab76693657ac45aa7d59f54a1fbe6768"
+  },
+  "splits": {
+    "wikiDevelopment": ["w01", "w02", "w03", "w04", "w05", "w06"],
+    "wikiHoldout": ["w07", "w08", "w09", "w10", "w11", "w12"],
+    "briefDevelopment": ["b01", "b02", "b03", "b04", "b05", "b06"],
+    "briefHoldout": ["b07", "b08", "b09", "b10", "b11", "b12"]
+  }
+}

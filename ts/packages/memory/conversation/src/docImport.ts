@@ -288,10 +288,14 @@ export function docPartsFromMarkdown(
     knowledgeOptions.collectLinks = options?.collectLinkKnowledge ?? true;
     knowledgeOptions.collectStructuralKnowledge =
         options?.collectStructuralKnowledge ?? true;
-    const [textBlocks, knowledgeBlocks] = tp.markdownToTextAndKnowledgeBlocks(
-        markdown,
-        maxCharsPerChunk,
-        knowledgeOptions,
+    const [textBlocks, knowledgeBlocks] = kp.timeSearchStage(
+        "ingestion.document.parse",
+        () =>
+            tp.markdownToTextAndKnowledgeBlocks(
+                markdown,
+                maxCharsPerChunk,
+                knowledgeOptions,
+            ),
     );
     if (textBlocks.length !== knowledgeBlocks.length) {
         throw new Error(
@@ -322,9 +326,12 @@ export function docPartsFromMarkdown(
         );
         parts.push(part);
     }
-    return options?.maxTokensPerPart === undefined
+    const maxTokensPerPart = options?.maxTokensPerPart;
+    return maxTokensPerPart === undefined
         ? parts
-        : aggregateDocParts(parts, options.maxTokensPerPart);
+        : kp.timeSearchStage("ingestion.document.chunk", () =>
+              aggregateDocParts(parts, maxTokensPerPart),
+          );
 }
 
 export function aggregateDocParts(
