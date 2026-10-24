@@ -6,7 +6,6 @@ import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
 import { displayWarn } from "@typeagent/agent-sdk/helpers/display";
 import { ActionContext } from "@typeagent/agent-sdk";
 import type { ShellContext } from "./agent.js";
-import { selectSpeechProvider } from "./speechProvider.js";
 
 import registerDebug from "debug";
 import { fileURLToPath } from "url";
@@ -109,7 +108,12 @@ export function closeLocalWhisper() {
     return false;
 }
 
-export function getLocalWhisperCommandHandlers(): CommandHandlerTable {
+export function getLocalWhisperCommandHandlers(
+    selectProvider: (
+        context: ActionContext<ShellContext>,
+        provider: "azure" | "whisper",
+    ) => Promise<void>,
+): CommandHandlerTable {
     return {
         description: "Configure Local Whisper",
         commands: {
@@ -120,7 +124,7 @@ export function getLocalWhisperCommandHandlers(): CommandHandlerTable {
                         "Deprecated: use @shell speechProvider azure.",
                         context,
                     );
-                    await selectSpeechProvider(context, "azure");
+                    await selectProvider(context, "azure");
                 },
             },
             on: {
@@ -130,7 +134,7 @@ export function getLocalWhisperCommandHandlers(): CommandHandlerTable {
                         "Deprecated: use @shell speechProvider whisper.",
                         context,
                     );
-                    await selectSpeechProvider(context, "whisper");
+                    await selectProvider(context, "whisper");
                 },
             },
         },
