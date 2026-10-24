@@ -106,6 +106,9 @@ no tests are skipped.
 Retained-index privacy checks drain deferred maintenance before enumerating the
 segment directory, so background reclamation cannot remove an obsolete segment
 between directory listing and inspection.
+In CI, Jest runs this package in one worker and recycles it between suites when
+its idle heap exceeds 1 GB. This bounds accumulated ESM module state on Node 22
+without increasing test timeouts or skipping coverage.
 
 The [memory-regression workflow](../../../../../.github/workflows/memory-regression.yml)
 runs both suites every Monday at 08:23 UTC and on manual dispatch, on Ubuntu,
