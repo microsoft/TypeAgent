@@ -18,6 +18,7 @@ import { mountMemoryHubImports } from "./memoryHubImports";
 import { mountMemoryHubCapture } from "./memoryHubCapture";
 
 import { mountMemoryHubViews } from "./memoryHubViews";
+import { mountMemoryHubQuestions } from "./memoryHubQuestions";
 import { mountMemoryHubViewActivity } from "./memoryHubViewActivity";
 import { renderDerivedViewUsage } from "./memoryHubViewUsage";
 
@@ -72,8 +73,10 @@ let importsPanel: ReturnType<typeof mountMemoryHubImports>;
 let capturePanel: ReturnType<typeof mountMemoryHubCapture>;
 
 let draftViewsPanel: ReturnType<typeof mountMemoryHubViews>;
+let questionsPanel: ReturnType<typeof mountMemoryHubQuestions>;
 let viewActivityPanel: ReturnType<typeof mountMemoryHubViewActivity>;
 let viewAttentionCount = 0;
+let questionAttentionCount = 0;
 
 let runbookImportsPanel: ReturnType<typeof mountMemoryHubRunbookImports>;
 let webMaintenancePanel: ReturnType<typeof mountMemoryHubWebMaintenance>;
@@ -128,6 +131,7 @@ function discardChanges(): boolean {
     return (
         manager.discardChanges() &&
         (draftViewsPanel?.discardChanges() ?? true) &&
+        (questionsPanel?.discardChanges() ?? true) &&
         (viewPreferencesPanel?.discardChanges() ?? true) &&
         (runbookImportsPanel?.discardChanges() ?? true)
     );
@@ -369,15 +373,10 @@ function inboxCard(item: MemoryHubInboxItem, dismissed: boolean): HTMLElement {
             }),
         );
     } else {
-        const more = [
-            {
-                label: "Snooze 1 day",
-                icon: "fa-bell-slash",
-                action: () => hideInboxItem(item, Date.now() + 86_400_000),
-            },
-        ];
         actions.append(
-            menuButton("More actions", more),
+            iconButton("fa-bell-slash", "Snooze 1 day", () =>
+                hideInboxItem(item, Date.now() + 86_400_000),
+            ),
             iconButton("fa-xmark", "Dismiss", () => hideInboxItem(item)),
         );
     }
@@ -444,7 +443,8 @@ function renderInboxChips(available: MemoryHubInboxItem[]): void {
 
 function renderInbox(): void {
     const counts = inboxCounts(snapshot.inbox, hidden, scope || undefined);
-    const attentionCount = counts.inbox + viewAttentionCount;
+    const attentionCount =
+        counts.inbox + viewAttentionCount + questionAttentionCount;
     el("inboxBadge").textContent = snapshotAvailable
         ? String(attentionCount)
         : "—";
@@ -485,7 +485,7 @@ function renderInbox(): void {
             .slice(inboxPage * 25, (inboxPage + 1) * 25)
             .map((item) => inboxCard(item, dismissed)),
     );
-    if (!items.length && !viewAttentionCount)
+    if (!items.length && !viewAttentionCount && !questionAttentionCount)
         list.append(
             inboxEmpty(
                 dismissed,
@@ -579,6 +579,7 @@ async function refreshSnapshot(): Promise<void> {
     renderAddTargets();
     renderInbox();
     renderErrors();
+    if (questionsPanel) await questionsPanel.refresh();
 }
 
 function renderAddTargets(): void {
@@ -1157,12 +1158,17 @@ async function showManagedRoute(
             "The selected corpus no longer exists. Choose another scope.",
         );
     const corpusId = item?.corpusId ?? route.corpusId ?? scope;
+    if (route.page === "questions") {
+        await questionsPanel.show(route.objectId, corpusId || undefined);
+        return;
+    }
     if (route.page === "views") {
         await draftViewsPanel.show({
             corpusId: corpusId || undefined,
             viewId: route.objectId,
             revisionId: route.viewRevisionId,
             pageId: route.viewPageId,
+            itemKey: route.viewItemKey,
         });
         return;
     }
@@ -1263,6 +1269,28 @@ export async function mountMemoryHub(): Promise<void> {
     el("hubRefresh").onclick = () => location.reload();
     await loadManagement();
     mountPhaseTwo();
+    questionsPanel = mountMemoryHubQuestions(
+        el("hubQuestions"),
+        el("hubQuestionAttention"),
+        {
+            scope: () => scope || undefined,
+            corpora: () => snapshot.corpora,
+            hidden,
+            persistHidden,
+            onError: (error) => {
+                void hubAction(async () => {
+                    throw error;
+                });
+            },
+            onOpenSource: (corpusId, objectId) => {
+                open({ page: "library", corpusId, objectId });
+            },
+            onAttentionCount: (count) => {
+                questionAttentionCount = count;
+                renderInbox();
+            },
+        },
+    );
 
     draftViewsPanel = mountMemoryHubViews(el("hubDraftViews"), {
         scope: () => scope || undefined,

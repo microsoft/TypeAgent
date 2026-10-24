@@ -8,7 +8,13 @@ import type {
     ViewMaintenanceTargetPlan,
 } from "@typeagent/memory-service";
 import { invokeMemory } from "./viewClient";
-import { rbButton, rbError, rbNode } from "./memoryHubDocumentUi";
+import {
+    rbButton,
+    rbChip,
+    rbError,
+    rbIconButton,
+    rbNode,
+} from "./memoryHubDocumentUi";
 
 const states: Record<ViewBuildResultState, string> = {
     pending: "Queued",
@@ -48,6 +54,7 @@ function resultTitle(result: ViewBuildTargetResult): string {
         projectBrief: "Project brief",
         timeline: "Timeline",
         troubleshootingGuide: "Troubleshooting guide",
+        schemaView: "Schema-defined questions",
     };
     return labels[result.snapshot.definition.kind];
 }
@@ -140,7 +147,7 @@ export function mountMemoryHubViewActivity(
                     rbNode("p", `${corpusName} · ${reason}`),
                     rbButton(
                         publication.indexState === "failed"
-                            ? "Inspect publication and retry indexing"
+                            ? "Retry indexing"
                             : "Preview update",
                         () => options.onOpenView(corpusId, view.viewId),
                     ),
@@ -157,14 +164,24 @@ export function mountMemoryHubViewActivity(
         const card = rbNode("article", undefined, "card hub-view-job");
         card.append(
             rbNode("h4", job.maintenancePlan ? "Update views" : "Build views"),
-            rbNode("p", `${job.state} · ${viewBuildSummary(job)}`),
+            rbChip(
+                job.state,
+                ["failed", "interrupted"].includes(job.state)
+                    ? "bad"
+                    : ["partial", "cancelled"].includes(job.state)
+                      ? "warn"
+                      : job.state === "running"
+                        ? undefined
+                        : "good",
+            ),
+            rbNode("p", viewBuildSummary(job)),
             rbNode("time", new Date(job.updatedAt).toLocaleString()),
         );
         for (const result of job.results) {
             const row = rbNode("div", undefined, "hub-view-result");
             row.append(
                 rbNode("strong", resultTitle(result)),
-                rbNode("span", states[result.state]),
+                rbChip(states[result.state]),
                 rbNode("p", result.reason),
             );
             if (result.wikiConsolidation) {
@@ -174,10 +191,16 @@ export function mountMemoryHubViewActivity(
                         "p",
                         `Consolidation effect: ${effect.stage}; derivative readiness is separate from canonical acceptance.`,
                     ),
-                    rbButton("Open canonical article", () =>
-                        options.onOpenView(job.corpusId, effect.survivorViewId),
+                    rbIconButton(
+                        "fa-arrow-up-right-from-square",
+                        "Open canonical article",
+                        () =>
+                            options.onOpenView(
+                                job.corpusId,
+                                effect.survivorViewId,
+                            ),
                     ),
-                    rbButton("Open original article link", () =>
+                    rbIconButton("fa-link", "Open original article link", () =>
                         options.onOpenView(job.corpusId, effect.retiringViewId),
                     ),
                 );
@@ -225,31 +248,39 @@ export function mountMemoryHubViewActivity(
         );
         card.append(diagnostics);
         if (job.state === "running") {
-            const cancel = rbButton("Request cancellation", () => {
-                cancel.disabled = true;
-                cancellationRequests.add(cancellationKey);
-                void run(async () => {
-                    let response: ViewBuildJob;
-                    try {
-                        response = await invokeMemory("memoryCancelViewBuild", {
-                            corpusId: job.corpusId,
-                            jobId: job.jobId,
-                        });
-                    } catch (error) {
-                        cancellationRequests.delete(cancellationKey);
-                        throw error;
-                    }
-                    if (response.state !== "running")
-                        cancellationRequests.delete(cancellationKey);
-                    await refresh();
-                    status.textContent =
-                        response.state === "cancelled"
-                            ? "Cancellation acknowledged. Already saved targets remain."
-                            : "Cancellation requested. Already saved targets remain.";
-                }).finally(() => {
-                    cancel.disabled = cancellationRequests.has(cancellationKey);
-                });
-            });
+            const cancel = rbIconButton(
+                "fa-xmark",
+                "Request cancellation",
+                () => {
+                    cancel.disabled = true;
+                    cancellationRequests.add(cancellationKey);
+                    void run(async () => {
+                        let response: ViewBuildJob;
+                        try {
+                            response = await invokeMemory(
+                                "memoryCancelViewBuild",
+                                {
+                                    corpusId: job.corpusId,
+                                    jobId: job.jobId,
+                                },
+                            );
+                        } catch (error) {
+                            cancellationRequests.delete(cancellationKey);
+                            throw error;
+                        }
+                        if (response.state !== "running")
+                            cancellationRequests.delete(cancellationKey);
+                        await refresh();
+                        status.textContent =
+                            response.state === "cancelled"
+                                ? "Cancellation acknowledged. Already saved targets remain."
+                                : "Cancellation requested. Already saved targets remain.";
+                    }).finally(() => {
+                        cancel.disabled =
+                            cancellationRequests.has(cancellationKey);
+                    });
+                },
+            );
             cancel.disabled = cancellationRequests.has(cancellationKey);
             card.append(cancel);
         } else if (
@@ -257,7 +288,7 @@ export function mountMemoryHubViewActivity(
                 job.state,
             )
         ) {
-            const retry = rbButton("Retry build", () => {
+            const retry = rbIconButton("fa-rotate-right", "Retry build", () => {
                 retry.disabled = true;
                 void run(async () => {
                     const next = await invokeMemory("memoryRetryViewBuild", {

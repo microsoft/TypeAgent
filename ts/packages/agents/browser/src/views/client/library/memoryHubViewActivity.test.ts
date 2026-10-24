@@ -55,7 +55,9 @@ function job(state: ViewBuildJob["state"] = "partial"): ViewBuildJob {
 
 function textButton(host: HTMLElement, text: string): HTMLButtonElement {
     const found = [...host.querySelectorAll("button")].find(
-        (button) => button.textContent === text,
+        (button) =>
+            button.textContent === text ||
+            button.getAttribute("aria-label") === text,
     );
     if (!found) throw new Error(`Missing button ${text}`);
     return found;
@@ -276,7 +278,7 @@ test("current indexing attention is counted once and maintenance plans respect t
     expect(attention.textContent).toContain(
         "Indexing failed: Indexer unavailable",
     );
-    textButton(attention, "Inspect publication and retry indexing").click();
+    textButton(attention, "Retry indexing").click();
     expect(onOpenView).toHaveBeenCalledWith("alpha", "guide-0");
     mounted.scopeChanged();
     expect(attention.textContent).toBe("");

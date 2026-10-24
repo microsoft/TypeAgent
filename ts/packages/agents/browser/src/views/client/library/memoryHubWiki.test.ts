@@ -62,7 +62,9 @@ const retrieval = {
 };
 function click(host: HTMLElement, label: string) {
     const button = [...host.querySelectorAll("button")].find(
-        (button) => button.textContent === label,
+        (button) =>
+            button.textContent === label ||
+            button.getAttribute("aria-label") === label,
     );
     if (!button) throw new Error(`Missing wiki control ${label}`);
     button.click();

@@ -7,7 +7,7 @@ import type {
     ViewRelationshipInput,
     ViewDefinitionInput,
 } from "@typeagent/memory-service";
-import { rbNode, rbButton } from "./memoryHubDocumentUi";
+import { rbButton, rbChip, rbIconButton, rbNode } from "./memoryHubDocumentUi";
 
 export function createWikiEditor(
     original: WikiContent,
@@ -61,9 +61,9 @@ export function createWikiEditor(
         heading.tabIndex = -1;
         reader.replaceChildren(
             heading,
-            rbNode("p", `Stable page: ${page.id}; ${details.taxonomy}`),
+            rbChip(details.taxonomy),
+            rbNode("p", content.summary, "hub-view-lead"),
             rbNode("pre", page.body),
-            rbNode("p", content.summary),
             rbNode("p", details.note),
         );
         for (const edge of edges.filter(
@@ -73,7 +73,8 @@ export function createWikiEditor(
         ))
             for (const citation of edge.citations)
                 reader.append(
-                    rbButton(
+                    rbIconButton(
+                        "fa-quote-left",
                         `${citation.sourceId} @ ${citation.revisionId} ${citation.locator}`,
                         () => showEvidence(citation),
                     ),

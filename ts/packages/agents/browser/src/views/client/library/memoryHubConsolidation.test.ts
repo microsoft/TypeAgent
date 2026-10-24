@@ -106,7 +106,9 @@ async function settle() {
 }
 function button(host: HTMLElement, text: string) {
     const found = [...host.querySelectorAll("button")].find(
-        (entry) => entry.textContent === text,
+        (entry) =>
+            entry.textContent === text ||
+            entry.getAttribute("aria-label") === text,
     );
     if (!found) throw new Error(`Missing consolidation button ${text}`);
     return found;

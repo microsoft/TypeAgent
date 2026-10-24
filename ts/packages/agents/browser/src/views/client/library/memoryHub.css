@@ -85,6 +85,11 @@ body[data-memory-hub] {
 .hub-view-section {
   margin: 20px 0;
 }
+.hub-view-lead {
+  font-size: 1.05em;
+  line-height: 1.5;
+  margin: 12px 0 20px;
+}
 .hub-view-section > details {
   margin-top: 12px;
   padding: 10px;
@@ -371,6 +376,16 @@ body[data-memory-hub] {
 }
 .hub-chip:empty {
   display: none;
+}
+.hub-chip.bad {
+  border-color: transparent;
+  background: var(--danger-soft, #fdf1ec);
+  color: var(--danger-text, #a4380d);
+}
+.hub-chip.good {
+  border-color: transparent;
+  background: var(--ok-soft, #eef8f1);
+  color: var(--ok-text, #1b6b3a);
 }
 .hub-chip.warn {
   border-color: transparent;
