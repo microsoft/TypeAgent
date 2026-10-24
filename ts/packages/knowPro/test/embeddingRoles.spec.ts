@@ -124,6 +124,31 @@ describe("KnowPro embedding roles (synthetic/offline)", () => {
         ).toBe(7);
     });
 
+    test("indexing bounds aggregate tokens without truncating or reordering inputs", async () => {
+        const texts = [
+            " word".repeat(4_000),
+            " word".repeat(4_000),
+            " word",
+            " word".repeat(8_000),
+        ];
+        const embeddingModel: TextEmbeddingModel = {
+            ...wideModel(),
+            forRole: () => embeddingModel,
+            embeddingIdentity: { ...identity("document"), provider: "azure" },
+        };
+        const result = await generateTextEmbeddingsForIndex(
+            embeddingModel,
+            texts,
+        );
+        expect(result.success).toBe(true);
+        if (result.success) expect(result.data).toHaveLength(texts.length);
+        expect(calls).toEqual([
+            `document:${texts.slice(0, 2).join(",")}`,
+            `document:${texts[2]}`,
+            `document:${texts[3]}`,
+        ]);
+    });
+
     test("conversation defaults to 128 terms, source texts, and threads", () => {
         const settings = createConversationSettings(model());
         expect(
@@ -133,6 +158,29 @@ describe("KnowPro embedding roles (synthetic/offline)", () => {
             settings.messageTextIndexSettings.embeddingIndexSettings.batchSize,
         ).toBe(128);
         expect(settings.threadSettings.batchSize).toBe(128);
+    });
+
+    test("a malformed hosted subbatch stops before requesting later inputs", async () => {
+        let requests = 0;
+        const embeddingModel: TextEmbeddingModel = {
+            ...wideModel(),
+            forRole: () => embeddingModel,
+            embeddingIdentity: { ...identity("document"), provider: "azure" },
+            async generateEmbeddingBatch() {
+                requests++;
+                return success([]);
+            },
+        };
+        const result = await generateTextEmbeddingsForIndex(embeddingModel, [
+            " word".repeat(8_000),
+            "later input",
+        ]);
+        expect(result).toEqual({
+            success: false,
+            message:
+                "generateTextEmbeddingsForIndex failed: Error: Embedding batch cardinality mismatch",
+        });
+        expect(requests).toBe(1);
     });
 
     test("default term lane batches 129 distinct terms as 128 and one and reuses them after reload", async () => {
@@ -252,13 +300,14 @@ describe("KnowPro embedding roles (synthetic/offline)", () => {
         expect(index.embeddingIndex.size).toBe(0);
     });
 
-    test.each<[number, number, number[]]>([
-        [40, 7500, [40]],
-        [41, 7500, [40, 1]],
-        [128, 4096, [73, 55]],
+    test.each<[number, number]>([
+        [40, 7500],
+        [41, 7500],
+        [128, 4096],
     ])(
-        "hosted batching keeps %i texts of %i tokens within the 300,000-token request budget",
-        async (inputCount, tokensPerInput, expectedBatches) => {
+        "hosted batching keeps %i texts of %i tokens within the 8,000-token aggregate work budget",
+        async (inputCount, tokensPerInput) => {
+            const expectedBatches = Array<number>(inputCount).fill(1);
             const text = " word".repeat(tokensPerInput);
             expect(countTokens(text)).toBe(tokensPerInput);
             const requests: string[][] = [];

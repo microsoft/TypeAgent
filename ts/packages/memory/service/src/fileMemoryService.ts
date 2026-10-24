@@ -1244,6 +1244,7 @@ export class FileMemoryService
                             jobId,
                             update,
                         );
+                        this.reportMaintenanceBuildFailures(job);
                         await this.checkpointInformationalFamilies(job);
                         await this.checkpointTopics(job);
                         return job;
@@ -1596,9 +1597,17 @@ export class FileMemoryService
                     kind,
                     views,
                 );
-                if (family.error)
+                const key = `${corpusId}:${kind}`;
+                if (
+                    family.error &&
+                    !status.failures.some(
+                        (failure) =>
+                            failure.key === key ||
+                            failure.key.startsWith(`${key}:`),
+                    )
+                )
                     status.failures.push({
-                        key: `${corpusId}:${kind}`,
+                        key,
                         error: family.error,
                     });
                 status.settled &&= !family.pending;
@@ -5711,23 +5720,37 @@ export class FileMemoryService
     ): Promise<void> {
         if (!result?.job) return;
         await this.viewBuilds.wait(result.job.jobId, signal);
-        const job = (
-            await this.viewStore.listViewBuilds(result.job.corpusId)
-        ).find((job) => job.jobId === result.job!.jobId);
-        // Informational targets retain failures and bounded retries independently.
-        const isolatedTargets = job?.results.every(
-            ({ snapshot }) =>
-                snapshot.pipeline === "informational-wiki-v1" ||
-                snapshot.pipeline === "informational-project-summary-v1",
-        );
-        if (
-            job &&
-            (job.state === "cancelled" ||
-                (!isolatedTargets && ["failed", "partial"].includes(job.state)))
-        )
-            throw new Error(
-                `Autonomous maintenance build ${job.state}: ${job.jobId}`,
+    }
+
+    private reportMaintenanceBuildFailures(job: ViewBuildJob): void {
+        if (job.state === "running") return;
+        for (const target of job.results) {
+            const family =
+                target.snapshot.pipeline === "informational-wiki-v1"
+                    ? "wiki"
+                    : target.snapshot.pipeline ===
+                        "informational-project-summary-v1"
+                      ? "projects"
+                      : target.snapshot.pipeline === "topics-v1"
+                        ? "topics"
+                        : undefined;
+            if (!family) continue;
+            this.maintenance.reportFailure(
+                job.corpusId,
+                family,
+                target.viewId,
+                [
+                    "failed",
+                    "cancelled",
+                    "interrupted",
+                    "blocked",
+                    "conflicted",
+                    "stale",
+                ].includes(target.state)
+                    ? `Autonomous maintenance build ${job.state}: ${job.jobId} (${target.state})`
+                    : undefined,
             );
+        }
     }
 
     private deferBatchMaintenance(

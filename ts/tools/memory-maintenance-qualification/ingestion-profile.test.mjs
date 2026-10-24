@@ -697,17 +697,34 @@ test("actual source embedding logical hook counts retries and marks validation f
         new URL("../../packages/knowPro/src/fuzzyIndex.ts", import.meta.url),
         "utf8",
     );
-    const definition = fuzzy.slice(
-        fuzzy.indexOf("export async function generateTextEmbeddingsForIndex("),
-        fuzzy.indexOf("export async function addTextToEmbeddingIndex("),
+    const fuzzyAst = ts.createSourceFile(
+        "fuzzyIndex.ts",
+        fuzzy,
+        ts.ScriptTarget.Latest,
+        true,
     );
+    const definitions = fuzzyAst.statements.filter(
+        (statement) =>
+            ts.isFunctionDeclaration(statement) &&
+            [
+                "generateTextEmbeddingsForIndex",
+                "getEmbeddingBatches",
+                "getIndexingBatches",
+            ].includes(statement.name?.text),
+    );
+    assert.equal(definitions.length, 3, "Missing production embedding hooks");
     const code = ts
-        .transpileModule(definition, {
-            compilerOptions: {
-                target: ts.ScriptTarget.ES2022,
-                module: ts.ModuleKind.ESNext,
+        .transpileModule(
+            definitions
+                .map((statement) => statement.getText(fuzzyAst))
+                .join("\n"),
+            {
+                compilerOptions: {
+                    target: ts.ScriptTarget.ES2022,
+                    module: ts.ModuleKind.ESNext,
+                },
             },
-        })
+        )
         .outputText.replace(/^export /gm, "");
     let invalid = false;
     const run = new Function(
@@ -719,6 +736,8 @@ test("actual source embedding logical hook counts retries and marks validation f
         "success",
         "error",
         "embeddingInputLimitError",
+        "countEmbeddingTokens",
+        "maxEmbeddingInputTokens",
         code + "\nreturn generateTextEmbeddingsForIndex;",
     )(
         instrumentEmbeddingModel,
@@ -740,6 +759,8 @@ test("actual source embedding logical hook counts retries and marks validation f
         (data) => ({ success: true, data }),
         (message) => ({ success: false, message }),
         embeddingInputExports.embeddingInputLimitError,
+        embeddingInputExports.countEmbeddingTokens,
+        embeddingInputExports.maxEmbeddingInputTokens,
     );
     const embeddings = [
         [1, 0],
@@ -761,6 +782,10 @@ test("actual source embedding logical hook counts retries and marks validation f
                     run(
                         {
                             maxBatchSize: 2,
+                            embeddingIdentity: {
+                                provider: "azure",
+                                dimensions: 2,
+                            },
                             generateEmbeddingBatch: async () =>
                                 ++attempt === 1
                                     ? {
@@ -773,7 +798,7 @@ test("actual source embedding logical hook counts retries and marks validation f
                     ),
             );
             assert.equal(result.success, !validationFailure);
-            if (result.success) assert.equal(result.data, embeddings);
+            if (result.success) assert.deepEqual(result.data, embeddings);
             const trace = summarizeTimings(parseTimingLog(lines.join("\n")))
                 .byJob[String(validationFailure)].byCategory.embedding;
             assert.equal(trace.logicalCalls, 1);

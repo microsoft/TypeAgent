@@ -174,12 +174,22 @@ and corpus-clear collection remain immediate rather than waiting for this queue.
 
 `await getMaintenanceStatus()` reports queue keys, active work, coalesced request count,
 budget deferrals and failures, including retained informational target failures.
-Independent targets and bounded per-target retries continue after a partial
-informational build; parked failures remain visible and prevent a settled result.
 A drain temporarily executes manual-mode work;
 it does not override foreground holds or active imports. `reason: "deadline"`,
 `"paused"` or `"budget"` and `settled: false` describe incomplete work explicitly.
 Deadline/abort signals reach automatic view builds and synopsis generation.
+Partial view builds retain their durable per-target errors without blocking
+independent targets or the family's continuation. Unchanged failed informational
+inputs retain the existing two-attempt automatic retry limit. Unresolved target
+failures appear in `failures` under a corpus/family/target key and keep
+`settled: false`, even after the queue is empty; a drain then returns promptly
+rather than spinning until its deadline. A successful retry clears only that
+target's diagnostic, including explicit retries outside scheduler work. Target
+reports are updated at the durable build checkpoint; after restart, retained
+family diagnostics also prevent a false settled result. Family summaries are
+not counted again when a per-target report already covers that family.
+Infrastructure and persistence failures still block the
+affected family until its existing retry conditions are met.
 Shutdown cancels their linked work before releasing storage. A provider that
 ignores cancellation must still be drained before storage ownership is released.
 
@@ -205,6 +215,15 @@ Unsupported grouped updates fall back to serialized single-source ingestion.
 Manifest publication remains atomic and source eligibility is rechecked.
 Recovery/retry reconciles committed revision identities even when job/member
 acknowledgments failed; missing or corrupt storage is not fabricated as success.
+
+KnowPro partitions hosted index embedding inputs into sequential subbatches totaling at
+most 8,000 `cl100k_base` tokens, in addition to the per-input 8,000-token guard.
+This aggregate work budget prevents a larger publication group from becoming one
+quota-sized embedding request; inputs remain intact and ordered. The runtime's
+default embedding attempt budget is 180 seconds, matching the hosted HTTP budget
+and allowing a provider's 60-second rate-limit wait to finish before an outer
+retry starts. Explicit caller deadlines remain supported. Character-bounded
+runtime embedding batches retain serial default concurrency.
 
 `ViewBuildSnapshot.influenceSources` records source/revision identities of nominated
 page context read during admission, including inputs not cited by the output.

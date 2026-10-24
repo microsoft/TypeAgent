@@ -37,6 +37,7 @@ export class MaintenanceScheduler {
     private readonly pending = new Map<string, Work>();
     private readonly running = new Map<string, Promise<void>>();
     private readonly failures = new Map<string, string>();
+    private readonly reportedFailures = new Map<string, string>();
     private readonly parked = new Map<string, string>();
     private readonly context = new AsyncLocalStorage<AbortSignal>();
     private readonly shutdown = new AbortController();
@@ -123,6 +124,20 @@ export class MaintenanceScheduler {
         this.pending.delete(key);
         this.failures.delete(key);
         this.parked.delete(key);
+        for (const target of this.reportedFailures.keys())
+            if (target.startsWith(`${key}:`))
+                this.reportedFailures.delete(target);
+    }
+
+    public reportFailure(
+        corpusId: string,
+        family: string,
+        targetId: string,
+        error?: string,
+    ): void {
+        const key = `${corpusId}:${family}:${targetId}`;
+        if (error === undefined) this.reportedFailures.delete(key);
+        else this.reportedFailures.set(key, error);
     }
 
     public park(corpusId: string, family: string, reason: string): void {
@@ -198,13 +213,19 @@ export class MaintenanceScheduler {
         return {
             mode: this.mode,
             paused: this.holds > 0,
-            settled: !this.pending.size && !this.running.size,
+            settled:
+                !this.pending.size &&
+                !this.running.size &&
+                !this.failures.size &&
+                !this.reportedFailures.size,
             pending: [...this.pending.keys()],
             running: [...this.running.keys()],
-            failures: [...this.failures].map(([key, error]) => ({
-                key,
-                error,
-            })),
+            failures: [...this.failures, ...this.reportedFailures].map(
+                ([key, error]) => ({
+                    key,
+                    error,
+                }),
+            ),
             deferred: [...this.parked].map(([key, reason]) => ({
                 key,
                 reason,
@@ -230,7 +251,10 @@ export class MaintenanceScheduler {
             : deadline;
         try {
             this.wake();
-            while (!this.status().settled && !this.failures.size) {
+            while (
+                (this.pending.size || this.running.size) &&
+                !this.failures.size
+            ) {
                 signal?.throwIfAborted();
                 if (deadline.aborted)
                     return { ...this.status(), reason: "deadline" };

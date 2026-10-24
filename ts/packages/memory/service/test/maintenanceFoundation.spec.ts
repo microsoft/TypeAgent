@@ -298,7 +298,9 @@ test.each(["semantic", "transient", "derivative"] as const)(
                 );
                 expect(
                     (await service.getMaintenanceStatus()).failures.some(
-                        (failure) => failure.key === `${corpusId}:wiki`,
+                        (failure) =>
+                            failure.key === `${corpusId}:wiki` ||
+                            failure.key.startsWith(`${corpusId}:wiki:`),
                     ),
                 ).toBe(false);
             }

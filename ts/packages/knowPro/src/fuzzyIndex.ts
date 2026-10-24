@@ -16,6 +16,8 @@ import {
     embeddingModelForRole,
     validateEmbeddingVector,
     embeddingInputLimitError,
+    countEmbeddingTokens,
+    maxEmbeddingInputTokens,
 } from "@typeagent/aiclient";
 import levenshtein from "fast-levenshtein";
 import { Scored } from "./common.js";
@@ -27,7 +29,6 @@ import {
 import { error, Result, success } from "typechat";
 import { instrumentEmbeddingModel, timeSearchStage } from "./searchTiming.js";
 import { queryEmbedding, queryEmbeddings } from "./queryEmbeddingCache.js";
-import { countTokens } from "gpt-tokenizer/encoding/cl100k_base";
 
 export interface IEmbeddingIndex {
     readonly size: number;
@@ -218,12 +219,19 @@ export async function generateTextEmbeddingsForIndex(
                 embeddingModel = instrumentEmbeddingModel(
                     embeddingModelForRole(embeddingModel, "document"),
                 );
-                const embeddings = await generateTextEmbeddingsWithRetry(
-                    embeddingModel,
+                const embeddings: NormalizedEmbedding[] = [];
+                for (const batch of getEmbeddingBatches(
                     textsToEmbed,
-                );
-                if (embeddings.length !== textsToEmbed.length) {
-                    throw new Error("Embedding batch cardinality mismatch");
+                    textsToEmbed.length || 1,
+                    embeddingModel,
+                )) {
+                    const vectors = await generateTextEmbeddingsWithRetry(
+                        embeddingModel,
+                        batch.values,
+                    );
+                    if (vectors.length !== batch.values.length)
+                        throw new Error("Embedding batch cardinality mismatch");
+                    embeddings.push(...vectors);
                 }
                 const dimensions =
                     embeddingModel.embeddingIdentity?.dimensions ??
@@ -310,10 +318,11 @@ function* getEmbeddingBatches(
         let start = 0;
         let tokens = 0;
         for (let index = 0; index < batch.values.length; index++) {
-            const inputTokens = countTokens(batch.values[index], {
-                disallowedSpecial: new Set(),
-            });
-            if (index > start && tokens + inputTokens > 300_000) {
+            const inputTokens = countEmbeddingTokens(batch.values[index]);
+            if (
+                index > start &&
+                tokens + inputTokens > maxEmbeddingInputTokens
+            ) {
                 yield {
                     startAt: batch.startAt + start,
                     values: batch.values.slice(start, index),
