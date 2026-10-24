@@ -25,7 +25,7 @@ export class WhisperRecognizer {
     private stream?: MediaStream;
     private disposed = false;
     private animationFrame?: number;
-    private httpController?: AbortController;
+    private httpController: AbortController | undefined;
 
     async initialize() {
         const stream = await navigator.mediaDevices.getUserMedia({
