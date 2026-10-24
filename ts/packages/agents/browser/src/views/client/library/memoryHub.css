@@ -1129,3 +1129,180 @@ textarea:focus-visible {
 .phase2-search-insights .knowledge-cards {
   max-height: none;
 }
+
+/* Questions: list on the left, selected question beside it */
+.hub-qhead {
+  flex-wrap: wrap;
+}
+.hub-qfilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.hub-qfilters input[type="search"] {
+  flex: 1 1 180px;
+  max-width: 320px;
+  min-height: 30px;
+}
+.hub-rows {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+}
+.hub-rows .hub-row-actions {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+}
+.hub-grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.hub-muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+.hub-notice {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--warn-soft);
+  color: var(--warn-text);
+}
+.hub-notice p {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 2px 0;
+  font-size: 13px;
+}
+.hub-notice i {
+  margin-right: 8px;
+}
+.hub-split {
+  display: grid;
+  grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr);
+  gap: 16px;
+  align-items: start;
+}
+.hub-qlist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.hub-qrow {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.hub-qrow:hover {
+  background: var(--surface-alt);
+}
+.hub-qrow.selected {
+  border-color: var(--primary);
+  background: var(--accent-soft-hover);
+}
+.hub-qrow > button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.hub-qmeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--muted);
+}
+.hub-qmeta small {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hub-qdetail {
+  position: sticky;
+  top: 8px;
+  max-height: calc(100vh - 24px);
+  min-width: 0;
+  overflow: auto;
+  padding: 0 4px 16px;
+}
+.hub-qdetail:empty::before {
+  content: "Select a question to see its answers.";
+  color: var(--muted);
+}
+.hub-qdetail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.hub-qdetail-head h3 {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 16px;
+}
+.hub-qdetail-head .hub-row-actions {
+  margin-left: auto;
+}
+.hub-qdetail details {
+  margin: 10px 0;
+}
+.hub-qdetail summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.hub-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0 0 6px;
+}
+.hub-fields dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+.hub-fields dd {
+  margin: 0;
+}
+.hub-panel {
+  margin-top: 20px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.hub-panel > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+@media (max-width: 900px) {
+  .hub-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hub-qdetail {
+    position: static;
+    max-height: none;
+  }
+}
+.hub-qdetail .card .hub-row-actions {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}

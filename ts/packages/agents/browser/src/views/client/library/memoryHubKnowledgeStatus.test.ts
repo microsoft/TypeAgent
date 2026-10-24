@@ -44,7 +44,9 @@ async function settle() {
 }
 function click(label: string) {
     const button = [...document.querySelectorAll("button")].find(
-        (value) => value.textContent === label,
+        (value) =>
+            value.textContent === label ||
+            value.getAttribute("aria-label") === label,
     );
     if (!button) throw new Error(`Missing button ${label}`);
     button.click();
@@ -69,9 +71,7 @@ beforeEach(() => {
 test("indexed sources never imply ready knowledge; partial coverage and exclusions remain visible", async () => {
     const panel = setup();
     await panel.refresh([{ corpusId: "corpus", name: "Corpus" }]);
-    expect(document.body.textContent).toContain(
-        "Source progress: 1/1 revisions indexed",
-    );
+    expect(document.body.textContent).toContain("1/1 revisions indexed");
     expect(document.body.textContent).toContain(
         "Checkpoint checkpoint · partial",
     );
@@ -118,7 +118,7 @@ test("knowledge failures are explicit and do not erase available source progress
     });
     const panel = setup();
     await panel.refresh([{ corpusId: "corpus", name: "Corpus" }]);
-    expect(document.body.textContent).toContain("Source progress: 0/0");
+    expect(document.body.textContent).toContain("0/0 revisions indexed");
     expect(document.body.textContent).toContain(
         "Add sources to discover useful questions",
     );

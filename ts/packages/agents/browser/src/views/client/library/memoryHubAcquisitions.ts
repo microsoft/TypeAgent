@@ -16,11 +16,11 @@ export function acquisitionStatusError(error: unknown): string {
 }
 
 export function mountMemoryHubAcquisitions(host: HTMLElement) {
-    const status = rbNode("p");
+    const status = rbNode("p", undefined, "hub-muted");
     status.setAttribute("role", "status");
     const controls = rbNode("div");
     const list = rbNode("div");
-    const acquisitionHeading = rbNode("h3", "Acquisition progress");
+    const acquisitionHeading = rbNode("h4", "Acquisition progress");
     acquisitionHeading.title =
         "Read-only progress for existing requests. Run once only processes host-authorized requests; it does not admit requests, grant tool permissions, or enable periodic work.";
     host.setAttribute("aria-label", "Acquisition progress");

@@ -107,13 +107,13 @@ test("policy-discovered questions retain source-backed reason without fabricated
     await panel.show();
     click("What is the name?");
     expect(document.body.textContent).toContain("Policy-discovered");
-    expect(document.body.textContent).toContain("Answer review: unreviewed");
+    expect(document.body.textContent).toContain("Answer review unreviewed");
     expect(document.body.textContent).toContain(
         "The source explicitly records a stable preference.",
     );
-    expect(document.body.textContent).toContain(
-        "Policy admission is not human confirmation",
-    );
+    expect(
+        document.querySelector('[title*="not human confirmation"]'),
+    ).not.toBeNull();
     expect(
         document.querySelector('[aria-label="source @ revision · chars:0-3"]'),
     ).not.toBeNull();

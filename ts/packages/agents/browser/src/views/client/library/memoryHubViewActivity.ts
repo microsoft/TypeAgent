@@ -142,14 +142,22 @@ export function mountMemoryHubViewActivity(
                             : undefined;
                 const card = rbNode("article", undefined, "card");
                 if (!reason) return card;
+                const label =
+                    publication.indexState === "failed"
+                        ? "Retry indexing"
+                        : "Preview update";
+                Object.assign(card.dataset, {
+                    group: `${corpusName} · ${reason}`,
+                    title: view.content.title,
+                    label,
+                    corpusId,
+                    viewId: view.viewId,
+                });
                 card.append(
                     rbNode("h4", view.content.title),
                     rbNode("p", `${corpusName} · ${reason}`),
-                    rbButton(
-                        publication.indexState === "failed"
-                            ? "Retry indexing"
-                            : "Preview update",
-                        () => options.onOpenView(corpusId, view.viewId),
+                    rbButton(label, () =>
+                        options.onOpenView(corpusId, view.viewId),
                     ),
                 );
                 return card;
@@ -348,6 +356,54 @@ export function mountMemoryHubViewActivity(
         return true;
     }
 
+    // Views that need the same thing share one card with a row per view,
+    // instead of repeating the identical sentence on every card.
+    function collapseAlerts(alerts: HTMLElement[]): HTMLElement[] {
+        const buckets = new Map<string, HTMLElement[]>();
+        for (const alert of alerts) {
+            const key = alert.dataset.group;
+            if (key) buckets.set(key, [...(buckets.get(key) ?? []), alert]);
+        }
+        const collapsed = new Set<HTMLElement>();
+        const result: HTMLElement[] = [];
+        for (const alert of alerts) {
+            const key = alert.dataset.group;
+            const bucket = key ? buckets.get(key) : undefined;
+            if (!bucket || bucket.length < 3) {
+                result.push(alert);
+                continue;
+            }
+            if (collapsed.has(bucket[0])) continue;
+            bucket.forEach((entry) => collapsed.add(entry));
+            const card = rbNode("article", undefined, "card");
+            card.dataset.entries = String(bucket.length);
+            const rows = rbNode("div", undefined, "hub-rows");
+            card.append(
+                rbNode("h4", `${bucket.length} views need attention`),
+                rbNode("p", key),
+                rows,
+            );
+            for (const entry of bucket) {
+                const row = rbNode("div", undefined, "hub-row-actions");
+                row.append(
+                    rbNode("span", entry.dataset.title, "hub-grow"),
+                    rbIconButton(
+                        "fa-chevron-right",
+                        `${entry.dataset.label}: ${entry.dataset.title}`,
+                        () =>
+                            options.onOpenView(
+                                entry.dataset.corpusId!,
+                                entry.dataset.viewId!,
+                            ),
+                    ),
+                );
+                rows.append(row);
+            }
+            result.push(card);
+        }
+        return result;
+    }
+
     async function renderGroups(
         groups: Array<{
             corpus: { corpusId: string; name: string };
@@ -360,7 +416,7 @@ export function mountMemoryHubViewActivity(
         let running = false;
         const seen = new Set<string>();
         for (const { corpus, jobs, alerts } of groups) {
-            attentionHost.append(...alerts);
+            attentionHost.append(...collapseAlerts(alerts));
             const ordered = [...jobs].sort((a, b) =>
                 b.updatedAt.localeCompare(a.updatedAt),
             );
@@ -444,7 +500,13 @@ export function mountMemoryHubViewActivity(
         status.textContent = total
             ? `${total} view ${total === 1 ? "operation" : "operations"}`
             : "No view builds yet.";
-        options.onAttentionCount?.(attentionHost.childElementCount);
+        options.onAttentionCount?.(
+            [...attentionHost.children].reduce(
+                (sum, child) =>
+                    sum + Number((child as HTMLElement).dataset.entries ?? 1),
+                0,
+            ),
+        );
         if (attentionHost.childElementCount) {
             const heading = rbNode("h3", "View attention");
             heading.title =

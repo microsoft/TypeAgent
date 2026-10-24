@@ -16,7 +16,7 @@ import {
     rbField,
     rbError,
 } from "./memoryHubDocumentUi";
-import { menuButton } from "./memoryHubUi";
+import { icon, menuButton } from "./memoryHubUi";
 import {
     questionAttention,
     questionIdentity,
@@ -47,20 +47,81 @@ export function mountMemoryHubQuestions(
     let selectedCorpus: string | undefined;
     let busy = false;
     let dirty = false;
-    const status = rbNode("p");
+    type Filter = "all" | "open" | "answered";
+    let selectedKey: string | undefined;
+    let filter: Filter = "all";
+    let search = "";
+    let loadedAt = 0;
+    let schemaViewsSupported = false;
+    let failureLines: string[] = [];
+    const status = rbChip("");
     status.setAttribute("role", "status");
-    const list = rbNode("div");
-    const inspector = rbNode("section");
+    const notice = rbNode("div", undefined, "hub-notice");
+    notice.hidden = true;
+    const list = rbNode("div", undefined, "hub-qlist");
+    const inspector = rbNode("section", undefined, "hub-qdetail");
     inspector.setAttribute("aria-label", "Question inspector");
     const author = rbNode("section");
-    const maintenanceStatus = rbNode("p");
-    maintenanceStatus.setAttribute("role", "status");
     const acquisitionHost = rbNode("section");
     const acquisitions = mountMemoryHubAcquisitions(acquisitionHost);
     const knowledgeHost = rbNode("section");
     const knowledge = mountMemoryHubKnowledgeStatus(knowledgeHost);
-    host.append(
+    const panel = rbNode("details", undefined, "hub-panel");
+    panel.append(
+        rbNode("summary", "Discovery and knowledge"),
+        knowledgeHost,
+        acquisitionHost,
+    );
+    let panelCorpora: Array<{ corpusId: string; name: string }> = [];
+    let panelLoaded = false;
+    async function loadPanel() {
+        if (!panel.open || panelLoaded) return;
+        panelLoaded = true;
+        await Promise.all([
+            acquisitions.refresh(panelCorpora, selectedView),
+            knowledge.refresh(panelCorpora),
+        ]);
+    }
+    panel.addEventListener("toggle", () => {
+        void loadPanel().catch((error: unknown) => options.onError(error));
+    });
+    const chips = rbNode("div", undefined, "hub-chips");
+    chips.setAttribute("role", "group");
+    chips.setAttribute("aria-label", "Question filter");
+    for (const [value, label] of [
+        ["all", "All"],
+        ["open", "Open"],
+        ["answered", "Answered"],
+    ] as const) {
+        const chip = rbButton(label, () => {
+            filter = value;
+            for (const other of chips.querySelectorAll("button"))
+                other.setAttribute("aria-pressed", String(other === chip));
+            renderList();
+        });
+        chip.setAttribute("aria-pressed", String(value === filter));
+        chips.append(chip);
+    }
+    const searchBox = rbNode("input");
+    searchBox.type = "search";
+    searchBox.placeholder = "Filter questions";
+    searchBox.setAttribute("aria-label", "Filter questions");
+    searchBox.addEventListener("input", () => {
+        search = searchBox.value.trim().toLowerCase();
+        renderList();
+    });
+    const head = rbNode("div", undefined, "hub-page-head hub-qhead");
+    head.append(
         rbNode("h2", "Questions"),
+        status,
+        rbNode("span", undefined, "hub-spacer"),
+        rbIconButton("fa-plus", "Propose a question", () => {
+            const form = author.querySelector("details");
+            if (form) {
+                form.open = true;
+                form.scrollIntoView?.({ block: "nearest" });
+            }
+        }),
         rbIconButton(
             "fa-rotate-left",
             "Restore dismissed question decisions",
@@ -71,14 +132,16 @@ export function mountMemoryHubQuestions(
                 renderAttention();
             },
         ),
-        status,
-        maintenanceStatus,
-        knowledgeHost,
-        author,
-        list,
-        inspector,
-        acquisitionHost,
+        rbIconButton("fa-gear", "Discovery and knowledge", () => {
+            panel.open = !panel.open;
+            if (panel.open) panel.scrollIntoView?.({ block: "nearest" });
+        }),
     );
+    const filters = rbNode("div", undefined, "hub-qfilters");
+    filters.append(chips, searchBox);
+    const split = rbNode("div", undefined, "hub-split");
+    split.append(list, inspector);
+    host.append(head, notice, author, filters, split, panel);
 
     function action(work: () => Promise<void>) {
         if (busy) return;
@@ -157,7 +220,7 @@ export function mountMemoryHubQuestions(
             edit,
         });
         dirty = false;
-        await refresh();
+        await refreshInventory();
         const current = all().find(
             (item) => questionIdentity(item) === questionIdentity(question),
         );
@@ -167,39 +230,153 @@ export function mountMemoryHubQuestions(
                 rbNode("p", "This question is no longer available."),
             );
     }
-    // One status chip plus only the states that differ from the default.
-    function questionStatusChips(question: MemoryQuestion) {
-        const details = question.details;
+    function originLabel(question: MemoryQuestion) {
+        return question.slot.admission?.actor === "policy"
+            ? "Policy-discovered"
+            : question.slot.admission?.actor === "user"
+              ? "User-defined"
+              : question.slot.discoveryCitations.length
+                ? "Source-proposed"
+                : "Origin not recorded";
+    }
+    function questionKey(question: MemoryQuestion) {
+        return questionIdentity(question);
+    }
+    function valueNode(value: unknown): HTMLElement {
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+            const fields = rbNode("dl", undefined, "hub-fields");
+            for (const [key, item] of Object.entries(value)) {
+                fields.append(
+                    rbNode("dt", key),
+                    rbNode(
+                        "dd",
+                        typeof item === "string" ? item : JSON.stringify(item),
+                    ),
+                );
+            }
+            return fields;
+        }
+        return rbNode(
+            "strong",
+            typeof value === "string" ? value : JSON.stringify(value),
+        );
+    }
+    // List rows: the answer state, plus a count only when it is not 1.
+    function rowChips(question: MemoryQuestion) {
         const row = rbNode("div", undefined, "hub-chips");
         row.append(
             rbChip(
-                question.slot.admission?.actor === "policy"
-                    ? "Policy-discovered"
-                    : question.slot.admission?.actor === "user"
-                      ? "User-defined"
-                      : question.slot.discoveryCitations.length
-                        ? "Source-proposed"
-                        : "Origin not recorded",
-            ),
-            rbChip(`Contract: ${question.slot.approval}`),
-            rbChip(`Answer review: ${details.reviewState}`),
-            rbChip(`Coverage: ${details.coverage}`),
-            rbChip(
-                details.answerState,
-                details.answerState === "conflicted" ? "bad" : undefined,
+                question.details.answerState,
+                question.details.answerState === "conflicted"
+                    ? "bad"
+                    : question.details.answerState === "answered"
+                      ? "good"
+                      : undefined,
             ),
         );
-        if (question.slot.approval !== "approved")
-            row.append(rbChip(question.slot.approval, "warn"));
-        if (details.reviewState !== "unreviewed")
-            row.append(rbChip(details.reviewState));
-        if (details.freshness !== "current")
-            row.append(rbChip(details.freshness, "warn"));
-        const count = details.candidates.length;
-        row.append(
-            rbChip(`${count} ${count === 1 ? "candidate" : "candidates"}`),
-        );
+        const count = question.details.candidates.length;
+        if (count > 1) row.append(rbChip(`${count} candidates`));
         return row;
+    }
+    function select(question: MemoryQuestion) {
+        if (dirty && !confirm("Discard unsaved question edits?")) return;
+        selectedKey = questionKey(question);
+        inspect(question);
+        renderList();
+        if (window.matchMedia?.("(max-width: 900px)").matches)
+            inspector.scrollIntoView?.({ block: "start" });
+    }
+    function visibleQuestions() {
+        return all().filter(
+            (item) =>
+                (!selectedView || item.viewId === selectedView) &&
+                (!selectedCorpus || item.corpusId === selectedCorpus) &&
+                (filter === "all" ||
+                    (filter === "answered") ===
+                        (item.details.answerState === "answered")) &&
+                (!search ||
+                    `${item.slot.question} ${item.viewTitle}`
+                        .toLowerCase()
+                        .includes(search)),
+        );
+    }
+    function renderNotice() {
+        notice.replaceChildren();
+        const lines = [
+            ...failureLines,
+            ...[...inventories.entries()].flatMap(([corpusId, inventory]) =>
+                inventory.maintenanceError
+                    ? [
+                          `${options.corpora().find((corpus) => corpus.corpusId === corpusId)?.name ?? corpusId} · Question maintenance failed: ${inventory.maintenanceError}`,
+                      ]
+                    : [],
+            ),
+        ];
+        notice.hidden = !lines.length;
+        for (const line of lines) {
+            const row = rbNode("p");
+            row.title = line;
+            row.append(icon("fa-triangle-exclamation"), line);
+            notice.append(row);
+        }
+    }
+    function renderList() {
+        list.replaceChildren();
+        const questions = visibleQuestions();
+        if (!all().length && !failureLines.length)
+            list.append(
+                rbNode(
+                    "p",
+                    "Add sources to discover useful questions, or define a question explicitly.",
+                    "hub-muted",
+                ),
+            );
+        else if (!questions.length)
+            list.append(rbNode("p", "No matching questions.", "hub-muted"));
+        for (const question of questions) {
+            const row = rbNode("div", undefined, "hub-qrow");
+            if (questionKey(question) === selectedKey)
+                row.classList.add("selected");
+            const title = rbButton(question.slot.question, () =>
+                select(question),
+            );
+            const meta = rbNode("div", undefined, "hub-qmeta");
+            const origin = rbNode("span");
+            origin.setAttribute("role", "img");
+            origin.setAttribute("aria-label", originLabel(question));
+            origin.title = originLabel(question);
+            origin.append(
+                icon(
+                    question.slot.admission?.actor === "user"
+                        ? "fa-user"
+                        : question.slot.admission?.actor === "policy"
+                          ? "fa-wand-magic-sparkles"
+                          : "fa-file-lines",
+                ),
+            );
+            meta.append(
+                origin,
+                rbNode("small", question.viewTitle),
+                rowChips(question),
+            );
+            row.append(title, meta);
+            row.addEventListener("click", (event) => {
+                if (event.target !== title) select(question);
+            });
+            list.append(row);
+        }
+    }
+    function detailMeta(question: MemoryQuestion) {
+        const details = question.details;
+        return [
+            originLabel(question),
+            `Contract ${question.slot.approval}`,
+            `Answer review ${details.reviewState}`,
+            `Coverage ${details.coverage}`,
+            ...(details.freshness !== "current"
+                ? [`Freshness ${details.freshness}`]
+                : []),
+        ].join(" · ");
     }
     function inspect(question: MemoryQuestion) {
         if (dirty && !confirm("Discard unsaved question edits?")) return;
@@ -207,20 +384,8 @@ export function mountMemoryHubQuestions(
         const details = question.details;
         // Decision first: the question, its status and the candidates.
         // Schemas, revisions and raw support stay under Advanced.
-        inspector.replaceChildren(
-            rbNode("h3", question.slot.question),
-            questionStatusChips(question),
-        );
-        if (question.slot.admission) {
-            const admission = question.slot.admission;
-            inspector.append(
-                rbNode("p", `Discovery reason: ${admission.reason}`),
-                rbNode(
-                    "p",
-                    `Admission: ${admission.actor} · policy v${admission.policyVersion}. Policy admission is not human confirmation of an answer.`,
-                ),
-            );
-        }
+        inspector.replaceChildren();
+        const admission = question.slot.admission;
         const advanced = rbNode("details");
         advanced.append(
             rbNode("summary", "Advanced"),
@@ -345,14 +510,17 @@ export function mountMemoryHubQuestions(
             }),
             menuButton("More question actions", menuItems),
         );
-        inspector.append(
+        const titleRow = rbNode("div", undefined, "hub-qdetail-head");
+        titleRow.append(
+            rbNode("h3", question.slot.question),
+            rowChips(question),
             headerActions,
-            evidence(
-                question.corpusId,
-                question.slot.discoveryCitations,
-                "Question discovery evidence",
-            ),
         );
+        const meta = rbNode("p", detailMeta(question), "hub-muted");
+        if (admission)
+            meta.title = `Admitted by ${admission.actor} · policy v${admission.policyVersion}. Policy admission is not human confirmation of an answer.`;
+        inspector.append(titleRow, meta);
+        if (admission) inspector.append(rbNode("p", admission.reason));
         const discovery = rbNode("details");
         discovery.append(rbNode("summary", "Configure bounded discovery"));
         const enable = rbNode("input");
@@ -409,18 +577,13 @@ export function mountMemoryHubQuestions(
             );
             const heading = rbNode("div", undefined, "hub-row-actions");
             heading.append(
-                rbNode(
-                    "strong",
-                    typeof candidate.value === "string"
-                        ? candidate.value
-                        : JSON.stringify(candidate.value),
-                ),
                 rbChip(
                     candidate.review,
                     candidate.review === "confirmed" ? "good" : undefined,
                 ),
             );
             if (selected) heading.append(rbChip("selected", "good"));
+            heading.append(rbNode("span", undefined, "hub-spacer"));
             for (const [review, glyph, label] of [
                 ["confirmed", "fa-check", "Confirm candidate"],
                 ["rejected", "fa-ban", "Reject candidate"],
@@ -440,15 +603,19 @@ export function mountMemoryHubQuestions(
                     );
             card.append(
                 heading,
+                valueNode(candidate.value),
                 rbNode(
                     "p",
                     [
                         candidate.effectiveAt,
                         candidate.assertionOwner,
-                        candidate.origin,
+                        candidate.origin === "source"
+                            ? undefined
+                            : candidate.origin,
                     ]
                         .filter(Boolean)
                         .join(" · "),
+                    "hub-muted",
                 ),
                 evidence(
                     question.corpusId,
@@ -477,6 +644,16 @@ export function mountMemoryHubQuestions(
             card.append(detail);
             inspector.append(card);
         }
+        const why = rbNode("details");
+        why.append(
+            rbNode("summary", "Why this question"),
+            evidence(
+                question.corpusId,
+                question.slot.discoveryCitations,
+                "Question discovery evidence",
+            ),
+        );
+        inspector.append(why);
         let answer = "";
         let itemKey = "";
         let meaning = question.slot.question;
@@ -591,51 +768,51 @@ export function mountMemoryHubQuestions(
         options.onAttentionCount?.(groups.length);
         if (!groups.length) return;
         attentionHost.append(rbNode("h3", "Question decisions"));
+        const byReason = new Map<string, typeof groups>();
         for (const group of groups) {
+            const reason = [
+                ...new Set(group.questions.map(questionReason)),
+            ].join("; ");
+            byReason.set(reason, [...(byReason.get(reason) ?? []), group]);
+        }
+        for (const [reason, members] of byReason) {
             const card = rbNode("article", undefined, "card");
-            const link = rbNode(
-                "a",
-                `${group.title} · ${group.questions.length} decisions`,
-            );
-            const first = group.questions[0];
-            link.href = routeHash({
-                page: "questions",
-                corpusId: first.corpusId,
-                objectId: first.viewId,
-            });
-            card.append(
-                link,
-                rbNode(
-                    "p",
-                    [...new Set(group.questions.map(questionReason))].join(
-                        "; ",
-                    ),
-                ),
-            );
-            for (const [label, glyph, until] of [
-                ["Dismiss", "fa-xmark", undefined],
-                ["Snooze one day", "fa-bell-slash", Date.now() + 86400000],
-            ] as const)
-                card.append(
-                    rbIconButton(glyph, label, () =>
-                        hideQuestions(group.questions, until),
-                    ),
+            const rows = rbNode("div", undefined, "hub-rows");
+            card.append(rbNode("h4", reason), rows);
+            for (const group of members) {
+                const row = rbNode("div", undefined, "hub-row-actions");
+                const first = group.questions[0];
+                const link = rbNode(
+                    "a",
+                    group.questions.length > 1
+                        ? `${group.title} · ${group.questions.length}`
+                        : group.title,
+                    "hub-grow",
                 );
+                link.href = routeHash({
+                    page: "questions",
+                    corpusId: first.corpusId,
+                    objectId: first.viewId,
+                });
+                row.append(link);
+                for (const [label, glyph, until] of [
+                    ["Snooze one day", "fa-bell-slash", Date.now() + 86400000],
+                    ["Dismiss", "fa-xmark", undefined],
+                ] as const)
+                    row.append(
+                        rbIconButton(glyph, `${label}: ${group.title}`, () =>
+                            hideQuestions(group.questions, until),
+                        ),
+                    );
+                rows.append(row);
+            }
             attentionHost.append(card);
         }
     }
     function renderAuthor() {
         author.replaceChildren();
         const corpusId = options.scope();
-        if (!corpusId) {
-            author.append(
-                rbNode(
-                    "p",
-                    "Select one collection to propose a schema-defined view.",
-                ),
-            );
-            return;
-        }
+        if (!corpusId) return;
         let viewId = "";
         let specification = "";
         let maintenance = JSON.stringify(
@@ -710,15 +887,89 @@ export function mountMemoryHubQuestions(
         );
         author.append(disclosure);
     }
+    async function loadQuestions(corpora: Array<{ corpusId: string }>) {
+        const results = await Promise.allSettled(
+            corpora.map(
+                async (corpus) =>
+                    [
+                        corpus.corpusId,
+                        await invokeMemory("memoryListQuestions", {
+                            corpusId: corpus.corpusId,
+                        }),
+                    ] as const,
+            ),
+        );
+        return results;
+    }
+    function applyInventory(
+        results: PromiseSettledResult<readonly [string, QuestionInventory]>[],
+        corpora: Array<{ corpusId: string; name: string }>,
+        corpusId: string | undefined,
+    ) {
+        inventories = new Map(
+            results.flatMap((result) =>
+                result.status === "fulfilled" ? [result.value] : [],
+            ),
+        );
+        failureLines = results.flatMap((result, index) =>
+            result.status === "rejected"
+                ? [
+                      `Incomplete question inventory: ${corpora[index].name}: ${rbError(result.reason)}`,
+                  ]
+                : [],
+        );
+        renderAuthor();
+        const questions = all();
+        status.textContent = `${questions.length} ${questions.length === 1 ? "question" : "questions"}`;
+        if (!corpora.length && corpusId) {
+            status.textContent = "";
+            failureLines = [
+                "Selected collection is unavailable; scope has not been broadened.",
+            ];
+        }
+        renderNotice();
+        renderList();
+        renderAttention();
+        loadedAt = Date.now();
+    }
+    function scopedCorpora() {
+        const corpusId = options.scope();
+        return options
+            .corpora()
+            .filter(
+                (corpus) =>
+                    !corpusId ||
+                    corpus.corpusId === corpusId ||
+                    corpus.corpusId === selectedCorpus,
+            );
+    }
+    // Reloads the inventory only. Knowledge and acquisition progress load
+    // when their panel is opened, not on every question edit.
+    async function refreshInventory() {
+        const version = ++sequence;
+        const corpora = scopedCorpora();
+        const results = await loadQuestions(corpora);
+        if (version !== sequence) return;
+        applyInventory(results, corpora, options.scope());
+    }
     async function refresh() {
         const version = ++sequence;
         status.textContent = "Loading questions…";
-        let capabilities;
+        const corpora = scopedCorpora();
+        let supported = schemaViewsSupported;
         try {
-            capabilities = await invokeMemory("memoryViewCapabilities", {});
+            if (!supported) {
+                const capabilities = await invokeMemory(
+                    "memoryViewCapabilities",
+                    {},
+                );
+                supported =
+                    capabilities.derivedViews?.kinds.includes("schemaView") ??
+                    false;
+            }
         } catch (error) {
             inventories = new Map();
-            maintenanceStatus.textContent = "";
+            notice.hidden = true;
             acquisitions.clear();
             knowledge.clear();
             list.replaceChildren();
@@ -733,9 +984,10 @@ export function mountMemoryHubQuestions(
             throw error;
         }
         if (version !== sequence) return;
-        if (!capabilities.derivedViews?.kinds.includes("schemaView")) {
+        schemaViewsSupported = supported;
+        if (!supported) {
             inventories = new Map();
-            maintenanceStatus.textContent = "";
+            notice.hidden = true;
             acquisitions.clear();
             knowledge.clear();
             list.replaceChildren();
@@ -743,95 +995,38 @@ export function mountMemoryHubQuestions(
             inspector.replaceChildren();
             attentionHost.replaceChildren();
             options.onAttentionCount?.(0);
-            status.textContent =
-                "Schema-defined questions capability is unavailable.";
-            return;
-        }
-        const corpusId = options.scope();
-        const corpora = options
-            .corpora()
-            .filter(
-                (corpus) =>
-                    !corpusId ||
-                    corpus.corpusId === corpusId ||
-                    corpus.corpusId === selectedCorpus,
-            );
-        const results = await Promise.allSettled(
-            corpora.map(
-                async (corpus) =>
-                    [
-                        corpus.corpusId,
-                        await invokeMemory("memoryListQuestions", {
-                            corpusId: corpus.corpusId,
-                        }),
-                    ] as const,
-            ),
-        );
-        if (version !== sequence) return;
-        inventories = new Map(
-            results.flatMap((result) =>
-                result.status === "fulfilled" ? [result.value] : [],
-            ),
-        );
-        maintenanceStatus.textContent = [...inventories.entries()]
-            .flatMap(([corpusId, inventory]) =>
-                inventory.maintenanceError
-                    ? [
-                          `${corpusId} · Question maintenance failed: ${inventory.maintenanceError}`,
-                      ]
-                    : [],
-            )
-            .join("\n");
-        const failures = results.flatMap((result, index) =>
-            result.status === "rejected"
-                ? [`${corpora[index].name}: ${rbError(result.reason)}`]
-                : [],
-        );
-        renderAuthor();
-        list.replaceChildren();
-        const questions = all();
-        status.textContent = failures.length
-            ? `Incomplete question inventory: ${failures.join("; ")}`
-            : `${questions.length} ${questions.length === 1 ? "question" : "questions"}`;
-        if (!corpora.length && corpusId)
-            status.textContent =
-                "Selected collection is unavailable; scope has not been broadened.";
-        if (!questions.length && !failures.length)
+            status.textContent = "";
             list.append(
                 rbNode(
                     "p",
-                    "Add sources to discover useful questions, or define a question explicitly. No synthetic questions are shown.",
+                    "Schema-defined questions capability is unavailable.",
+                    "hub-muted",
                 ),
             );
-        for (const question of questions.filter(
-            (item) =>
-                (!selectedView || item.viewId === selectedView) &&
-                (!selectedCorpus || item.corpusId === selectedCorpus),
-        )) {
-            const card = rbNode("article", undefined, "card");
-            card.append(
-                rbButton(question.slot.question, () => inspect(question)),
-                questionStatusChips(question),
-                rbNode("small", question.viewTitle),
-            );
-            list.append(card);
+            return;
         }
-        renderAttention();
-        if (failures.length)
-            attentionHost.prepend(rbNode("p", status.textContent));
-        const progressCorpora = corpora.filter(
+        const results = await loadQuestions(corpora);
+        if (version !== sequence) return;
+        applyInventory(results, corpora, options.scope());
+        if (failureLines.length)
+            attentionHost.prepend(rbNode("p", failureLines.join("; ")));
+        panelCorpora = corpora.filter(
             (corpus) => !selectedCorpus || corpus.corpusId === selectedCorpus,
         );
-        await Promise.all([
-            acquisitions.refresh(progressCorpora, selectedView),
-            knowledge.refresh(progressCorpora),
-        ]);
+        panelLoaded = false;
+        if (panel.open) await loadPanel();
     }
     return {
         async show(viewId?: string, corpusId?: string) {
+            const same = selectedView === viewId && selectedCorpus === corpusId;
             selectedView = viewId;
             selectedCorpus = corpusId;
             inspector.replaceChildren();
+            selectedKey = undefined;
+            if (same && inventories.size && Date.now() - loadedAt < 5000) {
+                renderList();
+                return;
+            }
             await refresh();
         },
         refresh,

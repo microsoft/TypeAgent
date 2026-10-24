@@ -118,9 +118,11 @@ function audit(root: HTMLElement, wordBudget: number): string[] {
     }
 
     // A5: at most two status chips per row.
-    for (const chips of root.querySelectorAll(".hub-chips"))
-        if (isVisible(chips) && chips.children.length > 2)
-            problems.push(`A5 ${chips.children.length} chips in one row`);
+    for (const chips of root.querySelectorAll(".hub-chips")) {
+        const count = chips.querySelectorAll(":scope > .hub-chip").length;
+        if (isVisible(chips) && count > 2)
+            problems.push(`A5 ${count} chips in one row`);
+    }
 
     // A7: icon-only controls have a tooltip and an accessible name.
     for (const control of root.querySelectorAll("button.icon-btn")) {
@@ -331,7 +333,7 @@ test("the audit flags the patterns it is meant to catch", () => {
             </div>
             <label>Rubric (JSON)<textarea></textarea></label>
             <pre>{}</pre>
-            <div class="hub-chips"><span></span><span></span><span></span></div>
+            <div class="hub-chips"><span class="hub-chip">a</span><span class="hub-chip">b</span><span class="hub-chip">c</span></div>
             <button class="icon-btn"></button>
         </article>`;
     const problems = audit(document.body, 5).join("\n");
