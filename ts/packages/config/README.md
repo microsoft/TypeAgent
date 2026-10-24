@@ -25,6 +25,44 @@ Live Azure Key Vault fetch, encrypted on-disk caching, and the
 4. `ts/config.local.yaml`
 5. `process.env` (caller-provided overrides)
 
+## Dependency installation settings
+
+`config.local.yaml` is application runtime configuration. It is loaded by
+TypeAgent entry points, not by pnpm or dependency install scripts. In particular,
+adding `FOUNDRY_LOCAL_NUGET_*` keys under `env:` can configure a running
+TypeAgent process, but cannot configure an earlier dependency installation.
+
+For source checkouts, run `node tools/scripts/setupWorktree.mjs` from `ts/`
+(or `pnpm run setup` when pnpm is already provisioned). Before installing,
+setup derives Foundry's NuGet v3 endpoint from the Azure Artifacts npm registry
+in the provisioned `.npmrc` and defaults to credential-aware `dotnet` mode.
+This requires a .NET SDK and a configured NuGet credential provider. The feed
+must have the required native package versions locally or available upstream;
+the first upstream restore requires Collaborator or higher permissions.
+npm's token helper does not authenticate NuGet.
+
+Explicit `FOUNDRY_LOCAL_NUGET_FEEDS` and `FOUNDRY_LOCAL_NUGET_MODE`
+environment variables take precedence. Setup passes the derived settings only
+to its install process; it does not persist machine configuration or credentials.
+Non-Azure npm registries retain the native installer's defaults.
+
+For a direct `pnpm install`, global package installation, or a standalone
+native-runtime repair, set these variables in the parent terminal first:
+
+```powershell
+$env:FOUNDRY_LOCAL_NUGET_FEEDS = 'https://pkgs.dev.azure.com/ORG/PROJECT/_packaging/FEED/nuget/v3/index.json'
+$env:FOUNDRY_LOCAL_NUGET_MODE = 'dotnet'
+pnpm install
+```
+
+`FOUNDRY_LOCAL_NUGET_FEEDS` replaces the installer's default sources, including
+public NuGet. Multiple sources use a semicolon-separated string. If using
+`FOUNDRY_LOCAL_NUGET_CONFIG` with `dotnet` mode, that NuGet config file's sources
+take precedence over the feed list; it must also use approved sources.
+Complete an interactive NuGet restore against the feed if its credential
+provider cannot authenticate silently. Azure CLI or npm sign-in alone does
+not guarantee that the NuGet provider has credentials.
+
 ## Flattening rules
 
 YAML maps are flattened into the `EnvVars` flat-key shape used by
