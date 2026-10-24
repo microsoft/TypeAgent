@@ -26,7 +26,8 @@ import {
     rbNode,
     rbMarkdown,
 } from "./memoryHubDocumentUi";
-import { icon, menuButton, type MenuItem } from "./memoryHubUi";
+import { icon, menuButton, setIconButton, type MenuItem } from "./memoryHubUi";
+import { mountFlyout } from "./memoryHubFlyout";
 import { viewRevisionTime, viewSheet } from "./memoryHubViewUi";
 import {
     listReadyViewSources,
@@ -143,9 +144,16 @@ export function mountMemoryHubViews(
     root.setAttribute("aria-label", "Derived views");
     const status = rbNode("p");
     status.setAttribute("role", "status");
-    const controls = rbNode("div");
-    const receipt = rbNode("details", undefined, "hub-view-build-receipt");
-    receipt.hidden = true;
+    const controls = rbNode("div", undefined, "hub-view-controls");
+    const receipt = rbNode("div", undefined, "hub-view-build-receipt");
+    let flyout: ReturnType<typeof mountFlyout> | undefined;
+    let latestJob:
+        | Pick<ViewBuildJob, "corpusId" | "state" | "jobId">
+        | undefined;
+    const latestBuild = rbIconButton("fa-list-check", "Latest build", () =>
+        openLatestBuild(),
+    );
+    latestBuild.hidden = true;
     const drafts = rbNode("div");
     const comparison = rbNode("div");
     root.append(
@@ -155,8 +163,6 @@ export function mountMemoryHubViews(
             "Read reusable documents built from your memory. Choose a view to preview it, or build new views from ready evidence.",
         ),
         status,
-        controls,
-        receipt,
         drafts,
         comparison,
     );
@@ -276,7 +282,7 @@ export function mountMemoryHubViews(
                 "The connected memory service does not provide view building. Views may be explicitly disabled by the host or unavailable in this service version. No setting in Memory needs to be enabled.";
             controls.replaceChildren();
             drafts.replaceChildren();
-            receipt.replaceChildren();
+            clearReceipt();
             comparison.replaceChildren();
             return;
         }
@@ -344,6 +350,7 @@ export function mountMemoryHubViews(
             ...(maintenance.length
                 ? [menuButton("Maintain collection", maintenance, "fa-gear")]
                 : []),
+            latestBuild,
         );
         const jobs = collections.flatMap((collection) =>
             collection.views.latestBuild ? [collection.views.latestBuild] : [],
@@ -361,31 +368,8 @@ export function mountMemoryHubViews(
         ]);
         renderDrafts();
         status.textContent += familyStatus.join(" ");
-        if (jobs[0]) {
-            const job = jobs[0];
-            receipt.hidden = false;
-            receipt.replaceChildren(
-                rbButton(
-                    `Latest build: ${job.state} — show operation details`,
-                    () => {
-                        void action(async () => {
-                            const full = await invokeMemory(
-                                "memoryGetViewBuild",
-                                { corpusId: job.corpusId, jobId: job.jobId },
-                            );
-                            if (!full)
-                                throw new Error(
-                                    "The selected build is unavailable.",
-                                );
-                            renderReceipt(full);
-                        });
-                    },
-                ),
-            );
-        } else {
-            receipt.replaceChildren();
-            receipt.hidden = true;
-        }
+        if (jobs[0]) setLatest(jobs[0]);
+        else clearReceipt();
 
         function wikiStatusDescription(
             corpusId: string,
@@ -435,7 +419,7 @@ export function mountMemoryHubViews(
                                         operation,
                                     },
                                 );
-                                if (result.job) renderReceipt(result.job);
+                                if (result.job) showReceipt(result.job);
                                 await refresh();
                             });
                         },
@@ -1183,8 +1167,7 @@ export function mountMemoryHubViews(
                                     : { publication: publication === "on" }),
                             });
                             if (current === sequence) {
-                                renderReceipt(job);
-                                receipt.open = true;
+                                showReceipt(job);
                                 builder?.element.remove();
                                 builder = undefined;
                                 builderDirty = false;
@@ -1264,12 +1247,60 @@ export function mountMemoryHubViews(
         return records;
     }
 
+    function setLatest(
+        job: Pick<ViewBuildJob, "corpusId" | "state" | "jobId">,
+    ) {
+        latestJob = job;
+        latestBuild.hidden = false;
+        setIconButton(
+            latestBuild,
+            job.state === "running"
+                ? "fa-solid fa-circle-notch fa-spin"
+                : "fa-list-check",
+            `Latest build: ${job.state}`,
+        );
+        latestBuild.classList.toggle(
+            "danger",
+            ["failed", "interrupted"].includes(job.state),
+        );
+    }
+    function clearReceipt() {
+        latestJob = undefined;
+        latestBuild.hidden = true;
+        receipt.replaceChildren();
+        flyout?.close();
+    }
+    function openReceipt() {
+        flyout ??= mountFlyout(host, "Build details");
+        flyout.open({
+            title: "Latest build",
+            render: (body) => {
+                body.append(receipt);
+            },
+        });
+    }
+    function showReceipt(job: ViewBuildJob) {
+        renderReceipt(job);
+        openReceipt();
+    }
+    function openLatestBuild() {
+        const job = latestJob;
+        if (!job) return;
+        void action(async () => {
+            const full = await invokeMemory("memoryGetViewBuild", {
+                corpusId: job.corpusId,
+                jobId: job.jobId,
+            });
+            if (!full) throw new Error("The selected build is unavailable.");
+            showReceipt(full);
+        });
+    }
     function renderReceipt(job: ViewBuildJob): void {
         if (options.scope() && job.corpusId !== options.scope()) return;
         if (timer) clearTimeout(timer);
-        receipt.hidden = false;
+        setLatest(job);
         receipt.replaceChildren(
-            rbNode("summary", `Build ${job.jobId}: ${job.state}`),
+            rbNode("p", `Build ${job.jobId}: ${job.state}`, "hub-muted"),
         );
         if (job.maintenancePlan) {
             const plan = rbNode("details");
@@ -1280,34 +1311,50 @@ export function mountMemoryHubViews(
             receipt.append(plan);
         }
         for (const result of job.results) {
+            const block = rbNode("section", undefined, "hub-result");
+            const blockHead = rbNode("div", undefined, "hub-row-actions");
+            const blockTitle = rbNode("span", result.viewId, "hub-grow");
+            blockTitle.title = result.viewId;
+            blockHead.append(
+                rbChip(
+                    result.state,
+                    ["blocked", "failed"].includes(result.state)
+                        ? "bad"
+                        : [
+                                "draft",
+                                "merged",
+                                "published",
+                                "searchable",
+                            ].includes(result.state)
+                          ? "good"
+                          : undefined,
+                ),
+                blockTitle,
+            );
+            block.append(blockHead);
             const effective = result.snapshot.publicationPolicy;
             if (effective)
-                receipt.append(
+                block.append(
                     rbNode(
                         "p",
                         `Auto-publish: ${effective.autoPublish ? "On" : "Off"} (${effective.origin}); corpus policy revision ${effective.corpusRevision}, view policy revision ${effective.viewRevision}`,
                     ),
                 );
             if (result.snapshot.definition?.kind === "timeline")
-                receipt.append(
+                block.append(
                     rbNode(
                         "p",
                         `Timeline checkpoint: learned through ${result.snapshot.bounds.learnedBefore ?? "unbounded"}; occurrence ${result.snapshot.bounds.occurredFrom ?? "unbounded"} to ${result.snapshot.bounds.occurredTo ?? "unbounded"} (inclusive). Record knowledge, not file import time, determines eligibility. Unknown required times are excluded. Canonical event authority is evidence, not permission.`,
                     ),
                 );
             if (result.publication)
-                receipt.append(
+                block.append(
                     rbNode(
                         "p",
                         `Published ${result.publication.publishedRevisionId}; indexed ${result.publication.indexedRevisionId ?? "not ready"}: ${result.publication.reason}`,
                     ),
                 );
-            receipt.append(
-                rbNode(
-                    "p",
-                    `${result.viewId}: ${result.state}. ${result.reason}`,
-                ),
-            );
+            block.append(rbNode("p", result.reason));
             const exact = rbNode("details");
             exact.append(
                 rbNode("summary", `Exact inputs for ${result.viewId}`),
@@ -1321,13 +1368,13 @@ export function mountMemoryHubViews(
                         .join(", "),
                 ),
             );
-            receipt.append(exact);
+            block.append(exact);
             if (
                 ["draft", "merged", "published", "searchable"].includes(
                     result.state,
                 )
             )
-                receipt.append(
+                block.append(
                     rbButton("Open view", () => {
                         void showView(job.corpusId, result.viewId);
                     }),
@@ -1356,23 +1403,24 @@ export function mountMemoryHubViews(
                         ),
                     ),
                 );
-                receipt.append(details);
+                block.append(details);
             }
             if (result.missingEvidence?.length)
-                receipt.append(
+                block.append(
                     rbNode(
                         "p",
                         `Missing evidence: ${result.missingEvidence.join("; ")}`,
                     ),
                 );
             if (result.conflictId)
-                receipt.append(
+                block.append(
                     rbButton("Compare and resolve conflict", () => {
                         void action(() =>
                             showConflict(job.corpusId, result.conflictId!),
                         );
                     }),
                 );
+            receipt.append(block);
         }
         receipt.append(
             rbButton("Refresh build status", () => {
@@ -1506,26 +1554,23 @@ export function mountMemoryHubViews(
                 const publication = publications.get(
                     publicationKey(view.corpusId, view.viewId),
                 );
-                card.append(
-                    rbButton(view.content.title, () => {
-                        void showView(view.corpusId, view.viewId);
-                    }),
-                    viewStatusChips(view, publication),
-                );
-                if (!options.scope()) {
-                    const diagnostics = rbNode("details");
-                    diagnostics.append(
-                        rbNode("summary", "Collection details"),
-                        rbNode("p", `Corpus ID: ${view.corpusId}`),
-                    );
+                const open = () => {
+                    void showView(view.corpusId, view.viewId);
+                };
+                const heading = rbNode("h3", undefined, "hub-view-card-title");
+                heading.append(rbButton(view.content.title, open));
+                card.append(heading, viewStatusChips(view, publication));
+                if (!options.scope())
                     card.append(
                         rbNode(
                             "p",
                             `Collection: ${corpusNames.get(view.corpusId) ?? "Collection name unavailable"}`,
+                            "hub-muted",
                         ),
-                        diagnostics,
                     );
-                }
+                card.addEventListener("click", (event) => {
+                    if (!(event.target instanceof HTMLButtonElement)) open();
+                });
                 list.append(card);
             }
         };
@@ -1543,9 +1588,15 @@ export function mountMemoryHubViews(
             selectedKind = supportedKinds.find((value) => value === kind.value);
             reload();
         };
-        drafts.replaceChildren(
+        const toolbar = rbNode("div", undefined, "hub-view-toolbar");
+        toolbar.append(
             search,
             kind,
+            rbNode("span", undefined, "hub-spacer"),
+            controls,
+        );
+        drafts.replaceChildren(
+            toolbar,
             list,
             pager.controls("views", () => {
                 void action(refresh);
@@ -1574,17 +1625,21 @@ export function mountMemoryHubViews(
         more: HTMLElement,
     ): void {
         if (view.relatedArticles?.length) {
-            const related = rbNode("nav");
+            const related = rbNode("nav", undefined, "hub-related");
             related.setAttribute("aria-label", "Related articles");
-            related.append(rbNode("h3", "Related articles"));
-            for (const entry of view.relatedArticles)
-                related.append(
+            const relatedList = rbNode("ul");
+            for (const entry of view.relatedArticles) {
+                const item = rbNode("li");
+                item.append(
                     rbButton(entry.title, () => {
                         void action(() =>
                             showView(view.corpusId, entry.viewId),
                         );
                     }),
                 );
+                relatedList.append(item);
+            }
+            related.append(rbNode("h3", "Related articles"), relatedList);
             article.append(related);
         }
         const protectedTargets = view.protectedTargets ?? [];
@@ -1637,6 +1692,24 @@ export function mountMemoryHubViews(
             );
     }
 
+    function citationKey(citation: ViewCitation) {
+        return `${citation.sourceId}@${citation.revisionId}@${citation.locator}`;
+    }
+    function evidenceRow(view: ViewVersion, citation: ViewCitation) {
+        const row = rbNode("div", undefined, "hub-row-actions");
+        const label = rbNode("span", citation.sourceId, "hub-grow");
+        label.title = `${citation.sourceId} @ ${citation.revisionId} · ${citation.locator}`;
+        row.append(
+            label,
+            rbIconButton(
+                "fa-arrow-up-right-from-square",
+                `Open exact evidence ${citation.sourceId}`,
+                () => showTimelineEvidence(view, citation),
+            ),
+        );
+        return row;
+    }
+
     function showPreview(
         view: ViewVersion,
         actionsReady = true,
@@ -1655,17 +1728,14 @@ export function mountMemoryHubViews(
         const title = rbNode("h2", view.content.title);
         title.tabIndex = -1;
         const article = rbNode("article", undefined, "hub-view-document");
-        article.append(
-            title,
-            rbNode("div", undefined, "hub-chips"),
-            ...viewRevisionTime(view.createdAt),
+        const meta = rbNode("div", undefined, "hub-view-meta");
+        const metaChips = rbNode("div", undefined, "hub-chips");
+        metaChips.append(
+            rbChip(viewKindLabels[view.content.kind]),
+            rbChip(`Version ${view.version}`),
         );
-        article
-            .querySelector(".hub-chips")!
-            .append(
-                rbChip(viewKindLabels[view.content.kind]),
-                rbChip(`Version ${view.version}`),
-            );
+        meta.append(metaChips, ...viewRevisionTime(view.createdAt));
+        article.append(title, meta);
         if (view.content.summary) {
             const lead = rbMarkdown(view.content.summary);
             lead.classList.add("hub-view-lead");
@@ -1700,7 +1770,11 @@ export function mountMemoryHubViews(
                 }),
             );
         }
-        if (view.content.kind === "wiki") {
+        if (
+            view.content.kind === "wiki" &&
+            (view.content.sections.length > 1 ||
+                view.content.sections[0]?.heading !== view.content.title)
+        ) {
             const contents = rbNode("nav");
             contents.setAttribute("aria-label", "Wiki pages");
             for (const section of view.content.sections)
@@ -1725,10 +1799,12 @@ export function mountMemoryHubViews(
             const page = rbNode("section", undefined, "hub-view-section");
             page.tabIndex = -1;
             page.dataset.page = section.id;
-            page.append(
-                rbNode("h3", section.heading),
-                rbMarkdown(section.body),
-            );
+            if (
+                view.content.sections.length > 1 ||
+                section.heading !== view.content.title
+            )
+                page.append(rbNode("h3", section.heading));
+            page.append(rbMarkdown(section.body));
             if (view.content.kind === "timeline") {
                 const record = view.content.sections.find(
                     (record) => record.id === section.id,
@@ -1744,36 +1820,33 @@ export function mountMemoryHubViews(
                     ),
                 );
             }
-            const evidence = rbNode("details");
-            evidence.append(rbNode("summary", "Evidence and relationships"));
-            for (const edge of view.relationships) {
-                if (
+            const listed = new Set(view.content.citations.map(citationKey));
+            const extra = view.relationships
+                .flatMap((edge) =>
                     edge.origin === "system" ||
                     edge.from.sectionId !== section.id
+                        ? []
+                        : edge.citations,
                 )
-                    continue;
-                evidence.append(rbNode("p", edge.predicate));
-                for (const citation of edge.citations)
-                    evidence.append(
-                        rbButton(
-                            `Open exact evidence ${citation.sourceId}`,
-                            () => showTimelineEvidence(view, citation),
-                        ),
-                    );
+                .filter((citation) => !listed.has(citationKey(citation)));
+            if (extra.length) {
+                const evidence = rbNode("details");
+                evidence.append(
+                    rbNode("summary", `Evidence (${extra.length})`),
+                    ...extra.map((citation) => evidenceRow(view, citation)),
+                );
+                page.append(evidence);
             }
-            page.append(evidence);
             article.append(page);
         }
         if (view.content.citations.length) {
             const citations = rbNode("details");
-            citations.append(rbNode("summary", "Exact source evidence"));
-            for (const citation of view.content.citations)
-                citations.append(
-                    rbButton(
-                        `${citation.sourceId} @ ${citation.revisionId}`,
-                        () => showTimelineEvidence(view, citation),
-                    ),
-                );
+            citations.append(
+                rbNode("summary", `Sources (${view.content.citations.length})`),
+                ...view.content.citations.map((citation) =>
+                    evidenceRow(view, citation),
+                ),
+            );
             article.append(citations);
         }
         const actions = rbNode("div", undefined, "hub-view-actions");
@@ -1788,7 +1861,11 @@ export function mountMemoryHubViews(
         function enableActions() {
             actions.replaceChildren();
             const more = rbNode("details", undefined, "hub-view-more-actions");
-            const moreSummary = rbNode("summary", "More actions");
+            const moreSummary = rbNode("summary");
+            moreSummary.append(
+                icon("fa-ellipsis"),
+                rbNode("span", "More actions", "hub-visually-hidden"),
+            );
             more.append(moreSummary);
             appendEditorialControls(view, article, more);
             more.addEventListener("keydown", (event) => {
@@ -1814,7 +1891,11 @@ export function mountMemoryHubViews(
             const editButton = rbButton("Edit", () => showEditor(view));
             editButton.classList.add("primary");
             editButton.prepend(icon("fa-pen"));
-            actions.append(back, editButton);
+            actions.append(
+                back,
+                rbNode("span", undefined, "hub-spacer"),
+                editButton,
+            );
             more.append(
                 rbButton("Rebuild from evidence", () => {
                     exactInitialSources.clear();
@@ -1912,7 +1993,7 @@ export function mountMemoryHubViews(
                                     await refresh();
                                 },
                                 onBuild: (job) => {
-                                    renderReceipt(job);
+                                    showReceipt(job);
                                     options.onBuildStarted?.(
                                         job.corpusId,
                                         job.jobId,
@@ -2548,7 +2629,7 @@ export function mountMemoryHubViews(
             if (timer) clearTimeout(timer);
             controls.replaceChildren();
             drafts.replaceChildren();
-            receipt.replaceChildren();
+            clearReceipt();
             comparison.replaceChildren();
             root.hidden = !visible;
             if (busy) refreshPending = true;
@@ -2560,6 +2641,7 @@ export function mountMemoryHubViews(
             sequence++;
             if (timer) clearTimeout(timer);
             window.removeEventListener("beforeunload", beforeUnload);
+            flyout?.dispose();
             root.remove();
         },
     };

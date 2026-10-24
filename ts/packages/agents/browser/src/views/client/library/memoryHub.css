@@ -85,6 +85,98 @@ body[data-memory-hub] {
 .hub-view-section {
   margin: 20px 0;
 }
+.hub-view-document .markdown-preview {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.hub-view-document h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+.hub-view-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.hub-view-section > h3 {
+  margin: 20px 0 8px;
+  font-size: 15px;
+}
+.hub-view-document > details {
+  margin: 12px 0;
+}
+.hub-view-document summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.hub-view-document details > .hub-row-actions {
+  padding: 2px 0;
+}
+.hub-related {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.hub-related h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.hub-related ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hub-related button {
+  padding: 3px 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.hub-related button:hover {
+  text-decoration: underline;
+}
+.hub-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.hub-view-more-actions > summary {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  list-style: none;
+  cursor: pointer;
+}
+.hub-view-more-actions > summary::-webkit-details-marker {
+  display: none;
+}
+.hub-view-more-actions > summary:hover {
+  background: var(--surface-alt);
+}
+.hub-draft-views:has(.hub-view-document) > h3,
+.hub-draft-views:has(.hub-view-document) > p,
+.hub-draft-views:has(.hub-view-document) > .hub-view-build-receipt {
+  display: none;
+}
+.hub-draft-views:has(.hub-view-document) .hub-view-actions {
+  max-width: 900px;
+  margin: 0 auto 8px;
+}
 .hub-view-lead {
   font-size: 1.05em;
   line-height: 1.5;
@@ -1305,4 +1397,82 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   width: 100%;
+}
+.hub-view-document h2:focus {
+  outline: none;
+}
+.hub-related button {
+  min-height: 0;
+  padding: 2px 0;
+  line-height: 1.4;
+}
+.hub-related li {
+  margin: 0;
+}
+.hub-view-card {
+  cursor: pointer;
+}
+.hub-view-card:hover {
+  background: var(--surface-alt);
+}
+.hub-view-card-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.hub-view-card-title button {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.hub-view-card .hub-muted {
+  margin: 6px 0 0;
+}
+.hub-view-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.hub-view-toolbar input[type="search"] {
+  flex: 1 1 180px;
+  max-width: 320px;
+  min-height: 32px;
+}
+.hub-view-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hub-flyout .hub-view-build-receipt {
+  margin: 0;
+}
+.hub-flyout pre {
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.hub-result {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.hub-result > p {
+  margin: 6px 0;
+}
+.hub-result .hub-grow {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

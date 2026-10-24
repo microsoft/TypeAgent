@@ -608,11 +608,8 @@ describe("Memory Center preview-first views", () => {
         expect(
             cards[1].querySelector(":scope > p:last-of-type")!.textContent,
         ).toBe("Collection: Two");
-        expect(cards[1].querySelector("details")!.open).toBe(false);
-        expect(cards[1].querySelector("details")!.textContent).toContain(
-            "Corpus ID: d",
-        );
-        expect(cards[1].textContent).not.toContain("Collection: d");
+        expect(cards[1].querySelector("details")).toBeNull();
+        expect(cards[1].textContent).not.toContain("Corpus ID");
         click(host, "Other guide");
         await settle();
         expect(navigate).toHaveBeenCalledWith("#/views/d/guide");
@@ -1147,6 +1144,37 @@ describe("Memory Center preview-first views", () => {
             host.querySelector('[aria-label="Conflict resolution choice"]'),
         ).not.toBeNull();
         expect(errors).toEqual([]);
+    });
+    test("the latest build opens in a flyout from an icon in the list toolbar", async () => {
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation(
+            inventoryFixture(async (method, params) => {
+                if (method === "memoryListViewBuilds") return [job];
+                if (method === "memoryGetViewBuild") return job;
+                return original(method, params);
+            }),
+        );
+        await panel.show({ corpusId: "c" });
+        await settle();
+        const toolbar = host.querySelector(".hub-view-toolbar")!;
+        expect(
+            toolbar.querySelector('input[aria-label="Find views"]'),
+        ).not.toBeNull();
+        const latest = toolbar.querySelector<HTMLButtonElement>(
+            'button[aria-label^="Latest build"]',
+        )!;
+        expect(latest.textContent).toBe("");
+        expect(host.querySelector(".hub-view-build-receipt")).toBeNull();
+        expect(host.textContent).not.toContain(job.jobId);
+        latest.click();
+        await settle();
+        const flyout = host.querySelector<HTMLElement>(".hub-flyout")!;
+        expect(flyout.hidden).toBe(false);
+        expect(flyout.textContent).toContain(job.jobId);
+        flyout
+            .querySelector<HTMLButtonElement>('button[aria-label="Close"]')!
+            .click();
+        expect(flyout.hidden).toBe(true);
     });
     test("a resolved historical build conflict is not exposed as pending on the latest reader", async () => {
         const original = invoke.getMockImplementation()!;
