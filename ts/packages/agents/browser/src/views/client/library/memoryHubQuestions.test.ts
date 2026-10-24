@@ -76,6 +76,48 @@ test("complete inventory opens inspector and assertions serialize optimistic con
     });
     expect(onError).not.toHaveBeenCalled();
 });
+test("policy-discovered questions retain source-backed reason without fabricated human confirmation", async () => {
+    const current = question();
+    current.slot.admission = {
+        version: 1,
+        actor: "policy",
+        policyVersion: 1,
+        recipeIdentity: "recipe",
+        modelIdentity: "model",
+        inputFingerprint: "source-scope",
+        reason: "The source explicitly records a stable preference.",
+    };
+    current.slot.discoveryCitations = [
+        {
+            sourceId: "source",
+            revisionId: "revision",
+            locator: "chars:0-3",
+            excerpt: "Ada",
+        },
+    ];
+    invoke.mockImplementation(async (method: string) => {
+        if (method === "memoryViewCapabilities")
+            return { derivedViews: { kinds: ["schemaView"] } };
+        if (method === "memoryListQuestions")
+            return { head: "head", items: [current] };
+        if (method === "memoryListAcquisitions") return [];
+        throw new Error(`Unexpected ${method}`);
+    });
+    const { panel } = setup();
+    await panel.show();
+    click("What is the name?");
+    expect(document.body.textContent).toContain("Policy-discovered");
+    expect(document.body.textContent).toContain("Answer review: unreviewed");
+    expect(document.body.textContent).toContain(
+        "The source explicitly records a stable preference.",
+    );
+    expect(document.body.textContent).toContain(
+        "Policy admission is not human confirmation",
+    );
+    expect(
+        document.querySelector('[aria-label="source @ revision · chars:0-3"]'),
+    ).not.toBeNull();
+});
 test("invalid answers and unapproved authoring do not reach service edits", async () => {
     const { panel, onError } = setup();
     await panel.show();

@@ -152,6 +152,40 @@ export function completeAnswer(
     );
 }
 
+function validateQuestionAdmission(value: unknown): void {
+    if (value === undefined) return;
+    object(
+        value,
+        [
+            "version",
+            "actor",
+            "policyVersion",
+            "recipeIdentity",
+            "modelIdentity",
+            "inputFingerprint",
+            "reason",
+        ],
+        "question admission",
+    );
+    if (
+        value.version !== 1 ||
+        value.policyVersion !== 1 ||
+        (value.actor !== "user" && value.actor !== "policy")
+    )
+        throw new Error("Unsupported question admission provenance");
+    for (const key of [
+        "recipeIdentity",
+        "modelIdentity",
+        "inputFingerprint",
+        "reason",
+    ])
+        boundedText(
+            value[key],
+            `Admission ${key}`,
+            key === "reason" ? 2000 : 1000,
+        );
+}
+
 export function validateQuestionSlot(
     value: unknown,
 ): asserts value is QuestionSlot {
@@ -166,6 +200,7 @@ export function validateQuestionSlot(
             "rubric",
             "approval",
             "discoveryCitations",
+            "admission",
         ],
         "question slot",
     );
@@ -199,6 +234,7 @@ export function validateQuestionSlot(
         value.discoveryCitations.length > 32
     )
         throw new Error("Invalid discovery citations");
+    validateQuestionAdmission(value.admission);
     object(
         value.rubric,
         [

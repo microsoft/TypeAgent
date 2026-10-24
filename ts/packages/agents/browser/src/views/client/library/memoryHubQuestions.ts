@@ -26,6 +26,7 @@ import {
 import { routeHash, type HiddenItems } from "./memoryHubModel";
 import { schemaViewPageBrowserLink } from "./memoryHubViewPages";
 import { mountMemoryHubAcquisitions } from "./memoryHubAcquisitions";
+import { mountMemoryHubKnowledgeStatus } from "./memoryHubKnowledgeStatus";
 
 export function mountMemoryHubQuestions(
     host: HTMLElement,
@@ -56,6 +57,8 @@ export function mountMemoryHubQuestions(
     maintenanceStatus.setAttribute("role", "status");
     const acquisitionHost = rbNode("section");
     const acquisitions = mountMemoryHubAcquisitions(acquisitionHost);
+    const knowledgeHost = rbNode("section");
+    const knowledge = mountMemoryHubKnowledgeStatus(knowledgeHost);
     host.append(
         rbNode("h2", "Questions"),
         rbIconButton(
@@ -70,6 +73,7 @@ export function mountMemoryHubQuestions(
         ),
         status,
         maintenanceStatus,
+        knowledgeHost,
         author,
         list,
         inspector,
@@ -169,6 +173,18 @@ export function mountMemoryHubQuestions(
         const row = rbNode("div", undefined, "hub-chips");
         row.append(
             rbChip(
+                question.slot.admission?.actor === "policy"
+                    ? "Policy-discovered"
+                    : question.slot.admission?.actor === "user"
+                      ? "User-defined"
+                      : question.slot.discoveryCitations.length
+                        ? "Source-proposed"
+                        : "Origin not recorded",
+            ),
+            rbChip(`Contract: ${question.slot.approval}`),
+            rbChip(`Answer review: ${details.reviewState}`),
+            rbChip(`Coverage: ${details.coverage}`),
+            rbChip(
                 details.answerState,
                 details.answerState === "conflicted" ? "bad" : undefined,
             ),
@@ -195,6 +211,16 @@ export function mountMemoryHubQuestions(
             rbNode("h3", question.slot.question),
             questionStatusChips(question),
         );
+        if (question.slot.admission) {
+            const admission = question.slot.admission;
+            inspector.append(
+                rbNode("p", `Discovery reason: ${admission.reason}`),
+                rbNode(
+                    "p",
+                    `Admission: ${admission.actor} · policy v${admission.policyVersion}. Policy admission is not human confirmation of an answer.`,
+                ),
+            );
+        }
         const advanced = rbNode("details");
         advanced.append(
             rbNode("summary", "Advanced"),
@@ -206,6 +232,10 @@ export function mountMemoryHubQuestions(
             rbNode("h4", "Answer schema"),
             rbNode("pre", JSON.stringify(question.slot.schema, null, 2)),
         );
+        if (question.slot.admission)
+            advanced.append(
+                rbNode("pre", JSON.stringify(question.slot.admission, null, 2)),
+            );
         const menuItems = [
             ...(["approved", "rejected"] as const).map((approval) => ({
                 label:
@@ -690,6 +720,7 @@ export function mountMemoryHubQuestions(
             inventories = new Map();
             maintenanceStatus.textContent = "";
             acquisitions.clear();
+            knowledge.clear();
             list.replaceChildren();
             attentionHost.replaceChildren(
                 rbNode(
@@ -706,6 +737,7 @@ export function mountMemoryHubQuestions(
             inventories = new Map();
             maintenanceStatus.textContent = "";
             acquisitions.clear();
+            knowledge.clear();
             list.replaceChildren();
             author.replaceChildren();
             inspector.replaceChildren();
@@ -764,6 +796,13 @@ export function mountMemoryHubQuestions(
         if (!corpora.length && corpusId)
             status.textContent =
                 "Selected collection is unavailable; scope has not been broadened.";
+        if (!questions.length && !failures.length)
+            list.append(
+                rbNode(
+                    "p",
+                    "Add sources to discover useful questions, or define a question explicitly. No synthetic questions are shown.",
+                ),
+            );
         for (const question of questions.filter(
             (item) =>
                 (!selectedView || item.viewId === selectedView) &&
@@ -780,13 +819,13 @@ export function mountMemoryHubQuestions(
         renderAttention();
         if (failures.length)
             attentionHost.prepend(rbNode("p", status.textContent));
-        await acquisitions.refresh(
-            corpora.filter(
-                (corpus) =>
-                    !selectedCorpus || corpus.corpusId === selectedCorpus,
-            ),
-            selectedView,
+        const progressCorpora = corpora.filter(
+            (corpus) => !selectedCorpus || corpus.corpusId === selectedCorpus,
         );
+        await Promise.all([
+            acquisitions.refresh(progressCorpora, selectedView),
+            knowledge.refresh(progressCorpora),
+        ]);
     }
     return {
         async show(viewId?: string, corpusId?: string) {

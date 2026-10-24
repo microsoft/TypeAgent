@@ -71,6 +71,9 @@ import {
     parseQuestionDiscovery,
     schemaAnswerResponse,
     hydrateSchemaAnswers,
+    corpusDiscoveryRules,
+    parseCorpusQuestionDiscovery,
+    parseSynthesisJson,
 } from "./schemaViewSynthesis.js";
 import { validateSchemaOutput } from "./schemaView.js";
 
@@ -128,10 +131,24 @@ export function createConfiguredViewSynthesisAdapter(
         );
         if (!result.success) throw new Error(result.message);
         signal.throwIfAborted();
-        return JSON.parse(result.data);
+        return parseSynthesisJson(
+            result.data,
+            `${schema.name} outer model response`,
+        );
     }
     return {
         identity: `configured:${endpoint ?? "default"}:evidence-first-v5`,
+        async discoverCorpusQuestions(input, signal) {
+            return parseCorpusQuestionDiscovery(
+                input,
+                await complete(
+                    `${corpusDiscoveryRules}\nAt most ${input.maxProposals} proposals.`,
+                    input,
+                    signal,
+                    authoringResponse(true),
+                ),
+            );
+        },
         async proposeSchema(specification, signal) {
             return parseSchemaProposal(
                 await complete(

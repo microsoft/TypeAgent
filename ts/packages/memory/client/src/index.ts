@@ -8,3 +8,4 @@ export * from "./topicProtocol.js";
 export * from "./agentSessionProtocol.js";
 export * from "./schemaViewProtocol.js";
 export * from "./acquisitionProtocol.js";
+export * from "./knowledgeProtocol.js";

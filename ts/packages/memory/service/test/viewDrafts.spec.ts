@@ -45,6 +45,8 @@ describe("typed draft views: service, history, privacy and CLI", () => {
             drafts: true,
             builds: true,
             informationalWiki: true,
+            knowledge: true,
+            integratedAnswering: true,
             kinds: [
                 "troubleshootingGuide",
                 "projectBrief",

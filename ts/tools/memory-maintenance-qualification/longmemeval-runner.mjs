@@ -87,6 +87,37 @@ export function sessionSource(caseId, session) {
     };
 }
 
+async function prepareKnowledge(service, construction, record, controls) {
+    if (!service.createKnowledgeCheckpoint) return;
+    assert.equal(typeof service.waitForKnowledgeCheckpoint, "function");
+    controls.signal.throwIfAborted();
+    controls.role(`knowledge:${construction.id}`);
+    if (!record.knowledgeCheckpoint) {
+        record.knowledgeCheckpoint = await service.createKnowledgeCheckpoint({
+            corpusId: record.corpusId,
+            sourceIds: [
+                ...new Set(
+                    Object.values(record.mappings).map(
+                        (entry) => entry.sourceId,
+                    ),
+                ),
+            ],
+            producerComplete: true,
+        });
+        await controls.persist();
+    }
+    record.knowledgeCheckpoint = await service.waitForKnowledgeCheckpoint({
+        corpusId: record.corpusId,
+        checkpointId: record.knowledgeCheckpoint.checkpointId,
+    });
+    await controls.persist();
+    assert.equal(
+        record.knowledgeCheckpoint.state,
+        "ready",
+        `Knowledge is not ready: ${record.knowledgeCheckpoint.state}; ${record.knowledgeCheckpoint.reasons.join("; ")}`,
+    );
+}
+
 export async function executeMemoryCase(
     service,
     construction,
@@ -141,6 +172,8 @@ export async function executeMemoryCase(
         delete record.inFlight;
         await persist();
     }
+    if (!record.hypothesis)
+        await prepareKnowledge(service, construction, record, controls);
     const question = reader.question;
     const temporalContext = {
         referenceTime: reader.question_date,
@@ -157,6 +190,13 @@ export async function executeMemoryCase(
             question,
             temporalContext,
             includeDiagnostics: true,
+            ...(record.knowledgeCheckpoint
+                ? {
+                      knowledgeCheckpointId:
+                          record.knowledgeCheckpoint.checkpointId,
+                      retrievalPolicy: "sourcesAndViews",
+                  }
+                : {}),
         });
         assert.equal(
             answer.mode,
@@ -171,6 +211,8 @@ export async function executeMemoryCase(
         record.answerPath = answer.readerContext?.answerPath ?? "knowpro";
         record.indexVersion = answer.indexVersion;
         record.warnings = answer.warnings;
+        record.derivedReferences = answer.derivedReferences;
+        record.assertionReferences = answer.assertionReferences;
         const sourceToSession = new Map(
             plan.map((entry) => [
                 record.mappings[entry.sourceKey].sourceId,

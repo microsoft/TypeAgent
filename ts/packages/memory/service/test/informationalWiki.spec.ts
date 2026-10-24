@@ -305,6 +305,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
     };
     const open = () =>
         new FileMemoryService(root, {
+            discoveryPolicy: "off",
             ...(indexedAnswerModel ? { indexedAnswerModel } : {}),
             viewSynthesisAdapter: adapter,
             indexFactory: (_corpusId, directory) =>
@@ -1113,7 +1114,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                         data: JSON.stringify({
                             status: "answered",
                             answer: "Mock source-only answer",
-                            citationIds: ["f0"],
+                            evidenceIds: ["s0"],
                         }),
                     };
                 },
@@ -1152,10 +1153,17 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 referenceTime: parseTemporalValue("2024/02/01 12:00"),
                 availabilityPolicy: "supplied-history",
             });
-            expect(result.readerContext?.answerPath).toBe("indexed-fragments");
+            expect(result.readerContext?.answerPath).toBe("sources-and-views");
+            const suppliedSources =
+                result.readerContext?.integratedAnswer?.suppliedEvidence.flatMap(
+                    (item) => (item.kind === "source" ? [item.source] : []),
+                ) ?? [];
+            expect(suppliedSources[0].snippet).toContain(
+                "governing qualification",
+            );
             expect(
-                result.readerContext?.indexedAnswer?.fragments[0].snippet,
-            ).toContain("governing qualification");
+                result.readerContext?.integratedAnswer?.selectedEvidenceIds,
+            ).toEqual(["s0"]);
             await expect(
                 service.answer({
                     corpusId,
@@ -1194,7 +1202,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                         data: JSON.stringify({
                             status: "noAnswer",
                             answer: "Mock reader does not calculate.",
-                            citationIds: [],
+                            evidenceIds: [],
                         }),
                     };
                 },
@@ -1223,14 +1231,16 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 includeDiagnostics: true,
             });
             const supplied =
-                answer.readerContext?.indexedAnswer?.fragments ?? [];
+                answer.readerContext?.integratedAnswer?.suppliedEvidence.flatMap(
+                    (item) => (item.kind === "source" ? [item.source] : []),
+                ) ?? [];
             expect(supplied.map((fragment) => fragment.sourceId)).toEqual(
                 expect.arrayContaining(["source-1", "source-34"]),
             );
             expect(prompts[0]).toContain("$2,800");
             expect(prompts[0]).toContain("$2,500");
             expect(
-                answer.readerContext?.indexedAnswer?.selection
+                answer.readerContext?.integratedAnswer?.sourceSelection
                     ?.eligibleSourceIds,
             ).toHaveLength(40);
             const scoped = await service.search({

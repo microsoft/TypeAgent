@@ -45,6 +45,15 @@ export interface QuestionSlot {
     rubric: QuestionRubric;
     approval: "proposed" | "approved" | "rejected";
     discoveryCitations: ViewCitation[];
+    admission?: {
+        version: 1;
+        actor: "user" | "policy";
+        policyVersion: 1;
+        recipeIdentity: string;
+        modelIdentity: string;
+        inputFingerprint: string;
+        reason: string;
+    };
 }
 
 export interface SchemaViewDefinition {

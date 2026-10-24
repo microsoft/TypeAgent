@@ -8,6 +8,7 @@ import type {
 } from "./types.js";
 import type { MemoryViewService } from "./viewTypes.js";
 import type { MemoryTopicService } from "./topicTypes.js";
+import type { MemoryKnowledgeService } from "./knowledgeTypes.js";
 
 export interface MemoryJobWaitOptions {
     signal?: AbortSignal;
@@ -21,8 +22,26 @@ function unsupportedCapability(operation: string): Promise<never> {
 
 export function createMemoryServiceRpcFacade(
     service: MemoryService & Partial<MemoryViewService>,
-): MemoryService & MemoryViewService & MemoryTopicService {
+): MemoryService &
+    MemoryViewService &
+    MemoryTopicService &
+    MemoryKnowledgeService {
     return {
+        getKnowledgeStatus: (corpusId) =>
+            service.getKnowledgeStatus?.(corpusId) ??
+            unsupportedCapability("knowledge status"),
+        updateKnowledgeDiscovery: (request) =>
+            service.updateKnowledgeDiscovery?.(request) ??
+            unsupportedCapability("knowledge discovery policy"),
+        createKnowledgeCheckpoint: (request) =>
+            service.createKnowledgeCheckpoint?.(request) ??
+            unsupportedCapability("knowledge checkpoints"),
+        getKnowledgeCheckpoint: (request) =>
+            service.getKnowledgeCheckpoint?.(request) ??
+            unsupportedCapability("knowledge checkpoints"),
+        waitForKnowledgeCheckpoint: (request) =>
+            service.waitForKnowledgeCheckpoint?.(request) ??
+            unsupportedCapability("knowledge checkpoint waits"),
         requestAcquisition: (request) =>
             service.requestAcquisition?.(request) ??
             unsupportedCapability("acquisition requests"),

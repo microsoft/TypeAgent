@@ -67,6 +67,9 @@ export function recordBenchmarkArm(state, capabilities, resume) {
         informationalViews:
             capabilities.derivedViews?.informationalWiki === true,
         viewDrafts: capabilities.derivedViews?.drafts === true,
+        knowledgeReadiness: capabilities.derivedViews?.knowledge === true,
+        integratedAnswering:
+            capabilities.derivedViews?.integratedAnswering === true,
     };
     if (resume)
         assert.deepEqual(

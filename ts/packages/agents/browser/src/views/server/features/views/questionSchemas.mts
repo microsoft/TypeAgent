@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
     viewReadRequestSchema,
     viewMaintenanceUpdateSchema,
+    questionAdmissionSchema,
 } from "@typeagent/memory-client";
 
 const id = z.string().min(1).max(200);
@@ -65,6 +66,7 @@ const slot = z.strictObject({
     }),
     approval,
     discoveryCitations: z.array(citation).max(1000),
+    admission: protocol(questionAdmissionSchema).optional(),
 });
 function protocol(schema: {
     safeParse(value: unknown): {

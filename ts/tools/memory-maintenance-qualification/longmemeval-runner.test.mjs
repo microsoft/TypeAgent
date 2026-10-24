@@ -442,6 +442,7 @@ test("product reader coverage uses actual answer diagnostics without an extra re
             serializedContextChars: 100,
         },
     });
+
     await executeMemoryCase(
         f.service,
         distinct,
@@ -471,6 +472,75 @@ test("product reader coverage uses actual answer diagnostics without an extra re
         scorecard.evidenceCoverage.evidenceSessionRecallAt20Matches,
         { measuredQuestions: 0, mean: null },
     );
+});
+
+test("knowledge readiness is frozen before the reader query is accessed", async () => {
+    const f = fixture();
+    const events = [];
+    const checkpoint = {
+        checkpointId: "knowledge",
+        state: "pending",
+        reasons: [],
+    };
+    f.service.createKnowledgeCheckpoint = async (request) => {
+        events.push("create");
+        assert.equal(request.producerComplete, true);
+        assert.equal(request.sourceIds.length, 2);
+        assert.ok(!JSON.stringify(request).includes("SENTINEL"));
+        return checkpoint;
+    };
+    f.service.waitForKnowledgeCheckpoint = async (request) => {
+        events.push("wait");
+        assert.equal(request.checkpointId, "knowledge");
+        return { ...checkpoint, state: "ready" };
+    };
+    const isolatedReader = {
+        question_date: reader.question_date,
+        get question() {
+            events.push("query");
+            assert.equal(f.record.knowledgeCheckpoint.state, "ready");
+            return reader.question;
+        },
+    };
+    await executeMemoryCase(
+        f.service,
+        construction,
+        isolatedReader,
+        reference,
+        f.record,
+        f.controls,
+    );
+    assert.deepEqual(events, ["create", "wait", "query"]);
+    assert.equal(f.calls.answer[0].knowledgeCheckpointId, "knowledge");
+    assert.equal(f.calls.answer[0].retrievalPolicy, "sourcesAndViews");
+});
+
+test("partial derived knowledge is retained but cannot qualify as a ready benchmark arm", async () => {
+    const f = fixture();
+    f.service.createKnowledgeCheckpoint = async () => ({
+        checkpointId: "knowledge",
+        state: "pending",
+        reasons: [],
+    });
+    f.service.waitForKnowledgeCheckpoint = async () => ({
+        checkpointId: "knowledge",
+        state: "partial",
+        reasons: ["Discovery window limit"],
+    });
+    await assert.rejects(
+        executeMemoryCase(
+            f.service,
+            construction,
+            reader,
+            reference,
+            f.record,
+            f.controls,
+        ),
+        /Knowledge is not ready: partial; Discovery window limit/,
+    );
+    assert.equal(f.record.knowledgeCheckpoint.state, "partial");
+    assert.equal(f.calls.answer.length, 0);
+    assert.equal(f.calls.judge.length, 0);
 });
 
 test("resume after a saved hypothesis neither re-ingests histories nor regenerates the answer", async () => {

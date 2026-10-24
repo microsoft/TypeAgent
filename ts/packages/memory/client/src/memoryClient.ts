@@ -12,6 +12,12 @@ import {
     type StdioServerParameters,
 } from "@modelcontextprotocol/client/stdio";
 import type {
+    KnowledgeStatus,
+    KnowledgeDiscoveryUpdate,
+    KnowledgeCheckpoint,
+    KnowledgeCheckpointRequest,
+    KnowledgeCheckpointRead,
+    KnowledgeCheckpointWait,
     QuestionInventory,
     QuestionEditRequest,
     SchemaViewPageRequest,
@@ -108,6 +114,7 @@ import {
 import type { z } from "zod";
 import {
     answerResultSchema,
+    answerRequestSchema,
     capabilitiesSchema,
     changePageSchema,
     clearedCountSchema,
@@ -169,6 +176,16 @@ import {
     projectAcquisitionProgress,
     safeAcquisitionOperation,
 } from "./acquisitionProtocol.js";
+import {
+    knowledgeCorpusRequestSchema,
+    knowledgeDiscoveryUpdateSchema,
+    knowledgeCheckpointRequestSchema,
+    knowledgeCheckpointReadSchema,
+    knowledgeCheckpointWaitSchema,
+    knowledgeCheckpointSchema,
+    knowledgeStatusSchema,
+    knowledgeToolNames,
+} from "./knowledgeProtocol.js";
 
 function unsupportedCapability(operation: string): Promise<never> {
     return Promise.reject(new Error(`Memory ${operation} are not supported`));
@@ -183,6 +200,19 @@ export interface MemoryServiceClient
     extends MemoryService,
         MemoryViewService,
         MemoryAcquisitionProgressService {
+    getKnowledgeStatus(corpusId: string): Promise<KnowledgeStatus>;
+    updateKnowledgeDiscovery(
+        request: KnowledgeDiscoveryUpdate,
+    ): Promise<KnowledgeStatus>;
+    createKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRequest,
+    ): Promise<KnowledgeCheckpoint>;
+    getKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRead,
+    ): Promise<KnowledgeCheckpoint>;
+    waitForKnowledgeCheckpoint(
+        request: KnowledgeCheckpointWait,
+    ): Promise<KnowledgeCheckpoint>;
     listQuestions(corpusId: string): Promise<QuestionInventory>;
     editQuestion(request: QuestionEditRequest): Promise<ViewHistoryEntry>;
     getViewPage(request: SchemaViewPageRequest): Promise<SchemaViewPage>;
@@ -218,6 +248,44 @@ export interface MemoryServiceClient
 }
 
 export class InProcessMemoryServiceClient implements MemoryServiceClient {
+    public getKnowledgeStatus(corpusId: string): Promise<KnowledgeStatus> {
+        return (
+            this.service.getKnowledgeStatus?.(corpusId) ??
+            unsupportedCapability("knowledge status")
+        );
+    }
+    public updateKnowledgeDiscovery(
+        request: KnowledgeDiscoveryUpdate,
+    ): Promise<KnowledgeStatus> {
+        return (
+            this.service.updateKnowledgeDiscovery?.(request) ??
+            unsupportedCapability("knowledge discovery policy")
+        );
+    }
+    public createKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRequest,
+    ): Promise<KnowledgeCheckpoint> {
+        return (
+            this.service.createKnowledgeCheckpoint?.(request) ??
+            unsupportedCapability("knowledge checkpoints")
+        );
+    }
+    public getKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRead,
+    ): Promise<KnowledgeCheckpoint> {
+        return (
+            this.service.getKnowledgeCheckpoint?.(request) ??
+            unsupportedCapability("knowledge checkpoints")
+        );
+    }
+    public waitForKnowledgeCheckpoint(
+        request: KnowledgeCheckpointWait,
+    ): Promise<KnowledgeCheckpoint> {
+        return (
+            this.service.waitForKnowledgeCheckpoint?.(request) ??
+            unsupportedCapability("knowledge checkpoint waits")
+        );
+    }
     public listQuestions(corpusId: string): Promise<QuestionInventory> {
         return (
             this.service.listQuestions?.(corpusId) ??
@@ -700,6 +768,49 @@ export type MemoryMcpTransportConfig =
 type MemoryMcpTransport = StdioClientTransport | StreamableHTTPClientTransport;
 
 export class McpMemoryServiceClient implements MemoryServiceClient {
+    public getKnowledgeStatus(corpusId: string): Promise<KnowledgeStatus> {
+        return this.invoke(
+            knowledgeToolNames.getKnowledgeStatus,
+            knowledgeCorpusRequestSchema.parse({ corpusId }),
+            knowledgeStatusSchema,
+        );
+    }
+    public updateKnowledgeDiscovery(
+        request: KnowledgeDiscoveryUpdate,
+    ): Promise<KnowledgeStatus> {
+        return this.invoke(
+            knowledgeToolNames.updateKnowledgeDiscovery,
+            knowledgeDiscoveryUpdateSchema.parse(request),
+            knowledgeStatusSchema,
+        );
+    }
+    public createKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRequest,
+    ): Promise<KnowledgeCheckpoint> {
+        return this.invoke(
+            knowledgeToolNames.createKnowledgeCheckpoint,
+            knowledgeCheckpointRequestSchema.parse(request),
+            knowledgeCheckpointSchema,
+        );
+    }
+    public getKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRead,
+    ): Promise<KnowledgeCheckpoint> {
+        return this.invoke(
+            knowledgeToolNames.getKnowledgeCheckpoint,
+            knowledgeCheckpointReadSchema.parse(request),
+            knowledgeCheckpointSchema,
+        );
+    }
+    public waitForKnowledgeCheckpoint(
+        request: KnowledgeCheckpointWait,
+    ): Promise<KnowledgeCheckpoint> {
+        return this.invoke(
+            knowledgeToolNames.waitForKnowledgeCheckpoint,
+            knowledgeCheckpointWaitSchema.parse(request),
+            knowledgeCheckpointSchema,
+        );
+    }
     public listQuestions(corpusId: string): Promise<QuestionInventory> {
         return this.invoke(
             schemaViewToolNames.listQuestions,
@@ -1300,7 +1411,11 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
     }
 
     public answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult> {
-        return this.invoke(memoryToolNames.answer, request, answerResultSchema);
+        return this.invoke(
+            memoryToolNames.answer,
+            answerRequestSchema.parse(request),
+            answerResultSchema,
+        );
     }
 
     public getKnowledgeGraph(corpusId: string): Promise<MemoryKnowledgeGraph> {
