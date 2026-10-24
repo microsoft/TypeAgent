@@ -648,6 +648,13 @@ export class KnowProCorpusIndex implements CorpusIndex {
         const highest = Math.max(0, ...scores.values());
         for (const ordinal of preferred)
             scores.set(ordinal, highest + (scores.get(ordinal) ?? 0));
+        if (
+            request.query &&
+            /\b(first|second|third|last|previous|next|earlier|later)\b/i.test(
+                request.query,
+            )
+        )
+            this.addConversationNeighbors(memory, eligible, scores);
         const blocks = [...this.indexedBlocks(memory, scores)];
         if (postingScores)
             this.fragmentScoreDiagnostics(
@@ -665,6 +672,57 @@ export class KnowProCorpusIndex implements CorpusIndex {
         if (selection.diagnostics)
             selection.diagnostics.limited = selection.limited;
         return selection;
+    }
+
+    private addConversationNeighbors(
+        memory: DocMemory,
+        eligible: Set<number>,
+        scores: Map<number, number>,
+    ): void {
+        const sources = new Map<string, number>();
+        const seeds = [...scores].sort((a, b) => b[1] - a[1]);
+        for (const [ordinal, score] of seeds) {
+            const uri = memory.messages.get(ordinal).metadata.sourceUrl;
+            if (!uri) continue;
+            const count = sources.get(uri) ?? 0;
+            if (count >= 2 || (!count && sources.size >= 6)) continue;
+            sources.set(uri, count + 1);
+            for (const neighbor of this.conversationNeighbors(
+                memory,
+                eligible,
+                ordinal,
+                uri,
+            ))
+                scores.set(
+                    neighbor,
+                    Math.max(scores.get(neighbor) ?? 0, score / 2),
+                );
+        }
+    }
+
+    private *conversationNeighbors(
+        memory: DocMemory,
+        eligible: Set<number>,
+        ordinal: number,
+        uri: string,
+    ): Iterable<number> {
+        for (const direction of [-1, 1]) {
+            let remaining = 2;
+            let neighbor = ordinal + direction;
+            while (
+                remaining > 0 &&
+                eligible.has(neighbor) &&
+                memory.messages.get(neighbor).metadata.sourceUrl === uri
+            ) {
+                if (
+                    memory.messages.get(neighbor).textChunks.join("\n").trim()
+                ) {
+                    yield neighbor;
+                    remaining--;
+                }
+                neighbor += direction;
+            }
+        }
     }
 
     private fragmentScoreDiagnostics(

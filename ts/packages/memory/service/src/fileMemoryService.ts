@@ -193,7 +193,10 @@ import {
     type ChatModel,
     type RequestBudgetLimits,
 } from "@typeagent/aiclient";
-import { answerIndexedEvidence } from "./indexedAnswer.js";
+import {
+    answerIndexedEvidence,
+    mergeIndexedAnswerEvidence,
+} from "./indexedAnswer.js";
 import {
     assertPublicationProof,
     effectiveViewPublicationPolicy,
@@ -7107,73 +7110,8 @@ export class FileMemoryService
             request.answerMode !== "extractive" &&
             this.informationalWikiEnabled
         ) {
-            const answer = async (): Promise<MemoryAnswerResult> => {
-                const result = await this.search({
-                    corpusId: request.corpusId,
-                    query: question,
-                    ...(request.sourceIds
-                        ? { sourceIds: request.sourceIds }
-                        : {}),
-                    indexedFragments: true,
-                    ...(request.includeDiagnostics
-                        ? { includeDiagnostics: true }
-                        : {}),
-                    ...(request.temporalContext
-                        ? { temporalContext: request.temporalContext }
-                        : {}),
-                    limit: Math.min(request.limit ?? 12, 12),
-                    maxResponseChars: Math.min(
-                        request.maxResponseChars ?? 24000,
-                        24000,
-                    ),
-                });
-                const generated = await answerIndexedEvidence(
-                    question,
-                    result.matches,
-                    Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
-                    this.wikiModelEndpoint,
-                    this.indexedAnswerModel,
-                    request,
-                );
-                if (
-                    generated.readerContext?.indexedAnswer &&
-                    result.indexedSelection
-                )
-                    generated.readerContext.indexedAnswer.selection =
-                        result.indexedSelection;
-                for (const citation of generated.citations) {
-                    if (!citation.locator?.startsWith("indexed:"))
-                        throw new Error(
-                            "Indexed answer requires an exact indexed locator",
-                        );
-                    const source = await this.getSource(
-                        request.corpusId,
-                        citation.sourceId,
-                    );
-                    if (source?.activeRevisionId !== citation.revisionId)
-                        throw new Error(
-                            "Indexed answer evidence changed before delivery",
-                        );
-                    const current = await this.getSourceContent({
-                        corpusId: request.corpusId,
-                        sourceId: citation.sourceId,
-                        revisionId: citation.revisionId,
-                        indexedLocator: citation.locator,
-                    });
-                    if (current.content !== citation.snippet)
-                        throw new Error(
-                            "Indexed answer evidence is unavailable or changed",
-                        );
-                }
-                return {
-                    question,
-                    ...generated,
-                    mode: "synthesized",
-                    grounded: true,
-                    indexVersion: result.indexVersion,
-                    warnings: result.warnings,
-                };
-            };
+            const answer = () =>
+                this.answerFromIndexedFragments(request, question);
             return this.wikiBudget
                 ? runWithRequestBudget(
                       new RequestBudget(this.wikiBudget),
@@ -7188,6 +7126,126 @@ export class FileMemoryService
             }
         }
         return this.extractiveAnswer(request, question);
+    }
+
+    private async answerFromIndexedFragments(
+        request: MemoryAnswerRequest,
+        question: string,
+    ): Promise<MemoryAnswerResult> {
+        const searchRequest = {
+            corpusId: request.corpusId,
+            query: question,
+            ...(request.sourceIds ? { sourceIds: request.sourceIds } : {}),
+            indexedFragments: true,
+            ...(request.includeDiagnostics ? { includeDiagnostics: true } : {}),
+            ...(request.temporalContext
+                ? { temporalContext: request.temporalContext }
+                : {}),
+            limit: Math.min(request.limit ?? 12, 12),
+            maxResponseChars: Math.min(
+                request.maxResponseChars ?? 24000,
+                24000,
+            ),
+        };
+        const result = await this.search(searchRequest);
+        let generated = await answerIndexedEvidence(
+            question,
+            result.matches,
+            Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
+            this.wikiModelEndpoint,
+            this.indexedAnswerModel,
+            request,
+        );
+        const queries = generated.retrievalQueries;
+        if (queries?.length) {
+            const initialContext = generated.readerContext;
+            const followup = await this.searchIndexedAnswerFollowups(
+                searchRequest,
+                queries,
+                result,
+            );
+            result.warnings = followup.warnings;
+            generated = await answerIndexedEvidence(
+                question,
+                followup.matches,
+                Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
+                this.wikiModelEndpoint,
+                this.indexedAnswerModel,
+                request,
+            );
+            if (generated.readerContext?.indexedAnswer)
+                generated.readerContext.indexedAnswer.refinement = {
+                    queries,
+                    ...(initialContext ? { initialContext } : {}),
+                    selections: followup.selections,
+                };
+        }
+        if (generated.readerContext?.indexedAnswer && result.indexedSelection)
+            generated.readerContext.indexedAnswer.selection =
+                result.indexedSelection;
+        for (const citation of generated.citations) {
+            if (!citation.locator?.startsWith("indexed:"))
+                throw new Error(
+                    "Indexed answer requires an exact indexed locator",
+                );
+            const source = await this.getSource(
+                request.corpusId,
+                citation.sourceId,
+            );
+            if (source?.activeRevisionId !== citation.revisionId)
+                throw new Error(
+                    "Indexed answer evidence changed before delivery",
+                );
+            const current = await this.getSourceContent({
+                corpusId: request.corpusId,
+                sourceId: citation.sourceId,
+                revisionId: citation.revisionId,
+                indexedLocator: citation.locator,
+            });
+            if (current.content !== citation.snippet)
+                throw new Error(
+                    "Indexed answer evidence is unavailable or changed",
+                );
+        }
+        return {
+            question,
+            answer: generated.answer,
+            citations: generated.citations,
+            ...(generated.readerContext
+                ? { readerContext: generated.readerContext }
+                : {}),
+            mode: "synthesized",
+            grounded: true,
+            indexVersion: result.indexVersion,
+            warnings: result.warnings,
+        };
+    }
+
+    private async searchIndexedAnswerFollowups(
+        request: MemorySearchRequest,
+        queries: string[],
+        initial: MemorySearchResult,
+    ) {
+        const groups: MemoryEvidence[][] = [];
+        const selections: IndexedSelectionDiagnostics[] = [];
+        const warnings = [...initial.warnings];
+        for (const query of queries) {
+            const followup = await this.search({ ...request, query });
+            groups.push(followup.matches);
+            warnings.push(...followup.warnings);
+            if (followup.indexedSelection)
+                selections.push(followup.indexedSelection);
+        }
+        groups.push(initial.matches);
+        return {
+            matches: mergeIndexedAnswerEvidence(
+                groups,
+                request.limit ?? 12,
+                request.maxResponseChars ?? 24000,
+            ),
+            warnings: [...new Set(warnings)],
+            selections,
+        };
     }
 
     private async synthesizeAnswer(

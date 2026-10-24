@@ -259,6 +259,24 @@ fail explicitly. Quotes and source line endings are never normalized or matched
 approximately. Persisted evidence keeps the same coordinate shape; the recipe
 change invalidates older semantic fingerprints.
 
+Indexed source answers balance relevant query coverage across sources. Ordered
+conversation questions can retrieve neighboring nonempty blocks from the same
+eligible source revision; the reader uses source-owned turn metadata and block
+ordinals, never retrieval rank, to establish order. Recommendation answers may
+transfer remembered preferences into conditional criteria, but cannot invent
+named inventory or availability.
+
+When missing historical evidence causes `noAnswer`, the reader may propose up
+to two focused searches. The service performs only one refinement round, using
+the original source scope, temporal context, search bounds and request budget.
+New and original evidence are interleaved with overlapping ranges removed,
+retaining the default final limit of twelve fragments and 24,000 snippet
+characters. A final `noAnswer` is not retried. Refinement can add two searches
+and one reader call, so aggregate retrieval and provider cost can increase;
+per-search indexed reads remain bounded at 32,000 characters. Diagnostics retain
+both reader contexts and the refinement queries and selection receipts. The
+product and qualification harness use this same answer path.
+
 All memory synthesis, topic, indexed-answer and hub-answer calls now omit
 optional OpenAI completion limits. Their prompts express approximate final-JSON
 length targets separately from reasoning; citation and coverage validators are

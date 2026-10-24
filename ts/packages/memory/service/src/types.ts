@@ -759,6 +759,11 @@ export interface AnswerContextDiagnostics {
     answerPath?: "indexed-fragments" | "knowpro";
     indexedAnswer?: {
         selection?: IndexedSelectionDiagnostics;
+        refinement?: {
+            queries: string[];
+            initialContext?: AnswerContextDiagnostics;
+            selections: IndexedSelectionDiagnostics[];
+        };
         temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
         fragments: MemoryEvidence[];
         response: {
