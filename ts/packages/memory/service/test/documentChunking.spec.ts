@@ -14,6 +14,7 @@ import {
     type DocMemorySettings,
 } from "@typeagent/conversation-memory";
 import type { EmbeddingRole, TextEmbeddingModel } from "@typeagent/aiclient";
+import { countEmbeddingTokens } from "@typeagent/aiclient";
 import { createEmbeddingCache } from "@typeagent/knowledge-processor";
 import * as kp from "@typeagent/knowpro";
 import { KnowProCorpusIndex } from "../src/knowProCorpusIndex.js";
@@ -45,6 +46,7 @@ describe("durable extraction and message embedding windows", () => {
             if (forbidden) throw new Error("Unexpected provider call");
             embedded.push(text);
             expect(countDocTokens(text)).toBeLessThanOrEqual(7500);
+            expect(countEmbeddingTokens(text)).toBeLessThanOrEqual(7500);
             return [1, 0, 0];
         };
         return {
@@ -205,6 +207,84 @@ describe("durable extraction and message embedding windows", () => {
         expect(languagePrompts.join(" ")).toContain("2026-10-22");
         expect(selection.readChars).toBeLessThanOrEqual(32000);
         expect(selection.fragments.length).toBeLessThanOrEqual(12);
+    });
+
+    test("sequence-relative retrieval includes adjacent turns only within the allowed source revision", async () => {
+        const pieces = [
+            "Please create a cobalt description.",
+            "Here is the first cobalt description.",
+            "Now create a different version.",
+            "Here is the second description.",
+        ];
+        const doc = document("text", pieces.join("\n"), "ordered");
+        let start = 0;
+        doc.revision.temporalContext = {
+            version: 1,
+            scopes: pieces.map((text, index) => {
+                const scope = {
+                    ownerId: `turn:${index}`,
+                    role: index % 2 ? "assistant" : "user",
+                    start,
+                    end: start + text.length,
+                };
+                start += text.length + 1;
+                return scope;
+            }),
+        };
+        const configured = settings();
+        const extract = (text: string) => ({
+            entities: text.startsWith("Here is the first")
+                ? [{ name: "cobalt", type: ["description"] }]
+                : [],
+            topics: [],
+            actions: [],
+            inverseActions: [],
+        });
+        configured.conversationSettings!.semanticRefIndexSettings.knowledgeExtractor =
+            {
+                settings: { maxContextLength: 1000 },
+                extract: async (text) => extract(text),
+                extractWithRetry: async (text) => ({
+                    success: true,
+                    data: extract(text),
+                }),
+            };
+        const index = new KnowProCorpusIndex("test", root, () => configured);
+        await index.rebuild(
+            [doc, document("text", "Foreign cobalt content.", "foreign")],
+            new AbortController().signal,
+            async () => {},
+        );
+        const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+        const language = clock
+            .spyOn(DocMemory.prototype, "searchWithLanguage")
+            .mockResolvedValue({ success: true, data: [] });
+        try {
+            const request = {
+                query: "What was the second cobalt description?",
+                terms: ["cobalt"],
+                sourceIds: ["ordered"],
+            };
+            const observed = await index.readFragments({
+                ...request,
+                includeDiagnostics: true,
+            });
+            expect(
+                observed.fragments
+                    .map((fragment) => fragment.snippet)
+                    .join("\n"),
+            ).toContain("second description");
+            expect(
+                observed.fragments.every(
+                    (fragment) => fragment.sourceId === "ordered",
+                ),
+            ).toBe(true);
+            expect((await index.readFragments(request)).fragments).toEqual(
+                observed.fragments,
+            );
+        } finally {
+            language.mockRestore();
+        }
     });
 
     test("query scoring keeps relevant price operands without type-wide boosts and scopes language search before ranking", async () => {
@@ -392,9 +472,9 @@ describe("durable extraction and message embedding windows", () => {
                           options,
                       )
                     : type === "text"
-                      ? docPartsFromText(content, 8000, uri)
+                      ? docPartsFromText(content, 8000, uri, options)
                       : type === "vtt"
-                        ? docPartsFromVtt(content, uri)
+                        ? docPartsFromVtt(content, uri, options)
                         : docPartsFromMarkdown(content, 8000, uri, options);
             const index = new KnowProCorpusIndex("test", root, settings);
             await index.rebuild(

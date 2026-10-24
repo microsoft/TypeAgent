@@ -8,9 +8,11 @@ import path from "node:path";
 import {
     createDocMemorySettings,
     docPartsFromMarkdown,
+    countDocTokens,
 } from "@typeagent/conversation-memory";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { createKnowProCorpusIndex } from "../src/knowProCorpusIndex.js";
+import type { IngestionSource, SourceType } from "../src/types.js";
 
 const markdown =
     "# Zephyr report\r\n\r\nZephyr **recovery** preserves source identity.\r\n";
@@ -200,6 +202,55 @@ describe("Markdown source persistence with stubbed KnowPro", () => {
             ),
         ).toBe(true);
     }
+
+    const tokenBudgetFormats: SourceType[] = [
+        "text",
+        "markdown",
+        "web",
+        "html",
+        "vtt",
+    ];
+    test.each(tokenBudgetFormats)(
+        "durable %s ingestion budgets actual extraction inputs and retains the source",
+        async (sourceType) => {
+            const body =
+                "Zephyr " + "\uC548\uB155\uD558\uC138\uC694".repeat(2_000);
+            const content =
+                sourceType === "html"
+                    ? `<html><body><p>${body}</p></body></html>`
+                    : sourceType === "vtt"
+                      ? `WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n<v Alice>${body}</v>\n`
+                      : body;
+            const source: IngestionSource = {
+                sourceId: sourceType,
+                sourceType,
+                title: "Token budget",
+            };
+            if (sourceType === "html") {
+                source.html = content;
+            } else if (sourceType === "markdown" || sourceType === "web") {
+                source.markdown = content;
+            } else {
+                source.text = content;
+            }
+            const { corpusId } = await service.createCorpus("Token budget");
+            const job = await service.ingestDocument({ corpusId, source });
+            await waitForJob(service, job.jobId);
+            expect(extracted.length).toBeGreaterThan(0);
+            for (const input of extracted) {
+                expect(countDocTokens(input)).toBeLessThanOrEqual(24_000);
+            }
+            expect(
+                (
+                    await service.getSourceContent({
+                        corpusId,
+                        sourceId: sourceType,
+                    })
+                ).content,
+            ).toBe(content);
+        },
+        30_000,
+    );
 
     test("coalesced KnowPro append preserves extraction scope and stable message citations through restart", async () => {
         const { corpusId } = await service.createCorpus(

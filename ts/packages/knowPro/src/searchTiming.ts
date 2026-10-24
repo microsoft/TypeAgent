@@ -40,7 +40,10 @@ export function runWithSearchTiming<T>(
             traceId:
                 traceId ?? searchTiming.getStore()?.traceId ?? randomUUID(),
             scope,
-            attributes,
+            attributes: {
+                batchId: searchTiming.getStore()?.attributes?.batchId,
+                ...attributes,
+            },
         },
         work,
     );
@@ -59,9 +62,14 @@ function emitTiming(
                 typeof value === "boolean" ||
                 (typeof value === "number" && Number.isFinite(value)) ||
                 (typeof value === "string" &&
-                    (["corpusId", "sourceId", "revisionId", "groupId"].includes(
-                        key,
-                    ) ||
+                    ([
+                        "corpusId",
+                        "sourceId",
+                        "revisionId",
+                        "groupId",
+                        "batchId",
+                        "indexGeneration",
+                    ].includes(key) ||
                         (key === "access" &&
                             ["read", "write"].includes(value)) ||
                         (key === "indexKind" &&

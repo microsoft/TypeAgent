@@ -15,7 +15,11 @@ import { ConversationThreads } from "../src/conversationThread.js";
 import {
     createTextEmbeddingIndexSettings,
     TextEmbeddingIndex,
+    generateTextEmbeddingsForIndex,
+    EmbeddingIndex,
+    indexesOfNearestTextBatchInIndex,
 } from "../src/fuzzyIndex.js";
+import { withQueryEmbeddingCache } from "../src/queryEmbeddingCache.js";
 import { buildMessageIndex, MessageTextIndex } from "../src/messageIndex.js";
 import { TermEmbeddingIndex } from "../src/relatedTermsIndex.js";
 import { TextToTextLocationIndex } from "../src/textLocationIndex.js";
@@ -23,7 +27,10 @@ import { searchConversationByTextSimilarity } from "../src/search.js";
 import { IConversation, TextRange } from "../src/interfaces.js";
 import { createTestMessages } from "./testMessage.js";
 import { SemanticRefCollection } from "../src/storage.js";
-import { TermToSemanticRefIndex } from "../src/conversationIndex.js";
+import {
+    addKnowledgeToSemanticRefIndex,
+    TermToSemanticRefIndex,
+} from "../src/conversationIndex.js";
 
 describe("KnowPro embedding roles (synthetic/offline)", () => {
     let calls: string[];
@@ -66,6 +73,47 @@ describe("KnowPro embedding roles (synthetic/offline)", () => {
         calls = [];
     });
 
+    test("language-query scope reuses message and term embeddings without caching document work", async () => {
+        const shared = model();
+        const messages = new MessageTextIndex({
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(shared, 2),
+        });
+        await withQueryEmbeddingCache(async () => {
+            await messages.generateEmbedding("shared");
+            await indexesOfNearestTextBatchInIndex(
+                new EmbeddingIndex(),
+                shared,
+                ["shared", "alias", "shared"],
+            );
+            await messages.generateEmbedding("shared");
+            await generateTextEmbeddingsForIndex(shared, "shared");
+            await generateTextEmbeddingsForIndex(shared, "shared");
+        });
+        expect(calls).toEqual([
+            "query:shared",
+            "query:alias",
+            "document:shared",
+            "document:shared",
+        ]);
+    });
+
+    test("indexing rejects oversized inputs before invoking any embedding model", async () => {
+        const exact = " word".repeat(8_000);
+        const result = await generateTextEmbeddingsForIndex(model(), [
+            "short",
+            exact + " word",
+        ]);
+        expect(result).toEqual({
+            success: false,
+            message:
+                "Embedding input[1] has 8001 tokens; maximum is 8000 (cl100k_base)",
+        });
+        expect(calls).toEqual([]);
+        const accepted = await generateTextEmbeddingsForIndex(model(), exact);
+        expect(accepted.success).toBe(true);
+        expect(calls).toEqual([`document:${exact}`]);
+    });
+
     test("conversation derives resolved identity dimensions without default switch", () => {
         expect(
             createConversationSettings(model()).messageTextIndexSettings
@@ -74,6 +122,31 @@ describe("KnowPro embedding roles (synthetic/offline)", () => {
         expect(
             createConversationSettings(model(), 7).threadSettings.embeddingSize,
         ).toBe(7);
+    });
+
+    test("indexing bounds aggregate tokens without truncating or reordering inputs", async () => {
+        const texts = [
+            " word".repeat(4_000),
+            " word".repeat(4_000),
+            " word",
+            " word".repeat(8_000),
+        ];
+        const embeddingModel: TextEmbeddingModel = {
+            ...wideModel(),
+            forRole: () => embeddingModel,
+            embeddingIdentity: { ...identity("document"), provider: "azure" },
+        };
+        const result = await generateTextEmbeddingsForIndex(
+            embeddingModel,
+            texts,
+        );
+        expect(result.success).toBe(true);
+        if (result.success) expect(result.data).toHaveLength(texts.length);
+        expect(calls).toEqual([
+            `document:${texts.slice(0, 2).join(",")}`,
+            `document:${texts[2]}`,
+            `document:${texts[3]}`,
+        ]);
     });
 
     test("conversation defaults to 128 terms, source texts, and threads", () => {
@@ -85,6 +158,29 @@ describe("KnowPro embedding roles (synthetic/offline)", () => {
             settings.messageTextIndexSettings.embeddingIndexSettings.batchSize,
         ).toBe(128);
         expect(settings.threadSettings.batchSize).toBe(128);
+    });
+
+    test("a malformed hosted subbatch stops before requesting later inputs", async () => {
+        let requests = 0;
+        const embeddingModel: TextEmbeddingModel = {
+            ...wideModel(),
+            forRole: () => embeddingModel,
+            embeddingIdentity: { ...identity("document"), provider: "azure" },
+            async generateEmbeddingBatch() {
+                requests++;
+                return success([]);
+            },
+        };
+        const result = await generateTextEmbeddingsForIndex(embeddingModel, [
+            " word".repeat(8_000),
+            "later input",
+        ]);
+        expect(result).toEqual({
+            success: false,
+            message:
+                "generateTextEmbeddingsForIndex failed: Error: Embedding batch cardinality mismatch",
+        });
+        expect(requests).toBe(1);
     });
 
     test("default term lane batches 129 distinct terms as 128 and one and reuses them after reload", async () => {
@@ -204,13 +300,14 @@ describe("KnowPro embedding roles (synthetic/offline)", () => {
         expect(index.embeddingIndex.size).toBe(0);
     });
 
-    test.each<[number, number, number[]]>([
-        [40, 7500, [40]],
-        [41, 7500, [40, 1]],
-        [128, 4096, [73, 55]],
+    test.each<[number, number]>([
+        [40, 7500],
+        [41, 7500],
+        [128, 4096],
     ])(
-        "hosted batching keeps %i texts of %i tokens within the 300,000-token request budget",
-        async (inputCount, tokensPerInput, expectedBatches) => {
+        "hosted batching keeps %i texts of %i tokens within the 8,000-token aggregate work budget",
+        async (inputCount, tokensPerInput) => {
+            const expectedBatches = Array<number>(inputCount).fill(1);
             const text = " word".repeat(tokensPerInput);
             expect(countTokens(text)).toBe(tokensPerInput);
             const requests: string[][] = [];
@@ -429,6 +526,40 @@ describe("KnowPro embedding roles (synthetic/offline)", () => {
         const result = await index.addText(["one", "two"]);
         expect(result.error).toMatch(/cardinality/);
         expect(index.size).toBe(0);
+    });
+
+    test("empty extracted topics never enter keyword or incremental embedding batches", async () => {
+        const conversation: IConversation = {
+            nameTag: "empty-topics",
+            tags: [],
+            secondaryIndexes: {},
+            messages: createTestMessages(1),
+            semanticRefs: new SemanticRefCollection(),
+            semanticRefIndex: new TermToSemanticRefIndex(),
+        };
+        const termsAdded = new Set<string>();
+        addKnowledgeToSemanticRefIndex(
+            conversation,
+            0,
+            0,
+            {
+                entities: [],
+                actions: [],
+                inverseActions: [],
+                topics: ["", " \t\n", "tea"],
+            },
+            termsAdded,
+        );
+        expect([...termsAdded]).toEqual(["tea"]);
+        expect(conversation.semanticRefIndex?.getTerms()).toEqual(["tea"]);
+        expect(conversation.semanticRefs?.length).toBe(3);
+        const index = new TermEmbeddingIndex(
+            createTextEmbeddingIndexSettings(model(), 2),
+        );
+        expect(await index.addTerms([...termsAdded])).toMatchObject({
+            numberCompleted: 1,
+        });
+        expect(calls).toEqual(["document:tea"]);
     });
 
     test("legacy term cache keeps raw key behavior", async () => {
