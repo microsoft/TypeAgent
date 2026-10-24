@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -27,10 +27,65 @@ import {
     selectConstructionCases,
     benchmarkQuestionIds,
     acceptBenchmarkEngine,
+    archiveBenchmarkArtifacts,
     runBenchmarkQuestion,
     completedOutcome,
     main,
 } from "./longmemeval-live.mjs";
+
+test("startup-timeout archival records missing admission but never ignores missing benchmark evidence", async () => {
+    const root = await mkdtemp(
+        path.join(os.tmpdir(), "benchmark-startup-archive-"),
+    );
+    try {
+        const archive = path.join(root, "archive");
+        await mkdir(archive);
+        for (const name of [
+            "benchmark-state.json",
+            "progress.json",
+            "scorecard.json",
+            "hypotheses.json",
+            "termination.json",
+            "admission-verified.json",
+        ])
+            await writeFile(path.join(root, name), JSON.stringify({ name }));
+        assert.deepEqual(
+            await archiveBenchmarkArtifacts(root, archive, {
+                phase: "startup",
+            }),
+            ["admitted.json"],
+        );
+        assert.deepEqual(
+            JSON.parse(
+                await readFile(
+                    path.join(archive, "benchmark-state.json"),
+                    "utf8",
+                ),
+            ),
+            { name: "benchmark-state.json" },
+        );
+        await assert.rejects(
+            archiveBenchmarkArtifacts(root, archive, {
+                phase: "admitted-work",
+            }),
+            { code: "ENOENT" },
+        );
+        await rm(path.join(root, "admission-verified.json"));
+        assert.deepEqual(
+            await archiveBenchmarkArtifacts(root, archive, {
+                phase: "startup",
+            }),
+            ["admitted.json", "admission-verified.json"],
+        );
+        await rm(path.join(root, "progress.json"));
+        await assert.rejects(
+            archiveBenchmarkArtifacts(root, archive, { phase: "startup" }),
+            { code: "ENOENT" },
+        );
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
 
 test("startup extensions are explicit and bounded independently of benchmark work", async () => {
     assert.equal(benchmarkStartupAllowance("2"), 120000);

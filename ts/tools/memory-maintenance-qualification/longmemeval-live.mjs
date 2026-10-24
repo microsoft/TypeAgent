@@ -384,6 +384,35 @@ export function acceptBenchmarkEngine(state, engineHash, spec) {
     state.engineHash = engineHash;
 }
 
+export async function archiveBenchmarkArtifacts(runDirectory, archive, prior) {
+    const missingArtifacts = [];
+    for (const name of [
+        "benchmark-state.json",
+        "progress.json",
+        "scorecard.json",
+        "hypotheses.json",
+        "termination.json",
+        "admitted.json",
+        "admission-verified.json",
+    ]) {
+        try {
+            await copyFile(
+                path.join(runDirectory, name),
+                path.join(archive, name),
+            );
+        } catch (error) {
+            if (
+                error.code !== "ENOENT" ||
+                !["admitted.json", "admission-verified.json"].includes(name) ||
+                prior.phase !== "startup"
+            )
+                throw error;
+            missingArtifacts.push(name);
+        }
+    }
+    return missingArtifacts;
+}
+
 export async function runBenchmarkQuestion(
     service,
     construction,
@@ -881,24 +910,17 @@ export async function main(args = process.argv.slice(2)) {
                 const archive = await mkdtemp(
                     path.join(runDirectory, "before-harness-continuation-"),
                 );
-                for (const name of [
-                    "benchmark-state.json",
-                    "progress.json",
-                    "scorecard.json",
-                    "hypotheses.json",
-                    "termination.json",
-                    "admitted.json",
-                    "admission-verified.json",
-                ])
-                    await copyFile(
-                        path.join(runDirectory, name),
-                        path.join(archive, name),
-                    );
+                const missingArtifacts = await archiveBenchmarkArtifacts(
+                    runDirectory,
+                    archive,
+                    prior,
+                );
                 await writeJson(path.join(archive, "authorization.json"), {
                     previousEngineHash: spec.previousEngineHash,
                     engineHash: await engineIdentity(),
                     policy: "continue-after-import-failure",
                     maximumCompletedQuestions,
+                    missingArtifacts,
                     authorizedEpochMs: Date.now(),
                 });
             }
