@@ -43,7 +43,6 @@ import { FileMemoryService } from "../src/fileMemoryService.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { ViewHistory } from "../src/viewHistory.js";
-import { TypedViewStore } from "../src/viewStore.js";
 import { buildSummary, questionSummary } from "../src/inventory.js";
 
 const name: QuestionSlot = {
@@ -888,10 +887,17 @@ describe("ordinary-source schema lifecycle", () => {
                     current.targets.some((target) => target.state === "rebuild")
                 ) {
                     rebuildPlans++;
-                    if (rebuildPlans <= conflicts)
-                        await new TypedViewStore(root).recordViewMaintenance(
-                            current,
+                    if (rebuildPlans <= conflicts) {
+                        const policy = await service.getViewPublicationPolicy(
+                            request.corpusId,
                         );
+                        await service.updateViewPublicationPolicy({
+                            corpusId: request.corpusId,
+                            expectedHead: current.expectedHead,
+                            expectedRevision: policy.revision,
+                            autoPublish: policy.autoPublish,
+                        });
+                    }
                 }
                 return current;
             };

@@ -484,3 +484,4 @@ ts/config.local.yaml.bak
 
 # Local circular-dependency investigation output
 /ts/completion-cap-circular-diagnostic/
+/ts/packages/memory/service/.view-index-concurrency-iSMJMB
