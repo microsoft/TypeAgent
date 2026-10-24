@@ -56,6 +56,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { nativeInstallEnvironment } from "./lib/installEnvironment.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // This script lives at ts/tools/scripts/; the repo `ts/` dir is two up.
@@ -73,6 +74,8 @@ if (args.has("--help") || args.has("-h")) {
             "  token only; also seeds corepack's pnpm). If config.local.yaml can't\n" +
             "  be copied, setup does NOT run getKeys (it fetches secrets) - it\n" +
             "  prints the command to run yourself.\n" +
+            "  Azure Artifacts npm feeds also supply Foundry's NuGet feed before\n" +
+            "  install; explicit FOUNDRY_LOCAL_NUGET_* environment overrides win.\n" +
             "  --build      also run a full `pnpm run build` at the end\n" +
             "               (otherwise build the package you touch on demand).",
     );
@@ -85,12 +88,13 @@ function log(step, message) {
 
 // Run a command with inherited stdio so its output streams live. `cmd` is a
 // shell command string (needed so `pnpm` resolves to pnpm.cmd on Windows).
-function run(cmd) {
+function run(cmd, env = process.env) {
     log("run", cmd);
     execFileSync(cmd, {
         cwd: repoTs,
         stdio: "inherit",
         shell: true,
+        env,
     });
 }
 
@@ -210,7 +214,19 @@ ensureProvisioned(".npmrc", "node tools/scripts/getNPMRC.mjs", mainTs, {
 });
 
 // 2. Install dependencies.
-run("pnpm install");
+const installEnv = nativeInstallEnvironment(
+    fs.readFileSync(path.join(repoTs, ".npmrc"), "utf8"),
+);
+if (
+    process.env.FOUNDRY_LOCAL_NUGET_FEEDS === undefined &&
+    installEnv.FOUNDRY_LOCAL_NUGET_FEEDS !== undefined
+)
+    log(
+        "native feed",
+        "Foundry uses the configured Azure Artifacts feed's NuGet endpoint " +
+            "for installation. NuGet authentication is separate from npm authentication.",
+    );
+run("pnpm install", installEnv);
 
 // 3. config.local.yaml holds API secrets; getKeys can open an interactive Azure
 //    sign-in, so setup never runs it automatically (autoRun: false). It needs
