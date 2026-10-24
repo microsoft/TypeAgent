@@ -203,6 +203,15 @@ Manifest publication remains atomic and source eligibility is rechecked.
 Recovery/retry reconciles committed revision identities even when job/member
 acknowledgments failed; missing or corrupt storage is not fabricated as success.
 
+KnowPro partitions hosted index embedding inputs into sequential subbatches totaling at
+most 8,000 `cl100k_base` tokens, in addition to the per-input 8,000-token guard.
+This aggregate work budget prevents a larger publication group from becoming one
+quota-sized embedding request; inputs remain intact and ordered. The runtime's
+default embedding attempt budget is 180 seconds, matching the hosted HTTP budget
+and allowing a provider's 60-second rate-limit wait to finish before an outer
+retry starts. Explicit caller deadlines remain supported. Character-bounded
+runtime embedding batches retain serial default concurrency.
+
 `ViewBuildSnapshot.influenceSources` records source/revision identities of nominated
 page context read during admission, including inputs not cited by the output.
 These dependencies participate in late-write/publication eligibility and privacy
