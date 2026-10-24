@@ -39,6 +39,7 @@ import {
     getConfigPath,
     getMode,
     getModeLabel,
+    getMacroToolAvailability,
     getRecipeOwner,
     type Mode,
     type RecipeOwner,
@@ -192,8 +193,11 @@ function handleStatusCommand(
             "",
             `- Mode: **${getModeLabel()}**`,
             `- Routing: ${getModeDescription()}`,
-            "- Ordinary prompts: local recipes, then Copilot",
-            `- Macro workspace tools: **${mode === "bypass" ? "disabled" : "available"}**`,
+            mode === "bypass"
+                ? "- Ordinary prompts: Copilot (no local recipe matching)"
+                : "- Ordinary prompts: local recipes, then Copilot",
+            `- Workspace tools: **${mode === "bypass" ? "disabled" : "available"}**`,
+            `- Macro tools: **${getMacroToolAvailability()}**`,
             `- Server: ws://${host}:${port}`,
             `- Config: ${configPath}`,
             "- Mode settings are shared by sessions using this config.",

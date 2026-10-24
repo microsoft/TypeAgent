@@ -18,6 +18,7 @@ export interface PluginConfig {
     /** Catalog revisions to expose to this Copilot session. */
     selectedSkills?: SkillSelection[];
     recipeOwner?: RecipeOwner;
+    bypassMacroTools?: boolean;
     recipeReadOnlyMcpTools?: { mcpServerName: string; toolName: string }[];
     recipeInferenceCliPath?: string;
     [key: string]: unknown;
@@ -161,6 +162,38 @@ export function getConversationId(): string | undefined {
 export function getModeLabel(): string {
     const mode = getMode();
     return mode === "mcp" ? `mcp (${getMcpRouting()})` : mode;
+}
+
+export function getBypassMacroToolsEnabled(): boolean {
+    const environment = process.env.TYPEAGENT_BYPASS_MACRO_TOOLS;
+    if (environment !== undefined) {
+        switch (environment.trim().toLowerCase()) {
+            case "true":
+            case "1":
+            case "on":
+                return true;
+            case "false":
+            case "0":
+            case "off":
+                return false;
+            default:
+                throw new Error(
+                    "TYPEAGENT_BYPASS_MACRO_TOOLS must be true/false, 1/0, or on/off.",
+                );
+        }
+    }
+    const configured = readConfig()?.bypassMacroTools;
+    if (configured === undefined) return false;
+    if (typeof configured !== "boolean")
+        throw new Error("bypassMacroTools must be a boolean.");
+    return configured;
+}
+
+export function getMacroToolAvailability(): string {
+    if (getMode() !== "bypass") return "available";
+    return getBypassMacroToolsEnabled()
+        ? "discovery and execution only"
+        : "disabled";
 }
 
 export function getSelectedSkills(): SkillSelection[] {
