@@ -15,6 +15,7 @@ import {
     EmbeddingRole,
     embeddingModelForRole,
     validateEmbeddingVector,
+    embeddingInputLimitError,
 } from "@typeagent/aiclient";
 import levenshtein from "fast-levenshtein";
 import { Scored } from "./common.js";
@@ -198,6 +199,10 @@ export async function generateTextEmbeddingsForIndex(
 ): Promise<Result<NormalizedEmbedding[]>> {
     try {
         const textsToEmbed = Array.isArray(texts) ? texts : [texts];
+        const inputError = embeddingInputLimitError(textsToEmbed);
+        if (inputError !== undefined) {
+            return error(inputError);
+        }
         embeddingModel = embeddingModelForRole(embeddingModel, "document");
         const embeddings = await generateTextEmbeddingsWithRetry(
             embeddingModel,

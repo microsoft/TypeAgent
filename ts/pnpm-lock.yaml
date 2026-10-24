@@ -4035,6 +4035,9 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
+      gpt-tokenizer:
+        specifier: ^2.9.0
+        version: 2.9.0
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -4252,6 +4255,12 @@ importers:
       zod:
         specifier: ^4.1.13
         version: 4.1.13
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../memory/service
+      hyparquet:
+        specifier: ^1.30.0
+        version: 1.31.4
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
@@ -19809,6 +19818,9 @@ packages:
 
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
+
+  hyparquet@1.31.4:
+    resolution: {integrity: sha512-Qe37Nhu1lLvmnSL9bQuY/CN8suLDoNMPNhrTb6+ZXJDfiy1mHHRjkoVYIYPhf0krYpRdAxMMnuEWEHeSUCe40g==}
 
 snapshots:
 
@@ -37224,3 +37236,5 @@ snapshots:
   zod@4.6.7: {}
 
   zwitch@2.0.4: {}
+
+  hyparquet@1.31.4: {}

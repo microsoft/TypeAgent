@@ -3,6 +3,7 @@
 
 export * from "./common.js";
 export * from "./models.js";
+export * from "./embeddingInput.js";
 export {
     instrumentChatModel,
     resetLlmClassificationDiagnostics,

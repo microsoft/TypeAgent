@@ -6,6 +6,7 @@ import {
     DocPart,
     type DocMemorySettings,
     createDocMemorySettings,
+    defaultDocPartTokenLimit,
     docPartsFromHtml,
     docPartsFromMarkdown,
     docPartsFromText,
@@ -41,11 +42,10 @@ import type {
 
 const indexBaseName = "corpus";
 const structuralChunkCharacters = 8_000;
-const extractionChunkTokens = 7_500;
 const durableDocPartOptions = {
     collectLinkKnowledge: false,
     collectStructuralKnowledge: false,
-    maxTokensPerPart: extractionChunkTokens,
+    maxTokensPerPart: defaultDocPartTokenLimit,
 };
 
 interface EntityKnowledge {
@@ -227,10 +227,19 @@ function toDocParts(document: IndexedDocument): DocPart[] {
             );
             break;
         case "vtt":
-            parts = docPartsFromVtt(document.content, uri);
+            parts = docPartsFromVtt(
+                document.content,
+                uri,
+                durableDocPartOptions,
+            );
             break;
         case "text":
-            parts = docPartsFromText(document.content, chunkCharacters, uri);
+            parts = docPartsFromText(
+                document.content,
+                chunkCharacters,
+                uri,
+                durableDocPartOptions,
+            );
             break;
     }
     for (const part of parts) {
