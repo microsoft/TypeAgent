@@ -4,11 +4,13 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
+import { canonicalJson } from "./canonicalJson.js";
 import { writeRunbookJson } from "./durableRunbookJson.js";
 import { redactRunbookText } from "./runbookRedaction.js";
 import {
     agentSessionEventDigest,
     buildAgentSessionEpisodes,
+    legacyAgentSessionEventDigests,
     parseAgentSessionChunk,
 } from "./agentSessionParsing.js";
 import {
@@ -84,7 +86,13 @@ interface SessionHost {
 }
 
 function digest(value: unknown): string {
-    return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+    return createHash("sha256").update(canonicalJson(value)).digest("hex");
+}
+
+// Request hashes stored before canonical hashing depend on key order.
+// TODO: remove once sessions recorded with key-order-dependent hashes are gone.
+function legacyRequestHash(request: AgentSessionImportRequest): string {
+    return createHash("sha256").update(JSON.stringify(request)).digest("hex");
 }
 
 function validateIdentifier(value: string): void {
@@ -338,7 +346,11 @@ export class AgentSessionStore {
         const requestKey = digest(request.idempotencyKey);
         const requestHash = digest(request);
         const prior = stored.requests.find((entry) => entry.key === requestKey);
-        if (prior && prior.hash !== requestHash)
+        if (
+            prior &&
+            prior.hash !== requestHash &&
+            prior.hash !== legacyRequestHash(request)
+        )
             throw new Error(
                 "Agent session idempotency key has different content",
             );
@@ -389,14 +401,18 @@ export class AgentSessionStore {
         if (request.expectedCursor !== stored.receipt.cursor)
             throw new Error("Agent session continuation cursor changed");
         const seen: Record<string, string> = {};
+        let legacyDigests: Map<string, string> | undefined;
         const events = parsed.events.filter((event) => {
             const eventKey = digest(event.id);
             const value = agentSessionEventDigest(event);
             const previous = stored.seen[eventKey];
-            if (previous && previous !== value)
-                throw new Error(
-                    "Agent session event identity has conflicting content",
-                );
+            if (previous && previous !== value) {
+                legacyDigests ??= legacyAgentSessionEventDigests(request);
+                if (legacyDigests.get(event.id) !== previous)
+                    throw new Error(
+                        "Agent session event identity has conflicting content",
+                    );
+            }
             if (previous) {
                 parsed.duplicates++;
                 return false;

@@ -8,18 +8,7 @@ import {
     agentEditionToMarkdown,
     validateAgentEdition,
 } from "./agentEditionValidation.js";
-
-function sortJson(value: unknown): unknown {
-    if (Array.isArray(value)) return value.map(sortJson);
-    if (value !== null && typeof value === "object") {
-        return Object.fromEntries(
-            Object.entries(value as Record<string, unknown>)
-                .sort(([left], [right]) => left.localeCompare(right))
-                .map(([key, child]) => [key, sortJson(child)]),
-        );
-    }
-    return value;
-}
+import { canonicalJson } from "./canonicalJson.js";
 
 function validateIdentifier(kind: string, value: string): void {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)) {
@@ -72,7 +61,7 @@ export function procedureToMarkdown(document: ProcedureDocument): string {
     );
     lines.push("", "## Sources", "");
     for (const citation of document.citations) {
-        lines.push(`- ${JSON.stringify(sortJson(citation))}`);
+        lines.push(`- ${canonicalJson(citation)}`);
     }
     if (document.citations.length === 0) lines.push("_None_");
     for (const section of document.additionalSections ?? []) {
