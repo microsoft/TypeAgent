@@ -267,6 +267,7 @@ test("QA partial-overlap deduplication preserves both operands in exact nonoverl
         query: "Renovation cost as a percentage of the price?",
         maxCharsPerFragment: 500,
     });
+
     const ranges = result.fragments
         .map((fragment) => parseIndexedLocator(fragment.locator))
         .sort((a, b) => a.start - b.start);

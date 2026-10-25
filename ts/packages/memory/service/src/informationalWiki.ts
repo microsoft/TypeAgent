@@ -77,6 +77,20 @@ function validateConsolidationIndex(content: WikiContent): void {
         );
 }
 
+function isInformationalSummary(value: unknown): value is string {
+    return (
+        typeof value === "string" &&
+        value.trim().length > 0 &&
+        value.length <= 4000
+    );
+}
+
+function isArticleCompleteness(
+    value: unknown,
+): value is NonNullable<WikiContent["status"]> {
+    return value === "partial" || value === "sufficient";
+}
+
 export function validateInformationalContent(content: WikiContent): void {
     if (
         content.coverageNote !== undefined &&
@@ -104,12 +118,9 @@ export function validateInformationalContent(content: WikiContent): void {
             typeof page.details.note !== "string" ||
             page.details.note.length > 4000 ||
             (position > 0 && page.details.mergedPageIds.length !== 0) ||
-            typeof content.summary !== "string" ||
-            !content.summary.trim() ||
-            content.summary.length > 4000 ||
+            !isInformationalSummary(content.summary) ||
             (content.status !== undefined &&
-                content.status !== "partial" &&
-                content.status !== "sufficient")
+                !isArticleCompleteness(content.status))
         )
             throw new Error(
                 "Invalid informational wiki page or missing explicit coverage limit",
@@ -223,15 +234,9 @@ export function hydrateInformational(
         !value.title.trim() ||
         !("summary" in value) ||
         !("status" in value) ||
-        ("summary" in value &&
-            value.summary !== undefined &&
-            (typeof value.summary !== "string" ||
-                !value.summary.trim() ||
-                value.summary.length > 4000)) ||
-        ("status" in value &&
-            value.status !== undefined &&
-            value.status !== "partial" &&
-            value.status !== "sufficient") ||
+        (value.summary !== undefined &&
+            !isInformationalSummary(value.summary)) ||
+        (value.status !== undefined && !isArticleCompleteness(value.status)) ||
         !("prose" in value) ||
         typeof value.prose !== "string" ||
         !value.prose.trim() ||
@@ -266,7 +271,7 @@ export function hydrateInformational(
     const viewId = input.definition.viewId;
     if (
         typeof value.summary !== "string" ||
-        (value.status !== "partial" && value.status !== "sufficient")
+        !isArticleCompleteness(value.status)
     )
         throw new Error(
             "Informational synthesis requires summary and completeness",

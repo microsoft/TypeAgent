@@ -121,7 +121,21 @@ test("wiki and project summaries preserve semantic warnings and source dates acr
         ).toThrow("summary and completeness");
         expect(() =>
             hydrateInformational(input, { ...value, summary: undefined }),
-        ).toThrow();
+        ).toThrow("summary and completeness");
+        for (const summary of ["", "  ", "x".repeat(4001), null, 1])
+            expect(() =>
+                hydrateInformational(input, { ...value, summary }),
+            ).toThrow("Invalid informational synthesis response");
+        expect(
+            hydrateInformational(input, {
+                ...value,
+                summary: "x".repeat(4000),
+            }).content.summary,
+        ).toHaveLength(4000);
+        for (const status of ["", "unknown", null, 1])
+            expect(() =>
+                hydrateInformational(input, { ...value, status }),
+            ).toThrow("Invalid informational synthesis response");
         expect(wiki.content.sections[0].body).toContain("2026-10-12");
         expect(brief.content.summary).toBe(wiki.content.summary);
         expect(brief.content.status).toBe("partial");

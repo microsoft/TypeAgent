@@ -74,6 +74,13 @@ Run their deterministic checks from the TypeScript workspace with
 These checks do not run production inference or certify factual quality.
 The authored artifact pilot requires independent human review before scoring.
 
+The ingestion profiler's source-level regression tests run through
+`pnpm run test:memory-quality`, or directly with
+`node --test tools/memory-maintenance-qualification/ingestion-profile.test.mjs`.
+The embedding timing harness loads the production input-token checks and batching
+helpers alongside the instrumented function. It verifies retries, vector validation
+failures and rejection of oversized inputs before model calls, without a provider.
+
 Project status rendering keeps capacity review pending distinct from a supported
 blocked condition. A `pendingOwnerReview` enum alone does not establish blockage;
 any actual blocker and its scope must remain in evidence-backed section prose.
@@ -95,6 +102,13 @@ that suite. The same assertions run against 100 and 1,000 commits in
 `test:regression`, which selects only `.regression.ts` files and runs serially.
 These scaling cases are excluded from normal Jest discovery and `test:local`;
 no tests are skipped.
+
+Retained-index privacy checks drain deferred maintenance before enumerating the
+segment directory, so background reclamation cannot remove an obsolete segment
+between directory listing and inspection.
+In CI, Jest runs this package in one worker and recycles it between suites when
+its idle heap exceeds 1 GB. This bounds accumulated ESM module state on Node 22
+without increasing test timeouts or skipping coverage.
 
 The [memory-regression workflow](../../../../../.github/workflows/memory-regression.yml)
 runs both suites every Monday at 08:23 UTC and on manual dispatch, on Ubuntu,
