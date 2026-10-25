@@ -89,7 +89,9 @@ const job: ViewBuildJob = {
 };
 
 class FixtureService extends FileMemoryService {
+    lastTopicQuery?: TopicQueryRequest;
     override async queryTopics(request: TopicQueryRequest) {
+        this.lastTopicQuery = structuredClone(request);
         return queryTopicSnapshot(snapshot, request);
     }
     override async rebuildTopics(corpusId: string) {
@@ -122,6 +124,14 @@ test("complete topic input and bounded browsing survive actual in-process, RPC a
             await createMemoryServiceRpcFacade(service).queryTopics(request),
         ).toEqual(expected);
         expect(await client.queryTopics(request)).toEqual(expected);
+        const detail = {
+            corpusId: "corpus",
+            curated: true,
+            topicId: "concept:one",
+            summarize: true,
+        };
+        await client.queryTopics(detail);
+        expect(service.lastTopicQuery).toEqual(detail);
         expect(topicQueryPageSchema.parse(expected)).toEqual(expected);
         const transported = await client.rebuildTopics("corpus");
         expect(transported).toEqual(job);

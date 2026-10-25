@@ -408,6 +408,22 @@ by itself certify maintained-view drain or the cold-reopen checks.
 
 ## Executing the full LongMemEval suite
 
+Derived-knowledge readiness is separate from source ingestion and the overall
+invocation allowance. `--knowledge-minutes` sets the per-case checkpoint
+execution **and** wait allowance, measured after ingestion. It defaults to
+**10 minutes** and accepts integer values from **1 to 60**. An explicit larger
+benchmark allowance leaves production's ten-minute default unchanged and must
+be disclosed when comparing arms; a successful 60-minute arm is not a
+ten-minute-readiness pass. The allowance is frozen in the run specification and
+cannot change on resume. Non-ready checkpoints are never answered. If a
+checkpoint wait throws, the runner retains its latest durable status rather
+than reporting only the initial pending receipt.
+An explicit non-ready checkpoint raises `EKNOWLEDGENOTREADY` and is reported as
+`KNOWLEDGE_NOT_READY`, even if a grounding rejection mentions a configured
+rubric or provider. Those words alone must not turn a materialization failure
+into a missing-endpoint diagnosis; raw evidence remains suppressed in the
+sanitized benchmark error.
+
 `longmemeval-live.mjs` runs real production ingestion, retrieval and synthesized
 answers, followed by model judging. It is separate from the offline preparation
 CLI and requires `--authorized-live-benchmark`.

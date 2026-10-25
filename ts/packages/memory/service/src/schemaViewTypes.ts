@@ -77,6 +77,10 @@ export interface AnswerCandidate {
     citations: ViewCitation[];
     opposingCitations: ViewCitation[];
     effectiveAt?: string;
+    localChronology?: {
+        timestamp: string;
+        scope: string;
+    };
     assertionOwner?: string;
     independenceKey?: string;
     derivedFrom: string[];
@@ -85,6 +89,10 @@ export interface AnswerCandidate {
         independenceKey?: string;
         assertionOwner?: string;
         effectiveAt?: string;
+        localChronology?: {
+            timestamp: string;
+            scope: string;
+        };
         derivedFrom: string[];
     }>;
 }

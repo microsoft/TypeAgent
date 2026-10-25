@@ -99,6 +99,44 @@ function fixture() {
     };
 }
 
+test.each([0, 11])(
+    "grounding repair reserves its own persisted hourly allowance after %s prior calls",
+    async (previousCalls) => {
+        const f = fixture();
+        f.state().discovery.callTimes = Array.from(
+            { length: previousCalls },
+            () => Date.now(),
+        );
+        let modelCalls = 0;
+        f.host.discover = async (_input, _signal, reserveRepair) => {
+            modelCalls++;
+            await reserveRepair();
+            modelCalls++;
+            return [];
+        };
+        try {
+            const checkpoint = await f.coordinator.create({
+                corpusId: "corpus",
+            });
+            const done = await f.coordinator.wait({
+                corpusId: "corpus",
+                checkpointId: checkpoint.checkpointId,
+            });
+            expect(done.state).toBe(previousCalls === 0 ? "ready" : "failed");
+            expect(modelCalls).toBe(previousCalls === 0 ? 2 : 1);
+            expect(f.state().discovery.callTimes).toHaveLength(
+                previousCalls === 0 ? 2 : 12,
+            );
+            if (previousCalls)
+                expect(done.reasons.join(" ")).toContain(
+                    "hourly budget exhausted before grounding repair",
+                );
+        } finally {
+            await f.coordinator.close();
+        }
+    },
+);
+
 test("discovery persists source identities and adapter identity before dispatch", async () => {
     const f = fixture();
     const plan = f.host.plan;
@@ -614,6 +652,114 @@ test("persisted hourly allowance survives a coordinator restart", async () => {
         expect(done.coverage.deferredSources).toBe(1);
         expect(f.discoveries()).toBe(0);
         expect(done.reasons.join(" ")).toContain("budget");
+    } finally {
+        await f.coordinator.close();
+    }
+});
+
+test.each([false, true])(
+    "producerComplete=%s preserves hourly discovery limits",
+    async (producerComplete) => {
+        const f = fixture();
+        f.state().discovery.callTimes = Array.from({ length: 12 }, () =>
+            Date.now(),
+        );
+        try {
+            const checkpoint = await f.coordinator.create({
+                corpusId: "corpus",
+                producerComplete,
+            });
+            const done = await f.coordinator.wait({
+                corpusId: "corpus",
+                checkpointId: checkpoint.checkpointId,
+            });
+            expect(done.state).toBe("partial");
+            expect(done.coverage.deferredSources).toBe(1);
+            expect(f.discoveries()).toBe(0);
+        } finally {
+            await f.coordinator.close();
+        }
+    },
+);
+
+test.each([false, true])(
+    "producerComplete=%s controls continuation across bounded discovery windows",
+    async (producerComplete) => {
+        const f = fixture();
+        f.sources(
+            Array.from({ length: 7 }, (_, index) => ({
+                sourceId: `source-${index}`,
+                revisionId: "r1",
+                title: "Harbor",
+                content: "Original source.",
+            })),
+        );
+        const plan = f.host.plan;
+        f.host.plan = (...args) => {
+            const window = plan(...args)[0];
+            return window.passages
+                .map((passage) => ({
+                    ...window,
+                    fingerprint: passage.sourceId,
+                    passages: [passage],
+                }))
+                .filter(
+                    (entry) =>
+                        !f
+                            .state()
+                            .discovery.receipts.some(
+                                (receipt) =>
+                                    receipt.fingerprint === entry.fingerprint &&
+                                    receipt.state === "complete",
+                            ),
+                )
+                .slice(0, 3);
+        };
+        try {
+            const checkpoint = await f.coordinator.create({
+                corpusId: "corpus",
+                producerComplete,
+            });
+            const done = await f.coordinator.wait({
+                corpusId: "corpus",
+                checkpointId: checkpoint.checkpointId,
+            });
+            expect(done.state).toBe(producerComplete ? "ready" : "partial");
+            expect(f.discoveries()).toBe(producerComplete ? 7 : 3);
+            expect(done.coverage.inspectedSources).toBe(
+                producerComplete ? 7 : 3,
+            );
+        } finally {
+            await f.coordinator.close();
+        }
+    },
+);
+
+test("complete receipts with historical deferral reasons do not remain partial forever", async () => {
+    const f = fixture();
+    f.state().discovery.receipts.push({
+        fingerprint: "source:r1",
+        sources: [{ sourceId: "source", revisionId: "r1" }],
+        state: "complete",
+        attempts: 1,
+        startedAt: new Date().toISOString(),
+        viewIds: [],
+        reason: "Checkpoint admission limit reached",
+    });
+    try {
+        const checkpoint = await f.coordinator.create({
+            corpusId: "corpus",
+            producerComplete: true,
+        });
+        expect(
+            (
+                await f.coordinator.wait({
+                    corpusId: "corpus",
+                    checkpointId: checkpoint.checkpointId,
+                })
+            ).state,
+        ).toBe("ready");
+        expect(f.discoveries()).toBe(0);
     } finally {
         await f.coordinator.close();
     }

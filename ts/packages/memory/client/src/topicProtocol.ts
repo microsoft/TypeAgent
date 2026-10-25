@@ -46,31 +46,51 @@ const related = z.strictObject({
     toId: id,
     kind: z.literal("related"),
 });
-const topicConceptSchema = z.strictObject({
-    id,
-    label: z.string().min(1).max(200),
-    scope: z.string().min(1).max(200),
-    purpose: z.string().min(1).max(2000),
-    memberIds: id.array().min(1),
-    summary: z.string().min(1).max(1600),
-    citations: citation.array().min(1),
-    salience: z.number().int().min(1).max(8),
-});
+const topicConceptSchema = z
+    .strictObject({
+        id,
+        label: z.string().min(1).max(200),
+        scope: z.string().min(1).max(200),
+        purpose: z.string().min(1).max(2000),
+        memberIds: id.array().min(1),
+        summary: z.string().max(1600),
+        summaryState: z.enum(["pending", "ready"]).optional(),
+        citations: citation.array().min(1),
+        salience: z.number().int().min(1).max(8),
+    })
+    .refine(
+        (concept) =>
+            concept.summaryState === "pending"
+                ? concept.summary === ""
+                : concept.summary.trim().length > 0,
+        "Concept summary must be empty only while explicitly pending",
+    );
 const topicCurationSchema = z.strictObject({
     concepts: topicConceptSchema.array(),
     deferred: z
         .strictObject({ nodeId: id, reason: z.string().min(1).max(2000) })
         .array(),
 });
-export const topicQueryRequestSchema = z.strictObject({
-    corpusId: id,
-    topicId: id.optional(),
-    search: z.string().max(1000).optional(),
-    depth: z.number().int().min(0).max(10).optional(),
-    pageSize: z.number().int().min(1).max(200).optional(),
-    continuationToken: z.string().min(1).max(2000).optional(),
-    curated: z.boolean().optional(),
-});
+export const topicQueryRequestSchema = z
+    .strictObject({
+        corpusId: id,
+        topicId: id.optional(),
+        search: z.string().max(1000).optional(),
+        depth: z.number().int().min(0).max(10).optional(),
+        pageSize: z.number().int().min(1).max(200).optional(),
+        continuationToken: z.string().min(1).max(2000).optional(),
+        curated: z.boolean().optional(),
+        summarize: z.boolean().optional(),
+    })
+    .refine(
+        (request) =>
+            !request.summarize ||
+            (request.curated === true &&
+                !!request.topicId &&
+                !request.search &&
+                !request.continuationToken),
+        "Summary generation requires one explicit curated topic",
+    );
 export const topicQueryPageSchema = z.strictObject({
     generation: id.nullable(),
     nodes: topicNodeSchema
@@ -110,7 +130,7 @@ export const topicQueryPageSchema = z.strictObject({
         elapsedMs: z.number().nonnegative(),
     }),
     concepts: topicConceptSchema
-        .extend({
+        .safeExtend({
             memberIds: id.array().max(20),
             citations: citation.array().max(8),
             memberCount: count,

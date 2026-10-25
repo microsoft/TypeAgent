@@ -92,6 +92,7 @@ async function prepareKnowledge(service, construction, record, controls) {
     assert.equal(typeof service.waitForKnowledgeCheckpoint, "function");
     controls.signal.throwIfAborted();
     controls.role(`knowledge:${construction.id}`);
+    const timeoutMs = controls.knowledgeTimeoutMs ?? 600000;
     if (!record.knowledgeCheckpoint) {
         record.knowledgeCheckpoint = await service.createKnowledgeCheckpoint({
             corpusId: record.corpusId,
@@ -103,19 +104,43 @@ async function prepareKnowledge(service, construction, record, controls) {
                 ),
             ],
             producerComplete: true,
+            timeoutMs,
         });
         await controls.persist();
     }
-    record.knowledgeCheckpoint = await service.waitForKnowledgeCheckpoint({
-        corpusId: record.corpusId,
-        checkpointId: record.knowledgeCheckpoint.checkpointId,
-    });
+    try {
+        record.knowledgeCheckpoint = await service.waitForKnowledgeCheckpoint({
+            corpusId: record.corpusId,
+            checkpointId: record.knowledgeCheckpoint.checkpointId,
+            timeoutMs,
+        });
+    } catch (error) {
+        if (service.getKnowledgeCheckpoint) {
+            try {
+                const checkpoint = await service.getKnowledgeCheckpoint({
+                    corpusId: record.corpusId,
+                    checkpointId: record.knowledgeCheckpoint.checkpointId,
+                });
+                if (checkpoint) record.knowledgeCheckpoint = checkpoint;
+                await controls.persist();
+            } catch (statusError) {
+                throw new AggregateError(
+                    [error, statusError],
+                    "Knowledge wait failed and checkpoint status could not be retained",
+                );
+            }
+        }
+        throw error;
+    }
     await controls.persist();
-    assert.equal(
-        record.knowledgeCheckpoint.state,
-        "ready",
-        `Knowledge is not ready: ${record.knowledgeCheckpoint.state}; ${record.knowledgeCheckpoint.reasons.join("; ")}`,
-    );
+    if (record.knowledgeCheckpoint.state !== "ready") {
+        const error = new Error(
+            `Knowledge is not ready: ${record.knowledgeCheckpoint.state}; ${record.knowledgeCheckpoint.reasons.join("; ")}`,
+        );
+        error.name = "KnowledgeNotReadyError";
+        error.code = "EKNOWLEDGENOTREADY";
+        throw error;
+    }
 }
 
 export async function executeMemoryCase(

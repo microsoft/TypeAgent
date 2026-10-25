@@ -35,6 +35,8 @@ export class WikiAssessmentRejection extends Error {
 }
 
 export const wikiPurposeRules = `Each page needs an independently useful explanatory purpose, not just a different label.
+The retrieval query and aliases define the candidate subject. Judge that subject only; do not admit an unrelated
+retrieved topic under this candidate to bypass an existing page's coverage of the queried subject.
 Assess consumer value, substantive supported content, marginal novelty and durable reference or decision value.
 Return defer when evidence is only a passing mention, generic chatter, an unsupported shell or too sparse
 for a useful explanation; zero new pages is a successful outcome. Give a concrete reason.
@@ -53,6 +55,8 @@ For covered suppression, identify essential distinctions from every selected fra
 For an ordinary contribution, identify the relevant missing distinctions; irrelevant or redundant context need not acquire an invented assertion.
 Shared citations alone are not prose coverage. Empty canonicalExcerpt means a missing explanation, not coverage.
 Return contribute when the same scoped purpose belongs in a supplied canonical page but essential explanation/qualification is missing.
+If the relevant evidence adds nothing to the current page and unrelated retrieval context prevents an all-fragment
+covered proof, defer the redundant candidate with a concrete reason; do not invent a new purpose or missing distinction.
 Contribution adds that missing explanation from indexed evidence; never use model page prose as source evidence.
 Keep resource definitions and failure explanations together only if that makes an independently useful same-scope page.
 Different project/episode/statistics/cohort/units or independently useful purposes remain distinct even with identical sources.
@@ -184,6 +188,9 @@ function subjectOverlap(
 export function wikiAssessmentSchema(
     pages: WikiPagePurposeContext[],
 ): StructuredOutputJsonSchema {
+    const fragmentIds = [
+        ...new Set(pages.flatMap((page) => page.candidateFragmentIds)),
+    ];
     return {
         name: "wiki_subject_purpose",
         strict: true,
@@ -221,9 +228,18 @@ export function wikiAssessmentSchema(
                         type: "object",
                         additionalProperties: false,
                         properties: {
-                            fragmentId: { type: "string" },
+                            fragmentId: {
+                                type: "string",
+                                ...(fragmentIds.length
+                                    ? { enum: fragmentIds }
+                                    : {}),
+                            },
                             statement: { type: "string" },
-                            canonicalExcerpt: { type: "string" },
+                            canonicalExcerpt: {
+                                type: "string",
+                                description:
+                                    'An exact contiguous substring of the selected page.prose, preserving punctuation and whitespace. Never paraphrase, concatenate separated sentences or insert ellipses. Use "" for missing explanation.',
+                            },
                         },
                         required: [
                             "fragmentId",
@@ -323,7 +339,7 @@ export function parseWikiAssessment(
                     .map((id) => Number(id.slice(1))),
             });
     }
-    if (canonical) validateDistinctions(assessment, canonical);
+    if (canonical) validateDistinctions(assessment, canonical, requirements);
     if (
         assessment.disposition === "covered" &&
         requirements.some(
@@ -418,12 +434,16 @@ function parseDistinctions(
 function validateDistinctions(
     assessment: WikiSubjectAssessment,
     canonical: WikiPagePurposeContext,
+    requirements: WikiSubjectAssessment["essentialDistinctions"],
 ): void {
     const distinctions = assessment.essentialDistinctions;
+    const requiredFragments = requirements.length
+        ? [...new Set(requirements.map((required) => required.fragmentId))]
+        : canonical.candidateFragmentIds;
     if (
         !canonical.candidateFragmentIds.length ||
         (assessment.disposition === "covered" &&
-            canonical.candidateFragmentIds.some(
+            requiredFragments.some(
                 (id) => !distinctions.some((item) => item.fragmentId === id),
             )) ||
         distinctions.some(
@@ -435,7 +455,7 @@ function validateDistinctions(
         )
     )
         throw new WikiAssessmentRejection("invalid-distinction-evidence", {
-            missingFragmentCount: canonical.candidateFragmentIds.filter(
+            missingFragmentCount: requiredFragments.filter(
                 (id) => !distinctions.some((item) => item.fragmentId === id),
             ).length,
             invalidFragmentCount: distinctions.filter(
@@ -448,6 +468,20 @@ function validateDistinctions(
                     (!item.canonicalExcerpt.trim() ||
                         !canonical.prose.includes(item.canonicalExcerpt)),
             ).length,
+            missingFragmentOrdinals: requiredFragments
+                .filter(
+                    (id) =>
+                        /^f\d{1,5}$/.test(id) &&
+                        !distinctions.some((item) => item.fragmentId === id),
+                )
+                .map((id) => Number(id.slice(1))),
+            invalidWitnessOrdinals: distinctions.flatMap((item, index) =>
+                item.canonicalExcerpt !== "" &&
+                (!item.canonicalExcerpt.trim() ||
+                    !canonical.prose.includes(item.canonicalExcerpt))
+                    ? [index]
+                    : [],
+            ),
         });
     const missing = distinctions.some((item) => item.canonicalExcerpt === "");
     if (

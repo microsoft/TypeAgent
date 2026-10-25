@@ -49,6 +49,7 @@ export interface KnowledgeHost {
     discover(
         input: CorpusQuestionInput,
         signal: AbortSignal,
+        reserveRepair: () => Promise<void>,
     ): Promise<CorpusQuestionProposal[]>;
     admit(
         corpusId: string,
@@ -276,7 +277,9 @@ export class KnowledgeCoordinator {
             const proposals =
                 prior?.proposals ??
                 (await abortable(
-                    this.host.discover(input, callSignal),
+                    this.host.discover(input, callSignal, () =>
+                        this.reserveDiscoveryRepair(corpusId),
+                    ),
                     callSignal,
                 ));
             if (proposals.length > input.maxProposals)
@@ -342,6 +345,19 @@ export class KnowledgeCoordinator {
             this.controllers.delete(controller);
         }
         return admitted - previousAdmissions;
+    }
+
+    private async reserveDiscoveryRepair(corpusId: string): Promise<void> {
+        await this.host.write(corpusId, (status) => {
+            const calls = status.discovery.callTimes.filter(
+                (time) => time > Date.now() - 3_600_000,
+            );
+            if (calls.length >= knowledgeLimits.callsPerHour)
+                throw new Error(
+                    "Discovery hourly budget exhausted before grounding repair",
+                );
+            status.discovery.callTimes = [...calls, Date.now()];
+        });
     }
 
     private async reserveDiscoveryWindow(
@@ -588,7 +604,28 @@ export class KnowledgeCoordinator {
     ): Promise<string[]> {
         if (!checkpoint.families.includes("questions")) return [];
         try {
-            await this.runDiscovery(checkpoint.corpusId, sources, signal);
+            let previous: string | undefined;
+            do {
+                signal.throwIfAborted();
+                const before = (await this.host.read(checkpoint.corpusId))
+                    .discovery;
+                const progress = JSON.stringify(
+                    before.receipts.map((receipt) => [
+                        receipt.fingerprint,
+                        receipt.state,
+                        receipt.processedProposals,
+                    ]),
+                );
+                if (progress === previous) break;
+                previous = progress;
+                await this.runDiscovery(checkpoint.corpusId, sources, signal);
+                const status = await this.host.read(checkpoint.corpusId);
+                if (
+                    status.discovery.error ||
+                    !(await this.discoveryCoverage(checkpoint)).limited
+                )
+                    break;
+            } while (checkpoint.producerComplete);
             return [];
         } catch (error) {
             signal.throwIfAborted();
@@ -619,7 +656,7 @@ export class KnowledgeCoordinator {
             checkpoint.families.includes("questions") &&
             (deferred > 0 ||
                 !!status.discovery.error ||
-                receipts.some((r) => r.reason));
+                receipts.some((r) => r.state !== "complete" && r.reason));
         return {
             coverage: {
                 inspectedSources: inspected.size,

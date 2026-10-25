@@ -522,9 +522,15 @@ test("document evidence retains exact revision and locator rather than reading c
     expect(onOpenSource).toHaveBeenCalledWith("a", "doc");
 });
 
-test.each([true, false])(
-    "maintained summaries load lazily and reject changed snapshots (current=%s)",
-    async (current) => {
+test.each([
+    { current: true, curated: false },
+    { current: false, curated: false },
+    { current: true, curated: true },
+    { current: false, curated: true },
+])(
+    "maintained summaries load lazily and reject changed snapshots (current=$current, curated=$curated)",
+    async ({ current, curated }) => {
+        const topicId = curated ? "concept:one" : "topic-1";
         invoke.mockImplementation((method) => {
             if (method === "memoryHubGraph")
                 return Promise.resolve({
@@ -538,7 +544,7 @@ test.each([true, false])(
                                     {
                                         ...sample.corpora[0].graph.nodes[0],
                                         kind: "topic",
-                                        topicId: "topic-1",
+                                        topicId,
                                         summaryState: "pending",
                                     },
                                 ],
@@ -562,15 +568,27 @@ test.each([true, false])(
             if (method === "memoryQueryTopics")
                 return Promise.resolve({
                     generation: current ? "topic-g1" : "topic-g2",
-                    nodes: [
-                        {
-                            id: "topic-1",
-                            summary: "Maintained summary content",
-                            summaryState: "ready",
-                            scope: "project",
-                            limits: [],
-                        },
-                    ],
+                    nodes: curated
+                        ? []
+                        : [
+                              {
+                                  id: "topic-1",
+                                  summary: "Maintained summary content",
+                                  summaryState: "ready",
+                                  scope: "project",
+                                  limits: [],
+                              },
+                          ],
+                    concepts: curated
+                        ? [
+                              {
+                                  id: topicId,
+                                  summary: "Maintained summary content",
+                                  summaryState: "ready",
+                                  scope: "project",
+                              },
+                          ]
+                        : undefined,
                     limits: [],
                 });
             throw new Error(`Unexpected maintained topic call: ${method}`);
@@ -584,8 +602,8 @@ test.each([true, false])(
         await settle();
         expect(invoke).toHaveBeenCalledWith("memoryQueryTopics", {
             corpusId: "a",
-            topicId: "topic-1",
-            depth: 0,
+            topicId,
+            ...(curated ? { curated: true, summarize: true } : { depth: 0 }),
             pageSize: 1,
         });
         if (current) {

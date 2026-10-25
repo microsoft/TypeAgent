@@ -28,6 +28,8 @@ import {
     validateQuestionSlot,
 } from "../src/schemaView.js";
 import type { AnswerCandidate, QuestionSlot } from "../src/schemaViewTypes.js";
+import type { ChatModel } from "@typeagent/aiclient";
+import { createConfiguredViewSynthesisAdapter } from "../src/viewSynthesis.js";
 
 const slot: QuestionSlot = {
     id: "model-hint",
@@ -81,6 +83,68 @@ function response(
 function proposal(): CorpusQuestionProposal {
     return parseCorpusQuestionDiscovery(input, response())[0];
 }
+
+test.each([false, true])(
+    "configured discovery repairs exact cited-subject grounding once; repeatedInvalid=%s",
+    async (repeatedInvalid) => {
+        let calls = 0;
+        let reserved = 0;
+        const model: ChatModel = {
+            completionSettings: {},
+            complete: async (messages) => {
+                calls++;
+                if (calls === 2) {
+                    if (typeof messages === "string")
+                        throw new Error("Expected structured discovery prompt");
+                    const payload = JSON.parse(String(messages[1].content));
+                    expect(payload.passages).toEqual(input.passages);
+                    expect(payload.rejectedProposalIndex).toBe(0);
+                }
+                return {
+                    success: true,
+                    data: JSON.stringify(
+                        response([
+                            {
+                                subject:
+                                    calls === 1 || repeatedInvalid
+                                        ? "Harbor ownership"
+                                        : "Harbor",
+                                reason: "Durable rollout leadership",
+                                slot,
+                                passageIds: [passage.passageId],
+                                utility: {
+                                    consumerValue: 2,
+                                    substance: 2,
+                                    novelty: 2,
+                                    durability: 2,
+                                },
+                            },
+                        ]),
+                    ),
+                };
+            },
+        };
+        const adapter = createConfiguredViewSynthesisAdapter(
+            undefined,
+            undefined,
+            model,
+        );
+        const result = adapter.discoverCorpusQuestions!(
+            input,
+            new AbortController().signal,
+            async () => {
+                reserved++;
+            },
+        );
+        if (repeatedInvalid)
+            await expect(result).rejects.toThrow(
+                "Discovered subject is not resolvable",
+            );
+        else expect((await result)[0].subject).toBe("Harbor");
+        expect(calls).toBe(2);
+        expect(reserved).toBe(1);
+    },
+);
 
 test("generic role subjects route through meaningful predicates, not grammar", () => {
     expect(

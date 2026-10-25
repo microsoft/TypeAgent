@@ -96,6 +96,21 @@ export async function captureTopicBuild(options: {
         ...(options.eventOccurrences ?? []),
     ];
     const nodes = initialTopicNodes(corpusId, occurrences);
+    const fingerprint = topicInputFingerprint(
+        sources,
+        indexGeneration,
+        suppressions,
+        model,
+        options.influenceEvents,
+    );
+    const reusableCuration =
+        current?.corpusId === corpusId &&
+        current.recipe === `${model}:editorial-v1:curated-lazy-v6` &&
+        current.inputFingerprint === fingerprint &&
+        viewHash(current.occurrences) === viewHash(occurrences) &&
+        current.nodes.every((node) => node.authorship === "generated")
+            ? (current.curation ?? current.curationProgress)
+            : undefined;
     const reusableSummaries =
         current?.corpusId === corpusId &&
         current.recipe === `${model}:editorial-v1`
@@ -161,17 +176,14 @@ export async function captureTopicBuild(options: {
             : {}),
         pipeline: "topics-v1",
         model,
-        fingerprint: topicInputFingerprint(
-            sources,
-            indexGeneration,
-            suppressions,
-            model,
-            options.influenceEvents,
-        ),
+        fingerprint,
         topicInput: {
             occurrences,
             ...(indexGeneration ? { indexGeneration } : {}),
             reusableSummaries,
+            ...(reusableCuration
+                ? { reusableCuration: structuredClone(reusableCuration) }
+                : {}),
             authoredLabels: (current?.nodes ?? [])
                 .filter((node) => node.authorship === "human")
                 .map(({ id, label, aliases }) => ({ id, label, aliases })),
@@ -182,8 +194,15 @@ export async function captureTopicBuild(options: {
 export function reconcileTopicFamily(
     family: TopicFamilyState,
     indexGeneration: string | undefined,
+    currentFingerprint?: string,
+    expectedFingerprint?: string,
 ): TopicFamilyState {
-    if (family.indexGeneration === indexGeneration) return family;
+    if (
+        family.indexGeneration === indexGeneration &&
+        (expectedFingerprint === undefined ||
+            currentFingerprint === expectedFingerprint)
+    )
+        return family;
     return {
         enabled: family.enabled,
         dirty: true,

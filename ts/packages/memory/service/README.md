@@ -51,6 +51,182 @@ Existing stored messages are not silently rechunked because that would change
 indexed locators. Reimport/rebuild from retained sources when adopting the new
 chunking policy; benchmark comparisons require fresh stores and fingerprints.
 
+## Knowledge readiness during continuous ingestion
+
+Source ingestion completion is not derived-knowledge readiness. Automatic
+question discovery waits until standalone ingestion queues and durable import
+batches are idle; the final ingestion schedules discovery again. Automatic
+maintenance also waits for standalone ingestion to finish. Automatic topics
+coalesce index changes for a two-second quiet period; explicit maintenance
+drains bypass that delay. Capability settings are unchanged.
+
+An index change promptly cancels an obsolete running topic generation without
+waiting for model calls under the foreground write lock. The build still owns
+and drains its workers. Topic generation periodically persists independently
+audited summaries before organization, so interrupted work can reuse summaries
+only when their original evidence, source-revision context and model recipe
+still match. Unaudited prose is never exposed as a ready summary.
+
+`createKnowledgeCheckpoint({ corpusId, producerComplete: true })` continues
+bounded discovery windows and page-family passes within the checkpoint's
+existing timeout. Ordinary checkpoints retain their bounded single-round
+discovery and three page-pass behavior. Continuation does not bypass the
+persisted hourly discovery allowance, retry failed discovery implicitly, or
+turn partial/failed coverage into `ready`. No progress, exhausted allowances,
+disabled families, deadlines and failed builds remain explicit.
+
+Completed discovery receipts are not made partial by an obsolete deferral
+reason. Successful low-utility wiki skips remain complete build outcomes;
+their admission receipts prevent unchanged utility deferrals from cycling
+through every checkpoint pass. New index generations, model/admission policy,
+or page revisions invalidate those receipts; explicit rebuild also bypasses
+them. Blocked editorial assessments remain failures. Configured wiki assessment
+allows one logged evidence-contract repair against the unchanged supplied
+fragments and pages, then validates again without a success-shaped fallback.
+On structured-output-capable models, topic summary schemas restrict numeric
+evidence references to the IDs actually supplied in that individual request.
+Models that disable response formatting retain the existing JSON-prompt path;
+host validation still rejects invalid responses on both paths.
+
+Configured question discovery requires a contiguous subject phrase in one of
+the proposal's cited passages. An unresolved subject permits one logged repair
+against the same frozen evidence, followed by full validation. That extra call
+reserves another persisted hourly allowance before dispatch; exhausted budgets,
+repeated invalid output and unrelated errors remain failures. The existing
+per-window timeout and hourly cap are not increased.
+
+## Concept curation and lazy topic summaries
+
+`FileMemoryService` enables curated topics by default. Complete raw incidence
+is retained, but background generation curates evidence-grounded concepts
+instead of producing a summary for every raw nomination. `curatedTopics: false`
+retains the legacy raw-summary path for explicit diagnostic/custom-host use.
+The recipe/fingerprint distinguishes these policies, so old raw snapshots
+cannot silently qualify as current curated knowledge.
+
+The LLM decides semantic equivalence, compatible scope and whether a concept
+has a substantive, specific consumer purpose. Host rules validate supplied
+identities, exact membership accounting, cited sources and bounded payloads;
+they do not equate repeated names or source overlap. Corpus-wide lexical
+candidate retrieval reintroduces relevant previously admitted concepts into
+later bounded batches for LLM reconciliation. Exact labels are prioritized,
+including short acronyms. This is candidate retrieval, not a hardcoded merge;
+synonyms missed by retrieval or evidence-budget bounds may remain separate.
+Salience is a model-assigned ordinal, not truth confidence or an automatic
+host-side admission threshold.
+
+Configured curation sends a strict, per-batch response schema with bounded
+text fields and enumerated occurrence/evidence IDs. JSON-only adapters retain
+the same prompt bounds and host validation. Contract failures in text bounds,
+membership accounting or evidence assignment permit one explicit repair against
+the unchanged evidence batch, with a fresh membership accounting pass. If an
+otherwise validated response omits nodes, the host retains valid decisions and
+requests one targeted completion for the missing nodes plus relevant admitted
+concepts, using the unchanged evidence. This can also follow a general contract
+repair; a second omission is terminal, not another retry. Validated unrelated
+decisions are not regenerated. Length
+diagnostics identify the field, observed length and limit. Repairs must account
+for every supplied occurrence exactly once and cite only evidence belonging to
+their members. Repeated violations and provider failures remain errors; text
+is never silently truncated and invalid provenance is never admitted.
+When a previously admitted concept is reconsidered, evidence ownership is checked
+against all expanded original raw members and their occurrences, not just the
+concept's earlier selected citation subset. Truly unrelated sources remain invalid.
+Lazy curation packs raw candidates from the same source revision together
+before applying the existing node and evidence-byte bounds. This reduces
+repeated source context without dropping evidence. Source proximity is a
+batching decision, not proof of semantic equivalence; the LLM still decides
+admission and cross-batch reconciliation.
+The curated-lazy-v6 recipe invalidates earlier curation-policy snapshots.
+
+Validated curation decisions are durably checkpointed after the first batch,
+every eight batches and the final batch, using the existing incidence write path.
+Partial decisions remain separate from completed curation and are not exposed
+as a finished curated hierarchy. A retry can reuse them only when corpus,
+recipe, source/index fingerprint and exact occurrence evidence are unchanged;
+human-authored node metadata prevents reuse. Source eligibility is rechecked
+before every write. Checkpoint persistence errors stop generation. Completed
+curation is also saved before organization, so an organization failure does not
+require repeating valid curation.
+
+Organization uses a strict response schema enumerating the supplied batch IDs.
+Invalid identities, malformed edges, self-links or parent cycles permit one
+replacement response against the unchanged label/scope batch, followed by fresh
+identity and whole-graph DAG validation. Repeated contract errors, cancellation
+and provider failures fail the build explicitly; they no longer return a
+success-shaped snapshot with silently absent graph edges. Valid empty edge sets
+remain allowed when the model finds no useful organizational relationships.
+
+Ordinary browsing, filtering, graph reads and knowledge readiness never require
+topic prose. Maintained hierarchy nodes represent admitted concepts and point
+to original occurrences; raw co-occurrence graphs remain indexed evidence.
+Parent/related organization uses concept labels and scopes, not summaries, and
+still runs during background maintenance. An in-progress concept build reports
+building coverage rather than exposing provisional raw nodes as a finished
+curated hierarchy.
+Wiki construction retrieves its own indexed evidence and does not consume
+topic summaries.
+
+An explicit detail request,
+`queryTopics({ corpusId, curated: true, topicId, summarize: true })`, generates
+only that concept's summary and independently audits it against original
+evidence. It cannot be combined with search or continuation. Concurrent requests
+for the same generation/concept share work; successful prose is durably cached.
+Changed source eligibility or a rebuilt generation rejects stale writes.
+Source removal and shutdown abort and drain owned summary work. Failures
+propagate to the caller; a later explicit request can retry. Summary absence
+does not count as missing evidence or prevent curated-topic readiness.
+
+The topic browser opens curated concepts by default, exposes original evidence
+before prose exists, and offers an explicit **Open concept summary** action.
+**All topics** and member drilldown preserve access to raw occurrences without
+triggering model work. Opening an admitted concept's hierarchy detail also
+requests and caches its summary; loading the graph itself does not.
+
+### Question chronology and bounded evidence repair
+
+Question candidates retain absolute `effectiveAt` only when the evidence states
+a timezone. Timezone-free observations can instead carry
+`localChronology: { timestamp, scope }`, preserving minute/second precision.
+The scope must identify a source-established common clock or ordered
+conversation/journal timeline. `mostRecent` compares local times only within
+the same scope; mixed absolute/local clocks and unrelated local scopes remain
+incomparable. No timezone is inferred from ingestion time. Each support keeps
+its own chronology when equal candidate values coalesce; a candidate-level
+timestamp is not invented across incompatible clocks.
+
+Historical value changes are separate dated observations, not automatically
+opposing evidence. Confirmation, authority, independent-support and freshness
+requirements remain in force. A complete but unsupported schema-answer audit
+can trigger one repair against unchanged retained passages, followed by host
+validation and a fresh support audit. Incomplete audit coverage, provider
+failures and a second unsupported result do not become accepted drafts.
+Generation and repair require every clause of every source candidate, including
+unselected candidates, to be supported by that candidate's own cited passages.
+Silence in an excerpt does not establish that an entire source has no decision.
+Repair adds the actual supporting passages or narrows unsupported clauses while
+preserving supported competing history; an unresolved aggregate answer does not
+exempt its candidates from these checks.
+Rendered source-derived answers explicitly describe historical observations and
+show their source times or unknown chronology. Maintenance freshness is not
+present-day verification of the observed fact.
+
+Wiki assessment repair reports omitted fragment ordinals and invalid witness
+ordinals. A coverage witness must quote a contiguous, verbatim substring of
+the selected canonical page prose; a source excerpt or paraphrase is not a
+canonical coverage witness. The same evidence is reused for the single bounded
+repair, and host coverage/provenance validation still rejects invalid results.
+
+Canonical contribution coverage is separate from standalone admission and
+redundancy screening. It checks the actual merged article against mandatory
+incoming distinctions and supported prior qualifications, using original source
+evidence, not the prior article as evidence. Unrelated retrieval context is not a
+mandatory new subject. A complete non-covering assessment can drive one article
+reconstruction, then another merge, host validation and independent coverage
+assessment. Both initial contributions and later refreshes share this path.
+Human edit conflicts bypass reconstruction and remain conflicts; transport
+errors, incomplete assessments and a second omission remain explicit failures.
+
 ## Offline test fixtures
 
 Memory maintenance regressions use the bundled synthetic
@@ -580,6 +756,14 @@ indexed evidence establishes one scoped purpose and an actual-output consequenti
 check passes. Shared citations only nominate a bounded comparison. Resource versus
 failure explanations, incompatible initiative scopes, exclusions, protected units
 and any historical human edits do not authorize automatic retirement.
+
+An unsafe consequential check permits one explicit reconstruction against unchanged
+original fragments. Only the summary and bodies of all existing sections may change;
+the host preserves section IDs, headings, citations, relationships and redirect
+anchors. A fresh independent check compares the actual repaired prose with original
+evidence and every supported unique claim in the unrepaired combined article.
+Invalid assessments, repeated rejection, provider failure and cancellation remain
+errors; they do not authorize consolidation or bypass readiness.
 
 The host retains unique sections, excerpts and citations in an exact registered
 consolidation index; ordinary generation remains single-page. Existing target

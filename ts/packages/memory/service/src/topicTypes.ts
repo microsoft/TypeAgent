@@ -54,6 +54,7 @@ export interface TopicSnapshot {
     related: Array<{ fromId: string; toId: string; kind: "related" }>;
     limits: string[];
     curation?: TopicCuration;
+    curationProgress?: TopicCuration;
 }
 export interface TopicConcept {
     id: string;
@@ -62,6 +63,7 @@ export interface TopicConcept {
     purpose: string;
     memberIds: string[];
     summary: string;
+    summaryState?: "pending" | "ready";
     citations: ViewCitation[];
     salience: number;
 }
@@ -75,6 +77,7 @@ export interface TopicBuildInput {
     reusableSummaries?: Array<
         Pick<TopicNode, "id" | "summary" | "citations" | "limits">
     >;
+    reusableCuration?: TopicCuration;
     indexGeneration?: string;
 }
 export interface TopicQueryRequest {
@@ -85,6 +88,7 @@ export interface TopicQueryRequest {
     pageSize?: number;
     continuationToken?: string;
     curated?: boolean;
+    summarize?: boolean;
 }
 export interface TopicQueryPage {
     generation: string | null;

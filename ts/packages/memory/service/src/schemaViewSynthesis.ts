@@ -113,12 +113,23 @@ export function schemaAnswerResponse(): StructuredOutputJsonSchema {
                                     properties: {
                                         valueJson: { type: "string" },
                                         effectiveAt: { type: "string" },
+                                        localTimestamp: {
+                                            type: "string",
+                                            pattern:
+                                                "^(?:|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2})?)$",
+                                        },
+                                        localTimeScope: {
+                                            type: "string",
+                                            maxLength: 200,
+                                        },
                                         passageIds: refs,
                                         opposingPassageIds: refs,
                                     },
                                     required: [
                                         "valueJson",
                                         "effectiveAt",
+                                        "localTimestamp",
+                                        "localTimeScope",
                                         "passageIds",
                                         "opposingPassageIds",
                                     ],
@@ -205,6 +216,18 @@ export function hydrateSchemaAnswers(
                     "Candidate effective time is required, empty when unknown",
                 );
             const effectiveAt = raw.effectiveAt || undefined;
+            const localTimestamp = raw.localTimestamp ?? "";
+            const localTimeScope = raw.localTimeScope ?? "";
+            if (
+                typeof localTimestamp !== "string" ||
+                typeof localTimeScope !== "string" ||
+                Boolean(localTimestamp) !== Boolean(localTimeScope) ||
+                (effectiveAt && localTimestamp)
+            )
+                throw new Error("Invalid candidate chronology binding");
+            const localChronology = localTimestamp
+                ? { timestamp: localTimestamp, scope: localTimeScope }
+                : undefined;
             const support = citations.map((citation) => {
                 const source = input.inputs.find(
                     (source) =>
@@ -213,6 +236,7 @@ export function hydrateSchemaAnswers(
                 return {
                     citation,
                     ...(effectiveAt ? { effectiveAt } : {}),
+                    ...(localChronology ? { localChronology } : {}),
                     ...(source.assertionLineage?.owner
                         ? { assertionOwner: source.assertionLineage.owner }
                         : {}),
@@ -237,6 +261,7 @@ export function hydrateSchemaAnswers(
                 citations,
                 opposingCitations,
                 ...(effectiveAt ? { effectiveAt } : {}),
+                ...(localChronology ? { localChronology } : {}),
                 derivedFrom: [
                     ...new Set(support.flatMap((entry) => entry.derivedFrom)),
                 ],
@@ -263,12 +288,7 @@ export function hydrateSchemaAnswers(
                         ...candidate.derivedFrom,
                     ]),
                 ];
-                if (
-                    candidate.effectiveAt &&
-                    (!prior.effectiveAt ||
-                        candidate.effectiveAt > prior.effectiveAt)
-                )
-                    prior.effectiveAt = candidate.effectiveAt;
+                mergeCandidateChronology(prior);
             }
         }
         const mergedCandidates = [...coalesced.values()];
@@ -321,6 +341,39 @@ export function hydrateSchemaAnswers(
             .filter((section) => section.details.answerState !== "answered")
             .map((section) => section.heading),
     };
+}
+
+function mergeCandidateChronology(candidate: AnswerCandidate): void {
+    const supports = candidate.support;
+    delete candidate.effectiveAt;
+    delete candidate.localChronology;
+    const scopes = new Set(
+        supports.map((support) =>
+            support.localChronology
+                ? `local:${support.localChronology.scope}`
+                : support.effectiveAt
+                  ? "absolute"
+                  : "unknown",
+        ),
+    );
+    if (scopes.size !== 1) return;
+    const absolute = supports.flatMap((support) =>
+        support.effectiveAt ? [support.effectiveAt] : [],
+    );
+    if (absolute.length) {
+        candidate.effectiveAt = absolute.sort(
+            (a, b) => Date.parse(b) - Date.parse(a),
+        )[0];
+        return;
+    }
+    const local = supports.flatMap((support) =>
+        support.localChronology ? [support.localChronology] : [],
+    );
+    if (local.length)
+        candidate.localChronology = local.sort(
+            (a, b) =>
+                Date.parse(`${b.timestamp}Z`) - Date.parse(`${a.timestamp}Z`),
+        )[0];
 }
 
 function dedup<T>(values: T[]): T[] {
@@ -422,6 +475,12 @@ function parseDiscoveredSlot(
     };
 }
 
+export class CorpusDiscoveryRejection extends Error {
+    constructor(public readonly proposalIndex: number) {
+        super("Discovered subject is not resolvable in original evidence");
+    }
+}
+
 export const corpusDiscoveryRules = `${schemaAuthoringRules}
 Discover reusable information worth maintaining from ORIGINAL passages, without an existing view or future query.
 Return exactly one outer JSON object {json:string}. Its json string must encode exactly one complete JSON array of {subject:string,reason:string,slot:QuestionSlot,passageIds:string[],utility:{consumerValue:number,substance:number,novelty:number,durability:number}}, NOT a view definition.
@@ -435,7 +494,7 @@ equivalent requirements even when wording differs. Different facets and historic
 existingContractCount reports the full inventory; existingContracts is a bounded relevant nomination.
 If an existingQuestions entry could be equivalent but its structured contract is absent, defer that
 candidate rather than inventing a difference in schema or temporal policy.
-Subject must be an explicitly named subject in a passage or its title; prefer a concrete domain entity, project, or topic phrase over bare conversational speaker labels such as "User" or "Assistant" whenever a specific phrase appears in the passage or title. Keep question text concise (at most 240 characters).
+Subject must be a verbatim contiguous phrase in the title or excerpt of at least one of THAT proposal's cited passages. Case and punctuation may differ, but do not paraphrase, add possessives, expand names or combine words from different passages. Prefer a concrete domain entity, project, or topic phrase over bare conversational speaker labels such as "User" or "Assistant" whenever a specific phrase appears in the passage or title. Keep question text concise (at most 240 characters).
 Distribute proposals across distinct sources and subjects in the window rather than emitting multiple redundant slots from a single transcript.
 Identify stated properties, persistent projects/decisions, source-explicit unresolved decisions or defensibly keyed collections.
 Do not invent generic profile questions or unknown fields merely because the source does not mention them.
@@ -480,7 +539,7 @@ export function parseCorpusQuestionDiscovery(
             .replace(/[^\p{L}\p{N}]+/gu, " ")
             .trim();
     const existingQuestions = new Set(input.existingQuestions.map(normalize));
-    return proposals.map((value) => {
+    return proposals.map((value, proposalIndex) => {
         const entry = evidenceRecord(value);
         if (
             Object.keys(entry).some(
@@ -519,9 +578,7 @@ export function parseCorpusQuestionDiscovery(
                     ),
             )
         )
-            throw new Error(
-                "Discovered subject is not resolvable in original evidence",
-            );
+            throw new CorpusDiscoveryRejection(proposalIndex);
         const utility =
             entry.utility === undefined
                 ? undefined

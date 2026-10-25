@@ -33,6 +33,37 @@ const base = {
     expectedHead: null,
     expectedVersion: 1,
 };
+test("generic view protocol preserves scoped local chronology without a timezone", () => {
+    const local = structuredClone(view);
+    const details = local.content.sections[0].details;
+    const citation = {
+        sourceId: "log",
+        revisionId: "revision",
+        locator: "chars:0-3",
+        excerpt: "log",
+    };
+    const localChronology = {
+        timestamp: "2031-04-09T13:45",
+        scope: "Workshop log common local clock",
+    };
+    details.candidates = [
+        {
+            id: "candidate",
+            value: "beta",
+            origin: "source",
+            review: "unreviewed",
+            citations: [citation],
+            opposingCitations: [],
+            localChronology,
+            derivedFrom: [],
+            support: [{ citation, localChronology, derivedFrom: [] }],
+        },
+    ];
+    assert.deepEqual(viewVersionSchema.parse(local), local);
+    details.candidates[0].localChronology.timestamp += "Z";
+    assert.equal(viewVersionSchema.safeParse(local).success, false);
+});
+
 test("generic view protocols preserve complete schema questions and reject construction mismatches", () => {
     assert.deepEqual(viewVersionSchema.parse(view), view);
     assert.deepEqual(

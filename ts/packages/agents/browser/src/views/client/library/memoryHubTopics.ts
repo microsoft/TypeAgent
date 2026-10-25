@@ -91,8 +91,27 @@ export function mountTopicBrowser(
                     `${concept.scope} · ${concept.memberCount} raw members · salience ${concept.salience}/8 (not truth confidence)`,
                 ),
                 element("p", concept.purpose),
-                element("p", concept.summary),
+                element(
+                    "p",
+                    concept.summary ||
+                        "Summary not generated; original evidence is available below.",
+                ),
             );
+            if (concept.summaryState === "pending") {
+                const summarize = element("button", "Open concept summary");
+                summarize.addEventListener(
+                    "click",
+                    () =>
+                        void browse({
+                            corpusId,
+                            curated: true,
+                            topicId: concept.id,
+                            summarize: true,
+                            pageSize: 1,
+                        }),
+                );
+                card.append(summarize);
+            }
             for (const id of concept.memberIds) {
                 const member = element("button", "Inspect original topic");
                 member.addEventListener(
@@ -135,7 +154,13 @@ export function mountTopicBrowser(
                     "p",
                     `${topic.scope} · ${topic.occurrenceCount} occurrences · ${topic.authorship}`,
                 ),
-                element("p", topic.summary || `Summary ${topic.summaryState}.`),
+                element(
+                    "p",
+                    topic.summary ||
+                        (page.totalConcepts !== undefined
+                            ? "Raw occurrence retained as evidence; summaries belong to curated concepts."
+                            : `Summary ${topic.summaryState}.`),
+                ),
                 element(
                     "p",
                     [
@@ -186,7 +211,7 @@ export function mountTopicBrowser(
         }
         continuation = page.nextContinuationToken;
         next.hidden = !continuation;
-        back.hidden = !request?.topicId;
+        back.hidden = !page.concepts && !request?.topicId;
     }
 
     function appendEvidence(
@@ -241,7 +266,12 @@ export function mountTopicBrowser(
             options.onError(error);
             return;
         }
-        request = selected ?? { corpusId, search: search.value, pageSize: 24 };
+        request = selected ?? {
+            corpusId,
+            curated: true,
+            search: search.value,
+            pageSize: 24,
+        };
         const current = ++epoch;
         load.disabled = true;
         next.disabled = true;
@@ -275,7 +305,16 @@ export function mountTopicBrowser(
                 pageSize: 24,
             });
     });
-    back.addEventListener("click", () => void browse());
+    back.addEventListener("click", () => {
+        const corpusId = options.corpusId();
+        if (corpusId)
+            void browse({
+                corpusId,
+                curated: false,
+                search: search.value,
+                pageSize: 24,
+            });
+    });
     search.addEventListener("keydown", (event) => {
         if (event.key === "Enter") void browse();
     });
