@@ -62,7 +62,7 @@ export const CROSSWORD_DECISION_LIMITS = {
     timeoutMs: 60_000,
     snapshotLifetimeMs: 120_000,
     collectorVersion: 2,
-    policyVersion: 12,
+    policyVersion: 13,
 } as const;
 
 export type CrosswordCandidate = {

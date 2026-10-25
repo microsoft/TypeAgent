@@ -33,6 +33,11 @@ const { loadRuntimeConfigSync } = await importFile(
     browserRequire.resolve("@typeagent/config"),
 );
 const ai = await importFile(browserRequire.resolve("@typeagent/aiclient"));
+const { CROSSWORD_DECISION_LIMITS } = await importFile(
+    extensionRequire.resolve(
+        "@typeagent/browser-control-rpc/crosswordDecisionTypes",
+    ),
+);
 const { CrosswordDecisionHandler } = await importFile(
     join(
         ts,
@@ -81,6 +86,7 @@ if (existsSync(join(azureCli, "az.cmd")))
 const output = resolve(process.argv[2]);
 const preflight = process.argv.includes("--preflight");
 const demo = process.argv.includes("--demo");
+const reads = process.argv.includes("--reads");
 const mode =
     process.argv.find((arg) => arg.startsWith("--mode="))?.slice(7) ??
     "decision";
@@ -99,6 +105,10 @@ assert.ok(
     !preflight || mode === "decision",
     "Zero-inference preflight requires Decision mode",
 );
+assert.ok(
+    !reads || (demo && mode === "decision"),
+    "Recorded clue reads require a Decision demo",
+);
 await mkdir(output, { recursive: true });
 const results = {
     scope: demo
@@ -107,11 +117,13 @@ const results = {
     startedAt: new Date().toISOString(),
     native: [],
     actions: [],
+    reads: [],
     schemas: [],
     notifications: [],
     mode,
     site,
     demo,
+    policyVersion: CROSSWORD_DECISION_LIMITS.policyVersion,
 };
 const persist = () =>
     writeFile(join(output, "results.json"), JSON.stringify(results, null, 2));
@@ -136,6 +148,15 @@ const handler = new CrosswordDecisionHandler({
                         results.native.length < 32,
                         "recording run native-call ceiling",
                     );
+                    if (request.questions.target) {
+                        assert.equal(
+                            request.state.scopeContext,
+                            "Scope IDs are opaque DOM/frame boundaries, not catalog identifiers. Decide clue identity and semantic ambiguity from the supplied evidence.",
+                        );
+                        assert.equal("candidates" in request.state, false);
+                    } else {
+                        assert.deepEqual(request.state, {});
+                    }
                     const started = performance.now();
                     const row = { request };
                     results.native.push(row);
@@ -504,6 +525,7 @@ try {
     ]);
     await page.setViewportSize({ width: 1280, height: 900 });
     video = page.video();
+    results.videoStartedAt = new Date().toISOString();
     const urls = {
         exolve: "https://crossword.typeagent.test/",
         seattle: "https://nytsyn.pzzl.com/cwd_seattle/",
@@ -813,6 +835,13 @@ try {
                     );
             }
             row.gridVerified = true;
+            row.completedAt = new Date().toISOString();
+            assert.ok(
+                results.native
+                    .slice(before)
+                    .every((call) => !call.request.questions.body),
+                "enterText must not ask body questions",
+            );
             await page.locator("#recorded-crossword-status").evaluate(
                 (panel, message) => {
                     panel.textContent = message;
@@ -820,11 +849,131 @@ try {
                 `${mode.toUpperCase()} | enterText ${params.clueNumber} ${params.clueDirection}: ${params.value}\nGrid verified | ${Math.round(durationMs)} ms | ${row.nativeCalls} Decision calls`,
             );
             await delay(2200);
+            if (reads) {
+                const expected = await page.evaluate(
+                    ({ site, number, direction }) => {
+                        const normalize = (text) =>
+                            text.replace(/\s+/g, " ").trim();
+                        if (site === "exolve") {
+                            const rows = document.querySelectorAll(
+                                `[id$="-${direction}"] tr`,
+                            );
+                            const matches = [...rows].filter(
+                                (node) =>
+                                    node
+                                        .querySelector(".xlv-clue-label")
+                                        ?.textContent?.trim() ===
+                                    String(number),
+                            );
+                            if (matches.length !== 1)
+                                throw new Error(
+                                    "Exolve body oracle is not unique",
+                                );
+                            return normalize(
+                                matches[0].querySelector(".xlv-clue-text")
+                                    .textContent,
+                            );
+                        }
+                        if (site === "universal") {
+                            const node = document.getElementById(
+                                `${direction}${number}`,
+                            );
+                            if (!node)
+                                throw new Error(
+                                    "Universal body oracle missing",
+                                );
+                            return normalize(node.textContent).replace(
+                                /^\d+\.?\s*/,
+                                "",
+                            );
+                        }
+                        const matches = [
+                            ...document.querySelectorAll(".xwordjs-clue"),
+                        ].filter(
+                            (node) =>
+                                node
+                                    .closest(".xwordjs-cluelist")
+                                    ?.previousElementSibling?.textContent?.trim()
+                                    .toLowerCase() === direction &&
+                                normalize(node.textContent).match(
+                                    /^\d+\./,
+                                )?.[0] === `${number}.`,
+                        );
+                        if (matches.length !== 1)
+                            throw new Error(
+                                "Seattle body oracle is not unique",
+                            );
+                        return normalize(matches[0].textContent).replace(
+                            /^\d+\.\s*/,
+                            "",
+                        );
+                    },
+                    {
+                        site,
+                        number: params.clueNumber,
+                        direction: params.clueDirection,
+                    },
+                );
+                const readParams = {
+                    clueNumber: params.clueNumber,
+                    clueDirection: params.clueDirection,
+                };
+                for (const cached of [false, true]) {
+                    const beforeRead = results.native.length;
+                    const started = performance.now();
+                    await page.locator("#recorded-crossword-status").evaluate(
+                        (panel, message) => {
+                            panel.textContent = message;
+                        },
+                        `DECISION | getClue ${readParams.clueNumber} ${readParams.clueDirection}${cached ? " | cached" : ""} | running`,
+                    );
+                    const actual = await page.evaluate(
+                        async (parameters) =>
+                            window.__demoAgents.get("crossword").executeAction({
+                                actionName: "getClueValue",
+                                parameters,
+                            }),
+                        readParams,
+                    );
+                    const durationMs = performance.now() - started;
+                    assert.equal(
+                        actual?.displayContent,
+                        `The clue is: ${expected}`,
+                        "getClue must return the exact independently observed body",
+                    );
+                    const calls = results.native.slice(beforeRead);
+                    assert.equal(calls.length, cached ? 0 : 1);
+                    assert.ok(
+                        calls.every((call) => call.request.questions.body),
+                        "An entry binding must upgrade with a body-only call",
+                    );
+                    const read = {
+                        params: readParams,
+                        expected,
+                        actual,
+                        cached,
+                        durationMs,
+                        nativeCalls: calls.length,
+                        bodyVerified: true,
+                        completedAt: new Date().toISOString(),
+                    };
+                    results.reads.push(read);
+                    await persist();
+                    await page.locator("#recorded-crossword-status").evaluate(
+                        (panel, message) => {
+                            panel.textContent = message;
+                        },
+                        `DECISION | getClue ${readParams.clueNumber} ${readParams.clueDirection}${cached ? " | cached" : ""}\n${expected}\nBody verified | ${Math.round(durationMs)} ms | ${calls.length} Decision calls`,
+                    );
+                    if (!cached) await delay(2200);
+                }
+            }
         }
         assert.ok(
-            results.native.every((row) => !row.request.questions.body),
+            reads || results.native.every((row) => !row.request.questions.body),
             "Entry-only demos must not ask body questions",
         );
+        assert.equal(results.reads.length, reads ? 4 : 0);
         assert.equal(results.schemas.length, mode === "generative" ? 1 : 0);
         await page.screenshot({ path: join(output, "success.png") });
         results.status = "passed";

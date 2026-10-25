@@ -13,6 +13,7 @@ import {
     countCrosswordDecisionTokens,
     crosswordBodyOptions,
     buildCrosswordBodyRequest,
+    buildCrosswordDiscoveryRequest,
 } from "../dist/agent/crosswordDecisionHandler.mjs";
 
 function request(overrides = {}) {
@@ -39,8 +40,7 @@ function bodyAnswer(native, body) {
     const criteria = native.questions.body.criteria;
     const choice =
         Object.entries(criteria).find(
-            ([, description]) =>
-                description === `Exact clue body: ${JSON.stringify(body)}`,
+            ([, description]) => description === JSON.stringify(body),
         )?.[0] ?? "no_fit";
     return answer(choice, 1, "body", Object.keys(criteria));
 }
@@ -237,13 +237,84 @@ test("bounded native request uses only requested-target Choice and treats repeat
     assert.equal(native.questions.target.type, "choice");
     assert.match(
         native.questions.target.instructions,
-        /Repeated list\/current views/,
+        /Duplicate views of one clue in one puzzle are equivalent/,
     );
     assert.match(
         native.questions.target.instructions,
-        /multiple matching puzzle scopes/,
+        /multiple matching puzzles/,
     );
     assert.equal(JSON.stringify(native).includes("selector"), false);
+});
+
+function targetCandidates(native) {
+    return Object.entries(native.questions.target.criteria)
+        .filter(([id]) => id !== "no_fit" && id !== "ambiguous")
+        .map(([id, evidence]) => ({ id, ...JSON.parse(evidence) }));
+}
+
+function discoveryRegions(native) {
+    const prefix = "Does this region contain crossword clues? ";
+    const suffix =
+        "\nFor a partial preview, choose uncertain unless clues are visible.";
+    return Object.entries(native.questions).map(([id, question]) => {
+        assert.ok(question.instructions.startsWith(prefix));
+        assert.ok(question.instructions.endsWith(suffix));
+        const evidence = JSON.parse(
+            question.instructions.slice(prefix.length, -suffix.length),
+        );
+        assert.equal(evidence.id, id);
+        return evidence;
+    });
+}
+
+test("compact target evidence is choice-local while the scope reminder stays shared", () => {
+    const input = observedCatalog();
+    const native = buildCrosswordDecisionRequest(input);
+    assert.deepEqual(native.state, {
+        scopeContext:
+            "Scope IDs are opaque DOM/frame boundaries, not catalog identifiers. Decide clue identity and semantic ambiguity from the supplied evidence.",
+        clueNumber: input.clueNumber,
+        clueDirection: input.clueDirection,
+    });
+    assert.deepEqual(targetCandidates(native), input.snapshot.candidates);
+    assert.ok(native.questions.target.instructions.length < 500);
+});
+
+test("compact discovery keeps complete region evidence only inside its own question", () => {
+    const input = observedCatalog();
+    const regions = ["region-1", "region-2"].map((id, i) => ({
+        id,
+        candidates: input.snapshot.candidates.slice(i * 12, (i + 1) * 12),
+    }));
+    const native = buildCrosswordDiscoveryRequest(regions);
+    assert.deepEqual(native.state, {});
+    assert.deepEqual(
+        discoveryRegions(native),
+        regions.map((region) => ({
+            id: region.id,
+            entryCount: region.candidates.length,
+            evidence: "complete",
+            previewCount: region.candidates.length,
+            candidates: region.candidates,
+        })),
+    );
+});
+
+test("compact body choices remain exact literal strings without repeated labels", () => {
+    const candidate = {
+        id: "c",
+        text: "7 24-hour worker (5)",
+        context: "Across",
+    };
+    const native = buildCrosswordBodyRequest(candidate);
+    const options = crosswordBodyOptions(candidate);
+    assert.deepEqual(native.state, {});
+    for (const option of options)
+        assert.equal(
+            native.questions.body.criteria[option.id],
+            JSON.stringify(option.text),
+        );
+    assert.ok(options.some((option) => option.text === "24-hour worker (5)"));
 });
 
 test("capability factory performs no inference and reuses model until config generation changes", async () => {
@@ -586,7 +657,7 @@ function discoverAndSelect(native) {
         return choices(native, (key) =>
             key === "region_1" ? "uncertain" : "clues",
         );
-    const target = native.state.candidates.find((c) =>
+    const target = targetCandidates(native).find((c) =>
         c.text.startsWith("1. Target"),
     );
     return targetAnswer(native, target?.id ?? "no_fit", 0.01);
@@ -605,11 +676,11 @@ test("253 candidates use exactly 255 choices, while 254 still require batching",
     assert.equal(CROSSWORD_DECISION_LIMITS.decisionCandidates, 253);
     const input = compactCatalog(253);
     const native = buildCrosswordDecisionRequest(input);
-    assert.equal(native.state.candidates.length, 253);
+    assert.equal(targetCandidates(native).length, 253);
     assert.equal(Object.keys(native.questions.target.criteria).length, 255);
     assert.match(
         native.questions.target.instructions,
-        /assess only this batch/,
+        /no_fit if this batch has no match/,
     );
     assert.throws(
         () => buildCrosswordDecisionRequest(compactCatalog(254)),
@@ -648,7 +719,7 @@ test("a single batch selection resolves despite no_fit or ambiguous peers in eit
                     );
                     return targetAnswer(
                         native,
-                        native.state.candidates.some(
+                        targetCandidates(native).some(
                             (c) => c.id === candidateId,
                         )
                             ? candidateId
@@ -665,12 +736,12 @@ test("a single batch selection resolves despite no_fit or ambiguous peers in eit
                 assert.equal(result.candidateId, candidateId);
                 assert.equal(result.choiceProbability, 0.01);
                 assert.deepEqual(
-                    targets.map((native) => native.state.candidates.length),
+                    targets.map((native) => targetCandidates(native).length),
                     [limit, limit, 1],
                 );
                 assert.deepEqual(
                     targets.flatMap((native) =>
-                        native.state.candidates.map(
+                        targetCandidates(native).map(
                             (candidate) => candidate.id,
                         ),
                     ),
@@ -723,9 +794,9 @@ test("multiple batch winners are the only candidates in model reconciliation, ev
         const s = setup(async (native) => {
             if (!native.questions.target) return choices(native, () => "clues");
             targets.push(native);
-            if (native.state.candidates.length === winners.length) {
+            if (targetCandidates(native).length === winners.length) {
                 assert.deepEqual(
-                    native.state.candidates.map((candidate) => candidate.id),
+                    targetCandidates(native).map((candidate) => candidate.id),
                     winners,
                 );
                 assert.deepEqual(
@@ -737,7 +808,7 @@ test("multiple batch winners are the only candidates in model reconciliation, ev
             return targetAnswer(
                 native,
                 winners.find((id) =>
-                    native.state.candidates.some(
+                    targetCandidates(native).some(
                         (candidate) => candidate.id === id,
                     ),
                 ) ?? "ambiguous",
@@ -777,8 +848,8 @@ test("large multi-region inventory retains uncertain regions and resolves every 
     const result = await s.handler.resolve("client", "hybrid", input);
     assert.equal(result.status, "resolved");
     assert.equal(result.choiceProbability, 0.01);
-    const discovery = observed.filter((native) => native.state.regions);
-    const discovered = discovery.flatMap((native) => native.state.regions);
+    const discovery = observed.filter((native) => !native.questions.target);
+    const discovered = discovery.flatMap((native) => discoveryRegions(native));
     assert.equal(discovered.length, 3);
     assert.ok(
         discovered.every(
@@ -788,18 +859,18 @@ test("large multi-region inventory retains uncertain regions and resolves every 
     const targetCalls = observed.filter((native) => native.questions.target);
     assert.equal(targetCalls.length, 4);
     assert.equal(
-        targetCalls.flatMap((native) => native.state.candidates).length,
+        targetCalls.flatMap((native) => targetCandidates(native)).length,
         count + 2,
     );
     assert.deepEqual(
-        targetCalls.at(-1).state.candidates.map((c) => c.id),
+        targetCandidates(targetCalls.at(-1)).map((c) => c.id),
         ["c1", `c${count - 1}`],
     );
     assert.equal(s.calls(), discovery.length + targetCalls.length);
 });
 
 test("token budget triggers hybrid discovery below the native count limit", async () => {
-    const input = catalog(24, () => ({
+    const input = catalog(48, () => ({
         text: " x".repeat(256),
         context: " x".repeat(256),
     }));
@@ -824,15 +895,15 @@ test("token budget triggers hybrid discovery below the native count limit", asyn
     assert.equal(
         observed
             .filter((r) => r.questions.target)
-            .flatMap((r) => r.state.candidates).length,
-        24,
+            .flatMap((r) => targetCandidates(r)).length,
+        48,
     );
     const targets = observed.filter((r) => r.questions.target);
     const originals = new Map(input.snapshot.candidates.map((c) => [c.id, c]));
     for (let i = 0; i + 1 < targets.length; i++) {
         const extended = [
-            ...targets[i].state.candidates,
-            targets[i + 1].state.candidates[0],
+            ...targetCandidates(targets[i]),
+            targetCandidates(targets[i + 1])[0],
         ].map((c) => originals.get(c.id));
         assert.throws(
             () =>
@@ -847,7 +918,7 @@ test("token budget triggers hybrid discovery below the native count limit", asyn
 });
 
 function repackCatalog() {
-    const input = catalog(18, () => ({
+    const input = catalog(36, () => ({
         text: " x".repeat(256),
         context: " y".repeat(256),
     }));
@@ -881,7 +952,7 @@ for (const strategy of ["hybrid", "hybrid2"]) {
             }
             return targetAnswer(
                 native,
-                native.state.candidates.some((c) => c.id === "c17")
+                targetCandidates(native).some((c) => c.id === "c17")
                     ? "c17"
                     : "ambiguous",
             );
@@ -900,7 +971,7 @@ for (const strategy of ["hybrid", "hybrid2"]) {
         assert.deepEqual(
             retried
                 .filter((native) => native.questions.target)
-                .flatMap((native) => native.state.candidates.map((c) => c.id)),
+                .flatMap((native) => targetCandidates(native).map((c) => c.id)),
             input.snapshot.candidates.map((c) => c.id),
         );
         assert.equal(
@@ -919,7 +990,7 @@ test("Azure discovery 422 repacks every region with complete evidence before tar
         return native.questions.target
             ? targetAnswer(
                   native,
-                  native.state.candidates.some((c) => c.id === "c17")
+                  targetCandidates(native).some((c) => c.id === "c17")
                       ? "c17"
                       : "no_fit",
               )
@@ -940,7 +1011,7 @@ test("Azure discovery 422 repacks every region with complete evidence before tar
         .slice(1)
         .filter((native) => !native.questions.target);
     assert.equal(discovery.length, 2);
-    const regions = discovery.flatMap((native) => native.state.regions);
+    const regions = discovery.flatMap((native) => discoveryRegions(native));
     assert.ok(regions.every((region) => region.evidence === "complete"));
     assert.deepEqual(
         regions.flatMap((region) => region.candidates.map((c) => c.id)).sort(),
@@ -959,7 +1030,7 @@ test("repacking an oversized single region retains candidates outside its partia
         return native.questions.target
             ? targetAnswer(
                   native,
-                  native.state.candidates.some((c) => c.id === "c17")
+                  targetCandidates(native).some((c) => c.id === "c17")
                       ? "c17"
                       : "no_fit",
               )
@@ -967,7 +1038,7 @@ test("repacking an oversized single region retains candidates outside its partia
     });
     const result = await s.handler.resolve("client", "partial-repack", input);
     assert.equal(result.candidateId, "c17");
-    const preview = observed[1].state.regions[0];
+    const preview = discoveryRegions(observed[1])[0];
     assert.equal(preview.evidence, "partial");
     assert.equal(preview.entryCount, input.snapshot.candidates.length);
     assert.ok(preview.previewCount < preview.entryCount);
@@ -984,7 +1055,7 @@ test("repacking an oversized single region retains candidates outside its partia
         observed
             .slice(1)
             .filter((native) => native.questions.target)
-            .flatMap((native) => native.state.candidates.map((c) => c.id)),
+            .flatMap((native) => targetCandidates(native).map((c) => c.id)),
         input.snapshot.candidates.map((c) => c.id),
     );
 });
@@ -1001,8 +1072,8 @@ test("repacked batch winners are still reconciled by a model call containing onl
         observed.push(native);
         return targetAnswer(
             native,
-            native.state.candidates[
-                native.state.candidates.length === 2 ? 1 : 0
+            targetCandidates(native)[
+                targetCandidates(native).length === 2 ? 1 : 0
             ].id,
         );
     });
@@ -1013,10 +1084,10 @@ test("repacked batch winners are still reconciled by a model call containing onl
     );
     assert.equal(observed.length, 3);
     assert.deepEqual(
-        observed[2].state.candidates.map((c) => c.id),
-        observed.slice(0, 2).map((native) => native.state.candidates[0].id),
+        targetCandidates(observed[2]).map((c) => c.id),
+        observed.slice(0, 2).map((native) => targetCandidates(native)[0].id),
     );
-    assert.equal(result.candidateId, observed[1].state.candidates[0].id);
+    assert.equal(result.candidateId, targetCandidates(observed[1])[0].id);
 });
 
 test("repeated Azure 422 and already-small 422 fail explicitly without retry loops", async () => {
@@ -1115,7 +1186,7 @@ test("repacking consumes the original call budget and never returns a partial wi
             }
             return targetAnswer(
                 native,
-                native.state.candidates.some((c) => c.id === "c0")
+                targetCandidates(native).some((c) => c.id === "c0")
                     ? "c0"
                     : "no_fit",
             );
@@ -1124,9 +1195,13 @@ test("repacking consumes the original call budget and never returns a partial wi
     );
     const input = catalog(2048, () => ({
         regionId: "one-region",
-        text: " x".repeat(256),
+        text: "a1".repeat(256),
         context: "Down",
     }));
+    assert.ok(
+        Buffer.byteLength(JSON.stringify(input)) <=
+            CROSSWORD_DECISION_LIMITS.snapshotBytes,
+    );
     const result = await s.handler.resolve("client", "budget-repack", input);
     assert.equal(result.status, "unsupported");
     assert.match(result.message, /maximum decision call budget/);
@@ -1176,7 +1251,7 @@ test("all host regions are classified in bounded batches without a top-region cu
                 CROSSWORD_DECISION_LIMITS.decisionTokens,
         );
         if (native.questions.target) {
-            refined.push(...native.state.candidates.map((c) => c.id));
+            refined.push(...targetCandidates(native).map((c) => c.id));
             return targetAnswer(native, "no_fit");
         }
         discoveryCalls++;
@@ -1184,7 +1259,7 @@ test("all host regions are classified in bounded batches without a top-region cu
             Object.keys(native.questions).length <=
                 CROSSWORD_DECISION_LIMITS.decisionQuestions,
         );
-        for (const region of native.state.regions) {
+        for (const region of discoveryRegions(native)) {
             assert.equal(region.evidence, "complete");
             assert.equal(region.entryCount, 1);
             classified.push(region.candidates[0].id);
@@ -1235,8 +1310,8 @@ test("cross-batch conflicting clues are compared by the model rather than vetoed
         );
         const s = setup(async (native) =>
             native.questions.target &&
-            native.state.candidates.some((c) => c.id === "c0") &&
-            native.state.candidates.some((c) => c.id === `c${count - 1}`)
+            targetCandidates(native).some((c) => c.id === "c0") &&
+            targetCandidates(native).some((c) => c.id === `c${count - 1}`)
                 ? targetAnswer(native, "ambiguous")
                 : discoverAndSelect(native),
         );
@@ -1252,7 +1327,7 @@ test("direct repeated views and nonmatching directions are native evidence, not 
         context: i === 2 ? "Down" : "Across",
     }));
     const s = setup(async (native) => {
-        assert.equal(native.state.candidates.length, 3);
+        assert.equal(targetCandidates(native).length, 3);
         return targetAnswer(native, "c0", 0);
     });
     const result = await s.handler.resolve("client", "repeated", input);
@@ -1282,7 +1357,7 @@ test("issued-candidate semantics are decided by target Choice, not a host parser
         input.snapshot.candidates = [candidate];
         const s = setup(async (native) => {
             assert.deepEqual(
-                native.state.candidates.map(({ id, text, context }) => ({
+                targetCandidates(native).map(({ id, text, context }) => ({
                     id,
                     text,
                     context,
@@ -1375,7 +1450,7 @@ test("call budget exhaustion never returns a partial target or absence", async (
             native.questions.target
                 ? targetAnswer(
                       native,
-                      native.state.candidates.some((c) => c.id === "c0")
+                      targetCandidates(native).some((c) => c.id === "c0")
                           ? "c0"
                           : "no_fit",
                   )
@@ -1384,9 +1459,13 @@ test("call budget exhaustion never returns a partial target or absence", async (
     );
     const input = catalog(2048, (i) => ({
         regionId: "one-region",
-        text: i === 0 ? "1. Target clue" : " x".repeat(256),
+        text: i === 0 ? "1. Target clue" : "a1".repeat(256),
         context: "Down",
     }));
+    assert.ok(
+        Buffer.byteLength(JSON.stringify(input)) <=
+            CROSSWORD_DECISION_LIMITS.snapshotBytes,
+    );
     const result = await s.handler.resolve("client", "budget", input);
     assert.equal(result.status, "unsupported");
     assert.match(result.message, /maximum decision call budget/);
@@ -1632,7 +1711,7 @@ test("shared identity contract normalizes only observable labels and nearest dir
                 ),
             ),
         );
-    assert.equal(CROSSWORD_DECISION_LIMITS.policyVersion, 12);
+    assert.equal(CROSSWORD_DECISION_LIMITS.policyVersion, 13);
     assert.equal(CROSSWORD_DECISION_LIMITS.collectorVersion, 2);
 });
 
@@ -1677,7 +1756,7 @@ test("the full catalog including repeated views and competing scopes reaches the
         });
         const s = setup(async (native) => {
             assert.ok(
-                native.state.candidates.some((c) => c.id === "duplicate"),
+                targetCandidates(native).some((c) => c.id === "duplicate"),
             );
             return targetAnswer(
                 native,
@@ -1719,13 +1798,12 @@ test("each region question carries its own complete evidence and unrelated retai
     let discoveryCalls = 0;
     const s = setup(async (native) => {
         if (native.questions.target) {
-            const target = native.state.candidates.find((c) => c.id === "c12");
+            const target = targetCandidates(native).find((c) => c.id === "c12");
             return targetAnswer(native, target ? "c12" : "no_fit");
         }
         discoveryCalls++;
-        for (const region of native.state.regions) {
+        for (const region of discoveryRegions(native)) {
             const instructions = native.questions[region.id].instructions;
-            assert.ok(instructions.includes(`region ${region.id}`));
             assert.ok(instructions.includes(JSON.stringify(region)));
             assert.equal(region.evidence, "complete");
             assert.equal(region.entryCount, region.previewCount);
@@ -1755,15 +1833,15 @@ test("oversized single regions use explicitly partial previews and cannot be pru
                 CROSSWORD_DECISION_LIMITS.decisionTokens,
         );
         if (native.questions.target) {
-            searched += native.state.candidates.length;
+            searched += targetCandidates(native).length;
             return targetAnswer(native, "no_fit");
         }
-        const region = native.state.regions[0];
+        const region = discoveryRegions(native)[0];
         assert.equal(region.evidence, "partial");
         assert.ok(region.entryCount > region.previewCount);
         assert.match(
             native.questions[region.id].instructions,
-            /partial preview cannot establish absence/,
+            /partial preview, choose uncertain unless clues are visible/,
         );
         return choices(native, () => "other");
     });
@@ -1779,11 +1857,11 @@ test("opaque candidate IDs and all other clue numbers remain model options", asy
         const input = observedCatalog();
         input.clueNumber = 14;
         const s = setup(async (native) => {
-            assert.equal(native.state.candidates.length, 48);
+            assert.equal(targetCandidates(native).length, 48);
             assert.ok(native.questions.target.criteria.c14);
             assert.match(
                 native.questions.target.instructions,
-                /c14 does NOT mean clue 14/,
+                /IDs are labels, not clue numbers/,
             );
             assert.equal(
                 JSON.parse(native.questions.target.criteria.c18).text,
@@ -1804,11 +1882,12 @@ test("target selection receives raw evidence without claims of host semantic cer
     const s = setup(async (native) => {
         assert.equal(native.state.observedIdentity, undefined);
         assert.ok(
-            native.state.candidates.some((candidate) => candidate.id === "c45"),
+            targetCandidates(native).some(
+                (candidate) => candidate.id === "c45",
+            ),
         );
         const question = native.questions.target;
-        assert.match(question.instructions, /host has not filtered options/);
-        assert.match(question.instructions, /requested clue 26 down/);
+        assert.match(question.instructions, /entry for clue 26 down/);
         return targetAnswer(native, "c45");
     });
     assert.equal(
