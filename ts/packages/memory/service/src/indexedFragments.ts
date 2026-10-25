@@ -174,6 +174,45 @@ function diverseBlocks(blocks: IndexedBlock[], limit: number): IndexedBlock[] {
     return selected;
 }
 
+function queryBlocks(
+    blocks: IndexedBlock[],
+    terms: string[],
+    limit: number,
+): IndexedBlock[] {
+    const remaining = blocks.map((block, order) => ({
+        block,
+        order,
+        words: new Set(
+            block.text.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ?? [],
+        ),
+    }));
+    const covered = new Set<string>();
+    const sourceCounts = new Map<string, number>();
+    const selected: IndexedBlock[] = [];
+    while (remaining.length && selected.length < limit) {
+        const utility = (entry: (typeof remaining)[number]) => {
+            const novel = terms.filter(
+                (term) => entry.words.has(term) && !covered.has(term),
+            ).length;
+            return (
+                (entry.block.score * (1 + novel / Math.max(1, terms.length))) /
+                Math.sqrt(1 + (sourceCounts.get(entry.block.sourceId) ?? 0))
+            );
+        };
+        remaining.sort((a, b) => utility(b) - utility(a) || a.order - b.order);
+        const entry = remaining.shift()!;
+        selected.push(entry.block);
+        sourceCounts.set(
+            entry.block.sourceId,
+            (sourceCounts.get(entry.block.sourceId) ?? 0) + 1,
+        );
+        terms.forEach((term) => {
+            if (entry.words.has(term)) covered.add(term);
+        });
+    }
+    return selected;
+}
+
 const contextualHeading =
     /^#{1,6} [^\n]*(qualif|contrast|warn|correct|limit|caveat|counterexample|scope|observation|measurement)/im;
 
@@ -262,6 +301,18 @@ function candidateWindows(
         const passages = matchedWindows(block, selectors, window, wholeWords);
         const words = matchedWindows(block, terms, window, wholeWords);
         const primary = passages.length ? passages : words;
+        if (wholeWords) {
+            const coverage = (candidate: WindowCandidate) => {
+                const text = block.text
+                    .slice(candidate.offset, candidate.offset + window)
+                    .toLocaleLowerCase();
+                const words = new Set<string>(
+                    text.match(/[\p{L}\p{N}-]+/gu) ?? [],
+                );
+                return terms.filter((term) => words.has(term)).length;
+            };
+            primary.sort((a, b) => coverage(b) - coverage(a));
+        }
         const qualifications = representativeMatches(
             block.text,
             /\b(qualif\w*|caveat|counterexample|correct\w*|withdraw\w*|retract\w*|exception|scope)\b/giu,
@@ -539,9 +590,7 @@ export function selectIndexedFragments(
         eligible.has(block.sourceId),
     );
     const selected = request.query
-        ? [...candidates]
-              .sort((a, b) => b.score - a.score)
-              .slice(0, maxFragments)
+        ? queryBlocks(candidates, terms, maxFragments)
         : diverseBlocks(candidates, Math.max(2, Math.floor(maxFragments / 3)));
     state.limited = candidates.length > selected.length;
     const windows = candidateWindows(

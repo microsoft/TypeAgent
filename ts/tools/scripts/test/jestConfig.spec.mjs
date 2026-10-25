@@ -11,6 +11,7 @@ for (const config of [
     "packages/agents/browser/jest.config.js",
     "packages/agents/browserExtension/jest.config.js",
     "packages/cli/jest.config.js",
+    "packages/memory/service/jest.config.cjs",
 ]) {
     for (const enabled of ["true", "false"]) {
         test(`Jest CI, retry cache and reporter settings: ${config}, enabled=${enabled}`, () => {
@@ -40,6 +41,13 @@ for (const config of [
             assert.ifError(result.error);
             assert.equal(result.status, 0, result.stderr);
             const actual = JSON.parse(result.stdout);
+            assert.equal(
+                actual.workerIdleMemoryLimit,
+                config === "packages/memory/service/jest.config.cjs" &&
+                    enabled === "true"
+                    ? "1GB"
+                    : undefined,
+            );
             if (enabled === "true") {
                 assert.equal(actual.maxWorkers, 1);
                 assert.equal(actual.cache, false);

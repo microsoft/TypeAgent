@@ -95,6 +95,7 @@ export default {
 
     // Don't need to install
     npmRebuild: false,
+    asarUnpack: ["node_modules/**/foundry-local-sdk/**/*"],
     artifactName: name + "-${version}-${platform}-${arch}.${ext}",
     win: {
         signtoolOptions: {

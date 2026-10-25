@@ -852,6 +852,40 @@ describe("inline synopsis production lifecycle", () => {
         }
         throw new Error(`Synopsis did not reach ${status}`);
     }
+    test("nested foreground scopes defer synopses across corpora and drain the latest revisions", async () => {
+        const release = service.deferMaintenance();
+        const nested = service.deferMaintenance();
+        try {
+            const first = await service.createCorpus("Earlier conversation");
+            const second = await service.createCorpus("Later conversation");
+            await ingest(
+                first.corpusId,
+                "# Preferences\n\nMira prefers tea before meetings.",
+            );
+            await ingest(
+                second.corpusId,
+                "# Deployment\n\nThe worker restarts after reconciliation.",
+            );
+            await new Promise((resolve) => setTimeout(resolve, 350));
+            expect(model.calls).toEqual([]);
+            expect(
+                service
+                    .getMaintenanceStatus()
+                    .pending.filter((key) => key.endsWith(":synopsis")),
+            ).toHaveLength(2);
+            release();
+            expect((await service.drainMaintenance()).reason).toBe("paused");
+            nested();
+            const settled = await service.drainMaintenance(5000);
+            expect(settled.settled).toBe(true);
+            expect((await synopsis(first.corpusId)).status).toBe("ready");
+            expect((await synopsis(second.corpusId)).status).toBe("ready");
+            expect(model.calls.length).toBeGreaterThanOrEqual(2);
+        } finally {
+            release();
+            nested();
+        }
+    });
     test("actual temporal revisions persist inline with exact current identity, public previews and restart/reindex no-op", async () => {
         const corpus = await service.createCorpus("temporal");
         let previous: string | undefined;

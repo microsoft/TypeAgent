@@ -39,6 +39,12 @@ function addTermToIndex(
     semanticRefOrdinal: SemanticRefOrdinal,
     termsAdded?: Set<string>,
 ) {
+    if (!term.trim()) {
+        console.warn(
+            "knowPro: skipping an empty extracted semantic term during indexing",
+        );
+        return;
+    }
     term = index.addTerm(term, semanticRefOrdinal);
     if (termsAdded) {
         termsAdded.add(term);

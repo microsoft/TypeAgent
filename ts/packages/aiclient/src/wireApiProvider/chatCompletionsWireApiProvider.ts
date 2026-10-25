@@ -209,6 +209,9 @@ export class ChatCompletionsWireApiProvider implements ProviderAdapter {
         if (!completion.choices || completion.choices.length === 0) {
             return error("No choices returned");
         }
+        if (completion.choices[0].finish_reason === "content_filter") {
+            return error("Model response blocked by content filter");
+        }
         if (Array.isArray(request.jsonSchema)) {
             const tool_calls = completion.choices[0].message?.tool_calls;
             if (tool_calls === undefined) {
