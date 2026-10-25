@@ -361,6 +361,7 @@ describe("hosted API container bootstrap", () => {
             azureFoundry: "absent",
             azureAISearch: "absent",
             reasoning: "absent",
+            decision: "absent",
             copilot: "absent",
             embedding: "absent",
             modelProvider: "azure-model-provider",
@@ -376,6 +377,13 @@ describe("hosted API container bootstrap", () => {
             platform: "win32",
         });
         expect(() => validateHostedApiRuntimeConfig(config)).not.toThrow();
+
+        expect(() =>
+            validateHostedApiRuntimeConfig({
+                ...config,
+                decision: { provider: "copilot" },
+            }),
+        ).toThrow();
 
         const unsupportedMaps: Config = {
             ...config,

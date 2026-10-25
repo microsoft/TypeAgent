@@ -6,6 +6,7 @@ import { restoreRecordingState } from "./recording";
 import { interceptHistory } from "./spaNavigation";
 import { PDFInterceptor } from "./pdfInterceptor";
 import { initializeContinuationHandler } from "./continuationHandler";
+import { initializeCrosswordBridge } from "./crossword/bridge";
 import "./autoIndexing"; // Initialize auto-indexing
 import "./autoDiscovery"; // Initialize auto-discovery of webflow actions
 
@@ -44,6 +45,7 @@ async function injectTabIdIntoMainWorld(): Promise<void> {
 
 // Inject tabId as early as possible (before DOMContentLoaded)
 injectTabIdIntoMainWorld();
+initializeCrosswordBridge();
 
 /**
  * Initializes the content script
