@@ -46,6 +46,7 @@ import {
 } from "./readiness.mjs";
 import { extractPageComponent } from "./componentExtractor.mjs";
 import { extractCrosswordSchema } from "./crosswordSchemaExtractor.mjs";
+import { crosswordDecisionHandler } from "./crosswordDecisionHandler.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
 import { ChildProcess, fork } from "child_process";
 import {
@@ -746,6 +747,7 @@ async function updateBrowserContext(
                 void context.notifyReadinessChanged();
             },
             onClientDisconnected: (client: BrowserClient) => {
+                crosswordDecisionHandler.disconnect(client.id);
                 if (client.type === "extension") {
                     debug(`Extension client disconnected: ${client.id}`);
                 }
@@ -768,6 +770,36 @@ async function updateBrowserContext(
                     isBuiltInWebAgentRpcRequest(data.params)
                 ) {
                     const { id, method, params } = data.params;
+                    if (method === "cancelCrosswordDecision") {
+                        crosswordDecisionHandler.cancel(client.id, params);
+                        return;
+                    }
+                    if (
+                        method === "getCrosswordDecisionCapabilities" ||
+                        method === "resolveCrosswordClue"
+                    ) {
+                        if (!id || id.length > 256) return;
+                        const result =
+                            method === "getCrosswordDecisionCapabilities"
+                                ? crosswordDecisionHandler.capabilities()
+                                : await crosswordDecisionHandler.resolve(
+                                      client.id,
+                                      id,
+                                      params,
+                                  );
+                        if (client.socket.readyState === 1) {
+                            client.socket.send(
+                                JSON.stringify({
+                                    source: "dispatcher",
+                                    method: "crosswordDecision/response",
+                                    type: "builtInRpcResponse",
+                                    id,
+                                    result,
+                                }),
+                            );
+                        }
+                        return;
+                    }
                     const result = await handleWebAgentRpc(
                         method,
                         params,

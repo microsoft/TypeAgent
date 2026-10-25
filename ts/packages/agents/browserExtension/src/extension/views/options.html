@@ -56,6 +56,67 @@
           </div>
         </div>
 
+        <div class="section">
+          <div class="section-title">Crossword Mode</div>
+          <fieldset id="crosswordMode">
+            <legend class="form-label fs-6">
+              Crossword clue reading and answer entry
+            </legend>
+            <div class="form-check form-check-inline">
+              <input
+                class="form-check-input"
+                type="radio"
+                name="crosswordMode"
+                id="crosswordModeGenerative"
+                value="generative"
+                checked
+              />
+              <label class="form-check-label" for="crosswordModeGenerative">
+                Generative
+              </label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input
+                class="form-check-input"
+                type="radio"
+                name="crosswordMode"
+                id="crosswordModeDecision"
+                value="decision"
+              />
+              <label class="form-check-label" for="crosswordModeDecision">
+                Decision
+              </label>
+            </div>
+          </fieldset>
+          <div class="form-text mb-3">
+            Generative extracts the puzzle schema. Decision matches the
+            requested clue against current page candidates. Decision never
+            silently falls back to Generative when unavailable.
+          </div>
+          <div class="mb-3">
+            <label for="crosswordDecisionStrategy" class="form-label">
+              Decision strategy
+            </label>
+            <select id="crosswordDecisionStrategy" class="form-select">
+              <option value="hybrid">Hybrid: direct on small pages</option>
+              <option value="hybrid2">Hybrid 2: cached clue regions</option>
+            </select>
+            <small class="text-muted">
+              Hybrid 2 discovers clue regions on the first action, then reuses
+              their element sets for other clues until the page or settings
+              change. Each new clue still requires target selection and
+              verification.
+            </small>
+          </div>
+          <div
+            id="crosswordDecisionStatus"
+            class="alert alert-info"
+            role="status"
+          >
+            Checking Crossword Decision availability...
+          </div>
+        </div>
+
         <!-- Content Extraction -->
         <div class="section">
           <div class="section-title">

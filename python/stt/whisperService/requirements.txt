@@ -1,7 +1,6 @@
 pyaudio
 torch 
 numpy
-pydub
 fastapi
 uvicorn
 python-multipart

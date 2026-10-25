@@ -1,6 +1,103 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import {
+    isCrosswordMode,
+    isCrosswordDecisionStrategy,
+    type CrosswordDecisionStrategy,
+    type CrosswordMode,
+} from "@typeagent/browser-control-rpc/crosswordDecisionTypes";
+
+export interface ExtensionSettings {
+    agentServerHost: string;
+    defaultExtractionMode: "content";
+    crosswordMode: CrosswordMode;
+    crosswordDecisionStrategy: CrosswordDecisionStrategy;
+    maxConcurrentExtractions: number;
+    qualityThreshold: number;
+    enableIntelligentAnalysis: boolean;
+    autoDiscovery: boolean;
+    autoDiscoveryMode: "scope" | "content";
+    excludeSensitiveSites: boolean;
+    autoOpenChatPanel: boolean;
+    caseInsensitiveWindowTitleMatching: boolean;
+}
+
+export const DEFAULT_EXTENSION_SETTINGS: ExtensionSettings = {
+    agentServerHost: "",
+    defaultExtractionMode: "content",
+    crosswordMode: "generative",
+    crosswordDecisionStrategy: "hybrid",
+    maxConcurrentExtractions: 3,
+    qualityThreshold: 0.3,
+    enableIntelligentAnalysis: true,
+    autoDiscovery: true,
+    autoDiscoveryMode: "content",
+    excludeSensitiveSites: true,
+    autoOpenChatPanel: true,
+    caseInsensitiveWindowTitleMatching: true,
+};
+
+export async function getCrosswordMode(): Promise<CrosswordMode> {
+    const { crosswordMode } = await chrome.storage.sync.get("crosswordMode");
+    if (isCrosswordMode(crosswordMode)) {
+        return crosswordMode;
+    }
+    if (crosswordMode !== undefined) {
+        console.warn("Invalid crossword mode; resetting to Generative.");
+        await chrome.storage.sync.set({ crosswordMode: "generative" });
+    }
+    return "generative";
+}
+
+export async function getCrosswordDecisionStrategy(): Promise<CrosswordDecisionStrategy> {
+    const { crosswordDecisionStrategy } = await chrome.storage.sync.get(
+        "crosswordDecisionStrategy",
+    );
+    if (isCrosswordDecisionStrategy(crosswordDecisionStrategy))
+        return crosswordDecisionStrategy;
+    if (crosswordDecisionStrategy !== undefined) {
+        console.warn(
+            "Invalid crossword Decision strategy; resetting to Hybrid.",
+        );
+        await chrome.storage.sync.set({ crosswordDecisionStrategy: "hybrid" });
+    }
+    return "hybrid";
+}
+
+export async function getCrosswordDecisionSettings() {
+    const [mode, strategy] = await Promise.all([
+        getCrosswordMode(),
+        getCrosswordDecisionStrategy(),
+    ]);
+    return { mode, strategy };
+}
+
+export async function notifyCrosswordModeChanged(
+    mode: CrosswordMode,
+): Promise<void> {
+    const strategy = await getCrosswordDecisionStrategy();
+    const tabs = await chrome.tabs.query({
+        url: ["http://*/*", "https://*/*"],
+    });
+    await Promise.all(
+        tabs
+            .filter((tab) => tab.id !== undefined)
+            .map(async (tab) => {
+                try {
+                    // Omitting frameId delivers to every content-script frame.
+                    await chrome.tabs.sendMessage(tab.id!, {
+                        type: "crosswordModeChanged",
+                        mode,
+                        strategy,
+                    });
+                } catch {
+                    // Tabs without a content-script receiver need no update.
+                }
+            }),
+    );
+}
+
 /**
  * Saves recorded actions to storage
  * @param recordedActions The recorded actions
