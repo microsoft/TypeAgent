@@ -82,6 +82,8 @@ export function ollamaApiSettingsFromEnv(
     env: Record<string, string | undefined> = process.env,
     modelName: string = "phi3",
 ): OllamaApiSettings | OpenAIApiSettings {
+    if (modelType === ModelType.Decision)
+        throw new Error("Ollama does not support native decisions");
     const useOAIEndpoint = env["OLLAMA_USE_OAI_ENDPOINT"] !== "0";
     if (modelType === ModelType.Image) {
         throw new Error("Image model not supported");

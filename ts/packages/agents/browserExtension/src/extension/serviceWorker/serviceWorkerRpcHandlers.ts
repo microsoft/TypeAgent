@@ -2,7 +2,13 @@
 // Licensed under the MIT License.
 
 import { getActiveTab } from "./tabManager";
-import { getRecordedActions, saveRecordedActions } from "./storage";
+import {
+    getRecordedActions,
+    saveRecordedActions,
+    getCrosswordDecisionSettings,
+    notifyCrosswordModeChanged,
+} from "./storage";
+import { forwardCrosswordDecisionRpc } from "./crosswordDecisionRpc";
 import {
     sendActionToAgent,
     ensureWebsocketConnected,
@@ -209,11 +215,22 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         },
 
         async settingsUpdated(params: any) {
-            console.log("Settings updated:", params.settings);
+            const { mode, strategy } = await getCrosswordDecisionSettings();
             await chrome.storage.local.set({
-                knowledgeSettings: params.settings,
+                knowledgeSettings: {
+                    ...params.settings,
+                    crosswordMode: mode,
+                    crosswordDecisionStrategy: strategy,
+                },
             });
+            await notifyCrosswordModeChanged(mode);
             return { success: true };
+        },
+
+        async getCrosswordDecisionCapabilities() {
+            return forwardCrosswordDecisionRpc(
+                "getCrosswordDecisionCapabilities",
+            );
         },
 
         async autoIndexSettingChanged(params: any) {

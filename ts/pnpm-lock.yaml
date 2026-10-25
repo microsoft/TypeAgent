@@ -2083,6 +2083,9 @@ importers:
       express-rate-limit:
         specifier: ^7.5.0
         version: 7.5.1(express@4.22.1)
+      gpt-tokenizer:
+        specifier: ^2.9.0
+        version: 2.9.0
       graphology:
         specifier: ^0.25.4
         version: 0.25.4(graphology-types@0.24.8)
@@ -2401,6 +2404,9 @@ importers:
       jsdom:
         specifier: ^28.1.0
         version: 28.1.0(@noble/hashes@2.4.0)
+      playwright:
+        specifier: 1.57.0
+        version: 1.57.0
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
