@@ -103,6 +103,10 @@ export const schemaViewDefinitionSchema = z.strictObject({
     }),
 });
 const review = z.enum(["unreviewed", "confirmed", "rejected"]);
+const localChronology = z.strictObject({
+    timestamp: z.string().regex(/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d)?$/),
+    scope: z.string().trim().min(1).max(200),
+});
 export const answerCandidateSchema = z.strictObject({
     id,
     value: schemaValueSchema,
@@ -112,6 +116,7 @@ export const answerCandidateSchema = z.strictObject({
     citations: citation.array().max(1000),
     opposingCitations: citation.array().max(1000),
     effectiveAt: z.string().max(200).optional(),
+    localChronology: localChronology.optional(),
     assertionOwner: z.string().max(200).optional(),
     independenceKey: z.string().max(200).optional(),
     derivedFrom: id.array().max(1000),
@@ -121,6 +126,7 @@ export const answerCandidateSchema = z.strictObject({
             independenceKey: z.string().max(200).optional(),
             assertionOwner: z.string().max(200).optional(),
             effectiveAt: z.string().max(200).optional(),
+            localChronology: localChronology.optional(),
             derivedFrom: id.array().max(1000),
         })
         .array()

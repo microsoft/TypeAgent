@@ -198,7 +198,9 @@ export function mountGraphDetails(
                 const page = await invokeView("memoryQueryTopics", {
                     corpusId,
                     topicId: topic.topicId,
-                    depth: 0,
+                    ...(topic.topicId.startsWith("concept:")
+                        ? { curated: true, summarize: true }
+                        : { depth: 0 }),
                     pageSize: 1,
                 });
                 if (!active()) return;
@@ -206,18 +208,22 @@ export function mountGraphDetails(
                     throw new Error(
                         "Topic snapshot changed. Refresh the graph.",
                     );
-                const detail = page.nodes.find(
-                    (node) => node.id === topic.topicId,
-                );
+                const detail =
+                    page.concepts?.find(
+                        (concept) => concept.id === topic.topicId,
+                    ) ?? page.nodes.find((node) => node.id === topic.topicId);
                 if (!detail)
                     throw new Error("Maintained topic is no longer available.");
-                status.textContent = `Generated summary · ${detail.summaryState} · ${detail.scope}`;
+                status.textContent = `Generated summary · ${detail.summaryState ?? "ready"} · ${detail.scope}`;
                 content.replaceChildren();
                 if (detail.summary) renderMarkdownInto(content, detail.summary);
                 content.append(
                     graphText(
                         "p",
-                        [...page.limits, ...detail.limits].join(" · "),
+                        [
+                            ...page.limits,
+                            ...("limits" in detail ? detail.limits : []),
+                        ].join(" · "),
                     ),
                 );
             } catch (value) {

@@ -57,6 +57,7 @@ export function recordBenchmarkArm(state, capabilities, resume) {
         readerProvenance:
             "Opt-in public diagnostics identify actual indexed reader fragments and selection; citations identify supplied evidence, not independent entailment.",
         answerLimit: "product-default",
+        knowledgeTimeoutMs: state.knowledgeTimeoutMs ?? 600000,
         preliminarySearch: false,
         readerDate:
             "Original question date supplied to retrieval and reader as temporal metadata",
@@ -105,6 +106,12 @@ function validateBenchmarkSpec(spec) {
                 spec.workAllowanceMs <= workAllowanceMs),
     );
     assert.equal(spec.totalAllowanceMs, spec.workAllowanceMs);
+    assert.ok(
+        Number.isSafeInteger(spec.knowledgeTimeoutMs ?? 600000) &&
+            (spec.knowledgeTimeoutMs ?? 600000) >= 60000 &&
+            (spec.knowledgeTimeoutMs ?? 600000) <= 3600000,
+        "Knowledge readiness timeout must be between one and sixty minutes",
+    );
     assert.equal(typeof spec.resume, "boolean");
     assert.ok(
         Number.isSafeInteger(spec.maximumCompletedQuestions) &&
@@ -130,6 +137,15 @@ export function benchmarkInvocationAllowance(value) {
         "Invocation work minutes must be an integer from 1 to 30, or unlimited",
     );
     return minutes * 60000 + cleanupReserveMs;
+}
+
+export function benchmarkKnowledgeTimeout(value) {
+    const minutes = Number(value);
+    assert.ok(
+        Number.isSafeInteger(minutes) && minutes >= 1 && minutes <= 60,
+        "Knowledge readiness minutes must be an integer from 1 to 60",
+    );
+    return minutes * 60000;
 }
 
 export async function acknowledgeStopAfterQuestion(
@@ -293,6 +309,15 @@ function completedOutcome(constructionCases, state, selection) {
         : "DIAGNOSTIC_SELECTION_COMPLETED";
 }
 
+export function recordKnowledgeAllowance(state, timeoutMs = 600000) {
+    assert.equal(
+        state.knowledgeTimeoutMs ?? 600000,
+        timeoutMs,
+        "Knowledge readiness allowance changed",
+    );
+    state.knowledgeTimeoutMs = timeoutMs;
+}
+
 async function runWorker(spec) {
     const prepared = await loadPrepared(spec);
     const selection = spec.questionIds;
@@ -315,6 +340,7 @@ async function runWorker(spec) {
               runId: spec.receiptId,
               manifestHash: prepared.manifest.sha256,
               compiledDigest,
+              knowledgeTimeoutMs: spec.knowledgeTimeoutMs,
               dependencies,
               engineHash,
               questionIds: selection ?? null,
@@ -324,6 +350,7 @@ async function runWorker(spec) {
               attempts: [],
           };
     assert.equal(state.runId, spec.receiptId);
+    recordKnowledgeAllowance(state, spec.knowledgeTimeoutMs);
     assert.deepEqual(
         state.questionIds ?? null,
         selection ?? null,
@@ -499,6 +526,7 @@ async function runWorker(spec) {
                     role: (value) => {
                         role = value;
                     },
+                    knowledgeTimeoutMs: state.knowledgeTimeoutMs,
                 },
             );
             if (
@@ -585,6 +613,7 @@ export async function main(args = process.argv.slice(2)) {
             "max-questions": { type: "string", default: "500" },
             "work-minutes": { type: "string", default: "30" },
             "question-ids": { type: "string" },
+            "knowledge-minutes": { type: "string", default: "10" },
         },
     });
     if (values.spec) {
@@ -647,6 +676,9 @@ export async function main(args = process.argv.slice(2)) {
         workAllowanceMs: invocationAllowanceMs,
         totalAllowanceMs: invocationAllowanceMs,
         maximumCompletedQuestions,
+        knowledgeTimeoutMs: benchmarkKnowledgeTimeout(
+            values["knowledge-minutes"],
+        ),
         ...(values["question-ids"] === undefined
             ? {}
             : { questionIds: values["question-ids"].split(",") }),

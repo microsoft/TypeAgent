@@ -5,6 +5,37 @@ import { setTimeout as delay } from "node:timers/promises";
 import { MaintenanceScheduler } from "../src/maintenanceScheduler.js";
 
 describe("coalesced maintenance execution", () => {
+    test("quiet-period requests coalesce without delaying explicit drains", async () => {
+        const scheduler = new MaintenanceScheduler(() => false);
+        const calls: string[] = [];
+        try {
+            scheduler.request(
+                "corpus",
+                "topics",
+                "old",
+                async () => {
+                    calls.push("old");
+                },
+                2000,
+            );
+            await delay(300);
+            expect(calls).toEqual([]);
+            scheduler.request(
+                "corpus",
+                "topics",
+                "latest",
+                async () => {
+                    calls.push("latest");
+                },
+                2000,
+            );
+            expect((await scheduler.drain(1000)).settled).toBe(true);
+            expect(calls).toEqual(["latest"]);
+        } finally {
+            await scheduler.close();
+        }
+    });
+
     test("nested foreground scopes retain only the latest generation", async () => {
         const scheduler = new MaintenanceScheduler(() => false);
         const first = scheduler.defer();

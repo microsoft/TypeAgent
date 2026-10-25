@@ -379,7 +379,7 @@ function eligibleCandidate(
 function candidateEffectiveTime(
     slot: QuestionSlot,
     candidate: AnswerCandidate,
-): number | undefined {
+): { value: number; scope: string } | undefined {
     const times = candidate.support
         .filter(
             (support) =>
@@ -388,14 +388,37 @@ function candidateEffectiveTime(
                     support.citation.sourceId,
                 ),
         )
-        .flatMap((support) =>
-            support.effectiveAt ? [Date.parse(support.effectiveAt)] : [],
-        )
-        .filter(Number.isFinite);
-    if (times.length) return Math.max(...times);
-    if (!slot.rubric.authoritySourceIds.length && candidate.effectiveAt) {
-        const parsed = Date.parse(candidate.effectiveAt);
-        if (Number.isFinite(parsed)) return parsed;
+        .flatMap((support) => {
+            const time = chronologyTime(support);
+            return time ? [time] : [];
+        });
+    if (times.length) {
+        if (new Set(times.map((time) => time.scope)).size !== 1)
+            return undefined;
+        return {
+            value: Math.max(...times.map((time) => time.value)),
+            scope: times[0].scope,
+        };
+    }
+    if (!slot.rubric.authoritySourceIds.length)
+        return chronologyTime(candidate);
+    return undefined;
+}
+
+function chronologyTime(
+    value: Pick<AnswerCandidate, "effectiveAt" | "localChronology">,
+): { value: number; scope: string } | undefined {
+    if (value.localChronology) {
+        // The UTC suffix computes an ordering key, not an asserted timezone.
+        const parsed = Date.parse(`${value.localChronology.timestamp}Z`);
+        return Number.isFinite(parsed)
+            ? { value: parsed, scope: `local:${value.localChronology.scope}` }
+            : undefined;
+    }
+    if (value.effectiveAt) {
+        const parsed = Date.parse(value.effectiveAt);
+        if (Number.isFinite(parsed))
+            return { value: parsed, scope: "absolute" };
     }
     return undefined;
 }
@@ -405,7 +428,7 @@ function score(slot: QuestionSlot, candidate: AnswerCandidate): number {
     if (slot.rubric.selection === "manual") return 0;
     if (slot.rubric.selection === "independentSupport")
         return independentSupport(candidate) ?? 0;
-    return candidateEffectiveTime(slot, candidate) ?? 0;
+    return candidateEffectiveTime(slot, candidate)?.value ?? 0;
 }
 
 function compareCandidates(
@@ -416,6 +439,22 @@ function compareCandidates(
     const primary = score(slot, b) - score(slot, a);
     if (primary !== 0) return primary;
     return 0;
+}
+
+function incomparableChronology(
+    slot: QuestionSlot,
+    group: AnswerCandidate[],
+): boolean {
+    return (
+        slot.rubric.selection === "mostRecent" &&
+        !group.some((candidate) => candidate.review === "confirmed") &&
+        new Set(
+            group.map(
+                (candidate) =>
+                    candidateEffectiveTime(slot, candidate)?.scope ?? "unknown",
+            ),
+        ).size > 1
+    );
 }
 
 export function resolveQuestion(
@@ -445,6 +484,10 @@ export function resolveQuestion(
                 candidate.review === "unreviewed",
         );
     for (const group of groups.values()) {
+        if (incomparableChronology(slot, group)) {
+            conflict = true;
+            continue;
+        }
         const ranked = [...group].sort((a, b) => compareCandidates(slot, a, b));
         if (
             ranked.length > 1 &&
@@ -513,7 +556,12 @@ export function questionBody(
         details.selectedCandidateIds.includes(candidate.id),
     );
     return [
-        `${details.answerState}; ${details.reviewState}; ${details.freshness}.`,
+        `Answer state: ${details.answerState}; review: ${details.reviewState}; maintenance freshness: ${details.freshness}.`,
+        ...(selected.some((candidate) => candidate.origin !== "user")
+            ? [
+                  "Retained-source answers report historical observations only, not verified present-day status. Maintenance freshness is not evidence that a past observation remains true today.",
+              ]
+            : []),
         ...(slot.cardinality === "collection"
             ? [
                   "Collection coverage is incomplete; absence is not evidence of non-membership.",
@@ -522,10 +570,27 @@ export function questionBody(
         ...(selected.length
             ? selected.map(
                   (candidate) =>
-                      `Origin: ${candidate.origin === "user" ? "authenticated user assertion, not retained-source evidence" : "retained source"}; review: ${candidate.review}.\n${JSON.stringify(candidate.value, null, 2)}`,
+                      `Origin: ${candidate.origin === "user" ? "authenticated user assertion, not retained-source evidence" : "retained source"}; review: ${candidate.review}.\n${candidateTemporalContext(candidate)}${JSON.stringify(candidate.value, null, 2)}`,
               )
             : ["Unknown: no uniquely eligible answer."]),
     ].join("\n\n");
+}
+
+function candidateTemporalContext(candidate: AnswerCandidate): string {
+    if (candidate.origin === "user") return "";
+    const observations = candidate.support.length
+        ? candidate.support
+        : [candidate];
+    const times = [
+        ...new Set(
+            observations.map((observation) =>
+                observation.localChronology
+                    ? `${observation.localChronology.timestamp} (local chronology: ${observation.localChronology.scope}; timezone unspecified)`
+                    : (observation.effectiveAt ?? "unknown observation time"),
+            ),
+        ),
+    ];
+    return `Source observation times: ${times.join("; ")}.\n`;
 }
 
 export function questionSection(
@@ -592,6 +657,7 @@ function validateCandidate(
             "citations",
             "opposingCitations",
             "effectiveAt",
+            "localChronology",
             "assertionOwner",
             "independenceKey",
             "derivedFrom",
@@ -623,6 +689,7 @@ function validateCandidate(
         throw new Error("User assertions cannot forge source support");
     if (candidate.effectiveAt !== undefined)
         validateIsoTimestamp("candidate effective time", candidate.effectiveAt);
+    validateLocalChronology(candidate);
     uniqueStrings(candidate.derivedFrom, "candidate derivation");
     validateCandidateSupport(candidate);
 }
@@ -658,6 +725,7 @@ function validateCandidateSupport(candidate: AnswerCandidate): void {
                 "independenceKey",
                 "assertionOwner",
                 "effectiveAt",
+                "localChronology",
                 "derivedFrom",
             ],
             "candidate support",
@@ -671,11 +739,31 @@ function validateCandidateSupport(candidate: AnswerCandidate): void {
         uniqueStrings(support.derivedFrom, "support derivation");
         if (support.effectiveAt !== undefined)
             validateIsoTimestamp("support effective time", support.effectiveAt);
+        validateLocalChronology(support);
         if (support.independenceKey !== undefined)
             boundedText(support.independenceKey, "Independence key", 200);
         if (support.assertionOwner !== undefined)
             boundedText(support.assertionOwner, "Assertion owner", 200);
     }
+}
+
+function validateLocalChronology(
+    value: Pick<AnswerCandidate, "effectiveAt" | "localChronology">,
+): void {
+    const chronology = value.localChronology;
+    if (chronology === undefined) return;
+    object(chronology, ["timestamp", "scope"], "local chronology");
+    if (
+        value.effectiveAt !== undefined ||
+        typeof chronology.timestamp !== "string" ||
+        !/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d)?$/.test(chronology.timestamp)
+    )
+        throw new Error("Invalid local chronology timestamp");
+    validateIsoTimestamp(
+        "local chronology",
+        `${chronology.timestamp}${chronology.timestamp.length === 16 ? ":00" : ""}Z`,
+    );
+    boundedText(chronology.scope, "Local chronology scope", 200);
 }
 
 export function validateSchemaViewContent(

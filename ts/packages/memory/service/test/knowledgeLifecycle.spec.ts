@@ -10,14 +10,191 @@ import { hydrateSchemaAnswers } from "../src/schemaViewSynthesis.js";
 import type { ViewSynthesisAdapter } from "../src/viewTypes.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 
+test.each([
+    { producerComplete: false, candidateCount: 45 },
+    { producerComplete: true, candidateCount: 45 },
+    { producerComplete: false, candidateCount: 49 },
+    { producerComplete: true, candidateCount: 49 },
+])(
+    "producerComplete=$producerComplete controls $candidateCount subjects beyond three bounded passes",
+    async ({ producerComplete, candidateCount }) => {
+        class PagedPurposeIndex extends FakeSemanticCorpusIndex {
+            async listSubjects(offset: number, limit = 100) {
+                return {
+                    total: candidateCount,
+                    items: Array.from({ length: candidateCount }, (_, i) => ({
+                        term: `Reference ${i}`,
+                        postingCount: 1,
+                        sourceIds: ["source"],
+                    })).slice(offset, offset + limit),
+                    ...(offset + limit < candidateCount
+                        ? { nextContinuationToken: String(offset + limit) }
+                        : {}),
+                };
+            }
+            override async getKnowledgeGraph() {
+                const { items } = await this.listSubjects(0);
+                return {
+                    entities: [],
+                    relationships: [],
+                    topics: items.map((subject) => ({
+                        name: subject.term,
+                        sourceIds: subject.sourceIds,
+                        mentionCount: 1,
+                    })),
+                };
+            }
+            async readFragments() {
+                const document = this.documents[0];
+                return {
+                    fragments: [
+                        {
+                            sourceId: document.source.sourceId,
+                            revisionId: document.revision.revisionId,
+                            snippet: document.content,
+                            locator: `indexed:0:${document.revision.contentHash}:0-${document.content.length}`,
+                            score: 1,
+                        },
+                    ],
+                    readChars: document.content.length,
+                    limited: false,
+                };
+            }
+        }
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "memory-checkpoint-pages-"),
+        );
+        const assessed: string[] = [];
+        const service = new FileMemoryService(root, {
+            maintenanceMode: "manual",
+            sourceSynopses: false,
+            indexFactory: (_corpusId, directory) =>
+                new PagedPurposeIndex(directory),
+            viewSynthesisAdapter: {
+                identity: "offline-deferred-pages",
+                generate: async () => {
+                    throw new Error(
+                        "Low-utility candidates must not generate prose",
+                    );
+                },
+                validate: async () => {
+                    throw new Error(
+                        "Low-utility candidates must not validate generated prose",
+                    );
+                },
+                assessWikiSubject: async (input) => {
+                    assessed.push(input.definition.wiki!.query);
+                    return {
+                        disposition: "defer",
+                        purpose: "Passing reference",
+                        reason: "A passing mention cannot support a substantive article.",
+                        canonicalViewId: "",
+                        sharedFragmentIds: [],
+                        essentialDistinctions: [],
+                        ambiguousViewIds: [],
+                    };
+                },
+            },
+        });
+        try {
+            const { corpusId } = await service.createCorpus(
+                "Bounded page continuation",
+            );
+            const admitted = await service.ingestDocument({
+                corpusId,
+                source: {
+                    sourceId: "source",
+                    sourceType: "text",
+                    title: "References",
+                    text: `Passing mentions only: ${Array.from(
+                        { length: candidateCount },
+                        (_, i) => `Reference ${i}`,
+                    ).join(", ")}.`,
+                },
+            });
+            expect(
+                (await waitForMemoryJob(service, admitted.jobId)).state,
+            ).toBe("complete");
+            const checkpoint = await service.createKnowledgeCheckpoint({
+                corpusId,
+                families: ["wiki"],
+                producerComplete,
+                timeoutMs: 60000,
+            });
+            const done = await service.waitForKnowledgeCheckpoint({
+                corpusId,
+                checkpointId: checkpoint.checkpointId,
+                timeoutMs: 60000,
+            });
+            expect(done.state).toBe(producerComplete ? "ready" : "partial");
+            expect(done.jobIds).toHaveLength(
+                producerComplete ? Math.ceil(candidateCount / 12) : 3,
+            );
+            expect(done.viewIds).toEqual([]);
+            expect((await service.listViews(corpusId)).views).toEqual([]);
+            expect(assessed).toHaveLength(
+                producerComplete ? candidateCount : 36,
+            );
+            expect(new Set(assessed).size).toBe(assessed.length);
+            if (producerComplete && candidateCount === 45) {
+                const unchanged = await service.maintainViews({
+                    corpusId,
+                    expectedHead: (await service.listViews(corpusId)).head,
+                    family: "wiki",
+                    operation: "update",
+                });
+                expect(unchanged.job).toBeUndefined();
+                expect(assessed).toHaveLength(candidateCount);
+                const changed = await service.ingestDocument({
+                    corpusId,
+                    source: {
+                        sourceId: "source",
+                        sourceType: "text",
+                        title: "Updated references",
+                        text: `Updated passing mentions: ${assessed.join(", ")}.`,
+                    },
+                });
+                expect(
+                    (await waitForMemoryJob(service, changed.jobId)).state,
+                ).toBe("complete");
+                const refreshed = await service.createKnowledgeCheckpoint({
+                    corpusId,
+                    families: ["wiki"],
+                    producerComplete: true,
+                    timeoutMs: 60000,
+                });
+                expect(
+                    (
+                        await service.waitForKnowledgeCheckpoint({
+                            corpusId,
+                            checkpointId: refreshed.checkpointId,
+                            timeoutMs: 60000,
+                        })
+                    ).state,
+                ).toBe("ready");
+                expect(assessed).toHaveLength(candidateCount * 2);
+                expect(new Set(assessed.slice(candidateCount)).size).toBe(
+                    candidateCount,
+                );
+            }
+        } finally {
+            await service.close();
+            await rm(root, { recursive: true, force: true });
+        }
+    },
+    90000,
+);
+
 describe("source-only knowledge bootstrap lifecycle", () => {
     let root: string;
     let service: FileMemoryService;
     let discoveryCalls: number;
     let adapter: ViewSynthesisAdapter;
+    let beforeRebuild: (() => Promise<void>) | undefined;
     beforeEach(async () => {
         root = await mkdtemp(path.join(os.tmpdir(), "memory-knowledge-"));
         discoveryCalls = 0;
+        beforeRebuild = undefined;
         adapter = {
             identity: "offline-knowledge-v1",
             discoverCorpusQuestions: async (input) => {
@@ -93,8 +270,15 @@ describe("source-only knowledge bootstrap lifecycle", () => {
             sourceSynopses: false,
             informationalViews: false,
             viewSynthesisAdapter: adapter,
-            indexFactory: (_corpusId, directory) =>
-                new FakeSemanticCorpusIndex(directory),
+            indexFactory: (_corpusId, directory) => {
+                const index = new FakeSemanticCorpusIndex(directory);
+                const rebuild = index.rebuild.bind(index);
+                index.rebuild = async (documents) => {
+                    await beforeRebuild?.();
+                    await rebuild(documents);
+                };
+                return index;
+            },
         });
     }
     afterEach(async () => {
@@ -127,6 +311,46 @@ describe("source-only knowledge bootstrap lifecycle", () => {
             timeoutMs: 15000,
         });
     }
+
+    test("standalone ingestion defers discovery until the ingestion queue becomes idle", async () => {
+        const corpus = await ingest("Hello.");
+        let release!: () => void;
+        let entered!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const started = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        beforeRebuild = async () => {
+            entered();
+            await gate;
+        };
+        try {
+            const admitted = await service.ingestDocument({
+                corpusId: corpus.corpusId,
+                source: {
+                    sourceId: "second",
+                    sourceType: "text",
+                    title: "Another greeting",
+                    text: "Hello.",
+                },
+            });
+            await started;
+            await new Promise((resolve) => setTimeout(resolve, 2200));
+            expect(discoveryCalls).toBe(0);
+            release();
+            expect(
+                (await waitForMemoryJob(service, admitted.jobId)).state,
+            ).toBe("complete");
+            const deadline = Date.now() + 10000;
+            while (!discoveryCalls && Date.now() < deadline)
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            expect(discoveryCalls).toBeGreaterThan(0);
+        } finally {
+            release();
+        }
+    }, 30000);
 
     test("first source yields a maintained unreviewed answer and published view without an artifact", async () => {
         const corpus = await ingest();

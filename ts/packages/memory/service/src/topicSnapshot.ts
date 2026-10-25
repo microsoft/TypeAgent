@@ -11,7 +11,10 @@ import type {
 } from "./topicTypes.js";
 import { assertViewIdentifier } from "./viewContent.js";
 import { parseIndexedLocator } from "./indexedFragments.js";
-import { validateTopicCuration } from "./topicCuration.js";
+import {
+    validateTopicCuration,
+    validateTopicCurationProgress,
+} from "./topicCuration.js";
 
 export function topicId(corpusId: string, identity: string): string {
     return `topic:${createHash("sha256")
@@ -183,7 +186,7 @@ function validateNode(
 
 function validateEdges(
     snapshot: TopicSnapshot,
-    nodes: Map<string, TopicNode>,
+    nodes: ReadonlySet<string>,
 ): void {
     const children = new Map<string, string[]>();
     for (const edge of snapshot.parents) {
@@ -253,8 +256,15 @@ export function validateTopicSnapshot(snapshot: TopicSnapshot): void {
         throw new Error(
             "Topic snapshot truncated maintained occurrence membership",
         );
-    validateEdges(snapshot, nodes);
     validateTopicCuration(snapshot);
+    validateTopicCurationProgress(snapshot);
+    validateEdges(
+        snapshot,
+        new Set([
+            ...nodes.keys(),
+            ...(snapshot.curation?.concepts.map((concept) => concept.id) ?? []),
+        ]),
+    );
 }
 
 export function validateTopicQuery(request: TopicQueryRequest): void {
@@ -270,12 +280,25 @@ export function validateTopicQuery(request: TopicQueryRequest): void {
                     "pageSize",
                     "continuationToken",
                     "curated",
+                    "summarize",
                 ].includes(key),
         )
     )
         throw new Error("Unsupported topic query");
     if (request.curated !== undefined && typeof request.curated !== "boolean")
         throw new Error("Invalid curated topic selection");
+    if (
+        request.summarize !== undefined &&
+        (typeof request.summarize !== "boolean" ||
+            (request.summarize &&
+                (!request.curated ||
+                    !request.topicId ||
+                    request.continuationToken ||
+                    request.search)))
+    )
+        throw new Error(
+            "Summary generation requires one explicit curated topic",
+        );
     assertViewIdentifier("corpus ID", request.corpusId);
     if (request.topicId !== undefined)
         assertViewIdentifier("topic ID", request.topicId);

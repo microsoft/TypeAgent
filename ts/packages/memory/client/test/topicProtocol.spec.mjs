@@ -10,6 +10,77 @@ import {
     topicSnapshotSchema,
 } from "../dist/topicProtocol.js";
 
+test("lazy detail requests are explicit and pending concept prose crosses strict response contracts", () => {
+    const request = {
+        corpusId: "test",
+        curated: true,
+        topicId: "concept:one",
+        summarize: true,
+    };
+    assert.deepEqual(topicQueryRequestSchema.parse(request), request);
+    for (const invalid of [
+        { corpusId: "test", summarize: true },
+        { ...request, curated: false },
+        { ...request, search: "bulk" },
+        { ...request, continuationToken: "next" },
+    ])
+        assert.equal(topicQueryRequestSchema.safeParse(invalid).success, false);
+    const concept = {
+        id: "concept:one",
+        label: "Lease lifetime",
+        scope: "Runtime",
+        purpose: "Distinguish command completion from resource lifetime",
+        memberIds: ["topic:one"],
+        summary: "",
+        summaryState: "pending",
+        citations: [
+            {
+                sourceId: "source",
+                revisionId: "r1",
+                locator: `indexed:0:${"a".repeat(64)}:0-4`,
+                excerpt: "text",
+            },
+        ],
+        salience: 7,
+        memberCount: 1,
+        omittedMembers: 0,
+        citationCount: 1,
+        omittedCitations: 0,
+    };
+    const page = {
+        generation: "g1",
+        nodes: [],
+        parents: [],
+        related: [],
+        neighborhoods: [],
+        totalNodes: 1,
+        matchingNodes: 1,
+        omittedNodes: 1,
+        omittedParents: 0,
+        omittedRelated: 0,
+        omittedNeighborhoods: 0,
+        limits: [],
+        io: { stateBytes: 1, snapshotBytes: 1, elapsedMs: 1 },
+        concepts: [concept],
+        totalConcepts: 1,
+    };
+    assert.deepEqual(topicQueryPageSchema.parse(page), page);
+    assert.equal(
+        topicQueryPageSchema.safeParse({
+            ...page,
+            concepts: [{ ...concept, summaryState: "ready" }],
+        }).success,
+        false,
+    );
+    assert.equal(
+        topicQueryPageSchema.safeParse({
+            ...page,
+            concepts: [{ ...concept, summary: "Unaudited pending prose" }],
+        }).success,
+        false,
+    );
+});
+
 test("curated queries and bounded concepts extend, not replace, raw topic contracts", () => {
     assert.equal(
         topicQueryRequestSchema.parse({ corpusId: "test", curated: true })

@@ -26,6 +26,15 @@ test("topic browse/rebuild and maintenance cross strict gateway with honest boun
         ],
         ["memoryRebuildTopics", { corpusId: "corpus" }],
         [
+            "memoryQueryTopics",
+            {
+                corpusId: "corpus",
+                curated: true,
+                topicId: "concept:one",
+                summarize: true,
+            },
+        ],
+        [
             "memoryMaintainViews",
             {
                 corpusId: "corpus",
@@ -44,6 +53,14 @@ test("topic browse/rebuild and maintenance cross strict gateway with honest boun
         { corpusId: "corpus", pageSize: 201 },
         { corpusId: "corpus", depth: 11 },
         { corpusId: "corpus", sources: ["display-cap"] },
+        { corpusId: "corpus", summarize: true },
+        {
+            corpusId: "corpus",
+            curated: true,
+            topicId: "concept:one",
+            summarize: true,
+            continuationToken: "token",
+        },
     ])
         assert.throws(() =>
             validateViewRequest({ method: "memoryQueryTopics", params }),

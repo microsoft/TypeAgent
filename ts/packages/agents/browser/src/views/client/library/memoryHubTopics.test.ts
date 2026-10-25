@@ -58,6 +58,96 @@ async function settle() {
     await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+test("concept browsing is lazy, explicit summary opening is scoped, and raw evidence browsing remains available", async () => {
+    const raw = page();
+    const concept = {
+        id: "concept:one",
+        label: "Connection lease",
+        scope: "Runtime",
+        purpose: "Understand resource lifetime",
+        summary: "",
+        summaryState: "pending" as const,
+        memberIds: ["topic:one"],
+        memberCount: 1,
+        omittedMembers: 0,
+        citations: raw.nodes[0]!.citations,
+        citationCount: 1,
+        omittedCitations: 0,
+        salience: 7,
+    };
+    const query = jest.fn(
+        async (request: TopicQueryRequest): Promise<TopicQueryPage> => {
+            if (!request.curated) return raw;
+            return {
+                ...raw,
+                nodes: [],
+                totalConcepts: 1,
+                nextContinuationToken: undefined,
+                concepts: [
+                    {
+                        ...concept,
+                        ...(request.summarize
+                            ? {
+                                  summary:
+                                      "Command and lease lifetimes differ.",
+                                  summaryState: "ready" as const,
+                              }
+                            : {}),
+                    },
+                ],
+            };
+        },
+    );
+    const onError = jest.fn();
+    const view = mountTopicBrowser(document.body, {
+        corpusId: () => "corpus",
+        query,
+        onError,
+        onOpenSource: jest.fn(),
+        rebuild: async () => {
+            throw new Error("unused");
+        },
+    });
+    const click = (text: string) => {
+        const button = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent === text,
+        );
+        if (!button) throw new Error(`Missing button ${text}`);
+        button.click();
+    };
+    try {
+        click("Browse topics");
+        await settle();
+        expect(query).toHaveBeenCalledTimes(1);
+        expect(query.mock.calls[0]![0].summarize).toBeUndefined();
+        expect(document.body.textContent).toContain("Summary not generated");
+        expect(document.body.textContent).toContain("revision r2");
+        click("Open concept summary");
+        await settle();
+        expect(query).toHaveBeenLastCalledWith({
+            corpusId: "corpus",
+            curated: true,
+            topicId: "concept:one",
+            summarize: true,
+            pageSize: 1,
+        });
+        expect(document.body.textContent).toContain(
+            "Command and lease lifetimes differ.",
+        );
+        click("All topics");
+        await settle();
+        expect(query).toHaveBeenLastCalledWith({
+            corpusId: "corpus",
+            curated: false,
+            search: "",
+            pageSize: 24,
+        });
+        expect(onError).not.toHaveBeenCalled();
+    } finally {
+        view.dispose();
+    }
+});
+
 test("curated concepts preserve raw member drilldown and exact source evidence", async () => {
     const raw = page();
     raw.totalConcepts = 1;
@@ -160,6 +250,7 @@ test("topic browser shows scoped identity, original evidence, generation and omi
         await settle();
         expect(query).toHaveBeenCalledWith({
             corpusId: "corpus",
+            curated: true,
             search: "",
             pageSize: 24,
         });
@@ -184,6 +275,7 @@ test("topic browser shows scoped identity, original evidence, generation and omi
             search: "",
             pageSize: 24,
             continuationToken: "next",
+            curated: true,
         });
         expect(onError).not.toHaveBeenCalled();
     } finally {

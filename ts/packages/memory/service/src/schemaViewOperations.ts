@@ -202,6 +202,7 @@ export function editSchemaQuestion(
                 existing.support = [];
                 existing.derivedFrom = [];
                 delete existing.effectiveAt;
+                delete existing.localChronology;
             } else
                 section.details.candidates.push({
                     id,

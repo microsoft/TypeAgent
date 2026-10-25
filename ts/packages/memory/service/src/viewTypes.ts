@@ -522,6 +522,7 @@ export interface ViewBuildSnapshot {
         query: string;
         purpose: string;
         essentialDistinctions: WikiSubjectAssessment["essentialDistinctions"];
+        priorProse?: string;
     };
 }
 export interface ViewSynthesisOutput {
@@ -641,6 +642,7 @@ export interface ViewSynthesisAdapter {
     discoverCorpusQuestions?(
         input: CorpusQuestionInput,
         signal: AbortSignal,
+        reserveRepair?: () => Promise<void>,
     ): Promise<CorpusQuestionProposal[]>;
     proposeSchema?(
         specification: string,
@@ -661,7 +663,15 @@ export interface ViewSynthesisAdapter {
         output: ViewSynthesisOutput,
         assessment: import("./wikiConsolidation.js").WikiConsolidationScope,
         signal: AbortSignal,
+        original?: ViewSynthesisOutput,
     ): Promise<import("./viewEditorial.js").ViewEditorialAssessment>;
+    repairWikiConsolidation?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        assessment: import("./wikiConsolidation.js").WikiConsolidationScope,
+        verification: import("./viewEditorial.js").ViewEditorialAssessment,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput>;
     checkEditorial?(
         input: ViewBuildSnapshot,
         output: ViewSynthesisOutput,
@@ -671,6 +681,12 @@ export interface ViewSynthesisAdapter {
         input: ViewBuildSnapshot,
         signal: AbortSignal,
     ): Promise<import("./topicTypes.js").TopicSnapshot>;
+    generateTopicSummary?(
+        concept: import("./topicTypes.js").TopicConcept,
+        signal: AbortSignal,
+    ): Promise<
+        Pick<import("./topicTypes.js").TopicConcept, "summary" | "citations">
+    >;
     assessWikiSubject?(
         input: ViewBuildSnapshot,
         pages: WikiPagePurposeContext[],
@@ -689,6 +705,18 @@ export interface ViewSynthesisAdapter {
         input: ViewBuildSnapshot,
         signal: AbortSignal,
         inventory?: ViewFactInventory,
+    ): Promise<ViewSynthesisOutput>;
+    repairSchemaAnswers?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        report: ViewSupportReport,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput>;
+    repairWikiContribution?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        assessment: WikiSubjectAssessment,
+        signal: AbortSignal,
     ): Promise<ViewSynthesisOutput>;
     validate(
         input: ViewBuildSnapshot,
