@@ -32,6 +32,7 @@ import { createGuideEditor } from "./memoryHubGuide";
 import { viewContentToText } from "@typeagent/memory-service/view-text";
 
 const viewKindLabels: Record<ViewKind, string> = {
+    schemaView: "Schema-defined questions",
     wiki: "Knowledge wiki",
     timeline: "Evidence-linked timeline",
     projectBrief: "Project brief",
@@ -172,6 +173,7 @@ export function mountMemoryHubViews(
               viewId: string;
               revisionId?: string;
               pageId?: string;
+              itemKey?: string;
           }
         | undefined;
     let activeCorpus: string | undefined;
@@ -433,6 +435,7 @@ export function mountMemoryHubViews(
             viewId: string;
             revisionId?: string;
             pageId?: string;
+            itemKey?: string;
         },
         current: number,
     ): Promise<void> {
@@ -443,7 +446,13 @@ export function mountMemoryHubViews(
         );
         const view =
             target.revisionId || !latest
-                ? await invokeMemory("memoryGetView", target)
+                ? await invokeMemory("memoryGetView", {
+                      corpusId: target.corpusId,
+                      viewId: target.viewId,
+                      ...(target.revisionId
+                          ? { revisionId: target.revisionId }
+                          : {}),
+                  })
                 : latest;
         if (disposed || current !== sequence) return;
         if (!view) {
@@ -466,6 +475,25 @@ export function mountMemoryHubViews(
             throw new Error(
                 "The service did not return the requested exact view revision",
             );
+        if (view.content.kind === "schemaView") {
+            const page = await invokeMemory("memoryGetViewPage", {
+                corpusId: target.corpusId,
+                viewId: target.viewId,
+                ...(target.revisionId ? { revisionId: target.revisionId } : {}),
+                ...(target.pageId ? { slotId: target.pageId } : {}),
+                ...(target.itemKey ? { itemKey: target.itemKey } : {}),
+            });
+            if (disposed || current !== sequence) return;
+            drafts.hidden = controls.hidden = true;
+            comparison.replaceChildren(
+                rbMarkdown(page.markdown),
+                rbButton("Review questions", () => {
+                    window.location.hash = `#/questions/${encodeURIComponent(view.corpusId)}/${encodeURIComponent(view.viewId)}`;
+                }),
+                rbButton("Back to views", backToViews),
+            );
+            return;
+        }
         if (view.redirect && !target.revisionId) {
             await renderCurrentWikiRedirect(view.redirect, target, current);
             return;
@@ -2133,6 +2161,7 @@ export function mountMemoryHubViews(
                 viewId?: string;
                 revisionId?: string;
                 pageId?: string;
+                itemKey?: string;
             } = {},
         ) => {
             if (!discardChanges()) return;
@@ -2146,6 +2175,7 @@ export function mountMemoryHubViews(
                           viewId: value.viewId,
                           revisionId: value.revisionId,
                           pageId: value.pageId,
+                          itemKey: value.itemKey,
                       }
                     : undefined;
             if (busy) refreshPending = true;
@@ -2161,6 +2191,7 @@ export function mountMemoryHubViews(
             viewId: string;
             revisionId?: string;
             pageId?: string;
+            itemKey?: string;
         }) => {
             if (!discardChanges()) return;
             sequence++;

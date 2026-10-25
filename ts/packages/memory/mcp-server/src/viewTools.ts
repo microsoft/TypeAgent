@@ -53,12 +53,14 @@ import type {
 } from "@typeagent/memory-service";
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import { z } from "zod";
+import { registerSchemaViewTools } from "./schemaViewTools.js";
 
 export function registerViewTools(
     server: McpServer,
     service: MemoryService & Partial<MemoryViewService>,
     run: (operation: () => Promise<unknown>) => Promise<CallToolResult>,
 ): void {
+    registerSchemaViewTools(server, service, run);
     const views = createMemoryServiceRpcFacade(service);
     const corpus = z.strictObject({ corpusId: z.string().min(1).max(200) });
     server.registerTool(

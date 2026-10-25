@@ -174,6 +174,7 @@ export function mountMemoryHubSearch(
         ["timeline", "Evidence-linked timelines"],
         ["wiki", "Knowledge wikis"],
         ["troubleshootingGuide", "Troubleshooting guides"],
+        ["schemaView", "Schema-defined questions"],
     ]) {
         const option = node("option", label);
         option.value = value;
@@ -758,7 +759,8 @@ export function mountMemoryHubSearch(
             ...(viewKind.value === "timeline" ||
             viewKind.value === "wiki" ||
             viewKind.value === "projectBrief" ||
-            viewKind.value === "troubleshootingGuide"
+            viewKind.value === "troubleshootingGuide" ||
+            viewKind.value === "schemaView"
                 ? { viewKinds: [viewKind.value] }
                 : {}),
             sourceTypes: sourceTypes.length ? sourceTypes : undefined,

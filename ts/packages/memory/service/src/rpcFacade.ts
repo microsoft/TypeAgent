@@ -23,6 +23,42 @@ export function createMemoryServiceRpcFacade(
     service: MemoryService & Partial<MemoryViewService>,
 ): MemoryService & MemoryViewService & MemoryTopicService {
     return {
+        listQuestionSummaries: (request) =>
+            service.listQuestionSummaries?.(request) ??
+            unsupportedCapability("question summaries"),
+        getQuestion: (request) =>
+            service.getQuestion?.(request) ??
+            unsupportedCapability("question detail"),
+        requestAcquisition: (request) =>
+            service.requestAcquisition?.(request) ??
+            unsupportedCapability("acquisition requests"),
+        listAcquisitions: (corpusId) =>
+            service.listAcquisitions?.(corpusId) ??
+            unsupportedCapability("acquisition status"),
+        cancelAcquisition: (request) =>
+            service.cancelAcquisition?.(request) ??
+            unsupportedCapability("acquisition cancellation"),
+        runAcquisitions: (corpusId) =>
+            service.runAcquisitions?.(corpusId) ??
+            unsupportedCapability("acquisition runs"),
+        startAcquisitionPeriodic: (request) =>
+            service.startAcquisitionPeriodic?.(request) ??
+            unsupportedCapability("periodic acquisition"),
+        listQuestions: (corpusId) =>
+            service.listQuestions?.(corpusId) ??
+            unsupportedCapability("questions"),
+        editQuestion: (request) =>
+            service.editQuestion?.(request) ??
+            unsupportedCapability("question editing"),
+        getViewPage: (request) =>
+            service.getViewPage?.(request) ??
+            unsupportedCapability("view pages"),
+        proposeSchemaView: (request) =>
+            service.proposeSchemaView?.(request) ??
+            unsupportedCapability("schema proposals"),
+        discoverSchemaQuestions: (request) =>
+            service.discoverSchemaQuestions?.(request) ??
+            unsupportedCapability("question discovery"),
         importAgentSession: (request) =>
             service.importAgentSession?.(request) ??
             unsupportedCapability("agent session imports"),

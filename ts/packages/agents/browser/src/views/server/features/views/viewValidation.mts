@@ -3,6 +3,7 @@
 
 import { z } from "zod";
 import { runbookImportViewSchemas } from "./runbookImportSchemas.mjs";
+import { questionSchemas } from "./questionSchemas.mjs";
 import {
     viewReadRequestSchema,
     viewSaveRequestSchema,
@@ -113,6 +114,7 @@ const schemas: Record<ViewMethod, z.ZodType> = {
     memoryGetViewConflict: protocolInput(viewConflictReadSchema),
     memoryResolveViewConflict: protocolInput(viewResolutionSchema),
     ...runbookImportViewSchemas,
+    ...questionSchemas,
     memoryHubViewUsedBy: z.strictObject({ ...source, ...page }),
     memoryHubSourceOriginal: z.strictObject({
         ...source,
@@ -139,9 +141,15 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         dateTo: z.iso.datetime({ offset: true }).optional(),
         conversationScope: z.enum(["none", "current", "all"]).optional(),
         viewKinds: z
-            .enum(["troubleshootingGuide", "projectBrief", "timeline", "wiki"])
+            .enum([
+                "troubleshootingGuide",
+                "projectBrief",
+                "timeline",
+                "wiki",
+                "schemaView",
+            ])
             .array()
-            .max(4)
+            .max(5)
             .optional(),
     }),
     memoryHubEvidence: z.discriminatedUnion("kind", [

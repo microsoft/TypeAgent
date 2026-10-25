@@ -48,6 +48,7 @@ function resultTitle(result: ViewBuildTargetResult): string {
         projectBrief: "Project brief",
         timeline: "Timeline",
         troubleshootingGuide: "Troubleshooting guide",
+        schemaView: "Schema-defined questions",
     };
     return labels[result.snapshot.definition.kind];
 }
