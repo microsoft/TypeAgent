@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 export const puzzleText = `exolve-begin
 exolve-id: typeagent-crossword-fixture
 exolve-title: Wordwork
