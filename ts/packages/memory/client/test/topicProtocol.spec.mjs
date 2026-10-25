@@ -7,7 +7,44 @@ import {
     topicBuildInputSchema,
     topicQueryPageSchema,
     topicQueryRequestSchema,
+    topicSnapshotSchema,
 } from "../dist/topicProtocol.js";
+
+test("curated queries and bounded concepts extend, not replace, raw topic contracts", () => {
+    assert.equal(
+        topicQueryRequestSchema.parse({ corpusId: "test", curated: true })
+            .curated,
+        true,
+    );
+    assert.equal(
+        topicQueryRequestSchema.safeParse({ corpusId: "test", curated: "yes" })
+            .success,
+        false,
+    );
+    const snapshot = {
+        schemaVersion: 1,
+        corpusId: "test",
+        generation: "g1",
+        inputFingerprint: "a".repeat(64),
+        recipe: "curated-v1",
+        generatedAt: "2026-10-24",
+        occurrences: [],
+        influenceSources: [],
+        nodes: [],
+        parents: [],
+        related: [],
+        limits: [],
+        curation: { concepts: [], deferred: [] },
+    };
+    assert.deepEqual(topicSnapshotSchema.parse(snapshot), snapshot);
+    assert.equal(
+        topicSnapshotSchema.safeParse({
+            ...snapshot,
+            curation: { concepts: [], deferred: [], approved: true },
+        }).success,
+        false,
+    );
+});
 
 test("topic query schema preserves generation, continuation, honest omissions and actual IO", () => {
     const page = {

@@ -43,6 +43,33 @@ import { createMaintenancePanel } from "./memoryHubMaintenance";
 import { createGuideEditor } from "./memoryHubGuide";
 import { viewContentToText } from "@typeagent/memory-service/view-text";
 
+function articleCompleteness(content: DerivedViewContent): HTMLElement[] {
+    if (
+        (content.kind !== "wiki" && content.kind !== "projectBrief") ||
+        !content.status
+    )
+        return [];
+    return [
+        rbChip(
+            `Completeness: ${content.status}`,
+            content.status === "sufficient" ? "good" : "warn",
+        ),
+    ];
+}
+
+function appendArticleCoverage(
+    article: HTMLElement,
+    content: DerivedViewContent,
+): void {
+    if (
+        (content.kind === "wiki" || content.kind === "projectBrief") &&
+        content.coverageNote
+    )
+        article.append(
+            rbNode("p", `Coverage: ${content.coverageNote}`, "hub-view-note"),
+        );
+}
+
 const viewKindLabels: Record<ViewKind, string> = {
     wiki: "Knowledge wiki",
     timeline: "Evidence-linked timeline",
@@ -1755,9 +1782,11 @@ export function mountMemoryHubViews(
         metaChips.append(
             rbChip(viewKindLabels[view.content.kind]),
             rbChip(`Version ${view.version}`),
+            ...articleCompleteness(view.content),
         );
         meta.append(metaChips, ...viewRevisionTime(view.createdAt));
         article.append(title, meta);
+        appendArticleCoverage(article, view.content);
         if (view.content.summary) {
             const lead = rbMarkdown(view.content.summary);
             lead.classList.add("hub-view-lead");

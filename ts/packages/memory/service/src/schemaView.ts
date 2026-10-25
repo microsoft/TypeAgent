@@ -376,11 +376,10 @@ function eligibleCandidate(
     );
 }
 
-function score(slot: QuestionSlot, candidate: AnswerCandidate): number {
-    if (candidate.review === "confirmed") return Number.MAX_SAFE_INTEGER;
-    if (slot.rubric.selection === "manual") return 0;
-    if (slot.rubric.selection === "independentSupport")
-        return independentSupport(candidate) ?? 0;
+function candidateEffectiveTime(
+    slot: QuestionSlot,
+    candidate: AnswerCandidate,
+): number | undefined {
     const times = candidate.support
         .filter(
             (support) =>
@@ -391,8 +390,32 @@ function score(slot: QuestionSlot, candidate: AnswerCandidate): number {
         )
         .flatMap((support) =>
             support.effectiveAt ? [Date.parse(support.effectiveAt)] : [],
-        );
-    return times.length ? Math.max(...times) : 0;
+        )
+        .filter(Number.isFinite);
+    if (times.length) return Math.max(...times);
+    if (!slot.rubric.authoritySourceIds.length && candidate.effectiveAt) {
+        const parsed = Date.parse(candidate.effectiveAt);
+        if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
+}
+
+function score(slot: QuestionSlot, candidate: AnswerCandidate): number {
+    if (candidate.review === "confirmed") return Number.MAX_SAFE_INTEGER;
+    if (slot.rubric.selection === "manual") return 0;
+    if (slot.rubric.selection === "independentSupport")
+        return independentSupport(candidate) ?? 0;
+    return candidateEffectiveTime(slot, candidate) ?? 0;
+}
+
+function compareCandidates(
+    slot: QuestionSlot,
+    a: AnswerCandidate,
+    b: AnswerCandidate,
+): number {
+    const primary = score(slot, b) - score(slot, a);
+    if (primary !== 0) return primary;
+    return 0;
 }
 
 export function resolveQuestion(
@@ -422,12 +445,10 @@ export function resolveQuestion(
                 candidate.review === "unreviewed",
         );
     for (const group of groups.values()) {
-        const ranked = [...group].sort(
-            (a, b) => score(slot, b) - score(slot, a),
-        );
+        const ranked = [...group].sort((a, b) => compareCandidates(slot, a, b));
         if (
             ranked.length > 1 &&
-            score(slot, ranked[0]) === score(slot, ranked[1])
+            compareCandidates(slot, ranked[0], ranked[1]) === 0
         ) {
             conflict = true;
             continue;

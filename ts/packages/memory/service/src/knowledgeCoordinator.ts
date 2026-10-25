@@ -281,6 +281,18 @@ export class KnowledgeCoordinator {
                 ));
             if (proposals.length > input.maxProposals)
                 throw new Error("Discovery exceeded proposal allowance");
+            if (!prior?.proposals)
+                proposals.sort(
+                    (a, b) =>
+                        Object.values(b.utility ?? {}).reduce(
+                            (sum, score) => sum + score,
+                            0,
+                        ) -
+                        Object.values(a.utility ?? {}).reduce(
+                            (sum, score) => sum + score,
+                            0,
+                        ),
+                );
             await this.host.write(corpusId, (status) => {
                 const current = status.discovery.receipts.find(
                     (entry) => entry.fingerprint === input.fingerprint,

@@ -692,8 +692,17 @@ export class ViewBuildRunner {
                 "Wiki purpose assessment requires current-page context and guarded receipts",
             );
         const pages = await this.owner.wikiPages(result.snapshot);
-        if (!pages.length) return false;
-        const sources = pages.flatMap((page) => page.contributingSources);
+        const sources = [
+            ...new Map(
+                [
+                    ...(result.snapshot.influenceSources ?? []),
+                    ...pages.flatMap((page) => page.contributingSources),
+                ].map((source) => [
+                    JSON.stringify([source.sourceId, source.revisionId]),
+                    source,
+                ]),
+            ).values(),
+        ];
         result.snapshot.influenceSources = sources;
         const scope = this.controllers.get(job.jobId);
         for (const source of sources) scope?.sources.add(source.sourceId);
@@ -734,6 +743,7 @@ export class ViewBuildRunner {
         }
         return (
             assessment.disposition === "covered" ||
+            assessment.disposition === "defer" ||
             assessment.disposition === "ambiguous"
         );
     }

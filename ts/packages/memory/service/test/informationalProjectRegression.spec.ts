@@ -80,6 +80,14 @@ function snapshot(text: string): ViewBuildSnapshot {
 function candidate() {
     return {
         title: "Atlas rollout",
+        summary:
+            "Atlas rollout remains active with capacity validation pending peak-load evidence.",
+        completeness: "partial",
+        assignments: [],
+        milestoneItems: [],
+        decisionItems: [],
+        openQuestions: [],
+        riskItems: [],
         goalsScope:
             "Atlas rollout remains active; completed rehearsal is not rollout approval.",
         owners: "Mira is the capacity reviewer, not the accountable service owner. Accountable role: service owner; assigned person unknown. Leo owns Boreal, not Atlas.",
@@ -97,6 +105,53 @@ function candidate() {
         capacityState: "pendingOwnerReview",
     };
 }
+
+test("grounded project structured details and item identities survive refresh without root duplicates", () => {
+    const input = snapshot(
+        "Mira is the Atlas capacity reviewer. Atlas acceptance review is proposed. Peak-load evidence is pending.",
+    );
+    const raw = {
+        ...candidate(),
+        assignments: [
+            {
+                id: "capacity-review",
+                responsibility: "Capacity review",
+                state: "known",
+                owner: "Mira",
+            },
+        ],
+        milestoneItems: [{ id: "acceptance", status: "proposed", date: null }],
+        decisionItems: [{ id: "acceptance-decision", status: "proposed" }],
+        openQuestions: [
+            "What peak-load memory evidence supports Atlas rollout?",
+        ],
+        riskItems: [{ id: "capacity-evidence", status: "open" }],
+    };
+    const first = hydrateProjectSummary(input, raw);
+    const second = hydrateProjectSummary(input, structuredClone(raw));
+    expect(second.content).toEqual(first.content);
+    expect(second.content).not.toHaveProperty("openQuestions");
+    expect(
+        second.content.sections.find((section) => section.role === "risks")!
+            .details,
+    ).toMatchObject({ openQuestions: raw.openQuestions, items: raw.riskItems });
+    expect(
+        second.content.sections.find((section) => section.role === "owners")!
+            .details,
+    ).toMatchObject({ assignments: raw.assignments });
+    expect(() =>
+        hydrateProjectSummary(input, {
+            ...raw,
+            assignments: [raw.assignments[0], raw.assignments[0]],
+        }),
+    ).toThrow("Duplicate");
+    expect(() =>
+        hydrateProjectSummary(input, {
+            ...raw,
+            assignments: [{ ...raw.assignments[0], id: "invalid id" }],
+        }),
+    ).toThrow("Invalid project item");
+});
 
 function version(
     input: ViewBuildSnapshot,

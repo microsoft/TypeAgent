@@ -78,6 +78,49 @@ function promptText(
         : String(messages[index].content);
 }
 
+test("large raw organization visits every topic without inventing same-label parent links", async () => {
+    const value = input(205);
+    value.topicInput!.occurrences = value.topicInput!.occurrences.map((entry) =>
+        occurrence(entry.sourceId, "Resource"),
+    );
+    const batches: string[][] = [];
+    const model: ChatModel = {
+        completionSettings: {},
+        complete: async (messages) => {
+            const instructions = promptText(messages, 0);
+            if (instructions.includes("Organize supplied topics")) {
+                const payload = JSON.parse(promptText(messages, 1)) as Array<{
+                    id: string;
+                }>;
+                batches.push(payload.map((node) => node.id));
+                return {
+                    success: true,
+                    data: JSON.stringify({ parents: [], related: [] }),
+                };
+            }
+            return {
+                success: true,
+                data: JSON.stringify(
+                    instructions.includes("Check the ACTUAL")
+                        ? { safe: true, failures: [] }
+                        : {
+                              summary: "Rollout remains blocked.",
+                              evidenceIds: [0],
+                          },
+                ),
+            };
+        },
+    };
+    const snapshot = await createConfiguredTopicGenerator(undefined, model)(
+        value,
+        new AbortController().signal,
+    );
+    expect(batches.map((batch) => batch.length)).toEqual([200, 5]);
+    expect(new Set(batches.flat()).size).toBe(205);
+    expect(snapshot.nodes).toHaveLength(205);
+    expect(snapshot.parents).toEqual([]);
+});
+
 function blockedModel() {
     type Response = Awaited<ReturnType<ChatModel["complete"]>>;
     const calls: Array<{

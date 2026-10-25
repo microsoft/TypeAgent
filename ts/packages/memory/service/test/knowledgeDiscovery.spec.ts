@@ -13,6 +13,7 @@ import {
     cachedCorpusQuestionReceipt,
     corpusQuestionIdentity,
     discoveryRouteMatches,
+    deriveDiscoveryRouteTerms,
     planCorpusQuestionWindows,
     planDiscoveryWindowsWithCoverage,
     policyAdmittedSlot,
@@ -80,6 +81,39 @@ function response(
 function proposal(): CorpusQuestionProposal {
     return parseCorpusQuestionDiscovery(input, response())[0];
 }
+
+test("generic role subjects route through meaningful predicates, not grammar", () => {
+    expect(
+        deriveDiscoveryRouteTerms("User", "Where was the user born?"),
+    ).toEqual(["born"]);
+    expect(
+        deriveDiscoveryRouteTerms(
+            "Harbor rollout",
+            "Who leads the Harbor rollout?",
+        ),
+    ).toEqual(["harbor", "rollout"]);
+});
+
+test("question utility dimensions are typed and bounded independently of evidence", () => {
+    const entry = {
+        subject: "Harbor",
+        reason: "Durable ownership",
+        slot,
+        passageIds: [passage.passageId],
+        utility: { consumerValue: 2, substance: 2, novelty: 1, durability: 2 },
+    };
+    expect(
+        parseCorpusQuestionDiscovery(input, response([entry]))[0].utility,
+    ).toEqual(entry.utility);
+    expect(() =>
+        parseCorpusQuestionDiscovery(
+            input,
+            response([
+                { ...entry, utility: { ...entry.utility, consumerValue: 10 } },
+            ]),
+        ),
+    ).toThrow("utility");
+});
 
 describe("content-only corpus discovery", () => {
     test("resolves host-issued original evidence, not model-authored offsets", () => {
@@ -259,6 +293,17 @@ describe("content-only corpus discovery", () => {
         differentlyNamed.slot.question = "WHO leads the Harbor rollout?!";
         differentlyNamed.slot.rubric.requireConfirmation = false;
         expect(corpusQuestionIdentity(differentlyNamed)).toBe(
+            corpusQuestionIdentity(original),
+        );
+        const historical = structuredClone(original);
+        historical.slot.rubric.selection = "mostRecent";
+        expect(corpusQuestionIdentity(historical)).not.toBe(
+            corpusQuestionIdentity(original),
+        );
+        const collection = structuredClone(original);
+        collection.slot.cardinality = "collection";
+        collection.slot.itemKey = "name";
+        expect(corpusQuestionIdentity(collection)).not.toBe(
             corpusQuestionIdentity(original),
         );
         expect(() =>

@@ -200,6 +200,8 @@ function canonical(): ViewVersion {
         excerpt: oldFact,
     };
     const output = hydrateInformational(input, {
+        summary: "Grounded reference summary.",
+        status: "partial",
         title: "Connection lease",
         prose: oldFact,
         limits: "Selected indexed evidence",
@@ -360,6 +362,8 @@ test("canonical contribution preserves editorial title, taxonomy, note and exclu
         assessment(input, context, "contribute"),
     );
     const candidate = hydrateInformational(combined, {
+        summary: "Grounded reference summary.",
+        status: "partial",
         title: "Generated title",
         prose: `${oldFact}\n\n${contrast}`,
         limits: "Bounded",
@@ -418,6 +422,8 @@ test.each(["old", "incoming"])(
             assessment(input, initial, "contribute"),
         );
         const output = hydrateInformational(combined, {
+            summary: "Grounded reference summary.",
+            status: "partial",
             title: "Connection lease",
             prose: `${oldFact}\n\n${contrast}`,
             limits: "Selected evidence",
@@ -516,6 +522,8 @@ test("contribution union retains original exact evidence, metadata, stable ID an
         "f1",
     );
     const output = hydrateInformational(combined, {
+        summary: "Grounded reference summary.",
+        status: "partial",
         title: "Connection lease",
         prose: `${oldFact}\n\n${contrast}`,
         limits: "Selected evidence",
@@ -652,6 +660,16 @@ async function rehearsal(
             input: ViewBuildSnapshot,
             pages: ReturnType<typeof nominateWikiPages>,
         ) => {
+            if (!pages.length)
+                return {
+                    disposition: "distinct" as const,
+                    purpose: "Useful reference explanation",
+                    reason: "Concrete facts explain the scoped connection lease",
+                    canonicalViewId: "",
+                    sharedFragmentIds: [],
+                    essentialDistinctions: [],
+                    ambiguousViewIds: [],
+                };
             assessed++;
             expect(pages).toHaveLength(1);
             return assessment(
@@ -723,6 +741,8 @@ async function rehearsal(
                 }
             }
             return hydrateInformational(input, {
+                summary: "Grounded reference summary.",
+                status: "partial",
                 title: "Connection lease",
                 prose,
                 limits: "Selected evidence; no universal default or leak proof",

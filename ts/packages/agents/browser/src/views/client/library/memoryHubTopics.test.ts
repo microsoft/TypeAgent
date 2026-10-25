@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { TopicQueryPage } from "@typeagent/memory-service";
+import type {
+    TopicQueryPage,
+    TopicQueryRequest,
+} from "@typeagent/memory-service";
 import { mountTopicBrowser } from "./memoryHubTopics";
 import { invokeView } from "./viewClient";
 
@@ -54,6 +57,87 @@ function page(): TopicQueryPage {
 async function settle() {
     await new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+test("curated concepts preserve raw member drilldown and exact source evidence", async () => {
+    const raw = page();
+    raw.totalConcepts = 1;
+    const concepts: TopicQueryPage = {
+        ...raw,
+        nodes: [],
+        concepts: [
+            {
+                id: "concept:one",
+                label: "Connection lease",
+                scope: "Runtime",
+                purpose: "Understand resource lifetime",
+                summary:
+                    "A command and its held lease have different lifetimes.",
+                memberIds: ["topic:one"],
+                memberCount: 1,
+                omittedMembers: 0,
+                citations: raw.nodes[0]!.citations,
+                citationCount: 1,
+                omittedCitations: 0,
+                salience: 7,
+            },
+        ],
+        totalConcepts: 1,
+    };
+    const query = jest.fn(async (request: TopicQueryRequest) =>
+        request.curated ? concepts : raw,
+    );
+    const onOpenSource = jest.fn();
+    const view = mountTopicBrowser(document.body, {
+        corpusId: () => "corpus",
+        query,
+        onOpenSource,
+        onError: jest.fn(),
+        rebuild: async () => {
+            throw new Error("unused");
+        },
+    });
+    try {
+        [...document.querySelectorAll("button")]
+            .find((button) => button.textContent === "Browse topics")!
+            .click();
+        await settle();
+        expect(
+            [...document.querySelectorAll("button")].find(
+                (button) => button.textContent === "Curated concepts",
+            )!.hidden,
+        ).toBe(false);
+        [...document.querySelectorAll("button")]
+            .find((button) => button.textContent === "Curated concepts")!
+            .click();
+        await settle();
+        expect(query).toHaveBeenLastCalledWith({
+            corpusId: "corpus",
+            curated: true,
+            search: "",
+            pageSize: 24,
+        });
+        expect(document.body.textContent).toContain("250 raw topics retained");
+        expect(document.body.textContent).toContain("not truth confidence");
+        [...document.querySelectorAll("button")]
+            .find((button) =>
+                button.textContent?.startsWith("Source original"),
+            )!
+            .click();
+        expect(onOpenSource).toHaveBeenCalledWith("corpus", "original");
+        [...document.querySelectorAll("button")]
+            .find((button) => button.textContent === "Inspect original topic")!
+            .click();
+        await settle();
+        expect(query).toHaveBeenLastCalledWith({
+            corpusId: "corpus",
+            topicId: "topic:one",
+            depth: 0,
+            pageSize: 24,
+        });
+    } finally {
+        view.dispose();
+    }
+});
 
 test("topic browser shows scoped identity, original evidence, generation and omission/IO honesty", async () => {
     const query = jest.fn(async () => page());

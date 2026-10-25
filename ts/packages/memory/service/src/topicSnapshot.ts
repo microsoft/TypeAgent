@@ -11,6 +11,7 @@ import type {
 } from "./topicTypes.js";
 import { assertViewIdentifier } from "./viewContent.js";
 import { parseIndexedLocator } from "./indexedFragments.js";
+import { validateTopicCuration } from "./topicCuration.js";
 
 export function topicId(corpusId: string, identity: string): string {
     return `topic:${createHash("sha256")
@@ -253,6 +254,7 @@ export function validateTopicSnapshot(snapshot: TopicSnapshot): void {
             "Topic snapshot truncated maintained occurrence membership",
         );
     validateEdges(snapshot, nodes);
+    validateTopicCuration(snapshot);
 }
 
 export function validateTopicQuery(request: TopicQueryRequest): void {
@@ -267,10 +269,13 @@ export function validateTopicQuery(request: TopicQueryRequest): void {
                     "depth",
                     "pageSize",
                     "continuationToken",
+                    "curated",
                 ].includes(key),
         )
     )
         throw new Error("Unsupported topic query");
+    if (request.curated !== undefined && typeof request.curated !== "boolean")
+        throw new Error("Invalid curated topic selection");
     assertViewIdentifier("corpus ID", request.corpusId);
     if (request.topicId !== undefined)
         assertViewIdentifier("topic ID", request.topicId);
@@ -399,6 +404,62 @@ function topicNeighborhoods(
         );
 }
 
+function queryCuratedTopics(
+    snapshot: TopicSnapshot,
+    request: TopicQueryRequest,
+    empty: TopicQueryPage,
+    offset: number,
+    selection: unknown[],
+): TopicQueryPage {
+    const concepts = (snapshot.curation?.concepts ?? [])
+        .filter((concept) => !request.topicId || concept.id === request.topicId)
+        .filter(
+            (concept) =>
+                !request.search ||
+                `${concept.label} ${concept.scope} ${concept.purpose}`
+                    .toLocaleLowerCase()
+                    .includes(request.search.toLocaleLowerCase()),
+        )
+        .sort((a, b) => b.salience - a.salience || a.id.localeCompare(b.id));
+    if (offset > concepts.length)
+        throw new Error("Curated topic continuation exceeds query");
+    const page = concepts.slice(offset, offset + (request.pageSize ?? 50));
+    return {
+        ...empty,
+        concepts: page.map((concept) => ({
+            ...concept,
+            memberIds: concept.memberIds.slice(0, 20),
+            citations: concept.citations.slice(0, 8),
+            memberCount: concept.memberIds.length,
+            omittedMembers: Math.max(0, concept.memberIds.length - 20),
+            citationCount: concept.citations.length,
+            omittedCitations: Math.max(0, concept.citations.length - 8),
+        })),
+        totalConcepts: snapshot.curation?.concepts.length ?? 0,
+        matchingNodes: concepts.length,
+        omittedNodes: snapshot.nodes.length,
+        limits: [
+            ...empty.limits,
+            ...(snapshot.curation
+                ? []
+                : [
+                      "Curated concepts have not been generated; raw occurrences remain available.",
+                  ]),
+        ],
+        ...(offset + page.length < concepts.length
+            ? {
+                  nextContinuationToken: Buffer.from(
+                      JSON.stringify([
+                          snapshot.generation,
+                          selection,
+                          offset + page.length,
+                      ]),
+                  ).toString("base64url"),
+              }
+            : {}),
+    };
+}
+
 export function queryTopicSnapshot(
     snapshot: TopicSnapshot | undefined,
     request: TopicQueryRequest,
@@ -419,6 +480,9 @@ export function queryTopicSnapshot(
         omittedNeighborhoods: 0,
         limits,
         io: { stateBytes: 0, snapshotBytes: 0, elapsedMs: 0 },
+        ...(snapshot?.curation
+            ? { totalConcepts: snapshot.curation.concepts.length }
+            : {}),
     };
     if (!snapshot) {
         if (request.continuationToken)
@@ -432,8 +496,11 @@ export function queryTopicSnapshot(
         request.search ?? null,
         request.depth ?? 1,
         request.pageSize ?? 50,
+        ...(request.curated ? ["curated-v1"] : []),
     ];
     const offset = continuationOffset(request, snapshot, selection);
+    if (request.curated)
+        return queryCuratedTopics(snapshot, request, empty, offset, selection);
     const nodes = selectTopicNodes(snapshot, request);
     if (request.topicId) {
         const neighborhoods = topicNeighborhoods(snapshot, request.topicId);

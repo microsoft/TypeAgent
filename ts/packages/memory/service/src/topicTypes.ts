@@ -53,6 +53,21 @@ export interface TopicSnapshot {
     parents: Array<{ parentId: string; childId: string }>;
     related: Array<{ fromId: string; toId: string; kind: "related" }>;
     limits: string[];
+    curation?: TopicCuration;
+}
+export interface TopicConcept {
+    id: string;
+    label: string;
+    scope: string;
+    purpose: string;
+    memberIds: string[];
+    summary: string;
+    citations: ViewCitation[];
+    salience: number;
+}
+export interface TopicCuration {
+    concepts: TopicConcept[];
+    deferred: Array<{ nodeId: string; reason: string }>;
 }
 export interface TopicBuildInput {
     occurrences: TopicOccurrence[];
@@ -69,6 +84,7 @@ export interface TopicQueryRequest {
     depth?: number;
     pageSize?: number;
     continuationToken?: string;
+    curated?: boolean;
 }
 export interface TopicQueryPage {
     generation: string | null;
@@ -91,6 +107,15 @@ export interface TopicQueryPage {
     nextContinuationToken?: string;
     limits: string[];
     io: { stateBytes: number; snapshotBytes: number; elapsedMs: number };
+    concepts?: Array<
+        TopicConcept & {
+            memberCount: number;
+            omittedMembers: number;
+            citationCount: number;
+            omittedCitations: number;
+        }
+    >;
+    totalConcepts?: number;
 }
 export interface TopicQueryNode extends TopicNode {
     occurrenceCount: number;

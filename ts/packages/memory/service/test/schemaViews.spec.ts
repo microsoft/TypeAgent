@@ -273,6 +273,67 @@ test("scope authority and confirmation precede scoring", () => {
     ).toBe("pending");
 });
 
+test.each(["unreviewed", "confirmed"] as const)(
+    "dates cannot break an independent-support tie between %s immutable facts",
+    (review) => {
+        const slot = {
+            ...name,
+            question: "Where was the user born?",
+            rubric: {
+                ...name.rubric,
+                selection: "independentSupport" as const,
+            },
+        };
+        const first = {
+            ...candidate("Paris"),
+            review,
+            effectiveAt: "2026-10-10T00:00:00Z",
+        };
+        const second = {
+            ...candidate("Rome"),
+            review,
+            effectiveAt: "2026-10-11T00:00:00Z",
+        };
+        const result = resolveQuestion(slot, [first, second], []);
+        expect(result.answerState).toBe("conflicted");
+        expect(result.selectedCandidateIds).toEqual([]);
+    },
+);
+
+test("differently dated candidates retain explicit retrospective corrections", () => {
+    const input = snapshot();
+    input.inputs[0].content =
+        "The birthplace was Paris.\n\nThe earlier Paris assertion was incorrect; the birthplace was Rome.";
+    const output = hydrateSchemaAnswers(input, {
+        answers: [
+            {
+                slotId: name.id,
+                candidates: [
+                    {
+                        valueJson: '"Paris"',
+                        effectiveAt: "2026-10-10T00:00:00Z",
+                        passageIds: ["p0-0"],
+                        opposingPassageIds: ["p0-1"],
+                    },
+                    {
+                        valueJson: '"Rome"',
+                        effectiveAt: "2026-10-11T00:00:00Z",
+                        passageIds: ["p0-1"],
+                        opposingPassageIds: [],
+                    },
+                ],
+            },
+        ],
+    });
+    const details = output.content.sections[0].details;
+    if (!details || details.kind !== "question")
+        throw new Error("Expected question");
+    expect(
+        details.candidates.find((entry) => entry.value === "Paris")
+            ?.opposingCitations,
+    ).toHaveLength(1);
+});
+
 test("partial records and collections do not imply complete coverage", () => {
     const input = snapshot([profile, destinations]);
     const output = hydrateSchemaAnswers(input, {

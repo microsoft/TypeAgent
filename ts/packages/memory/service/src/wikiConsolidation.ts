@@ -405,6 +405,14 @@ export function preservedCanonicalOutput(
                 [content.summary, retiring.content.summary].filter(Boolean),
             ),
         ].join("\n\n");
+    delete content.status;
+    content.coverageNote = [
+        survivor.content.coverageNote,
+        retiring.content.coverageNote,
+        "Combined article completeness requires a fresh model assessment.",
+    ]
+        .filter(Boolean)
+        .join(" ");
     content.index = wikiIndex(content.sections);
     const relationships = authoredRelationships(survivor);
     for (const edge of authoredRelationships(retiring)) {

@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import {
@@ -97,8 +97,7 @@ describe("durable change receipts", () => {
     }
 
     beforeEach(async () => {
-        root = path.resolve(".change-receipts-tests", randomUUID());
-        await mkdir(root, { recursive: true });
+        root = await mkdtemp(path.join(os.tmpdir(), "memory-change-receipts-"));
         failRebuild = false;
         service = openService();
         corpusId = (await service.createCorpus("Changes test")).corpusId;
@@ -107,9 +106,6 @@ describe("durable change receipts", () => {
     afterEach(async () => {
         await service.close();
         await rm(root, { recursive: true, force: true });
-        await rm(path.dirname(root), { recursive: false }).catch(
-            () => undefined,
-        );
     });
 
     test("persists metadata-only committed operations across restart", async () => {

@@ -15,7 +15,7 @@ import type { QuestionSlot } from "./schemaViewTypes.js";
 import { validateQuestionSlot } from "./schemaView.js";
 import { viewHash } from "./viewMerge.js";
 
-export const corpusDiscoveryRecipe = "corpus-questions-v1";
+export const corpusDiscoveryRecipe = "corpus-questions-v2";
 
 type Passage = CorpusQuestionInput["passages"][number];
 
@@ -210,10 +210,29 @@ export function planCorpusQuestionWindows(
     while (remaining.size) {
         const passages: Passage[] = [];
         const windowSources = new Set<string>();
+        const perSourceCounts = new Map<string, number>();
+        const distinctRemainingSources = new Set(
+            [...remaining].map((passage) => sourceKey(passage)),
+        ).size;
+        const maxPerSource =
+            distinctRemainingSources <= 1
+                ? knowledgeLimits.windowPassages
+                : Math.max(
+                      3,
+                      Math.ceil(
+                          knowledgeLimits.windowPassages /
+                              Math.min(
+                                  distinctRemainingSources,
+                                  knowledgeLimits.windowSources,
+                              ),
+                      ),
+                  );
         for (const passage of remaining) {
             const key = sourceKey(passage);
+            const currentCount = perSourceCounts.get(key) ?? 0;
             if (
                 passages.length >= knowledgeLimits.windowPassages ||
+                currentCount >= maxPerSource ||
                 (!windowSources.has(key) &&
                     windowSources.size >= knowledgeLimits.windowSources) ||
                 JSON.stringify([...passages, passage]).length >
@@ -222,6 +241,7 @@ export function planCorpusQuestionWindows(
                 continue;
             passages.push(passage);
             windowSources.add(key);
+            perSourceCounts.set(key, currentCount + 1);
             remaining.delete(passage);
         }
         if (!passages.length) break;
@@ -294,16 +314,24 @@ function canonical(value: unknown): unknown {
     return value;
 }
 
+export function questionContractIdentity(slot: QuestionSlot): string {
+    return viewHash([
+        normalized(slot.question),
+        slot.cardinality,
+        slot.itemKey ?? null,
+        canonical(slot.schema),
+        slot.rubric.selection,
+        slot.rubric.freshnessDays ?? null,
+    ]);
+}
+
 export function corpusQuestionIdentity(
     proposal: CorpusQuestionProposal,
 ): string {
     return viewHash([
         corpusDiscoveryRecipe,
         normalized(proposal.subject),
-        normalized(proposal.slot.question),
-        proposal.slot.cardinality,
-        proposal.slot.itemKey ?? null,
-        canonical(proposal.slot.schema),
+        questionContractIdentity(proposal.slot),
     ]);
 }
 
@@ -422,16 +450,118 @@ export function policyAdmittedSlot(
     return slot;
 }
 
+const genericDiscoveryRouteTerms = new Set([
+    "the",
+    "and",
+    "for",
+    "are",
+    "was",
+    "were",
+    "been",
+    "being",
+    "can",
+    "could",
+    "would",
+    "should",
+    "will",
+    "may",
+    "might",
+    "its",
+    "his",
+    "her",
+    "our",
+    "your",
+    "they",
+    "them",
+    "you",
+    "not",
+    "user",
+    "users",
+    "assistant",
+    "human",
+    "agent",
+    "speaker",
+    "author",
+    "session",
+    "conversation",
+    "chat",
+    "message",
+    "messages",
+    "transcript",
+    "document",
+    "source",
+    "note",
+    "notes",
+    "question",
+    "answer",
+    "summary",
+    "status",
+    "current",
+    "general",
+    "what",
+    "who",
+    "where",
+    "when",
+    "which",
+    "how",
+    "does",
+    "did",
+    "have",
+    "has",
+    "had",
+    "with",
+    "from",
+    "into",
+    "that",
+    "this",
+    "their",
+    "there",
+    "about",
+    "user's",
+]);
+
+export function isGenericDiscoveryRouteTerm(term: string): boolean {
+    const clean = normalized(term);
+    if (!clean) return true;
+    const words = clean.split(" ").filter(Boolean);
+    if (!words.length) return true;
+    return words.every(
+        (word) => word.length <= 2 || genericDiscoveryRouteTerms.has(word),
+    );
+}
+
+export function deriveDiscoveryRouteTerms(
+    subject: string,
+    question?: string,
+): string[] {
+    const extract = (text: string) =>
+        normalized(text)
+            .split(" ")
+            .filter(
+                (word) =>
+                    word.length > 2 && !genericDiscoveryRouteTerms.has(word),
+            );
+    const subjectTerms = extract(subject);
+    if (subjectTerms.length) return [...new Set(subjectTerms)];
+    return [...new Set(extract(question ?? ""))];
+}
+
 export function discoveryRouteMatches(
     route: DiscoveryRoute,
     input: { title?: string; terms?: string[]; sourceId?: string },
 ): boolean {
     if (route.detached) return false;
     if (input.sourceId && route.sourceIds.includes(input.sourceId)) return true;
-    const terms = new Set((input.terms ?? []).map(normalized).filter(Boolean));
+    const terms = new Set(
+        (input.terms ?? [])
+            .map(normalized)
+            .filter(
+                (term) => Boolean(term) && !isGenericDiscoveryRouteTerm(term),
+            ),
+    );
     const title = ` ${normalized(input.title ?? "")} `;
     return [route.subject, ...route.terms]
         .map(normalized)
-        .filter(Boolean)
+        .filter((term) => Boolean(term) && !isGenericDiscoveryRouteTerm(term))
         .some((term) => terms.has(term) || title.includes(` ${term} `));
 }

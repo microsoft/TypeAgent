@@ -122,6 +122,8 @@ export interface WikiFamilyState {
         viewId: string;
         query: string;
         sourceIds: string[];
+        postingCount?: number;
+        salience?: number;
         identity?: import("./types.js").IndexedSubjectIdentity;
         admission?: {
             generation: string | undefined;

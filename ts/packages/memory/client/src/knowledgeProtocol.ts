@@ -46,6 +46,8 @@ const corpusQuestionInputSchema = z.strictObject({
         .array()
         .max(24),
     existingQuestions: text.array().max(100000),
+    existingContracts: questionSlotSchema.array().max(64).optional(),
+    existingContractCount: z.number().int().nonnegative().optional(),
     maxProposals: z.number().int().min(0).max(64),
 });
 export const knowledgeCheckpointSchema = z.strictObject({
@@ -106,6 +108,14 @@ export const knowledgeStatusSchema = z.strictObject({
                         subject: text,
                         reason: text,
                         slot: questionSlotSchema,
+                        utility: z
+                            .strictObject({
+                                consumerValue: z.number().int().min(0).max(2),
+                                substance: z.number().int().min(0).max(2),
+                                novelty: z.number().int().min(0).max(2),
+                                durability: z.number().int().min(0).max(2),
+                            })
+                            .optional(),
                     })
                     .array()
                     .max(64)

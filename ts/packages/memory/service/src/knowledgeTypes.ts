@@ -15,12 +15,20 @@ export interface CorpusQuestionInput {
     fingerprint: string;
     passages: Array<ViewCitation & { passageId: string; title: string }>;
     existingQuestions: string[];
+    existingContracts?: QuestionSlot[];
+    existingContractCount?: number;
     maxProposals: number;
 }
 export interface CorpusQuestionProposal {
     subject: string;
     reason: string;
     slot: QuestionSlot;
+    utility?: {
+        consumerValue: number;
+        substance: number;
+        novelty: number;
+        durability: number;
+    };
 }
 export interface DiscoveryReceipt {
     fingerprint: string;

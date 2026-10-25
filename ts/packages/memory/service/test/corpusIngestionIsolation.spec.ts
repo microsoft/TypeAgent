@@ -3,6 +3,7 @@
 
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import type {
@@ -88,7 +89,7 @@ describe("detached corpus ingestion preparation", () => {
     const providers: Array<ReturnType<typeof blockedProvider>> = [];
 
     beforeEach(async () => {
-        root = await mkdtemp(path.join(process.cwd(), ".corpus-ingestion-"));
+        root = await mkdtemp(path.join(os.tmpdir(), "corpus-ingestion-"));
         nextProvider = undefined;
         service = new FileMemoryService(root, {
             informationalViews: false,

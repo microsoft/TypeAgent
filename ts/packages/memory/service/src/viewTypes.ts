@@ -102,6 +102,7 @@ export type WikiPage = Omit<ViewSection, "role" | "details"> & {
     role: "page";
     details: WikiPageDetails;
 };
+export type InformationalCompletenessStatus = "partial" | "sufficient";
 export interface WikiIndexEntry {
     pageId: string;
     title: string;
@@ -110,6 +111,8 @@ export interface WikiIndexEntry {
 export interface WikiContent {
     kind: "wiki";
     construction: "informational-wiki-v1";
+    status?: InformationalCompletenessStatus;
+    coverageNote?: string;
     title: string;
     summary?: string;
     index: WikiIndexEntry[];
@@ -195,6 +198,7 @@ export type ProjectBriefDetails =
               id: string;
               status: "open" | "blocked" | "resolved" | "unknown";
           }>;
+          openQuestions?: string[];
       }
     | {
           kind: "context";
@@ -208,6 +212,8 @@ export type ProjectBriefSection = Omit<ViewSection, "role" | "details"> & {
 export interface ProjectBriefContent {
     kind: "projectBrief";
     construction: "informational-project-summary-v1";
+    status?: InformationalCompletenessStatus;
+    coverageNote?: string;
     title: string;
     summary?: string;
     sections: ProjectBriefSection[];
@@ -706,7 +712,7 @@ export interface WikiPagePurposeContext {
     sourceOverlap: { shared: number; union: number; subset: boolean };
 }
 export interface WikiSubjectAssessment {
-    disposition: "distinct" | "covered" | "contribute" | "ambiguous";
+    disposition: "distinct" | "covered" | "contribute" | "ambiguous" | "defer";
     purpose: string;
     reason: string;
     /** Empty for distinct/ambiguous; covered/contribute name a supplied current page. */

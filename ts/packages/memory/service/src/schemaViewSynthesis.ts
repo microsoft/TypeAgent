@@ -62,6 +62,7 @@ interface Proposal {
     reason: string;
     slot: QuestionSlot;
     passageIds: string[];
+    utility?: { consumerValue: number; substance: number; novelty: number; durability: number; };
 }
 interface QuestionSlot {
     id: string;
@@ -270,11 +271,12 @@ export function hydrateSchemaAnswers(
                     prior.effectiveAt = candidate.effectiveAt;
             }
         }
+        const mergedCandidates = [...coalesced.values()];
         return questionSection(
             slot,
             resolveQuestion(
                 slot,
-                [...coalesced.values()],
+                mergedCandidates,
                 input.definition.selector.sources,
             ),
         );
@@ -422,16 +424,25 @@ function parseDiscoveredSlot(
 
 export const corpusDiscoveryRules = `${schemaAuthoringRules}
 Discover reusable information worth maintaining from ORIGINAL passages, without an existing view or future query.
-Return exactly one outer JSON object {json:string}. Its json string must encode exactly one complete JSON array of {subject:string,reason:string,slot:QuestionSlot,passageIds:string[]}, NOT a view definition.
+Return exactly one outer JSON object {json:string}. Its json string must encode exactly one complete JSON array of {subject:string,reason:string,slot:QuestionSlot,passageIds:string[],utility:{consumerValue:number,substance:number,novelty:number,durability:number}}, NOT a view definition.
 Do not append a second JSON value, prose, Markdown fences or explanations to either JSON layer.
 Return zero proposals for greetings, unintelligible content or no eligible information; this is a valid result.
-Subject must be an explicitly named subject in a passage or its title. Keep question text concise (at most 240 characters).
+Rate each utility dimension 0 (absent), 1 (plausible) or 2 (clear). Assess reusable consumer value,
+substantive supported information, marginal novelty over existingContracts and other proposals,
+and durable reference/decision value. Do not propose a question with any zero dimension.
+Use existingContracts' schema, cardinality, item key and temporal rubric to suppress semantically
+equivalent requirements even when wording differs. Different facets and historical events remain separate.
+existingContractCount reports the full inventory; existingContracts is a bounded relevant nomination.
+If an existingQuestions entry could be equivalent but its structured contract is absent, defer that
+candidate rather than inventing a difference in schema or temporal policy.
+Subject must be an explicitly named subject in a passage or its title; prefer a concrete domain entity, project, or topic phrase over bare conversational speaker labels such as "User" or "Assistant" whenever a specific phrase appears in the passage or title. Keep question text concise (at most 240 characters).
+Distribute proposals across distinct sources and subjects in the window rather than emitting multiple redundant slots from a single transcript.
 Identify stated properties, persistent projects/decisions, source-explicit unresolved decisions or defensibly keyed collections.
 Do not invent generic profile questions or unknown fields merely because the source does not mention them.
 Use original passage IDs only. Do not supply answers, candidate values, citations, invented offsets or admission metadata.
 Existing contracts and rejected identities suppress equivalent proposals. Subject identity, property/event, cardinality and temporal intent matter more than wording.
 Use raw strings rather than invented enumerations, date-only strings rather than fabricated instants, and retain historical occurrences separately.
-Use independentSupport unless source-supported effective times/corrections justify mostRecent. No fabricated authority IDs.
+Use mostRecent for mutable states, counters, streaks, locations, or project statuses that evolve across dated passages; use independentSupport for time-invariant facts unless source-supported effective times/corrections justify mostRecent. No fabricated authority IDs.
 Policy decides contract admission; neither discovery nor admission confirms candidate answers or authorizes external tools.`;
 
 export function parseCorpusQuestionDiscovery(
@@ -474,7 +485,13 @@ export function parseCorpusQuestionDiscovery(
         if (
             Object.keys(entry).some(
                 (key) =>
-                    !["subject", "reason", "slot", "passageIds"].includes(key),
+                    ![
+                        "subject",
+                        "reason",
+                        "slot",
+                        "passageIds",
+                        "utility",
+                    ].includes(key),
             )
         )
             throw new Error("Unexpected corpus question proposal fields");
@@ -505,7 +522,36 @@ export function parseCorpusQuestionDiscovery(
             throw new Error(
                 "Discovered subject is not resolvable in original evidence",
             );
-        const proposal = { subject, reason, slot };
+        const utility =
+            entry.utility === undefined
+                ? undefined
+                : evidenceRecord(entry.utility);
+        if (
+            utility &&
+            (Object.keys(utility).length !== 4 ||
+                ["consumerValue", "substance", "novelty", "durability"].some(
+                    (key) =>
+                        !Number.isInteger(utility[key]) ||
+                        Number(utility[key]) < 0 ||
+                        Number(utility[key]) > 2,
+                ))
+        )
+            throw new Error("Invalid question utility dimensions");
+        const proposal: CorpusQuestionProposal = {
+            subject,
+            reason,
+            slot,
+            ...(utility
+                ? {
+                      utility: {
+                          consumerValue: Number(utility.consumerValue),
+                          substance: Number(utility.substance),
+                          novelty: Number(utility.novelty),
+                          durability: Number(utility.durability),
+                      },
+                  }
+                : {}),
+        };
         const identity = corpusQuestionIdentity(proposal);
         if (
             identities.has(identity) ||

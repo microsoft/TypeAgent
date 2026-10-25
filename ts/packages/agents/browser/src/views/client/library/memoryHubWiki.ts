@@ -62,6 +62,14 @@ export function createWikiEditor(
         reader.replaceChildren(
             heading,
             rbChip(details.taxonomy),
+            ...(content.status
+                ? [
+                      rbChip(
+                          `Completeness: ${content.status}`,
+                          content.status === "sufficient" ? "good" : "warn",
+                      ),
+                  ]
+                : []),
             rbNode("p", content.summary, "hub-view-lead"),
             rbNode("pre", page.body),
             rbNode("p", details.note),

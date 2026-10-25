@@ -38,6 +38,8 @@ export function mountTopicBrowser(
     search.placeholder = "Filter topic labels or scoped aliases";
     search.setAttribute("aria-label", "Filter maintained topics");
     const load = element("button", "Browse topics");
+    const concepts = element("button", "Curated concepts");
+    concepts.hidden = true;
     const rebuild = element("button", "Rebuild topics");
     const back = element("button", "All topics");
     back.hidden = true;
@@ -54,6 +56,7 @@ export function mountTopicBrowser(
         heading,
         search,
         load,
+        concepts,
         rebuild,
         back,
         status,
@@ -70,12 +73,49 @@ export function mountTopicBrowser(
 
     function render(page: TopicQueryPage, corpusId: string) {
         list.replaceChildren();
+        concepts.hidden = page.totalConcepts === undefined;
         status.textContent = `${page.nodes.length} shown of ${page.matchingNodes} matching; ${page.totalNodes} maintained topics; ${page.omittedNodes} omitted from this response. Generation ${page.generation ?? "not available"}.`;
+        if (page.concepts)
+            status.textContent = `${page.concepts.length} curated concepts shown of ${page.totalConcepts ?? 0}; ${page.totalNodes} raw topics retained.`;
         limits.textContent = [
             ...page.limits,
             `${page.omittedParents} organizational links, ${page.omittedRelated} related links and ${page.omittedNeighborhoods} neighbors omitted.`,
             `Full-state blob payload: ${page.io.stateBytes} bytes uncompressed; snapshot ${page.io.snapshotBytes} serialized bytes; ${page.io.elapsedMs.toFixed(1)} ms. Physical disk traffic is not measured by these payload counts.`,
         ].join(" ");
+        for (const concept of page.concepts ?? []) {
+            const card = element("article");
+            card.append(
+                element("h4", concept.label),
+                element(
+                    "p",
+                    `${concept.scope} · ${concept.memberCount} raw members · salience ${concept.salience}/8 (not truth confidence)`,
+                ),
+                element("p", concept.purpose),
+                element("p", concept.summary),
+            );
+            for (const id of concept.memberIds) {
+                const member = element("button", "Inspect original topic");
+                member.addEventListener(
+                    "click",
+                    () =>
+                        void browse({
+                            corpusId,
+                            topicId: id,
+                            depth: 0,
+                            pageSize: 24,
+                        }),
+                );
+                card.append(member);
+            }
+            card.append(
+                element(
+                    "p",
+                    `${concept.omittedMembers} member links omitted; Browse topics retains access to all raw occurrences.`,
+                ),
+            );
+            appendEvidence(card, concept.citations, corpusId);
+            list.append(card);
+        }
         for (const topic of page.nodes) {
             const card = element("article");
             const title = element("button", topic.label);
@@ -104,35 +144,7 @@ export function mountTopicBrowser(
                     ].join(" "),
                 ),
             );
-            for (const citation of topic.citations) {
-                const eventId =
-                    citation.evidence?.kind === "event"
-                        ? citation.evidence.eventId
-                        : undefined;
-                const source = element(
-                    "button",
-                    eventId
-                        ? `Event ${eventId} · original evidence`
-                        : `Source ${citation.sourceId} · manage source`,
-                );
-                source.addEventListener("click", () =>
-                    eventId
-                        ? eventDetails.openEvent(corpusId, eventId)
-                        : options.onOpenSource(corpusId, citation.sourceId),
-                );
-                const evidence = element("details");
-                evidence.append(
-                    element(
-                        "summary",
-                        eventId
-                            ? `Original indexed event evidence · ${eventId}`
-                            : `Original indexed evidence · revision ${citation.revisionId}`,
-                    ),
-                    element("blockquote", citation.excerpt),
-                    element("code", citation.locator),
-                );
-                card.append(source, evidence);
-            }
+            appendEvidence(card, topic.citations, corpusId);
             const parents = page.parents
                 .filter((edge) => edge.childId === topic.id)
                 .map((edge) => edge.parentId);
@@ -177,6 +189,42 @@ export function mountTopicBrowser(
         back.hidden = !request?.topicId;
     }
 
+    function appendEvidence(
+        card: HTMLElement,
+        citations: TopicQueryPage["nodes"][number]["citations"],
+        corpusId: string,
+    ) {
+        for (const citation of citations) {
+            const eventId =
+                citation.evidence?.kind === "event"
+                    ? citation.evidence.eventId
+                    : undefined;
+            const source = element(
+                "button",
+                eventId
+                    ? `Event ${eventId} · original evidence`
+                    : `Source ${citation.sourceId} · manage source`,
+            );
+            source.addEventListener("click", () =>
+                eventId
+                    ? eventDetails.openEvent(corpusId, eventId)
+                    : options.onOpenSource(corpusId, citation.sourceId),
+            );
+            const evidence = element("details");
+            evidence.append(
+                element(
+                    "summary",
+                    eventId
+                        ? `Original indexed event evidence · ${eventId}`
+                        : `Original indexed evidence · revision ${citation.revisionId}`,
+                ),
+                element("blockquote", citation.excerpt),
+                element("code", citation.locator),
+            );
+            card.append(source, evidence);
+        }
+    }
+
     async function browse(selected?: TopicQueryRequest) {
         const corpusId = options.corpusId();
         if (!corpusId) {
@@ -217,6 +265,16 @@ export function mountTopicBrowser(
         }
     }
     load.addEventListener("click", () => void browse());
+    concepts.addEventListener("click", () => {
+        const corpusId = options.corpusId();
+        if (corpusId)
+            void browse({
+                corpusId,
+                curated: true,
+                search: search.value,
+                pageSize: 24,
+            });
+    });
     back.addEventListener("click", () => void browse());
     search.addEventListener("keydown", (event) => {
         if (event.key === "Enter") void browse();
@@ -257,6 +315,7 @@ export function mountTopicBrowser(
     return {
         refresh: () => {
             epoch++;
+            concepts.hidden = true;
             eventDetails.close();
             request = undefined;
             continuation = undefined;

@@ -54,8 +54,11 @@ import type {
 } from "./knowledgeTypes.js";
 import { knowledgeLimits } from "./knowledgeTypes.js";
 import {
+    corpusQuestionIdentity,
+    deriveDiscoveryRouteTerms,
     planDiscoveryWindows,
     policyAdmittedSlot,
+    questionContractIdentity,
 } from "./knowledgeDiscovery.js";
 import type {
     QuestionEditRequest,
@@ -619,6 +622,8 @@ export interface FileMemoryServiceOptions {
     viewPublicationCheckpoint?: (point: "intent" | "index") => Promise<void>;
     viewSynthesisAdapter?: ViewSynthesisAdapter;
     viewModelEndpoint?: string;
+    /** Opt-in while curated concept quality and edit workflows are qualified. */
+    curatedTopics?: boolean;
     indexFactory?: CorpusIndexFactory;
     eventIndexFactory?: CorpusIndexFactory;
     capabilities?: MemoryServiceCapabilities;
@@ -1181,6 +1186,7 @@ export class FileMemoryService
     private readonly viewDrafts: boolean;
     private readonly viewPublicationCheckpoint: FileMemoryServiceOptions["viewPublicationCheckpoint"];
     private readonly viewAdapter: ViewSynthesisAdapter;
+    private readonly curatedTopics: boolean;
     private readonly viewBuilds: ViewBuildRunner;
     private readonly indexFactory: CorpusIndexFactory;
     private readonly eventIndexFactory: CorpusIndexFactory;
@@ -1387,6 +1393,7 @@ export class FileMemoryService
         this.viewPublicationCheckpoint = options.viewPublicationCheckpoint;
         this.viewDrafts = options.viewDrafts !== false;
         this.wikiModelEndpoint = options.viewModelEndpoint;
+        this.curatedTopics = options.curatedTopics ?? false;
         this.indexedAnswerModel = options.indexedAnswerModel;
         this.sourceSynopsesEnabled =
             options.sourceSynopses ?? options.informationalViews !== false;
@@ -1581,7 +1588,11 @@ export class FileMemoryService
                     }),
             },
             this.wikiBudget,
-            createConfiguredTopicGenerator(options.viewModelEndpoint),
+            createConfiguredTopicGenerator(
+                options.viewModelEndpoint,
+                undefined,
+                this.curatedTopics,
+            ),
         );
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
         this.eventIndexFactory = options.eventIndexFactory ?? this.indexFactory;
@@ -1700,12 +1711,43 @@ export class FileMemoryService
                     state,
                     identity,
                 ),
-            discover: (input, signal) => {
+            discover: async (input, signal) => {
                 if (!this.viewAdapter.discoverCorpusQuestions)
                     throw new Error(
                         "Corpus question discovery is unsupported by this host",
                     );
-                return this.viewAdapter.discoverCorpusQuestions(input, signal);
+                const existingContracts = (
+                    await this.viewStore.listViews(input.corpusId)
+                ).views
+                    .filter((view) => view.state !== "archived")
+                    .flatMap((view) => view.definition.schemaView?.slots ?? []);
+                const text = input.passages
+                    .map((passage) => `${passage.title} ${passage.excerpt}`)
+                    .join("\n")
+                    .toLocaleLowerCase();
+                const nominated = existingContracts
+                    .map((slot) => ({
+                        slot,
+                        score: deriveDiscoveryRouteTerms(
+                            "",
+                            slot.question,
+                        ).filter((term) => text.includes(term)).length,
+                    }))
+                    .sort(
+                        (a, b) =>
+                            b.score - a.score ||
+                            a.slot.id.localeCompare(b.slot.id),
+                    )
+                    .slice(0, knowledgeLimits.liveSlots)
+                    .map(({ slot }) => slot);
+                return this.viewAdapter.discoverCorpusQuestions(
+                    {
+                        ...input,
+                        existingContracts: nominated,
+                        existingContractCount: existingContracts.length,
+                    },
+                    signal,
+                );
             },
             admit: (corpusId, input, proposal, signal) =>
                 this.admitKnowledgeQuestion(corpusId, input, proposal, signal),
@@ -4807,11 +4849,6 @@ export class FileMemoryService
     ): Promise<string | undefined> {
         signal.throwIfAborted();
         validateQuestionSlot(proposal.slot);
-        const key = (text: string) =>
-            text
-                .toLocaleLowerCase()
-                .replace(/[^\p{L}\p{N}]+/gu, " ")
-                .trim();
         return this.enqueueWrite(corpusId, async () => {
             signal.throwIfAborted();
             const status = await this.viewStore.getKnowledgeState(corpusId);
@@ -4823,7 +4860,8 @@ export class FileMemoryService
             if (
                 slots.some(
                     (slot) =>
-                        key(slot.question) === key(proposal.slot.question),
+                        questionContractIdentity(slot) ===
+                        questionContractIdentity(proposal.slot),
                 )
             )
                 return undefined;
@@ -4836,6 +4874,51 @@ export class FileMemoryService
                             view.state !== "archived",
                     ),
             );
+            if (proposal.utility) {
+                const dimensions = [
+                    "consumerValue",
+                    "substance",
+                    "novelty",
+                    "durability",
+                ];
+                if (
+                    Object.keys(proposal.utility).length !==
+                        dimensions.length ||
+                    dimensions.some(
+                        (dimension) =>
+                            !Object.prototype.hasOwnProperty.call(
+                                proposal.utility,
+                                dimension,
+                            ),
+                    ) ||
+                    Object.values(proposal.utility).some(
+                        (score) =>
+                            !Number.isInteger(score) || score < 0 || score > 2,
+                    )
+                )
+                    throw new Error("Invalid question utility assessment");
+            }
+            const noUtility =
+                proposal.utility &&
+                Object.values(proposal.utility).some((score) => score === 0);
+            if (noUtility) {
+                await this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                    const receipt = state.discovery.receipts.find(
+                        (entry) => entry.fingerprint === input.fingerprint,
+                    );
+                    if (!receipt)
+                        throw new Error(
+                            "Question admission receipt is missing",
+                        );
+                    receipt.reason = [
+                        receipt.reason,
+                        `${proposal.slot.question}: deferred for insufficient utility`,
+                    ]
+                        .filter(Boolean)
+                        .join("; ");
+                });
+                return undefined;
+            }
             if (liveRoutes.length >= knowledgeLimits.liveSlots) {
                 const error = "Policy-admitted live question ceiling reached";
                 await this.viewStore.updateKnowledgeState(corpusId, (state) => {
@@ -4879,7 +4962,7 @@ export class FileMemoryService
                 throw new Error(
                     "Corpus discovery requires original-source citations",
                 );
-            const viewId = `observed-${viewHash([key(proposal.subject), key(proposal.slot.question)]).slice(0, 32)}`;
+            const viewId = `observed-${corpusQuestionIdentity(proposal).slice(0, 32)}`;
             if (snapshot.views.some((view) => view.viewId === viewId))
                 return undefined;
             const slot = policyAdmittedSlot(
@@ -4923,9 +5006,10 @@ export class FileMemoryService
             status.discovery.routes.push({
                 viewId,
                 subject: proposal.subject,
-                terms: key(proposal.subject)
-                    .split(" ")
-                    .filter((term) => term.length > 2),
+                terms: deriveDiscoveryRouteTerms(
+                    proposal.subject,
+                    proposal.slot.question,
+                ),
                 sourceIds: selected.map((source) => source.sourceId),
             });
             const receipt = status.discovery.receipts.find(
@@ -4958,7 +5042,7 @@ export class FileMemoryService
     ): Promise<void> {
         const status = await this.viewStore.getKnowledgeState(corpusId);
         for (const route of status.discovery.routes) {
-            if (route.detached || !route.terms.length) continue;
+            if (route.detached) continue;
             const view = await this.viewStore.getView({
                 corpusId,
                 viewId: route.viewId,
@@ -4980,13 +5064,36 @@ export class FileMemoryService
                 );
                 continue;
             }
-            const additions = sources.filter(
-                (source) =>
-                    !route.sourceIds.includes(source.sourceId) &&
-                    route.terms.filter((term) =>
-                        source.content.toLocaleLowerCase().includes(term),
-                    ).length >= Math.min(2, route.terms.length),
-            );
+            const questions = view.definition.schemaView?.slots
+                .map((slot) => slot.question)
+                .join(" ");
+            const effectiveTerms = questions
+                ? deriveDiscoveryRouteTerms(route.subject, questions)
+                : [];
+            if (viewHash(effectiveTerms) !== viewHash(route.terms))
+                await this.enqueueWrite(corpusId, () =>
+                    this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                        const current = state.discovery.routes.find(
+                            (entry) => entry.viewId === route.viewId,
+                        );
+                        if (current) current.terms = effectiveTerms;
+                    }),
+                );
+            if (!effectiveTerms.length) continue;
+            if (effectiveTerms.length === 1 && effectiveTerms[0].length < 4)
+                continue;
+            const additions = sources.filter((source) => {
+                if (route.sourceIds.includes(source.sourceId)) return false;
+                const normalizedSource = ` ${source.content
+                    .toLocaleLowerCase()
+                    .replace(/[^\p{L}\p{N}]+/gu, " ")
+                    .trim()} `;
+                return (
+                    effectiveTerms.filter((term) =>
+                        normalizedSource.includes(` ${term} `),
+                    ).length >= Math.min(2, effectiveTerms.length)
+                );
+            });
             if (!additions.length) continue;
             const ids = [
                 ...new Set([
@@ -6060,6 +6167,13 @@ export class FileMemoryService
 
     private async acceptInformationalVersion(view: ViewVersion): Promise<void> {
         if (!informationalWiki(view.content)) return;
+        const publication = await this.viewStore.getViewPublication(view);
+        if (publication.blockedReason) {
+            console.warn(
+                `Informational draft ${view.viewId} saved; publication withheld: ${publication.blockedReason}`,
+            );
+            return;
+        }
         await this.assertViewPublicationFresh(view);
         await this.viewStore.makeInformationalVisible(view);
         await this.indexViewLocked(view);
@@ -6353,8 +6467,6 @@ export class FileMemoryService
                 "View indexing is closing or being purged",
             );
         const runtime = await this.getCorpusRuntime(view.corpusId);
-        const manifest = runtime.manifest;
-        const events = runtime.events;
         const target = await this.viewStore.getView({
             corpusId: view.corpusId,
             viewId: view.viewId,
@@ -6402,20 +6514,19 @@ export class FileMemoryService
             this.assertRemovalComplete(runtime);
             const current = await this.viewStore.listViews(view.corpusId);
             if (
-                runtime.manifest !== manifest ||
-                runtime.events !== events ||
                 current.views.find((entry) => entry.viewId === view.viewId)
                     ?.revisionId !== target.revisionId
             )
                 throw new ViewBuildStaleError(
                     "Corpus or view changed during derivative preparation; retry the current exact revision",
                 );
+            // Metadata-only synopsis updates may replace the manifest. Recheck
+            // exact evidence and influence eligibility, not object identity.
             await this.assertViewPublicationFresh(view);
             const publication = await this.viewStore.getViewPublication(view);
-            if (
-                publication.publishedRevisionId !== view.revisionId ||
-                publication.blockedReason
-            )
+            if (publication.blockedReason)
+                throw new Error(publication.blockedReason);
+            if (publication.publishedRevisionId !== view.revisionId)
                 throw new ViewBuildStaleError(
                     "Publication changed during derivative preparation",
                 );
@@ -7946,7 +8057,10 @@ export class FileMemoryService
                         target.snapshot.influenceSources = structuredClone(
                             result.snapshot.influenceSources,
                         );
-                    if (assessment.disposition === "covered") {
+                    if (assessment.disposition === "defer") {
+                        target.state = "skipped";
+                        target.reason = `Standalone page deferred for insufficient utility: ${assessment.reason}`;
+                    } else if (assessment.disposition === "covered") {
                         target.state = "skipped";
                         target.reason = `Standalone purpose already covered by ${assessment.canonicalViewId}: ${assessment.reason}`;
                     } else if (assessment.disposition === "ambiguous") {
@@ -9030,7 +9144,7 @@ export class FileMemoryService
             this.topicSources(runtime),
             runtime.manifest.indexGeneration,
             runtime.manifest.knowledgeSuppressions ?? [],
-            this.viewAdapter.identity,
+            `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-v1" : "raw-v1"}`,
             this.topicEvents(runtime),
         );
     }
@@ -9184,7 +9298,7 @@ export class FileMemoryService
             index: runtime.index,
             sources: this.topicSources(runtime),
             suppressions: runtime.manifest.knowledgeSuppressions ?? [],
-            model: this.viewAdapter.identity,
+            model: `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-v1" : "raw-v1"}`,
             eventOccurrences,
             influenceEvents: this.topicEvents(runtime),
             ...(runtime.manifest.indexGeneration

@@ -35,6 +35,10 @@ export class WikiAssessmentRejection extends Error {
 }
 
 export const wikiPurposeRules = `Each page needs an independently useful explanatory purpose, not just a different label.
+Assess consumer value, substantive supported content, marginal novelty and durable reference or decision value.
+Return defer when evidence is only a passing mention, generic chatter, an unsupported shell or too sparse
+for a useful explanation; zero new pages is a successful outcome. Give a concrete reason.
+Do not require multiple sources or user authorship: a coherent assistant explanation or single-source reference can be valuable.
 A sentence-shaped state, warning, open gate or owner-signoff mention usually contributes evidence to its existing concept.
 Admit broader/narrower pages separately only when the selected evidence supports independently useful content:
 a platform overview is distinct from application readiness only if it actually explains the platform beyond readiness.
@@ -139,7 +143,11 @@ export function nominateWikiPages(
             ...wikiPageContext(input, view, identities.get(view.viewId)),
             ...(identity ? { candidateIdentity: identity } : {}),
         }))
-        .filter((page) => page.sourceOverlap.shared > 0)
+        .filter(
+            (page) =>
+                page.sourceOverlap.shared > 0 ||
+                subjectOverlap(input, page) > 0,
+        )
         .sort((a, b) => {
             return (
                 Number(b.sourceOverlap.subset) -
@@ -147,10 +155,30 @@ export function nominateWikiPages(
                 b.sourceOverlap.shared / b.sourceOverlap.union -
                     a.sourceOverlap.shared / a.sourceOverlap.union ||
                 b.sharedFragmentIds.length - a.sharedFragmentIds.length ||
+                subjectOverlap(input, b) - subjectOverlap(input, a) ||
                 a.viewId.localeCompare(b.viewId)
             );
         })
         .slice(0, 8);
+}
+
+function subjectOverlap(
+    input: ViewBuildSnapshot,
+    page: WikiPagePurposeContext,
+): number {
+    const words = (text: string) =>
+        new Set(text.toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
+    const candidate = words(
+        [
+            input.definition.wiki?.query,
+            ...(input.definition.wiki?.aliases ?? []),
+        ].join(" "),
+    );
+    const current = words([page.query, ...page.aliases, page.title].join(" "));
+    const intersection = [...candidate].filter((word) =>
+        current.has(word),
+    ).length;
+    return intersection / Math.max(1, new Set([...candidate, ...current]).size);
 }
 
 export function wikiAssessmentSchema(
@@ -165,7 +193,13 @@ export function wikiAssessmentSchema(
             properties: {
                 disposition: {
                     type: "string",
-                    enum: ["distinct", "covered", "contribute", "ambiguous"],
+                    enum: [
+                        "distinct",
+                        "covered",
+                        "contribute",
+                        "ambiguous",
+                        "defer",
+                    ],
                 },
                 purpose: { type: "string" },
                 reason: { type: "string" },
@@ -241,6 +275,7 @@ export function parseWikiAssessment(
             "covered",
             "contribute",
             "ambiguous",
+            "defer",
         ]),
         purpose: assessmentText(raw.purpose, 2000),
         reason: assessmentText(raw.reason, 4000),
@@ -256,7 +291,10 @@ export function parseWikiAssessment(
     const canonical = pages.find(
         (page) => page.viewId === assessment.canonicalViewId,
     );
-    if (assessment.disposition === "distinct") {
+    if (
+        assessment.disposition === "distinct" ||
+        assessment.disposition === "defer"
+    ) {
         if (
             assessment.canonicalViewId !== "" ||
             assessment.sharedFragmentIds.length !== 0 ||
@@ -271,10 +309,6 @@ export function parseWikiAssessment(
         if (!canonical)
             throw new WikiAssessmentRejection("canonical-not-supplied", {
                 suppliedCount: pages.length,
-            });
-        if (!canonical.sourceOverlap.shared)
-            throw new WikiAssessmentRejection("canonical-no-source-overlap", {
-                sharedSourceCount: canonical.sourceOverlap.shared,
             });
         const invalid = assessment.sharedFragmentIds.filter(
             (id) => !canonical.sharedFragmentIds.includes(id),

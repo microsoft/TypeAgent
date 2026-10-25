@@ -84,6 +84,8 @@ function input(
 }
 function output(snapshot: ViewBuildSnapshot) {
     return hydrateInformational(snapshot, {
+        summary: "Grounded reference summary.",
+        status: "partial",
         title: snapshot.definition.viewId,
         prose: snapshot.inputs[0].content,
         limits: "Selected original indexed evidence",

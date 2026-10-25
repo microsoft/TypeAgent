@@ -139,13 +139,214 @@ function matchingIndexTerms(
     };
 }
 
-function collectPostingScores(
+type MessageSpeakerRole = "user" | "assistant" | "mixed" | "document";
+
+const userRolePattern = /^(?:user|human|prompt|question|requester|author)$/i;
+const assistantRolePattern =
+    /^(?:assistant|agent|ai|model|bot|response|answer)$/i;
+const speakerLinePattern =
+    /^\s*(?:#{1,6}\s+|\*\*)?(user|human|assistant|agent|ai)(?:\*\*)?(?:\s*:(?:\s|$)|\s*$)/gim;
+const leadingUserTurnPattern =
+    /^\s*(?:#{1,6}\s+|\*\*)?(?:user|human)(?:\*\*)?(?:\s*:|\s*\r?\n)/i;
+const leadingAssistantTurnPattern =
+    /^\s*(?:#{1,6}\s+|\*\*)?(?:assistant|agent|ai)(?:\*\*)?(?:\s*:|\s*\r?\n)/i;
+
+function inferMessageTurnRole(
+    message: DocPart,
+    text = (message?.textChunks ?? []).join("\n"),
+): MessageSpeakerRole {
+    const contextRole = message.metadata.temporalContext?.role?.trim();
+    if (contextRole) {
+        if (userRolePattern.test(contextRole)) return "user";
+        if (assistantRolePattern.test(contextRole)) return "assistant";
+    }
+    for (const tag of message.tags ?? []) {
+        if (typeof tag !== "string") continue;
+        const normalized = tag.trim().toLocaleLowerCase();
+        if (["role:user", "user"].includes(normalized)) return "user";
+        if (["role:assistant", "assistant"].includes(normalized))
+            return "assistant";
+    }
+    let hasUser = false;
+    let hasAssistant = false;
+    for (const match of text.matchAll(speakerLinePattern)) {
+        const label = match[1]?.toLocaleLowerCase() ?? "";
+        if (userRolePattern.test(label)) hasUser = true;
+        else if (label === "assistant" || label === "agent" || label === "ai")
+            hasAssistant = true;
+    }
+    if (hasUser && hasAssistant) return "mixed";
+    if (leadingUserTurnPattern.test(text)) return "user";
+    if (leadingAssistantTurnPattern.test(text)) return "assistant";
+    return "document";
+}
+
+function splitMixedSpeakerSpans(
+    text: string,
+): Array<{ role: "user" | "assistant" | "document"; text: string }> {
+    const spans: Array<{
+        role: "user" | "assistant" | "document";
+        text: string;
+    }> = [];
+    let currentRole: "user" | "assistant" | "document" = "document";
+    let buffer: string[] = [];
+    for (const line of text.split(/\r?\n/)) {
+        const match =
+            /^\s*(?:#{1,6}\s+|\*\*)?(user|human|assistant|agent|ai)(?:\*\*)?(?:\s*:(.*)|\s*)$/i.exec(
+                line,
+            );
+        if (match) {
+            if (buffer.length) {
+                spans.push({ role: currentRole, text: buffer.join("\n") });
+                buffer = [];
+            }
+            const label = match[1].toLocaleLowerCase();
+            currentRole =
+                label === "user" || label === "human" ? "user" : "assistant";
+            if (match[2]?.trim()) buffer.push(match[2].trim());
+        } else {
+            buffer.push(line);
+        }
+    }
+    if (buffer.length) {
+        spans.push({ role: currentRole, text: buffer.join("\n") });
+    }
+    return spans;
+}
+
+function termMentionedInText(text: string, term: string): boolean {
+    const lowerText = text.toLocaleLowerCase();
+    const lowerTerm = term.trim().toLocaleLowerCase();
+    if (!lowerTerm) return false;
+    if (lowerText.includes(lowerTerm)) return true;
+    const words = indexedWords(lowerTerm).filter((word) => word.length > 2);
+    if (!words.length) return false;
+    const textWords = new Set(indexedWords(lowerText));
+    const matched = words.filter((word) => textWords.has(word)).length;
+    return (
+        matched === words.length ||
+        (words.length >= 2 && matched / words.length >= 0.8)
+    );
+}
+
+function effectiveTermRole(
+    message: DocPart,
+    text: string,
+    term: string,
+): "user" | "assistant" | "document" {
+    const role = inferMessageTurnRole(message, text);
+    if (role !== "mixed") return role;
+    const spans = splitMixedSpeakerSpans(text);
+    const inUser = spans.some(
+        (span) => span.role === "user" && termMentionedInText(span.text, term),
+    );
+    if (inUser) return "user";
+    const inAssistant = spans.some(
+        (span) =>
+            span.role === "assistant" && termMentionedInText(span.text, term),
+    );
+    if (inAssistant) return "assistant";
+    return "document";
+}
+
+function roleSalienceWeight(role: "user" | "assistant" | "document"): number {
+    if (role === "user") return 1.5;
+    if (role === "assistant") return 0.65;
+    return 1.0;
+}
+
+function findPrecedingUserEchoOrdinal(
+    memory: DocMemory,
+    assistantOrdinal: number,
+    sourceId: string,
+    revisionId: string,
+    term: string,
+): number | undefined {
+    for (let prev = assistantOrdinal - 1; prev >= 0; prev--) {
+        const prevMessage = memory.messages.get(prev);
+        const prevSource = parseSourceUri(prevMessage?.metadata.sourceUrl);
+        if (
+            !prevMessage ||
+            !prevSource ||
+            prevSource.sourceId !== sourceId ||
+            prevSource.revisionId !== revisionId
+        )
+            break;
+        const prevText = (prevMessage.textChunks ?? []).join("\n");
+        const prevRole = effectiveTermRole(prevMessage, prevText, term);
+        if (prevRole === "user") {
+            return termMentionedInText(prevText, term) ? prev : undefined;
+        }
+    }
+    return undefined;
+}
+
+function countIndependentMention(
+    memory: DocMemory,
+    ordinal: number,
+    term: string,
+    counted: Set<number>,
+): number {
+    const message = memory.messages.get(ordinal);
+    const source = parseSourceUri(message?.metadata.sourceUrl);
+    const role = effectiveTermRole(
+        message,
+        (message.textChunks ?? []).join("\n"),
+        term,
+    );
+    const independentOrdinal =
+        role === "assistant" && source
+            ? (findPrecedingUserEchoOrdinal(
+                  memory,
+                  ordinal,
+                  source.sourceId,
+                  source.revisionId,
+                  term,
+              ) ?? ordinal)
+            : ordinal;
+    if (counted.has(independentOrdinal)) return 0;
+    counted.add(independentOrdinal);
+    return 1;
+}
+
+function postingSpeakerContext(
+    memory: DocMemory,
+    matches: Map<number, Set<string>>,
+) {
+    const roles = new Map<number, MessageSpeakerRole>();
+    const echoedWordsByOrdinal = new Map<number, Set<string>>();
+    for (const [ordinal, words] of matches) {
+        const message = memory.messages.get(ordinal);
+        if (!message) continue;
+        const role = inferMessageTurnRole(message);
+        roles.set(ordinal, role);
+        const source = parseSourceUri(message.metadata.sourceUrl);
+        if (role !== "assistant" || !source) continue;
+        const echoed = new Set(
+            [...words].filter((word) => {
+                const preceding = findPrecedingUserEchoOrdinal(
+                    memory,
+                    ordinal,
+                    source.sourceId,
+                    source.revisionId,
+                    word,
+                );
+                return (
+                    preceding !== undefined && matches.get(preceding)?.has(word)
+                );
+            }),
+        );
+        if (echoed.size) echoedWordsByOrdinal.set(ordinal, echoed);
+    }
+    return { roles, echoedWordsByOrdinal };
+}
+
+function collectPostingMatches(
     memory: DocMemory,
     terms: string[],
     requested: Set<string>,
     eligible: (ordinal: number) => boolean,
-    messageCount: number,
-): Map<number, number> {
+): Map<number, Set<string>> {
     const matches = new Map<number, Set<string>>();
     for (const term of terms) {
         const matchedWords = indexedWords(term).filter((word) =>
@@ -171,23 +372,42 @@ function collectPostingScores(
             }
         }
     }
-    const scores = new Map<number, number>();
+    return matches;
+}
+
+function collectPostingScores(
+    memory: DocMemory,
+    terms: string[],
+    requested: Set<string>,
+    eligible: (ordinal: number) => boolean,
+    messageCount: number,
+): Map<number, number> {
+    const matches = collectPostingMatches(memory, terms, requested, eligible);
+    const { roles, echoedWordsByOrdinal } = postingSpeakerContext(
+        memory,
+        matches,
+    );
+    const supportCounts = new Map<string, number>();
     for (const [ordinal, words] of matches)
-        scores.set(
-            ordinal,
-            [...words].reduce(
-                (score, word) =>
-                    score +
-                    Math.log(
-                        1 +
-                            messageCount /
-                                [...matches.values()].filter((set) =>
-                                    set.has(word),
-                                ).length,
-                    ),
-                0,
-            ),
-        );
+        for (const word of words)
+            if (!echoedWordsByOrdinal.get(ordinal)?.has(word))
+                supportCounts.set(word, (supportCounts.get(word) ?? 0) + 1);
+    const scores = new Map<number, number>();
+    for (const [ordinal, words] of matches) {
+        const role = roles.get(ordinal) ?? "document";
+        const echoed = echoedWordsByOrdinal.get(ordinal);
+        const rawScore = [...words].reduce((score, word) => {
+            const independentCount = Math.max(1, supportCounts.get(word) ?? 0);
+            const wordWeight = echoed?.has(word) ? 0.5 : 1.0;
+            return (
+                score +
+                wordWeight * Math.log(1 + messageCount / independentCount)
+            );
+        }, 0);
+        const roleMultiplier =
+            role === "user" ? 1.25 : role === "assistant" ? 0.8 : 1.0;
+        scores.set(ordinal, rawScore * roleMultiplier);
+    }
     return scores;
 }
 
@@ -487,7 +707,14 @@ export class KnowProCorpusIndex implements CorpusIndex {
                   return subject ? [subject] : [];
               })
             : [];
-        items.sort((a, b) => a.term.localeCompare(b.term));
+        items.sort(
+            (a, b) =>
+                (b.salience ?? b.postingCount) -
+                    (a.salience ?? a.postingCount) ||
+                b.sourceIds.length - a.sourceIds.length ||
+                b.postingCount - a.postingCount ||
+                a.term.localeCompare(b.term),
+        );
         const remaining = new Set(items);
         const fair: IndexedSubject[] = [];
         while (remaining.size) {
@@ -518,13 +745,16 @@ export class KnowProCorpusIndex implements CorpusIndex {
     ): IndexedSubject | undefined {
         const sources = new Set<string>();
         let postingCount = 0;
+        const supportWeights = new Map<string, number>();
         let initiative = false;
         const types = new Set<string>();
         const scopes = new Set<string>();
         const symbols = new Set<string>();
+        const countedUserOrdinals = new Set<number>();
         for (const posting of memory.semanticRefIndex.lookupTerm(term)) {
             const ref = memory.semanticRefs.get(posting.semanticRefOrdinal);
-            if (!this.eligible(ref.range.start.messageOrdinal)) continue;
+            const messageOrdinal = ref.range.start.messageOrdinal;
+            if (!this.eligible(messageOrdinal)) continue;
             const subject =
                 ref.knowledgeType === "entity"
                     ? (ref.knowledge as EntityKnowledge).name
@@ -536,13 +766,12 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 subject.toLocaleLowerCase() !== term.toLocaleLowerCase()
             )
                 continue;
-            const message = memory.messages.get(ref.range.start.messageOrdinal);
+            const message = memory.messages.get(messageOrdinal);
             const source = parseSourceUri(message.metadata.sourceUrl);
             if (!source || !sourceIds.has(source.sourceId)) continue;
-            const text = message.textChunks.join("\n");
+            const text = (message?.textChunks ?? []).join("\n");
             if (!usefulWikiSubject(subject, text)) continue;
             sources.add(source.sourceId);
-            postingCount++;
             const identity = indexedSubjectIdentity(ref);
             identity.types.forEach((type) => types.add(type));
             identity.scopes.forEach((scope) => scopes.add(scope));
@@ -552,11 +781,46 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 initiativeKnowledgeTypes(ref),
                 text,
             );
+            const role = effectiveTermRole(message, text, subject);
+            const echoUserOrdinal =
+                role === "assistant"
+                    ? findPrecedingUserEchoOrdinal(
+                          memory,
+                          messageOrdinal,
+                          source.sourceId,
+                          source.revisionId,
+                          subject,
+                      )
+                    : undefined;
+            const supportOrdinal = echoUserOrdinal ?? messageOrdinal;
+            if (!countedUserOrdinals.has(supportOrdinal)) {
+                countedUserOrdinals.add(supportOrdinal);
+                postingCount++;
+            }
+            supportWeights.set(
+                source.sourceId,
+                Math.max(
+                    supportWeights.get(source.sourceId) ?? 0,
+                    roleSalienceWeight(
+                        echoUserOrdinal !== undefined ? "user" : role,
+                    ),
+                ),
+            );
         }
+        const roundedSalience =
+            Math.round(
+                [...supportWeights.values()].reduce(
+                    (sum, weight) => sum + weight,
+                    0,
+                ) * 100,
+            ) / 100;
         return postingCount
             ? {
                   term: symbols.size === 1 ? [...symbols][0] : term,
                   postingCount,
+                  ...(roundedSalience !== postingCount
+                      ? { salience: roundedSalience }
+                      : {}),
                   sourceIds: [...sources],
                   initiative,
                   identity: {
@@ -1617,6 +1881,8 @@ export class KnowProCorpusIndex implements CorpusIndex {
         >();
 
         let examined = 0;
+        const countedTopicUserOrdinals = new Map<string, Set<number>>();
+        const countedEntityUserOrdinals = new Map<string, Set<number>>();
         for (const semanticRef of this.memory.semanticRefs ?? []) {
             if (
                 !admitGraphReference(
@@ -1628,8 +1894,9 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 )
             )
                 continue;
+            const messageOrdinal = semanticRef.range.start.messageOrdinal;
             const sourceId = this.graphReferenceSource(
-                semanticRef.range.start.messageOrdinal,
+                messageOrdinal,
                 semanticRef.knowledgeType,
                 semanticRef.knowledge,
                 sourceIds,
@@ -1648,7 +1915,15 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     mentionCount: 0,
                     sourceIds: new Set<string>(),
                 };
-                aggregate.mentionCount++;
+                const counted =
+                    countedEntityUserOrdinals.get(key) ?? new Set<number>();
+                countedEntityUserOrdinals.set(key, counted);
+                aggregate.mentionCount += countIndependentMention(
+                    this.memory,
+                    messageOrdinal,
+                    entity.name,
+                    counted,
+                );
                 entity.type.forEach((type) => aggregate.types.add(type));
                 aggregate.sourceIds.add(sourceId);
                 entities.set(key, aggregate);
@@ -1665,7 +1940,15 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     mentionCount: 0,
                     sourceIds: new Set<string>(),
                 };
-                aggregate.mentionCount++;
+                const counted =
+                    countedTopicUserOrdinals.get(key) ?? new Set<number>();
+                countedTopicUserOrdinals.set(key, counted);
+                aggregate.mentionCount += countIndependentMention(
+                    this.memory,
+                    messageOrdinal,
+                    name,
+                    counted,
+                );
                 aggregate.sourceIds.add(sourceId);
                 topics.set(key, aggregate);
             } else if (semanticRef.knowledgeType === "action") {

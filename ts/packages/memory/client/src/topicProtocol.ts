@@ -46,6 +46,22 @@ const related = z.strictObject({
     toId: id,
     kind: z.literal("related"),
 });
+const topicConceptSchema = z.strictObject({
+    id,
+    label: z.string().min(1).max(200),
+    scope: z.string().min(1).max(200),
+    purpose: z.string().min(1).max(2000),
+    memberIds: id.array().min(1),
+    summary: z.string().min(1).max(1600),
+    citations: citation.array().min(1),
+    salience: z.number().int().min(1).max(8),
+});
+const topicCurationSchema = z.strictObject({
+    concepts: topicConceptSchema.array(),
+    deferred: z
+        .strictObject({ nodeId: id, reason: z.string().min(1).max(2000) })
+        .array(),
+});
 export const topicQueryRequestSchema = z.strictObject({
     corpusId: id,
     topicId: id.optional(),
@@ -53,6 +69,7 @@ export const topicQueryRequestSchema = z.strictObject({
     depth: z.number().int().min(0).max(10).optional(),
     pageSize: z.number().int().min(1).max(200).optional(),
     continuationToken: z.string().min(1).max(2000).optional(),
+    curated: z.boolean().optional(),
 });
 export const topicQueryPageSchema = z.strictObject({
     generation: id.nullable(),
@@ -92,6 +109,19 @@ export const topicQueryPageSchema = z.strictObject({
         snapshotBytes: count,
         elapsedMs: z.number().nonnegative(),
     }),
+    concepts: topicConceptSchema
+        .extend({
+            memberIds: id.array().max(20),
+            citations: citation.array().max(8),
+            memberCount: count,
+            omittedMembers: count,
+            citationCount: count,
+            omittedCitations: count,
+        })
+        .array()
+        .max(200)
+        .optional(),
+    totalConcepts: count.optional(),
 });
 export const topicBuildInputSchema = z.strictObject({
     occurrences: topicOccurrenceSchema.array(),
@@ -124,6 +154,7 @@ export const topicSnapshotSchema = z.strictObject({
     parents: parent.array(),
     related: related.array(),
     limits: text.array(),
+    curation: topicCurationSchema.optional(),
 });
 export const topicToolNames = {
     queryTopics: "memory_topics_query",

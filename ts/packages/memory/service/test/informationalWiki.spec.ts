@@ -74,12 +74,20 @@ test("wiki and project summaries preserve semantic warnings and source dates acr
     };
     const value = {
         title: "Dated original",
+        summary: "Source recorded 2026-10-12.",
+        status: "partial",
         prose: "Source recorded 2026-10-12.",
         limits: "Owner approval unknown. Updated source note: 2026-10-12",
         citationIds: ["f0"],
     };
     const project = {
         ...value,
+        completeness: "partial",
+        assignments: [],
+        milestoneItems: [],
+        decisionItems: [],
+        openQuestions: [],
+        riskItems: [],
         goalsScope: value.prose,
         owners: "Unknown",
         status: "Pending",
@@ -101,11 +109,28 @@ test("wiki and project summaries preserve semantic warnings and source dates acr
         clock.setSystemTime(new Date("2026-10-14T00:00:00Z"));
         expect(hydrateInformational(input, value)).toEqual(wiki);
         expect(hydrateProjectSummary(input, project)).toEqual(brief);
-        expect(wiki.content.summary).toBe(
-            `Limited summary: selected indexed fragments only; ${value.limits}. Search sources or retry a deeper bounded refresh.`,
-        );
+        expect(wiki.content.summary).toBe(value.summary);
+        expect(wiki.content.coverageNote).toBe(value.limits);
+        expect(wiki.content.status).toBe("partial");
+        expect(
+            hydrateInformational(input, { ...value, status: "sufficient" })
+                .content.status,
+        ).toBe("sufficient");
+        expect(() =>
+            hydrateInformational(input, { ...value, status: undefined }),
+        ).toThrow("summary and completeness");
+        expect(() =>
+            hydrateInformational(input, { ...value, summary: undefined }),
+        ).toThrow();
         expect(wiki.content.sections[0].body).toContain("2026-10-12");
         expect(brief.content.summary).toBe(wiki.content.summary);
+        expect(brief.content.status).toBe("partial");
+        expect(() =>
+            hydrateProjectSummary(input, {
+                ...project,
+                assignments: undefined,
+            }),
+        ).toThrow();
     } finally {
         clock.useRealTimers();
     }
@@ -255,6 +280,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
     let maintenanceLimits: FileMemoryServiceOptions["maintenanceLimits"];
     let summaryLimits =
         "Only selected indexed evidence; owner approval unknown";
+    let generatedSummary = "Acquisition has a scoped approval process.";
     const adapter: ViewSynthesisAdapter = {
         identity: "mock-informational",
         checkEditorial: async () => ({ safe: true, failures: [] }),
@@ -273,6 +299,13 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             await beforeGeneration?.(input);
             if (input.pipeline === "informational-project-summary-v1") {
                 return hydrateProjectSummary(input, {
+                    summary: "Grounded project summary.",
+                    completeness: "partial",
+                    assignments: [],
+                    milestoneItems: [],
+                    decisionItems: [],
+                    openQuestions: [],
+                    riskItems: [],
                     title:
                         input.editorial?.generatedBase.content.title ??
                         input.definition.projectSummary?.query ??
@@ -296,6 +329,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 });
             }
             return hydrateInformational(input, {
+                summary: generatedSummary,
+                status: "partial",
                 title: "Acquisition",
                 prose: input.inputs
                     .map((source) => source.content)
@@ -346,6 +381,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         generated = 0;
         summaryLimits =
             "Only selected indexed evidence; owner approval unknown";
+        generatedSummary = "Acquisition has a scoped approval process.";
         failNext = false;
         beforeGeneration = undefined;
         indexedAnswerModel = undefined;
@@ -435,6 +471,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         expect(humanEdit.newValue).toBe(content.summary);
         summaryLimits =
             "Owner approval withheld; production cutover is not authorized";
+        generatedSummary =
+            "Acquisition production cutover is not authorized pending owner review.";
         await add(
             corpusId,
             "qualification",
@@ -858,8 +896,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             const admitted = await admitFreshBuild(request);
             expect(admitted.results[0].snapshot.model).toBe(
                 family === "wiki"
-                    ? "mock-informational:wiki-source-contribution-v4:editorial-v1:indexed-evidence-v2"
-                    : "mock-informational:project-attribution-v4:editorial-v1:indexed-evidence-v2",
+                    ? "mock-informational:wiki-source-contribution-v6:editorial-v1:indexed-evidence-v2"
+                    : "mock-informational:project-attribution-v6:editorial-v1:indexed-evidence-v2",
             );
             expect((await service.buildViews(request)).jobId).toBe(
                 admitted.jobId,
@@ -1912,9 +1950,13 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         expect(afterEdit.views[0].content.citations).toEqual(
             page.content.citations,
         );
-        expect(afterEdit.views[0].content.sections[0].body).toContain(
+        expect(afterEdit.views[0].content.sections[0].body).not.toContain(
             "Coverage limits:",
         );
+        expect(
+            afterEdit.views[0].content.kind === "wiki" &&
+                afterEdit.views[0].content.coverageNote,
+        ).toBe(summaryLimits);
         expect(generated - before).toBe(1);
         const calls = generated;
         expect((await update(corpusId)).job).toBeUndefined();

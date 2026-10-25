@@ -48,7 +48,7 @@ export function topicInputFingerprint(
         suppressions,
         model,
         ...(events.length ? { events } : {}),
-        recipe: "topics-v1:editorial-v1",
+        recipe: "topics-v2:curated-v1:editorial-v1",
     });
 }
 

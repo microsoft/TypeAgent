@@ -81,6 +81,8 @@ function page(viewId = "canonical"): ViewVersion {
             revisionId: "definition-revision",
         },
         content: hydrateInformational(snapshot, {
+            summary: "Grounded reference summary.",
+            status: "partial",
             title: "Readiness boundaries",
             prose: "The open review qualifies readiness, not a separate platform overview.",
             limits: "Selected evidence only",
@@ -116,16 +118,6 @@ test("referential rejection diagnostics reproduce separate failures without reta
             value: { ...covered(), canonicalViewId: "private invented text" },
             pages: contexts,
             code: "canonical-not-supplied",
-        },
-        {
-            value: covered(),
-            pages: [
-                {
-                    ...contexts[0],
-                    sourceOverlap: { shared: 0, union: 1, subset: false },
-                },
-            ],
-            code: "canonical-no-source-overlap",
         },
         {
             value: { ...covered(), sharedFragmentIds: ["private fragment"] },
@@ -224,7 +216,10 @@ test("index-evidence nomination is bounded, preserves scope/symbol distinctions,
     identities.clear();
     const changed = structuredClone(canonical);
     changed.content.citations[0].revisionId = "changed";
-    expect(nominateWikiPages(candidate, [changed], identities)).toEqual([]);
+    const disjoint = nominateWikiPages(candidate, [changed], identities);
+    expect(disjoint).toHaveLength(1);
+    expect(disjoint[0].sourceOverlap.shared).toBe(0);
+    expect(disjoint[0].sharedFragmentIds).toEqual([]);
     expect(
         nominateWikiPages(
             candidate,
@@ -249,6 +244,47 @@ test("typed assessment rejects invented canonical identity/evidence, empty purpo
         expect(() => parseWikiAssessment(invalid, contexts)).toThrow();
     expect(wikiPurposeRules).toContain("independently useful");
     expect(wikiPurposeRules).toContain("units/statistics, cohorts");
+});
+
+test("first-page utility can defer without inventing a canonical page", () => {
+    const value = {
+        disposition: "defer",
+        purpose: "Passing reference to readiness",
+        reason: "No explanatory substance beyond a passing mention",
+        canonicalViewId: "",
+        sharedFragmentIds: [],
+        essentialDistinctions: [],
+        ambiguousViewIds: [],
+    };
+    expect(parseWikiAssessment(value, [])).toEqual(value);
+    expect(() =>
+        parseWikiAssessment({ ...value, canonicalViewId: "invented" }, []),
+    ).toThrow();
+});
+
+test("disjoint-source comparisons retain exact incoming evidence and canonical prose checks", () => {
+    const canonical = page();
+    canonical.content.citations[0].sourceId = "independent-source";
+    const contexts = nominateWikiPages(input(), [canonical], new Map());
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0].sourceOverlap.shared).toBe(0);
+    const value = { ...covered(), sharedFragmentIds: [] };
+    expect(parseWikiAssessment(value, contexts)).toEqual(value);
+    expect(() =>
+        parseWikiAssessment(
+            {
+                ...value,
+                essentialDistinctions: [
+                    {
+                        fragmentId: "f999",
+                        statement: "Invented statement",
+                        canonicalExcerpt: "",
+                    },
+                ],
+            },
+            contexts,
+        ),
+    ).toThrow();
 });
 
 test("one informational target timeout does not cancel independent peers", async () => {
@@ -280,6 +316,8 @@ test("one informational target timeout does not cancel independent peers", async
                 if (input.definition.viewId === "slow")
                     return new Promise<never>(() => {});
                 return hydrateInformational(input, {
+                    summary: "Grounded reference summary.",
+                    status: "partial",
                     title: "Independent",
                     prose: input.inputs[0].content,
                     limits: "Selected evidence",
@@ -366,6 +404,8 @@ test("forgetting read-but-not-cited nominated evidence cancels a late distinct r
     const materialize = import.meta.jest.fn(async () => {});
     const generate = import.meta.jest.fn(async () =>
         hydrateInformational(snapshot, {
+            summary: "Grounded reference summary.",
+            status: "partial",
             title: "Late result",
             prose: snapshot.inputs[0].content,
             limits: "Selected",
@@ -410,11 +450,20 @@ test("forgetting read-but-not-cited nominated evidence cancels a late distinct r
     expect(materialize).not.toHaveBeenCalled();
 });
 
-test("real sequential runner records genuine covered skip without generating or merging; invalid output is blocked", async () => {
-    for (const invalid of [false, true]) {
+test("sequential admission skips covered or low-value first pages and blocks invalid output without losing dependencies", async () => {
+    for (const scenario of ["covered", "invalid", "first-defer"]) {
+        const invalid = scenario === "invalid";
+        const deferred = scenario === "first-defer";
         const snapshot = input();
+        const originalInfluence = {
+            sourceId: "original-context",
+            revisionId: "original-revision",
+        };
+        snapshot.influenceSources = [originalInfluence];
         const canonical = page();
-        const contexts = nominateWikiPages(snapshot, [canonical], new Map());
+        const contexts = deferred
+            ? []
+            : nominateWikiPages(snapshot, [canonical], new Map());
         let generated = 0;
         const job: ViewBuildJob = {
             jobId: "job",
@@ -449,10 +498,23 @@ test("real sequential runner records genuine covered skip without generating or 
         const runner = new ViewBuildRunner(
             {
                 identity: "offline",
-                assessWikiSubject: async () =>
-                    invalid
+                assessWikiSubject: async (current, pages) => {
+                    expect(current.influenceSources).toContainEqual(
+                        originalInfluence,
+                    );
+                    expect(pages).toEqual(contexts);
+                    if (deferred)
+                        return {
+                            ...covered(),
+                            disposition: "defer",
+                            canonicalViewId: "",
+                            sharedFragmentIds: [],
+                            essentialDistinctions: [],
+                        };
+                    return invalid
                         ? { ...covered(), canonicalViewId: "invented" }
-                        : covered(),
+                        : covered();
+                },
                 generate: async () => {
                     generated++;
                     throw new Error("Redundant synthesis must not run");
@@ -469,7 +531,9 @@ test("real sequential runner records genuine covered skip without generating or 
                     result.reason = assessment.reason;
                     result.wikiAssessment = {
                         ...assessment,
-                        canonicalRevisionId: canonical.revisionId,
+                        ...(!deferred && {
+                            canonicalRevisionId: canonical.revisionId,
+                        }),
                     };
                 },
                 update: async (_corpusId, _jobId, update) => {
@@ -492,7 +556,7 @@ test("real sequential runner records genuine covered skip without generating or 
         expect(generated).toBe(0);
         expect(job.results[0].state).toBe(invalid ? "blocked" : "skipped");
         expect(job.state).toBe(invalid ? "failed" : "complete");
-        if (!invalid) {
+        if (!invalid && !deferred) {
             expect(
                 reusableWikiAssessment(job.results[0], snapshot, canonical),
             ).toBe(true);
@@ -581,6 +645,16 @@ test("automatic family compares earlier same-job page, persists skip and replays
             _input: ViewBuildSnapshot,
             pages: ReturnType<typeof nominateWikiPages>,
         ): Promise<WikiSubjectAssessment> => {
+            if (!pages.length)
+                return {
+                    disposition: "distinct",
+                    purpose: "Cache propagation reference",
+                    reason: "Substantive scoped explanation",
+                    canonicalViewId: "",
+                    sharedFragmentIds: [],
+                    essentialDistinctions: [],
+                    ambiguousViewIds: [],
+                };
             assessed++;
             expect(pages).toHaveLength(1);
             expect(pages[0].query).toBe("cache propagation");
@@ -601,6 +675,8 @@ test("automatic family compares earlier same-job page, persists skip and replays
         generate: async (snapshot: ViewBuildSnapshot) => {
             generated++;
             return hydrateInformational(snapshot, {
+                summary: "Grounded reference summary.",
+                status: "partial",
                 title: "Cache propagation",
                 prose: snapshot.inputs[0].content,
                 limits: "Selected evidence, unknown rollout",
