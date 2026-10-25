@@ -25,6 +25,7 @@ declare global {
         };
         _tabId?: string;
         __webAgentRegister?: (agent: WebAgent) => void;
+        __webAgentRegisterOnDemand?: (agent: WebAgent) => Promise<void>;
     }
 }
 
@@ -280,6 +281,7 @@ export function initializeWebAgentLoader(): void {
     // (sites/crossword.js, etc.) share the same loader state instead of
     // getting their own duplicate copy of module variables.
     window.__webAgentRegister = registerWebAgent;
+    window.__webAgentRegisterOnDemand = registerOnDemandWebAgent;
 
     window.addEventListener("spa-navigation", handleSpaNavigation);
     window.addEventListener(
@@ -291,6 +293,12 @@ export function initializeWebAgentLoader(): void {
 
 export function getActiveWebAgent(): WebAgent | null {
     return activeAgent;
+}
+
+export async function registerOnDemandWebAgent(agent: WebAgent): Promise<void> {
+    if (window !== window.top || !agent.initializeOnDemand) return;
+    // Publish intent-driven actions without replacing a site's active agent.
+    await agent.initializeOnDemand(createWebAgentContext());
 }
 
 export function registerWebAgent(agent: WebAgent): void {

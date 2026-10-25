@@ -47,6 +47,7 @@ export interface WebAgent {
     matchesDocument?(): boolean;
 
     initialize(context: WebAgentContext): Promise<void>;
+    initializeOnDemand?(context: WebAgentContext): Promise<void>;
 
     handleContinuation?(
         continuation: ContinuationState,

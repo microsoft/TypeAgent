@@ -8,6 +8,7 @@ import {
 } from "../serviceWorker/storage";
 import {
     isCrosswordMode,
+    isCrosswordDecisionStrategy,
     type CrosswordDecisionCapabilities,
 } from "@typeagent/browser-control-rpc/crosswordDecisionTypes";
 
@@ -104,6 +105,7 @@ export class EnhancedOptionsPage {
                     ...saved,
                 });
             }
+            await this.repairCrosswordStrategy(saved);
             if (saved.defaultExtractionMode !== "content") {
                 throw new Error(
                     "Unsupported extraction mode. Reset settings to use 'content'.",
@@ -113,6 +115,11 @@ export class EnhancedOptionsPage {
             document.querySelector<HTMLInputElement>(
                 `input[name="crosswordMode"][value="${this.settings.crosswordMode}"]`,
             )!.checked = true;
+            (
+                document.getElementById(
+                    "crosswordDecisionStrategy",
+                ) as HTMLSelectElement
+            ).value = this.settings.crosswordDecisionStrategy;
 
             // Update form fields
             (
@@ -190,6 +197,11 @@ export class EnhancedOptionsPage {
         const status = document.getElementById("crosswordDecisionStatus")!;
         const capabilities = this.crosswordCapabilities;
         const selectedMode = this.getSelectedCrosswordMode();
+        (
+            document.getElementById(
+                "crosswordDecisionStrategy",
+            ) as HTMLSelectElement
+        ).disabled = selectedMode !== "decision";
         status.className = `alert alert-${capabilities?.available ? "success" : "warning"}`;
         const availability = capabilities?.available
             ? "Crossword Decision available."
@@ -207,6 +219,24 @@ export class EnhancedOptionsPage {
         return document.querySelector<HTMLInputElement>(
             'input[name="crosswordMode"]:checked',
         )?.value;
+    }
+
+    private async repairCrosswordStrategy(saved: Record<string, unknown>) {
+        if (isCrosswordDecisionStrategy(saved.crosswordDecisionStrategy))
+            return;
+        console.warn(
+            "Invalid crossword Decision strategy; resetting to Hybrid.",
+        );
+        saved.crosswordDecisionStrategy =
+            DEFAULT_SETTINGS.crosswordDecisionStrategy;
+        await chrome.storage.sync.set({
+            crosswordDecisionStrategy: saved.crosswordDecisionStrategy,
+        });
+        this.showStatus(
+            "Invalid Crossword Decision strategy was reset to Hybrid.",
+            "warning",
+        );
+        await this.notifySettingsUpdated({ ...DEFAULT_SETTINGS, ...saved });
     }
 
     private async checkAIModelStatus() {
@@ -278,6 +308,18 @@ export class EnhancedOptionsPage {
             this.showStatus("Please select a valid Crossword Mode.", "warning");
             return;
         }
+        const strategy = (
+            document.getElementById(
+                "crosswordDecisionStrategy",
+            ) as HTMLSelectElement
+        ).value;
+        if (!isCrosswordDecisionStrategy(strategy)) {
+            this.showStatus(
+                "Please select a valid Crossword Decision strategy.",
+                "warning",
+            );
+            return;
+        }
 
         // Validate WebSocket URL — blank means "use default agent-server
         // URL" (the service worker falls back to AGENT_SERVER_DEFAULT_URL).
@@ -298,6 +340,7 @@ export class EnhancedOptionsPage {
         // Update settings
         this.settings.agentServerHost = agentServerHost;
         this.settings.crosswordMode = crosswordMode;
+        this.settings.crosswordDecisionStrategy = strategy;
 
         // Auto-discovery settings
         const autoDiscoveryEl = document.getElementById(
@@ -364,6 +407,17 @@ export class EnhancedOptionsPage {
     }
 
     private exportSettings() {
+        if (
+            !isCrosswordDecisionStrategy(
+                this.settings.crosswordDecisionStrategy,
+            )
+        ) {
+            this.showStatus(
+                "Invalid Crossword Decision strategy. Reload settings before exporting.",
+                "warning",
+            );
+            return;
+        }
         if (!isCrosswordMode(this.settings.crosswordMode)) {
             this.showStatus(
                 "Invalid Crossword Mode. Reload settings before exporting.",

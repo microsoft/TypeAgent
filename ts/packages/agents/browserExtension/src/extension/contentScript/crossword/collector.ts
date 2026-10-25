@@ -3,16 +3,25 @@
 
 import {
     CROSSWORD_DECISION_LIMITS as limits,
+    parseCrosswordClueIdentity,
+    type CrosswordDirection,
     type CrosswordSnapshot,
 } from "@typeagent/browser-control-rpc/crosswordDecisionTypes";
 
-const containers =
-    '.xlv-frame, [role="group"][aria-roledescription="crossword"], [role="region"][aria-roledescription="crossword"]';
 const excluded =
-    "script,style,input,textarea,select,button,svg,[hidden],[aria-hidden=true]";
-export const textOf = (node: Element): string => {
+    "script,style,noscript,template,input,textarea,select,svg,[hidden],[aria-hidden=true],[role=status],[role=progressbar],.xlv-frame .xlv-status";
+const headings =
+    "h1,h2,h3,h4,h5,h6,[role=heading],caption,legend,.xlv-clues-heading,.xlv-clues-label";
+const scopes =
+    '.xlv-frame,[aria-roledescription="crossword"],article,section,[role=region],[role=group]';
+const regions =
+    "ul,ol,table,[role=list],[role=table],section,article,main,nav,aside,header,footer,div";
+export const textOf = (
+    node: Element,
+    visible: (node: Element) => boolean = isVisible,
+): string => {
     const walk = (element: Element): string => {
-        if (element.matches(excluded) || !isVisible(element)) return "";
+        if (element.matches(excluded) || !visible(element)) return "";
         return Array.from(element.childNodes)
             .map((child) =>
                 child.nodeType === Node.TEXT_NODE
@@ -82,8 +91,14 @@ export function uniqueSelector(node: Element): string {
     return selector;
 }
 
-function contextOf(node: Element, root: Element): string {
-    const parts: string[] = [];
+function contextOf(
+    node: Element,
+    root: Element,
+    readText: (node: Element) => string = textOf,
+    headingCache = new Map<Element, Element[]>(),
+): string {
+    const parts: string[] = [node.getAttribute("aria-label") ?? ""];
+    let branch = node;
     for (
         let parent = node.parentElement;
         parent && root.contains(parent);
@@ -91,15 +106,54 @@ function contextOf(node: Element, root: Element): string {
     ) {
         const label = parent.getAttribute("aria-label");
         if (label) parts.push(label);
-        const heading = Array.from(parent.children).find((child) =>
-            child.matches(
-                "h1,h2,h3,h4,h5,h6,[role=heading],caption,legend,.xlv-clues-heading,.xlv-clues-label",
-            ),
-        );
-        if (heading) parts.push(textOf(heading));
+        let siblings = headingCache.get(parent);
+        if (!siblings) {
+            siblings = Array.from(parent.children).filter((child) => {
+                if (child.matches(headings)) return true;
+                const label = /^(?:across|down)(?:\s+clues)?$/i;
+                return (
+                    label.test(child.textContent?.trim() ?? "") &&
+                    label.test(readText(child))
+                );
+            });
+            headingCache.set(parent, siblings);
+        }
+        const heading = [...siblings]
+            .reverse()
+            .find(
+                (child) =>
+                    !!(
+                        child.compareDocumentPosition(branch) &
+                        Node.DOCUMENT_POSITION_FOLLOWING
+                    ),
+            );
+        if (heading) {
+            const value = readText(heading);
+            // A nearer group heading wins over a page-wide sibling heading.
+            if (!directionOf(parts.join(" | ")) || !directionOf(value))
+                parts.push(value);
+        }
         if (parent === root) break;
+        branch = parent;
     }
     return [...new Set(parts.filter(Boolean))].join(" | ");
+}
+
+function directionOf(context: string): CrosswordDirection | undefined {
+    for (const part of context.split(" | ")) {
+        const across = /\bacross\b/i.test(part);
+        const down = /\bdown\b/i.test(part);
+        if (across !== down) return across ? "across" : "down";
+    }
+    return undefined;
+}
+
+function regionOf(node: Element, root: Element): Element {
+    return node.parentElement?.closest(regions) ?? root;
+}
+
+function scopeOf(node: Element, root: Element): Element {
+    return node.closest(scopes) ?? root;
 }
 
 export type CandidateNode = {
@@ -108,7 +162,23 @@ export type CandidateNode = {
     text: string;
     context: string;
     role: string | null;
+    region: Element;
+    scope: Element;
+    textMode: "subtree" | "direct";
 };
+function directText(node: Element): string {
+    return Array.from(node.childNodes)
+        .filter((child) => child.nodeType === Node.TEXT_NODE)
+        .map((child) => child.textContent ?? "")
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+export function candidateText(binding: CandidateNode): string {
+    return binding.textMode === "subtree"
+        ? textOf(binding.node)
+        : directText(binding.node);
+}
 export type Collected = {
     snapshot: CrosswordSnapshot;
     root: Element;
@@ -116,25 +186,16 @@ export type Collected = {
     url: string;
 };
 
-export function collect(
-    documentToken: string,
-    revision: number,
-    modeGeneration: number,
-): Collected {
-    const roots = Array.from(document.querySelectorAll(containers)).filter(
-        isVisible,
-    );
-    if (roots.length !== 1)
-        throw new Error("unsupported: missing or ambiguous puzzle container");
-    const root = roots[0];
-    const evidenceRoot = root.matches(".xlv-frame")
-        ? (root.querySelector(".xlv-clues") ?? root)
-        : root;
-    const nodes = new Set<Element>();
-    for (const leaf of Array.from(evidenceRoot.querySelectorAll("*"))) {
+function candidateNodes(
+    root: Element,
+    visible: (node: Element) => boolean,
+    readText: (node: Element) => string,
+): Map<Element, CandidateNode["textMode"]> {
+    const nodes = new Map<Element, CandidateNode["textMode"]>();
+    for (const leaf of [root, ...Array.from(root.querySelectorAll("*"))]) {
         if (
             leaf.closest(excluded) ||
-            !isVisible(leaf) ||
+            !visible(leaf) ||
             !Array.from(leaf.childNodes).some(
                 (child) =>
                     child.nodeType === Node.TEXT_NODE &&
@@ -142,39 +203,102 @@ export function collect(
             )
         )
             continue;
+        const heading = leaf.closest(headings);
+        if (heading && root.contains(heading)) {
+            nodes.set(heading, "subtree");
+            continue;
+        }
         const row = leaf.closest("tr,li,[role=row],[role=listitem]");
-        if (row && root.contains(row)) nodes.add(row);
+        if (row && root.contains(row)) nodes.set(row, "subtree");
         else if (
-            leaf.parentElement !== evidenceRoot &&
+            leaf.parentElement !== root &&
             leaf.parentElement?.matches("div,p") &&
             leaf.parentElement.children.length >= 2 &&
-            Array.from(leaf.parentElement.children).every(
-                (child) =>
-                    child.matches("span,a,b,strong,em,small,i") &&
-                    !!textOf(child),
-            )
+            (Array.from(leaf.parentElement.children).every((child) =>
+                child.matches("span,a,b,strong,em,small,i"),
+            ) ||
+                (leaf.parentElement.children.length <= 4 &&
+                    /^\d{1,4}[.)]?$/.test(
+                        readText(leaf.parentElement.children[0]),
+                    )))
         )
-            nodes.add(leaf.parentElement);
-        else if (!Array.from(leaf.children).some((child) => textOf(child)))
-            nodes.add(leaf);
+            nodes.set(leaf.parentElement, "subtree");
+        else
+            nodes.set(
+                leaf,
+                Array.from(leaf.children).some((child) => readText(child))
+                    ? "direct"
+                    : "subtree",
+            );
     }
-    // Headers remain evidence through context, not additional semantic clue labels.
-    const rows = Array.from(nodes).filter(
-        (node) =>
-            !node.matches(
-                "h1,h2,h3,h4,h5,h6,[role=heading],caption,legend,.xlv-clues-heading,.xlv-clues-label",
-            ) &&
-            !Array.from(nodes).some(
-                (other) => other !== node && other.contains(node),
-            ),
-    );
-    if (!rows.length || rows.length > limits.candidates)
+    // Group headings provide context; numbered headings may themselves be clues.
+    const rows = Array.from(nodes.keys()).filter((node) => {
+        if (
+            node.matches(headings) &&
+            !/^\(?\d{1,4}[ad]?\)?(?=$|[\s.:()-])/i.test(readText(node))
+        )
+            return false;
+        for (
+            let parent = node.parentElement;
+            parent;
+            parent = parent.parentElement
+        )
+            if (nodes.get(parent) === "subtree") return false;
+        return true;
+    });
+    return new Map(rows.map((node) => [node, nodes.get(node)!]));
+}
+
+export function collect(
+    documentToken: string,
+    revision: number,
+    modeGeneration: number,
+): Collected {
+    const root = document.body;
+    if (!root) throw new Error("unsupported: document body unavailable");
+    const visibility = new Map<Element, boolean>();
+    const visible = (node: Element) => {
+        let result = visibility.get(node);
+        if (result === undefined) {
+            result = isVisible(node);
+            visibility.set(node, result);
+        }
+        return result;
+    };
+    const texts = new Map<Element, string>();
+    const readText = (node: Element) => {
+        let result = texts.get(node);
+        if (result === undefined) {
+            result = textOf(node, visible);
+            texts.set(node, result);
+        }
+        return result;
+    };
+    const headingCache = new Map<Element, Element[]>();
+    const nodes = candidateNodes(root, visible, readText);
+    const rows = [...nodes.keys()];
+    if (rows.length > limits.candidates)
         throw new Error("unsupported: incomplete candidate set (count bound)");
     const registry = new Map<string, CandidateNode>();
-    const candidates = rows.map((node, index) => {
+    const regionIds = new Map<Element, string>();
+    const scopeIds = new Map<Element, string>();
+    const idOf = (
+        map: Map<Element, string>,
+        element: Element,
+        prefix: string,
+    ) => {
+        let id = map.get(element);
+        if (!id) {
+            id = `${prefix}${map.size}`;
+            map.set(element, id);
+        }
+        return id;
+    };
+    let candidates = rows.map((node, index) => {
         const id = `c${index}`;
-        const text = textOf(node);
-        const context = contextOf(node, root);
+        const textMode = nodes.get(node)!;
+        const text = textMode === "subtree" ? readText(node) : directText(node);
+        const context = contextOf(node, root, readText, headingCache);
         if (
             !text ||
             text.length > limits.textLength ||
@@ -188,14 +312,70 @@ export function collect(
             throw new Error(
                 "unsupported: incomplete candidate set (role bound)",
             );
+        const region = regionOf(node, root);
+        const scope = scopeOf(node, root);
         registry.set(id, {
             node,
-            selector: uniqueSelector(node),
+            selector: "",
             text,
             context,
             role,
+            region,
+            scope,
+            textMode,
         });
-        return { id, text, context, ...(role ? { role } : {}) };
+        return {
+            id,
+            text,
+            context,
+            regionId: idOf(regionIds, region, "r"),
+            scopeId: idOf(scopeIds, scope, "p"),
+            ...(role ? { role } : {}),
+        };
+    });
+    const canonical = new Map<string, string>();
+    const keys = new Map<string, string>();
+    for (const candidate of candidates) {
+        const binding = registry.get(candidate.id)!;
+        const identity = identityOf(binding);
+        if (!identity.number || !identity.direction) continue;
+        const key = JSON.stringify([
+            candidate.scopeId,
+            identity.number,
+            identity.direction,
+            logicalClueText(binding),
+        ]);
+        keys.set(candidate.id, key);
+        const prior = canonical.get(key);
+        if (
+            !prior ||
+            (!registry
+                .get(prior)!
+                .node.matches("tr,li,[role=row],[role=listitem]") &&
+                binding.node.matches("tr,li,[role=row],[role=listitem]"))
+        )
+            canonical.set(key, candidate.id);
+    }
+    candidates = candidates.filter(
+        (candidate) =>
+            /[\p{L}\p{N}]/u.test(candidate.text) &&
+            (!keys.has(candidate.id) ||
+                canonical.get(keys.get(candidate.id)!) === candidate.id),
+    );
+    const bindings = candidates.map((candidate) => registry.get(candidate.id)!);
+    registry.clear();
+    regionIds.clear();
+    scopeIds.clear();
+    candidates = candidates.map((candidate, index) => {
+        const id = `c${index}`;
+        const binding = bindings[index];
+        registry.set(id, binding);
+        return {
+            ...candidate,
+            id,
+            regionId: idOf(regionIds, binding.region, "r"),
+            scopeId: idOf(scopeIds, binding.scope, "p"),
+        };
     });
     const snapshot: CrosswordSnapshot = {
         snapshotId: crypto.randomUUID(),
@@ -213,20 +393,27 @@ export function collect(
         limits.snapshotBytes
     )
         throw new Error("unsupported: incomplete candidate set (byte bound)");
+    for (const binding of registry.values())
+        binding.selector = uniqueSelector(binding.node);
     return { snapshot, root, registry, url: location.href };
 }
 
 export function validateNode(state: Collected, binding: CandidateNode): void {
     if (
         state.url !== location.href ||
-        !state.root.isConnected ||
-        !state.root.contains(binding.node) ||
+        binding.node.ownerDocument !== document ||
+        !binding.node.isConnected ||
         !isVisible(binding.node) ||
-        document.querySelectorAll(binding.selector).length !== 1 ||
-        document.querySelector(binding.selector) !== binding.node ||
-        textOf(binding.node) !== binding.text ||
-        contextOf(binding.node, state.root) !== binding.context ||
-        binding.node.getAttribute("role") !== binding.role
+        candidateText(binding) !== binding.text
     )
         throw new Error("stale: crossword target changed");
+}
+
+function identityOf(binding: CandidateNode) {
+    return parseCrosswordClueIdentity(binding.text, binding.context);
+}
+
+function logicalClueText(binding: CandidateNode): string {
+    return parseCrosswordClueIdentity(candidateText(binding), binding.context)
+        .text;
 }

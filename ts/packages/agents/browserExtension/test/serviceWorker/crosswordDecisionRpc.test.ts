@@ -11,6 +11,7 @@ import type {
     CrosswordRpcOrigin,
     ResolveCrosswordClueRequest,
 } from "@typeagent/browser-control-rpc/crosswordDecisionTypes";
+import { CROSSWORD_DECISION_LIMITS as limits } from "@typeagent/browser-control-rpc/crosswordDecisionTypes";
 
 jest.mock("../../src/extension/serviceWorker/websocket", () => ({
     getWebSocket: jest.fn(),
@@ -63,7 +64,7 @@ function request(): ResolveCrosswordClueRequest {
             modeGeneration: 0,
             createdAt: Date.now(),
             complete: true,
-            collectorVersion: 1,
+            collectorVersion: limits.collectorVersion,
             candidates: [{ id: "c1", text: "1. Clue", context: "Across" }],
         },
     };
@@ -80,6 +81,7 @@ function response(params: ResolveCrosswordClueRequest, candidateId = "c1") {
         configGeneration: "1",
         status: "resolved",
         candidateId,
+        choiceProbability: 0.32,
     };
 }
 
@@ -163,7 +165,9 @@ test("missing origin, unavailable connection and oversized evidence do not send"
             .status,
     ).toBe("unsupported");
     const oversized = request();
-    oversized.snapshot.candidates[0].text = "x".repeat(65_537);
+    oversized.snapshot.candidates[0].text = "x".repeat(
+        limits.snapshotBytes + 1,
+    );
     expect(
         (
             await forwardCrosswordDecisionRpc(
@@ -179,6 +183,24 @@ test("missing origin, unavailable connection and oversized evidence do not send"
             .available,
     ).toBe(false);
     expect(socket.sent).toHaveLength(0);
+});
+
+test("explicit incomplete-discovery messages survive private forwarding", async () => {
+    const params = request();
+    const pending = forwardCrosswordDecisionRpc(
+        "resolveCrosswordClue",
+        params,
+        origin,
+    );
+    socket.reply(socket.sent.at(-1)!.params.id, {
+        ...response(params),
+        status: "unsupported",
+        message: "Region discovery was incomplete.",
+    });
+    expect(await pending).toMatchObject({
+        status: "unsupported",
+        message: "Region discovery was incomplete.",
+    });
 });
 
 test("cancellation is scoped to originating document, deadline cleans listeners and late replies are discarded", async () => {

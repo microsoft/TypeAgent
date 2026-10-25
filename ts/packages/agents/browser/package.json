@@ -93,6 +93,7 @@
     "dompurify": "^3.4.13",
     "express": "^4.22.0",
     "express-rate-limit": "^7.5.0",
+    "gpt-tokenizer": "^2.9.0",
     "graphology": "^0.25.4",
     "graphology-communities-louvain": "^2.0.1",
     "graphology-layout": "^0.6.1",

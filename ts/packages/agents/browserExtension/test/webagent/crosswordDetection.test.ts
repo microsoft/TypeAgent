@@ -8,6 +8,9 @@ jest.mock("../../src/extension/webagent/crossword/CrosswordWebAgent", () => ({
         initialize: jest.fn(),
     })),
 }));
+jest.mock("../../src/extension/webagent/crossword/decisionBridge", () => ({
+    getCrosswordMode: jest.fn().mockResolvedValue("generative"),
+}));
 
 import { hasVisibleExolvePuzzle } from "../../src/extension/sites/crossword";
 

@@ -5,7 +5,7 @@ import { getActiveTab } from "./tabManager";
 import {
     getRecordedActions,
     saveRecordedActions,
-    getCrosswordMode,
+    getCrosswordDecisionSettings,
     notifyCrosswordModeChanged,
 } from "./storage";
 import { forwardCrosswordDecisionRpc } from "./crosswordDecisionRpc";
@@ -211,9 +211,13 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         },
 
         async settingsUpdated(params: any) {
-            const mode = await getCrosswordMode();
+            const { mode, strategy } = await getCrosswordDecisionSettings();
             await chrome.storage.local.set({
-                knowledgeSettings: { ...params.settings, crosswordMode: mode },
+                knowledgeSettings: {
+                    ...params.settings,
+                    crosswordMode: mode,
+                    crosswordDecisionStrategy: strategy,
+                },
             });
             await notifyCrosswordModeChanged(mode);
             return { success: true };

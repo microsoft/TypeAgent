@@ -8,7 +8,10 @@ import {
     createDecisionModel,
     getRuntimeConfigGeneration,
 } from "@typeagent/aiclient";
-import { CrosswordDecisionHandler } from "../dist/agent/crosswordDecisionHandler.mjs";
+import {
+    CrosswordDecisionHandler,
+    countCrosswordDecisionTokens,
+} from "../dist/agent/crosswordDecisionHandler.mjs";
 import {
     loadServiceWorkerTransport,
     PrivateSocket,
@@ -28,7 +31,7 @@ function snapshot(candidateId) {
             modeGeneration: 0,
             createdAt: Date.now(),
             complete: true,
-            collectorVersion: 1,
+            collectorVersion: 2,
             candidates: [
                 { id: candidateId, text: "7. Offline clue", context: "Down" },
             ],
@@ -41,65 +44,65 @@ function inspectNativeRequest(provider, body, candidateId) {
     assert.equal(state.clueNumber, 7);
     assert.equal(state.clueDirection, "down");
     assert.equal(state.candidates[0].id, candidateId);
+    assert.equal(state.puzzleId, undefined);
     const expectedIds = [candidateId, "no_fit", "ambiguous"];
     if (provider === "azure") {
-        assert.deepEqual(Object.keys(body.questions), ["target", "unique_fit"]);
+        assert.deepEqual(Object.keys(body.questions), ["target"]);
         assert.equal(body.questions.target.type, "choice");
         assert.deepEqual(
             Object.keys(body.questions.target.criteria),
             expectedIds,
         );
-        assert.equal(body.questions.unique_fit.type, "noul");
-        assert.match(body.questions.unique_fit.instructions, /Independently/);
+        assert.match(body.questions.target.instructions, /7 down/);
+        assert.match(
+            body.questions.target.criteria[candidateId],
+            /7\. Offline clue/,
+        );
     } else {
         assert.deepEqual(
             body.questions.map((question) => question.name),
-            ["target", "unique_fit"],
+            ["target"],
         );
+        assert.match(body.questions[0].instructions, /7 down/);
         assert.equal(body.questions[0].type, "choice");
         assert.deepEqual(
             body.questions[0].choices.map((choice) => choice.value),
             expectedIds,
         );
-        assert.equal(body.questions[1].type, "predicate");
-        assert.match(body.questions[1].instructions, /Independently/);
     }
     assert.equal("messages" in body, false);
     assert.equal(JSON.stringify(body).includes("page-spoof"), false);
 }
 
 function nativeResponse(provider, body, selected) {
+    const key =
+        provider === "azure"
+            ? Object.keys(body.questions)[0]
+            : body.questions[0].name;
     const choices =
         provider === "azure"
-            ? Object.keys(body.questions.target.criteria)
+            ? Object.keys(body.questions[key].criteria)
             : body.questions[0].choices.map((choice) => choice.value);
     const probabilities = Object.fromEntries(
         choices.map((id) => [id, id === selected ? 1 : 0]),
     );
-    const fit = selected === "no_fit" ? 0 : 0.95;
     const answers =
         provider === "azure"
             ? {
-                  target: {
+                  [key]: {
                       type: "choice",
                       choice: selected,
                       probabilities,
                   },
-                  unique_fit: { type: "noul", noul: fit },
               }
             : [
                   {
-                      name: "target",
+                      name: key,
                       type: "choice",
                       choice: selected,
                       probabilities: Object.entries(probabilities).map(
                           ([value, probability]) => ({ value, probability }),
                       ),
-                  },
-                  {
-                      name: "unique_fit",
-                      type: "predicate",
-                      probability: fit,
                   },
               ];
     return new Response(JSON.stringify({ answers }), {
@@ -118,6 +121,98 @@ async function waitForCalls(calls, count) {
         "Native HTTP calls reached expected count",
     );
 }
+
+test("real Azure native adapter preserves HTTP 422 for 16K evidence repacking", async () => {
+    const originalFetch = globalThis.fetch;
+    const observed = [];
+    const config = buildConfig({
+        AZURE_OPENAI_ENDPOINT_DECISION_1_EASTUS:
+            "https://eastus.example/providers/microsoft/v1/systemone",
+        AZURE_OPENAI_API_KEY_DECISION_1_EASTUS: "offline-test",
+        AZURE_OPENAI_MAX_RETRYATTEMPTS: "0",
+    });
+    const input = snapshot("c0");
+    input.snapshot.candidates = Array.from({ length: 18 }, (_, i) => ({
+        id: `c${i}`,
+        text: " x".repeat(256),
+        context: " y".repeat(256),
+        regionId: `region-${i % 3}`,
+    }));
+    const handler = new CrosswordDecisionHandler({
+        createModel: () => createDecisionModel({ config, provider: "azure" }),
+        generation: getRuntimeConfigGeneration,
+        now: Date.now,
+        timeoutMs: 5000,
+        telemetry: () => {},
+    });
+    globalThis.fetch = async (_url, options) => {
+        const body = JSON.parse(options.body);
+        const request = { state: body.state, questions: body.questions };
+        observed.push(request);
+        if (countCrosswordDecisionTokens(request) > 16 * 1024)
+            return new Response(
+                JSON.stringify({
+                    detail: "Question prompt exceeds the 32768-token context limit including the decision token",
+                }),
+                {
+                    status: 422,
+                    headers: { "content-type": "application/json" },
+                },
+            );
+        const answers = Object.fromEntries(
+            Object.entries(request.questions).map(([key, question]) => {
+                const choice =
+                    key === "target"
+                        ? Object.hasOwn(question.criteria, "c17")
+                            ? "c17"
+                            : "no_fit"
+                        : "clues";
+                return [
+                    key,
+                    {
+                        type: "choice",
+                        choice,
+                        probabilities: Object.fromEntries(
+                            Object.keys(question.criteria).map((id) => [
+                                id,
+                                id === choice ? 1 : 0,
+                            ]),
+                        ),
+                    },
+                ];
+            }),
+        );
+        return new Response(JSON.stringify({ answers }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+        });
+    };
+    try {
+        const result = await handler.resolve(
+            "offline-422",
+            "native-repack",
+            input,
+        );
+        assert.equal(result.status, "resolved");
+        assert.equal(result.candidateId, "c17");
+        assert.ok(countCrosswordDecisionTokens(observed[0]) > 16 * 1024);
+        assert.ok(
+            observed
+                .slice(1)
+                .every(
+                    (request) =>
+                        countCrosswordDecisionTokens(request) <= 16 * 1024,
+                ),
+        );
+        assert.equal(
+            observed.filter((request) => request.questions.target).length,
+            3,
+        );
+    } finally {
+        globalThis.fetch = originalFetch;
+        handler.disconnect("offline-422");
+    }
+});
 
 for (const provider of ["azure", "copilot"]) {
     test(
@@ -181,6 +276,15 @@ for (const provider of ["azure", "copilot"]) {
                         : "https://copilot.example/v1/decisions",
                 );
                 const body = JSON.parse(options.body);
+                const key =
+                    provider === "azure"
+                        ? Object.keys(body.questions)[0]
+                        : body.questions[0].name;
+                assert.equal(
+                    key,
+                    "target",
+                    "Only target selection reaches native HTTP",
+                );
                 if (mode === "error") {
                     calls.push({ body });
                     return new Response(
@@ -270,6 +374,7 @@ for (const provider of ["azure", "copilot"]) {
                 const frameResult = await frame;
                 assert.equal(frameResult.status, "resolved");
                 assert.equal(frameResult.candidateId, "c-frame");
+                assert.equal("verified" in frameResult, false);
                 assert.equal(
                     frameResult.snapshotId,
                     frameRequest.snapshot.snapshotId,
@@ -281,6 +386,7 @@ for (const provider of ["azure", "copilot"]) {
                 const topResult = await top;
                 assert.equal(topResult.status, "resolved");
                 assert.equal(topResult.candidateId, "c-top");
+                assert.equal("verified" in topResult, false);
                 assert.equal(
                     topResult.snapshotId,
                     topRequest.snapshot.snapshotId,

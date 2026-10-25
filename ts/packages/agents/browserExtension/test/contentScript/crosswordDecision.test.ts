@@ -111,6 +111,7 @@ function fixture(count = 16): void {
 
 function runtimeMock() {
     let mode = "decision";
+    let strategy = "hybrid";
     let config = "config-1";
     let resolver:
         | ((request: ResolveCrosswordClueRequest) => Promise<unknown>)
@@ -121,7 +122,7 @@ function runtimeMock() {
             method?: string;
             params: ResolveCrosswordClueRequest;
         };
-        if (data.type === "getCrosswordMode") return { mode };
+        if (data.type === "getCrosswordMode") return { mode, strategy };
         if (data.type === "cancelCrosswordDecisionRpc") return {};
         if (data.method === "getCrosswordDecisionCapabilities")
             return { available: true, configGeneration: config };
@@ -131,13 +132,15 @@ function runtimeMock() {
             configGeneration: config,
             status: "resolved",
             candidateId: "c0",
-            fit: 0.9,
         };
     });
     return {
         runtime: runtime as jest.Mock & RuntimeCall,
         mode: (value: string) => {
             mode = value;
+        },
+        strategy: (value: string) => {
+            strategy = value;
         },
         config: (value: string) => {
             config = value;
@@ -168,7 +171,7 @@ afterEach(() => {
 });
 
 describe("generic accessible candidate recall (not provider calibration)", () => {
-    test.each([16, 32, 64])(
+    test.each([16, 32, 64, 65, 128, 253, 254, 512])(
         "retains every split number/text row at %i candidates",
         (count) => {
             fixture(count);
@@ -191,7 +194,10 @@ describe("generic accessible candidate recall (not provider calibration)", () =>
         },
     );
     test("overflow is explicitly incomplete, never a guessed shortlist", () => {
-        fixture(65);
+        document.body.innerHTML = `<ul>${Array.from(
+            { length: 2049 },
+            (_, i) => `<li>${i + 1} Clue</li>`,
+        ).join("")}</ul>`;
         expect(() => collect("doc", 0, 0)).toThrow("incomplete candidate set");
     });
     test("overlong evidence is rejected rather than truncated", () => {
@@ -200,10 +206,10 @@ describe("generic accessible candidate recall (not provider calibration)", () =>
         expect(() => collect("doc", 0, 0)).toThrow("text bound");
     });
     test("UTF-8 snapshot byte overflow is rejected without truncation", () => {
-        fixture(64);
-        document.querySelectorAll("li span:last-child").forEach((node) => {
-            node.textContent = "界".repeat(450);
-        });
+        document.body.innerHTML = `<ul>${Array.from(
+            { length: 1400 },
+            (_, i) => `<li>${i + 1} ${"界".repeat(500)}</li>`,
+        ).join("")}</ul>`;
         expect(() => collect("doc", 0, 0)).toThrow("byte bound");
     });
     test("split leaves promote to minimal non-semantic rows", () => {
@@ -214,12 +220,55 @@ describe("generic accessible candidate recall (not provider calibration)", () =>
         expect(state.snapshot.candidates).toHaveLength(1);
         expect(state.snapshot.candidates[0].text).toBe("1 Split visible clue");
     });
-    test("duplicate puzzles cannot establish an active puzzle", () => {
-        fixture();
+    test("collects unrelated content and generic clues without engine roots", () => {
+        document.body.innerHTML = `News before the puzzle
+            <nav><a href="#">News</a></nav>
+            <main><h2>Across</h2><div><div>1</div><div>Beam of light</div></div>
+            <h2>Down</h2><p>1 Not dark</p></main><footer>Copyright</footer>`;
+        const state = collect("doc", 0, 0);
+        expect(state.snapshot.candidates.map((entry) => entry.text)).toEqual([
+            "News before the puzzle",
+            "News",
+            "1 Beam of light",
+            "1 Not dark",
+            "Copyright",
+        ]);
+        expect(state.snapshot.candidates[2].context).toBe("Across");
+        expect(state.snapshot.candidates[3].context).toBe("Down");
+        expect(state.snapshot.candidates[2].regionId).toBeDefined();
+        expect(state.snapshot.candidates[2].scopeId).toBeDefined();
+    });
+    test("empty documents have complete empty local inventories", () => {
+        document.body.replaceChildren();
+        expect(collect("doc", 0, 0).snapshot.candidates).toEqual([]);
+    });
+    test("numbered clue headings remain entries, not just group context", () => {
+        document.body.innerHTML =
+            "<h3><span>1</span> Across Beam of light</h3><h3>1 Down Not dark</h3>";
+        expect(
+            collect("doc", 0, 0).snapshot.candidates.map((entry) => entry.text),
+        ).toEqual(["1 Across Beam of light", "1 Down Not dark"]);
+    });
+    test("plain direction labels supply context without engine classes or heading roles", () => {
+        document.body.innerHTML =
+            "<div><div>Across</div><table><tr><td>1</td><td>Beam of light</td></tr></table><div>Down</div><p>1 Not dark</p></div>";
+        const candidates = collect("doc", 0, 0).snapshot.candidates;
+        expect(
+            candidates.find((entry) => entry.text === "1 Beam of light")
+                ?.context,
+        ).toBe("Across");
+        expect(
+            candidates.find((entry) => entry.text === "1 Not dark")?.context,
+        ).toBe("Down");
+    });
+    test("separate puzzles retain separate scopes", () => {
+        fixture(1);
         document.body.append(
             document.querySelector("section")!.cloneNode(true),
         );
-        expect(() => collect("doc", 0, 0)).toThrow("ambiguous puzzle");
+        const candidates = collect("doc", 0, 0).snapshot.candidates;
+        expect(candidates).toHaveLength(2);
+        expect(candidates[0].scopeId).not.toBe(candidates[1].scopeId);
     });
     test("hidden and unrelated page inputs never become evidence", () => {
         fixture();
@@ -231,6 +280,30 @@ describe("generic accessible candidate recall (not provider calibration)", () =>
             );
         expect(JSON.stringify(collect("doc", 0, 0).snapshot)).not.toMatch(
             /private|secret/,
+        );
+    });
+    test("live progress is not clue evidence, including the known Exolve counter", () => {
+        fixture(1);
+        document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div role="status">Loading</div><div class="xlv-frame"><div class="xlv-status">Squares filled: 0</div></div>',
+        );
+        const state = collect("doc", 0, 0);
+        expect(state.snapshot.candidates).toHaveLength(1);
+    });
+    test("numbered duplicate current views coalesce to stable list nodes", () => {
+        fixture(1);
+        const before = collect("doc", 0, 0);
+        document
+            .querySelector("section")!
+            .insertAdjacentHTML(
+                "afterbegin",
+                "<div><span>1a.</span><span>Visible clue 1</span></div>",
+            );
+        const after = collect("doc", 0, 0);
+        expect(after.snapshot.candidates).toEqual(before.snapshot.candidates);
+        expect(after.registry.get("c0")!.node).toBe(
+            before.registry.get("c0")!.node,
         );
     });
 });
@@ -280,6 +353,18 @@ describe("isolated decision lifecycle", () => {
             });
             return { state, binding, input, wrapper, letters };
         }
+        test("physical clue label and direction mapping reject mismatches before typing", () => {
+            const { state, binding, letters } = engine();
+            expect(() =>
+                enterExolve(state, binding, "cat", 2, "across", () => {}),
+            ).toThrow("clue label mapping");
+            expect(() =>
+                enterExolve(state, binding, "cat", 1, "down", () => {}),
+            ).toThrow("clue direction mapping");
+            expect(
+                [...letters].slice(0, 3).map((letter) => letter.textContent),
+            ).toEqual(["", "", ""]);
+        });
         test("uppercase exact length, per-keystroke focus and rendered readback", () => {
             const { state, binding, letters } = engine();
             expect(
@@ -331,6 +416,21 @@ describe("isolated decision lifecycle", () => {
         await host.readClue(1, "across");
         expect(matches(mock)).toHaveLength(1);
     });
+    test("Hybrid2 strategy comes from extension settings and changing it invalidates bindings", async () => {
+        mock.strategy("hybrid2");
+        await host.readClue(1, "across");
+        const first = matches(mock)[0][0].params;
+        expect(first.strategy).toBe("hybrid2");
+        await host.readClue(1, "across");
+        expect(matches(mock)).toHaveLength(1);
+        mock.strategy("hybrid");
+        await host.readClue(1, "across");
+        expect(matches(mock)).toHaveLength(2);
+        expect(matches(mock)[1][0].params.strategy).toBe("hybrid");
+        expect(matches(mock)[1][0].params.snapshot.snapshotId).not.toBe(
+            first.snapshot.snapshotId,
+        );
+    });
     test("coalesces simultaneous same-clue matches", async () => {
         await Promise.all([
             host.readClue(1, "across"),
@@ -352,6 +452,124 @@ describe("isolated decision lifecycle", () => {
         document.querySelector("li")!.className = "active";
         await host.readClue(1, "across");
         expect(matches(mock)).toHaveLength(1);
+    });
+    test("progressive publisher content and unrelated candidate removal preserve the cached inventory", async () => {
+        mock.strategy("hybrid2");
+        await host.readClue(1, "across");
+        const snapshot = await host.capture();
+        document.body.insertAdjacentHTML(
+            "afterbegin",
+            "<aside><p>Publisher update</p></aside>",
+        );
+        document.querySelector("li:last-child")!.remove();
+        document.querySelector("aside p")!.textContent = "Another update";
+        expect(await host.capture()).toEqual(snapshot);
+        expect((await host.readClue(1, "across")).text).toBe(
+            "1 Visible clue 1",
+        );
+        expect(matches(mock)).toHaveLength(1);
+    });
+    test("original node handles survive selector drift and changed layout metadata", async () => {
+        const original = collect("selector-audit", 0, 0).registry.get("c0")!;
+        await host.readClue(1, "across");
+        document
+            .querySelector("ul")!
+            .insertAdjacentHTML("afterbegin", "<li>New placeholder</li>");
+        original.node.setAttribute("role", "listitem");
+        document.querySelector("h3")!.textContent = "Across clues";
+        expect(document.querySelector(original.selector)).not.toBe(
+            original.node,
+        );
+        expect((await host.readClue(1, "across")).text).toBe(
+            "1 Visible clue 1",
+        );
+        expect(matches(mock)).toHaveLength(1);
+    });
+    test("unrelated DOM churn during inference does not veto an issued selection", async () => {
+        mock.resolve(async (request) => {
+            document.body.insertAdjacentHTML(
+                "afterbegin",
+                "<aside><p>Loaded after capture</p></aside>",
+            );
+            document.querySelector("li:last-child")!.remove();
+            return {
+                ...request.snapshot,
+                status: "resolved",
+                candidateId: "c0",
+                configGeneration: "config-1",
+            };
+        });
+        expect((await host.readClue(1, "across")).text).toBe(
+            "1 Visible clue 1",
+        );
+        expect(matches(mock)).toHaveLength(1);
+    });
+    test.each(["change", "remove", "replace"])(
+        "a first selected target that changes during inference is rejected: %s",
+        async (mutation) => {
+            const snapshot = await host.capture();
+            mock.resolve(async (request) => {
+                const node = document.querySelector("li")!;
+                if (mutation === "change") node.textContent = "1 New puzzle";
+                else if (mutation === "remove") node.remove();
+                else node.replaceWith(node.cloneNode(true));
+                return {
+                    ...request.snapshot,
+                    status: "resolved",
+                    candidateId: "c0",
+                    configGeneration: "config-1",
+                };
+            });
+            await expect(host.readClue(1, "across")).rejects.toThrow("stale");
+            expect((await host.capture()).snapshotId).not.toBe(
+                snapshot.snapshotId,
+            );
+        },
+    );
+    test("an established sentinel invalidates an in-flight selection of an unchanged clue", async () => {
+        await host.readClue(1, "across");
+        const snapshot = await host.capture();
+        mock.resolve(async (request) => {
+            document.querySelector("li span:last-child")!.textContent =
+                "New edition";
+            return {
+                ...request.snapshot,
+                status: "resolved",
+                candidateId: "c1",
+                configGeneration: "config-1",
+            };
+        });
+        await expect(host.readClue(2, "across")).rejects.toThrow("stale");
+        expect((await host.capture()).snapshotId).not.toBe(snapshot.snapshotId);
+        expect(mock.runtime).toHaveBeenCalledWith({
+            type: "cancelCrosswordDecisionRpc",
+            snapshotId: snapshot.snapshotId,
+        });
+    });
+    test("same-URL puzzle ancestor replacement forces rediscovery even with identical clue text", async () => {
+        await host.readClue(1, "across");
+        const snapshot = await host.capture();
+        const puzzle = document.querySelector("section")!;
+        puzzle.replaceWith(puzzle.cloneNode(true));
+        await host.readClue(1, "across");
+        expect((await host.capture()).snapshotId).not.toBe(snapshot.snapshotId);
+        expect(matches(mock)).toHaveLength(2);
+    });
+    test("selected non-sentinel removal is rejected locally and retires the old inventory", async () => {
+        await host.readClue(1, "across");
+        const snapshot = await host.capture();
+        document.querySelector("li:nth-child(2)")!.remove();
+        expect(await host.capture()).toEqual(snapshot);
+        await expect(
+            host.executeCaptured("readClue", {
+                snapshotId: snapshot.snapshotId,
+                candidateId: "c1",
+                configGeneration: "config-1",
+                clueNumber: 2,
+                clueDirection: "across",
+            }),
+        ).rejects.toThrow("stale");
+        expect((await host.capture()).snapshotId).not.toBe(snapshot.snapshotId);
     });
     test("replacement nodes with identical text do not retain handles", async () => {
         await host.readClue(1, "across");
@@ -384,7 +602,6 @@ describe("isolated decision lifecycle", () => {
             ...request.snapshot,
             status: "resolved",
             candidateId: "c0",
-            fit: 0.99,
             configGeneration: "config-1",
         });
         await expect(pending).rejects.toThrow("stale");
@@ -400,9 +617,121 @@ describe("isolated decision lifecycle", () => {
             configGeneration: "config-1",
             status: "resolved",
             candidateId: "invented",
-            fit: 0.99,
         }));
         await expect(host.readClue(1, "across")).rejects.toThrow("unissued");
+    });
+    test("issued model choices authorize reads without verification while physical entry safeguards remain", async () => {
+        mock.resolve(async (request) => ({
+            ...request.snapshot,
+            configGeneration: "config-1",
+            status: "resolved",
+            candidateId: "c1",
+        }));
+        expect((await host.readClue(1, "across")).text).toContain(
+            "Visible clue 2",
+        );
+        await expect(host.enterText("ABC", 1, "across")).rejects.toThrow(
+            "verified entry requires",
+        );
+    });
+    test("low Choice probability is diagnostic, not an acceptance threshold", async () => {
+        mock.resolve(async (request) => ({
+            ...request.snapshot,
+            configGeneration: "config-1",
+            status: "resolved",
+            candidateId: "c0",
+            choiceProbability: 0.2,
+        }));
+        expect((await host.readClue(1, "across")).text).toContain(
+            "Visible clue 1",
+        );
+    });
+    test("legacy uniqueness-fit cannot override model ambiguity", async () => {
+        mock.resolve(async (request) => ({
+            ...request.snapshot,
+            configGeneration: "config-1",
+            status: "ambiguous",
+            candidateId: "c0",
+            fit: 1,
+        }));
+        await expect(host.readClue(1, "across")).rejects.toThrow("ambiguous");
+    });
+    test("missing parsed direction does not override an issued model read", async () => {
+        document.querySelector("[aria-label]")!.removeAttribute("aria-label");
+        document.querySelector("h3")!.remove();
+        expect((await host.readClue(1, "across")).text).toContain(
+            "Visible clue 1",
+        );
+    });
+    test("class-renamed table layouts remain readable without engine assumptions", async () => {
+        document.body.innerHTML =
+            '<div class="different-engine"><div class="different-heading">Across</div><table><tr><td>1</td><td>Beam of light</td></tr></table></div>';
+        mock.resolve(async (request) => ({
+            ...request.snapshot,
+            status: "resolved",
+            configGeneration: "config-1",
+            candidateId: request.snapshot.candidates.find(
+                (entry) => entry.text === "1 Beam of light",
+            )?.id,
+        }));
+        expect((await host.readClue(1, "across")).text).toBe("1 Beam of light");
+    });
+    test("same number in Across and Down and other Across numbers do not conflict", async () => {
+        document
+            .querySelector("section")!
+            .insertAdjacentHTML(
+                "beforeend",
+                "<div><h3>Down</h3><ul><li>1 A different Down clue</li></ul></div>",
+            );
+        expect((await host.readClue(1, "across")).text).toContain(
+            "Visible clue 1",
+        );
+    });
+    test("repeated presentations within one puzzle are allowed", async () => {
+        document
+            .querySelector("ul")!
+            .append(document.querySelector("li")!.cloneNode(true));
+        expect((await host.readClue(1, "across")).text).toContain(
+            "Visible clue 1",
+        );
+    });
+    test.each(["different text", "different puzzle"])(
+        "the host does not add a semantic veto to an issued model choice: %s",
+        async (conflict) => {
+            if (conflict === "different puzzle")
+                document.body.append(
+                    document.querySelector("section")!.cloneNode(true),
+                );
+            else
+                document
+                    .querySelector("ul")!
+                    .insertAdjacentHTML(
+                        "beforeend",
+                        "<li>1 Conflicting clue</li>",
+                    );
+            expect((await host.readClue(1, "across")).text).toContain(
+                "Visible clue 1",
+            );
+        },
+    );
+    test("captured targets are checked locally before use and after mutation", async () => {
+        const snapshot = await host.capture();
+        const params = {
+            snapshotId: snapshot.snapshotId,
+            candidateId: "c0",
+            configGeneration: "config-1",
+            clueNumber: 1,
+            clueDirection: "across" as const,
+        };
+        await expect(host.executeCaptured("readClue", params)).resolves.toEqual(
+            {
+                text: "1 Visible clue 1",
+            },
+        );
+        document.querySelector("li")!.textContent = "1 Changed";
+        await expect(host.executeCaptured("readClue", params)).rejects.toThrow(
+            "stale",
+        );
     });
     test("crossing and answer validation happen before entry", () => {
         const state = collect("doc", 0, 0);

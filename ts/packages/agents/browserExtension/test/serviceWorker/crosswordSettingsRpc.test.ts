@@ -43,11 +43,15 @@ describe("Crossword settings RPC", () => {
             createAllHandlers().settingsUpdated({ settings }),
         ).resolves.toEqual({ success: true });
         expect(chrome.storage.local.set).toHaveBeenCalledWith({
-            knowledgeSettings: settings,
+            knowledgeSettings: {
+                ...settings,
+                crosswordDecisionStrategy: "hybrid",
+            },
         });
         expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(7, {
             type: "crosswordModeChanged",
             mode: "decision",
+            strategy: "hybrid",
         });
     });
 
@@ -66,11 +70,15 @@ describe("Crossword settings RPC", () => {
                 crosswordMode: "generative",
             });
             expect(chrome.storage.local.set).toHaveBeenCalledWith({
-                knowledgeSettings: { crosswordMode: "generative" },
+                knowledgeSettings: {
+                    crosswordMode: "generative",
+                    crosswordDecisionStrategy: "hybrid",
+                },
             });
             expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(7, {
                 type: "crosswordModeChanged",
                 mode: "generative",
+                strategy: "hybrid",
             });
         } finally {
             warning.mockRestore();

@@ -16,12 +16,13 @@ import { createChromeRpcServer } from "./chromeRpcServer";
 import { createAllHandlers } from "./serviceWorkerRpcHandlers";
 import { setChatPanelRpc } from "./dispatcherConnection";
 import { setContextMenuRpcSend, initContextMenuSettings } from "./contextMenu";
-import { clearRecordedActions, getCrosswordMode } from "./storage";
+import { clearRecordedActions, getCrosswordDecisionSettings } from "./storage";
 import {
     cancelCrosswordDecisionRpc,
     forwardCrosswordDecisionRpc,
     getCrosswordRpcOrigin,
 } from "./crosswordDecisionRpc";
+import { routeCrosswordFrameAction } from "./crosswordFrames";
 
 import {
     isWebAgentMessage,
@@ -83,10 +84,31 @@ function setupEventListeners(): void {
     // Handle simple content script and view messages (not RPC)
     chrome.runtime.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
+            if (message?.type === "crosswordFrameAction") {
+                routeCrosswordFrameAction(message, sender)
+                    .then(sendResponse)
+                    .catch((error) =>
+                        sendResponse({
+                            error:
+                                error instanceof Error
+                                    ? error.message
+                                    : "unavailable: crossword frame action",
+                        }),
+                    );
+                return true;
+            }
             if (message?.type === "getCrosswordMode") {
-                getCrosswordMode()
-                    .then((mode) => sendResponse({ mode }))
-                    .catch(() => sendResponse({ mode: "generative" }));
+                getCrosswordDecisionSettings()
+                    .then(sendResponse)
+                    .catch((error) => {
+                        console.warn(
+                            "Could not read crossword settings:",
+                            error,
+                        );
+                        sendResponse({
+                            error: "unavailable: crossword settings",
+                        });
+                    });
                 return true;
             }
             if (message?.type === "crosswordDecisionRpc") {

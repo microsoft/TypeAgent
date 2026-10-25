@@ -3,6 +3,8 @@
 
 import {
     isCrosswordMode,
+    isCrosswordDecisionStrategy,
+    type CrosswordDecisionStrategy,
     type CrosswordMode,
 } from "@typeagent/browser-control-rpc/crosswordDecisionTypes";
 
@@ -10,6 +12,7 @@ export interface ExtensionSettings {
     agentServerHost: string;
     defaultExtractionMode: "content";
     crosswordMode: CrosswordMode;
+    crosswordDecisionStrategy: CrosswordDecisionStrategy;
     maxConcurrentExtractions: number;
     qualityThreshold: number;
     enableIntelligentAnalysis: boolean;
@@ -24,6 +27,7 @@ export const DEFAULT_EXTENSION_SETTINGS: ExtensionSettings = {
     agentServerHost: "",
     defaultExtractionMode: "content",
     crosswordMode: "generative",
+    crosswordDecisionStrategy: "hybrid",
     maxConcurrentExtractions: 3,
     qualityThreshold: 0.3,
     enableIntelligentAnalysis: true,
@@ -46,9 +50,33 @@ export async function getCrosswordMode(): Promise<CrosswordMode> {
     return "generative";
 }
 
+export async function getCrosswordDecisionStrategy(): Promise<CrosswordDecisionStrategy> {
+    const { crosswordDecisionStrategy } = await chrome.storage.sync.get(
+        "crosswordDecisionStrategy",
+    );
+    if (isCrosswordDecisionStrategy(crosswordDecisionStrategy))
+        return crosswordDecisionStrategy;
+    if (crosswordDecisionStrategy !== undefined) {
+        console.warn(
+            "Invalid crossword Decision strategy; resetting to Hybrid.",
+        );
+        await chrome.storage.sync.set({ crosswordDecisionStrategy: "hybrid" });
+    }
+    return "hybrid";
+}
+
+export async function getCrosswordDecisionSettings() {
+    const [mode, strategy] = await Promise.all([
+        getCrosswordMode(),
+        getCrosswordDecisionStrategy(),
+    ]);
+    return { mode, strategy };
+}
+
 export async function notifyCrosswordModeChanged(
     mode: CrosswordMode,
 ): Promise<void> {
+    const strategy = await getCrosswordDecisionStrategy();
     const tabs = await chrome.tabs.query({
         url: ["http://*/*", "https://*/*"],
     });
@@ -61,6 +89,7 @@ export async function notifyCrosswordModeChanged(
                     await chrome.tabs.sendMessage(tab.id!, {
                         type: "crosswordModeChanged",
                         mode,
+                        strategy,
                     });
                 } catch {
                     // Tabs without a content-script receiver need no update.

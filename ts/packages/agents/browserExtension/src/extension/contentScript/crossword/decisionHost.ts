@@ -4,23 +4,29 @@
 import {
     CROSSWORD_DECISION_LIMITS as limits,
     isCrosswordMode,
+    isCrosswordDecisionStrategy,
+    type CrosswordDecisionStrategy,
     type CrosswordMode,
     type CrosswordDirection,
     type CrosswordDecisionCapabilities,
+    type CrosswordSnapshot,
     type ResolveCrosswordClueResponse,
 } from "@typeagent/browser-control-rpc/crosswordDecisionTypes";
 import {
     collect,
+    candidateText,
     textOf,
     validateNode,
     type Collected,
     type CandidateNode,
 } from "./collector";
 import { enterExolve } from "./exolveEntry";
+import { CrosswordSentinels } from "./sentinels";
 
 export type RuntimeCall = (message: unknown) => Promise<unknown>;
 export class CrosswordDecisionHost {
     private mode: CrosswordMode = "generative";
+    private strategy: CrosswordDecisionStrategy = "hybrid";
     private generation = 0;
     private revision = 0;
     private token = crypto.randomUUID();
@@ -28,33 +34,17 @@ export class CrosswordDecisionHost {
     private config?: string;
     private bindings = new Map<string, CandidateNode>();
     private pending = new Map<string, Promise<CandidateNode>>();
-    private observer: MutationObserver;
+    private readonly sentinels: CrosswordSentinels;
     private queue: Promise<unknown> = Promise.resolve();
 
     constructor(private runtime: RuntimeCall) {
-        this.observer = new MutationObserver((records) =>
-            this.checkMutations(records),
-        );
-        this.observer.observe(document, {
-            subtree: true,
-            childList: true,
-            characterData: true,
-            attributes: true,
-            attributeFilter: [
-                "id",
-                "role",
-                "aria-label",
-                "aria-hidden",
-                "hidden",
-                "style",
-                "class",
-            ],
-        });
+        this.sentinels = new CrosswordSentinels(() => this.invalidate());
     }
 
-    changeMode(mode: CrosswordMode): void {
-        if (mode === this.mode) return;
+    changeMode(mode: CrosswordMode, strategy = this.strategy): void {
+        if (mode === this.mode && strategy === this.strategy) return;
         this.mode = mode;
+        this.strategy = strategy;
         this.invalidate();
     }
 
@@ -63,6 +53,7 @@ export class CrosswordDecisionHost {
         this.generation++;
         this.revision++;
         this.state = undefined;
+        this.sentinels.clear();
         this.bindings.clear();
         this.pending.clear();
         if (snapshotId)
@@ -74,21 +65,30 @@ export class CrosswordDecisionHost {
 
     dispose(): void {
         this.invalidate();
-        this.observer.disconnect();
+        this.sentinels.dispose();
     }
 
     async getMode(): Promise<{ mode: CrosswordMode }> {
         const generation = this.generation;
         const response = (await this.runtime({ type: "getCrosswordMode" })) as
-            | { mode?: unknown }
+            | { mode?: unknown; strategy?: unknown }
             | undefined;
         if (!isCrosswordMode(response?.mode))
             throw new Error(
                 "unavailable: invalid extension crossword settings",
             );
-        if (generation !== this.generation && response.mode !== this.mode)
+        if (
+            response.strategy !== undefined &&
+            !isCrosswordDecisionStrategy(response.strategy)
+        )
+            throw new Error("unavailable: invalid crossword Decision strategy");
+        const strategy = response.strategy ?? "hybrid";
+        if (
+            generation !== this.generation &&
+            (response.mode !== this.mode || strategy !== this.strategy)
+        )
             throw new Error("cancelled: settings changed during mode lookup");
-        this.changeMode(response.mode);
+        this.changeMode(response.mode, strategy);
         return { mode: this.mode };
     }
 
@@ -115,41 +115,23 @@ export class CrosswordDecisionHost {
     }
 
     async status(): Promise<
-        CrosswordDecisionCapabilities & { mode: CrosswordMode; policy: string }
+        CrosswordDecisionCapabilities & {
+            mode: CrosswordMode;
+            strategy: CrosswordDecisionStrategy;
+            policy: string;
+        }
     > {
         const { mode } = await this.getMode();
         return {
             ...(await this.capabilities()),
             mode,
-            policy: "uncalibrated local pilot; bounded on-demand Choice + fit",
+            strategy: this.strategy,
+            policy: "hybrid visible-text discovery; model-selected target Choice; no verification or uniqueness score",
         };
     }
 
-    private checkMutations(records: MutationRecord[] = []): void {
-        if (records.length + this.observer.takeRecords().length === 0) return;
-        if (!this.state) return;
-        try {
-            for (const binding of this.state.registry.values())
-                validateNode(this.state, binding);
-            const fresh = collect(this.token, this.revision, this.generation);
-            const nodes = [...this.state.registry.values()].map(
-                (entry) => entry.node,
-            );
-            if (
-                fresh.root !== this.state.root ||
-                fresh.registry.size !== nodes.length ||
-                [...fresh.registry.values()].some(
-                    (entry, i) => entry.node !== nodes[i],
-                )
-            )
-                this.invalidate();
-        } catch {
-            this.invalidate();
-        }
-    }
-
     private guard(state: Collected, binding?: CandidateNode): void {
-        this.checkMutations();
+        this.sentinels.check();
         if (
             this.mode !== "decision" ||
             this.state !== state ||
@@ -160,26 +142,21 @@ export class CrosswordDecisionHost {
             if (this.state === state) this.invalidate();
             throw new Error("stale: crossword state expired or changed");
         }
-        if (binding) validateNode(state, binding);
+        if (binding) {
+            try {
+                validateNode(state, binding);
+            } catch (error) {
+                this.invalidate();
+                throw error;
+            }
+            this.sentinels.watch(binding.node, () => candidateText(binding));
+        }
     }
 
-    private async resolve(
-        number: number,
-        direction: CrosswordDirection,
-    ): Promise<{ state: Collected; binding: CandidateNode }> {
-        if (
-            !Number.isSafeInteger(number) ||
-            number <= 0 ||
-            number > 9999 ||
-            (direction !== "across" && direction !== "down")
-        )
-            throw new Error("unsupported: invalid clue request");
+    async capture(): Promise<CrosswordSnapshot> {
         if ((await this.getMode()).mode !== "decision")
             throw new Error("cancelled: decision mode is not selected");
-        const capability = await this.capabilities();
-        if (!capability.available)
-            throw new Error("unavailable: decision provider not available");
-        this.checkMutations();
+        this.sentinels.check();
         if (
             this.state &&
             Date.now() - this.state.snapshot.createdAt >
@@ -191,6 +168,96 @@ export class CrosswordDecisionHost {
             this.revision,
             this.generation,
         ));
+        this.guard(state);
+        return state.snapshot;
+    }
+
+    executeCaptured(
+        method: "readClue" | "enterText",
+        params: {
+            snapshotId: string;
+            candidateId: string;
+            configGeneration: string;
+            clueNumber: number;
+            clueDirection: CrosswordDirection;
+            value?: string;
+        },
+    ): Promise<unknown> {
+        const run = async () => {
+            this.validateRequest(params.clueNumber, params.clueDirection);
+            if ((await this.getMode()).mode !== "decision")
+                throw new Error("cancelled: decision mode is not selected");
+            const capability = await this.capabilities();
+            if (
+                !capability.available ||
+                capability.configGeneration !== params.configGeneration
+            )
+                throw new Error("stale: decision configuration changed");
+            const state = this.state;
+            const binding = state?.registry.get(params.candidateId);
+            if (
+                !state ||
+                state.snapshot.snapshotId !== params.snapshotId ||
+                !binding
+            )
+                throw new Error("stale: captured crossword target changed");
+            this.guard(state, binding);
+            if (method === "readClue") return this.readBinding(binding);
+            if (method !== "enterText")
+                throw new Error(
+                    "unsupported: unknown captured crossword action",
+                );
+            this.validateAnswer(params.value);
+            return enterExolve(
+                state,
+                binding,
+                params.value,
+                params.clueNumber,
+                params.clueDirection,
+                () => this.guard(state, binding),
+            );
+        };
+        if (method === "readClue") return run();
+        const result = this.queue.then(run);
+        this.queue = result.catch(() => {});
+        return result;
+    }
+
+    private validateRequest(
+        number: number,
+        direction: CrosswordDirection,
+    ): void {
+        if (
+            !Number.isSafeInteger(number) ||
+            number <= 0 ||
+            number > 9999 ||
+            (direction !== "across" && direction !== "down")
+        )
+            throw new Error("unsupported: invalid clue request");
+    }
+
+    private validateAnswer(value: unknown): asserts value is string {
+        if (typeof value !== "string" || value.length > limits.textLength)
+            throw new Error("unsupported: invalid answer");
+    }
+
+    private readBinding(binding: CandidateNode): { text: string } {
+        const clue = binding.node.querySelector(".xlv-clue-text");
+        return { text: clue ? textOf(clue) : candidateText(binding) };
+    }
+
+    private async resolve(
+        number: number,
+        direction: CrosswordDirection,
+    ): Promise<{ state: Collected; binding: CandidateNode }> {
+        this.validateRequest(number, direction);
+        const capability = await this.capabilities();
+        if (!capability.available)
+            throw new Error("unavailable: decision provider not available");
+        await this.capture();
+        const state = this.state!;
+        if (!state.registry.size)
+            throw new Error("no_fit: no visible text entries");
         const key = `${number}:${direction}`;
         this.guard(state);
         let binding = this.bindings.get(key);
@@ -231,6 +298,7 @@ export class CrosswordDecisionHost {
                         snapshot: state.snapshot,
                         clueNumber,
                         clueDirection,
+                        strategy: this.strategy,
                     },
                 }),
                 new Promise<never>((_, reject) => {
@@ -258,13 +326,16 @@ export class CrosswordDecisionHost {
             )
                 throw new Error("stale: mismatched decision response");
             if (response.status !== "resolved")
-                throw new Error(`${response.status}: clue was not resolved`);
+                throw new Error(
+                    `${response.status}: ${response.message ?? "clue was not resolved"}`,
+                );
             if (
-                !Number.isFinite(response.fit) ||
-                response.fit! < limits.fitThreshold ||
-                response.fit! > 1
+                response.choiceProbability !== undefined &&
+                (!Number.isFinite(response.choiceProbability) ||
+                    response.choiceProbability < 0 ||
+                    response.choiceProbability > 1)
             )
-                throw new Error("no_fit: pilot fit gate rejected response");
+                throw new Error("provider_error: invalid choice probability");
             const binding = response.candidateId
                 ? state.registry.get(response.candidateId)
                 : undefined;
@@ -283,11 +354,7 @@ export class CrosswordDecisionHost {
     ): Promise<{ text: string }> {
         const { state, binding } = await this.resolve(number, direction);
         this.guard(state, binding);
-        return {
-            text: textOf(
-                binding.node.querySelector(".xlv-clue-text") ?? binding.node,
-            ),
-        };
+        return this.readBinding(binding);
     }
 
     enterText(
@@ -296,8 +363,7 @@ export class CrosswordDecisionHost {
         direction: CrosswordDirection,
     ): Promise<unknown> {
         const run = async () => {
-            if (typeof value !== "string" || value.length > limits.textLength)
-                throw new Error("unsupported: invalid answer");
+            this.validateAnswer(value);
             const { state, binding } = await this.resolve(number, direction);
             this.guard(state, binding);
             return enterExolve(state, binding, value, number, direction, () =>

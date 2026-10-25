@@ -215,13 +215,17 @@ export async function forwardCrosswordDecisionRpc(
                 return;
             }
             if (method === "resolveCrosswordClue") {
+                const snapshot = params?.snapshot;
+                const identityKeys = [
+                    "snapshotId",
+                    "documentToken",
+                    "puzzleId",
+                    "revision",
+                    "modeGeneration",
+                ] as const;
                 if (
-                    !params ||
-                    result.snapshotId !== params.snapshot.snapshotId ||
-                    result.documentToken !== params.snapshot.documentToken ||
-                    result.puzzleId !== params.snapshot.puzzleId ||
-                    result.revision !== params.snapshot.revision ||
-                    result.modeGeneration !== params.snapshot.modeGeneration
+                    !snapshot ||
+                    identityKeys.some((key) => result[key] !== snapshot[key])
                 ) {
                     finish(failure("cancelled"));
                     return;
@@ -260,10 +264,12 @@ export async function forwardCrosswordDecisionRpc(
                     modeGeneration: result.modeGeneration,
                     configGeneration: result.configGeneration.slice(0, 256),
                     status: result.status,
+                    ...(typeof result.message === "string"
+                        ? { message: result.message.slice(0, 512) }
+                        : {}),
                     ...(result.status === "resolved"
                         ? {
                               candidateId: result.candidateId,
-                              fit: result.fit,
                               choiceProbability: result.choiceProbability,
                           }
                         : {}),

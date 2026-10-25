@@ -53,7 +53,8 @@ function prepareEntry(
     number: number,
     direction: CrosswordDirection,
 ) {
-    if (!state.root.matches(".xlv-frame") || !/^[a-zA-Z]+$/.test(value))
+    const root = binding.node.closest(".xlv-frame");
+    if (!root || !state.root.contains(root) || !/^[a-zA-Z]+$/.test(value))
         throw new Error(
             "unsupported: verified entry requires rectangular Exolve and original letters only",
         );
@@ -63,7 +64,7 @@ function prepareEntry(
     const group = binding.node.closest("[id$='-across'],[id$='-down']");
     if (!group?.id.endsWith(`-${direction}`))
         throw new Error("unsupported: clue direction mapping");
-    const cells = cellsOf(state.root);
+    const cells = cellsOf(root);
     if (
         new Set(cells.map((cell) => `${cell.x},${cell.y}`)).size !==
         cells.length
@@ -106,17 +107,17 @@ function prepareEntry(
         throw new Error("unsupported: answer length mismatch");
     if (light.some((cell, i) => cell.letter && cell.letter !== normalized[i]))
         throw new Error("crossing_conflict: existing letters protected");
-    const inputs = state.root.querySelectorAll<HTMLInputElement>(
+    const inputs = root.querySelectorAll<HTMLInputElement>(
         "input.xlv-grid-input",
     );
-    const wrappers = state.root.querySelectorAll<HTMLElement>(
+    const wrappers = root.querySelectorAll<HTMLElement>(
         ".xlv-grid-input-wrapper",
     );
     if (inputs.length !== 1 || wrappers.length !== 1)
         throw new Error("unsupported: Exolve input mapping");
     const input = inputs[0];
     const wrapper = wrappers[0];
-    return { cells, light, normalized, input, wrapper };
+    return { root, cells, light, normalized, input, wrapper };
 }
 
 function validateGrid(root: Element, cells: Cell[]): void {
@@ -184,7 +185,7 @@ export function enterExolve(
     direction: CrosswordDirection,
     guard: () => void,
 ): { entered: number; verified: true } {
-    const { cells, light, normalized, input, wrapper } = prepareEntry(
+    const { root, cells, light, normalized, input, wrapper } = prepareEntry(
         state,
         binding,
         value,
@@ -213,7 +214,7 @@ export function enterExolve(
         );
         for (const [index, cell] of light.entries()) {
             guard();
-            validateGrid(state.root, cells);
+            validateGrid(root, cells);
             validateFocus(binding, input, wrapper, cell);
             input.value = normalized[index];
             input.dispatchEvent(

@@ -16,6 +16,7 @@ import {
 } from "../../contentScript/webAgentStorage";
 import { extractCrosswordSchema } from "../webAgentRpc";
 import { crosswordBridge, getCrosswordMode } from "./decisionBridge";
+import { CrosswordSentinels } from "../../contentScript/crossword/sentinels";
 
 declare global {
     interface Window {
@@ -80,9 +81,7 @@ type GetClueValue = {
 };
 
 interface CrosswordObserverState {
-    observer: MutationObserver;
-    monitoredSelectors: string[];
-    monitoredTexts: string[];
+    observer: CrosswordSentinels;
     debounceTimer: number | null;
 }
 
@@ -95,6 +94,12 @@ export class CrosswordWebAgent implements WebAgent {
     private context: WebAgentContext | null = null;
     private registered = false;
     private legacyLoading: Promise<void> | null = null;
+
+    async initializeOnDemand(context: WebAgentContext): Promise<void> {
+        if ((await getCrosswordMode()) !== "decision") return;
+        this.context = context;
+        await this.registerWithTypeAgent();
+    }
 
     async initialize(context: WebAgentContext): Promise<void> {
         const initStart = performance.now();
@@ -436,7 +441,6 @@ export class CrosswordWebAgent implements WebAgent {
         ];
         const sampleClues = allClues.slice(0, 5);
         const selectors = sampleClues.map((c) => c.selector).filter(Boolean);
-        const texts = sampleClues.map((c) => c.text);
 
         if (selectors.length === 0) {
             console.log(
@@ -450,83 +454,23 @@ export class CrosswordWebAgent implements WebAgent {
             selectors,
         );
 
-        const observer = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                if (this.hasRelevantChange(mutation, selectors, texts)) {
-                    this.handleClueChange();
-                    break;
-                }
-            }
-        });
+        const observer = new CrosswordSentinels(() => this.handleClueChange());
 
         selectors.forEach((selector) => {
             const element = document.querySelector(selector);
             if (element) {
-                observer.observe(element, {
-                    characterData: true,
-                    childList: true,
-                    subtree: true,
-                });
-
-                if (element.parentElement) {
-                    observer.observe(element.parentElement, {
-                        childList: true,
-                    });
-                }
+                observer.watch(element);
             }
         });
 
         this.observerState = {
             observer,
-            monitoredSelectors: selectors,
-            monitoredTexts: texts,
             debounceTimer: null,
         };
 
         console.log(
             "[CrosswordWebAgent] Mutation observer set up successfully",
         );
-    }
-
-    private hasRelevantChange(
-        mutation: MutationRecord,
-        selectors: string[],
-        texts: string[],
-    ): boolean {
-        if (mutation.type === "characterData") {
-            const newText = mutation.target.textContent || "";
-            return !texts.some((text) => newText.includes(text));
-        }
-
-        if (mutation.type === "childList") {
-            for (const node of Array.from(mutation.removedNodes)) {
-                if (node instanceof Element) {
-                    for (const selector of selectors) {
-                        if (
-                            node.matches(selector) ||
-                            node.querySelector(selector)
-                        ) {
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            for (const node of Array.from(mutation.addedNodes)) {
-                if (node instanceof Element) {
-                    for (const selector of selectors) {
-                        if (
-                            node.matches(selector) ||
-                            node.querySelector(selector)
-                        ) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-
-        return false;
     }
 
     private handleClueChange(): void {
@@ -536,14 +480,14 @@ export class CrosswordWebAgent implements WebAgent {
             clearTimeout(this.observerState.debounceTimer);
         }
 
-        this.observerState.debounceTimer = window.setTimeout(async () => {
+        const state = this.observerState;
+        state.debounceTimer = window.setTimeout(async () => {
+            state.debounceTimer = null;
             console.log(
                 "[CrosswordWebAgent] Clue change detected, refreshing schema only",
             );
 
             await this.refreshSchemaOnly();
-
-            this.observerState!.debounceTimer = null;
         }, 500);
     }
 
@@ -580,7 +524,7 @@ export class CrosswordWebAgent implements WebAgent {
     private disconnectObserver(): void {
         if (this.observerState?.observer) {
             console.log("[CrosswordWebAgent] Disconnecting mutation observer");
-            this.observerState.observer.disconnect();
+            this.observerState.observer.dispose();
 
             if (this.observerState.debounceTimer) {
                 clearTimeout(this.observerState.debounceTimer);

@@ -68,4 +68,17 @@ describe("crossword DOM activation", () => {
         expect(loader.getActiveWebAgent()).toBe(crossword);
         expect(crossword.initialize).toHaveBeenCalledTimes(1);
     });
+    test("on-demand crossword actions do not steal an unrelated site's agent", async () => {
+        const loader = await import(
+            "../../src/extension/webagent/webAgentLoader"
+        );
+        const generic = agent("webflow", [/.*/]);
+        loader.registerWebAgent(generic);
+        const crossword = agent("crossword", []);
+        crossword.initializeOnDemand = jest.fn().mockResolvedValue(undefined);
+        await loader.registerOnDemandWebAgent(crossword);
+        expect(crossword.initializeOnDemand).toHaveBeenCalledTimes(1);
+        expect(crossword.initialize).not.toHaveBeenCalled();
+        expect(loader.getActiveWebAgent()).toBe(generic);
+    });
 });

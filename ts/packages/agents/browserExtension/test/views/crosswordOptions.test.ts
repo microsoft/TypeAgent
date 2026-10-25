@@ -92,6 +92,44 @@ describe("Crossword options lifecycle", () => {
         );
         expect(invoke).toHaveBeenCalledTimes(2);
         expect(chrome.storage.sync.set).not.toHaveBeenCalled();
+        const strategy = document.getElementById(
+            "crosswordDecisionStrategy",
+        ) as HTMLSelectElement;
+        expect(strategy.value).toBe("hybrid");
+        expect(strategy.disabled).toBe(true);
+    });
+
+    test("Hybrid2 is opt-in, enabled within Decision mode and persists through save", async () => {
+        stored.crosswordMode = "decision";
+        await page.initialize();
+        const strategy = document.getElementById(
+            "crosswordDecisionStrategy",
+        ) as HTMLSelectElement;
+        expect(strategy.disabled).toBe(false);
+        expect(strategy.value).toBe("hybrid");
+        strategy.value = "hybrid2";
+        await save();
+        expect(stored.crosswordDecisionStrategy).toBe("hybrid2");
+        expect(invoke).toHaveBeenCalledWith("settingsUpdated", {
+            settings: expect.objectContaining({
+                crosswordMode: "decision",
+                crosswordDecisionStrategy: "hybrid2",
+            }),
+        });
+    });
+
+    test("invalid saved strategy warns, resets and notifies instead of silently selecting Hybrid2", async () => {
+        stored.crosswordDecisionStrategy = "invalid";
+        const warning = jest
+            .spyOn(console, "warn")
+            .mockImplementation(() => {});
+        await page.initialize();
+        expect(stored.crosswordDecisionStrategy).toBe("hybrid");
+        expect(warning).toHaveBeenCalled();
+        expect(
+            document.getElementById("saveStatus")?.textContent ??
+                document.body.textContent,
+        ).toContain("reset to Hybrid");
     });
 
     test("keeps unavailable Decision selected despite generic AI availability and saves it", async () => {
