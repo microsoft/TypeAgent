@@ -140,6 +140,44 @@ test("actual socket correlation isolates simultaneous frames/documents and overw
     expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
 });
 
+test("body-only upgrades retain a validated literal body through private forwarding", async () => {
+    const params = { ...request(), includeBody: true, bodyCandidateId: "c1" };
+    const pending = forwardCrosswordDecisionRpc(
+        "resolveCrosswordClue",
+        params,
+        origin,
+    );
+    const body = { start: 3, end: 7, text: "Clue" };
+    socket.reply(socket.sent[0].params.id, {
+        ...response(params),
+        body: { ...body, arbitrary: "not forwarded" },
+    });
+    expect((await pending).body).toEqual(body);
+    expect(socket.sent[0].params.params.bodyCandidateId).toBe("c1");
+    expect(socket.sent[0].params.params.includeBody).toBe(true);
+});
+
+test("requested bodies must be present and match the selected candidate exactly", async () => {
+    for (const body of [
+        undefined,
+        { start: 3, end: 7, text: "Fake" },
+        { start: -1, end: 7, text: "Clue" },
+        { start: 3, end: 99, text: "Clue" },
+    ]) {
+        const params = { ...request(), includeBody: true };
+        const pending = forwardCrosswordDecisionRpc(
+            "resolveCrosswordClue",
+            params,
+            origin,
+        );
+        socket.reply(socket.sent.at(-1)!.params.id, {
+            ...response(params),
+            body,
+        });
+        expect((await pending).status).toBe("unavailable");
+    }
+});
+
 test("stale identity, malformed replies and invented candidates cannot authorize a result", async () => {
     for (const result of [
         { ...response(request()), revision: 8 },

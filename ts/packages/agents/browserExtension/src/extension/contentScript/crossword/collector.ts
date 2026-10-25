@@ -328,6 +328,19 @@ export function collect(
             id,
             text,
             context,
+            ...(textMode === "subtree"
+                ? {
+                      bodyTexts: Array.from(
+                          new Set(
+                              Array.from(node.querySelectorAll("*"))
+                                  .map((child) => readText(child))
+                                  .filter(
+                                      (part) => part && text.includes(part),
+                                  ),
+                          ),
+                      ),
+                  }
+                : {}),
             regionId: idOf(regionIds, region, "r"),
             scopeId: idOf(scopeIds, scope, "p"),
             ...(role ? { role } : {}),

@@ -270,7 +270,12 @@ async function runChromiumScenario(
                             return {snapshotId,documentToken,puzzleId,revision,modeGeneration,
                                 configGeneration:"chromium-fixture",
                                 status: matches.length === 1 ? "resolved" : matches.length ? "ambiguous" : "no_fit",
-                                ...(matches.length === 1 ? {candidateId:matches[0].id} : {})};
+                                ...(matches.length === 1 ? {candidateId:matches[0].id,
+                                    ...(message.params.includeBody ? {body:(() => {
+                                        const text=matches[0].text;
+                                        const start=/^\\d+\\s+/.exec(text)[0].length;
+                                        return {start,end:text.length,text:text.slice(start)};
+                                    })()} : {})} : {})};
                         },
                         onMessage: {addListener: listener => state.listeners.push(listener),
                             removeListener: listener => state.listeners = state.listeners.filter(item => item !== listener)},
@@ -431,7 +436,7 @@ async function runChromiumScenario(
             text: "Device producing a concentrated beam of light (5)",
         });
         if (live)
-            assert.equal(live.nativeCalls(), strategy === "hybrid2" ? 2 : 1);
+            assert.equal(live.nativeCalls(), strategy === "hybrid2" ? 3 : 2);
         await puzzle.evaluate(() => {
             const publisher = document.createElement("aside");
             publisher.textContent = "Progressively loaded publisher content";
@@ -472,8 +477,8 @@ async function runChromiumScenario(
         if (live) {
             assert.equal(
                 live.nativeCalls(),
-                strategy === "hybrid2" ? 3 : 2,
-                "Hybrid2 discovers once; each different clue uses one target call and warm bindings require none",
+                strategy === "hybrid2" ? 4 : 3,
+                "Hybrid2 discovers once; read extracts a body, entry only selects a target, and warm bindings require none",
             );
             if (strategy === "hybrid2")
                 assert.equal(

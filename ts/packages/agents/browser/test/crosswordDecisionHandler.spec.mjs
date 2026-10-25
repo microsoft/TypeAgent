@@ -11,6 +11,8 @@ import {
     CrosswordDecisionHandler,
     buildCrosswordDecisionRequest,
     countCrosswordDecisionTokens,
+    crosswordBodyOptions,
+    buildCrosswordBodyRequest,
 } from "../dist/agent/crosswordDecisionHandler.mjs";
 
 function request(overrides = {}) {
@@ -32,6 +34,134 @@ function request(overrides = {}) {
         ...overrides,
     };
 }
+
+function bodyAnswer(native, body) {
+    const criteria = native.questions.body.criteria;
+    const choice =
+        Object.entries(criteria).find(
+            ([, description]) =>
+                description === `Exact clue body: ${JSON.stringify(body)}`,
+        )?.[0] ?? "no_fit";
+    return answer(choice, 1, "body", Object.keys(criteria));
+}
+
+test("body extraction is opt-in and uses one additional Decision call", async () => {
+    const s = setup(async (native) =>
+        native.questions.body ? bodyAnswer(native, "Clue text") : answer(),
+    );
+    const params = request({ includeBody: true });
+    const result = await s.handler.resolve("client", "read", params);
+    assert.equal(result.status, "resolved");
+    assert.deepEqual(result.body, { start: 3, end: 12, text: "Clue text" });
+    assert.equal(s.calls(), 2);
+    const entry = await s.handler.resolve(
+        "client",
+        "entry",
+        request({ snapshot: params.snapshot }),
+    );
+    assert.equal(entry.body, undefined);
+    assert.equal(s.calls(), 3);
+});
+
+test("a cached entry target can request just its body without reselection", async () => {
+    const s = setup(async (native) => {
+        assert.equal(native.questions.target, undefined);
+        return bodyAnswer(native, "Clue text");
+    });
+    const result = await s.handler.resolve(
+        "client",
+        "body",
+        request({
+            includeBody: true,
+            bodyCandidateId: "c1",
+        }),
+    );
+    assert.equal(result.body.text, "Clue text");
+    assert.equal(s.calls(), 1);
+});
+
+test("structural child texts offer a full body before trailing UI without label parsing", async () => {
+    const params = request({ includeBody: true });
+    params.snapshot.candidates[0] = {
+        id: "c1",
+        text: "17. Wind instrument | Answer length: 5 | Selected",
+        context: "Across",
+        bodyTexts: ["17.", "Wind instrument", "Answer length: 5"],
+    };
+    const s = setup(async (native) =>
+        native.questions.body
+            ? bodyAnswer(native, "Wind instrument")
+            : answer(),
+    );
+    const result = await s.handler.resolve("client", "read", params);
+    assert.equal(result.body.text, "Wind instrument");
+    assert.equal(
+        params.snapshot.candidates[0].text.slice(
+            result.body.start,
+            result.body.end,
+        ),
+        result.body.text,
+    );
+});
+
+test("suffix candidates cover the whole UTF-16 string without splitting emoji", () => {
+    const candidate = {
+        id: "c",
+        text: "💡 17. 1984 novelist",
+        context: "Across",
+    };
+    const options = crosswordBodyOptions(candidate);
+    assert.ok(options.some((option) => option.text === "1984 novelist"));
+    assert.ok(options.every((option) => option.start !== 1));
+    const native = buildCrosswordBodyRequest(candidate);
+    assert.deepEqual(Object.keys(native.questions), ["body"]);
+    assert.equal(JSON.stringify(native).includes("selector"), false);
+});
+
+test("long body options batch rather than truncating the first 253 positions", async () => {
+    const params = request({ includeBody: true, bodyCandidateId: "c1" });
+    params.snapshot.candidates[0].text = "x".repeat(480) + " Final clue";
+    const s = setup(async (native) => bodyAnswer(native, "Final clue"), {
+        timeoutMs: 10_000,
+    });
+    const result = await s.handler.resolve("client", "body", params);
+    assert.equal(result.status, "resolved");
+    assert.equal(result.body.text, "Final clue");
+    assert.ok(result.body.start > 252);
+    assert.ok(s.calls() > 1);
+});
+
+test("body provider errors cannot fall back to labelled text", async () => {
+    const s = setup(async (native) =>
+        native.questions.body ? { success: false, code: "provider" } : answer(),
+    );
+    const result = await s.handler.resolve(
+        "client",
+        "read",
+        request({ includeBody: true }),
+    );
+    assert.equal(result.status, "provider_error");
+    assert.equal(result.body, undefined);
+});
+
+test("unissued body targets and ungrounded structural strings are rejected", async () => {
+    const s = setup();
+    const badTarget = request({
+        includeBody: true,
+        bodyCandidateId: "invented",
+    });
+    assert.equal(
+        (await s.handler.resolve("client", "bad", badTarget)).status,
+        "unsupported",
+    );
+    const badText = request({ includeBody: true });
+    badText.snapshot.candidates[0].bodyTexts = ["not in original text"];
+    assert.equal(
+        (await s.handler.resolve("client", "bad-text", badText)).status,
+        "unsupported",
+    );
+    assert.equal(s.calls(), 0);
+});
 
 function answer(
     choice = "c1",
@@ -1502,7 +1632,7 @@ test("shared identity contract normalizes only observable labels and nearest dir
                 ),
             ),
         );
-    assert.equal(CROSSWORD_DECISION_LIMITS.policyVersion, 11);
+    assert.equal(CROSSWORD_DECISION_LIMITS.policyVersion, 12);
     assert.equal(CROSSWORD_DECISION_LIMITS.collectorVersion, 2);
 });
 

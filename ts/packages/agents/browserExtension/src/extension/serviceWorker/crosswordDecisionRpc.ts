@@ -3,6 +3,7 @@
 
 import {
     CROSSWORD_DECISION_LIMITS,
+    isCrosswordClueBody,
     type CrosswordDecisionCapabilities,
     type CrosswordRpcOrigin,
     type ResolveCrosswordClueRequest,
@@ -16,6 +17,21 @@ type Pending = {
     cancel: () => void;
 };
 const pending = new Map<string, Pending>();
+
+function validatedBody(value: unknown, source?: string) {
+    if (source === undefined || !isCrosswordClueBody(value, source))
+        return undefined;
+    return { start: value.start, end: value.end, text: value.text };
+}
+
+function validResolvedSelection(
+    status: string,
+    issued: boolean,
+    includeBody: boolean | undefined,
+    body: ResolveCrosswordClueResponse["body"],
+): boolean {
+    return status !== "resolved" || (issued && (!includeBody || !!body));
+}
 
 function capabilitiesResponse(result: {
     available?: unknown;
@@ -244,13 +260,21 @@ export async function forwardCrosswordDecisionRpc(
                     "cancelled",
                     "provider_error",
                 ];
+                const candidate = params!.snapshot.candidates.find(
+                    (entry) => entry.id === result.candidateId,
+                );
+                const body = params!.includeBody
+                    ? validatedBody(result.body, candidate?.text)
+                    : undefined;
                 if (
                     !statuses.includes(result.status) ||
                     typeof result.configGeneration !== "string" ||
-                    (result.status === "resolved" &&
-                        !params!.snapshot.candidates.some(
-                            (c) => c.id === result.candidateId,
-                        ))
+                    !validResolvedSelection(
+                        result.status,
+                        !!candidate,
+                        params!.includeBody,
+                        body,
+                    )
                 ) {
                     finish(failure("unavailable"));
                     return;
@@ -271,6 +295,7 @@ export async function forwardCrosswordDecisionRpc(
                         ? {
                               candidateId: result.candidateId,
                               choiceProbability: result.choiceProbability,
+                              ...(body ? { body } : {}),
                           }
                         : {}),
                 });

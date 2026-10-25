@@ -7,6 +7,7 @@ import {
     type RuntimeCall,
 } from "../../src/extension/contentScript/crossword/decisionHost";
 import { enterExolve } from "../../src/extension/contentScript/crossword/exolveEntry";
+import { enterCrossword } from "../../src/extension/contentScript/crossword/entry";
 import type { ResolveCrosswordClueRequest } from "@typeagent/browser-control-rpc/crosswordDecisionTypes";
 import { initializeCrosswordBridge } from "../../src/extension/contentScript/crossword/bridge";
 
@@ -100,6 +101,49 @@ describe("narrow isolated-world window bridge", () => {
     });
 });
 
+describe("Decision body bindings", () => {
+    test("an entry-only target upgrades to a body without target reselection", async () => {
+        fixture();
+        const mock = runtimeMock();
+        const host = new CrosswordDecisionHost(mock.runtime);
+        await expect(host.enterText("ABC", 1, "across")).rejects.toThrow(
+            "verified entry requires",
+        );
+        const requests = () =>
+            mock.runtime.mock.calls
+                .map(([message]) => message)
+                .filter((message) => message.method === "resolveCrosswordClue");
+        expect(requests()[0].params.includeBody).toBeUndefined();
+        expect(await host.readClue(1, "across")).toEqual({
+            text: "Visible clue 1",
+        });
+        expect(requests()).toHaveLength(2);
+        expect(requests()[1].params).toMatchObject({
+            includeBody: true,
+            bodyCandidateId: "c0",
+        });
+        await host.readClue(1, "across");
+        expect(requests()).toHaveLength(2);
+        host.dispose();
+    });
+    test("a missing body does not return labelled text", async () => {
+        fixture();
+        const mock = runtimeMock();
+        mock.resolve(async (request) => ({
+            ...request.snapshot,
+            status: "resolved",
+            candidateId: "c0",
+            configGeneration: "config-1",
+            body: null,
+        }));
+        const host = new CrosswordDecisionHost(mock.runtime);
+        await expect(host.readClue(1, "across")).rejects.toThrow(
+            "invalid clue body binding",
+        );
+        host.dispose();
+    });
+});
+
 function fixture(count = 16): void {
     document.body.innerHTML = `<section role="group" aria-roledescription="crossword">
         <h2>Puzzle</h2><div aria-label="Across"><h3>Across</h3><ul>${Array.from(
@@ -126,12 +170,33 @@ function runtimeMock() {
         if (data.type === "cancelCrosswordDecisionRpc") return {};
         if (data.method === "getCrosswordDecisionCapabilities")
             return { available: true, configGeneration: config };
-        if (resolver) return resolver(data.params);
+        if (resolver) {
+            const result = await resolver(data.params);
+            if (
+                result &&
+                typeof result === "object" &&
+                "status" in result &&
+                result.status === "resolved" &&
+                "candidateId" in result &&
+                !("body" in result) &&
+                data.params.includeBody
+            ) {
+                const candidate = data.params.snapshot.candidates.find(
+                    (entry) => entry.id === result.candidateId,
+                );
+                if (candidate)
+                    return { ...result, body: fixtureBody(candidate.text) };
+            }
+            return result;
+        }
         return {
             ...data.params.snapshot,
             configGeneration: config,
             status: "resolved",
             candidateId: "c0",
+            ...(data.params.includeBody
+                ? { body: fixtureBody(data.params.snapshot.candidates[0].text) }
+                : {}),
         };
     });
     return {
@@ -149,6 +214,11 @@ function runtimeMock() {
             resolver = value;
         },
     };
+}
+
+function fixtureBody(text: string) {
+    const start = /^\d+[.]?\s+/.exec(text)?.[0].length ?? 0;
+    return { start, end: text.length, text: text.slice(start) };
 }
 
 beforeAll(() => {
@@ -374,6 +444,16 @@ describe("isolated decision lifecycle", () => {
                 "CATZ",
             );
         });
+        test("a Generative clue-text selector uses the same verified Exolve input path", () => {
+            const { state, binding, letters } = engine();
+            const node = binding.node.querySelector(".xlv-clue-text")!;
+            expect(
+                enterCrossword(state, { node }, "cat", 1, "across", () => {}),
+            ).toEqual({ entered: 3, verified: true });
+            expect(
+                [...letters].map((letter) => letter.textContent).join(""),
+            ).toBe("CATZ");
+        });
         test("conflicting crossings and unsupported lengths cause no typing", () => {
             const { state, binding, input, letters } = engine();
             letters[1].textContent = "X";
@@ -464,9 +544,7 @@ describe("isolated decision lifecycle", () => {
         document.querySelector("li:last-child")!.remove();
         document.querySelector("aside p")!.textContent = "Another update";
         expect(await host.capture()).toEqual(snapshot);
-        expect((await host.readClue(1, "across")).text).toBe(
-            "1 Visible clue 1",
-        );
+        expect((await host.readClue(1, "across")).text).toBe("Visible clue 1");
         expect(matches(mock)).toHaveLength(1);
     });
     test("original node handles survive selector drift and changed layout metadata", async () => {
@@ -480,9 +558,7 @@ describe("isolated decision lifecycle", () => {
         expect(document.querySelector(original.selector)).not.toBe(
             original.node,
         );
-        expect((await host.readClue(1, "across")).text).toBe(
-            "1 Visible clue 1",
-        );
+        expect((await host.readClue(1, "across")).text).toBe("Visible clue 1");
         expect(matches(mock)).toHaveLength(1);
     });
     test("unrelated DOM churn during inference does not veto an issued selection", async () => {
@@ -499,9 +575,7 @@ describe("isolated decision lifecycle", () => {
                 configGeneration: "config-1",
             };
         });
-        expect((await host.readClue(1, "across")).text).toBe(
-            "1 Visible clue 1",
-        );
+        expect((await host.readClue(1, "across")).text).toBe("Visible clue 1");
         expect(matches(mock)).toHaveLength(1);
     });
     test.each(["change", "remove", "replace"])(
@@ -674,7 +748,7 @@ describe("isolated decision lifecycle", () => {
                 (entry) => entry.text === "1 Beam of light",
             )?.id,
         }));
-        expect((await host.readClue(1, "across")).text).toBe("1 Beam of light");
+        expect((await host.readClue(1, "across")).text).toBe("Beam of light");
     });
     test("same number in Across and Down and other Across numbers do not conflict", async () => {
         document
@@ -722,10 +796,11 @@ describe("isolated decision lifecycle", () => {
             configGeneration: "config-1",
             clueNumber: 1,
             clueDirection: "across" as const,
+            body: fixtureBody(snapshot.candidates[0].text),
         };
         await expect(host.executeCaptured("readClue", params)).resolves.toEqual(
             {
-                text: "1 Visible clue 1",
+                text: "Visible clue 1",
             },
         );
         document.querySelector("li")!.textContent = "1 Changed";

@@ -17,6 +17,11 @@ import {
 import { extractCrosswordSchema } from "../webAgentRpc";
 import { crosswordBridge, getCrosswordMode } from "./decisionBridge";
 import { CrosswordSentinels } from "../../contentScript/crossword/sentinels";
+import {
+    enterCrossword,
+    hasVerifiedCrosswordEntry,
+    typeCrosswordKey,
+} from "../../contentScript/crossword/entry";
 
 declare global {
     interface Window {
@@ -197,7 +202,7 @@ export class CrosswordWebAgent implements WebAgent {
             );
 
             await context.notify(
-                `The crossword is fully loaded and ready for interaction with ${acrossCount} across and ${downCount} down clues (Generative mode, legacy entry baseline without verified grid readback). Try asking questions like "What is the clue for 1 across?" or "Enter 'Foo' in the answer for 2 down."`,
+                `The crossword is fully loaded and ready for interaction with ${acrossCount} across and ${downCount} down clues (Generative mode; verified entry on supported Exolve, PZZL and Universal grids). Try asking questions like "What is the clue for 1 across?" or "Enter 'Foo' in the answer for 2 down."`,
                 notificationId,
             );
 
@@ -378,12 +383,34 @@ export class CrosswordWebAgent implements WebAgent {
             throw new Error(`Clue ${clueNumber} ${clueDirection} not found`);
         }
 
+        const nodes = document.querySelectorAll(clue.selector);
+        if (nodes.length !== 1)
+            throw new Error("Crossword clue selector must match one element");
+        const node = nodes[0];
+        if (hasVerifiedCrosswordEntry(node)) {
+            enterCrossword(
+                { root: document.body },
+                { node },
+                value,
+                clueNumber,
+                clueDirection,
+                () => {
+                    if (
+                        !node.isConnected ||
+                        document.querySelector(clue.selector) !== node
+                    )
+                        throw new Error("stale: selected clue detached");
+                },
+            );
+            return;
+        }
+
         await this.context.ui.clickOn(clue.selector);
         await new Promise((resolve) => setTimeout(resolve, 100));
 
         const textUpper = String(value).toUpperCase();
         for (const char of textUpper) {
-            await this.typeKey(char);
+            typeCrosswordKey(char);
             await new Promise((resolve) => setTimeout(resolve, 50));
         }
 
@@ -532,41 +559,6 @@ export class CrosswordWebAgent implements WebAgent {
 
             this.observerState = null;
         }
-    }
-
-    private async typeKey(char: string): Promise<void> {
-        const keydownEvent = new KeyboardEvent("keydown", {
-            key: char,
-            code: `Key${char.toUpperCase()}`,
-            charCode: char.charCodeAt(0),
-            keyCode: char.charCodeAt(0),
-            which: char.charCodeAt(0),
-            bubbles: true,
-            cancelable: true,
-        });
-        document.activeElement?.dispatchEvent(keydownEvent);
-
-        const keypressEvent = new KeyboardEvent("keypress", {
-            key: char,
-            code: `Key${char.toUpperCase()}`,
-            charCode: char.charCodeAt(0),
-            keyCode: char.charCodeAt(0),
-            which: char.charCodeAt(0),
-            bubbles: true,
-            cancelable: true,
-        });
-        document.activeElement?.dispatchEvent(keypressEvent);
-
-        const keyupEvent = new KeyboardEvent("keyup", {
-            key: char,
-            code: `Key${char.toUpperCase()}`,
-            charCode: char.charCodeAt(0),
-            keyCode: char.charCodeAt(0),
-            which: char.charCodeAt(0),
-            bubbles: true,
-            cancelable: true,
-        });
-        document.activeElement?.dispatchEvent(keyupEvent);
     }
 
     handleContinuation(

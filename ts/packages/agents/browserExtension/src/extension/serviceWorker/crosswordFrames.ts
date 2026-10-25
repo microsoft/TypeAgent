@@ -30,8 +30,11 @@ type Owner = { inventory: Inventory; candidateId: string };
 type Binding = {
     signature: string;
     owner: Owner;
+    snapshot: CrosswordSnapshot;
+    candidateId: string;
     expires: number;
     tabId: number;
+    body?: ResolveCrosswordClueResponse["body"];
 };
 type RegionInventory = ReturnType<typeof merge> & {
     signature: string;
@@ -181,6 +184,34 @@ async function frameMessage(
     }
 }
 
+async function executeBinding(
+    binding: Binding,
+    action: Action,
+    origin: CrosswordRpcOrigin,
+    configGeneration: string,
+): Promise<unknown> {
+    const response = await frameMessage(
+        origin.tabId,
+        binding.owner.inventory.frame,
+        {
+            type:
+                action.method === "readClue"
+                    ? "crosswordFrameRead"
+                    : "crosswordFrameEnter",
+            params: {
+                ...action.params,
+                snapshotId: binding.owner.inventory.snapshot.snapshotId,
+                candidateId: binding.owner.candidateId,
+                configGeneration,
+                ...(action.method === "readClue" ? { body: binding.body } : {}),
+            },
+        },
+    );
+    if (!Object.prototype.hasOwnProperty.call(response, "result"))
+        fail("unsupported: missing crossword frame result");
+    return response.result;
+}
+
 function validSnapshot(value: unknown): value is CrosswordSnapshot {
     if (!value || typeof value !== "object") return false;
     const snapshot = value as CrosswordSnapshot;
@@ -273,6 +304,9 @@ function merge(inventories: Inventory[]): {
                 id,
                 text: candidate.text,
                 context: candidate.context,
+                ...(candidate.bodyTexts
+                    ? { bodyTexts: candidate.bodyTexts }
+                    : {}),
                 ...(candidate.role === undefined
                     ? {}
                     : { role: candidate.role }),
@@ -430,6 +464,9 @@ export async function routeCrosswordFrameAction(
                     clueNumber: action.params.clueNumber,
                     clueDirection: action.params.clueDirection,
                     strategy,
+                    ...(action.method === "readClue"
+                        ? { includeBody: true }
+                        : {}),
                 },
                 origin,
             );
@@ -444,9 +481,38 @@ export async function routeCrosswordFrameAction(
             binding = {
                 signature,
                 owner,
+                snapshot,
+                candidateId: response.candidateId!,
                 tabId: origin.tabId,
                 expires: snapshot.createdAt + limits.snapshotLifetimeMs,
+                body: response.body,
             };
+            if (action.method === "readClue" && !binding.body)
+                fail("unsupported: missing clue body binding");
+        } else if (action.method === "readClue" && !binding.body) {
+            const owner = binding.owner;
+            const snapshot = binding.snapshot;
+            operation.snapshotId = snapshot.snapshotId;
+            const response = await forwardCrosswordDecisionRpc(
+                "resolveCrosswordClue",
+                {
+                    snapshot,
+                    clueNumber: action.params.clueNumber,
+                    clueDirection: action.params.clueDirection,
+                    includeBody: true,
+                    bodyCandidateId: binding.candidateId,
+                },
+                origin,
+            );
+            active();
+            selectedOwner(
+                response,
+                snapshot,
+                new Map([[binding.candidateId, owner]]),
+                capability.configGeneration,
+            );
+            if (!response.body) fail("unsupported: missing clue body binding");
+            binding = { ...binding, body: response.body };
         }
         const after = await forwardCrosswordDecisionRpc(
             "getCrosswordDecisionCapabilities",
@@ -463,25 +529,13 @@ export async function routeCrosswordFrameAction(
             fail("cancelled: crossword mode or configuration changed");
         active();
         // No retry: a frame may have applied an entry even if its reply is lost.
-        const response = await frameMessage(
-            origin.tabId,
-            binding.owner.inventory.frame,
-            {
-                type:
-                    action.method === "readClue"
-                        ? "crosswordFrameRead"
-                        : "crosswordFrameEnter",
-                params: {
-                    ...action.params,
-                    snapshotId: binding.owner.inventory.snapshot.snapshotId,
-                    candidateId: binding.owner.candidateId,
-                    configGeneration: capability.configGeneration,
-                },
-            },
+        const result = await executeBinding(
+            binding,
+            action,
+            origin,
+            capability.configGeneration,
         );
         active();
-        if (!Object.prototype.hasOwnProperty.call(response, "result"))
-            fail("unsupported: missing crossword frame result");
         bindings.delete(key);
         if (bindings.size >= 128)
             bindings.delete(bindings.keys().next().value!);
@@ -494,7 +548,7 @@ export async function routeCrosswordFrameAction(
                 );
             regionInventories.set(inventoryKey, regionInventory);
         }
-        return { result: response.result };
+        return { result };
     };
     try {
         return await Promise.race([run(), cancellation]);

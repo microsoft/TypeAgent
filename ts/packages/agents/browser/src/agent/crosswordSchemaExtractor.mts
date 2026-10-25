@@ -141,7 +141,7 @@ async function extractCluesWithSelectors(
         },
         {
             type: "text",
-            text: `Use the layout information provided to generate a "Crossword" response using the typescript schema below. This MUST include all the clues in the crossword.\n'''\n${CROSSWORD_SCHEMA}\n'''\nThe following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:`,
+            text: `Use the layout information provided to generate a "Crossword" response using the typescript schema below. This MUST include all the clues in the crossword. For each cssSelector, select the actual interactive clue row or clue text in the main Across or Down clue list: clicking it must select that clue in the grid. Do not select duplicate clues in notes, annotations, tooltips, print/export views, hidden panels, or instructions. Prefer the main clue list's interactive element over another element whose title attribute happens to contain the same clue. Use existing stable IDs and descendant selectors. Do not depend on tbody wrappers: HTML serialization may insert them even when they are absent from the live DOM. For example, prefer "#table-id tr:nth-child(1) td:nth-child(2)" over a selector containing tbody.\n'''\n${CROSSWORD_SCHEMA}\n'''\nThe following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:`,
         },
     ];
 

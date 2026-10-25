@@ -47,8 +47,8 @@ function cellsOf(root: Element): Cell[] {
 }
 
 function prepareEntry(
-    state: Collected,
-    binding: CandidateNode,
+    state: Pick<Collected, "root">,
+    binding: Pick<CandidateNode, "node">,
     value: string,
     number: number,
     direction: CrosswordDirection,
@@ -138,7 +138,7 @@ function validateGrid(root: Element, cells: Cell[]): void {
 }
 
 function validateFocus(
-    binding: CandidateNode,
+    binding: Pick<CandidateNode, "node">,
     input: HTMLInputElement,
     wrapper: HTMLElement,
     cell: Cell,
@@ -178,8 +178,8 @@ function verifyReadback(
 }
 
 export function enterExolve(
-    state: Collected,
-    binding: CandidateNode,
+    state: Pick<Collected, "root">,
+    binding: Pick<CandidateNode, "node">,
     value: string,
     number: number,
     direction: CrosswordDirection,

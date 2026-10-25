@@ -62,7 +62,7 @@ export const CROSSWORD_DECISION_LIMITS = {
     timeoutMs: 60_000,
     snapshotLifetimeMs: 120_000,
     collectorVersion: 2,
-    policyVersion: 11,
+    policyVersion: 12,
 } as const;
 
 export type CrosswordCandidate = {
@@ -72,7 +72,39 @@ export type CrosswordCandidate = {
     role?: string;
     regionId?: string;
     scopeId?: string;
+    bodyTexts?: string[];
 };
+
+export type CrosswordClueBody = { start: number; end: number; text: string };
+
+export function isCrosswordClueBody(
+    value: unknown,
+    source: string,
+): value is CrosswordClueBody {
+    if (!value || typeof value !== "object") return false;
+    const body = value as Partial<CrosswordClueBody>;
+    const boundary = (offset: number) =>
+        offset === 0 ||
+        offset === source.length ||
+        !(
+            source.charCodeAt(offset - 1) >= 0xd800 &&
+            source.charCodeAt(offset - 1) <= 0xdbff &&
+            source.charCodeAt(offset) >= 0xdc00 &&
+            source.charCodeAt(offset) <= 0xdfff
+        );
+    return (
+        typeof body.start === "number" &&
+        typeof body.end === "number" &&
+        Number.isSafeInteger(body.start) &&
+        Number.isSafeInteger(body.end) &&
+        body.start >= 0 &&
+        body.start < body.end &&
+        body.end <= source.length &&
+        boundary(body.start) &&
+        boundary(body.end) &&
+        body.text === source.slice(body.start, body.end)
+    );
+}
 
 export type CrosswordSnapshot = {
     snapshotId: string;
@@ -99,6 +131,8 @@ export type ResolveCrosswordClueRequest = {
     clueDirection: CrosswordDirection;
     origin?: CrosswordRpcOrigin;
     strategy?: CrosswordDecisionStrategy;
+    includeBody?: boolean;
+    bodyCandidateId?: string;
 };
 
 export type CrosswordDecisionStatus =
@@ -122,6 +156,7 @@ export type ResolveCrosswordClueResponse = {
     candidateId?: string;
     choiceProbability?: number;
     message?: string;
+    body?: CrosswordClueBody;
 };
 
 export type CrosswordDecisionCapabilities = {

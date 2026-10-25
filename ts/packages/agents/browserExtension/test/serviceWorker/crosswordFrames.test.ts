@@ -69,6 +69,15 @@ function snapshot(frame: number, texts: string[]): CrosswordSnapshot {
 }
 
 function accepted(request: ResolveCrosswordClueRequest) {
+    const candidate =
+        request.snapshot.candidates.find(
+            (entry) => entry.id === request.bodyCandidateId,
+        ) ??
+        request.snapshot.candidates.find((entry) =>
+            entry.text.startsWith(`${request.clueNumber}. `),
+        ) ??
+        request.snapshot.candidates.at(-1);
+    const start = candidate?.text.indexOf(". ") ?? -1;
     return {
         snapshotId: request.snapshot.snapshotId,
         documentToken: request.snapshot.documentToken,
@@ -77,10 +86,16 @@ function accepted(request: ResolveCrosswordClueRequest) {
         modeGeneration: request.snapshot.modeGeneration,
         configGeneration: config,
         status: "resolved",
-        candidateId:
-            request.snapshot.candidates.find((candidate) =>
-                candidate.text.startsWith(`${request.clueNumber}. `),
-            )?.id ?? request.snapshot.candidates.at(-1)?.id,
+        candidateId: candidate?.id,
+        ...(request.includeBody && candidate
+            ? {
+                  body: {
+                      start: start + 2,
+                      end: candidate.text.length,
+                      text: candidate.text.slice(start + 2),
+                  },
+              }
+            : {}),
     };
 }
 
@@ -203,6 +218,11 @@ test("unrelated parent plus clue child routes selected read/entry to owning docu
                     snapshotId: "snapshot-4",
                     candidateId: "c0",
                     configGeneration: config,
+                    body: {
+                        start: 3,
+                        end: 32,
+                        text: "A clue in the embedded puzzle",
+                    },
                 },
             },
         }),
@@ -211,6 +231,24 @@ test("unrelated parent plus clue child routes selected read/entry to owning docu
     expect(requests).toHaveLength(1);
     expect(executed[1].message.type).toBe("crosswordFrameEnter");
     expect(executed[1].message.params.value).toBe("ANSWER");
+});
+
+test("reading after entry upgrades the original merged binding without target reselection", async () => {
+    (getCrosswordDecisionStrategy as jest.Mock).mockResolvedValue("hybrid2");
+    await routeCrosswordFrameAction(enter, sender);
+    expect(requests).toHaveLength(1);
+    expect(requests[0].includeBody).toBeUndefined();
+    const original = requests[0].snapshot;
+    const selected = accepted(requests[0]).candidateId;
+    await routeCrosswordFrameAction(read, sender);
+    expect(requests).toHaveLength(2);
+    expect(requests[1].snapshot).toBe(original);
+    expect(requests[1].bodyCandidateId).toBe(selected);
+    expect(requests[1].includeBody).toBe(true);
+    expect(requests[1].snapshot.snapshotId).not.toBe("snapshot-4");
+    await routeCrosswordFrameAction(read, sender);
+    expect(requests).toHaveLength(2);
+    expect(executed).toHaveLength(3);
 });
 
 test("warm accepted inventory cache preserves inference, not a stale target or entry replay", async () => {

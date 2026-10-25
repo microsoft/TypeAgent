@@ -5,6 +5,8 @@ import {
     CROSSWORD_DECISION_LIMITS as limits,
     isCrosswordMode,
     isCrosswordDecisionStrategy,
+    isCrosswordClueBody,
+    type CrosswordClueBody,
     type CrosswordDecisionStrategy,
     type CrosswordMode,
     type CrosswordDirection,
@@ -15,12 +17,11 @@ import {
 import {
     collect,
     candidateText,
-    textOf,
     validateNode,
     type Collected,
     type CandidateNode,
 } from "./collector";
-import { enterExolve } from "./exolveEntry";
+import { enterCrossword } from "./entry";
 import { CrosswordSentinels } from "./sentinels";
 
 export type RuntimeCall = (message: unknown) => Promise<unknown>;
@@ -34,6 +35,7 @@ export class CrosswordDecisionHost {
     private config?: string;
     private bindings = new Map<string, CandidateNode>();
     private pending = new Map<string, Promise<CandidateNode>>();
+    private bodies = new Map<CandidateNode, CrosswordClueBody>();
     private readonly sentinels: CrosswordSentinels;
     private queue: Promise<unknown> = Promise.resolve();
 
@@ -56,6 +58,7 @@ export class CrosswordDecisionHost {
         this.sentinels.clear();
         this.bindings.clear();
         this.pending.clear();
+        this.bodies.clear();
         if (snapshotId)
             void this.runtime({
                 type: "cancelCrosswordDecisionRpc",
@@ -181,6 +184,7 @@ export class CrosswordDecisionHost {
             clueNumber: number;
             clueDirection: CrosswordDirection;
             value?: string;
+            body?: CrosswordClueBody;
         },
     ): Promise<unknown> {
         const run = async () => {
@@ -202,13 +206,14 @@ export class CrosswordDecisionHost {
             )
                 throw new Error("stale: captured crossword target changed");
             this.guard(state, binding);
-            if (method === "readClue") return this.readBinding(binding);
+            if (method === "readClue")
+                return this.readBinding(binding, params.body);
             if (method !== "enterText")
                 throw new Error(
                     "unsupported: unknown captured crossword action",
                 );
             this.validateAnswer(params.value);
-            return enterExolve(
+            return enterCrossword(
                 state,
                 binding,
                 params.value,
@@ -241,14 +246,21 @@ export class CrosswordDecisionHost {
             throw new Error("unsupported: invalid answer");
     }
 
-    private readBinding(binding: CandidateNode): { text: string } {
-        const clue = binding.node.querySelector(".xlv-clue-text");
-        return { text: clue ? textOf(clue) : candidateText(binding) };
+    private readBinding(
+        binding: CandidateNode,
+        body = this.bodies.get(binding),
+    ): { text: string } {
+        if (!isCrosswordClueBody(body, binding.text))
+            throw new Error(
+                "unsupported: missing or invalid clue body binding",
+            );
+        return { text: body.text };
     }
 
     private async resolve(
         number: number,
         direction: CrosswordDirection,
+        includeBody = false,
     ): Promise<{ state: Collected; binding: CandidateNode }> {
         this.validateRequest(number, direction);
         const capability = await this.capabilities();
@@ -261,21 +273,30 @@ export class CrosswordDecisionHost {
         const key = `${number}:${direction}`;
         this.guard(state);
         let binding = this.bindings.get(key);
-        if (!binding) {
-            let request = this.pending.get(key);
+        if (!binding || (includeBody && !this.bodies.has(binding))) {
+            const pendingKey = `${key}:${includeBody}`;
+            let request = this.pending.get(pendingKey);
             if (!request) {
+                const bodyCandidateId = binding
+                    ? Array.from(state.registry).find(
+                          ([, node]) => node === binding,
+                      )?.[0]
+                    : undefined;
                 request = this.match(
                     state,
                     number,
                     direction,
                     capability.configGeneration,
+                    includeBody,
+                    bodyCandidateId,
                 );
-                this.pending.set(key, request);
+                this.pending.set(pendingKey, request);
             }
             try {
                 binding = await request;
             } finally {
-                if (this.pending.get(key) === request) this.pending.delete(key);
+                if (this.pending.get(pendingKey) === request)
+                    this.pending.delete(pendingKey);
             }
         }
         this.guard(state, binding);
@@ -287,6 +308,8 @@ export class CrosswordDecisionHost {
         clueNumber: number,
         clueDirection: CrosswordDirection,
         config: string,
+        includeBody: boolean,
+        bodyCandidateId?: string,
     ): Promise<CandidateNode> {
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
@@ -299,6 +322,8 @@ export class CrosswordDecisionHost {
                         clueNumber,
                         clueDirection,
                         strategy: this.strategy,
+                        ...(includeBody ? { includeBody: true } : {}),
+                        ...(bodyCandidateId ? { bodyCandidateId } : {}),
                     },
                 }),
                 new Promise<never>((_, reject) => {
@@ -341,6 +366,7 @@ export class CrosswordDecisionHost {
                 : undefined;
             if (!binding) throw new Error("unsupported: unissued candidate");
             this.guard(state, binding);
+            if (includeBody) this.cacheBody(binding, response, bodyCandidateId);
             this.bindings.set(`${clueNumber}:${clueDirection}`, binding);
             return binding;
         } finally {
@@ -348,11 +374,25 @@ export class CrosswordDecisionHost {
         }
     }
 
+    private cacheBody(
+        binding: CandidateNode,
+        response: ResolveCrosswordClueResponse,
+        expectedCandidateId?: string,
+    ): void {
+        if (expectedCandidateId && response.candidateId !== expectedCandidateId)
+            throw new Error("unsupported: body candidate changed");
+        if (!isCrosswordClueBody(response.body, binding.text))
+            throw new Error(
+                "unsupported: missing or invalid clue body binding",
+            );
+        this.bodies.set(binding, response.body);
+    }
+
     async readClue(
         number: number,
         direction: CrosswordDirection,
     ): Promise<{ text: string }> {
-        const { state, binding } = await this.resolve(number, direction);
+        const { state, binding } = await this.resolve(number, direction, true);
         this.guard(state, binding);
         return this.readBinding(binding);
     }
@@ -366,8 +406,13 @@ export class CrosswordDecisionHost {
             this.validateAnswer(value);
             const { state, binding } = await this.resolve(number, direction);
             this.guard(state, binding);
-            return enterExolve(state, binding, value, number, direction, () =>
-                this.guard(state, binding),
+            return enterCrossword(
+                state,
+                binding,
+                value,
+                number,
+                direction,
+                () => this.guard(state, binding),
             );
         };
         const result = this.queue.then(run);
