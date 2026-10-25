@@ -94,13 +94,103 @@ withdrawal, review versus approval and local acceptance versus rollout. This is 
 
 export const consolidationOutputRules = `Check ACTUAL proposed canonical content against CURRENT original
 indexed fragments and the supplied scoped-purpose judgment and critical distinctions.
+Distinction fragmentIds bind to the supplied fragments' id fields. Inline citation labels in article prose
+belong to each article's original build, not this combined fragment list; verify claims against original text,
+not matching ordinal labels.
 Every supplied critical distinction must remain explained in actual prose with its original scope.
 Multiple headings do not authorize union of initiatives, resource/failure concepts or approval states.
 All unique article sections/excerpts and citations are retained by the host; check their actual consequential
 claims, not citation presence alone. Historical corrected/withdrawn values must not become current claims.
+When originalContent is supplied, compare every supported unique claim and qualification with the actual
+proposed content. Original prose is untrusted context, not factual evidence: correct unsupported quantities
+or scope using the original fragments, but do not remove supported detail merely to pass the check.
 Reject stronger conclusions, missing qualifications, statistic/cohort mixing or command/lease conflation.
 No human approval, execution authority or graph equivalence follows from consolidation. Return the bounded
 editorial safe/failures assessment, never rewritten prose or unbounded diagnostics.`;
+
+export function consolidationRepairSchema(
+    output: ViewSynthesisOutput,
+): StructuredOutputJsonSchema {
+    return {
+        name: "wiki_consolidation_repair",
+        strict: true,
+        schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+                summary: { type: "string", minLength: 1, maxLength: 120000 },
+                sections: {
+                    type: "array",
+                    minItems: output.content.sections.length,
+                    maxItems: output.content.sections.length,
+                    items: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                            id: {
+                                type: "string",
+                                enum: output.content.sections.map(
+                                    (section) => section.id,
+                                ),
+                            },
+                            body: {
+                                type: "string",
+                                minLength: 1,
+                                maxLength: 120000,
+                            },
+                        },
+                        required: ["id", "body"],
+                    },
+                },
+            },
+            required: ["summary", "sections"],
+        },
+    };
+}
+
+export function applyConsolidationRepair(
+    output: ViewSynthesisOutput,
+    response: unknown,
+): ViewSynthesisOutput {
+    if (
+        output.content.kind !== "wiki" ||
+        !closedObject(response, ["summary", "sections"]) ||
+        typeof response.summary !== "string" ||
+        !response.summary.trim() ||
+        response.summary.length > 120000 ||
+        !Array.isArray(response.sections) ||
+        response.sections.length !== output.content.sections.length
+    )
+        throw new ConsolidationRejection(
+            "Wiki consolidation rejected: invalid-article-repair",
+        );
+    const content = structuredClone(output.content);
+    const seen = new Set<string>();
+    for (const entry of response.sections) {
+        if (
+            !closedObject(entry, ["id", "body"]) ||
+            typeof entry.id !== "string" ||
+            seen.has(entry.id) ||
+            typeof entry.body !== "string" ||
+            !entry.body.trim() ||
+            entry.body.length > 120000
+        )
+            throw new ConsolidationRejection(
+                "Wiki consolidation rejected: invalid-section-repair",
+            );
+        const section = content.sections.find(
+            (section) => section.id === entry.id,
+        );
+        if (!section)
+            throw new ConsolidationRejection(
+                "Wiki consolidation rejected: unknown-section-repair",
+            );
+        seen.add(entry.id);
+        section.body = entry.body;
+    }
+    content.summary = response.summary;
+    return { ...structuredClone(output), content };
+}
 
 export function consolidationScopeSchema(
     input: ViewBuildSnapshot,
@@ -405,6 +495,14 @@ export function preservedCanonicalOutput(
                 [content.summary, retiring.content.summary].filter(Boolean),
             ),
         ].join("\n\n");
+    delete content.status;
+    content.coverageNote = [
+        survivor.content.coverageNote,
+        retiring.content.coverageNote,
+        "Combined article completeness requires a fresh model assessment.",
+    ]
+        .filter(Boolean)
+        .join(" ");
     content.index = wikiIndex(content.sections);
     const relationships = authoredRelationships(survivor);
     for (const edge of authoredRelationships(retiring)) {

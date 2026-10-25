@@ -9,7 +9,10 @@ import type {
 } from "./viewTypes.js";
 import type { TopicSnapshot } from "./topicTypes.js";
 import { validateTopicSnapshot } from "./topicSnapshot.js";
-import type { TopicGenerator } from "./topicGeneration.js";
+import type {
+    TopicGenerator,
+    TopicGenerationCheckpoint,
+} from "./topicGeneration.js";
 
 export interface TopicBuildOwner {
     materializeTopicIncidence?(
@@ -31,6 +34,7 @@ export async function generateTopicTarget(
     input: ViewBuildSnapshot,
     signal: AbortSignal,
     fallback?: TopicGenerator,
+    checkpoint?: TopicGenerationCheckpoint,
 ): Promise<TopicSnapshot> {
     const generate = adapter.generateTopics?.bind(adapter) ?? fallback;
     if (!generate)
@@ -38,7 +42,17 @@ export async function generateTopicTarget(
             "Topic generation is not supported by this synthesis adapter",
         );
     signal.throwIfAborted();
-    const snapshot = await generate(input, signal);
+    const snapshot = await generate(
+        input,
+        signal,
+        checkpoint
+            ? async (partial) => {
+                  signal.throwIfAborted();
+                  validateTopicBuildOutput(input, partial);
+                  await checkpoint(partial);
+              }
+            : undefined,
+    );
     signal.throwIfAborted();
     validateTopicBuildOutput(input, snapshot);
     return snapshot;
@@ -55,7 +69,9 @@ export function validateTopicBuildOutput(
         JSON.stringify(snapshot.occurrences) !==
             JSON.stringify(input.topicInput?.occurrences) ||
         JSON.stringify(snapshot.influenceSources) !==
-            JSON.stringify(input.influenceSources ?? [])
+            JSON.stringify(input.influenceSources ?? []) ||
+        JSON.stringify(snapshot.influenceEvents ?? []) !==
+            JSON.stringify(input.influenceEvents ?? [])
     )
         throw new Error(
             "Topic output changed complete captured incidence or influence",

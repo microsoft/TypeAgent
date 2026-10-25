@@ -80,6 +80,7 @@ export type WikiPage = Omit<ViewSection, "role" | "details"> & {
     role: "page";
     details: WikiPageDetails;
 };
+export type InformationalCompletenessStatus = "partial" | "sufficient";
 export interface WikiIndexEntry {
     pageId: string;
     title: string;
@@ -88,6 +89,8 @@ export interface WikiIndexEntry {
 export interface WikiContent {
     kind: "wiki";
     construction: "informational-wiki-v1";
+    status?: InformationalCompletenessStatus;
+    coverageNote?: string;
     title: string;
     summary?: string;
     index: WikiIndexEntry[];
@@ -173,6 +176,7 @@ export type ProjectBriefDetails =
               id: string;
               status: "open" | "blocked" | "resolved" | "unknown";
           }>;
+          openQuestions?: string[];
       }
     | {
           kind: "context";
@@ -186,6 +190,8 @@ export type ProjectBriefSection = Omit<ViewSection, "role" | "details"> & {
 export interface ProjectBriefContent {
     kind: "projectBrief";
     construction: "informational-project-summary-v1";
+    status?: InformationalCompletenessStatus;
+    coverageNote?: string;
     title: string;
     summary?: string;
     sections: ProjectBriefSection[];
@@ -452,6 +458,7 @@ export interface ViewBuildSnapshot {
     bounds: ViewBuildBounds;
     inputs: ViewRetainedInput[];
     influenceSources?: Array<{ sourceId: string; revisionId: string }>;
+    influenceEvents?: import("./topicTypes.js").TopicEventReference[];
     selectionFingerprint?: string;
     informationalRetrieval?: {
         readonly indexGeneration: string;
@@ -479,6 +486,7 @@ export interface ViewBuildSnapshot {
         query: string;
         purpose: string;
         essentialDistinctions: WikiSubjectAssessment["essentialDistinctions"];
+        priorProse?: string;
     };
 }
 export interface ViewSynthesisOutput {
@@ -605,7 +613,15 @@ export interface ViewSynthesisAdapter {
         output: ViewSynthesisOutput,
         assessment: import("./wikiConsolidation.js").WikiConsolidationScope,
         signal: AbortSignal,
+        original?: ViewSynthesisOutput,
     ): Promise<import("./viewEditorial.js").ViewEditorialAssessment>;
+    repairWikiConsolidation?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        assessment: import("./wikiConsolidation.js").WikiConsolidationScope,
+        verification: import("./viewEditorial.js").ViewEditorialAssessment,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput>;
     checkEditorial?(
         input: ViewBuildSnapshot,
         output: ViewSynthesisOutput,
@@ -614,7 +630,14 @@ export interface ViewSynthesisAdapter {
     generateTopics?(
         input: ViewBuildSnapshot,
         signal: AbortSignal,
+        checkpoint?: import("./topicGeneration.js").TopicGenerationCheckpoint,
     ): Promise<import("./topicTypes.js").TopicSnapshot>;
+    generateTopicSummary?(
+        concept: import("./topicTypes.js").TopicConcept,
+        signal: AbortSignal,
+    ): Promise<
+        Pick<import("./topicTypes.js").TopicConcept, "summary" | "citations">
+    >;
     assessWikiSubject?(
         input: ViewBuildSnapshot,
         pages: WikiPagePurposeContext[],
@@ -633,6 +656,12 @@ export interface ViewSynthesisAdapter {
         input: ViewBuildSnapshot,
         signal: AbortSignal,
         inventory?: ViewFactInventory,
+    ): Promise<ViewSynthesisOutput>;
+    repairWikiContribution?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        assessment: WikiSubjectAssessment,
+        signal: AbortSignal,
     ): Promise<ViewSynthesisOutput>;
     validate(
         input: ViewBuildSnapshot,
@@ -656,7 +685,7 @@ export interface WikiPagePurposeContext {
     sourceOverlap: { shared: number; union: number; subset: boolean };
 }
 export interface WikiSubjectAssessment {
-    disposition: "distinct" | "covered" | "contribute" | "ambiguous";
+    disposition: "distinct" | "covered" | "contribute" | "ambiguous" | "defer";
     purpose: string;
     reason: string;
     /** Empty for distinct/ambiguous; covered/contribute name a supplied current page. */

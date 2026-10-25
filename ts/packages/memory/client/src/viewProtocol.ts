@@ -369,6 +369,7 @@ const informationalProjectDetails = z.discriminatedUnion("kind", [
             })
             .array()
             .max(128),
+        openQuestions: text.array().max(128).optional(),
     }),
     z.strictObject({
         kind: z.literal("context"),
@@ -379,6 +380,8 @@ const informationalProjectDetails = z.discriminatedUnion("kind", [
 const informationalProjectContent = guideContent.extend({
     kind: z.literal("projectBrief"),
     construction: z.literal("informational-project-summary-v1"),
+    status: z.enum(["partial", "sufficient"]).optional(),
+    coverageNote: text.optional(),
     sections: section
         .extend({ details: informationalProjectDetails })
         .array()
@@ -420,6 +423,8 @@ const timelineContent = guideContent.extend({
 const wikiContentShape = guideContent.extend({
     kind: z.literal("wiki"),
     construction: z.literal("informational-wiki-v1"),
+    status: z.enum(["partial", "sufficient"]).optional(),
+    coverageNote: text.optional(),
     index: z
         .strictObject({
             pageId: id,

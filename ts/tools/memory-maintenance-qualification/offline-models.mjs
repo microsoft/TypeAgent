@@ -91,12 +91,43 @@ export async function createOfflineOptions(load, counters, controls = {}) {
                     input.summaries.find(
                         (item) => item.qualifications.length,
                     ) ?? input.summaries[0];
+                const contributors = input.summaries.filter(
+                    (item) =>
+                        item === selected ||
+                        item.qualifications.length ||
+                        item.contrasts.length,
+                );
+                const qualifications = [
+                    ...new Set(
+                        contributors.flatMap((item) => item.qualifications),
+                    ),
+                ];
+                const contrasts = [
+                    ...new Set(contributors.flatMap((item) => item.contrasts)),
+                ];
+                const overview = [
+                    selected.overview,
+                    ...[...qualifications, ...contrasts].filter(
+                        (item) => !selected.overview.includes(item),
+                    ),
+                ].join("\n");
+                const evidence = [
+                    ...new Map(
+                        contributors.flatMap((item) =>
+                            item.evidence.map(({ id }) => [id, { id }]),
+                        ),
+                    ).values(),
+                ];
+                assert.ok(
+                    overview.length <= 6000 && evidence.length <= 32,
+                    "Offline synopsis composition exceeds supported bounds",
+                );
                 return JSON.stringify({
                     preview: selected.overview.slice(0, 300),
-                    overview: selected.overview,
-                    evidence: selected.evidence,
-                    qualifications: selected.qualifications,
-                    contrasts: [],
+                    overview,
+                    evidence,
+                    qualifications,
+                    contrasts,
                     limitations: [
                         "Deterministic orchestration, not semantic qualification",
                     ],
@@ -108,16 +139,21 @@ export async function createOfflineOptions(load, counters, controls = {}) {
                 from,
                 from + (marker >= 0 ? 822 : Math.min(160, input.text.length)),
             );
+            const evidence = input.evidence
+                .filter(
+                    (item) =>
+                        item.start < input.start + from + excerpt.length &&
+                        item.end > input.start + from,
+                )
+                .map(({ id }) => ({ id }));
+            assert.ok(
+                evidence.length > 0 && evidence.length <= 32,
+                "Offline synopsis excerpt requires bounded supplied evidence",
+            );
             return JSON.stringify({
                 preview: excerpt.slice(0, 300),
                 overview: excerpt,
-                evidence: [
-                    {
-                        start: input.start + from,
-                        end: input.start + from + excerpt.length,
-                        excerpt,
-                    },
-                ],
+                evidence,
                 qualifications: marker >= 0 ? [excerpt] : [],
                 contrasts: [],
                 limitations: [
@@ -183,6 +219,13 @@ export async function createOfflineOptions(load, counters, controls = {}) {
             if (input.definition.projectSummary)
                 return hydrateProjectSummary(input, {
                     title,
+                    summary: emitted[0].fragment.excerpt.slice(0, 1000),
+                    completeness: "partial",
+                    assignments: [],
+                    milestoneItems: [],
+                    decisionItems: [],
+                    openQuestions: [],
+                    riskItems: [],
                     goalsScope: body,
                     owners: "Owner interpretation not qualified by deterministic copy",
                     status: body,
@@ -198,6 +241,8 @@ export async function createOfflineOptions(load, counters, controls = {}) {
                 });
             return hydrateInformational(input, {
                 title,
+                summary: emitted[0].fragment.excerpt.slice(0, 1000),
+                status: "partial",
                 prose: body,
                 limits: "Offline selected-evidence copy, not model qualification",
                 citationIds,

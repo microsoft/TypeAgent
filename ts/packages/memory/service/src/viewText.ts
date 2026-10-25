@@ -46,9 +46,15 @@ export function projectBriefDetailsText(details: ProjectBriefDetails): string {
                 .map((entry, index) => `Decision ${index + 1}: ${entry.status}`)
                 .join("\n");
         case "risks":
-            return details.items
-                .map((entry, index) => `Risk ${index + 1}: ${entry.status}`)
-                .join("\n");
+            return [
+                ...details.items.map(
+                    (entry, index) => `Risk ${index + 1}: ${entry.status}`,
+                ),
+                ...(details.openQuestions ?? []).map(
+                    (question, index) =>
+                        `Open question ${index + 1}: ${question}`,
+                ),
+            ].join("\n");
         case "context":
             return `Project knowledge as-of: ${details.asOf ?? "unknown"} (${details.basis}). Generation/source capture times are distinct.`;
     }
@@ -58,6 +64,14 @@ export function viewContentToText(content: ViewVersion["content"]): string {
     return [
         content.title,
         content.summary ?? "",
+        ...((content.kind === "wiki" || content.kind === "projectBrief") &&
+        content.coverageNote
+            ? [`Coverage limits: ${content.coverageNote}`]
+            : []),
+        ...((content.kind === "wiki" || content.kind === "projectBrief") &&
+        content.status
+            ? [`Completeness: ${content.status}`]
+            : []),
         ...(content.kind === "timeline"
             ? [`Generated: ${content.generatedAt}`]
             : []),

@@ -411,10 +411,10 @@ function validateDraftContent(
             "citations",
             ...(request.content.kind === "timeline" ? ["generatedAt"] : []),
             ...(request.content.kind === "wiki"
-                ? ["index", "construction"]
+                ? ["index", "construction", "status", "coverageNote"]
                 : []),
             ...(request.content.kind === "projectBrief"
-                ? ["construction"]
+                ? ["construction", "status", "coverageNote"]
                 : []),
         ],
         "guide content",

@@ -1,10 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { diff3Merge, diffIndices } from "node-diff3";
-import { canonicalizeProcedure } from "./agentEdition.js";
-import { viewSourceKey } from "./viewContent.js";
+import { viewSourceKey, viewHash } from "./viewContent.js";
 import type {
     DerivedViewContent,
     ViewSection,
@@ -22,26 +21,28 @@ import { informationalView } from "./informationalView.js";
 import { wikiIndex } from "./viewContent.js";
 export { edgeIdentity } from "./viewRelationships.js";
 
-export function viewHash(value: unknown): string {
-    return createHash("sha256")
-        .update(canonicalizeProcedure(value ?? null))
-        .digest("hex");
-}
+export { viewHash } from "./viewContent.js";
 
 export function sameViewBuildEvidence(
     prior: ViewBuildSnapshot | undefined,
     next: ViewBuildSnapshot,
 ): boolean {
-    const semanticInput = (input: ViewBuildSnapshot) =>
-        viewHash({
-            inputs: input.inputs,
-            definition: input.definition,
-            pipeline: input.pipeline,
-            model: input.model,
-            wikiContribution: input.wikiContribution,
-            editorialUnlocks: input.editorial?.unlockedTargets ?? [],
-        });
-    return prior !== undefined && semanticInput(prior) === semanticInput(next);
+    return (
+        prior !== undefined &&
+        viewBuildEvidenceFingerprint(prior) ===
+            viewBuildEvidenceFingerprint(next)
+    );
+}
+
+export function viewBuildEvidenceFingerprint(input: ViewBuildSnapshot): string {
+    return viewHash({
+        inputs: input.inputs,
+        definition: input.definition,
+        pipeline: input.pipeline,
+        model: input.model,
+        wikiContribution: input.wikiContribution,
+        editorialUnlocks: input.editorial?.unlockedTargets ?? [],
+    });
 }
 
 export function mergeProse(
@@ -190,24 +191,7 @@ function mergeSection(
             : mergeValue(base.heading, human.heading, generated.heading);
     const body = mergeValue(base.body, human.body, generated.body);
     const role = mergeValue(base.role, human.role, generated.role);
-    const details =
-        base.details?.kind === "page" ||
-        human.details?.kind === "page" ||
-        generated.details?.kind === "page"
-            ? mergeWikiDetails(base.details, human.details, generated.details)
-            : base.details?.kind === "event" ||
-                human.details?.kind === "event" ||
-                generated.details?.kind === "event"
-              ? mergeTimelineDetails(
-                    base.details,
-                    human.details,
-                    generated.details,
-                )
-              : mergeProjectDetails(
-                    base.details,
-                    human.details,
-                    generated.details,
-                );
+    const details = mergeSectionDetails(base, human, generated);
     if (
         typeof heading !== "string" ||
         typeof body !== "string" ||
@@ -225,6 +209,22 @@ function mergeSection(
             ? { details: details as NonNullable<ViewSection["details"]> }
             : {}),
     };
+}
+
+function mergeSectionDetails(
+    base: ViewSection,
+    human: ViewSection,
+    generated: ViewSection,
+): unknown {
+    return base.details?.kind === "page" ||
+        human.details?.kind === "page" ||
+        generated.details?.kind === "page"
+        ? mergeWikiDetails(base.details, human.details, generated.details)
+        : base.details?.kind === "event" ||
+            human.details?.kind === "event" ||
+            generated.details?.kind === "event"
+          ? mergeTimelineDetails(base.details, human.details, generated.details)
+          : mergeProjectDetails(base.details, human.details, generated.details);
 }
 
 function mergeWikiDetails(

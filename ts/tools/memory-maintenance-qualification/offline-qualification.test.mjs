@@ -6,7 +6,9 @@ import test from "node:test";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { createOfflineOptions } from "./offline-models.mjs";
+import { generateSourceSynopsis } from "../../packages/memory/service/dist/sourceSynopsis.js";
 import {
     checkpointExpectationHash,
     assertTerminalJobs,
@@ -33,6 +35,63 @@ const fixtureRoot = fileURLToPath(
         import.meta.url,
     ),
 );
+
+test("offline synopsis uses supplied evidence identities and preserves composed qualifications", async () => {
+    const root = fileURLToPath(new URL("../../", import.meta.url));
+    const counters = { synopsis: 0 };
+    const { sourceSynopsisModel: model } = await createOfflineOptions(
+        (relative) => import(pathToFileURL(path.join(root, relative)).href),
+        counters,
+    );
+    const first =
+        "Governing tail exception: cohort A requires a separate review.";
+    const second =
+        "Governing tail exception: cohort B is not approved for release.";
+    const content = `${first}\n${"Additional technical context. ".repeat(120)}\n${second}`;
+    const synopsis = await generateSourceSynopsis(
+        {
+            corpusId: "offline-fixture",
+            sourceId: "source",
+            title: "Synthetic review boundaries",
+            sourceType: "document",
+            canonicalUri: "fixture:review-boundaries",
+            tags: [],
+        },
+        {
+            sourceId: "source",
+            revisionId: "revision",
+            contentHash: createHash("sha256").update(content).digest("hex"),
+            mimeType: "text/plain",
+            capturedAt: "2026-10-24T00:00:00Z",
+        },
+        content,
+        model,
+        new AbortController().signal,
+    );
+    assert.ok(
+        counters.synopsis > 1,
+        "Fixture must exercise bounded composition",
+    );
+    assert.ok(synopsis.overview.includes(first));
+    assert.ok(synopsis.overview.includes(second));
+    for (const evidence of synopsis.evidence)
+        assert.equal(
+            content.slice(evidence.start, evidence.end),
+            evidence.excerpt,
+        );
+    await assert.rejects(
+        () =>
+            model.complete(
+                `Fixture\n${JSON.stringify({
+                    text: first,
+                    start: 0,
+                    evidence: [{ id: "unrelated", start: 1000, end: 1100 }],
+                })}`,
+                new AbortController().signal,
+            ),
+        /requires bounded supplied evidence/,
+    );
+});
 
 function ownedConflictControl() {
     const originalContent = {

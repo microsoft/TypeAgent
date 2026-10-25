@@ -153,7 +153,11 @@ test("distinct indexed project summaries round-trip through save and MCP without
         },
         { kind: "milestones", items: [] },
         { kind: "decisions", items: [] },
-        { kind: "risks", items: [] },
+        {
+            kind: "risks",
+            items: [],
+            openQuestions: ["Who approves the next rehearsal?"],
+        },
         { kind: "context", asOf: null, basis: "unknown" },
     ];
     const output = {
@@ -161,6 +165,8 @@ test("distinct indexed project summaries round-trip through save and MCP without
         content: {
             kind: "projectBrief",
             construction: "informational-project-summary-v1",
+            status: "partial",
+            coverageNote: "Approval owner remains unknown",
             title: "Project",
             citations: [citation],
             sections: roles.map((role, i) => ({

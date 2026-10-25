@@ -101,6 +101,8 @@ test.each(["semantic", "transient", "derivative"] as const)(
                 )
                     throw new Error("Synthetic unavailable provider");
                 const output = hydrateInformational(input, {
+                    summary: "Grounded reference summary.",
+                    status: "partial",
                     title: query,
                     prose: `${query} explains an independent operational mechanism and its boundaries.`,
                     limits: "Synthetic selected evidence",
