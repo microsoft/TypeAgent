@@ -347,6 +347,17 @@ export interface EmbeddingModelDefinition extends EmbeddingConfig {
     readonly modalities: readonly EmbeddingModality[];
 }
 
+export interface DecisionConfig {
+    readonly provider?: "inherit" | "azure" | "copilot" | undefined;
+    readonly azure?:
+        | {
+              readonly deploymentKey?: string | undefined;
+              readonly deploymentName?: string | undefined;
+          }
+        | undefined;
+    readonly copilot?: { readonly model?: string | undefined } | undefined;
+}
+
 export interface ReasoningConfig {
     /** Reasoning-loop timeout in milliseconds (0 = disabled). */
     readonly timeoutMs?: number | undefined;
@@ -410,6 +421,7 @@ export interface Config {
     readonly azureFoundry?: AzureFoundryConfig | undefined;
     readonly azureAISearch?: AzureAISearchConfig | undefined;
     readonly reasoning?: ReasoningConfig | undefined;
+    readonly decision?: DecisionConfig | undefined;
     readonly copilot?: CopilotConfig | undefined;
     /**
      * Embedding provider selection, independent of `modelProvider`. When

@@ -11,6 +11,7 @@ export enum ModelType {
     Embedding = "embedding",
     Image = "image",
     Video = "video",
+    Decision = "decision",
 }
 
 export type ModelInfo<T> = {

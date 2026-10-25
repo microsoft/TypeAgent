@@ -502,6 +502,9 @@ export function createChatModel(
             : getChatModelPool(endpoint);
     const settings = pool.members[0].settings;
 
+    if (settings.modelType === ModelType.Decision)
+        throw new Error("Native decisions cannot be used as chat models");
+
     for (const member of pool.members)
         applyChatModelRequestDefaults(member.settings);
 

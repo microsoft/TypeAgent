@@ -58,6 +58,7 @@ import type {
     TopicQueryRequest,
     TopicQueryPage,
 } from "@typeagent/memory-service";
+import type { CrosswordDecisionCapabilities } from "./crosswordDecisionTypes.js";
 
 export type MemoryAcquisitionProgress = Pick<
     AcquisitionRequest,
@@ -753,6 +754,7 @@ export type ExtensionLocalInvokeFunctions = {
     getViewHostUrl(): Promise<{ url?: string }>;
 
     // Settings
+    getCrosswordDecisionCapabilities(): Promise<CrosswordDecisionCapabilities>;
     settingsUpdated(params: { settings: any }): Promise<{ success: boolean }>;
     autoIndexSettingChanged(params: {
         enabled: boolean;

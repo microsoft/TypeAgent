@@ -909,6 +909,9 @@ importers:
 
   examples/whisperClient:
     dependencies:
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../packages/utils/commonUtils
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -2080,6 +2083,9 @@ importers:
       express-rate-limit:
         specifier: ^7.5.0
         version: 7.5.1(express@4.22.1)
+      gpt-tokenizer:
+        specifier: ^2.9.0
+        version: 2.9.0
       graphology:
         specifier: ^0.25.4
         version: 0.25.4(graphology-types@0.24.8)
@@ -2398,6 +2404,9 @@ importers:
       jsdom:
         specifier: ^28.1.0
         version: 28.1.0(@noble/hashes@2.4.0)
+      playwright:
+        specifier: 1.57.0
+        version: 1.57.0
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -16479,7 +16488,7 @@ packages:
     resolution: {integrity: sha1-Grpmk7DyVSWKBJ1iEykykyKq1Vg=}
 
   node-addon-api@8.9.2:
-    resolution: {integrity: sha1-23rJShP/2bVebLBFhL1e+OHXSxg=}
+    resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
     engines: {node: ^18 || ^20 || >= 21}
 
   node-api-version@0.2.1:
@@ -22280,7 +22289,7 @@ snapshots:
       '@jest/schemas': 29.6.3
       '@types/istanbul-lib-coverage': 2.0.6
       '@types/istanbul-reports': 3.0.4
-      '@types/node': 26.4.1
+      '@types/node': 22.20.5
       '@types/yargs': 17.0.35
       chalk: 4.1.2
 
@@ -24541,7 +24550,7 @@ snapshots:
     dependencies:
       '@types/http-cache-semantics': 4.2.0
       '@types/keyv': 3.1.4
-      '@types/node': 26.4.1
+      '@types/node': 22.20.5
       '@types/responselike': 1.0.3
 
   '@types/chai-dom@1.11.3':
@@ -24816,7 +24825,7 @@ snapshots:
 
   '@types/fs-extra@9.0.13':
     dependencies:
-      '@types/node': 26.4.1
+      '@types/node': 22.20.5
 
   '@types/geojson@7946.0.16': {}
 
@@ -24827,7 +24836,7 @@ snapshots:
 
   '@types/graceful-fs@4.1.9':
     dependencies:
-      '@types/node': 26.4.1
+      '@types/node': 22.20.5
 
   '@types/har-format@1.2.15': {}
 
@@ -24909,7 +24918,7 @@ snapshots:
 
   '@types/keyv@3.1.4':
     dependencies:
-      '@types/node': 26.4.1
+      '@types/node': 22.20.5
 
   '@types/koa-compose@3.2.9':
     dependencies:
@@ -25030,7 +25039,7 @@ snapshots:
 
   '@types/responselike@1.0.3':
     dependencies:
-      '@types/node': 26.4.1
+      '@types/node': 22.20.5
 
   '@types/retry@0.12.2': {}
 
@@ -29996,7 +30005,7 @@ snapshots:
     dependencies:
       '@jest/types': 29.6.3
       '@types/graceful-fs': 4.1.9
-      '@types/node': 26.4.1
+      '@types/node': 22.20.5
       anymatch: 3.1.3
       fb-watchman: 2.0.2
       graceful-fs: 4.2.11
@@ -30144,7 +30153,7 @@ snapshots:
   jest-util@29.7.0:
     dependencies:
       '@jest/types': 29.6.3
-      '@types/node': 26.4.1
+      '@types/node': 22.20.5
       chalk: 4.1.2
       ci-info: 3.9.0
       graceful-fs: 4.2.11
@@ -30172,13 +30181,13 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 26.4.1
+      '@types/node': 22.20.5
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
   jest-worker@29.7.0:
     dependencies:
-      '@types/node': 26.4.1
+      '@types/node': 22.20.5
       jest-util: 29.7.0
       merge-stream: 2.0.0
       supports-color: 8.1.1

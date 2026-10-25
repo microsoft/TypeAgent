@@ -11,6 +11,50 @@ Supported services:
 
 The library includes support for getting settings needed to call these services from environment variables.
 
+## Native decisions
+
+`createDecisionModel({ config?, provider? })` returns a `DecisionResult<DecisionModel>`
+(compatible with TypeChat `Result`). Construction validates capability/configuration
+without acquiring credentials or performing inference. Use `model.decide({ state,
+questions }, { signal?, timeoutMs? })` for native Azure systemone or Copilot
+`/v1/decisions` requests; these are not chat models.
+
+Questions are named `noul` (optional true/false criteria), `choice` (a value-to-description
+map), or `score` (ordered labels). Responses contain validated discriminated answers,
+requested/reported model identity, provider, optional normalized token usage and duration.
+Malformed/missing/duplicate/refused answers invalidate the response; a valid no-fit
+answer remains success. Probability maps retain supplied choice values and zero-based
+score indexes, never array position.
+Distribution sums must equal one within `1e-6`; no labels or mass are silently
+dropped or renormalized.
+Every answer can carry optional native `confidence`, validated as a finite number
+in `[0, 1]` independently of its probability distribution or score.
+`decisionUsage?: DecisionUsage` preserves individually reported counts normalized
+to `prompt_tokens`, `completion_tokens`, `total_tokens`, and `cached_tokens`.
+Input-only usage remains observable there and in telemetry; missing output counts
+are never replaced with zero. Existing `usage?: CompletionUsageStats` remains
+available when both input/output counts are known (total is reported or their sum).
+
+Provider precedence is factory override → `decision.provider` → active in-memory
+override → supplied `config.modelProvider` → Azure. `decision.provider: inherit`
+skips the explicit decision override. Inherited OpenAI/Ollama is unavailable, not
+a fallback. `providerSource` explains selection. `configGeneration` and
+`getRuntimeConfigGeneration()` support cache invalidation after config/provider changes.
+
+Azure uses the `decision.azure.deploymentKey` pool (default `decision_1`) but sends
+the separate exact `deploymentName` (default `decision-1`). All pool members must
+use HTTPS `/providers/microsoft/v1/systemone` and serve that same deployment name.
+Copilot uses `decision.copilot.model` (default `gpt-6-luna-decisions`) and the existing
+model-endpoint credential helper, refreshing once on 401/403. Neither provider falls
+back to chat. Both reuse REST secret redaction, request constraints and budgets;
+native fixed-shape output receives a conservative reservation and shares the
+inference-attempt budget. The deadline includes credentials, retries and response
+decoding. Errors carry bounded `code`, `errorCategory`, `retryable`, and optional
+`httpStatus`; raw provider bodies and credentials are not returned.
+
+Live availability and tenant permission are not established by capability construction;
+they can only be verified by an authorized native request.
+
 ## Multi-region endpoint pools
 
 Chat, embedding, and image factories resolve each model into an **endpoint pool** — a list of endpoints (one per region + variant) that the client rotates among on 429 / 5xx / timeout. The goal is to survive single-region throttling without user-visible stalls, and to keep a PTU reservation preferred when one is configured.
