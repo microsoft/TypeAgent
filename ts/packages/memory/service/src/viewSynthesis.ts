@@ -157,7 +157,7 @@ export function createConfiguredViewSynthesisAdapter(
         );
     }
     return {
-        identity: `configured:${endpoint ?? "default"}:evidence-first-v5:questions-v2`,
+        identity: `configured:${endpoint ?? "default"}:evidence-first-v5`,
         async proposeSchema(specification, signal) {
             return parseSchemaProposal(
                 await complete(

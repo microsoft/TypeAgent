@@ -476,22 +476,7 @@ export function mountMemoryHubViews(
                 "The service did not return the requested exact view revision",
             );
         if (view.content.kind === "schemaView") {
-            const page = await invokeMemory("memoryGetViewPage", {
-                corpusId: target.corpusId,
-                viewId: target.viewId,
-                ...(target.revisionId ? { revisionId: target.revisionId } : {}),
-                ...(target.pageId ? { slotId: target.pageId } : {}),
-                ...(target.itemKey ? { itemKey: target.itemKey } : {}),
-            });
-            if (disposed || current !== sequence) return;
-            drafts.hidden = controls.hidden = true;
-            comparison.replaceChildren(
-                rbMarkdown(page.markdown),
-                rbButton("Review questions", () => {
-                    window.location.hash = `#/questions/${encodeURIComponent(view.corpusId)}/${encodeURIComponent(view.viewId)}`;
-                }),
-                rbButton("Back to views", backToViews),
-            );
+            await renderSchemaPage(target, current);
             return;
         }
         if (view.redirect && !target.revisionId) {
@@ -523,6 +508,28 @@ export function mountMemoryHubViews(
                 }),
             );
         }
+    }
+
+    async function renderSchemaPage(
+        target: Parameters<typeof renderRoute>[0],
+        current: number,
+    ): Promise<void> {
+        const page = await invokeMemory("memoryGetViewPage", {
+            corpusId: target.corpusId,
+            viewId: target.viewId,
+            ...(target.revisionId ? { revisionId: target.revisionId } : {}),
+            ...(target.pageId ? { slotId: target.pageId } : {}),
+            ...(target.itemKey ? { itemKey: target.itemKey } : {}),
+        });
+        if (disposed || current !== sequence) return;
+        drafts.hidden = controls.hidden = true;
+        comparison.replaceChildren(
+            rbMarkdown(page.markdown),
+            rbButton("Review questions", () => {
+                window.location.hash = `#/questions/${encodeURIComponent(target.corpusId)}/${encodeURIComponent(target.viewId)}`;
+            }),
+            rbButton("Back to views", backToViews),
+        );
     }
 
     async function renderCurrentWikiRedirect(
