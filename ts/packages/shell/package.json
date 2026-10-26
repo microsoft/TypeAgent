@@ -86,7 +86,7 @@
     "foundry-local-sdk": "2.1.0",
     "jose": "^5.9.6",
     "js-yaml": "^4.3.2",
-    "markdown-it": "^14.3.2",
+    "markdown-it": "^14.3.3",
     "microsoft-cognitiveservices-speech-sdk": "^1.38.0",
     "typechat": "^0.1.1",
     "ws": "^8.21.3"
