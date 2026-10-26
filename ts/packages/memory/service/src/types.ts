@@ -554,7 +554,11 @@ export interface SourceKnowledgeSuppressionRequest
 export interface MemoryServiceCapabilities {
     derivedViews?: {
         kinds: Array<
-            "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki"
+            | "troubleshootingGuide"
+            | "projectBrief"
+            | "timeline"
+            | "wiki"
+            | "schemaView"
         >;
         drafts: true;
         history: true;

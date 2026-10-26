@@ -29,6 +29,7 @@ import {
     validateConstructedGuide,
     prepareWikiContribution,
     validateSupport,
+    ViewSupportRejection,
 } from "./viewSynthesis.js";
 import { redactRunbookText } from "./runbookRedaction.js";
 import { informationalPipeline } from "./informationalView.js";
@@ -482,9 +483,11 @@ export class ViewBuildRunner {
                 ))
             )
                 return true;
-            const evidence = informational
-                ? undefined
-                : await this.prepareInventory(job, result, signal);
+            const evidence =
+                informational ||
+                result.snapshot.pipeline === "schema-defined-v1"
+                    ? undefined
+                    : await this.prepareInventory(job, result, signal);
             const inventory = evidence?.inventory;
             validation = false;
             await this.result(
@@ -516,16 +519,10 @@ export class ViewBuildRunner {
                 candidate.coverage ? { coverage: candidate.coverage } : {},
             );
             if (!informational)
-                validateSupport(
+                candidate = await this.validateOrRepairAnswers(
+                    result.snapshot,
                     candidate,
-                    await abortable(
-                        this.adapter.validate(
-                            result.snapshot,
-                            candidate,
-                            signal,
-                        ),
-                        signal,
-                    ),
+                    signal,
                 );
             validation = false;
             const current = await timeSearchStage("view.current.read", () =>
@@ -608,6 +605,41 @@ export class ViewBuildRunner {
             jobSignal.removeEventListener("abort", cancel);
         }
         return true;
+    }
+
+    private async validateOrRepairAnswers(
+        input: ViewBuildSnapshot,
+        candidate: ViewSynthesisOutput,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput> {
+        const report = await abortable(
+            this.adapter.validate(input, candidate, signal),
+            signal,
+        );
+        try {
+            validateSupport(candidate, report);
+            return candidate;
+        } catch (error) {
+            if (
+                !(error instanceof ViewSupportRejection) ||
+                input.pipeline !== "schema-defined-v1" ||
+                !this.adapter.repairSchemaAnswers
+            )
+                throw error;
+        }
+        const repaired = await abortable(
+            this.adapter.repairSchemaAnswers(input, candidate, report, signal),
+            signal,
+        );
+        validateConstructedGuide(input, repaired);
+        validateSupport(
+            repaired,
+            await abortable(
+                this.adapter.validate(input, repaired, signal),
+                signal,
+            ),
+        );
+        return repaired;
     }
 
     private async consolidateWikiTarget(

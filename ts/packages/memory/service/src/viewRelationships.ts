@@ -41,6 +41,9 @@ export function derivedDefinitionInput(
         ...(version.definition.projectSummary
             ? { projectSummary: version.definition.projectSummary }
             : {}),
+        ...(version.definition.schemaView
+            ? { schemaView: version.definition.schemaView }
+            : {}),
     };
 }
 
@@ -55,6 +58,7 @@ export function materializeDefinition(
             definition.maintenance,
             definition.wiki,
             definition.projectSummary,
+            definition.schemaView,
         ]);
     return {
         ...structuredClone(input),

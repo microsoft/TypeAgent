@@ -1283,6 +1283,49 @@ rebuild under the history lock; Git commit traversal remains linear. Privacy
 replacement of the history repository removes these records and unreachable
 blobs together, rather than leaving a second history outside the purge boundary.
 
+### Explicit schema-defined question Views
+
+`schemaView` is a persisted, versioned View kind with restricted data-only answer
+schemas and explicit question slots. Slots support singleton, record and keyed
+collection answers; candidate values retain exact source citations and separate
+review, freshness, coverage and answer states. Versioned rubrics select by most
+recent evidence, independent support or manual review. An authenticated user can
+confirm/reject candidates, assert a typed answer, edit a contract or approve/reject
+a proposed question without rewriting retained evidence.
+
+`proposeSchemaView` creates unapproved contracts from an explicitly supplied
+specification and maintenance scope. `discoverSchemaQuestions` is an explicit,
+per-View call with opt-in cumulative bounds; enabling discovery does not run it.
+Ordinary ingestion maintains approved question answers within their configured
+source scope, but does not discover questions across the corpus. Evidence audits
+cover every source-origin candidate, including unselected candidates. One bounded
+repair can correct evidence and chronology bindings before independent revalidation.
+Timezone-free reports are comparable only within the same evidence-supported local
+chronology; ingestion time never establishes fact time.
+
+`listQuestions` returns full details; `listQuestionSummaries` provides bounded,
+filtered summary pages and `getQuestion` loads one complete question.
+`getViewPage` resolves deterministic Markdown and exact revision/slot/item
+`memory-view:` links without inference. These methods are available through typed
+in-process, browser RPC and MCP clients. Source removal and corpus clearing purge
+question evidence and history through the existing privacy lifecycle.
+
+### Deferred evidence acquisition
+
+Hosts can authorize deduplicated, consumer-tracked evidence requests for approved
+question slots. Tools remain disabled by default. Authorization binds the
+principal, policy, tool, resource and exact outbound arguments; question text or a
+model proposal cannot grant authority. Requests inspect current answers before
+fetching and deliver fetched material through ordinary source ingestion, retaining
+ingestion receipts and reconciling overlapping question consumers. Cancellation,
+stale consumers, conflicts, indexing failures and privacy suppression remain
+explicit states, not successful empty answers.
+
+The Questions page exposes sanitized progress and explicit run-once/cancel controls
+for existing requests. Browser and MCP progress omit outbound arguments, staged
+content and raw errors. They cannot admit requests, enable periodic acquisition
+or authorize tools; those operations belong to an explicitly configured host.
+
 ### Runnable local CLI
 
 Build from `ts` with `pnpm exec fluid-build packages\memory\service -t build`

@@ -227,6 +227,38 @@ describe("Memory Center preview-first views", () => {
         jest.useRealTimers();
     });
 
+    test("schema question links resolve exact revision, slot and item through deterministic page reads", async () => {
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation(async (method, params) => {
+            if (method === "memoryGetView")
+                return { ...view, content: { ...content, kind: "schemaView" } };
+            if (method === "memoryGetViewPage")
+                return {
+                    uri: "memory-view://c/guide?slotId=trip&itemKey=first",
+                    revisionId: "v1",
+                    markdown: "# Recorded trip\n\nThe original observation.",
+                };
+            return original(method, params);
+        });
+        await panel.show({
+            corpusId: "c",
+            viewId: "guide",
+            revisionId: "v1",
+            pageId: "trip",
+            itemKey: "first",
+        });
+        expect(invoke).toHaveBeenCalledWith("memoryGetViewPage", {
+            corpusId: "c",
+            viewId: "guide",
+            revisionId: "v1",
+            slotId: "trip",
+            itemKey: "first",
+        });
+        expect(host.textContent).toContain("The original observation.");
+        expect(host.textContent).toContain("Review questions");
+        expect(errors).toEqual([]);
+    });
+
     async function startBuild(kinds = ["Troubleshooting guide"]) {
         await panel.refresh();
         click(host, "Build views");

@@ -25,7 +25,11 @@ export type MemoryHubSearchRequest = {
     dateTo?: string;
     conversationScope?: "none" | "current" | "all";
     viewKinds?: Array<
-        "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki"
+        | "troubleshootingGuide"
+        | "projectBrief"
+        | "timeline"
+        | "wiki"
+        | "schemaView"
     >;
 };
 
@@ -45,7 +49,12 @@ export type MemoryHubEvidence = {
     synopsis?: MemoryCenterSource["revisions"][number]["synopsis"];
     locator?: string;
     canonicalUri?: string;
-    viewKind?: "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki";
+    viewKind?:
+        | "troubleshootingGuide"
+        | "projectBrief"
+        | "timeline"
+        | "wiki"
+        | "schemaView";
     viewVersion?: number;
     viewProvenance?: ViewVersion["provenance"];
     review?: "unreviewed";
@@ -406,6 +415,16 @@ export const viewMethods = [
     "memoryQueryTopics",
     "memoryRebuildTopics",
     "memoryListViews",
+    "memoryListQuestions",
+    "memoryListQuestionSummaries",
+    "memoryGetQuestion",
+    "memoryListAcquisitions",
+    "memoryRunAcquisitions",
+    "memoryCancelAcquisition",
+    "memoryEditQuestion",
+    "memoryGetViewPage",
+    "memoryProposeSchemaView",
+    "memoryDiscoverSchemaQuestions",
     "memoryGetView",
     "memorySaveViewDraft",
     "memoryArchiveView",

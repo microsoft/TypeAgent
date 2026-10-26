@@ -2,6 +2,15 @@
 // Licensed under the MIT License.
 
 import type { AgentEdition } from "./agentEdition.js";
+import type { MemoryAcquisitionService } from "./acquisitionTypes.js";
+export type * from "./acquisitionTypes.js";
+import type {
+    MemorySchemaViewService,
+    QuestionDetails,
+    SchemaViewContent,
+    SchemaViewDefinition,
+} from "./schemaViewTypes.js";
+export type * from "./schemaViewTypes.js";
 import type { MemoryTopicService } from "./topicTypes.js";
 import type { ProcedureSourceCitation } from "./types.js";
 import type {
@@ -26,7 +35,8 @@ export type ViewKind =
     | "troubleshootingGuide"
     | "projectBrief"
     | "timeline"
-    | "wiki";
+    | "wiki"
+    | "schemaView";
 export type ViewState = "draft" | "stale" | "archived";
 export interface ViewCitation extends ProcedureSourceCitation {
     locator: string;
@@ -63,10 +73,15 @@ export interface ViewSection {
         | "decisions"
         | "risks"
         | "event"
-        | "page";
+        | "page"
+        | "question";
     heading: string;
     body: string;
-    details?: ProjectBriefDetails | TimelineRecordDetails | WikiPageDetails;
+    details?:
+        | ProjectBriefDetails
+        | TimelineRecordDetails
+        | WikiPageDetails
+        | QuestionDetails;
 }
 export interface InformationalWikiPageDetails {
     kind: "page";
@@ -202,7 +217,8 @@ export type DerivedViewContent =
     | TroubleshootingGuideContent
     | ProjectBriefContent
     | TimelineContent
-    | WikiContent;
+    | WikiContent
+    | SchemaViewContent;
 export type ViewEndpoint =
     | { kind: "section"; viewId: string; sectionId: string }
     | {
@@ -261,6 +277,7 @@ export interface ViewDefinitionInput {
     kind: ViewKind;
     selector: ViewSourceSelector;
     maintenance?: ViewMaintenanceDefinition;
+    schemaView?: SchemaViewDefinition;
     wiki?: {
         construction: "informational-wiki-v1";
         query: string;
@@ -280,6 +297,7 @@ export interface ViewDefinition {
     kind: ViewKind;
     selector: ViewSourceSelector;
     maintenance?: ViewMaintenanceDefinition;
+    schemaView?: SchemaViewDefinition;
     wiki?: NonNullable<ViewDefinitionInput["wiki"]>;
     projectSummary?: NonNullable<ViewDefinitionInput["projectSummary"]>;
 }
@@ -374,7 +392,10 @@ export interface ViewHistoryEntry {
     commitId: string;
     version: ViewVersion;
 }
-export interface MemoryViewService extends Partial<MemoryTopicService> {
+export interface MemoryViewService
+    extends Partial<MemoryTopicService>,
+        Partial<MemorySchemaViewService>,
+        Partial<MemoryAcquisitionService> {
     updateViewMaintenance(
         request: ViewMaintenanceUpdate,
     ): Promise<ViewHistoryEntry>;
@@ -447,6 +468,11 @@ export interface ViewRetainedInput {
     evidence?: { kind: "event"; eventId: string };
     passages?: ViewCitation[];
     records?: TimelineEvidenceRecord[];
+    assertionLineage?: {
+        owner?: string;
+        independenceKey?: string;
+        derivedFrom: string[];
+    };
 }
 export interface ViewBuildSnapshot {
     corpusId: string;
@@ -475,7 +501,8 @@ export interface ViewBuildSnapshot {
         | "timeline-v1"
         | "informational-wiki-v1"
         | "informational-project-summary-v1"
-        | "topics-v1";
+        | "topics-v1"
+        | "schema-defined-v1";
     model: string;
     fingerprint: string;
     publicationPolicy?: ViewEffectivePublicationPolicy;
@@ -497,7 +524,8 @@ export interface ViewSynthesisOutput {
         | "verifiedRecovery"
         | "projectSummary"
         | "chronology"
-        | "knowledgePages";
+        | "knowledgePages"
+        | "schemaAnswers";
     missingEvidence: string[];
     inventory?: ViewFactInventory;
     inventoryAudit?: ViewInventoryAudit;
@@ -602,6 +630,20 @@ export interface ViewSupportReport {
 }
 export interface ViewSynthesisAdapter {
     identity: string;
+    repairSchemaAnswers?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        report: ViewSupportReport,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput>;
+    proposeSchema?(
+        specification: string,
+        signal: AbortSignal,
+    ): Promise<SchemaViewDefinition>;
+    discoverSchemaQuestions?(
+        input: ViewBuildSnapshot,
+        signal: AbortSignal,
+    ): Promise<import("./schemaViewTypes.js").QuestionSlot[]>;
     assessWikiConsolidation?(
         input: ViewBuildSnapshot,
         survivor: ViewVersion,

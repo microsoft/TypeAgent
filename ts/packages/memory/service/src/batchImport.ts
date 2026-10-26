@@ -584,6 +584,40 @@ export class MemoryBatchStore {
         return results;
     }
 
+    public async pendingSourceScopes(corpusId: string): Promise<
+        Array<{
+            batchId: string;
+            source: DocumentIngestRequest["source"];
+        }>
+    > {
+        const pending: Array<{
+            batchId: string;
+            source: DocumentIngestRequest["source"];
+        }> = [];
+        for await (const batch of this.stored()) {
+            if (
+                batch.corpusId !== corpusId ||
+                !["running", "cancelling"].includes(batch.state)
+            )
+                continue;
+            for (const member of batch.members) {
+                if (!["pending", "ingesting"].includes(member.state)) continue;
+                const document =
+                    batch.request.documents[Number(member.memberId)];
+                if (!document) continue;
+                const {
+                    text: _text,
+                    html: _html,
+                    markdown: _markdown,
+                    assets: _assets,
+                    ...source
+                } = document.source;
+                pending.push({ batchId: batch.batchId, source });
+            }
+        }
+        return pending;
+    }
+
     public async start(
         request: MemoryBatchImportRequest,
     ): Promise<MemoryBatchImport> {

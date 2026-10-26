@@ -16,10 +16,54 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import * as filesystem from "node:fs/promises";
 import { userInfo } from "node:os";
+import {
+    questionSummary,
+    questionNeedsAttention,
+    validateInventoryPage,
+} from "./inventory.js";
+import type {
+    QuestionSummaryRequest,
+    QuestionReadRequest,
+    QuestionSummaryPage,
+} from "./inventoryTypes.js";
 import path from "node:path";
 import lockfile from "proper-lockfile";
 import { normalizeQueryTemporalContext } from "./temporalContext.js";
 import { indexedQueryTerms } from "./indexedFragments.js";
+import type {
+    QuestionEditRequest,
+    QuestionInventory,
+    SchemaViewPage,
+    SchemaViewPageRequest,
+    SchemaViewProposalRequest,
+    SchemaQuestionDiscoveryRequest,
+} from "./schemaViewTypes.js";
+import type { ViewRetainedInput } from "./viewTypes.js";
+import { DeferredAcquisitionCoordinator } from "./deferredAcquisition.js";
+import type {
+    AcquisitionRequest,
+    AcquisitionRequestInput,
+    AcquisitionReadiness,
+    AcquisitionPeriodicOptions,
+    DeferredAcquisitionConfig,
+} from "./acquisitionTypes.js";
+import { maintenanceScopeMatches } from "./viewMaintenance.js";
+import {
+    emptySchemaView,
+    questionSection,
+    resolveQuestion,
+    schemaCitations,
+    schemaViewLimits,
+    validateQuestionSlot,
+    validateSchemaViewDefinition,
+    sourceAssertionLineage,
+    questionContractRevision,
+} from "./schemaView.js";
+import {
+    editSchemaQuestion,
+    questionInventory,
+    renderViewPage,
+} from "./schemaViewOperations.js";
 
 import {
     MemoryBatchStore,
@@ -474,6 +518,12 @@ export interface FileMemoryServiceOptions {
         maxCandidatesPerPass?: number;
         maxPassesPerGeneration?: number;
         requestBudget?: RequestBudgetLimits;
+    };
+    acquisition?: DeferredAcquisitionConfig & {
+        principalId: string;
+        policyId: string;
+        authorize(request: AcquisitionRequestInput): boolean;
+        graceMs?: number;
     };
     agentSessionImports?: boolean;
     agentSessionDistillationModel?: AgentSessionDistillationModel;
@@ -1067,6 +1117,8 @@ export class FileMemoryService
     private readonly eventIndexFactory: CorpusIndexFactory;
     private readonly capabilities: MemoryServiceCapabilities;
     private readonly viewStore: TypedViewStore;
+    private readonly acquisition: DeferredAcquisitionCoordinator;
+    private readonly acquisitionPolicy: FileMemoryServiceOptions["acquisition"];
     private readonly assetStore: RevisionAssetStore;
     private readonly batchStore: MemoryBatchStore;
     private readonly corpora = new Map<string, CorpusRuntime>();
@@ -1126,6 +1178,10 @@ export class FileMemoryService
         { corpusId: string; jobId: string; sourceIds: Set<string> }
     >();
     private readonly jobs = new Map<string, IngestionJobStatus>();
+    private readonly pendingSourceScopes = new Map<
+        string,
+        DocumentIngestRequest["source"]
+    >();
     private readonly jobWrites = new Map<string, Promise<void>>();
     private readonly controllers = new Map<string, AbortController>();
     private initializePromise: Promise<void> | undefined;
@@ -1135,6 +1191,13 @@ export class FileMemoryService
     private reconciliationTimer: ReturnType<typeof setInterval> | undefined;
     private readonly reconciliationWork = new Set<string>();
     private readonly wikiMaintenanceFailures = new Map<string, Error>();
+    private readonly schemaTimers = new Map<
+        string,
+        ReturnType<typeof setTimeout>
+    >();
+    private readonly schemaWork = new Map<string, Promise<void>>();
+    private readonly schemaMaintenanceFailures = new Map<string, Error>();
+    private readonly schemaMaintenanceRetries = new Map<string, number>();
     private readonly informationalWikiEnabled: boolean;
     private readonly wikiBudget: RequestBudgetLimits | undefined;
     private readonly wikiModelEndpoint: string | undefined;
@@ -1179,6 +1242,34 @@ export class FileMemoryService
                 );
         if ((options.maintenanceLimits?.maxTargetsPerPass ?? 12) > 12)
             throw new Error("Maintenance target limit cannot exceed 12");
+        this.acquisitionPolicy = options.acquisition;
+        this.acquisition = new DeferredAcquisitionCoordinator(
+            rootDirectory,
+            {
+                listQuestions: async (corpusId) => {
+                    await this.getCorpusRuntime(corpusId);
+                    const snapshot = await this.viewStore.listViews(corpusId);
+                    return {
+                        head: snapshot.head,
+                        items: questionInventory(snapshot),
+                    };
+                },
+                inspect: (request) => this.inspectAcquisition(request),
+                withAdmissionBarrier: (corpusId, operation) =>
+                    this.enqueueWrite(corpusId, operation),
+                admit: (request) => this.ingestDocument(request),
+                getSource: async (corpusId, sourceId) => {
+                    const runtime = await this.getCorpusRuntime(corpusId);
+                    return structuredClone(
+                        runtime.manifest.sources.find(
+                            (source) => source.sourceId === sourceId,
+                        ),
+                    );
+                },
+                getJob: (jobId) => this.getJob(jobId),
+            },
+            options.acquisition ?? {},
+        );
         this.revisionTextCheckpoint = options.revisionTextCheckpoint;
         this.viewPublicationCheckpoint = options.viewPublicationCheckpoint;
         this.viewDrafts = options.viewDrafts !== false;
@@ -1574,14 +1665,18 @@ export class FileMemoryService
         this.closed = true;
         for (const work of this.topicSummaryWork.values())
             work.controller.abort(new Error("Memory service is closing"));
+        await this.acquisition.close();
         if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
         const maintenanceClosure = this.maintenance.close();
+        for (const timer of this.schemaTimers.values()) clearTimeout(timer);
+        this.schemaTimers.clear();
         await this.initializePromise?.catch(() => undefined);
         for (const controller of this.controllers.values()) {
             controller.abort(new Error("Memory service is closing"));
         }
         await this.agentSessionStore.close();
         await this.batchStore.close();
+        await Promise.allSettled(this.schemaWork.values());
 
         this.viewBuilds.cancelAll();
         await Promise.allSettled([
@@ -1602,6 +1697,8 @@ export class FileMemoryService
         await maintenanceClosure;
         if (viewFailure.status === "rejected") throw viewFailure.reason;
         for (const failure of this.wikiMaintenanceFailures.values())
+            throw failure;
+        for (const failure of this.schemaMaintenanceFailures.values())
             throw failure;
     }
 
@@ -1786,6 +1883,15 @@ export class FileMemoryService
         );
         return this.enqueueWrite(corpusId, async () => {
             const runtime = await this.getCorpusRuntime(corpusId);
+            await this.acquisition.suppress(corpusId, {
+                viewIds: (await this.viewStore.listViews(corpusId)).views.map(
+                    (view) => view.viewId,
+                ),
+                sourceIds: runtime.manifest.sources.map(
+                    (source) => source.sourceId,
+                ),
+                uncertain: true,
+            });
             await this.agentSessionStore.purge(corpusId);
             await this.viewStore.clearDerivedViews(corpusId);
             if (runtime.manifest.indexGeneration !== undefined) {
@@ -1846,6 +1952,10 @@ export class FileMemoryService
         runtime: CorpusRuntime,
     ): Promise<void> {
         const removedSources = runtime.manifest.pendingCorpusClear;
+        await this.acquisition.suppress(corpusId, {
+            sourceIds: removedSources?.map((source) => source.sourceId) ?? [],
+            uncertain: true,
+        });
         const indexGeneration = runtime.manifest.indexGeneration;
         if (!removedSources || !indexGeneration)
             throw new Error(
@@ -2391,6 +2501,14 @@ export class FileMemoryService
             warnings: [],
         };
         await this.saveJob(job);
+        const {
+            text: _text,
+            markdown: _markdown,
+            html: _html,
+            assets: _assets,
+            ...sourceScope
+        } = request.source;
+        this.pendingSourceScopes.set(jobId, { ...sourceScope, sourceId });
         const controller = new AbortController();
         this.controllers.set(jobId, controller);
         signal?.addEventListener(
@@ -2463,6 +2581,7 @@ export class FileMemoryService
                 if (forgotten) throw error;
             })
             .finally(() => {
+                this.pendingSourceScopes.delete(jobId);
                 this.controllers.delete(jobId);
                 if (admittedAt !== undefined) {
                     runWithSearchTiming(jobId, "memory.ingestion", () =>
@@ -2719,6 +2838,14 @@ export class FileMemoryService
         if (!removal)
             throw new Error("No authorized source removal to recover");
         const sourceId = removal.sourceId;
+        const affected = (await this.viewStore.listViews(corpusId)).views.map(
+            (view) => view.viewId,
+        );
+        await this.acquisition.suppress(corpusId, {
+            sourceIds: [sourceId],
+            viewIds: affected,
+            uncertain: true,
+        });
         this.viewBuilds.forget(corpusId, sourceId);
         const candidateManifest = structuredClone(runtime.manifest);
         const retained = candidateManifest.sources.some(
@@ -3496,11 +3623,13 @@ export class FileMemoryService
                               "projectBrief",
                               "timeline",
                               "wiki",
+                              "schemaView",
                           ] as Array<
                               | "troubleshootingGuide"
                               | "projectBrief"
                               | "timeline"
                               | "wiki"
+                              | "schemaView"
                           >,
                           drafts: true as const,
                           history: true as const,
@@ -3780,6 +3909,699 @@ export class FileMemoryService
         }
     }
 
+    public async listQuestions(corpusId: string): Promise<QuestionInventory> {
+        const runtime = await this.requireViews(corpusId);
+        return runtime.access.read(async () => {
+            const snapshot = await this.viewStore.listViews(corpusId);
+            const failure = this.schemaMaintenanceFailures.get(corpusId);
+            return {
+                head: snapshot.head,
+                items: questionInventory(snapshot),
+                ...(failure ? { maintenanceError: failure.message } : {}),
+            };
+        });
+    }
+
+    public async listQuestionSummaries(
+        request: QuestionSummaryRequest,
+    ): Promise<QuestionSummaryPage> {
+        validateInventoryPage(request);
+        if (
+            request.answerFilter !== undefined &&
+            !["open", "answered"].includes(request.answerFilter)
+        )
+            throw new Error("Question answerFilter must be open or answered");
+        if (
+            request.attentionOnly !== undefined &&
+            typeof request.attentionOnly !== "boolean"
+        )
+            throw new Error("Question attentionOnly must be a boolean");
+        const inventory = await this.listQuestions(request.corpusId);
+        const query = request.query?.toLowerCase() ?? "";
+        const items = inventory.items
+            .map(questionSummary)
+            .filter(
+                (question) =>
+                    (!request.viewId || question.viewId === request.viewId) &&
+                    (!request.answerFilter ||
+                        (question.details.answerState === "answered") ===
+                            (request.answerFilter === "answered")) &&
+                    (!request.attentionOnly ||
+                        questionNeedsAttention(question)) &&
+                    `${question.slot.question} ${question.viewTitle}`
+                        .toLowerCase()
+                        .includes(query),
+            )
+            .sort(
+                (a, b) =>
+                    b.attentionScore - a.attentionScore ||
+                    a.viewId.localeCompare(b.viewId) ||
+                    a.slot.id.localeCompare(b.slot.id),
+            );
+        return {
+            ...pageItems(
+                items,
+                request.pageSize ?? 25,
+                request.continuationToken,
+            ),
+            head: inventory.head,
+            ...(inventory.maintenanceError
+                ? { maintenanceError: inventory.maintenanceError }
+                : {}),
+        };
+    }
+
+    public async getQuestion(
+        request: QuestionReadRequest,
+    ): Promise<import("./schemaViewTypes.js").MemoryQuestion | undefined> {
+        const runtime = await this.requireViews(request.corpusId);
+        validateIdentifier("view ID", request.viewId);
+        validateIdentifier("slot ID", request.slotId);
+        return runtime.access.read(() =>
+            this.viewStore.withReadSnapshot(request.corpusId, async () => {
+                const view = await this.viewStore.getView({
+                    corpusId: request.corpusId,
+                    viewId: request.viewId,
+                });
+                if (!view) return undefined;
+                return questionInventory({ head: null, views: [view] }).find(
+                    (question) => question.slot.id === request.slotId,
+                );
+            }),
+        );
+    }
+
+    public async requestAcquisition(
+        request: AcquisitionRequestInput,
+    ): Promise<AcquisitionRequest> {
+        await this.requireViews(request.corpusId);
+        const policy = this.acquisitionPolicy;
+        if (
+            !policy?.toolsEnabled ||
+            request.principalId !== policy.principalId ||
+            request.policyId !== policy.policyId
+        )
+            throw new Error(
+                "External acquisition requires explicit host authorization for this principal, policy and outbound arguments",
+            );
+        return this.enqueueWrite(request.corpusId, async () => {
+            const views = (await this.viewStore.listViews(request.corpusId))
+                .views;
+            const tags = new Set<string>();
+            const projects = new Set<string>();
+            for (const consumer of request.consumers) {
+                const view = views.find(
+                    (view) => view.viewId === consumer.viewId,
+                );
+                const scope = view?.definition.maintenance?.scope;
+                if (
+                    !scope ||
+                    scope.mode !== "scopedSources" ||
+                    (scope.sourceTypes && !scope.sourceTypes.includes("text"))
+                )
+                    throw new Error(
+                        "Acquisition consumers require an explicit dynamic source scope admitting text results; pinned/current-source scopes are not widened",
+                    );
+                for (const tag of scope.tags ?? []) tags.add(tag);
+                if (scope.project !== undefined) projects.add(scope.project);
+            }
+            if (projects.size > 1)
+                throw new Error(
+                    "Acquisition consumers have incompatible project scopes",
+                );
+            const {
+                sourceTags: _tags,
+                sourceProject: _project,
+                ...authorized
+            } = request;
+            const derived: AcquisitionRequestInput = {
+                ...authorized,
+                ...(tags.size ? { sourceTags: [...tags].sort() } : {}),
+                ...(projects.size ? { sourceProject: [...projects][0] } : {}),
+            };
+            if (!policy.authorize(derived))
+                throw new Error(
+                    "Host policy rejected outbound acquisition arguments",
+                );
+            const readiness = await this.inspectAcquisition(derived);
+            if (!readiness.authorityValid)
+                throw new Error(
+                    "Acquisition consumers or source scope are obsolete",
+                );
+            return this.acquisition.add(derived);
+        });
+    }
+
+    public async listAcquisitions(
+        corpusId: string,
+    ): Promise<AcquisitionRequest[]> {
+        const runtime = await this.requireViews(corpusId);
+        return runtime.access.read(() => this.acquisition.list(corpusId));
+    }
+
+    public async cancelAcquisition(request: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<AcquisitionRequest> {
+        await this.requireViews(request.corpusId);
+        await this.acquisition.cancel(request.corpusId, request.requestId);
+        const updated = (await this.acquisition.list(request.corpusId)).find(
+            (entry) => entry.requestId === request.requestId,
+        );
+        if (!updated) throw new Error("Acquisition request is unavailable");
+        return updated;
+    }
+
+    public async runAcquisitions(
+        corpusId: string,
+    ): Promise<AcquisitionRequest[]> {
+        await this.requireViews(corpusId);
+        await this.acquisition.runOnce(corpusId);
+        return this.listAcquisitions(corpusId);
+    }
+
+    public async startAcquisitionPeriodic(
+        options: AcquisitionPeriodicOptions,
+    ): Promise<void> {
+        for (const corpusId of options.corpusIds)
+            await this.requireViews(corpusId);
+        this.acquisition.startPeriodic(options);
+    }
+
+    private async inspectAcquisition(
+        request: AcquisitionRequestInput,
+    ): Promise<AcquisitionReadiness> {
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        this.assertRemovalComplete(runtime);
+        const policy = this.acquisitionPolicy;
+        let authorityValid =
+            !!policy?.toolsEnabled &&
+            request.principalId === policy.principalId &&
+            request.policyId === policy.policyId &&
+            policy.authorize(request);
+        const views = (await this.viewStore.listViews(request.corpusId)).views;
+        const relevant = new Map<
+            string,
+            { sourceId: string; revisionId: string }
+        >();
+        const pendingJobIds = new Set<string>();
+        let scopeEvaluated = true;
+        const consumers = request.consumers.map((consumer) => {
+            const view = views.find(
+                (view) =>
+                    view.viewId === consumer.viewId &&
+                    view.state !== "archived",
+            );
+            const slot = view?.definition.schemaView?.slots.find(
+                (slot) => slot.id === consumer.slotId,
+            );
+            const section =
+                view?.content.kind === "schemaView"
+                    ? view.content.sections.find(
+                          (section) => section.id === consumer.slotId,
+                      )
+                    : undefined;
+            if (
+                !view ||
+                !slot ||
+                !section ||
+                slot.approval !== "approved" ||
+                questionContractRevision(view.definition, slot) !==
+                    consumer.definitionRevision
+            ) {
+                authorityValid = false;
+                return { ...consumer, status: "obsolete" as const };
+            }
+            const definition = derivedDefinitionInput(view);
+            const maintenance = definition.maintenance;
+            const selected =
+                maintenance && maintenance.scope.mode !== "pinned"
+                    ? runtime.manifest.sources
+                          .filter((source) =>
+                              maintenanceScopeMatches(maintenance, source),
+                          )
+                          .map((source) => ({
+                              sourceId: source.sourceId,
+                              revisionId: source.activeRevisionId,
+                          }))
+                    : definition.selector.sources;
+            for (const source of selected)
+                relevant.set(`${source.sourceId}:${source.revisionId}`, source);
+            if (
+                view.state === "stale" ||
+                viewHash(
+                    [...selected].sort((a, b) =>
+                        a.sourceId.localeCompare(b.sourceId),
+                    ),
+                ) !==
+                    viewHash(
+                        [...section.details.evaluatedSources].sort((a, b) =>
+                            a.sourceId.localeCompare(b.sourceId),
+                        ),
+                    )
+            )
+                scopeEvaluated = false;
+            for (const jobId of this.pendingAcquisitionJobs(
+                request.corpusId,
+                view,
+                selected,
+                runtime,
+            ))
+                pendingJobIds.add(jobId);
+            const resolved = resolveQuestion(
+                slot,
+                section.details.candidates,
+                section.details.evaluatedSources,
+            );
+            return {
+                ...consumer,
+                status:
+                    resolved.answerState === "answered" &&
+                    resolved.freshness === "current"
+                        ? ("resolved" as const)
+                        : ("missing" as const),
+            };
+        });
+        const pendingBatchIds: string[] = [];
+        for (const pending of await this.batchStore.pendingSourceScopes(
+            request.corpusId,
+        )) {
+            if (
+                request.consumers.some((consumer) => {
+                    const view = views.find(
+                        (view) => view.viewId === consumer.viewId,
+                    );
+                    return (
+                        view &&
+                        this.matchesAcquisitionSource(
+                            view,
+                            pending.source,
+                            request.corpusId,
+                        )
+                    );
+                }) &&
+                !pendingBatchIds.includes(pending.batchId)
+            )
+                pendingBatchIds.push(pending.batchId);
+        }
+        const newest = Math.max(
+            0,
+            ...[...relevant.values()].map((selected) => {
+                const source = runtime.manifest.sources.find(
+                    (source) => source.sourceId === selected.sourceId,
+                );
+                const revision = source?.revisions.find(
+                    (revision) => revision.revisionId === selected.revisionId,
+                );
+                return (
+                    Date.parse(
+                        revision?.indexedAt ?? revision?.capturedAt ?? "",
+                    ) || 0
+                );
+            }),
+        );
+        if (Date.now() - newest < (policy?.graceMs ?? 1000))
+            scopeEvaluated = false;
+        return {
+            authorityValid,
+            scopeEvaluated,
+            pendingJobIds: [...pendingJobIds],
+            pendingBatchIds,
+            consumers,
+        };
+    }
+
+    private matchesAcquisitionSource(
+        view: ViewVersion,
+        source: DocumentIngestRequest["source"],
+        corpusId: string,
+    ): boolean {
+        const maintenance = view.definition.maintenance;
+        if (!maintenance || maintenance.scope.mode === "pinned")
+            return view.definition.selector.sources.some(
+                (entry) => entry.sourceId === source.sourceId,
+            );
+        return maintenanceScopeMatches(maintenance, {
+            corpusId,
+            sourceId: source.sourceId ?? "unassigned",
+            activeRevisionId: "pending",
+            sourceType: source.sourceType,
+            title: source.title,
+            ...(source.tags ? { tags: source.tags } : {}),
+            ...(source.metadata ? { metadata: source.metadata } : {}),
+        });
+    }
+
+    private pendingAcquisitionJobs(
+        corpusId: string,
+        view: ViewVersion,
+        selected: Array<{ sourceId: string; revisionId: string }>,
+        runtime: CorpusRuntime,
+    ): string[] {
+        const pending: string[] = [];
+        for (const job of this.jobs.values()) {
+            if (
+                job.corpusId !== corpusId ||
+                ["complete", "partial", "failed", "cancelled"].includes(
+                    job.state,
+                )
+            )
+                continue;
+            const source =
+                this.pendingSourceScopes.get(job.jobId) ??
+                runtime.manifest.sources.find(
+                    (source) => source.sourceId === job.sourceId,
+                );
+            if (
+                selected.some(
+                    (selected) => selected.sourceId === job.sourceId,
+                ) ||
+                (source &&
+                    this.matchesAcquisitionSource(view, source, corpusId))
+            )
+                pending.push(job.jobId);
+        }
+        return pending;
+    }
+
+    public async getViewPage(
+        request: SchemaViewPageRequest,
+    ): Promise<SchemaViewPage> {
+        const runtime = await this.requireViews(request.corpusId);
+        return runtime.access.read(async () => {
+            const view = await this.viewStore.getView(request);
+            if (!view || view.state === "archived")
+                throw new Error("View page is unavailable");
+            return renderViewPage(view, request);
+        });
+    }
+
+    public async editQuestion(
+        request: QuestionEditRequest,
+    ): Promise<ViewHistoryEntry> {
+        const view = await this.getView(request);
+        if (!view) throw new Error("Question view is unavailable");
+        return this.saveViewDraft(editSchemaQuestion(view, request));
+    }
+
+    public async proposeSchemaView(
+        request: SchemaViewProposalRequest,
+    ): Promise<ViewHistoryEntry> {
+        await this.requireViews(request.corpusId);
+        validateIdentifier("view ID", request.viewId);
+        if (request.expectedVersion !== 0)
+            throw new Error(
+                "Assisted authoring creates a new proposal; edit existing questions explicitly",
+            );
+        if (
+            typeof request.specification !== "string" ||
+            !request.specification.trim() ||
+            request.specification.length > schemaViewLimits.specificationChars
+        )
+            throw new Error("Specification requires 1 to 16000 characters");
+        if (!request.maintenance)
+            throw new Error("Authoring requires an explicit source scope");
+        if (!this.viewAdapter.proposeSchema)
+            throw new Error("Schema authoring is unsupported by this host");
+        const schemaView = await this.viewAdapter.proposeSchema(
+            request.specification,
+            AbortSignal.timeout(120000),
+        );
+        for (const slot of schemaView.slots) {
+            slot.approval = "proposed";
+            slot.discoveryCitations = [];
+            slot.rubric.requireConfirmation = true;
+        }
+        schemaView.discovery = { enabled: false, maxProposals: 0 };
+        const definition: ViewDefinitionInput = {
+            viewId: request.viewId,
+            kind: "schemaView",
+            selector: { kind: "sources", sources: [] },
+            maintenance: request.maintenance,
+            schemaView,
+        };
+        validateSchemaViewDefinition(definition);
+        return this.saveViewDraft({
+            corpusId: request.corpusId,
+            viewId: request.viewId,
+            expectedHead: request.expectedHead,
+            expectedVersion: 0,
+            definition,
+            content: emptySchemaView(schemaView),
+            relationships: [],
+        });
+    }
+
+    public async discoverSchemaQuestions(
+        request: SchemaQuestionDiscoveryRequest,
+    ): Promise<ViewHistoryEntry> {
+        const runtime = await this.requireViews(request.corpusId);
+        const view = await this.getView(request);
+        if (
+            !view ||
+            view.version !== request.expectedVersion ||
+            view.content.kind !== "schemaView"
+        )
+            throw new Error(
+                "Discovery requires the current exact schema view version",
+            );
+        const definition = structuredClone(derivedDefinitionInput(view));
+        const schema = definition.schemaView!;
+        if (
+            !schema.discovery.enabled ||
+            !this.viewAdapter.discoverSchemaQuestions
+        )
+            throw new Error(
+                "Question discovery is disabled or unsupported by this host",
+            );
+        const remaining =
+            schema.discovery.maxProposals -
+            schema.slots.filter((slot) => slot.discoveryCitations.length)
+                .length;
+        if (remaining <= 0)
+            throw new Error("Question discovery allowance is exhausted");
+        const plan = this.resolveMaintenanceTarget(
+            definition,
+            runtime,
+            {},
+            view,
+        );
+        if (plan.state === "blocked")
+            throw new Error(
+                `Discovery source scope is unavailable: ${plan.reason}`,
+            );
+        if (plan.state === "rebuild")
+            throw new Error(
+                "Reconcile the current question source scope before discovering additional questions",
+            );
+        definition.selector = plan.selector ?? definition.selector;
+        const input = await runtime.access.read(() =>
+            this.snapshotViewTarget(
+                request.corpusId,
+                { definition, expectedVersion: view.version },
+                {},
+            ),
+        );
+        const proposals = await this.viewAdapter.discoverSchemaQuestions(
+            input,
+            AbortSignal.timeout(120000),
+        );
+        if (
+            proposals.length > remaining ||
+            schema.slots.length + proposals.length > schemaViewLimits.slots
+        )
+            throw new Error(
+                "Question discovery exceeded its cumulative allowance",
+            );
+        const known = new Set(
+            schema.slots.flatMap((slot) => [
+                slot.id,
+                slot.question.trim().toLowerCase(),
+            ]),
+        );
+        for (const proposed of proposals) {
+            validateQuestionSlot(proposed);
+            if (
+                known.has(proposed.id) ||
+                known.has(proposed.question.trim().toLowerCase())
+            )
+                continue;
+            if (!proposed.discoveryCitations.length)
+                throw new Error(
+                    "Discovered questions require original-source evidence",
+                );
+            const slot = { ...proposed, approval: "proposed" as const };
+            schema.slots.push(slot);
+            known.add(slot.id);
+            known.add(slot.question.trim().toLowerCase());
+        }
+        schema.discovery.lastEvaluatedScope = viewHash(
+            definition.selector.sources,
+        );
+        const content = emptySchemaView(schema, definition.selector.sources);
+        for (const section of content.sections) {
+            const prior = view.content.sections.find(
+                (entry) => entry.id === section.id,
+            );
+            if (prior)
+                Object.assign(
+                    section,
+                    questionSection(
+                        schema.slots.find((slot) => slot.id === section.id)!,
+                        resolveQuestion(
+                            schema.slots.find(
+                                (slot) => slot.id === section.id,
+                            )!,
+                            prior.details.candidates,
+                            definition.selector.sources,
+                        ),
+                    ),
+                );
+        }
+        content.citations = schemaCitations(schema, content.sections);
+        return this.saveViewDraft({
+            corpusId: request.corpusId,
+            viewId: request.viewId,
+            expectedHead: request.expectedHead,
+            expectedVersion: request.expectedVersion,
+            definition,
+            content,
+            relationships: authoredRelationships(view),
+        });
+    }
+
+    private scheduleSchemaMaintenance(corpusId: string): void {
+        if (this.closed || !this.viewDrafts || this.schemaTimers.has(corpusId))
+            return;
+        const timer = setTimeout(() => {
+            this.schemaTimers.delete(corpusId);
+            if (this.closed) return;
+            if (this.schemaWork.has(corpusId)) {
+                this.scheduleSchemaMaintenance(corpusId);
+                return;
+            }
+            const work = this.reconcileSchemaViews(corpusId)
+                .then(
+                    () => {
+                        this.schemaMaintenanceFailures.delete(corpusId);
+                        this.schemaMaintenanceRetries.delete(corpusId);
+                    },
+                    (error: unknown) => {
+                        this.recordSchemaMaintenanceFailure(corpusId, error);
+                    },
+                )
+                .finally(() => this.schemaWork.delete(corpusId));
+            this.schemaWork.set(corpusId, work);
+        }, 250);
+        timer.unref();
+        this.schemaTimers.set(corpusId, timer);
+    }
+
+    private recordSchemaMaintenanceFailure(
+        corpusId: string,
+        error: unknown,
+    ): void {
+        const failure =
+            error instanceof Error ? error : new Error(String(error));
+        if (this.closed && failure.message === "Memory service is closed")
+            return;
+        const manifest = this.corpora.get(corpusId)?.manifest;
+        if (
+            error instanceof ViewBuildStaleError &&
+            (manifest?.authorizedSourceRemoval || manifest?.pendingCorpusClear)
+        ) {
+            this.scheduleSchemaMaintenance(corpusId);
+            return;
+        }
+        const retries = this.schemaMaintenanceRetries.get(corpusId) ?? 0;
+        const stalePlan =
+            error instanceof ViewBuildStaleError &&
+            failure.message ===
+                "Maintenance head or target version changed; inspect a fresh plan";
+        if (
+            (stalePlan ||
+                /^View (history head|version) conflict/.test(
+                    failure.message,
+                )) &&
+            retries < 3
+        ) {
+            this.schemaMaintenanceRetries.set(corpusId, retries + 1);
+            this.scheduleSchemaMaintenance(corpusId);
+            return;
+        }
+        this.schemaMaintenanceFailures.set(corpusId, failure);
+    }
+
+    private async reconcileSchemaViews(corpusId: string): Promise<void> {
+        const snapshot = await this.listViews(corpusId);
+        const views = snapshot.views.filter(
+            (view) =>
+                view.state !== "archived" &&
+                view.definition.schemaView &&
+                view.definition.maintenance,
+        );
+        if (!views.length) return;
+        const jobs = await this.listViewBuilds(corpusId);
+        const active = jobs.some(
+            (job) =>
+                ["queued", "running"].includes(job.state) &&
+                job.results.some((result) =>
+                    views.some((view) => view.viewId === result.viewId),
+                ),
+        );
+        if (active) {
+            this.scheduleSchemaMaintenance(corpusId);
+            return;
+        }
+        const plan = await this.planViewMaintenance({
+            corpusId,
+            viewIds: views.map((view) => view.viewId),
+        });
+        const blocked = plan.targets.find(
+            (target) => target.state === "blocked",
+        );
+        const rebuild = plan.targets.filter(
+            (target) => target.state === "rebuild",
+        );
+        if (rebuild.length) {
+            const failure = rebuild.find((target) =>
+                jobs.some((job) =>
+                    job.results.some(
+                        (result) =>
+                            result.viewId === target.viewId &&
+                            [
+                                "failed",
+                                "blocked",
+                                "conflicted",
+                                "cancelled",
+                                "interrupted",
+                            ].includes(result.state) &&
+                            result.snapshot.maintenance?.fingerprint ===
+                                target.snapshot?.fingerprint,
+                    ),
+                ),
+            );
+            if (failure)
+                throw new Error(
+                    `Question reconciliation for ${failure.viewId} needs an explicit retry or changed evidence; automatic retries are stopped`,
+                );
+            await this.maintainViews({
+                corpusId,
+                expectedHead: plan.expectedHead,
+                targets: rebuild.map((target) => ({
+                    viewId: target.viewId,
+                    expectedVersion: target.expectedVersion,
+                })),
+            });
+            this.scheduleSchemaMaintenance(corpusId);
+            return;
+        }
+        if (blocked)
+            throw new Error(
+                `Question reconciliation blocked: ${blocked.reason}`,
+            );
+    }
+
     public async getSourceViewUsage(
         request: ViewSourceUsageRequest,
     ): Promise<ViewSourceUsagePage> {
@@ -3899,6 +4721,7 @@ export class FileMemoryService
         }
         if (
             request.definition.maintenance !== undefined &&
+            !(request.content.kind === "schemaView" && !prior) &&
             viewHash(request.definition.maintenance) !==
                 viewHash(prior?.definition.maintenance)
         )
@@ -3913,42 +4736,8 @@ export class FileMemoryService
             throw new Error(
                 "Timeline and wiki drafts must begin with a grounded Build views result",
             );
-        let proof: ViewPublicationProof | undefined;
-        if (prior?.generation?.input) {
-            if (
-                viewHash(prior.definition.selector) !==
-                viewHash(request.definition.selector)
-            )
-                throw new Error(
-                    "Generated guide source selection must change through an explicit rebuild",
-                );
-            const output: ViewSynthesisOutput = {
-                content: request.content,
-                relationships: request.relationships,
-                outcome: prior.generation.outcome ?? "diagnosticOnly",
-                missingEvidence: prior.generation.missingEvidence ?? [
-                    "Human edit retains generation evidence limits",
-                ],
-                ...inventoryEvidence(prior.generation),
-            };
-            validateConstructedGuide(prior.generation.input, output);
-            const support = informationalWiki(output.content)
-                ? undefined
-                : await this.viewAdapter.validate(
-                      prior.generation.input,
-                      output,
-                      this.maintenance.signal,
-                  );
-            if (support) {
-                validateSupport(output, support);
-                proof = publicationProof(
-                    prior.generation.input.fingerprint,
-                    output,
-                    support,
-                );
-            }
-        }
-        return this.enqueueWrite(request.corpusId, async () => {
+        const proof = await this.validateDraftGeneration(request, prior);
+        const result = await this.enqueueWrite(request.corpusId, async () => {
             const runtime = await this.getCorpusRuntime(request.corpusId);
             if (informationalWiki(request.content))
                 await this.ensureDocumentIndex(request.corpusId, runtime);
@@ -4021,6 +4810,50 @@ export class FileMemoryService
             await this.markWikiRetrievalChanged(request, prior);
             return saved;
         });
+        if (request.definition.schemaView)
+            this.scheduleSchemaMaintenance(request.corpusId);
+        return result;
+    }
+
+    private async validateDraftGeneration(
+        request: ViewSaveRequest,
+        prior: ViewVersion | undefined,
+    ): Promise<ViewPublicationProof | undefined> {
+        const frozen = prior?.generation?.input;
+        if (!frozen || !prior?.generation) return undefined;
+        if (
+            viewHash(prior.definition.selector) !==
+            viewHash(request.definition.selector)
+        )
+            throw new Error(
+                "Generated guide source selection must change through an explicit rebuild",
+            );
+        const output: ViewSynthesisOutput = {
+            content: request.content,
+            relationships: request.relationships,
+            outcome: prior.generation.outcome ?? "diagnosticOnly",
+            missingEvidence: prior.generation.missingEvidence ?? [
+                "Human edit retains generation evidence limits",
+            ],
+            ...inventoryEvidence(prior.generation),
+        };
+        const validationInput =
+            request.content.kind === "schemaView"
+                ? { ...frozen, definition: request.definition }
+                : frozen;
+        validateConstructedGuide(validationInput, output);
+        if (informationalWiki(output.content)) return undefined;
+        const support = await this.viewAdapter.validate(
+            validationInput,
+            output,
+            this.maintenance.signal,
+        );
+        validateSupport(output, support);
+        if (
+            viewHash(validationInput.definition) !== viewHash(frozen.definition)
+        )
+            return undefined;
+        return publicationProof(frozen.fingerprint, output, support);
     }
 
     private async markWikiRetrievalChanged(
@@ -4485,7 +5318,7 @@ export class FileMemoryService
             request.freshness !== "current" ||
             (request.kinds !== undefined &&
                 (!Array.isArray(request.kinds) ||
-                    request.kinds.length > 4 ||
+                    request.kinds.length > 5 ||
                     request.kinds.some(
                         (kind) =>
                             ![
@@ -4493,6 +5326,7 @@ export class FileMemoryService
                                 "projectBrief",
                                 "timeline",
                                 "wiki",
+                                "schemaView",
                             ].includes(kind),
                     ))) ||
             (request.limit !== undefined &&
@@ -6532,59 +7366,69 @@ export class FileMemoryService
             current,
         );
         assertMaintenanceMembership(target, current, maintenance);
-        const inputs = target.definition.selector.sources.map((selected) => {
-            const source = runtime.manifest.sources.find(
-                (entry) => entry.sourceId === selected.sourceId,
-            );
-            const revision = source?.revisions.find(
-                (entry) => entry.revisionId === selected.revisionId,
-            );
-            if (
-                !source ||
-                !revision ||
-                revision.state !== "ready" ||
-                source.activeRevisionId !== selected.revisionId
-            )
-                throw new ViewBuildStaleError(
-                    "Selected source is unavailable or no longer the current exact retained revision",
+        const inputs: ViewRetainedInput[] =
+            target.definition.selector.sources.map((selected) => {
+                const source = runtime.manifest.sources.find(
+                    (entry) => entry.sourceId === selected.sourceId,
                 );
-            if (target.definition.kind === "timeline")
-                return timelineDocumentInput(
-                    {
-                        ...selected,
-                        title: source.title,
-                        content: revision.content,
-                        capturedAt: revision.capturedAt,
-                    },
-                    bounds ?? {},
+                const revision = source?.revisions.find(
+                    (entry) => entry.revisionId === selected.revisionId,
                 );
-            const learnedAt = revision.capturedAt;
-            const occurredAt = revision.sourceModifiedAt;
-            if (
-                (bounds?.learnedBefore &&
-                    (!learnedAt ||
-                        Date.parse(learnedAt) >
-                            Date.parse(bounds.learnedBefore))) ||
-                (bounds?.occurredFrom &&
-                    (!occurredAt ||
-                        Date.parse(occurredAt) <
-                            Date.parse(bounds.occurredFrom))) ||
-                (bounds?.occurredTo &&
-                    (!occurredAt ||
-                        Date.parse(occurredAt) > Date.parse(bounds.occurredTo)))
-            )
-                throw new ViewBuildStaleError(
-                    "Selected complete source is outside the temporal bounds or lacks a required timestamp; no source truncation is applied",
-                );
-            return {
-                ...selected,
-                title: source.title,
-                content: revision.content,
-                contentHash: viewHash(revision.content),
-                ...(learnedAt === undefined ? {} : { learnedAt }),
-                ...(occurredAt === undefined ? {} : { occurredAt }),
-            };
-        });
+                if (
+                    !source ||
+                    !revision ||
+                    revision.state !== "ready" ||
+                    source.activeRevisionId !== selected.revisionId
+                )
+                    throw new ViewBuildStaleError(
+                        "Selected source is unavailable or no longer the current exact retained revision",
+                    );
+                if (target.definition.kind === "timeline")
+                    return timelineDocumentInput(
+                        {
+                            ...selected,
+                            title: source.title,
+                            content: revision.content,
+                            capturedAt: revision.capturedAt,
+                        },
+                        bounds ?? {},
+                    );
+                const learnedAt = revision.capturedAt;
+                const occurredAt = revision.sourceModifiedAt;
+                if (
+                    (bounds?.learnedBefore &&
+                        (!learnedAt ||
+                            Date.parse(learnedAt) >
+                                Date.parse(bounds.learnedBefore))) ||
+                    (bounds?.occurredFrom &&
+                        (!occurredAt ||
+                            Date.parse(occurredAt) <
+                                Date.parse(bounds.occurredFrom))) ||
+                    (bounds?.occurredTo &&
+                        (!occurredAt ||
+                            Date.parse(occurredAt) >
+                                Date.parse(bounds.occurredTo)))
+                )
+                    throw new ViewBuildStaleError(
+                        "Selected complete source is outside the temporal bounds or lacks a required timestamp; no source truncation is applied",
+                    );
+                return {
+                    ...selected,
+                    title: source.title,
+                    content: revision.content,
+                    contentHash: viewHash(revision.content),
+                    ...(learnedAt === undefined ? {} : { learnedAt }),
+                    ...(occurredAt === undefined ? {} : { occurredAt }),
+                    ...(target.definition.schemaView &&
+                    source.metadata?.assertionLineage !== undefined
+                        ? {
+                              assertionLineage: sourceAssertionLineage(
+                                  source.metadata,
+                              )!,
+                          }
+                        : {}),
+                };
+            });
         for (const selected of target.definition.selector.events ?? []) {
             const event = runtime.events.find(
                 (entry) => entry.eventId === selected.eventId,
@@ -6632,9 +7476,11 @@ export class FileMemoryService
                   }
                 : {}),
             pipeline:
-                target.definition.kind === "timeline"
-                    ? ("timeline-v1" as const)
-                    : ("troubleshooting-v1" as const),
+                target.definition.kind === "schemaView"
+                    ? ("schema-defined-v1" as const)
+                    : target.definition.kind === "timeline"
+                      ? ("timeline-v1" as const)
+                      : ("troubleshooting-v1" as const),
             model: this.viewAdapter.identity,
             publicationPolicy: effectiveViewPublicationPolicy(
                 await this.viewStore.getViewPublicationPolicy(corpusId),
@@ -7127,7 +7973,11 @@ export class FileMemoryService
                         state: "blocked",
                         reason: "View is missing or archived",
                     };
-                if (view.definition.maintenance && !view.generation?.input)
+                if (
+                    view.definition.maintenance &&
+                    !view.generation?.input &&
+                    !view.definition.schemaView
+                )
                     return {
                         viewId,
                         expectedVersion: view.version,
@@ -7205,6 +8055,9 @@ export class FileMemoryService
                         ...(current.definition.maintenance
                             ? { maintenance: current.definition.maintenance }
                             : {}),
+                        ...(current.definition.schemaView
+                            ? { schemaView: current.definition.schemaView }
+                            : {}),
                     },
                 });
             }
@@ -7253,6 +8106,13 @@ export class FileMemoryService
         this.scheduleSourceSynopses(corpusId);
         const runtime = await this.getCorpusRuntime(corpusId);
         const { views } = await this.viewStore.listViews(corpusId);
+        if (
+            views.some(
+                (view) =>
+                    view.definition.schemaView && view.state !== "archived",
+            )
+        )
+            this.scheduleSchemaMaintenance(corpusId);
         const invalid = views.filter((view) => {
             if (!view.definition.maintenance || view.state !== "draft")
                 return false;

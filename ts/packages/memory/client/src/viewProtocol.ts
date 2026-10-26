@@ -4,6 +4,10 @@
 import { z } from "zod";
 import { topicBuildInputSchema } from "./topicProtocol.js";
 import {
+    schemaViewDefinitionSchema,
+    schemaViewContentSchema,
+} from "./schemaViewProtocol.js";
+import {
     viewMaintenanceDefinitionSchema,
     viewMaintenanceManifestSchema,
     viewMaintenanceSnapshotSchema,
@@ -35,6 +39,7 @@ export const viewSourceUsagePageSchema = z.strictObject({
                 "projectBrief",
                 "timeline",
                 "wiki",
+                "schemaView",
             ]),
             title: text,
             state: z.enum(["draft", "stale", "archived"]),
@@ -68,6 +73,7 @@ export const viewDefinitionSchema = z
             "projectBrief",
             "timeline",
             "wiki",
+            "schemaView",
         ]),
         selector: viewSelectorSchema,
         maintenance: viewMaintenanceDefinitionSchema.optional(),
@@ -87,8 +93,22 @@ export const viewDefinitionSchema = z
                 excludedSourceIds: id.array().max(32),
             })
             .optional(),
+        schemaView: schemaViewDefinitionSchema.optional(),
     })
     .superRefine((definition, context) => {
+        if (
+            (definition.kind === "schemaView") !== !!definition.schemaView ||
+            (definition.schemaView &&
+                (definition.wiki ||
+                    definition.projectSummary ||
+                    !definition.maintenance))
+        )
+            context.addIssue({
+                code: "custom",
+                path: ["schemaView"],
+                message:
+                    "Schema-defined views require their definition and an explicit maintenance scope",
+            });
         if (
             (definition.kind === "wiki") !== !!definition.wiki ||
             (definition.wiki &&
@@ -497,6 +517,7 @@ const wikiContent = wikiContentShape.superRefine((wiki, context) => {
     }
 });
 const content = z.union([
+    schemaViewContentSchema,
     guideContent,
 
     timelineContent,
@@ -504,6 +525,7 @@ const content = z.union([
     informationalProjectContent,
 ]);
 const requestContent = z.union([
+    schemaViewContentSchema,
     guideContent.extend({ citations: citation.array().max(1000) }),
 
     timelineContent.extend({ citations: citation.array().max(1000) }),
@@ -521,6 +543,7 @@ export const viewSynthesisSchema = z.strictObject({
         "projectSummary",
         "chronology",
         "knowledgePages",
+        "schemaAnswers",
     ]),
     missingEvidence: text.array().max(100),
 });
@@ -643,9 +666,15 @@ export const viewSearchRequestSchema = z.strictObject({
     limit: z.number().int().min(1).max(100).optional(),
     freshness: z.literal("current"),
     kinds: z
-        .enum(["troubleshootingGuide", "projectBrief", "timeline", "wiki"])
+        .enum([
+            "troubleshootingGuide",
+            "projectBrief",
+            "timeline",
+            "wiki",
+            "schemaView",
+        ])
         .array()
-        .max(4)
+        .max(5)
         .optional(),
 });
 const snapshot = z.object({
@@ -684,6 +713,7 @@ const snapshot = z.object({
         "informational-wiki-v1",
         "informational-project-summary-v1",
         "topics-v1",
+        "schema-defined-v1",
     ]),
     selectionFingerprint: hash.optional(),
     informationalRetrieval: z
@@ -924,13 +954,16 @@ export const viewVersionSchema = z.object({
             "projectBrief",
             "timeline",
             "wiki",
+            "schemaView",
         ]),
         selector: viewSelectorSchema,
         maintenance: viewMaintenanceDefinitionSchema.optional(),
         wiki: viewDefinitionSchema.shape.wiki,
         projectSummary: viewDefinitionSchema.shape.projectSummary,
+        schemaView: viewDefinitionSchema.shape.schemaView,
     }),
     content: z.union([
+        schemaViewContentSchema,
         informationalProjectContent,
         timelineContent,
         wikiContent,
@@ -964,6 +997,7 @@ export const viewVersionSchema = z.object({
                     "projectSummary",
                     "chronology",
                     "knowledgePages",
+                    "schemaAnswers",
                 ])
                 .optional(),
             missingEvidence: z.string().array().max(100).optional(),

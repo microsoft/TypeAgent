@@ -22,6 +22,36 @@ puppeteer helpers).
 
 ## Architecture
 
+### Schema-defined questions
+
+The Memory hub's Questions workspace is a complete projection of versioned
+schema-view slots, including proposed and rejected slots. The inspector reviews
+candidates and exact source revisions, records schema-validated user assertions,
+and edits versioned rubrics without rewriting source evidence. Question and
+answer state, review, freshness and coverage are displayed separately.
+
+Question decisions are ranked, grouped by view and capped at five groups. Dismissal
+and one-day snooze use the existing fingerprint preferences; changed evidence
+resurfaces decisions, and Questions can restore dismissed decisions. Source
+mentions are not independent votes.
+
+Assisted authoring requires explicit approval to generate a proposal and an
+explicit maintenance scope; generated slots still require approval. Discovery is
+opt-in, bounded and explicitly invoked. Neither operation authorizes tools.
+`memoryGetViewPage` returns deterministic Markdown and a `memory-view:` URI;
+Markdown links preserve exact revisions, slots and collection item keys when
+opened in the browser. Optional service capabilities and operation errors are
+reported explicitly, not interpreted as empty inventories. Question lists use
+bounded summary pages; selecting a question separately loads its full evidence.
+There is no corpus-wide discovery policy or knowledge-status control.
+
+Questions also shows acquisition progress and explicit run-once/cancel controls
+for existing host-authorized requests. Its RPC projection excludes staged
+content, authorized arguments and raw request errors. The workspace cannot admit
+acquisition requests, enable periodic work or authorize tools; unsupported and
+disabled hosts are reported explicitly. Ingestion receipts link to ordinary
+activity and retained-source pages.
+
 ### PDF Understanding Worktree
 
 The PDF viewer supports local open/drop, selected-page semantic inspection,
