@@ -8,7 +8,7 @@ const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/);
 const text = z.string().min(1).max(120000);
 const source = z.strictObject({ sourceId: id, revisionId: id });
 const family = z.enum(["questions", "wiki", "projects", "topics"]);
-const timeoutMs = z.number().int().min(0).max(300000).optional();
+const timeoutMs = z.number().int().min(1).max(3600000).optional();
 export const discoveryPolicySchema = z.enum([
     "off",
     "suggest",

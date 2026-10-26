@@ -91,7 +91,7 @@ export function registerKnowledgeTools(
         knowledgeToolNames.waitForKnowledgeCheckpoint,
         {
             description:
-                "Wait for a fixed knowledge checkpoint within a finite timeout (maximum 300000ms). A nonready return or timeout is not successful readiness; inspect state and reasons.",
+                "Wait for a fixed knowledge checkpoint within a finite timeout (1 to 3600000ms). A nonready return or timeout is not successful readiness; inspect state and reasons.",
             inputSchema: knowledgeCheckpointWaitSchema,
             outputSchema: z.strictObject({ result: knowledgeCheckpointSchema }),
         },

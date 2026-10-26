@@ -152,7 +152,7 @@ test("knowledge protocol preserves honest fixed-scope states and has finite stri
         knowledgeCheckpointWaitSchema.safeParse({
             corpusId: "c",
             checkpointId: "k",
-            timeoutMs: 300001,
+            timeoutMs: 3600001,
         }).success,
         false,
     );
@@ -162,8 +162,25 @@ test("knowledge protocol preserves honest fixed-scope states and has finite stri
             checkpointId: "k",
             timeoutMs: 0,
         }).success,
-        true,
+        false,
     );
+    for (const timeoutMs of [1, 600000, 3600000]) {
+        assert.equal(
+            knowledgeCheckpointWaitSchema.safeParse({
+                corpusId: "c",
+                checkpointId: "k",
+                timeoutMs,
+            }).success,
+            true,
+        );
+        assert.equal(
+            knowledgeCheckpointRequestSchema.safeParse({
+                corpusId: "c",
+                timeoutMs,
+            }).success,
+            true,
+        );
+    }
     assert.equal(new Set(Object.values(knowledgeToolNames)).size, 5);
     assert.doesNotThrow(() => z.toJSONSchema(knowledgeStatusSchema));
 });

@@ -138,6 +138,7 @@ test("knowledge operations round-trip over actual MCP HTTP, retaining nonready c
                 corpusId: "corpus",
                 producerComplete: false,
                 families: ["questions"],
+                timeoutMs: 600000,
             }),
         ).toEqual(checkpoint);
         expect(
@@ -150,7 +151,7 @@ test("knowledge operations round-trip over actual MCP HTTP, retaining nonready c
             await client.waitForKnowledgeCheckpoint({
                 corpusId: "corpus",
                 checkpointId: "checkpoint",
-                timeoutMs: 0,
+                timeoutMs: 3600000,
             }),
         ).toEqual(checkpoint);
         const answer = await client.answer({
@@ -198,7 +199,7 @@ test("knowledge operations round-trip over actual MCP HTTP, retaining nonready c
             arguments: {
                 corpusId: "corpus",
                 checkpointId: "checkpoint",
-                timeoutMs: 300001,
+                timeoutMs: 3600001,
             },
         });
         expect(tooLong.isError).toBe(true);

@@ -51,7 +51,11 @@ test("browser knowledge RPC is allowlisted, strict and forwards exact checkpoint
         ],
         [
             "memoryWaitForKnowledgeCheckpoint",
-            { corpusId: "corpus", checkpointId: "checkpoint", timeoutMs: 0 },
+            {
+                corpusId: "corpus",
+                checkpointId: "checkpoint",
+                timeoutMs: 600000,
+            },
         ],
     ]) {
         assert.ok(viewMethods.includes(method));
@@ -71,7 +75,7 @@ test("browser knowledge RPC is allowlisted, strict and forwards exact checkpoint
     assert.deepEqual(calls.at(-1), {
         corpusId: "corpus",
         checkpointId: "checkpoint",
-        timeoutMs: 0,
+        timeoutMs: 600000,
     });
     assert.throws(() =>
         validateViewRequest({
