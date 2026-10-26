@@ -70,6 +70,12 @@ describe("Crossword options lifecycle", () => {
         )!;
     }
 
+    function shoppingModeControl() {
+        return document.querySelector<HTMLInputElement>(
+            'input[name="shoppingMode"]:checked',
+        )!;
+    }
+
     async function settle() {
         for (let i = 0; i < 10; i++) await Promise.resolve();
     }
@@ -84,6 +90,7 @@ describe("Crossword options lifecycle", () => {
     test("migrates legacy options to Generative and only checks capabilities on open", async () => {
         await page.initialize();
         expect(modeControl().value).toBe("generative");
+        expect(shoppingModeControl().value).toBe("generative");
         expect(invoke.mock.calls.map(([method]) => method)).toEqual(
             expect.arrayContaining([
                 "checkAIModelAvailability",
@@ -97,6 +104,67 @@ describe("Crossword options lifecycle", () => {
         ) as HTMLSelectElement;
         expect(strategy.value).toBe("hybrid");
         expect(strategy.disabled).toBe(true);
+    });
+
+    test.each([
+        ["generative", "generative"],
+        ["generative", "decision"],
+        ["decision", "generative"],
+        ["decision", "decision"],
+    ])(
+        "saves and reloads independent Shopping %s and Crossword %s modes",
+        async (shoppingMode, crosswordMode) => {
+            await page.initialize();
+            document.querySelector<HTMLInputElement>(
+                `input[name="shoppingMode"][value="${shoppingMode}"]`,
+            )!.checked = true;
+            document.querySelector<HTMLInputElement>(
+                `input[name="crosswordMode"][value="${crosswordMode}"]`,
+            )!.checked = true;
+            expect(chrome.storage.sync.set).not.toHaveBeenCalled();
+            await save();
+            expect(stored).toEqual(
+                expect.objectContaining({ shoppingMode, crosswordMode }),
+            );
+            expect(invoke).toHaveBeenCalledWith("settingsUpdated", {
+                settings: expect.objectContaining({
+                    shoppingMode,
+                    crosswordMode,
+                }),
+            });
+            await page.initialize();
+            expect(shoppingModeControl().value).toBe(shoppingMode);
+            expect(modeControl().value).toBe(crosswordMode);
+        },
+    );
+
+    test("repairs invalid Shopping Mode visibly without changing Crossword", async () => {
+        stored.shoppingMode = "invalid";
+        stored.crosswordMode = "decision";
+        jest.spyOn(console, "warn").mockImplementation(() => {});
+        await page.initialize();
+        expect(shoppingModeControl().value).toBe("generative");
+        expect(modeControl().value).toBe("decision");
+        expect(stored.shoppingMode).toBe("generative");
+        expect(document.getElementById("statusMessage")!.textContent).toContain(
+            "Invalid Shopping Mode",
+        );
+        expect(invoke).toHaveBeenCalledWith("settingsUpdated", {
+            settings: expect.objectContaining({
+                shoppingMode: "generative",
+                crosswordMode: "decision",
+            }),
+        });
+    });
+
+    test("rejects invalid Shopping Mode in the form without saving", async () => {
+        await page.initialize();
+        shoppingModeControl().value = "invalid";
+        await save();
+        expect(chrome.storage.sync.set).not.toHaveBeenCalled();
+        expect(document.getElementById("statusMessage")!.textContent).toContain(
+            "valid Shopping Mode",
+        );
     });
 
     test("Hybrid2 is opt-in, enabled within Decision mode and persists through save", async () => {
@@ -233,11 +301,13 @@ describe("Crossword options lifecycle", () => {
 
     test("reset restores Generative and notifies the service worker", async () => {
         stored.crosswordMode = "decision";
+        stored.shoppingMode = "decision";
         await page.initialize();
         jest.spyOn(window, "confirm").mockReturnValue(true);
         document.getElementById("resetToDefaults")!.click();
         await settle();
         expect(modeControl().value).toBe("generative");
+        expect(shoppingModeControl().value).toBe("generative");
         expect(stored).toEqual(DEFAULT_EXTENSION_SETTINGS);
         expect(invoke).toHaveBeenCalledWith("settingsUpdated", {
             settings: expect.objectContaining({ crosswordMode: "generative" }),
@@ -246,6 +316,7 @@ describe("Crossword options lifecycle", () => {
 
     test("export contains the saved validated mode and no capability configuration", async () => {
         stored.crosswordMode = "decision";
+        stored.shoppingMode = "decision";
         await page.initialize();
         const create = jest.fn((_blob: Blob) => "blob:settings");
         Object.defineProperty(URL, "createObjectURL", {
@@ -270,11 +341,23 @@ describe("Crossword options lifecycle", () => {
         expect(JSON.parse(exported)).toEqual(
             expect.objectContaining({
                 crosswordMode: "decision",
+                shoppingMode: "decision",
                 defaultExtractionMode: "content",
             }),
         );
         expect(exported).not.toContain("configGeneration");
         expect(exported).not.toContain("endpoint");
+    });
+
+    test("export rejects an invalid Shopping Mode visibly", async () => {
+        await page.initialize();
+        (
+            page as unknown as { settings: Record<string, unknown> }
+        ).settings.shoppingMode = "invalid";
+        document.getElementById("exportSettings")!.click();
+        expect(document.getElementById("statusMessage")!.textContent).toContain(
+            "Invalid Shopping Mode",
+        );
     });
 
     test("export rejects an invalid settings enum with a visible warning", async () => {

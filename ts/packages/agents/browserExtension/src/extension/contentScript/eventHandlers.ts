@@ -74,6 +74,7 @@ function setupMessageListeners(): void {
     chrome.runtime?.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
             if (
+                message.type === "groundedUi" ||
                 message.type === "crosswordFrameCapture" ||
                 message.type === "crosswordFrameRead" ||
                 message.type === "crosswordFrameEnter"
@@ -344,7 +345,9 @@ export async function handleMessage(
             }
 
             case "await_page_incremental_load": {
-                const updated = await awaitPageIncrementalUpdates();
+                const updated = await awaitPageIncrementalUpdates(
+                    message.timeout,
+                );
                 sendResponse(updated);
                 break;
             }

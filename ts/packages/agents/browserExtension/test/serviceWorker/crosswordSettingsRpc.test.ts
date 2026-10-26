@@ -45,6 +45,7 @@ describe("Crossword settings RPC", () => {
         expect(chrome.storage.local.set).toHaveBeenCalledWith({
             knowledgeSettings: {
                 ...settings,
+                shoppingMode: "generative",
                 crosswordDecisionStrategy: "hybrid",
             },
         });
@@ -71,6 +72,7 @@ describe("Crossword settings RPC", () => {
             });
             expect(chrome.storage.local.set).toHaveBeenCalledWith({
                 knowledgeSettings: {
+                    shoppingMode: "generative",
                     crosswordMode: "generative",
                     crosswordDecisionStrategy: "hybrid",
                 },
@@ -83,6 +85,23 @@ describe("Crossword settings RPC", () => {
         } finally {
             warning.mockRestore();
         }
+    });
+
+    test("mirrors authoritative shopping settings independently of the incoming payload", async () => {
+        (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
+            shoppingMode: "decision",
+            crosswordMode: "generative",
+        });
+        await createAllHandlers().settingsUpdated({
+            settings: { shoppingMode: "generative", crosswordMode: "decision" },
+        });
+        expect(chrome.storage.local.set).toHaveBeenCalledWith({
+            knowledgeSettings: {
+                shoppingMode: "decision",
+                crosswordMode: "generative",
+                crosswordDecisionStrategy: "hybrid",
+            },
+        });
     });
 
     test("capability display forwards only the status RPC without clue inference", async () => {

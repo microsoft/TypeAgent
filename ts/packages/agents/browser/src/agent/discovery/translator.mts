@@ -240,9 +240,14 @@ export class SchemaDiscoveryAgent<T extends object> {
         userRequest?: string,
         fragments?: HtmlFragments[],
         screenshots?: string[],
+        targetSchema?: string,
     ) {
         const componentsSchema =
-            await getSchemaFileContents("pageComponents.mts");
+            targetSchema === undefined
+                ? await getSchemaFileContents("pageComponents.mts")
+                : targetSchema.trimStart().startsWith("export")
+                  ? targetSchema
+                  : `export type ${componentTypeName} = ${targetSchema};`;
         const bootstrapTranslator = this.getBootstrapTranslator(
             componentTypeName,
             componentsSchema,

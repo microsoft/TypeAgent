@@ -25,6 +25,9 @@ import {
     type ViewHostLookup,
 } from "./browserViewNavigation";
 import { createPageCapture } from "./pageCapture";
+import { createUiDecisionBrowser } from "./uiDecisionBrowser";
+import { awaitDocumentPageLoad } from "./pageLoad";
+import { getShoppingMode } from "./storage";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
 //import { openai } from "@typeagent/aiclient";
 
@@ -312,6 +315,7 @@ export function createExternalBrowserServer(
         return contentScriptRpc;
     }
     const pageCapture = createPageCapture(getDocumentRpc);
+    const uiDecisionBrowser = createUiDecisionBrowser(ensureActiveTab);
 
     async function getActiveTabRpc() {
         const targetTab = await ensureActiveTab();
@@ -343,6 +347,7 @@ export function createExternalBrowserServer(
     );
 
     const invokeFunctions: BrowserControlInvokeFunctions = {
+        ...uiDecisionBrowser,
         getCapturePages: () => pageCapture.getCapturePages(),
         capturePageSnapshot: (pageId) =>
             pageCapture.capturePageSnapshot(pageId),
@@ -695,23 +700,15 @@ export function createExternalBrowserServer(
             }
         },
         getBrowserSettings: async () => {
-            try {
-                const result = await chrome.storage.sync.get([
-                    "autoIndexing",
-                    "extractionMode",
-                ]);
-
-                return {
-                    autoIndexing: result.autoIndexing === true,
-                    extractionMode: result.extractionMode || "content",
-                };
-            } catch (error) {
-                console.error("Failed to get browser settings:", error);
-                return {
-                    autoIndexing: false,
-                    extractionMode: "content",
-                };
-            }
+            const [result, shoppingMode] = await Promise.all([
+                chrome.storage.sync.get(["autoIndexing", "extractionMode"]),
+                getShoppingMode(),
+            ]);
+            return {
+                autoIndexing: result.autoIndexing === true,
+                extractionMode: result.extractionMode || "content",
+                shoppingMode,
+            };
         },
 
         getHtmlFragments: async (
@@ -764,8 +761,7 @@ export function createExternalBrowserServer(
         },
         awaitPageLoad: async (timeout?: number) => {
             const targetTab = await ensureActiveTab();
-            const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
-            return contentScriptRpc.awaitPageLoad(timeout);
+            return awaitDocumentPageLoad(targetTab.id!, timeout ?? 5000);
         },
         awaitPageInteraction: async (timeout?: number) => {
             const targetTab = await ensureActiveTab();

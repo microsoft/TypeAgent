@@ -37,6 +37,16 @@ function createBrowserApi(): WebFlowBrowserAPI {
             answered: true,
             answerText: "answer",
         })),
+        selectElement: jest.fn(async () => ({
+            targetId: "target",
+            name: "Search",
+            role: "textbox",
+        })),
+        evaluatePageCondition: jest.fn(async () => ({
+            status: "matched" as const,
+            explanation: "Observed",
+        })),
+        executeUiAction: jest.fn(async () => ({ dispatched: true as const })),
     };
 }
 
