@@ -3,6 +3,8 @@
 
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
+import { schemaViewPageBrowserLink } from "./memoryHubViewPages";
+import { iconButton } from "./memoryHubUi";
 
 export function rbNode<K extends keyof HTMLElementTagNameMap>(
     tag: K,
@@ -21,6 +23,21 @@ export function rbButton(text: string, handler: () => void, name?: string) {
     if (name) value.name = name;
     value.addEventListener("click", handler);
     return value;
+}
+
+// Icon-only control. The label becomes the accessible name and tooltip, so it
+// should name the verb ("Confirm candidate"), not repeat the row's title.
+export function rbIconButton(
+    glyph: string,
+    label: string,
+    handler: () => void,
+): HTMLButtonElement {
+    return iconButton(glyph, label, handler);
+}
+
+// Compact status label; tone is one of "good", "warn", "bad" or omitted.
+export function rbChip(text: string, tone?: string): HTMLSpanElement {
+    return rbNode("span", text, `hub-chip${tone ? ` ${tone}` : ""}`);
 }
 
 export function rbField(
@@ -42,6 +59,21 @@ export function rbField(
 export function rbMarkdown(value: string) {
     const container = rbNode("div", undefined, "markdown-preview");
     const markdown = new MarkdownIt({ html: false, breaks: true });
+    const validateLink = markdown.validateLink.bind(markdown);
+    markdown.validateLink = (url) =>
+        url.startsWith("memory-view:") || validateLink(url);
+    markdown.renderer.rules.link_open = (
+        tokens,
+        index,
+        options,
+        _env,
+        renderer,
+    ) => {
+        const href = tokens[index].attrGet("href");
+        if (href?.startsWith("memory-view:"))
+            tokens[index].attrSet("href", schemaViewPageBrowserLink(href));
+        return renderer.renderToken(tokens, index, options);
+    };
     container.innerHTML = DOMPurify.sanitize(markdown.render(value), {
         ALLOWED_TAGS: [
             "p",
@@ -70,6 +102,7 @@ export function rbMarkdown(value: string) {
         ALLOW_DATA_ATTR: false,
     });
     for (const link of container.querySelectorAll("a")) {
+        if (link.getAttribute("href")?.startsWith("#/views/")) continue;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
     }

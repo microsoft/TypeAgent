@@ -46,6 +46,7 @@ test("capture RPC is document-targeted and cannot consume active RPC or another 
         configurable: true,
         value: () => "opaque",
     });
+
     const tab = {
         id: 7,
         url: "https://example.com",
@@ -106,4 +107,42 @@ test("capture RPC is document-targeted and cannot consume active RPC or another 
             message: "Explicit-page capture is unavailable in this document.",
         }),
     );
+});
+
+describe("Browser settings RPC", () => {
+    function handlers() {
+        jest.clearAllMocks();
+        createExternalBrowserServer({}, async () => "http://localhost:1234");
+        return (createRpc as jest.Mock).mock
+            .calls[0][2] as BrowserControlInvokeFunctions;
+    }
+
+    test("returns current saved shopping mode on every request", async () => {
+        const rpc = handlers();
+        let shoppingMode = "decision";
+        (chrome.storage.sync.get as jest.Mock).mockImplementation(async () => ({
+            shoppingMode,
+            autoIndexing: true,
+            extractionMode: "content",
+        }));
+        await expect(rpc.getBrowserSettings()).resolves.toEqual({
+            shoppingMode: "decision",
+            autoIndexing: true,
+            extractionMode: "content",
+        });
+        shoppingMode = "generative";
+        expect((await rpc.getBrowserSettings()).shoppingMode).toBe(
+            "generative",
+        );
+    });
+
+    test("does not hide a settings storage failure behind Generative defaults", async () => {
+        const rpc = handlers();
+        (chrome.storage.sync.get as jest.Mock).mockRejectedValue(
+            new Error("Storage unavailable"),
+        );
+        await expect(rpc.getBrowserSettings()).rejects.toThrow(
+            "Storage unavailable",
+        );
+    });
 });

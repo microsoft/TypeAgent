@@ -7,6 +7,15 @@ import { openai as ai } from "@typeagent/aiclient";
 import { createJsonTranslator, MultimodalPromptContent } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import registerDebug from "debug";
+import type {
+    UiAction,
+    UiActionResult,
+    UiConditionResult,
+    UiFrameScope,
+    UiSelectionRequest,
+    UiTarget,
+} from "@typeagent/browser-control-rpc/uiDecisionTypes";
+import { UiDecisionService } from "./uiDecisionService.mjs";
 
 const debug = registerDebug("typeagent:browser:webflow:api");
 
@@ -57,11 +66,22 @@ export interface WebFlowBrowserAPI {
         answerText?: string;
         confidence?: number;
     }>;
+
+    selectElement(request: UiSelectionRequest): Promise<UiTarget>;
+    evaluatePageCondition(
+        condition: string,
+        frameScope?: UiFrameScope,
+    ): Promise<UiConditionResult>;
+    executeUiAction(
+        targetId: string,
+        action: UiAction,
+    ): Promise<UiActionResult>;
 }
 
 export class WebFlowBrowserAPIImpl implements WebFlowBrowserAPI {
     private scope: WebFlowScope | undefined;
     private extractComponentFn: ExtractComponentFn | undefined;
+    private readonly uiDecisions: UiDecisionService;
 
     constructor(
         private browser: BrowserControl,
@@ -70,6 +90,25 @@ export class WebFlowBrowserAPIImpl implements WebFlowBrowserAPI {
     ) {
         this.scope = scope;
         this.extractComponentFn = extractComponentFn;
+        this.uiDecisions = new UiDecisionService(browser);
+    }
+
+    async selectElement(request: UiSelectionRequest): Promise<UiTarget> {
+        return this.uiDecisions.selectElement(request);
+    }
+
+    async evaluatePageCondition(
+        condition: string,
+        frameScope?: UiFrameScope,
+    ): Promise<UiConditionResult> {
+        return this.uiDecisions.evaluatePageCondition(condition, frameScope);
+    }
+
+    async executeUiAction(
+        targetId: string,
+        action: UiAction,
+    ): Promise<UiActionResult> {
+        return this.uiDecisions.execute(targetId, action);
     }
 
     async navigateTo(url: string): Promise<void> {

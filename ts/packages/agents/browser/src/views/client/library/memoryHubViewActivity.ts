@@ -6,9 +6,19 @@ import type {
     ViewBuildResultState,
     ViewBuildTargetResult,
     ViewMaintenanceTargetPlan,
+    ViewBuildSummary,
+    ViewBuildResultSummary,
+    ViewSummaryPage,
 } from "@typeagent/memory-service";
 import { invokeMemory } from "./viewClient";
-import { rbButton, rbError, rbNode } from "./memoryHubDocumentUi";
+import { MemoryHubInventoryPager } from "./memoryHubInventoryPager";
+import {
+    rbButton,
+    rbChip,
+    rbError,
+    rbIconButton,
+    rbNode,
+} from "./memoryHubDocumentUi";
 
 const states: Record<ViewBuildResultState, string> = {
     pending: "Queued",
@@ -29,7 +39,9 @@ const states: Record<ViewBuildResultState, string> = {
     interrupted: "Interrupted",
 };
 
-export function viewBuildSummary(job: ViewBuildJob): string {
+export function viewBuildSummary(job: {
+    results: { state: ViewBuildResultState }[];
+}): string {
     const saved = job.results.filter((result) =>
         ["draft", "merged", "published", "searchable"].includes(result.state),
     ).length;
@@ -41,13 +53,16 @@ export function viewBuildSummary(job: ViewBuildJob): string {
     return `${saved} of ${job.results.length} targets saved${attention ? `; ${attention} need attention` : ""}`;
 }
 
-function resultTitle(result: ViewBuildTargetResult): string {
+function resultTitle(
+    result: ViewBuildTargetResult | ViewBuildResultSummary,
+): string {
     if (result.snapshot.pipeline === "topics-v1") return "Maintained topics";
     const labels = {
         wiki: "Wiki",
         projectBrief: "Project brief",
         timeline: "Timeline",
         troubleshootingGuide: "Troubleshooting guide",
+        schemaView: "Schema-defined questions",
     };
     return labels[result.snapshot.definition.kind];
 }
@@ -80,6 +95,8 @@ export function mountMemoryHubViewActivity(
     let visible = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let selected: { corpusId: string; jobId: string } | undefined;
+    const jobPager = new MemoryHubInventoryPager();
+    const attentionPager = new MemoryHubInventoryPager();
     const cancellationRequests = new Set<string>();
 
     async function run(operation: () => Promise<void>): Promise<void> {
@@ -95,12 +112,15 @@ export function mountMemoryHubViewActivity(
         corpusId: string,
         corpusName: string,
         maintenance: boolean,
-    ): Promise<HTMLElement[]> {
-        const snapshot = await invokeMemory("memoryListViews", { corpusId });
-        const active = snapshot.views.filter(
+    ): Promise<{ alerts: HTMLElement[]; page: ViewSummaryPage }> {
+        const snapshot = await invokeMemory(
+            "memoryListViewSummaries",
+            attentionPager.request(corpusId),
+        );
+        const active = snapshot.items.filter(
             (view) => view.state !== "archived",
         );
-        const maintained = active.filter((view) => view.definition.maintenance);
+        const maintained = active.filter((view) => view.maintained);
         const targets: ViewMaintenanceTargetPlan[] = [];
         if (maintenance)
             for (let offset = 0; offset < maintained.length; offset += 32) {
@@ -112,15 +132,9 @@ export function mountMemoryHubViewActivity(
                 });
                 targets.push(...plan.targets);
             }
-        return Promise.all(
+        const alerts = await Promise.all(
             active.map(async (view) => {
-                const publication = await invokeMemory(
-                    "memoryGetViewPublication",
-                    {
-                        corpusId,
-                        viewId: view.viewId,
-                    },
-                );
+                const publication = view.publication;
                 const target = targets.find(
                     (target) => target.viewId === view.viewId,
                 );
@@ -135,19 +149,28 @@ export function mountMemoryHubViewActivity(
                             : undefined;
                 const card = rbNode("article", undefined, "card");
                 if (!reason) return card;
+                const label =
+                    publication.indexState === "failed"
+                        ? "Retry indexing"
+                        : "Preview update";
+                Object.assign(card.dataset, {
+                    group: `${corpusName} · ${reason}`,
+                    title: view.content.title,
+                    label,
+                    corpusId,
+                    viewId: view.viewId,
+                });
                 card.append(
                     rbNode("h4", view.content.title),
                     rbNode("p", `${corpusName} · ${reason}`),
-                    rbButton(
-                        publication.indexState === "failed"
-                            ? "Inspect publication and retry indexing"
-                            : "Preview update",
-                        () => options.onOpenView(corpusId, view.viewId),
+                    rbButton(label, () =>
+                        options.onOpenView(corpusId, view.viewId),
                     ),
                 );
                 return card;
             }),
         ).then((cards) => cards.filter((card) => card.childElementCount > 0));
+        return { alerts, page: snapshot };
     }
 
     function renderJob(job: ViewBuildJob): HTMLElement {
@@ -157,27 +180,40 @@ export function mountMemoryHubViewActivity(
         const card = rbNode("article", undefined, "card hub-view-job");
         card.append(
             rbNode("h4", job.maintenancePlan ? "Update views" : "Build views"),
-            rbNode("p", `${job.state} · ${viewBuildSummary(job)}`),
+            rbChip(
+                job.state,
+                ["failed", "interrupted"].includes(job.state)
+                    ? "bad"
+                    : ["partial", "cancelled"].includes(job.state)
+                      ? "warn"
+                      : job.state === "running"
+                        ? undefined
+                        : "good",
+            ),
+            rbNode("p", viewBuildSummary(job)),
             rbNode("time", new Date(job.updatedAt).toLocaleString()),
         );
         for (const result of job.results) {
             const row = rbNode("div", undefined, "hub-view-result");
             row.append(
                 rbNode("strong", resultTitle(result)),
-                rbNode("span", states[result.state]),
+                rbChip(states[result.state]),
                 rbNode("p", result.reason),
             );
             if (result.wikiConsolidation) {
                 const effect = result.wikiConsolidation;
                 row.append(
-                    rbNode(
-                        "p",
-                        `Consolidation effect: ${effect.stage}; derivative readiness is separate from canonical acceptance.`,
+                    rbChip(`Consolidation: ${effect.stage}`),
+                    rbIconButton(
+                        "fa-arrow-up-right-from-square",
+                        "Open canonical article",
+                        () =>
+                            options.onOpenView(
+                                job.corpusId,
+                                effect.survivorViewId,
+                            ),
                     ),
-                    rbButton("Open canonical article", () =>
-                        options.onOpenView(job.corpusId, effect.survivorViewId),
-                    ),
-                    rbButton("Open original article link", () =>
+                    rbIconButton("fa-link", "Open original article link", () =>
                         options.onOpenView(job.corpusId, effect.retiringViewId),
                     ),
                 );
@@ -225,31 +261,39 @@ export function mountMemoryHubViewActivity(
         );
         card.append(diagnostics);
         if (job.state === "running") {
-            const cancel = rbButton("Request cancellation", () => {
-                cancel.disabled = true;
-                cancellationRequests.add(cancellationKey);
-                void run(async () => {
-                    let response: ViewBuildJob;
-                    try {
-                        response = await invokeMemory("memoryCancelViewBuild", {
-                            corpusId: job.corpusId,
-                            jobId: job.jobId,
-                        });
-                    } catch (error) {
-                        cancellationRequests.delete(cancellationKey);
-                        throw error;
-                    }
-                    if (response.state !== "running")
-                        cancellationRequests.delete(cancellationKey);
-                    await refresh();
-                    status.textContent =
-                        response.state === "cancelled"
-                            ? "Cancellation acknowledged. Already saved targets remain."
-                            : "Cancellation requested. Already saved targets remain.";
-                }).finally(() => {
-                    cancel.disabled = cancellationRequests.has(cancellationKey);
-                });
-            });
+            const cancel = rbIconButton(
+                "fa-xmark",
+                "Request cancellation",
+                () => {
+                    cancel.disabled = true;
+                    cancellationRequests.add(cancellationKey);
+                    void run(async () => {
+                        let response: ViewBuildJob;
+                        try {
+                            response = await invokeMemory(
+                                "memoryCancelViewBuild",
+                                {
+                                    corpusId: job.corpusId,
+                                    jobId: job.jobId,
+                                },
+                            );
+                        } catch (error) {
+                            cancellationRequests.delete(cancellationKey);
+                            throw error;
+                        }
+                        if (response.state !== "running")
+                            cancellationRequests.delete(cancellationKey);
+                        await refresh();
+                        status.textContent =
+                            response.state === "cancelled"
+                                ? "Cancellation acknowledged. Already saved targets remain."
+                                : "Cancellation requested. Already saved targets remain.";
+                    }).finally(() => {
+                        cancel.disabled =
+                            cancellationRequests.has(cancellationKey);
+                    });
+                },
+            );
             cancel.disabled = cancellationRequests.has(cancellationKey);
             card.append(cancel);
         } else if (
@@ -257,7 +301,7 @@ export function mountMemoryHubViewActivity(
                 job.state,
             )
         ) {
-            const retry = rbButton("Retry build", () => {
+            const retry = rbIconButton("fa-rotate-right", "Retry build", () => {
                 retry.disabled = true;
                 void run(async () => {
                     const next = await invokeMemory("memoryRetryViewBuild", {
@@ -277,12 +321,12 @@ export function mountMemoryHubViewActivity(
 
     function appendJobSummary(
         corpus: { corpusId: string; name: string },
-        job: ViewBuildJob,
+        job: ViewBuildSummary,
     ): void {
         const row = rbNode("article", undefined, "card");
         row.append(
             rbButton(
-                `${job.maintenancePlan ? "Update" : "Build"} · ${corpus.name} · ${job.state}`,
+                `${job.maintenance ? "Update" : "Build"} · ${corpus.name} · ${job.state}`,
                 () => options.onOpenBuild(corpus.corpusId, job.jobId),
             ),
             rbNode("p", viewBuildSummary(job)),
@@ -292,8 +336,8 @@ export function mountMemoryHubViewActivity(
 
     async function appendResultAttention(
         corpus: { corpusId: string; name: string },
-        job: ViewBuildJob,
-        result: ViewBuildTargetResult,
+        job: ViewBuildSummary,
+        result: ViewBuildResultSummary,
         current: number,
     ): Promise<boolean> {
         if (result.conflictId) {
@@ -320,10 +364,58 @@ export function mountMemoryHubViewActivity(
         return true;
     }
 
+    // Views that need the same thing share one card with a row per view,
+    // instead of repeating the identical sentence on every card.
+    function collapseAlerts(alerts: HTMLElement[]): HTMLElement[] {
+        const buckets = new Map<string, HTMLElement[]>();
+        for (const alert of alerts) {
+            const key = alert.dataset.group;
+            if (key) buckets.set(key, [...(buckets.get(key) ?? []), alert]);
+        }
+        const collapsed = new Set<HTMLElement>();
+        const result: HTMLElement[] = [];
+        for (const alert of alerts) {
+            const key = alert.dataset.group;
+            const bucket = key ? buckets.get(key) : undefined;
+            if (!bucket || bucket.length < 3) {
+                result.push(alert);
+                continue;
+            }
+            if (collapsed.has(bucket[0])) continue;
+            bucket.forEach((entry) => collapsed.add(entry));
+            const card = rbNode("article", undefined, "card");
+            card.dataset.entries = String(bucket.length);
+            const rows = rbNode("div", undefined, "hub-rows");
+            card.append(
+                rbNode("h4", `${bucket.length} views need attention`),
+                rbNode("p", key),
+                rows,
+            );
+            for (const entry of bucket) {
+                const row = rbNode("div", undefined, "hub-row-actions");
+                row.append(
+                    rbNode("span", entry.dataset.title, "hub-grow"),
+                    rbIconButton(
+                        "fa-chevron-right",
+                        `${entry.dataset.label}: ${entry.dataset.title}`,
+                        () =>
+                            options.onOpenView(
+                                entry.dataset.corpusId!,
+                                entry.dataset.viewId!,
+                            ),
+                    ),
+                );
+                rows.append(row);
+            }
+            result.push(card);
+        }
+        return result;
+    }
+
     async function renderGroups(
         groups: Array<{
             corpus: { corpusId: string; name: string };
-            jobs: ViewBuildJob[];
+            jobs: ViewBuildSummary[];
             alerts: HTMLElement[];
         }>,
         current: number,
@@ -332,7 +424,7 @@ export function mountMemoryHubViewActivity(
         let running = false;
         const seen = new Set<string>();
         for (const { corpus, jobs, alerts } of groups) {
-            attentionHost.append(...alerts);
+            attentionHost.append(...collapseAlerts(alerts));
             const ordered = [...jobs].sort((a, b) =>
                 b.updatedAt.localeCompare(a.updatedAt),
             );
@@ -341,6 +433,7 @@ export function mountMemoryHubViewActivity(
                 running ||= job.state === "running";
                 appendJobSummary(corpus, job);
                 for (const result of job.results) {
+                    if (!result.current) continue;
                     const key = JSON.stringify([
                         corpus.corpusId,
                         result.viewId,
@@ -394,37 +487,91 @@ export function mountMemoryHubViewActivity(
         const groups = await Promise.all(
             available.map(async (corpus) => {
                 const [jobs, alerts] = await Promise.all([
-                    invokeMemory("memoryListViewBuilds", {
-                        corpusId: corpus.corpusId,
-                    }),
-                    sourceAttention(
-                        corpus.corpusId,
-                        corpus.name,
-                        capabilities.derivedViews?.maintenance === true,
-                    ),
+                    jobPager.includes(corpus.corpusId)
+                        ? invokeMemory(
+                              "memoryListViewBuildSummaries",
+                              jobPager.request(corpus.corpusId),
+                          )
+                        : Promise.resolve(undefined),
+                    !visible && attentionPager.includes(corpus.corpusId)
+                        ? sourceAttention(
+                              corpus.corpusId,
+                              corpus.name,
+                              capabilities.derivedViews?.maintenance === true,
+                          )
+                        : Promise.resolve(undefined),
                 ]);
-                return { corpus, jobs, alerts };
+                return {
+                    corpus,
+                    jobs: jobs?.items ?? [],
+                    alerts: alerts?.alerts ?? [],
+                    jobPage: jobs,
+                    attentionPage: alerts?.page,
+                };
             }),
         );
         if (disposed || current !== sequence || scope !== options.scope())
             return;
+        jobPager.update(
+            groups.flatMap((group) =>
+                group.jobPage
+                    ? [{ corpusId: group.corpus.corpusId, ...group.jobPage }]
+                    : [],
+            ),
+        );
+        attentionPager.update(
+            groups.flatMap((group) =>
+                group.attentionPage
+                    ? [
+                          {
+                              corpusId: group.corpus.corpusId,
+                              ...group.attentionPage,
+                          },
+                      ]
+                    : [],
+            ),
+        );
         list.replaceChildren();
         attentionHost.replaceChildren();
         const rendered = await renderGroups(groups, current);
         if (!rendered.current) return;
         const { total, running } = rendered;
         status.textContent = total
-            ? `${total} view operations. Results are recorded per target.`
+            ? `Showing ${total} of ${jobPager.total} view operations`
             : "No view builds yet.";
-        options.onAttentionCount?.(attentionHost.childElementCount);
-        if (attentionHost.childElementCount) {
-            attentionHost.prepend(
-                rbNode("h3", "View attention"),
-                rbNode(
-                    "p",
-                    "Current view and build issues in this scope. The filters above apply to source and guide notifications.",
+        options.onAttentionCount?.(
+            [...attentionHost.children].reduce(
+                (sum, child) =>
+                    sum + Number((child as HTMLElement).dataset.entries ?? 1),
+                0,
+            ) +
+                Number(
+                    !visible && (attentionPager.hasNext || jobPager.hasNext),
+                ),
+        );
+        if (visible)
+            list.append(
+                jobPager.controls("view operations", () => void run(refresh)),
+            );
+        else {
+            attentionHost.append(
+                attentionPager.controls(
+                    "view attention",
+                    () => void run(refresh),
                 ),
             );
+            attentionHost.append(
+                jobPager.controls(
+                    "operation attention",
+                    () => void run(refresh),
+                ),
+            );
+        }
+        if (attentionHost.childElementCount) {
+            const heading = rbNode("h3", "View attention");
+            heading.title =
+                "Current view and build issues in this scope. The filters above apply to source and guide notifications.";
+            attentionHost.prepend(heading);
         }
         if (selected) {
             const job = await invokeMemory("memoryGetViewBuild", selected);
@@ -454,6 +601,8 @@ export function mountMemoryHubViewActivity(
         scopeChanged(): void {
             sequence++;
             clearTimeout(timer);
+            jobPager.reset();
+            attentionPager.reset();
             attentionHost.replaceChildren();
             options.onAttentionCount?.(0);
         },
@@ -462,6 +611,7 @@ export function mountMemoryHubViewActivity(
             jobId: string;
         }): Promise<void> {
             visible = true;
+            jobPager.reset();
             selected = target;
             await run(refresh);
         },

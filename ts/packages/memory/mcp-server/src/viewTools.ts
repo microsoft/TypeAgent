@@ -53,19 +53,21 @@ import type {
 } from "@typeagent/memory-service";
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import { z } from "zod";
+import { registerSchemaViewTools } from "./schemaViewTools.js";
 
 export function registerViewTools(
     server: McpServer,
     service: MemoryService & Partial<MemoryViewService>,
     run: (operation: () => Promise<unknown>) => Promise<CallToolResult>,
 ): void {
+    registerSchemaViewTools(server, service, run);
     const views = createMemoryServiceRpcFacade(service);
     const corpus = z.strictObject({ corpusId: z.string().min(1).max(200) });
     server.registerTool(
         topicToolNames.queryTopics,
         {
             description:
-                "Browse the complete maintained topic snapshot with generation-bound pagination, original evidence, incidence neighborhoods and explicit omissions. Response bounds do not bound store IO.",
+                "Browse maintained concepts or raw topic evidence with generation-bound pagination and explicit omissions. Ordinary queries do not generate prose. Set curated:true, one topicId and summarize:true only for an explicit concept detail request; this generates and caches an evidence-grounded summary. Response bounds do not bound store IO.",
             inputSchema: topicQueryRequestSchema,
             outputSchema: z.object({ result: topicQueryPageSchema }),
         },
@@ -87,6 +89,12 @@ export function registerViewTools(
                         : {}),
                     ...(request.continuationToken !== undefined
                         ? { continuationToken: request.continuationToken }
+                        : {}),
+                    ...(request.curated !== undefined
+                        ? { curated: request.curated }
+                        : {}),
+                    ...(request.summarize !== undefined
+                        ? { summarize: request.summarize }
                         : {}),
                 }),
             ),

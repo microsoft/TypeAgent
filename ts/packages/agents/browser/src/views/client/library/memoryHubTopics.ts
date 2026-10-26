@@ -6,6 +6,7 @@ import type {
     TopicQueryRequest,
     ViewBuildJob,
 } from "@typeagent/memory-service";
+import { mountGraphDetails } from "./memoryHubGraphDetails";
 
 export interface TopicBrowserOptions {
     corpusId: () => string | undefined;
@@ -37,6 +38,8 @@ export function mountTopicBrowser(
     search.placeholder = "Filter topic labels or scoped aliases";
     search.setAttribute("aria-label", "Filter maintained topics");
     const load = element("button", "Browse topics");
+    const concepts = element("button", "Curated concepts");
+    concepts.hidden = true;
     const rebuild = element("button", "Rebuild topics");
     const back = element("button", "All topics");
     back.hidden = true;
@@ -53,6 +56,7 @@ export function mountTopicBrowser(
         heading,
         search,
         load,
+        concepts,
         rebuild,
         back,
         status,
@@ -61,6 +65,7 @@ export function mountTopicBrowser(
         next,
     );
     host.append(root);
+    const eventDetails = mountGraphDetails(host, options);
     let epoch = 0;
     let disposed = false;
     let request: TopicQueryRequest | undefined;
@@ -68,12 +73,68 @@ export function mountTopicBrowser(
 
     function render(page: TopicQueryPage, corpusId: string) {
         list.replaceChildren();
+        concepts.hidden = page.totalConcepts === undefined;
         status.textContent = `${page.nodes.length} shown of ${page.matchingNodes} matching; ${page.totalNodes} maintained topics; ${page.omittedNodes} omitted from this response. Generation ${page.generation ?? "not available"}.`;
+        if (page.concepts)
+            status.textContent = `${page.concepts.length} curated concepts shown of ${page.totalConcepts ?? 0}; ${page.totalNodes} raw topics retained.`;
         limits.textContent = [
             ...page.limits,
             `${page.omittedParents} organizational links, ${page.omittedRelated} related links and ${page.omittedNeighborhoods} neighbors omitted.`,
             `Full-state blob payload: ${page.io.stateBytes} bytes uncompressed; snapshot ${page.io.snapshotBytes} serialized bytes; ${page.io.elapsedMs.toFixed(1)} ms. Physical disk traffic is not measured by these payload counts.`,
         ].join(" ");
+        for (const concept of page.concepts ?? []) {
+            const card = element("article");
+            card.append(
+                element("h4", concept.label),
+                element(
+                    "p",
+                    `${concept.scope} · ${concept.memberCount} raw members · salience ${concept.salience}/8 (not truth confidence)`,
+                ),
+                element("p", concept.purpose),
+                element(
+                    "p",
+                    concept.summary ||
+                        "Summary not generated; original evidence is available below.",
+                ),
+            );
+            if (concept.summaryState === "pending") {
+                const summarize = element("button", "Open concept summary");
+                summarize.addEventListener(
+                    "click",
+                    () =>
+                        void browse({
+                            corpusId,
+                            curated: true,
+                            topicId: concept.id,
+                            summarize: true,
+                            pageSize: 1,
+                        }),
+                );
+                card.append(summarize);
+            }
+            for (const id of concept.memberIds) {
+                const member = element("button", "Inspect original topic");
+                member.addEventListener(
+                    "click",
+                    () =>
+                        void browse({
+                            corpusId,
+                            topicId: id,
+                            depth: 0,
+                            pageSize: 24,
+                        }),
+                );
+                card.append(member);
+            }
+            card.append(
+                element(
+                    "p",
+                    `${concept.omittedMembers} member links omitted; Browse topics retains access to all raw occurrences.`,
+                ),
+            );
+            appendEvidence(card, concept.citations, corpusId);
+            list.append(card);
+        }
         for (const topic of page.nodes) {
             const card = element("article");
             const title = element("button", topic.label);
@@ -93,7 +154,13 @@ export function mountTopicBrowser(
                     "p",
                     `${topic.scope} · ${topic.occurrenceCount} occurrences · ${topic.authorship}`,
                 ),
-                element("p", topic.summary || `Summary ${topic.summaryState}.`),
+                element(
+                    "p",
+                    topic.summary ||
+                        (page.totalConcepts !== undefined
+                            ? "Raw occurrence retained as evidence; summaries belong to curated concepts."
+                            : `Summary ${topic.summaryState}.`),
+                ),
                 element(
                     "p",
                     [
@@ -102,25 +169,7 @@ export function mountTopicBrowser(
                     ].join(" "),
                 ),
             );
-            for (const citation of topic.citations) {
-                const source = element(
-                    "button",
-                    `Source ${citation.sourceId} · manage source`,
-                );
-                source.addEventListener("click", () =>
-                    options.onOpenSource(corpusId, citation.sourceId),
-                );
-                const evidence = element("details");
-                evidence.append(
-                    element(
-                        "summary",
-                        `Original indexed evidence · revision ${citation.revisionId}`,
-                    ),
-                    element("blockquote", citation.excerpt),
-                    element("code", citation.locator),
-                );
-                card.append(source, evidence);
-            }
+            appendEvidence(card, topic.citations, corpusId);
             const parents = page.parents
                 .filter((edge) => edge.childId === topic.id)
                 .map((edge) => edge.parentId);
@@ -162,7 +211,43 @@ export function mountTopicBrowser(
         }
         continuation = page.nextContinuationToken;
         next.hidden = !continuation;
-        back.hidden = !request?.topicId;
+        back.hidden = !page.concepts && !request?.topicId;
+    }
+
+    function appendEvidence(
+        card: HTMLElement,
+        citations: TopicQueryPage["nodes"][number]["citations"],
+        corpusId: string,
+    ) {
+        for (const citation of citations) {
+            const eventId =
+                citation.evidence?.kind === "event"
+                    ? citation.evidence.eventId
+                    : undefined;
+            const source = element(
+                "button",
+                eventId
+                    ? `Event ${eventId} · original evidence`
+                    : `Source ${citation.sourceId} · manage source`,
+            );
+            source.addEventListener("click", () =>
+                eventId
+                    ? eventDetails.openEvent(corpusId, eventId)
+                    : options.onOpenSource(corpusId, citation.sourceId),
+            );
+            const evidence = element("details");
+            evidence.append(
+                element(
+                    "summary",
+                    eventId
+                        ? `Original indexed event evidence · ${eventId}`
+                        : `Original indexed evidence · revision ${citation.revisionId}`,
+                ),
+                element("blockquote", citation.excerpt),
+                element("code", citation.locator),
+            );
+            card.append(source, evidence);
+        }
     }
 
     async function browse(selected?: TopicQueryRequest) {
@@ -181,7 +266,12 @@ export function mountTopicBrowser(
             options.onError(error);
             return;
         }
-        request = selected ?? { corpusId, search: search.value, pageSize: 24 };
+        request = selected ?? {
+            corpusId,
+            curated: true,
+            search: search.value,
+            pageSize: 24,
+        };
         const current = ++epoch;
         load.disabled = true;
         next.disabled = true;
@@ -205,7 +295,26 @@ export function mountTopicBrowser(
         }
     }
     load.addEventListener("click", () => void browse());
-    back.addEventListener("click", () => void browse());
+    concepts.addEventListener("click", () => {
+        const corpusId = options.corpusId();
+        if (corpusId)
+            void browse({
+                corpusId,
+                curated: true,
+                search: search.value,
+                pageSize: 24,
+            });
+    });
+    back.addEventListener("click", () => {
+        const corpusId = options.corpusId();
+        if (corpusId)
+            void browse({
+                corpusId,
+                curated: false,
+                search: search.value,
+                pageSize: 24,
+            });
+    });
     search.addEventListener("keydown", (event) => {
         if (event.key === "Enter") void browse();
     });
@@ -245,6 +354,8 @@ export function mountTopicBrowser(
     return {
         refresh: () => {
             epoch++;
+            concepts.hidden = true;
+            eventDetails.close();
             request = undefined;
             continuation = undefined;
             list.replaceChildren();
@@ -256,9 +367,11 @@ export function mountTopicBrowser(
             status.textContent =
                 "Browse maintained topics for the selected corpus.";
         },
+        hide: () => eventDetails.close(),
         dispose: () => {
             disposed = true;
             epoch++;
+            eventDetails.dispose();
             root.remove();
         },
     };

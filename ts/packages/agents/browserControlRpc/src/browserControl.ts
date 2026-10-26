@@ -1,11 +1,21 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type {
+    ShoppingMode,
+    UiAction,
+    UiActionResult,
+    UiObservation,
+    UiFrameScope,
+} from "./uiDecisionTypes.js";
+
 export type ExtractionMode = "basic" | "summary" | "content" | "full";
 
 export interface BrowserSettings {
     autoIndexing: boolean;
     extractionMode: ExtractionMode;
+    /** Omitted by older extensions; normal shopping commands remain generative. */
+    shoppingMode?: ShoppingMode;
 }
 
 export interface BrowserCapturePage {
@@ -41,6 +51,13 @@ export type BrowserControlInvokeFunctions = {
     getCapturePages(): Promise<BrowserCapturePage[]>;
     /** Captures a listed document without activating it; rejects stale handles. */
     capturePageSnapshot(pageId: string): Promise<BrowserCaptureSnapshot>;
+    captureUiObservation?(frameScope?: UiFrameScope): Promise<UiObservation>;
+    validateUiObservation?(snapshotId: string): Promise<void>;
+    executeUiAction?(
+        snapshotId: string,
+        candidateId: string,
+        action: UiAction,
+    ): Promise<UiActionResult>;
     scrollUp(): Promise<void>;
     scrollDown(): Promise<void>;
     zoomIn(): Promise<void>;
@@ -129,6 +146,27 @@ export function createBrowserControlRpcFacade(
                 throw new Error("Explicit-page capture is unavailable.");
             }
             return browserControl.capturePageSnapshot(pageId);
+        },
+        captureUiObservation: async (frameScope) => {
+            if (!browserControl.captureUiObservation)
+                throw new Error(
+                    "unsupported: grounded UI capture is unavailable",
+                );
+            return browserControl.captureUiObservation(frameScope);
+        },
+        validateUiObservation: async (snapshotId) => {
+            if (!browserControl.validateUiObservation)
+                throw new Error(
+                    "unsupported: grounded UI validation is unavailable",
+                );
+            return browserControl.validateUiObservation(snapshotId);
+        },
+        executeUiAction: async (...args) => {
+            if (!browserControl.executeUiAction)
+                throw new Error(
+                    "unsupported: grounded UI execution is unavailable",
+                );
+            return browserControl.executeUiAction(...args);
         },
         scrollUp: (...args) => browserControl.scrollUp(...args),
         scrollDown: (...args) => browserControl.scrollDown(...args),

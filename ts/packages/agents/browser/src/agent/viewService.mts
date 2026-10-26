@@ -168,6 +168,12 @@ export function createViewServiceHost(
                     context.agentContext.viewPortRegistration =
                         context.registerPort("view", message.port);
                     context.agentContext.localHostPort = message.port;
+                    const baseUrl = `http://localhost:${message.port}`;
+                    // code-lint-allow no-console: Startup URLs must be visible without DEBUG.
+                    console.log(
+                        `Browser views listening on port ${message.port}: ${baseUrl}\n` +
+                            `Memory Hub: ${baseUrl}/library/memoryHub.html`,
+                    );
                     cleanup();
                     resolve(child);
                 } catch (error) {

@@ -73,6 +73,13 @@ function setupMessageListeners(): void {
     // Listen for messages from the background script
     chrome.runtime?.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
+            if (
+                message.type === "groundedUi" ||
+                message.type === "crosswordFrameCapture" ||
+                message.type === "crosswordFrameRead" ||
+                message.type === "crosswordFrameEnter"
+            )
+                return false;
             if (message.type === "captureRpc") {
                 captureChannel.notifyMessage(message.message);
                 sendResponse({ captureRpcAccepted: true });
@@ -338,7 +345,9 @@ export async function handleMessage(
             }
 
             case "await_page_incremental_load": {
-                const updated = await awaitPageIncrementalUpdates();
+                const updated = await awaitPageIncrementalUpdates(
+                    message.timeout,
+                );
                 sendResponse(updated);
                 break;
             }

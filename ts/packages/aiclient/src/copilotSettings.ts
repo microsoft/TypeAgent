@@ -8,12 +8,13 @@ import {
 } from "./copilotModelDefaults.js";
 import type { CommonApiSettings } from "./openai.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
+import type { Config } from "@typeagent/config";
 
 export type CopilotReasoningEffort = "low" | "medium" | "high" | "xhigh";
 
 export type CopilotApiSettings = CommonApiSettings & {
     provider: "copilot";
-    modelType: ModelType.Chat;
+    modelType: ModelType.Chat | ModelType.Decision;
     modelName: string;
     cliPath?: string;
     cliUrl?: string;
@@ -31,8 +32,8 @@ const ENDPOINT_GATE_ENV = "COPILOT_ALLOW_GET_PROVIDER_ENDPOINT";
 
 export function copilotApiSettingsFromConfig(
     modelName?: string,
+    config: Config = getRuntimeConfig(),
 ): CopilotApiSettings {
-    const config = getRuntimeConfig();
     const copilot = config.copilot;
     const resolvedModel =
         modelName ?? copilot?.defaultModel ?? DEFAULT_COPILOT_MODEL;

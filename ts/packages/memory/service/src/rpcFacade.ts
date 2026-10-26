@@ -8,6 +8,7 @@ import type {
 } from "./types.js";
 import type { MemoryViewService } from "./viewTypes.js";
 import type { MemoryTopicService } from "./topicTypes.js";
+import type { MemoryKnowledgeService } from "./knowledgeTypes.js";
 
 export interface MemoryJobWaitOptions {
     signal?: AbortSignal;
@@ -21,8 +22,77 @@ function unsupportedCapability(operation: string): Promise<never> {
 
 export function createMemoryServiceRpcFacade(
     service: MemoryService & Partial<MemoryViewService>,
-): MemoryService & MemoryViewService & MemoryTopicService {
+): MemoryService &
+    MemoryViewService &
+    MemoryTopicService &
+    MemoryKnowledgeService {
     return {
+        ...(service.queryKnowledgeGraph
+            ? { queryKnowledgeGraph: service.queryKnowledgeGraph.bind(service) }
+            : {}),
+        ...(service.queryGraphSupport
+            ? { queryGraphSupport: service.queryGraphSupport.bind(service) }
+            : {}),
+        listViewSummaries: (request) =>
+            service.listViewSummaries?.(request) ??
+            unsupportedCapability("view summaries"),
+        listViewBuildSummaries: (request) =>
+            service.listViewBuildSummaries?.(request) ??
+            unsupportedCapability("build summaries"),
+        getViewPublications: (request) =>
+            service.getViewPublications?.(request) ??
+            unsupportedCapability("publication batches"),
+        listQuestionSummaries: (request) =>
+            service.listQuestionSummaries?.(request) ??
+            unsupportedCapability("question summaries"),
+        getQuestion: (request) =>
+            service.getQuestion?.(request) ??
+            unsupportedCapability("question detail"),
+        getKnowledgeStatus: (corpusId) =>
+            service.getKnowledgeStatus?.(corpusId) ??
+            unsupportedCapability("knowledge status"),
+        updateKnowledgeDiscovery: (request) =>
+            service.updateKnowledgeDiscovery?.(request) ??
+            unsupportedCapability("knowledge discovery policy"),
+        createKnowledgeCheckpoint: (request) =>
+            service.createKnowledgeCheckpoint?.(request) ??
+            unsupportedCapability("knowledge checkpoints"),
+        getKnowledgeCheckpoint: (request) =>
+            service.getKnowledgeCheckpoint?.(request) ??
+            unsupportedCapability("knowledge checkpoints"),
+        waitForKnowledgeCheckpoint: (request) =>
+            service.waitForKnowledgeCheckpoint?.(request) ??
+            unsupportedCapability("knowledge checkpoint waits"),
+        requestAcquisition: (request) =>
+            service.requestAcquisition?.(request) ??
+            unsupportedCapability("acquisition requests"),
+        listAcquisitions: (corpusId) =>
+            service.listAcquisitions?.(corpusId) ??
+            unsupportedCapability("acquisition status"),
+        cancelAcquisition: (request) =>
+            service.cancelAcquisition?.(request) ??
+            unsupportedCapability("acquisition cancellation"),
+        runAcquisitions: (corpusId) =>
+            service.runAcquisitions?.(corpusId) ??
+            unsupportedCapability("acquisition runs"),
+        startAcquisitionPeriodic: (request) =>
+            service.startAcquisitionPeriodic?.(request) ??
+            unsupportedCapability("periodic acquisition"),
+        listQuestions: (corpusId) =>
+            service.listQuestions?.(corpusId) ??
+            unsupportedCapability("questions"),
+        editQuestion: (request) =>
+            service.editQuestion?.(request) ??
+            unsupportedCapability("question editing"),
+        getViewPage: (request) =>
+            service.getViewPage?.(request) ??
+            unsupportedCapability("view pages"),
+        proposeSchemaView: (request) =>
+            service.proposeSchemaView?.(request) ??
+            unsupportedCapability("schema proposals"),
+        discoverSchemaQuestions: (request) =>
+            service.discoverSchemaQuestions?.(request) ??
+            unsupportedCapability("question discovery"),
         importAgentSession: (request) =>
             service.importAgentSession?.(request) ??
             unsupportedCapability("agent session imports"),

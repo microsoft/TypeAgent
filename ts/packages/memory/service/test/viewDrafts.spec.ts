@@ -34,7 +34,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         await service.close();
         await rm(root, { recursive: true, force: true });
     });
-    test("Views and all four builders are enabled without configuration", async () => {
+    test("Views and all builders are enabled without configuration", async () => {
         expect(parseViewDraftCapability(undefined)).toBe(true);
         expect(parseViewDraftCapability("true")).toBe(true);
         expect(parseViewDraftCapability("false")).toBe(false);
@@ -45,7 +45,15 @@ describe("typed draft views: service, history, privacy and CLI", () => {
             drafts: true,
             builds: true,
             informationalWiki: true,
-            kinds: ["troubleshootingGuide", "projectBrief", "timeline", "wiki"],
+            knowledge: true,
+            integratedAnswering: true,
+            kinds: [
+                "troubleshootingGuide",
+                "projectBrief",
+                "timeline",
+                "wiki",
+                "schemaView",
+            ],
         });
     });
     async function fixture(): Promise<ViewSaveRequest> {

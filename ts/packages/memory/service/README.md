@@ -10,6 +10,28 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Scoped knowledge graphs and read inventories
+
+`queryKnowledgeGraph` reads bounded entity, raw-topic or maintained-hierarchy
+projections across eligible documents and conversation events. Evidence-kind and
+event filters apply before aggregation. Responses report independent document,
+event and topic coverage (`ready`, `building`, `stale`, `error` or `unsupported`),
+exact support counts, omitted counts and response budgets. Index preparation is
+scheduled separately from graph reads; an unavailable projection is not an empty,
+ready graph.
+
+Node, edge and support pages bind to a stable generation. `queryGraphSupport`
+returns exact source revisions or event identities; evidence changes invalidate
+continuations. Forgetting, suppression and authority constraints also apply to
+projections and drilldown. Maintained hierarchy summaries reuse topic maintenance
+and lazy concept summaries; these graph APIs do not require knowledge checkpoints
+or integrated answering.
+
+View, build and publication summary operations avoid loading full evidence bodies
+for list navigation. A committed read projection preserves historical conflict
+fallback and source eligibility checks. View/event index preparation can release
+the writer lease, then revalidates captured evidence before installation.
+
 ## Document import token budgets
 
 Text, Markdown, HTML/web and VTT retain their format-specific parsers and then
@@ -84,6 +106,67 @@ failures and rejection of oversized inputs before model calls, without a provide
 Project status rendering keeps capacity review pending distinct from a supported
 blocked condition. A `pendingOwnerReview` enum alone does not establish blockage;
 any actual blocker and its scope must remain in evidence-backed section prose.
+
+## Maintained knowledge quality
+
+Wiki and Project Views generate substantive source-grounded summaries and
+separate article completeness (`partial` or `sufficient`) from evidence freshness,
+human review, incident closure and project approval. Project briefs retain typed
+assignments, milestones, decisions, risks and open questions without inventing
+missing owners, dates or outcomes. Wiki admission binds the exact queried subject
+and may defer a thin or redundant candidate. Canonical contributions and
+consolidations independently check actual prose, with bounded evidence-grounded
+repairs that preserve stable anchors, citations, protected structures and human
+edits.
+
+Topic maintenance retains complete raw incidence while admitting scoped,
+purposeful concepts through semantic assessment. Candidate reconciliation and
+source-local packing preserve membership and provenance; partial curation and
+completed concept organization are durable checkpoints. Plain topic browsing
+exposes concepts, members and original evidence without another graph API.
+Concept summaries remain pending until an explicit curated-topic detail request
+uses `summarize: true`; generation and independent support auditing share
+concurrent requests and cache successful results in the current generation.
+Evidence/fingerprint changes invalidate that cache. Shutdown, corpus clearing
+and source removal cancel outstanding summary work. Maintenance drain does not
+eagerly summarize every concept.
+
+`curatedTopics` defaults to `true`; setting it to `false` retains the raw-topic
+summary pipeline. No model-backed quality or latency qualification is implied:
+native curation latency and source-synopsis model failures remain follow-up work.
+The quality pipeline is separate from the discovery and answering lifecycle
+below. This change does not add a new graph explorer.
+
+## Automatic knowledge preparation and integrated answering
+
+New corpora default to `sourceObserved` question discovery; existing corpora with
+no persisted discovery policy remain off. Hosts and clients can explicitly choose
+`off`, `suggest`, or `sourceObserved`. Discovery uses bounded original-source
+windows, existing contracts, evidence-grounded utility assessment and durable
+fingerprints, receipts and hourly call budgets. Repairs reserve call allowance.
+Policy-admitted informational contracts are not human-confirmed answers and do
+not authorize external tools. Failed discovery requires an explicit bounded
+retry; source changes invalidate affected work.
+
+Knowledge checkpoints capture exact source revisions, index identity, enabled
+families and exclusions. A producer-complete checkpoint continues bounded
+maintenance until its captured work finishes or it reaches an explicit nonready
+outcome. Ingestion completion alone is not readiness. Inspect `state`, `coverage`
+and `reasons`, including partial, blocked, failed, superseded and cancelled work.
+Complete curated-topic coverage does not require eagerly generated concept prose.
+Ingestion deferral, family coordination, source eligibility changes, privacy
+removal and shutdown apply to this work.
+
+Answers default to integrated original-source and eligible published-View
+retrieval. `sourcesOnly` bypasses Views; `sourcesAndViews` requests the integrated
+path explicitly. Optional `knowledgeCheckpointId` binds readiness to a captured
+scope. View evidence is revalidated for source scope, review, freshness,
+conflicts, authority, publication and access eligibility. Supporting citations
+expand exact retained source passages rather than trusting cached View excerpts.
+Derived references and user assertions remain distinct from original-source
+citations. Reconstruction and follow-up retrieval have finite evidence/request
+bounds and expose opt-in reader diagnostics. No live model or benchmark
+qualification is implied by deterministic tests.
 
 ## Test suites
 
@@ -421,6 +504,15 @@ and one reader call, so aggregate retrieval and provider cost can increase;
 per-search indexed reads remain bounded at 32,000 characters. Diagnostics retain
 both reader contexts and the refinement queries and selection receipts. The
 product and qualification harness use this same answer path.
+
+The bounded refinement also applies to integrated source-plus-view answers,
+including `sourcesOnly`. Follow-up searches retain the original access scope
+and temporal constraints; views are still evaluated against the original
+question. Delivery validation rechecks evidence from both reader calls, even
+when the final bounded pool omits an initial passage. A delivery-race
+reconstruction remains limited to one retry and may repeat that bounded
+refinement. Integrated diagnostics expose the initial typed evidence and the
+follow-up selection receipts under `integratedAnswer.refinement`.
 
 All memory synthesis, topic, indexed-answer and hub-answer calls now omit
 optional OpenAI completion limits. Their prompts express approximate final-JSON
@@ -1252,6 +1344,49 @@ revision filtering, editorial metadata and head guards. Legacy derived records
 rebuild under the history lock; Git commit traversal remains linear. Privacy
 replacement of the history repository removes these records and unreachable
 blobs together, rather than leaving a second history outside the purge boundary.
+
+### Explicit schema-defined question Views
+
+`schemaView` is a persisted, versioned View kind with restricted data-only answer
+schemas and explicit question slots. Slots support singleton, record and keyed
+collection answers; candidate values retain exact source citations and separate
+review, freshness, coverage and answer states. Versioned rubrics select by most
+recent evidence, independent support or manual review. An authenticated user can
+confirm/reject candidates, assert a typed answer, edit a contract or approve/reject
+a proposed question without rewriting retained evidence.
+
+`proposeSchemaView` creates unapproved contracts from an explicitly supplied
+specification and maintenance scope. `discoverSchemaQuestions` is an explicit,
+per-View call with opt-in cumulative bounds; enabling discovery does not run it.
+Ordinary ingestion maintains approved question answers within their configured
+source scope, but does not discover questions across the corpus. Evidence audits
+cover every source-origin candidate, including unselected candidates. One bounded
+repair can correct evidence and chronology bindings before independent revalidation.
+Timezone-free reports are comparable only within the same evidence-supported local
+chronology; ingestion time never establishes fact time.
+
+`listQuestions` returns full details; `listQuestionSummaries` provides bounded,
+filtered summary pages and `getQuestion` loads one complete question.
+`getViewPage` resolves deterministic Markdown and exact revision/slot/item
+`memory-view:` links without inference. These methods are available through typed
+in-process, browser RPC and MCP clients. Source removal and corpus clearing purge
+question evidence and history through the existing privacy lifecycle.
+
+### Deferred evidence acquisition
+
+Hosts can authorize deduplicated, consumer-tracked evidence requests for approved
+question slots. Tools remain disabled by default. Authorization binds the
+principal, policy, tool, resource and exact outbound arguments; question text or a
+model proposal cannot grant authority. Requests inspect current answers before
+fetching and deliver fetched material through ordinary source ingestion, retaining
+ingestion receipts and reconciling overlapping question consumers. Cancellation,
+stale consumers, conflicts, indexing failures and privacy suppression remain
+explicit states, not successful empty answers.
+
+The Questions page exposes sanitized progress and explicit run-once/cancel controls
+for existing requests. Browser and MCP progress omit outbound arguments, staged
+content and raw errors. They cannot admit requests, enable periodic acquisition
+or authorize tools; those operations belong to an explicitly configured host.
 
 ### Runnable local CLI
 

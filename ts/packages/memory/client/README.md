@@ -1,5 +1,53 @@
 # @typeagent/memory-client
 
+Scoped graphs are available through `queryKnowledgeGraph` and
+`queryGraphSupport` on supporting hosts. The same bounded request/response
+schemas validate in-process, RPC and MCP graph operations. Graph responses expose
+coverage and generation-bound continuation tokens; clients must not treat
+`building`, `stale`, `error` or `unsupported` coverage as complete evidence.
+`features.scopedKnowledgeGraphs` reports support for these operations, not that
+every requested projection is already prepared.
+View/build summary pages and batched publication status support lazy navigation
+without loading full view bodies.
+
+## Knowledge readiness and answering
+
+Both clients expose `getKnowledgeStatus`, `updateKnowledgeDiscovery`,
+`createKnowledgeCheckpoint`, `getKnowledgeCheckpoint` and
+`waitForKnowledgeCheckpoint`. The exported `knowledgeProtocol` schemas are
+strict; waits have finite timeouts (0–300,000 ms). Source indexing is distinct
+from checkpoint readiness: inspect state, coverage, exclusions and reasons,
+including partial/failed/superseded results. `producerComplete` must only be
+claimed by a producer that has sealed its batch.
+
+Discovery policy is service-owned: existing corpora stay off; new corpora default
+to `sourceObserved`. Explicit policy updates select `off`, `suggest` or
+`sourceObserved`; optional `retryFailed: true` requests a bounded retry. Policy
+admission records preserve their source-backed reason and never imply human
+answer confirmation or authority to run external tools.
+
+`answer` accepts orthogonal `retrievalPolicy` (`sourcesOnly` diagnostic mode or
+strict `sourcesAndViews`) and optional `knowledgeCheckpointId`. Omission uses
+the host's integrated default. Exact `derivedReferences`, `assertionReferences`,
+warnings and integrated reader diagnostics survive MCP serialization. Hosts
+advertise `derivedViews.integratedAnswering` and `derivedViews.knowledge`.
+
+## Schema-defined questions
+
+Generic View protocols include `schemaView` definitions, candidates, support
+lineage and `schema-defined-v1` build receipts. Both typed clients expose
+`listQuestions`, `editQuestion`, `getViewPage`, `proposeSchemaView` and
+`discoverSchemaQuestions`. Page results preserve deterministic `memory-view:`
+URIs and exact revisions. Proposals are drafts, not facts; slot approval and
+bounded discovery remain explicit guarded edits.
+
+`listAcquisitionProgress`, `runAcquisitionProgress` and
+`cancelAcquisitionProgress` return sanitized progress only, including the
+`ingested` (indexed but not yet resolved) state. They do not return staged
+content, host authority, outbound arguments or raw request errors. Acquisition
+admission and periodic scheduling remain host-only. Unsupported capabilities
+fail explicitly.
+
 ## Explicit agent-session imports
 
 Both clients and the RPC facade expose optional `importAgentSession`,

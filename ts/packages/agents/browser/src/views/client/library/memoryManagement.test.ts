@@ -65,6 +65,9 @@ const synopsis: SourceSynopsis = {
 };
 let source: MemoryCenterSource;
 let mounted: ReturnType<typeof mountMemoryManagement>;
+async function settle() {
+    for (let index = 0; index < 30; index++) await Promise.resolve();
+}
 
 beforeEach(() => {
     document.body.innerHTML = readFileSync(
@@ -133,6 +136,155 @@ beforeEach(() => {
 
 afterEach(() => document.body.replaceChildren());
 
+test("direct source details load no inventories and original text does not wait for the synopsis", async () => {
+    const originalInvoke = invoke.getMockImplementation()!;
+    let resolveSource!: (value: unknown) => void;
+    let resolveSynopsis!: (value: unknown) => void;
+    invoke.mockImplementation((method, params) => {
+        if (method === "memoryGetSource")
+            return new Promise((resolve) => {
+                resolveSource = resolve;
+            });
+        if (method === "memoryGetSourceSynopsis")
+            return new Promise((resolve) => {
+                resolveSynopsis = resolve;
+            });
+        return originalInvoke(method, params);
+    });
+    const pending = mounted.selectSource("source", corpus.corpusId);
+    expect(document.getElementById("sourceList")?.textContent).toContain(
+        "Source list not loaded",
+    );
+    expect(document.getElementById("sourceTitle")?.textContent).toBe(
+        "Loading source...",
+    );
+    expect(document.getElementById("contentPreview")?.textContent).toContain(
+        "Loading source details...",
+    );
+    expect(
+        (document.getElementById("replaceSourceButton") as HTMLButtonElement)
+            .disabled,
+    ).toBe(true);
+    resolveSource(source);
+    await pending;
+    expect(
+        (document.getElementById("contentEditor") as HTMLTextAreaElement).value,
+    ).toBe(original);
+    expect(invoke.mock.calls.map(([method]) => method)).toEqual([
+        "memoryGetCorpus",
+        "memoryGetSource",
+        "memoryGetSourceContent",
+        "memoryGetSourceSynopsis",
+    ]);
+    expect(
+        document.getElementById("sourceMetadata")?.textContent,
+    ).not.toContain(synopsis.overview);
+    resolveSynopsis(synopsis);
+    await settle();
+    expect(document.getElementById("sourceMetadata")?.textContent).toContain(
+        synopsis.overview,
+    );
+});
+test("a late source response cannot overwrite a newer source selection", async () => {
+    await mounted.selectCorpus(corpus.corpusId);
+    const originalInvoke = invoke.getMockImplementation()!;
+    let resolveOld!: (value: unknown) => void;
+    invoke.mockImplementation((method, params) => {
+        if (method === "memoryGetSource")
+            return params.sourceId === "source"
+                ? new Promise((resolve) => {
+                      resolveOld = resolve;
+                  })
+                : Promise.resolve({
+                      ...source,
+                      sourceId: "new",
+                      title: "New worksheet",
+                  });
+        return originalInvoke(method, params);
+    });
+    const old = mounted.selectSource("source");
+    await mounted.selectSource("new");
+    resolveOld(source);
+    await old;
+    await settle();
+    expect(document.getElementById("sourceTitle")?.textContent).toBe(
+        "New worksheet",
+    );
+    expect(
+        invoke.mock.calls
+            .filter(([method]) => method === "memoryGetSourceContent")
+            .map(([, params]) => params.sourceId),
+    ).toEqual(["new"]);
+});
+test("a late original-content response cannot replace the newer source text", async () => {
+    await mounted.selectCorpus(corpus.corpusId);
+    const originalInvoke = invoke.getMockImplementation()!;
+    let resolveContent!: (value: unknown) => void;
+    invoke.mockImplementation((method, params) => {
+        if (method === "memoryGetSource")
+            return Promise.resolve({
+                ...source,
+                sourceId: params.sourceId,
+                title: params.sourceId,
+            });
+        if (method === "memoryGetSourceContent")
+            return params.sourceId === "source"
+                ? new Promise((resolve) => {
+                      resolveContent = resolve;
+                  })
+                : Promise.resolve({
+                      content: "New original",
+                      offset: 0,
+                      totalChars: 12,
+                  });
+        return originalInvoke(method, params);
+    });
+    const old = mounted.selectSource("source");
+    await settle();
+    await mounted.selectSource("new");
+    resolveContent({ content: "Old original", offset: 0, totalChars: 12 });
+    await old;
+    expect(
+        (document.getElementById("contentEditor") as HTMLTextAreaElement).value,
+    ).toBe("New original");
+    expect(document.getElementById("sourceTitle")?.textContent).toBe("new");
+});
+test("leaving source details cancels late rendering and failures leave edits disabled", async () => {
+    let resolveOld!: (value: unknown) => void;
+    const originalInvoke = invoke.getMockImplementation()!;
+    invoke.mockImplementation((method, params) =>
+        method === "memoryGetSource"
+            ? new Promise((resolve) => {
+                  resolveOld = resolve;
+              })
+            : originalInvoke(method, params),
+    );
+    const old = mounted.selectSource("source", corpus.corpusId);
+    mounted.cancelSourceSelection();
+    resolveOld(source);
+    await old;
+    expect(
+        invoke.mock.calls.some(
+            ([method]) => method === "memoryGetSourceContent",
+        ),
+    ).toBe(false);
+    invoke.mockImplementation((method, params) =>
+        method === "memoryGetSource"
+            ? Promise.reject(new Error("Source unavailable"))
+            : originalInvoke(method, params),
+    );
+    await expect(
+        mounted.selectSource("source", corpus.corpusId),
+    ).rejects.toThrow("Source unavailable");
+    expect(document.getElementById("contentPreview")?.textContent).toContain(
+        "Source details unavailable: Source unavailable",
+    );
+    expect(
+        (document.getElementById("replaceSourceButton") as HTMLButtonElement)
+            .disabled,
+    ).toBe(true);
+});
+
 test("source list/detail retain original evidence and distinguish generated identity, scan and coordinates", async () => {
     await mounted.selectCorpus(corpus.corpusId);
     expect(document.getElementById("sourceList")!.textContent).toContain(
@@ -140,6 +292,7 @@ test("source list/detail retain original evidence and distinguish generated iden
     );
     expect(document.querySelector("img")).toBeNull();
     await mounted.selectSource("source");
+    await settle();
     expect(invoke).toHaveBeenLastCalledWith("memoryGetSourceSynopsis", {
         corpusId: corpus.corpusId,
         sourceId: "source",
@@ -169,6 +322,7 @@ test("unsupported synopsis detail is explicit and does not block original source
         new Error("Source synopses are not supported"),
     );
     await mounted.selectSource("source");
+    await settle();
     expect(document.getElementById("sourceMetadata")!.textContent).toContain(
         "Synopsis unavailableSource synopses are not supported",
     );

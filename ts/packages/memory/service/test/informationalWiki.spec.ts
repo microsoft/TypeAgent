@@ -74,12 +74,20 @@ test("wiki and project summaries preserve semantic warnings and source dates acr
     };
     const value = {
         title: "Dated original",
+        summary: "Source recorded 2026-10-12.",
+        status: "partial",
         prose: "Source recorded 2026-10-12.",
         limits: "Owner approval unknown. Updated source note: 2026-10-12",
         citationIds: ["f0"],
     };
     const project = {
         ...value,
+        completeness: "partial",
+        assignments: [],
+        milestoneItems: [],
+        decisionItems: [],
+        openQuestions: [],
+        riskItems: [],
         goalsScope: value.prose,
         owners: "Unknown",
         status: "Pending",
@@ -101,11 +109,28 @@ test("wiki and project summaries preserve semantic warnings and source dates acr
         clock.setSystemTime(new Date("2026-10-14T00:00:00Z"));
         expect(hydrateInformational(input, value)).toEqual(wiki);
         expect(hydrateProjectSummary(input, project)).toEqual(brief);
-        expect(wiki.content.summary).toBe(
-            `Limited summary: selected indexed fragments only; ${value.limits}. Search sources or retry a deeper bounded refresh.`,
-        );
+        expect(wiki.content.summary).toBe(value.summary);
+        expect(wiki.content.coverageNote).toBe(value.limits);
+        expect(wiki.content.status).toBe("partial");
+        expect(
+            hydrateInformational(input, { ...value, status: "sufficient" })
+                .content.status,
+        ).toBe("sufficient");
+        expect(() =>
+            hydrateInformational(input, { ...value, status: undefined }),
+        ).toThrow("summary and completeness");
+        expect(() =>
+            hydrateInformational(input, { ...value, summary: undefined }),
+        ).toThrow();
         expect(wiki.content.sections[0].body).toContain("2026-10-12");
         expect(brief.content.summary).toBe(wiki.content.summary);
+        expect(brief.content.status).toBe("partial");
+        expect(() =>
+            hydrateProjectSummary(input, {
+                ...project,
+                assignments: undefined,
+            }),
+        ).toThrow();
     } finally {
         clock.useRealTimers();
     }
@@ -255,6 +280,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
     let maintenanceLimits: FileMemoryServiceOptions["maintenanceLimits"];
     let summaryLimits =
         "Only selected indexed evidence; owner approval unknown";
+    let generatedSummary = "Acquisition has a scoped approval process.";
     const adapter: ViewSynthesisAdapter = {
         identity: "mock-informational",
         checkEditorial: async () => ({ safe: true, failures: [] }),
@@ -273,6 +299,13 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             await beforeGeneration?.(input);
             if (input.pipeline === "informational-project-summary-v1") {
                 return hydrateProjectSummary(input, {
+                    summary: "Grounded project summary.",
+                    completeness: "partial",
+                    assignments: [],
+                    milestoneItems: [],
+                    decisionItems: [],
+                    openQuestions: [],
+                    riskItems: [],
                     title:
                         input.editorial?.generatedBase.content.title ??
                         input.definition.projectSummary?.query ??
@@ -296,6 +329,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 });
             }
             return hydrateInformational(input, {
+                summary: generatedSummary,
+                status: "partial",
                 title: "Acquisition",
                 prose: input.inputs
                     .map((source) => source.content)
@@ -314,6 +349,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         new FileMemoryService(root, {
             maintenanceMode,
             ...(maintenanceLimits ? { maintenanceLimits } : {}),
+            discoveryPolicy: "off",
             ...(indexedAnswerModel ? { indexedAnswerModel } : {}),
             viewSynthesisAdapter: adapter,
             indexFactory: (_corpusId, directory) =>
@@ -344,6 +380,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         generated = 0;
         summaryLimits =
             "Only selected indexed evidence; owner approval unknown";
+        generatedSummary = "Acquisition has a scoped approval process.";
         failNext = false;
         beforeGeneration = undefined;
         indexedAnswerModel = undefined;
@@ -433,6 +470,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         expect(humanEdit.newValue).toBe(content.summary);
         summaryLimits =
             "Owner approval withheld; production cutover is not authorized";
+        generatedSummary =
+            "Acquisition production cutover is not authorized pending owner review.";
         await add(
             corpusId,
             "qualification",
@@ -856,8 +895,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             const admitted = await admitFreshBuild(request);
             expect(admitted.results[0].snapshot.model).toBe(
                 family === "wiki"
-                    ? "mock-informational:wiki-source-contribution-v4:editorial-v1:indexed-evidence-v2"
-                    : "mock-informational:project-attribution-v4:editorial-v1:indexed-evidence-v2",
+                    ? "mock-informational:wiki-source-contribution-v6:editorial-v1:indexed-evidence-v2"
+                    : "mock-informational:project-attribution-v6:editorial-v1:indexed-evidence-v2",
             );
             expect((await service.buildViews(request)).jobId).toBe(
                 admitted.jobId,
@@ -1266,7 +1305,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                         data: JSON.stringify({
                             status: "answered",
                             answer: "Mock source-only answer",
-                            citationIds: ["f0"],
+                            evidenceIds: ["s0"],
                         }),
                     };
                 },
@@ -1305,10 +1344,17 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 referenceTime: parseTemporalValue("2024/02/01 12:00"),
                 availabilityPolicy: "supplied-history",
             });
-            expect(result.readerContext?.answerPath).toBe("indexed-fragments");
+            expect(result.readerContext?.answerPath).toBe("sources-and-views");
+            const suppliedSources =
+                result.readerContext?.integratedAnswer?.suppliedEvidence.flatMap(
+                    (item) => (item.kind === "source" ? [item.source] : []),
+                ) ?? [];
+            expect(suppliedSources[0].snippet).toContain(
+                "governing qualification",
+            );
             expect(
-                result.readerContext?.indexedAnswer?.fragments[0].snippet,
-            ).toContain("governing qualification");
+                result.readerContext?.integratedAnswer?.selectedEvidenceIds,
+            ).toEqual(["s0"]);
             await expect(
                 service.answer({
                     corpusId,
@@ -1341,6 +1387,14 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 complete: async (input) => {
                     calls++;
                     const prompt = JSON.stringify(input);
+                    if (typeof input === "string")
+                        throw new Error("Expected typed answer messages");
+                    const content = input[input.length - 1].content;
+                    if (typeof content !== "string")
+                        throw new Error("Expected serialized answer evidence");
+                    const envelope: {
+                        evidence: { kind: string; id: string }[];
+                    } = JSON.parse(content);
                     if (calls === 2) {
                         expect(prompt).toContain("Property price 200000");
                         expect(prompt).toContain("Renovation cost 20000");
@@ -1354,9 +1408,13 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                                 calls === 1
                                     ? "Missing price"
                                     : "Final response",
-                            citationIds:
+                            evidenceIds:
                                 calls === 2 && finalStatus === "answered"
-                                    ? ["f0", "f1"]
+                                    ? envelope.evidence
+                                          .filter(
+                                              (item) => item.kind === "source",
+                                          )
+                                          .map((item) => item.id)
                                     : [],
                             retrievalQueries:
                                 calls === 1 || finalStatus === "noAnswer"
@@ -1386,19 +1444,16 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 },
             });
             expect(calls).toBe(2);
-            expect(result.readerContext?.indexedAnswer?.response.status).toBe(
-                finalStatus,
-            );
             expect(
-                result.readerContext?.indexedAnswer?.refinement?.queries,
+                result.readerContext?.integratedAnswer?.refinement?.queries,
             ).toEqual(["property price"]);
             expect(
-                result.readerContext?.indexedAnswer?.refinement?.initialContext
-                    ?.indexedAnswer?.fragments,
+                result.readerContext?.integratedAnswer?.refinement
+                    ?.initialEvidence,
             ).toHaveLength(1);
-            expect(result.readerContext?.indexedAnswer?.fragments).toHaveLength(
-                2,
-            );
+            expect(
+                result.readerContext?.integratedAnswer?.suppliedEvidence,
+            ).toHaveLength(2);
             const followup = MockIndexedCorpus.fragmentRequests.find(
                 (request) => request.query === "property price",
             )!;
@@ -1428,7 +1483,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                         data: JSON.stringify({
                             status: "noAnswer",
                             answer: "Mock reader does not calculate.",
-                            citationIds: [],
+                            evidenceIds: [],
                         }),
                     };
                 },
@@ -1457,14 +1512,16 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 includeDiagnostics: true,
             });
             const supplied =
-                answer.readerContext?.indexedAnswer?.fragments ?? [];
+                answer.readerContext?.integratedAnswer?.suppliedEvidence.flatMap(
+                    (item) => (item.kind === "source" ? [item.source] : []),
+                ) ?? [];
             expect(supplied.map((fragment) => fragment.sourceId)).toEqual(
                 expect.arrayContaining(["source-1", "source-34"]),
             );
             expect(prompts[0]).toContain("$2,800");
             expect(prompts[0]).toContain("$2,500");
             expect(
-                answer.readerContext?.indexedAnswer?.selection
+                answer.readerContext?.integratedAnswer?.sourceSelection
                     ?.eligibleSourceIds,
             ).toHaveLength(40);
             const scoped = await service.search({
@@ -1492,6 +1549,150 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         30000,
     );
 
+    test.each([false, true])(
+        "maintenance retrieval admits graph reads and rejects changed evidence: %s",
+        async (suppress) => {
+            const { corpusId } =
+                await service.createCorpus("Detached retrieval");
+            await update(corpusId, "pause");
+            await add(
+                corpusId,
+                "source",
+                "Acquisition has governing qualifications.",
+            );
+            let entered!: () => void;
+            let release!: () => void;
+            let timeout: ReturnType<typeof setTimeout> | undefined;
+            const started = new Promise<void>((resolve) => {
+                entered = resolve;
+            });
+            const gate = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            const read = MockIndexedCorpus.prototype.readFragments;
+            const clock = (import.meta as ImportMeta & { jest: typeof jest })
+                .jest;
+            const blocked = clock
+                .spyOn(MockIndexedCorpus.prototype, "readFragments")
+                .mockImplementationOnce(async function (
+                    this: MockIndexedCorpus,
+                    request,
+                ) {
+                    entered();
+                    await gate;
+                    return read.call(this, request);
+                });
+            const head = (await service.listViews(corpusId)).head;
+            const maintaining = service
+                .maintainViews({
+                    corpusId,
+                    expectedHead: head,
+                    family: "wiki",
+                    operation: "resume",
+                })
+                .then(
+                    (result) => ({ result, error: undefined }),
+                    (error: unknown) => ({ result: undefined, error }),
+                );
+            try {
+                await started;
+                await Promise.race([
+                    Promise.all([
+                        service.queryKnowledgeGraph({
+                            corpusId,
+                            kind: "entities",
+                        }),
+                        service.listViews(corpusId),
+                    ]),
+                    new Promise<never>((_resolve, reject) => {
+                        timeout = setTimeout(
+                            () =>
+                                reject(
+                                    new Error(
+                                        "Reads blocked behind wiki fragment retrieval",
+                                    ),
+                                ),
+                            1500,
+                        );
+                    }),
+                ]);
+                if (suppress)
+                    await service.suppressSourceKnowledge({
+                        corpusId,
+                        sourceId: "source",
+                        kind: "entity",
+                        name: "Acquisition",
+                    });
+                release();
+                const outcome = await maintaining;
+                if (suppress) {
+                    expect(outcome.error).toBeInstanceOf(ViewBuildStaleError);
+                    expect(outcome.result).toBeUndefined();
+                } else {
+                    expect(outcome.error).toBeUndefined();
+                    expect(outcome.result?.job).toBeDefined();
+                    expect(
+                        (await waitForViewBuild(service, outcome.result!.job!))
+                            .state,
+                    ).toBe("complete");
+                }
+            } finally {
+                clearTimeout(timeout);
+                release();
+                await maintaining;
+                blocked.mockRestore();
+            }
+        },
+    );
+    test("pausing automatic maintenance during detached retrieval preserves the paused head", async () => {
+        await service.close();
+        rehearsalBudget = false;
+        service = open();
+        let entered!: () => void;
+        let release!: () => void;
+        const started = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const read = MockIndexedCorpus.prototype.readFragments;
+        const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+        const blocked = clock
+            .spyOn(MockIndexedCorpus.prototype, "readFragments")
+            .mockImplementationOnce(async function (
+                this: MockIndexedCorpus,
+                request,
+            ) {
+                entered();
+                await gate;
+                return read.call(this, request);
+            });
+        try {
+            const { corpusId } = await service.createCorpus(
+                "Paused detached retrieval",
+            );
+            await add(
+                corpusId,
+                "source",
+                "Acquisition has governing qualifications.",
+            );
+            await started;
+            await update(corpusId, "pause");
+            const head = (await service.listViews(corpusId)).head;
+            release();
+            await service.close();
+            const store = new TypedViewStore(root);
+            const snapshot = await store.listViews(corpusId);
+            const family = await store.getWikiFamily(corpusId);
+            expect(snapshot.head).toBe(head);
+            expect(family.enabled).toBe(false);
+            expect(family.error).toBeUndefined();
+        } finally {
+            release();
+            blocked.mockRestore();
+        }
+    });
     test("automatic wiki builds without rehearsal variables and family pause survives reopen", async () => {
         await service.close();
         rehearsalBudget = false;
@@ -1742,9 +1943,13 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         expect(afterEdit.views[0].content.citations).toEqual(
             page.content.citations,
         );
-        expect(afterEdit.views[0].content.sections[0].body).toContain(
+        expect(afterEdit.views[0].content.sections[0].body).not.toContain(
             "Coverage limits:",
         );
+        expect(
+            afterEdit.views[0].content.kind === "wiki" &&
+                afterEdit.views[0].content.coverageNote,
+        ).toBe(summaryLimits);
         expect(generated - before).toBe(1);
         const calls = generated;
         expect((await update(corpusId)).job).toBeUndefined();
@@ -2075,7 +2280,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             .jest;
         const historyRead = jestApi.spyOn(ViewHistory.prototype, "read");
         const accepted = await service.listViews(corpusId);
-        expect(historyRead).toHaveBeenCalledTimes(1);
+        expect(historyRead).not.toHaveBeenCalled();
         historyRead.mockRestore();
         expect(accepted.wikiFamily).toEqual({
             enabled: true,

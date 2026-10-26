@@ -7,6 +7,8 @@ import type {
     TopicIndexReader,
     TopicSnapshot,
     TopicSourceReference,
+    TopicOccurrence,
+    TopicEventReference,
 } from "./topicTypes.js";
 import type { ViewBuildSnapshot } from "./viewTypes.js";
 import { viewHash } from "./viewMerge.js";
@@ -36,6 +38,7 @@ export function topicInputFingerprint(
     indexGeneration: string | undefined,
     suppressions: SourceKnowledgeSuppression[],
     model: string,
+    events: TopicEventReference[] = [],
 ): string {
     return viewHash({
         sources: [...sources].sort((a, b) =>
@@ -44,7 +47,8 @@ export function topicInputFingerprint(
         indexGeneration: indexGeneration ?? null,
         suppressions,
         model,
-        recipe: "topics-v1:editorial-v1",
+        ...(events.length ? { events } : {}),
+        recipe: "topics-v2:curated-v1:editorial-v1",
     });
 }
 
@@ -57,6 +61,8 @@ export async function captureTopicBuild(options: {
     suppressions: SourceKnowledgeSuppression[];
     model: string;
     current?: TopicSnapshot;
+    eventOccurrences?: TopicOccurrence[];
+    influenceEvents?: TopicEventReference[];
 }): Promise<ViewBuildSnapshot> {
     const {
         corpusId,
@@ -70,7 +76,7 @@ export async function captureTopicBuild(options: {
     const active = new Map(
         sources.map((source) => [source.sourceId, source.revisionId]),
     );
-    const occurrences = (
+    const documentOccurrences = (
         await requireTopicIndex(options.index).getTopicOccurrences(
             new Set(active.keys()),
         )
@@ -85,7 +91,26 @@ export async function captureTopicBuild(options: {
                         occurrence.label.trim().toLocaleLowerCase(),
             ),
     );
+    const occurrences = [
+        ...documentOccurrences,
+        ...(options.eventOccurrences ?? []),
+    ];
     const nodes = initialTopicNodes(corpusId, occurrences);
+    const fingerprint = topicInputFingerprint(
+        sources,
+        indexGeneration,
+        suppressions,
+        model,
+        options.influenceEvents,
+    );
+    const reusableCuration =
+        current?.corpusId === corpusId &&
+        current.recipe === `${model}:editorial-v1:curated-lazy-v6` &&
+        current.inputFingerprint === fingerprint &&
+        viewHash(current.occurrences) === viewHash(occurrences) &&
+        current.nodes.every((node) => node.authorship === "generated")
+            ? (current.curation ?? current.curationProgress)
+            : undefined;
     const reusableSummaries =
         current?.corpusId === corpusId &&
         current.recipe === `${model}:editorial-v1`
@@ -146,18 +171,19 @@ export async function captureTopicBuild(options: {
         bounds: {},
         inputs: [],
         influenceSources: sources,
+        ...(options.influenceEvents?.length
+            ? { influenceEvents: options.influenceEvents }
+            : {}),
         pipeline: "topics-v1",
         model,
-        fingerprint: topicInputFingerprint(
-            sources,
-            indexGeneration,
-            suppressions,
-            model,
-        ),
+        fingerprint,
         topicInput: {
             occurrences,
             ...(indexGeneration ? { indexGeneration } : {}),
             reusableSummaries,
+            ...(reusableCuration
+                ? { reusableCuration: structuredClone(reusableCuration) }
+                : {}),
             authoredLabels: (current?.nodes ?? [])
                 .filter((node) => node.authorship === "human")
                 .map(({ id, label, aliases }) => ({ id, label, aliases })),
@@ -168,8 +194,15 @@ export async function captureTopicBuild(options: {
 export function reconcileTopicFamily(
     family: TopicFamilyState,
     indexGeneration: string | undefined,
+    currentFingerprint?: string,
+    expectedFingerprint?: string,
 ): TopicFamilyState {
-    if (family.indexGeneration === indexGeneration) return family;
+    if (
+        family.indexGeneration === indexGeneration &&
+        (expectedFingerprint === undefined ||
+            currentFingerprint === expectedFingerprint)
+    )
+        return family;
     return {
         enabled: family.enabled,
         dirty: true,

@@ -12,7 +12,7 @@ import type {
     WikiPagePurposeContext,
     WikiSubjectAssessment,
 } from "./viewTypes.js";
-import { parseWikiAssessment, wikiPageContext } from "./wikiAdmission.js";
+import { parseWikiAssessment } from "./wikiAdmission.js";
 import { publicationProof } from "./viewPublication.js";
 import { validateInventoryAudit } from "./viewInventory.js";
 import {
@@ -25,7 +25,12 @@ import {
     ConsolidationRejection,
     ConsolidationTargetChanged,
 } from "./wikiConsolidation.js";
-import { validateConstructedGuide, validateSupport } from "./viewSynthesis.js";
+import {
+    validateConstructedGuide,
+    prepareWikiContribution,
+    validateSupport,
+    ViewSupportRejection,
+} from "./viewSynthesis.js";
 import { redactRunbookText } from "./runbookRedaction.js";
 import { informationalPipeline } from "./informationalView.js";
 import { generateTopicTarget, type TopicBuildOwner } from "./topicBuilds.js";
@@ -136,12 +141,14 @@ export class ViewBuildRunner {
                 ]),
             ),
             events: new Set(
-                job.results.flatMap(
-                    (result) =>
-                        result.snapshot.definition.selector.events?.map(
-                            (event) => event.eventId,
-                        ) ?? [],
-                ),
+                job.results.flatMap((result) => [
+                    ...(result.snapshot.definition.selector.events?.map(
+                        (event) => event.eventId,
+                    ) ?? []),
+                    ...(result.snapshot.influenceEvents?.map(
+                        (event) => event.eventId,
+                    ) ?? []),
+                ]),
             ),
         };
         this.controllers.set(job.jobId, { ...scope, controller });
@@ -221,9 +228,13 @@ export class ViewBuildRunner {
 
     public cancel(
         jobId: string,
-        reason = "Explicit cancellation requested",
+        reason: string | Error = "Explicit cancellation requested",
     ): void {
-        this.controllers.get(jobId)?.controller.abort(new Error(reason));
+        this.controllers
+            .get(jobId)
+            ?.controller.abort(
+                reason instanceof Error ? reason : new Error(reason),
+            );
     }
 
     public forget(corpusId: string, sourceId?: string): void {
@@ -399,16 +410,29 @@ export class ViewBuildRunner {
                             signal,
                         ),
                     );
-                const snapshot = await abortable(
-                    timeSearchStage("topic.generate.total", () =>
+                const snapshot = await timeSearchStage(
+                    "topic.generate.total",
+                    () =>
                         generateTopicTarget(
                             this.adapter,
                             result.snapshot,
                             signal,
                             this.topicGenerator,
+                            this.owner.materializeTopicIncidence
+                                ? (snapshot) =>
+                                      timeSearchStage(
+                                          "topic.summary.checkpoint",
+                                          () =>
+                                              this.owner
+                                                  .materializeTopicIncidence!(
+                                                  job,
+                                                  result,
+                                                  snapshot,
+                                                  signal,
+                                              ),
+                                      )
+                                : undefined,
                         ),
-                    ),
-                    signal,
                 );
                 validation = true;
                 await this.result(
@@ -459,9 +483,11 @@ export class ViewBuildRunner {
                 ))
             )
                 return true;
-            const evidence = informational
-                ? undefined
-                : await this.prepareInventory(job, result, signal);
+            const evidence =
+                informational ||
+                result.snapshot.pipeline === "schema-defined-v1"
+                    ? undefined
+                    : await this.prepareInventory(job, result, signal);
             const inventory = evidence?.inventory;
             validation = false;
             await this.result(
@@ -470,7 +496,7 @@ export class ViewBuildRunner {
                 "generating",
                 "Synthesizing complete labeled retained inputs",
             );
-            const candidate = await abortable(
+            let candidate = await abortable(
                 timeSearchStage("view.synthesis.generate", () =>
                     this.adapter.generate(result.snapshot, signal, inventory),
                 ),
@@ -493,37 +519,39 @@ export class ViewBuildRunner {
                 candidate.coverage ? { coverage: candidate.coverage } : {},
             );
             if (!informational)
-                validateSupport(
+                candidate = await this.validateOrRepairAnswers(
+                    result.snapshot,
                     candidate,
-                    await abortable(
-                        this.adapter.validate(
-                            result.snapshot,
-                            candidate,
-                            signal,
-                        ),
-                        signal,
-                    ),
+                    signal,
                 );
             validation = false;
             const current = await timeSearchStage("view.current.read", () =>
                 this.owner.current(result.snapshot),
             );
-            const { output, conflicts } = mergeEditorialView(
-                current,
-                candidate,
-                result.snapshot.inputs,
+            validation = true;
+            const prepared = await abortable(
+                timeSearchStage("wiki.contribution.refresh", () =>
+                    prepareWikiContribution(
+                        this.adapter,
+                        result.snapshot,
+                        candidate,
+                        (candidate) =>
+                            mergeEditorialView(
+                                current,
+                                candidate,
+                                result.snapshot.inputs,
+                            ),
+                        signal,
+                    ),
+                ),
+                signal,
             );
+            candidate = prepared.candidate;
+            const { output, conflicts } = prepared;
             let proof: ViewPublicationProof | undefined;
             if (!conflicts.length) {
                 validation = true;
                 validateConstructedGuide(result.snapshot, output);
-                await timeSearchStage("wiki.contribution.refresh", () =>
-                    this.verifyContributionRefresh(
-                        result.snapshot,
-                        output,
-                        signal,
-                    ),
-                );
                 await timeSearchStage("view.editorial.verify", () =>
                     this.verifyEditorialUpdate(result.snapshot, output, signal),
                 );
@@ -579,6 +607,41 @@ export class ViewBuildRunner {
         return true;
     }
 
+    private async validateOrRepairAnswers(
+        input: ViewBuildSnapshot,
+        candidate: ViewSynthesisOutput,
+        signal: AbortSignal,
+    ): Promise<ViewSynthesisOutput> {
+        const report = await abortable(
+            this.adapter.validate(input, candidate, signal),
+            signal,
+        );
+        try {
+            validateSupport(candidate, report);
+            return candidate;
+        } catch (error) {
+            if (
+                !(error instanceof ViewSupportRejection) ||
+                input.pipeline !== "schema-defined-v1" ||
+                !this.adapter.repairSchemaAnswers
+            )
+                throw error;
+        }
+        const repaired = await abortable(
+            this.adapter.repairSchemaAnswers(input, candidate, report, signal),
+            signal,
+        );
+        validateConstructedGuide(input, repaired);
+        validateSupport(
+            repaired,
+            await abortable(
+                this.adapter.validate(input, repaired, signal),
+                signal,
+            ),
+        );
+        return repaired;
+    }
+
     private async consolidateWikiTarget(
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
@@ -609,44 +672,6 @@ export class ViewBuildRunner {
                 signal,
             ),
         );
-    }
-
-    private async verifyContributionRefresh(
-        input: ViewBuildSnapshot,
-        output: ViewSynthesisOutput,
-        signal: AbortSignal,
-    ): Promise<void> {
-        if (!input.wikiContribution) return;
-        if (!this.adapter.assessWikiSubject)
-            throw new Error(
-                "Wiki contribution refresh lacks actual-prose coverage checker",
-            );
-        const context = wikiPageContext(
-            input,
-            {
-                viewId: input.definition.viewId,
-                revisionId: input.targetRevisionId!,
-                definition: {
-                    ...input.definition,
-                    revisionId: input.definitionRevisionId!,
-                },
-                content: output.content,
-            },
-            undefined,
-            false,
-        );
-        const coverage = parseWikiAssessment(
-            await abortable(
-                this.adapter.assessWikiSubject(input, [context], signal),
-                signal,
-            ),
-            [context],
-            input.wikiContribution.essentialDistinctions,
-        );
-        if (coverage.disposition !== "covered")
-            throw new Error(
-                "Wiki contribution refresh did not preserve essential old/new distinctions in actual prose",
-            );
     }
 
     private async skipInformationalTarget(
@@ -688,8 +713,17 @@ export class ViewBuildRunner {
                 "Wiki purpose assessment requires current-page context and guarded receipts",
             );
         const pages = await this.owner.wikiPages(result.snapshot);
-        if (!pages.length) return false;
-        const sources = pages.flatMap((page) => page.contributingSources);
+        const sources = [
+            ...new Map(
+                [
+                    ...(result.snapshot.influenceSources ?? []),
+                    ...pages.flatMap((page) => page.contributingSources),
+                ].map((source) => [
+                    JSON.stringify([source.sourceId, source.revisionId]),
+                    source,
+                ]),
+            ).values(),
+        ];
         result.snapshot.influenceSources = sources;
         const scope = this.controllers.get(job.jobId);
         for (const source of sources) scope?.sources.add(source.sourceId);
@@ -730,6 +764,7 @@ export class ViewBuildRunner {
         }
         return (
             assessment.disposition === "covered" ||
+            assessment.disposition === "defer" ||
             assessment.disposition === "ambiguous"
         );
     }

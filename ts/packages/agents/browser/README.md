@@ -20,7 +20,71 @@ Related packages:
 Run `pnpm run build` in this folder (builds the agent, PDF views, and
 puppeteer helpers).
 
+### Puppeteer browser
+
+The Puppeteer helpers require Node.js 22.12.0 or later. Puppeteer's install
+scripts are disabled by workspace policy, so `pnpm install` does not download
+its browser. After updating Puppeteer, install the matching Chrome binary
+from `ts/`:
+
+```powershell
+pnpm --filter @typeagent/browser exec puppeteer browsers install chrome
+```
+
+When using an existing system Chrome installation instead, update that browser
+separately. Updating Puppeteer does not patch system Chrome.
+
 ## Architecture
+
+### Scoped graphs and Memory Hub navigation
+
+Memory Hub Explore supports entity, topic and maintained hierarchy graphs with
+document/event filters, bounded generation-aware paging, coverage diagnostics and
+exact evidence drilldown. Graph preparation happens separately from reads; hosts
+without the scoped capability report it explicitly. Retained originals and event
+bodies remain subject to current eligibility and suppression checks.
+
+Views use paginated cards and a separate detail reader, with build receipts in a
+flyout. Grouped activity, Inbox navigation and responsive detail panels reuse
+summary inventories rather than fetching every view's full evidence. These
+navigation features do not depend on checkpoint or integrated-answer APIs.
+
+### Schema-defined questions
+
+The Memory hub's Questions workspace is a complete projection of versioned
+schema-view slots, including proposed and rejected slots. The inspector reviews
+candidates and exact source revisions, records schema-validated user assertions,
+and edits versioned rubrics without rewriting source evidence. Question and
+answer state, review, freshness and coverage are displayed separately.
+
+Question decisions are ranked, grouped by view and capped at five groups. Dismissal
+and one-day snooze use the existing fingerprint preferences; changed evidence
+resurfaces decisions, and Questions can restore dismissed decisions. Source
+mentions are not independent votes.
+
+Assisted authoring requires explicit approval to generate a proposal and an
+explicit maintenance scope; per-view generated slots still require approval.
+Per-view discovery is opt-in, bounded and explicitly invoked. Corpus-level
+discovery can separately admit informational contracts under the
+`sourceObserved` policy. Neither operation authorizes tools.
+`memoryGetViewPage` returns deterministic Markdown and a `memory-view:` URI;
+Markdown links preserve exact revisions, slots and collection item keys when
+opened in the browser. Optional service capabilities and operation errors are
+reported explicitly, not interpreted as empty inventories. Question lists use
+bounded summary pages; selecting a question separately loads its full evidence.
+Questions also mounts knowledge preparation status, discovery policy controls,
+bounded failed-discovery retries and captured readiness checkpoints. Existing
+corpora remain off until enabled; new corpora default to source observed.
+Policy admission is not human confirmation, and source indexing alone never
+implies knowledge readiness. Integrated search answers retain original-source
+citations and separately render maintained-View and user-assertion evidence.
+
+Questions also shows acquisition progress and explicit run-once/cancel controls
+for existing host-authorized requests. Its RPC projection excludes staged
+content, authorized arguments and raw request errors. The workspace cannot admit
+acquisition requests, enable periodic work or authorize tools; unsupported and
+disabled hosts are reported explicitly. Ingestion receipts link to ordinary
+activity and retained-source pages.
 
 ### PDF Understanding Worktree
 

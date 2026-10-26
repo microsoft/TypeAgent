@@ -118,6 +118,7 @@ describe("actual configured evidence-first adapter and durable service", () => {
     }
     const open = () =>
         new FileMemoryService(root, {
+            discoveryPolicy: "off",
             informationalViews: false,
             indexFactory: (_id: string, directory: string) =>
                 new ControlledIndex(directory),

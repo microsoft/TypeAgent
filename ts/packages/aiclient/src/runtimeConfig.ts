@@ -18,9 +18,17 @@
  */
 
 import { buildConfig, type Config } from "@typeagent/config";
-import { setActiveModelProvider } from "./providerMode.js";
+import {
+    setConfiguredModelProvider,
+    getProviderOverrideGeneration,
+} from "./providerMode.js";
 
 let cached: Config | undefined;
+let generation = 0;
+
+export function getRuntimeConfigGeneration(): number {
+    return generation + getProviderOverrideGeneration();
+}
 
 /**
  * Replace the cached typed Config. Hosts should call this after they
@@ -33,9 +41,8 @@ let cached: Config | undefined;
  */
 export function setRuntimeConfig(config: Config): void {
     cached = config;
-    if (config.modelProvider !== undefined) {
-        setActiveModelProvider(config.modelProvider);
-    }
+    generation++;
+    setConfiguredModelProvider(config.modelProvider);
 }
 
 /**
@@ -48,9 +55,8 @@ export function initRuntimeConfigFromProcessEnv(): Config {
         if (typeof v === "string") flat[k] = v;
     }
     cached = buildConfig(flat);
-    if (cached.modelProvider !== undefined) {
-        setActiveModelProvider(cached.modelProvider);
-    }
+    generation++;
+    setConfiguredModelProvider(cached.modelProvider);
     return cached;
 }
 
@@ -71,4 +77,6 @@ export function getRuntimeConfig(): Config {
  */
 export function _resetRuntimeConfigForTests(): void {
     cached = undefined;
+    setConfiguredModelProvider(undefined);
+    generation++;
 }

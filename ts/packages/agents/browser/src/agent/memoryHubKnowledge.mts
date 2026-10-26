@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    conversationCorpusName,
-    type MemoryKnowledgeGraph,
-} from "@typeagent/memory-service";
+import type { MemoryKnowledgeGraph } from "@typeagent/memory-service";
 import type {
     MemoryHubFunctions,
     MemoryHubKnowledgeItem,
@@ -19,6 +16,35 @@ import {
     timed,
     type MemoryHubReadService,
 } from "./memoryHubQuery.mjs";
+import { readScopedKnowledge } from "./memoryHubScopedKnowledge.mjs";
+
+async function documentItems(
+    service: MemoryHubReadService,
+    corpusId: string,
+    corpusName: string,
+): Promise<MemoryHubKnowledgeItem[]> {
+    const items: MemoryHubKnowledgeItem[] = [];
+    let continuationToken: string | undefined;
+    do {
+        const page = await timed(
+            service.listSourcesPage({
+                corpusId,
+                pageSize: 100,
+                ...(continuationToken ? { continuationToken } : {}),
+            }),
+        );
+        items.push(
+            ...page.items.map((source) => ({
+                id: identity("source", corpusId, source.sourceId),
+                title: source.title ?? source.sourceId,
+                subtitle: `${corpusName} · ${source.sourceType}`,
+                sources: [{ corpusId, sourceId: source.sourceId }],
+            })),
+        );
+        continuationToken = page.nextContinuationToken;
+    } while (continuationToken);
+    return items;
+}
 
 function derivedItems(
     corpusId: string,
@@ -109,10 +135,43 @@ export function createMemoryHubKnowledgeFunctions(
             const errors: MemoryHubKnowledgePage["errors"] = [];
             await mapMemoryHubCorpora(corpora, async (corpus) => {
                 try {
-                    if (corpus.name === conversationCorpusName)
-                        throw new Error(
-                            "Conversation knowledge collections are unavailable; use Search for turn evidence.",
+                    if (service.queryKnowledgeGraph) {
+                        if (request.kind === "sources") {
+                            items.push(
+                                ...(await documentItems(
+                                    service,
+                                    corpus.corpusId,
+                                    corpus.name,
+                                )),
+                            );
+                            return;
+                        }
+                        const inventory = await readScopedKnowledge(
+                            service,
+                            corpus.corpusId,
+                            request.kind,
+                            true,
                         );
+                        if (!inventory)
+                            throw new Error(
+                                "Scoped knowledge capability is unavailable.",
+                            );
+                        items.push(
+                            ...inventory.items.map((item) => ({
+                                ...item,
+                                subtitle: [item.subtitle, corpus.name]
+                                    .filter(Boolean)
+                                    .join(" · "),
+                            })),
+                        );
+                        for (const reason of inventory.first.coverage.reasons)
+                            errors.push({
+                                corpusId: corpus.corpusId,
+                                operation: "graph",
+                                message: reason,
+                            });
+                        return;
+                    }
                     const graph = await timed(
                         service.getKnowledgeGraph(corpus.corpusId),
                     );

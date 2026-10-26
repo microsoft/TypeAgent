@@ -167,6 +167,20 @@ export function mountMemoryHubSearch(
     const conversation = node("select");
     conversation.name = "conversationScope";
     const viewKind = node("select");
+    const retrieval = node("select");
+    const checkpoint = node("input");
+    checkpoint.setAttribute("aria-label", "Required knowledge checkpoint");
+    checkpoint.placeholder = "Optional exact checkpoint ID";
+    retrieval.setAttribute("aria-label", "Answer retrieval policy");
+    for (const [value, label] of [
+        ["", "Available sources and knowledge (default)"],
+        ["sourcesOnly", "Sources only (diagnostic)"],
+        ["sourcesAndViews", "Sources and views (strict)"],
+    ]) {
+        const option = node("option", label);
+        option.value = value;
+        retrieval.append(option);
+    }
     viewKind.setAttribute("aria-label", "Derived view kind");
     for (const [value, label] of [
         ["", "All derived views"],
@@ -174,6 +188,7 @@ export function mountMemoryHubSearch(
         ["timeline", "Evidence-linked timelines"],
         ["wiki", "Knowledge wikis"],
         ["troubleshootingGuide", "Troubleshooting guides"],
+        ["schemaView", "Schema-defined questions"],
     ]) {
         const option = node("option", label);
         option.value = value;
@@ -215,6 +230,8 @@ export function mountMemoryHubSearch(
         field("Through (UTC)", to),
         field("Conversations", conversation),
         field("Derived view kind", viewKind),
+        field("Answer retrieval", retrieval),
+        field("Require ready knowledge checkpoint", checkpoint),
     );
     filters.append(filtersSummary, filterFields, dateNote);
     form.append(queryLabel, submit, filters);
@@ -588,6 +605,32 @@ export function mountMemoryHubSearch(
                 }),
             );
         answer.append(cites, followUps);
+        for (const reference of result.answer.derivedReferences ?? []) {
+            answer.append(
+                action(
+                    `Maintained knowledge · ${reference.viewId} @ ${reference.revisionId}${reference.sectionId ? ` · ${reference.sectionId}` : ""} · ${reference.state}`,
+                    () =>
+                        options.onOpenView?.(
+                            reference.corpusId,
+                            reference.viewId,
+                            reference.revisionId,
+                        ),
+                ),
+            );
+        }
+        for (const reference of result.answer.assertionReferences ?? []) {
+            answer.append(
+                action(
+                    `User assertion · ${reference.assertionOrigin} · ${reference.viewId} @ ${reference.revisionId} · candidate ${reference.candidateId} (not independent source evidence)`,
+                    () =>
+                        options.onOpenView?.(
+                            reference.corpusId,
+                            reference.viewId,
+                            reference.revisionId,
+                        ),
+                ),
+            );
+        }
     }
     function renderInsights() {
         insights.replaceChildren(node("h3", "Search insights"));
@@ -755,10 +798,18 @@ export function mountMemoryHubSearch(
             corpusId: options.scope(),
             limit: 50,
             generateAnswer: true,
+            ...(retrieval.value === "sourcesOnly" ||
+            retrieval.value === "sourcesAndViews"
+                ? { retrievalPolicy: retrieval.value }
+                : {}),
+            ...(checkpoint.value.trim()
+                ? { knowledgeCheckpointId: checkpoint.value.trim() }
+                : {}),
             ...(viewKind.value === "timeline" ||
             viewKind.value === "wiki" ||
             viewKind.value === "projectBrief" ||
-            viewKind.value === "troubleshootingGuide"
+            viewKind.value === "troubleshootingGuide" ||
+            viewKind.value === "schemaView"
                 ? { viewKinds: [viewKind.value] }
                 : {}),
             sourceTypes: sourceTypes.length ? sourceTypes : undefined,

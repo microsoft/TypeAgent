@@ -116,6 +116,8 @@ export class MemoryServiceHost {
                         }),
                         { parsedBody },
                     );
+                    // Stateless requests must not reuse sockets expired during client schema compilation.
+                    webResponse.headers.set("connection", "close");
                     await writeWebResponse(response, webResponse);
                 } finally {
                     activeServers.delete(mcpServer);

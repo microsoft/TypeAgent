@@ -8,9 +8,13 @@ import {
     type ChatModel,
 } from "@typeagent/aiclient";
 import { runWithSearchTiming } from "@typeagent/knowpro";
-import { captureTopicBuild } from "../src/topicCapture.js";
+import {
+    captureTopicBuild,
+    reconcileTopicFamily,
+} from "../src/topicCapture.js";
 import {
     createConfiguredTopicGenerator,
+    createConfiguredTopicConceptSummarizer,
     createTopicSnapshot,
 } from "../src/topicGeneration.js";
 import { indexedTopicOccurrence } from "../src/topicIncidence.js";
@@ -77,6 +81,572 @@ function promptText(
         ? messages
         : String(messages[index].content);
 }
+
+test("topic policy changes dirty clean families even when source index generation is unchanged", () => {
+    const family = {
+        enabled: true,
+        dirty: false,
+        indexGeneration: "same",
+        error: "Old policy failure",
+    };
+    const changed = reconcileTopicFamily(
+        family,
+        "same",
+        "raw-policy",
+        "curated-lazy-policy",
+    );
+    expect(changed.dirty).toBe(true);
+    expect(changed.error).toBeUndefined();
+    expect(reconcileTopicFamily(family, "same", "current", "current")).toBe(
+        family,
+    );
+});
+
+test.each([false, true])(
+    "configured curated generation admits concepts without eager prose (structured output: %s)",
+    async (structured) => {
+        let calls = 0;
+        const generator = createConfiguredTopicGenerator(
+            undefined,
+            {
+                completionSettings: structured
+                    ? { response_format: { type: "json_object" } }
+                    : {},
+                complete: async (messages, _options, schema) => {
+                    calls++;
+                    expect(promptText(messages, 0)).toContain(
+                        "Do not write a summary",
+                    );
+                    const payload = JSON.parse(promptText(messages, 1));
+                    if (structured) {
+                        expect(JSON.stringify(schema)).not.toContain(
+                            '"summary"',
+                        );
+                        expect(schema).toMatchObject({
+                            name: "memory_topic_curation",
+                            strict: true,
+                            schema: {
+                                properties: {
+                                    concepts: {
+                                        items: {
+                                            properties: {
+                                                label: { maxLength: 200 },
+                                                scope: { maxLength: 200 },
+                                                purpose: { maxLength: 2000 },
+                                                memberIds: {
+                                                    items: {
+                                                        enum: payload.nodes.map(
+                                                            (node: {
+                                                                id: string;
+                                                            }) => node.id,
+                                                        ),
+                                                    },
+                                                },
+                                                evidenceIds: {
+                                                    items: {
+                                                        enum: payload.evidence.map(
+                                                            (entry: {
+                                                                id: string;
+                                                            }) => entry.id,
+                                                        ),
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        });
+                    } else {
+                        expect(schema).toBeUndefined();
+                    }
+                    return {
+                        success: true,
+                        data: JSON.stringify({
+                            concepts: [],
+                            deferred: payload.nodes.map(
+                                (node: { id: string }) => ({
+                                    nodeId: node.id,
+                                    reason: "Incidental nomination without a standalone reference purpose",
+                                }),
+                            ),
+                        }),
+                    };
+                },
+            },
+            true,
+        );
+        const snapshot = await generator(
+            input(7),
+            new AbortController().signal,
+        );
+        expect(calls).toBe(1);
+        expect(snapshot.curation?.deferred).toHaveLength(7);
+        expect(
+            snapshot.nodes.every(
+                (node) =>
+                    node.summaryState === "pending" && node.summary === "",
+            ),
+        ).toBe(true);
+    },
+);
+
+test.each([
+    "valid",
+    "repaired",
+    "cycle",
+    "repeated",
+    "transport",
+    "abort",
+] as const)(
+    "curated hierarchy uses bounded independently validated organization (%s)",
+    async (mode) => {
+        const stages: string[] = [];
+        let organizations = 0;
+        const controller = new AbortController();
+        const generator = createConfiguredTopicGenerator(
+            undefined,
+            {
+                completionSettings: {
+                    response_format: { type: "json_object" },
+                },
+                complete: async (messages, _options, schema) => {
+                    const rules = promptText(messages, 0);
+                    const payload = JSON.parse(promptText(messages, 1));
+                    if (rules.includes("Organize supplied topics")) {
+                        stages.push("organization");
+                        organizations++;
+                        expect(schema).toMatchObject({
+                            name: "memory_topic_organization",
+                            strict: true,
+                            schema: {
+                                properties: {
+                                    parents: {
+                                        items: {
+                                            properties: {
+                                                parentId: {
+                                                    enum: payload.map(
+                                                        (node: {
+                                                            id: string;
+                                                        }) => node.id,
+                                                    ),
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        });
+                        if (mode === "transport")
+                            throw new Error("Organization provider failed");
+                        if (mode === "abort")
+                            controller.abort(
+                                new Error("Organization cancelled"),
+                            );
+                        const invalid =
+                            mode === "repeated" ||
+                            ((mode === "repaired" || mode === "cycle") &&
+                                organizations === 1);
+                        return {
+                            success: true,
+                            data: JSON.stringify({
+                                parents: [
+                                    {
+                                        parentId:
+                                            invalid && mode !== "cycle"
+                                                ? "invented"
+                                                : payload[0].id,
+                                        childId: payload[1].id,
+                                    },
+                                ],
+                                related: [],
+                                ...(invalid && mode === "cycle"
+                                    ? {
+                                          parents: [
+                                              {
+                                                  parentId: payload[0].id,
+                                                  childId: payload[1].id,
+                                              },
+                                              {
+                                                  parentId: payload[1].id,
+                                                  childId: payload[0].id,
+                                              },
+                                          ],
+                                      }
+                                    : {}),
+                            }),
+                        };
+                    }
+                    stages.push("curation");
+                    return {
+                        success: true,
+                        data: JSON.stringify({
+                            concepts: payload.nodes.map(
+                                (node: {
+                                    id: string;
+                                    label: string;
+                                    evidenceIds: string[];
+                                }) => ({
+                                    label: node.label,
+                                    scope: "Deployment",
+                                    purpose:
+                                        "Understand a distinct rollout constraint",
+                                    memberIds: [node.id],
+                                    evidenceIds: node.evidenceIds,
+                                    salience: 7,
+                                }),
+                            ),
+                            deferred: [],
+                        }),
+                    };
+                },
+            },
+            true,
+        );
+        const outcome = generator(input(2), controller.signal);
+        if (mode === "repeated" || mode === "transport" || mode === "abort") {
+            await expect(outcome).rejects.toThrow(
+                mode === "repeated"
+                    ? "out-of-batch identity"
+                    : mode === "transport"
+                      ? "Organization provider failed"
+                      : "Organization cancelled",
+            );
+            expect(organizations).toBe(mode === "repeated" ? 2 : 1);
+            return;
+        }
+        const snapshot = await outcome;
+        expect(stages).toEqual(
+            mode === "valid"
+                ? ["curation", "organization"]
+                : ["curation", "organization", "organization"],
+        );
+        expect(snapshot.parents).toHaveLength(1);
+        expect(snapshot.parents[0].parentId).toMatch(/^concept:/);
+        expect(
+            snapshot.curation!.concepts.every(
+                (concept) => concept.summaryState === "pending",
+            ),
+        ).toBe(true);
+        expect(snapshot.nodes.every((node) => node.summary === "")).toBe(true);
+    },
+);
+
+test.each([false, true])(
+    "lazy concept summaries validate supplied evidence and editorial approval; rejection=%s",
+    async (reject) => {
+        let calls = 0;
+        const summarize = createConfiguredTopicConceptSummarizer(undefined, {
+            completionSettings: {},
+            complete: async () => {
+                calls++;
+                return {
+                    success: true,
+                    data: JSON.stringify(
+                        calls === 1
+                            ? {
+                                  summary: "The rollout remains blocked.",
+                                  evidenceIds: [0],
+                              }
+                            : {
+                                  safe: !reject,
+                                  failures: reject ? ["scope-state"] : [],
+                              },
+                    ),
+                };
+            },
+        });
+        const concept = {
+            id: `concept:${"a".repeat(32)}`,
+            label: "Rollout",
+            scope: "Deployment",
+            purpose: "Understand the rollout gate",
+            summary: "",
+            summaryState: "pending" as const,
+            memberIds: ["topic:one"],
+            citations: occurrence("source").citations,
+            salience: 7,
+        };
+        if (reject)
+            await expect(
+                summarize(concept, new AbortController().signal),
+            ).rejects.toThrow("scope-state");
+        else
+            expect(
+                (await summarize(concept, new AbortController().signal))
+                    .summary,
+            ).toBe("The rollout remains blocked.");
+        expect(calls).toBe(2);
+        expect(concept.summary).toBe("");
+    },
+);
+
+test("curation checkpoints seed only unchanged policy and exact captured evidence", async () => {
+    const frozen = await capture(input(55).topicInput!.occurrences);
+    const checkpoints: TopicSnapshot[] = [];
+    let calls = 0;
+    const generator = createConfiguredTopicGenerator(
+        undefined,
+        {
+            completionSettings: {},
+            complete: async (messages) => {
+                if (++calls === 2)
+                    throw new Error("Curation provider interrupted");
+                const payload = JSON.parse(promptText(messages, 1));
+                return {
+                    success: true,
+                    data: JSON.stringify({
+                        concepts: [],
+                        deferred: payload.nodes.map((node: { id: string }) => ({
+                            nodeId: node.id,
+                            reason: "Incidental mention",
+                        })),
+                    }),
+                };
+            },
+        },
+        true,
+    );
+    await expect(
+        generator(frozen, new AbortController().signal, async (partial) => {
+            checkpoints.push(partial);
+        }),
+    ).rejects.toThrow("Curation provider interrupted");
+    expect(checkpoints).toHaveLength(1);
+    const partial = checkpoints[0];
+    expect(partial.curation).toBeUndefined();
+    expect(partial.curationProgress!.deferred).toHaveLength(24);
+    const resumed = await capture(frozen.topicInput!.occurrences, partial);
+    expect(resumed.topicInput!.reusableCuration).toEqual(
+        partial.curationProgress,
+    );
+    expect(
+        (
+            await capture(frozen.topicInput!.occurrences, partial, {
+                model: "changed",
+            })
+        ).topicInput!.reusableCuration,
+    ).toBeUndefined();
+    const changed = structuredClone(frozen.topicInput!.occurrences);
+    changed[0].citations[0].excerpt += " Corrected context.";
+    expect(
+        (await capture(changed, partial)).topicInput!.reusableCuration,
+    ).toBeUndefined();
+    partial.nodes[0].authorship = "human";
+    expect(
+        (await capture(frozen.topicInput!.occurrences, partial)).topicInput!
+            .reusableCuration,
+    ).toBeUndefined();
+});
+
+test("partial summary checkpoints retain only audited prose and can seed exact-evidence reuse", async () => {
+    const captured = input(55);
+    const held = deferred<void>();
+    const audited = new Set<string>();
+    const checkpoints: TopicSnapshot[] = [];
+    const generator = createConfiguredTopicGenerator(undefined, {
+        completionSettings: {},
+        complete: async (messages) => {
+            const instructions = promptText(messages, 0);
+            if (instructions.includes("Organize supplied topics"))
+                return {
+                    success: true,
+                    data: JSON.stringify({ parents: [], related: [] }),
+                };
+            const payload = JSON.parse(promptText(messages, 1));
+            if (instructions.includes("Check the ACTUAL")) {
+                const sourceId = payload.evidence[0].sourceId;
+                if (sourceId === "source-0") await held.promise;
+                audited.add(sourceId);
+                return {
+                    success: true,
+                    data: JSON.stringify({ safe: true, failures: [] }),
+                };
+            }
+            return {
+                success: true,
+                data: JSON.stringify({
+                    summary: "Rollout remains blocked.",
+                    evidenceIds: [0],
+                }),
+            };
+        },
+    });
+    try {
+        await generator(
+            captured,
+            new AbortController().signal,
+            async (snapshot) => {
+                for (const node of snapshot.nodes)
+                    if (node.summaryState === "ready")
+                        expect(audited.has(node.citations[0].sourceId)).toBe(
+                            true,
+                        );
+                checkpoints.push(snapshot);
+                if (checkpoints.length === 1) {
+                    const pending = snapshot.nodes.find((node) =>
+                        node.citations.some(
+                            (citation) => citation.sourceId === "source-0",
+                        ),
+                    )!;
+                    expect(pending.summaryState).toBe("pending");
+                    expect(pending.summary).toBe("");
+                    held.resolve();
+                }
+            },
+        );
+        expect(checkpoints).toHaveLength(2);
+        const partial = checkpoints[0];
+        const ready = partial.nodes.filter(
+            (node) => node.summaryState === "ready",
+        ).length;
+        expect(ready).toBeGreaterThanOrEqual(48);
+        expect(ready).toBeLessThan(55);
+        expect(
+            checkpoints[1].nodes.every((node) => node.summaryState === "ready"),
+        ).toBe(true);
+        const resumed = await capture(
+            captured.topicInput!.occurrences,
+            partial,
+        );
+        expect(resumed.topicInput!.reusableSummaries).toHaveLength(ready);
+    } finally {
+        held.resolve();
+    }
+});
+
+test("checkpoint persistence failure drains workers and prevents organization", async () => {
+    let organizations = 0;
+    const generator = createConfiguredTopicGenerator(undefined, {
+        completionSettings: {},
+        complete: async (messages) => {
+            const instructions = promptText(messages, 0);
+            if (instructions.includes("Organize supplied topics"))
+                organizations++;
+            return {
+                success: true,
+                data: JSON.stringify(
+                    instructions.includes("Check the ACTUAL")
+                        ? { safe: true, failures: [] }
+                        : {
+                              summary: "Rollout remains blocked.",
+                              evidenceIds: [0],
+                          },
+                ),
+            };
+        },
+    });
+    await expect(
+        generator(input(55), new AbortController().signal, async () => {
+            throw new Error("Offline checkpoint persistence failure");
+        }),
+    ).rejects.toThrow("Offline checkpoint persistence failure");
+    expect(organizations).toBe(0);
+});
+
+test("large raw organization visits every topic without inventing same-label parent links", async () => {
+    const value = input(205);
+    value.topicInput!.occurrences = value.topicInput!.occurrences.map((entry) =>
+        occurrence(entry.sourceId, "Resource"),
+    );
+    const batches: string[][] = [];
+    const model: ChatModel = {
+        completionSettings: {},
+        complete: async (messages) => {
+            const instructions = promptText(messages, 0);
+            if (instructions.includes("Organize supplied topics")) {
+                const payload = JSON.parse(promptText(messages, 1)) as Array<{
+                    id: string;
+                }>;
+                batches.push(payload.map((node) => node.id));
+                return {
+                    success: true,
+                    data: JSON.stringify({ parents: [], related: [] }),
+                };
+            }
+            return {
+                success: true,
+                data: JSON.stringify(
+                    instructions.includes("Check the ACTUAL")
+                        ? { safe: true, failures: [] }
+                        : {
+                              summary: "Rollout remains blocked.",
+                              evidenceIds: [0],
+                          },
+                ),
+            };
+        },
+    };
+    const snapshot = await createConfiguredTopicGenerator(undefined, model)(
+        value,
+        new AbortController().signal,
+    );
+    expect(batches.map((batch) => batch.length)).toEqual([200, 5]);
+    expect(new Set(batches.flat()).size).toBe(205);
+    expect(snapshot.nodes).toHaveLength(205);
+    expect(snapshot.parents).toEqual([]);
+});
+
+test("summary schema permits only the exact numeric IDs in each request", async () => {
+    let summaries = 0;
+    const model: ChatModel = {
+        completionSettings: { response_format: { type: "json_object" } },
+        complete: async (messages, _options, schema) => {
+            const instructions = promptText(messages, 0);
+            if (instructions.includes("Organize supplied topics"))
+                return {
+                    success: true,
+                    data: JSON.stringify({ parents: [], related: [] }),
+                };
+            if (instructions.includes("Check the ACTUAL"))
+                return {
+                    success: true,
+                    data: JSON.stringify({ safe: true, failures: [] }),
+                };
+            const payload = JSON.parse(promptText(messages, 1));
+            expect(schema).toEqual({
+                name: "memory_topic_summary",
+                strict: true,
+                schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                        summary: {
+                            type: "string",
+                            minLength: 1,
+                            maxLength: 1600,
+                        },
+                        evidenceIds: {
+                            type: "array",
+                            minItems: 1,
+                            maxItems: payload.evidence.length,
+                            items: {
+                                type: "integer",
+                                enum: payload.evidence.map(
+                                    (entry: { id: number }) => entry.id,
+                                ),
+                            },
+                        },
+                    },
+                    required: ["summary", "evidenceIds"],
+                },
+            });
+            summaries++;
+            return {
+                success: true,
+                data: JSON.stringify({
+                    summary: "Rollout remains blocked.",
+                    evidenceIds: [0],
+                }),
+            };
+        },
+    };
+    await createConfiguredTopicGenerator(undefined, model)(
+        input(2),
+        new AbortController().signal,
+    );
+    expect(summaries).toBe(2);
+});
 
 function blockedModel() {
     type Response = Awaited<ReturnType<ChatModel["complete"]>>;
