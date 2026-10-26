@@ -213,7 +213,7 @@ export function mountMemoryHubKnowledgeStatus(host: HTMLElement) {
                     }),
                     invokeMemory("memoryGetKnowledgeStatus", {
                         corpusId: corpus.corpusId,
-                    }),
+                    }).then((knowledge) => knowledgeCard(corpus, knowledge)),
                 ] as const),
             })),
         );
@@ -248,7 +248,7 @@ export function mountMemoryHubKnowledgeStatus(host: HTMLElement) {
                 );
             }
             if (knowledge.status === "fulfilled") {
-                list.append(knowledgeCard(corpus, knowledge.value));
+                list.append(knowledge.value);
             } else {
                 failures++;
                 list.append(

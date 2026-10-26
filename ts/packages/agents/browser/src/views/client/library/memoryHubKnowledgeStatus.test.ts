@@ -85,6 +85,28 @@ test("indexed sources never imply ready knowledge; partial coverage and exclusio
         ),
     ).toBe(false);
 });
+test("malformed knowledge status cannot erase source progress or escape the preparation panel", async () => {
+    const original = invoke.getMockImplementation()!;
+    invoke.mockImplementation((method, params) =>
+        method === "memoryGetKnowledgeStatus"
+            ? Promise.resolve({ items: [] })
+            : original(method, params),
+    );
+    const panel = setup();
+    await expect(
+        panel.refresh([{ corpusId: "corpus", name: "Corpus" }]),
+    ).resolves.toBeUndefined();
+    expect(document.body.textContent).toContain(
+        "Source progress: 1/1 revisions indexed",
+    );
+    expect(document.body.textContent).toContain(
+        "Knowledge preparation unavailable:",
+    );
+    expect(document.body.textContent).toContain("Progress is incomplete");
+    expect(document.body.textContent).not.toContain(
+        "Source and knowledge progress loaded",
+    );
+});
 test("discovery policy is read from service and changed only by explicit action", async () => {
     const panel = setup();
     await panel.refresh([{ corpusId: "corpus", name: "Corpus" }]);
