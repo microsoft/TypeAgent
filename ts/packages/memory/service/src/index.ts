@@ -27,6 +27,7 @@ export * from "./topicGeneration.js";
 export * from "./topicIncidence.js";
 export * from "./topicSnapshot.js";
 export * from "./schemaView.js";
+export * from "./knowledgeTypes.js";
 export * from "./schemaViewOperations.js";
 export * from "./deferredAcquisition.js";
 export type * from "./inventoryTypes.js";

@@ -85,7 +85,13 @@ import type {
     WikiSubjectAssessment,
 } from "./viewTypes.js";
 
+import type {
+    KnowledgeStatus,
+    KnowledgeDiscoveryState,
+} from "./knowledgeTypes.js";
+
 interface ViewStoreState {
+    knowledge?: KnowledgeStatus;
     views: Record<string, ViewVersion[]>;
     builds?: Record<string, ViewBuildJob>;
     conflicts?: Record<string, ViewMergeConflict>;
@@ -191,6 +197,50 @@ function validateIdentifier(kind: string, value: string): void {
 }
 
 export class TypedViewStore {
+    public async getKnowledgeState(corpusId: string): Promise<KnowledgeStatus> {
+        const { state } = await this.readSnapshot(corpusId);
+        return structuredClone(
+            state.knowledge ?? {
+                discovery: {
+                    version: 1,
+                    policy: "off",
+                    policyVersion: 1,
+                    receipts: [],
+                    routes: [],
+                    callTimes: [],
+                },
+                checkpoints: [],
+            },
+        );
+    }
+
+    public async updateKnowledgeState(
+        corpusId: string,
+        update: (knowledge: KnowledgeStatus) => void,
+    ): Promise<KnowledgeStatus> {
+        const { head, state } = await this.history(corpusId).read();
+        const knowledge = state.knowledge ?? {
+            discovery: {
+                version: 1 as const,
+                policy: "off" as const,
+                policyVersion: 1 as const,
+                receipts: [],
+                routes: [],
+                callTimes: [],
+            },
+            checkpoints: [],
+        };
+        update(knowledge);
+        state.knowledge = knowledge;
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            "Checkpoint maintained knowledge",
+        );
+        return structuredClone(knowledge);
+    }
+
     private readonly readOperation = new AsyncLocalStorage<{
         corpusId: string;
         active: boolean;
@@ -798,6 +848,7 @@ export class TypedViewStore {
     public async saveViewDraft(
         request: ViewSaveRequest,
         validation?: ViewPublicationProof,
+        discovery?: KnowledgeDiscoveryState,
     ): Promise<ViewHistoryEntry> {
         const history = this.history(request.corpusId);
         const { head, state } = await history.read();
@@ -857,6 +908,11 @@ export class TypedViewStore {
             });
         }
         state.views[request.viewId] = [...versions, version];
+        if (discovery) {
+            state.knowledge ??= { discovery, checkpoints: [] };
+            state.knowledge.discovery = structuredClone(discovery);
+            version.provenance = "generated";
+        }
         this.expireReadSnapshot();
         const commitId = await history.commit(
             head,
@@ -1779,6 +1835,40 @@ export class TypedViewStore {
     private sanitize(state: ViewStoreState, sourceId: string): ViewStoreState {
         const clearingDerived = sourceId === "@clear-derived-views";
         const forgottenEvents = forgottenEventIds(sourceId);
+        if (state.knowledge && !forgottenEvents) {
+            state.knowledge.discovery.receipts =
+                state.knowledge.discovery.receipts.filter(
+                    (receipt) =>
+                        !clearingDerived &&
+                        !receipt.sources.some(
+                            (source) => source.sourceId === sourceId,
+                        ),
+                );
+            state.knowledge.discovery.routes =
+                state.knowledge.discovery.routes.filter(
+                    (route) =>
+                        !clearingDerived && !route.sourceIds.includes(sourceId),
+                );
+            delete state.knowledge.discovery.error;
+            state.knowledge.checkpoints = state.knowledge.checkpoints.map(
+                (checkpoint) =>
+                    clearingDerived ||
+                    checkpoint.sources.some(
+                        (source) => source.sourceId === sourceId,
+                    )
+                        ? {
+                              ...checkpoint,
+                              state: "superseded",
+                              sources: [],
+                              viewIds: [],
+                              jobIds: [],
+                              discoveryFingerprints: [],
+                              reasons: ["Knowledge evidence was removed"],
+                              updatedAt: timestamp(),
+                          }
+                        : checkpoint,
+            );
+        }
         if (
             clearingDerived ||
             (forgottenEvents &&
@@ -2001,7 +2091,8 @@ export class TypedViewStore {
             !Object.keys(state.maintenanceReceipts ?? {}).length &&
             !Object.keys(state.publications ?? {}).length &&
             !state.viewIndexCleanup?.length &&
-            !Object.keys(state.publicationPolicy?.views ?? {}).length
+            !Object.keys(state.publicationPolicy?.views ?? {}).length &&
+            !state.knowledge
         )
             return;
         // This identity cannot collide with a validated source ID and is recoverable by the same purge journal.

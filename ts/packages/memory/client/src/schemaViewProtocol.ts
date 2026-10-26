@@ -71,6 +71,15 @@ export const questionRubricSchema = z.strictObject({
     freshnessDays: z.number().positive().finite().optional(),
 });
 const approval = z.enum(["proposed", "approved", "rejected"]);
+export const questionAdmissionSchema = z.strictObject({
+    version: z.literal(1),
+    actor: z.enum(["user", "policy"]),
+    policyVersion: z.literal(1),
+    recipeIdentity: z.string().min(1).max(1000),
+    modelIdentity: z.string().min(1).max(1000),
+    inputFingerprint: z.string().min(1).max(1000),
+    reason: z.string().min(1).max(2000),
+});
 export const questionSlotSchema = z.strictObject({
     id,
     question: text,
@@ -80,6 +89,7 @@ export const questionSlotSchema = z.strictObject({
     rubric: questionRubricSchema,
     approval,
     discoveryCitations: citation.array().max(1000),
+    admission: questionAdmissionSchema.optional(),
 });
 export const schemaViewDefinitionSchema = z.strictObject({
     construction: z.literal("schema-defined-v1"),

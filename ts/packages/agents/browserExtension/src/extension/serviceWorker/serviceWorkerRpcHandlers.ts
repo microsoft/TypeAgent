@@ -90,6 +90,16 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryListQuestionSummaries: (params) =>
             forward("memoryListQuestionSummaries", params),
         memoryGetQuestion: (params) => forward("memoryGetQuestion", params),
+        memoryGetKnowledgeStatus: (params) =>
+            forward("memoryGetKnowledgeStatus", params),
+        memoryUpdateKnowledgeDiscovery: (params) =>
+            forward("memoryUpdateKnowledgeDiscovery", params),
+        memoryCreateKnowledgeCheckpoint: (params) =>
+            forward("memoryCreateKnowledgeCheckpoint", params),
+        memoryGetKnowledgeCheckpoint: (params) =>
+            forward("memoryGetKnowledgeCheckpoint", params),
+        memoryWaitForKnowledgeCheckpoint: (params) =>
+            forward("memoryWaitForKnowledgeCheckpoint", params),
         memoryEditQuestion: (params) => forward("memoryEditQuestion", params),
         memoryGetViewPage: (params) => forward("memoryGetViewPage", params),
         memoryProposeSchemaView: (params) =>

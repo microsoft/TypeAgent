@@ -49,14 +49,21 @@ resurfaces decisions, and Questions can restore dismissed decisions. Source
 mentions are not independent votes.
 
 Assisted authoring requires explicit approval to generate a proposal and an
-explicit maintenance scope; generated slots still require approval. Discovery is
-opt-in, bounded and explicitly invoked. Neither operation authorizes tools.
+explicit maintenance scope; per-view generated slots still require approval.
+Per-view discovery is opt-in, bounded and explicitly invoked. Corpus-level
+discovery can separately admit informational contracts under the
+`sourceObserved` policy. Neither operation authorizes tools.
 `memoryGetViewPage` returns deterministic Markdown and a `memory-view:` URI;
 Markdown links preserve exact revisions, slots and collection item keys when
 opened in the browser. Optional service capabilities and operation errors are
 reported explicitly, not interpreted as empty inventories. Question lists use
 bounded summary pages; selecting a question separately loads its full evidence.
-There is no corpus-wide discovery policy or knowledge-status control.
+Questions also mounts knowledge preparation status, discovery policy controls,
+bounded failed-discovery retries and captured readiness checkpoints. Existing
+corpora remain off until enabled; new corpora default to source observed.
+Policy admission is not human confirmation, and source indexing alone never
+implies knowledge readiness. Integrated search answers retain original-source
+citations and separately render maintained-View and user-assertion evidence.
 
 Questions also shows acquisition progress and explicit run-once/cancel controls
 for existing host-authorized requests. Its RPC projection excludes staged

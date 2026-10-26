@@ -349,6 +349,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         new FileMemoryService(root, {
             maintenanceMode,
             ...(maintenanceLimits ? { maintenanceLimits } : {}),
+            discoveryPolicy: "off",
             ...(indexedAnswerModel ? { indexedAnswerModel } : {}),
             viewSynthesisAdapter: adapter,
             indexFactory: (_corpusId, directory) =>
@@ -1304,7 +1305,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                         data: JSON.stringify({
                             status: "answered",
                             answer: "Mock source-only answer",
-                            citationIds: ["f0"],
+                            evidenceIds: ["s0"],
                         }),
                     };
                 },
@@ -1343,10 +1344,17 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 referenceTime: parseTemporalValue("2024/02/01 12:00"),
                 availabilityPolicy: "supplied-history",
             });
-            expect(result.readerContext?.answerPath).toBe("indexed-fragments");
+            expect(result.readerContext?.answerPath).toBe("sources-and-views");
+            const suppliedSources =
+                result.readerContext?.integratedAnswer?.suppliedEvidence.flatMap(
+                    (item) => (item.kind === "source" ? [item.source] : []),
+                ) ?? [];
+            expect(suppliedSources[0].snippet).toContain(
+                "governing qualification",
+            );
             expect(
-                result.readerContext?.indexedAnswer?.fragments[0].snippet,
-            ).toContain("governing qualification");
+                result.readerContext?.integratedAnswer?.selectedEvidenceIds,
+            ).toEqual(["s0"]);
             await expect(
                 service.answer({
                     corpusId,
@@ -1379,6 +1387,14 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 complete: async (input) => {
                     calls++;
                     const prompt = JSON.stringify(input);
+                    if (typeof input === "string")
+                        throw new Error("Expected typed answer messages");
+                    const content = input[input.length - 1].content;
+                    if (typeof content !== "string")
+                        throw new Error("Expected serialized answer evidence");
+                    const envelope: {
+                        evidence: { kind: string; id: string }[];
+                    } = JSON.parse(content);
                     if (calls === 2) {
                         expect(prompt).toContain("Property price 200000");
                         expect(prompt).toContain("Renovation cost 20000");
@@ -1392,9 +1408,13 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                                 calls === 1
                                     ? "Missing price"
                                     : "Final response",
-                            citationIds:
+                            evidenceIds:
                                 calls === 2 && finalStatus === "answered"
-                                    ? ["f0", "f1"]
+                                    ? envelope.evidence
+                                          .filter(
+                                              (item) => item.kind === "source",
+                                          )
+                                          .map((item) => item.id)
                                     : [],
                             retrievalQueries:
                                 calls === 1 || finalStatus === "noAnswer"
@@ -1424,19 +1444,16 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 },
             });
             expect(calls).toBe(2);
-            expect(result.readerContext?.indexedAnswer?.response.status).toBe(
-                finalStatus,
-            );
             expect(
-                result.readerContext?.indexedAnswer?.refinement?.queries,
+                result.readerContext?.integratedAnswer?.refinement?.queries,
             ).toEqual(["property price"]);
             expect(
-                result.readerContext?.indexedAnswer?.refinement?.initialContext
-                    ?.indexedAnswer?.fragments,
+                result.readerContext?.integratedAnswer?.refinement
+                    ?.initialEvidence,
             ).toHaveLength(1);
-            expect(result.readerContext?.indexedAnswer?.fragments).toHaveLength(
-                2,
-            );
+            expect(
+                result.readerContext?.integratedAnswer?.suppliedEvidence,
+            ).toHaveLength(2);
             const followup = MockIndexedCorpus.fragmentRequests.find(
                 (request) => request.query === "property price",
             )!;
@@ -1466,7 +1483,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                         data: JSON.stringify({
                             status: "noAnswer",
                             answer: "Mock reader does not calculate.",
-                            citationIds: [],
+                            evidenceIds: [],
                         }),
                     };
                 },
@@ -1495,14 +1512,16 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 includeDiagnostics: true,
             });
             const supplied =
-                answer.readerContext?.indexedAnswer?.fragments ?? [];
+                answer.readerContext?.integratedAnswer?.suppliedEvidence.flatMap(
+                    (item) => (item.kind === "source" ? [item.source] : []),
+                ) ?? [];
             expect(supplied.map((fragment) => fragment.sourceId)).toEqual(
                 expect.arrayContaining(["source-1", "source-34"]),
             );
             expect(prompts[0]).toContain("$2,800");
             expect(prompts[0]).toContain("$2,500");
             expect(
-                answer.readerContext?.indexedAnswer?.selection
+                answer.readerContext?.integratedAnswer?.sourceSelection
                     ?.eligibleSourceIds,
             ).toHaveLength(40);
             const scoped = await service.search({

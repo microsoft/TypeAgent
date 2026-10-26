@@ -67,6 +67,7 @@ for (const kind of [
             "context",
         ];
         const service = new FileMemoryService(root, {
+            discoveryPolicy: "off",
             informationalViews: kind === "projectBrief" || kind === "wiki",
             ...(kind === "projectBrief"
                 ? {

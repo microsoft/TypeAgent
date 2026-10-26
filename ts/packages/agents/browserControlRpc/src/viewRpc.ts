@@ -10,7 +10,12 @@ import type {
     MemoryCenterCorpusStatus,
 } from "./serviceTypes.js";
 import type { BrowserCapturePage } from "./browserControl.js";
-import type { ViewVersion } from "@typeagent/memory-service";
+import type {
+    ViewVersion,
+    AnswerDerivedReference,
+    AnswerAssertionReference,
+    AnswerRetrievalPolicy,
+} from "@typeagent/memory-service";
 import type { MemoryHubRunbookImportFunctions } from "./runbookImportViewTypes.js";
 import type { MemoryHubGraphFunctions } from "./memoryGraphViewTypes.js";
 export type * from "./memoryGraphViewTypes.js";
@@ -21,6 +26,8 @@ export type MemoryHubSearchRequest = {
     corpusId?: string;
     limit?: number;
     generateAnswer?: boolean;
+    retrievalPolicy?: AnswerRetrievalPolicy;
+    knowledgeCheckpointId?: string;
     sourceTypes?: MemoryCenterSource["sourceType"][];
     tags?: string[];
     dateFrom?: string;
@@ -80,6 +87,10 @@ export type MemoryHubAnswer = {
     mode: "synthesized" | "extractive";
     citationIds: string[];
     followUps: string[];
+    derivedReferences?: Array<AnswerDerivedReference & { corpusId: string }>;
+    assertionReferences?: Array<
+        AnswerAssertionReference & { corpusId: string }
+    >;
 };
 
 export type MemoryHubSearchResult = {
@@ -434,6 +445,11 @@ export const viewMethods = [
     "memoryListQuestions",
     "memoryListQuestionSummaries",
     "memoryGetQuestion",
+    "memoryGetKnowledgeStatus",
+    "memoryUpdateKnowledgeDiscovery",
+    "memoryCreateKnowledgeCheckpoint",
+    "memoryGetKnowledgeCheckpoint",
+    "memoryWaitForKnowledgeCheckpoint",
     "memoryListAcquisitions",
     "memoryRunAcquisitions",
     "memoryCancelAcquisition",

@@ -44,6 +44,7 @@ import {
     jsonSegmentDirectory,
     normalizeTemporalContext,
     temporalContextFromHeaders,
+    temporalSegments,
     parseTemporalValue,
 } from "@typeagent/knowpro";
 import { createHash, randomUUID } from "node:crypto";
@@ -63,6 +64,30 @@ import path from "node:path";
 import lockfile from "proper-lockfile";
 import { normalizeQueryTemporalContext } from "./temporalContext.js";
 import { indexedQueryTerms } from "./indexedFragments.js";
+import {
+    KnowledgeCoordinator,
+    type KnowledgeDocument,
+} from "./knowledgeCoordinator.js";
+import type {
+    CorpusQuestionInput,
+    CorpusQuestionProposal,
+    DiscoveryPolicy,
+    KnowledgeCheckpoint,
+    KnowledgeCheckpointRead,
+    KnowledgeCheckpointRequest,
+    KnowledgeCheckpointWait,
+    KnowledgeDiscoveryUpdate,
+    KnowledgeFamily,
+    KnowledgeStatus,
+} from "./knowledgeTypes.js";
+import { knowledgeLimits } from "./knowledgeTypes.js";
+import {
+    planDiscoveryWindows,
+    policyAdmittedSlot,
+    deriveDiscoveryRouteTerms,
+    questionContractIdentity,
+    corpusQuestionIdentity,
+} from "./knowledgeDiscovery.js";
 import type {
     QuestionEditRequest,
     QuestionInventory,
@@ -291,6 +316,12 @@ import {
     answerIndexedEvidence,
     mergeIndexedAnswerEvidence,
 } from "./indexedAnswer.js";
+import { answerIntegratedEvidence } from "./integratedAnswer.js";
+import type {
+    AnswerEvidence,
+    AnswerSourceReference,
+    AnswerViewEvidence,
+} from "./types.js";
 import {
     assertPublicationProof,
     effectiveViewPublicationPolicy,
@@ -440,6 +471,29 @@ const eventAuthorities: ReadonlySet<string> = new Set<MemoryEventAuthority>([
     "producer-reported",
 ]);
 
+type KnowledgeMaintenanceResult = Pick<
+    KnowledgeCheckpoint,
+    "viewIds" | "jobIds" | "state" | "reasons" | "viewRevisions"
+>;
+
+function knowledgeMaintenanceResult(
+    results: KnowledgeMaintenanceResult[],
+): KnowledgeMaintenanceResult {
+    const severity = ["ready", "partial", "blocked", "failed"];
+    return {
+        state: results.reduce<KnowledgeCheckpoint["state"]>(
+            (state, result) =>
+                severity.indexOf(result.state) > severity.indexOf(state)
+                    ? result.state
+                    : state,
+            "ready",
+        ),
+        reasons: results.flatMap((result) => result.reasons),
+        viewIds: [...new Set(results.flatMap((result) => result.viewIds))],
+        jobIds: [...new Set(results.flatMap((result) => result.jobIds))],
+    };
+}
+
 interface StoredRevision extends SourceRevision {
     content: string;
     synopsis?: SourceSynopsis & { attempts: number };
@@ -558,6 +612,7 @@ export interface FileMemoryServiceOptions {
         maxPassesPerGeneration?: number;
         requestBudget?: RequestBudgetLimits;
     };
+    discoveryPolicy?: DiscoveryPolicy;
     acquisition?: DeferredAcquisitionConfig & {
         principalId: string;
         policyId: string;
@@ -1156,6 +1211,9 @@ export class FileMemoryService
     private readonly eventIndexFactory: CorpusIndexFactory;
     private readonly capabilities: MemoryServiceCapabilities;
     private readonly viewStore: TypedViewStore;
+    private readonly knowledge: KnowledgeCoordinator;
+    private readonly newCorpusDiscoveryPolicy: DiscoveryPolicy;
+    private readonly knowledgeMaintenance = new Set<string>();
     private readonly acquisition: DeferredAcquisitionCoordinator;
     private readonly acquisitionPolicy: FileMemoryServiceOptions["acquisition"];
     private readonly assetStore: RevisionAssetStore;
@@ -1459,7 +1517,11 @@ export class FileMemoryService
                         } else if (
                             !conflicts.length &&
                             saved.revisionId &&
-                            result.snapshot.publicationPolicy?.autoPublish
+                            (result.snapshot.publicationPolicy?.autoPublish ||
+                                (await this.isPolicyQuestion(
+                                    job.corpusId,
+                                    result.viewId,
+                                )))
                         ) {
                             const snapshot = await this.viewStore.listViews(
                                 job.corpusId,
@@ -1549,6 +1611,142 @@ export class FileMemoryService
             commitPolicy,
         );
         this.viewStore = new TypedViewStore(rootDirectory, userInfo().username);
+        this.newCorpusDiscoveryPolicy = this.viewDrafts
+            ? (options.discoveryPolicy ?? "sourceObserved")
+            : "off";
+        this.knowledge = new KnowledgeCoordinator({
+            begin: async (corpusId) => {
+                this.knowledgeMaintenance.add(corpusId);
+                const schemaTimer = this.schemaTimers.get(corpusId);
+                if (schemaTimer) clearTimeout(schemaTimer);
+                this.schemaTimers.delete(corpusId);
+                for (const family of ["wiki", "projects", "topics"]) {
+                    this.maintenance.cancel(corpusId, family);
+                }
+                await this.schemaWork.get(corpusId);
+            },
+            end: (corpusId) => {
+                this.knowledgeMaintenance.delete(corpusId);
+                this.scheduleSchemaMaintenance(corpusId);
+                const runtime = this.corpora.get(corpusId);
+                if (runtime) this.scheduleTopics(corpusId, runtime);
+                this.scheduleWikiMaintenance(corpusId, "wiki");
+                this.scheduleWikiMaintenance(corpusId, "projects");
+            },
+            reportFailure: async (corpusId, error) => {
+                await this.enqueueWrite(
+                    corpusId,
+                    async () => {
+                        const runtime = await this.getCorpusRuntime(
+                            corpusId,
+                            true,
+                        );
+                        if (
+                            runtime.manifest.authorizedSourceRemoval ||
+                            runtime.manifest.pendingCorpusClear ||
+                            this.closed
+                        )
+                            return;
+                        await this.viewStore.updateKnowledgeState(
+                            corpusId,
+                            (state) => {
+                                state.discovery.error = safeError(error);
+                            },
+                        );
+                    },
+                    true,
+                );
+            },
+            modelIdentity: this.viewAdapter.identity,
+            read: (corpusId) => this.viewStore.getKnowledgeState(corpusId),
+            write: (corpusId, update) =>
+                this.enqueueWrite(corpusId, () =>
+                    this.viewStore.updateKnowledgeState(corpusId, update),
+                ),
+            capture: (corpusId) => this.captureKnowledge(corpusId),
+            activeImport: (corpusId) =>
+                this.batchStore.hasActiveImports(corpusId) ||
+                this.ingestionTails.has(corpusId),
+            maintainedCurrent: async (checkpoint) => {
+                const views = await this.viewStore.listViews(
+                    checkpoint.corpusId,
+                );
+                return (checkpoint.viewRevisions ?? []).every((reference) =>
+                    views.views.some(
+                        (view) =>
+                            view.viewId === reference.viewId &&
+                            view.revisionId === reference.revisionId &&
+                            view.state !== "archived",
+                    ),
+                );
+            },
+            questions: async (corpusId) =>
+                (await this.viewStore.listViews(corpusId)).views.flatMap(
+                    (view) =>
+                        view.definition.schemaView?.slots.map(
+                            (slot) => slot.question,
+                        ) ?? [],
+                ),
+            plan: (corpusId, sources, questions, state, identity) =>
+                planDiscoveryWindows(
+                    corpusId,
+                    sources,
+                    questions,
+                    state,
+                    identity,
+                ),
+            discover: async (input, signal, reserveRepair) => {
+                if (!this.viewAdapter.discoverCorpusQuestions)
+                    throw new Error(
+                        "Corpus question discovery is unsupported by this host",
+                    );
+                const existingContracts = (
+                    await this.viewStore.listViews(input.corpusId)
+                ).views
+                    .filter((view) => view.state !== "archived")
+                    .flatMap((view) => view.definition.schemaView?.slots ?? []);
+                const text = input.passages
+                    .map((passage) => `${passage.title} ${passage.excerpt}`)
+                    .join("\n")
+                    .toLocaleLowerCase();
+                const nominated = existingContracts
+                    .map((slot) => ({
+                        slot,
+                        score: deriveDiscoveryRouteTerms(
+                            "",
+                            slot.question,
+                        ).filter((term) => text.includes(term)).length,
+                    }))
+                    .sort(
+                        (a, b) =>
+                            b.score - a.score ||
+                            a.slot.id.localeCompare(b.slot.id),
+                    )
+                    .slice(0, knowledgeLimits.liveSlots)
+                    .map(({ slot }) => slot);
+                return this.viewAdapter.discoverCorpusQuestions(
+                    {
+                        ...input,
+                        existingContracts: nominated,
+                        existingContractCount: existingContracts.length,
+                    },
+                    signal,
+                    reserveRepair,
+                );
+            },
+            admit: (corpusId, input, proposal, signal) =>
+                this.admitKnowledgeQuestion(corpusId, input, proposal, signal),
+            route: (corpusId, sources) =>
+                this.routeKnowledgeSources(corpusId, sources),
+            maintain: (checkpoint, signal) =>
+                this.maintainKnowledgeCheckpoint(checkpoint, signal),
+            enabledFamilies: () => [
+                ...(this.viewDrafts ? ["questions" as const] : []),
+                ...(this.informationalWikiEnabled
+                    ? ["wiki" as const, "projects" as const, "topics" as const]
+                    : []),
+            ],
+        });
         this.agentSessionImportsEnabled = options.agentSessionImports !== false;
         let sessionModel = options.agentSessionDistillationModel;
         this.agentSessionStore = new AgentSessionStore(
@@ -1677,6 +1875,8 @@ export class FileMemoryService
                             runtime.manifest.sources,
                         );
                         await this.reconcileTopics(directory.name, runtime);
+                        await this.recoverKnowledge(directory.name);
+                        this.knowledge.schedule(directory.name);
                         if (!this.informationalWikiEnabled) continue;
                         await this.enqueueWrite(directory.name, () =>
                             this.recoverWikiConsolidationsLocked(
@@ -1793,6 +1993,10 @@ export class FileMemoryService
                 ),
             };
             this.corpora.set(corpusId, runtime);
+            if (this.viewDrafts)
+                await this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                    state.discovery.policy = this.newCorpusDiscoveryPolicy;
+                });
             return structuredClone(corpus);
         });
     }
@@ -3533,6 +3737,8 @@ export class FileMemoryService
             ...(this.viewDrafts
                 ? {
                       derivedViews: {
+                          knowledge: true as const,
+                          integratedAnswering: true as const,
                           builds: true as const,
                           editMerging: true as const,
                           maintenance: true as const,
@@ -4211,6 +4417,799 @@ export class FileMemoryService
         return pending;
     }
 
+    private async captureKnowledge(
+        corpusId: string,
+    ): Promise<{ sources: KnowledgeDocument[]; indexVersion: string }> {
+        const runtime = await this.getCorpusRuntime(corpusId);
+        return runtime.access.read(async () => ({
+            indexVersion: this.indexVersion(runtime.manifest),
+            sources: runtime.manifest.sources.flatMap((source) => {
+                const revision = source.revisions.find(
+                    (revision) =>
+                        revision.revisionId === source.activeRevisionId &&
+                        revision.state === "ready",
+                );
+                if (
+                    !revision ||
+                    runtime.manifest.knowledgeSuppressions?.some(
+                        (entry) => entry.sourceId === source.sourceId,
+                    )
+                )
+                    return [];
+                return [
+                    {
+                        sourceId: source.sourceId,
+                        revisionId: revision.revisionId,
+                        title: source.title,
+                        content: revision.content,
+                    },
+                ];
+            }),
+        }));
+    }
+
+    private async isPolicyQuestion(
+        corpusId: string,
+        viewId: string,
+    ): Promise<boolean> {
+        const { discovery } = await this.viewStore.getKnowledgeState(corpusId);
+        return (
+            discovery.policy === "sourceObserved" &&
+            discovery.routes.some(
+                (route) => route.viewId === viewId && !route.detached,
+            )
+        );
+    }
+
+    public async getKnowledgeStatus(
+        corpusId: string,
+    ): Promise<KnowledgeStatus> {
+        await this.requireViews(corpusId);
+        const status = await this.viewStore.getKnowledgeState(corpusId);
+        for (let index = 0; index < status.checkpoints.length; index++)
+            if (status.checkpoints[index].state === "ready")
+                status.checkpoints[index] = await this.knowledge.get({
+                    corpusId,
+                    checkpointId: status.checkpoints[index].checkpointId,
+                });
+        return status;
+    }
+
+    public async updateKnowledgeDiscovery(
+        request: KnowledgeDiscoveryUpdate,
+    ): Promise<KnowledgeStatus> {
+        await this.requireViews(request.corpusId);
+        return this.knowledge.update(request);
+    }
+
+    public async createKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRequest,
+    ): Promise<KnowledgeCheckpoint> {
+        await this.requireViews(request.corpusId);
+        return this.knowledge.create(request);
+    }
+
+    public async getKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRead,
+    ): Promise<KnowledgeCheckpoint> {
+        await this.requireViews(request.corpusId);
+        return this.knowledge.get(request);
+    }
+
+    public async waitForKnowledgeCheckpoint(
+        request: KnowledgeCheckpointWait,
+    ): Promise<KnowledgeCheckpoint> {
+        await this.requireViews(request.corpusId);
+        return this.knowledge.wait(request);
+    }
+
+    private async admitKnowledgeQuestion(
+        corpusId: string,
+        input: CorpusQuestionInput,
+        proposal: CorpusQuestionProposal,
+        signal: AbortSignal,
+    ): Promise<string | undefined> {
+        signal.throwIfAborted();
+        validateQuestionSlot(proposal.slot);
+        return this.enqueueWrite(corpusId, async () => {
+            signal.throwIfAborted();
+            const status = await this.viewStore.getKnowledgeState(corpusId);
+            if (status.discovery.policy === "off") return undefined;
+            const snapshot = await this.viewStore.listViews(corpusId);
+            const slots = snapshot.views
+                .filter((view) => view.state !== "archived")
+                .flatMap((view) => view.definition.schemaView?.slots ?? []);
+            if (
+                slots.some(
+                    (slot) =>
+                        questionContractIdentity(slot) ===
+                        questionContractIdentity(proposal.slot),
+                )
+            )
+                return undefined;
+            const liveRoutes = status.discovery.routes.filter(
+                (route) =>
+                    !route.detached &&
+                    snapshot.views.some(
+                        (view) =>
+                            view.viewId === route.viewId &&
+                            view.state !== "archived",
+                    ),
+            );
+            if (proposal.utility) {
+                const dimensions = [
+                    "consumerValue",
+                    "substance",
+                    "novelty",
+                    "durability",
+                ];
+                if (
+                    Object.keys(proposal.utility).length !==
+                        dimensions.length ||
+                    dimensions.some(
+                        (dimension) =>
+                            !Object.prototype.hasOwnProperty.call(
+                                proposal.utility,
+                                dimension,
+                            ),
+                    ) ||
+                    Object.values(proposal.utility).some(
+                        (score) =>
+                            !Number.isInteger(score) || score < 0 || score > 2,
+                    )
+                )
+                    throw new Error("Invalid question utility assessment");
+            }
+            const noUtility =
+                proposal.utility &&
+                Object.values(proposal.utility).some((score) => score === 0);
+            if (noUtility) {
+                await this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                    const receipt = state.discovery.receipts.find(
+                        (entry) => entry.fingerprint === input.fingerprint,
+                    );
+                    if (!receipt)
+                        throw new Error(
+                            "Question admission receipt is missing",
+                        );
+                    receipt.reason = [
+                        receipt.reason,
+                        `${proposal.slot.question}: deferred for insufficient utility`,
+                    ]
+                        .filter(Boolean)
+                        .join("; ");
+                });
+                return undefined;
+            }
+            if (liveRoutes.length >= knowledgeLimits.liveSlots) {
+                const error = "Policy-admitted live question ceiling reached";
+                await this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                    state.discovery.error = error;
+                });
+                return undefined;
+            }
+            const runtime = await this.getCorpusRuntime(corpusId);
+            for (const citation of proposal.slot.discoveryCitations) {
+                const supplied = input.passages.some(
+                    (p) =>
+                        p.sourceId === citation.sourceId &&
+                        p.revisionId === citation.revisionId &&
+                        p.locator === citation.locator &&
+                        p.excerpt === citation.excerpt,
+                );
+                const source = runtime.manifest.sources.find(
+                    (source) => source.sourceId === citation.sourceId,
+                );
+                const revision = source?.revisions.find(
+                    (revision) =>
+                        revision.revisionId === source.activeRevisionId &&
+                        revision.state === "ready",
+                );
+                const match = /^chars:(\d+)-(\d+)$/.exec(citation.locator);
+                if (
+                    !supplied ||
+                    !revision ||
+                    revision.revisionId !== citation.revisionId ||
+                    !match ||
+                    revision.content.slice(
+                        Number(match[1]),
+                        Number(match[2]),
+                    ) !== citation.excerpt
+                )
+                    throw new ViewBuildStaleError(
+                        "Discovery evidence changed or is not an exact supplied original passage",
+                    );
+            }
+            if (!proposal.slot.discoveryCitations.length)
+                throw new Error(
+                    "Corpus discovery requires original-source citations",
+                );
+            const viewId = `observed-${corpusQuestionIdentity(proposal).slice(0, 32)}`;
+            if (snapshot.views.some((view) => view.viewId === viewId))
+                return undefined;
+            const slot = policyAdmittedSlot(
+                proposal,
+                input,
+                status.discovery.policy,
+                this.viewAdapter.identity,
+            );
+            const selected = [
+                ...new Map(
+                    slot.discoveryCitations.map((citation) => [
+                        citation.sourceId,
+                        {
+                            sourceId: citation.sourceId,
+                            revisionId: citation.revisionId,
+                        },
+                    ]),
+                ).values(),
+            ].sort((a, b) => a.sourceId.localeCompare(b.sourceId));
+            const schemaView = {
+                construction: "schema-defined-v1" as const,
+                title: proposal.subject,
+                template: "questions-v1" as const,
+                slots: [slot],
+                discovery: { enabled: false, maxProposals: 0 },
+            };
+            const definition: ViewDefinitionInput = {
+                viewId,
+                kind: "schemaView",
+                selector: { kind: "sources", sources: selected },
+                maintenance: {
+                    schemaVersion: 1,
+                    scope: {
+                        mode: "currentSources",
+                        sourceIds: selected.map((source) => source.sourceId),
+                    },
+                },
+                schemaView,
+            };
+            validateSchemaViewDefinition(definition);
+            status.discovery.routes.push({
+                viewId,
+                subject: proposal.subject,
+                terms: deriveDiscoveryRouteTerms(
+                    proposal.subject,
+                    proposal.slot.question,
+                ),
+                sourceIds: selected.map((source) => source.sourceId),
+            });
+            const receipt = status.discovery.receipts.find(
+                (receipt) => receipt.fingerprint === input.fingerprint,
+            );
+            if (!receipt)
+                throw new Error("Discovery admission receipt is missing");
+            receipt.viewIds.push(viewId);
+            await this.viewStore.saveViewDraft(
+                {
+                    corpusId,
+                    viewId,
+                    expectedHead: snapshot.head,
+                    expectedVersion: 0,
+                    definition,
+                    content: emptySchemaView(schemaView, selected),
+                    relationships: [],
+                },
+                undefined,
+                status.discovery,
+            );
+            this.scheduleSchemaMaintenance(corpusId);
+            return viewId;
+        });
+    }
+
+    private async routeKnowledgeSources(
+        corpusId: string,
+        sources: KnowledgeDocument[],
+    ): Promise<void> {
+        const status = await this.viewStore.getKnowledgeState(corpusId);
+        for (const route of status.discovery.routes) {
+            if (route.detached) continue;
+            const view = await this.viewStore.getView({
+                corpusId,
+                viewId: route.viewId,
+            });
+            if (!view || view.state === "archived") continue;
+            const scope = view.definition.maintenance?.scope;
+            if (
+                scope?.mode !== "currentSources" ||
+                viewHash([...scope.sourceIds].sort()) !==
+                    viewHash([...route.sourceIds].sort())
+            ) {
+                await this.enqueueWrite(corpusId, () =>
+                    this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                        const current = state.discovery.routes.find(
+                            (entry) => entry.viewId === route.viewId,
+                        );
+                        if (current) current.detached = true;
+                    }),
+                );
+                continue;
+            }
+            const questions = view.definition.schemaView?.slots
+                .map((slot) => slot.question)
+                .join(" ");
+            const effectiveTerms = questions
+                ? deriveDiscoveryRouteTerms(route.subject, questions)
+                : [];
+            if (viewHash(effectiveTerms) !== viewHash(route.terms))
+                await this.enqueueWrite(corpusId, () =>
+                    this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                        const current = state.discovery.routes.find(
+                            (entry) => entry.viewId === route.viewId,
+                        );
+                        if (current) current.terms = effectiveTerms;
+                    }),
+                );
+            if (!effectiveTerms.length) continue;
+            if (effectiveTerms.length === 1 && effectiveTerms[0].length < 4)
+                continue;
+            const additions = sources.filter((source) => {
+                if (route.sourceIds.includes(source.sourceId)) return false;
+                const normalizedSource = ` ${source.content
+                    .toLocaleLowerCase()
+                    .replace(/[^\p{L}\p{N}]+/gu, " ")
+                    .trim()} `;
+                return (
+                    effectiveTerms.filter((term) =>
+                        normalizedSource.includes(` ${term} `),
+                    ).length >= Math.min(2, effectiveTerms.length)
+                );
+            });
+            if (!additions.length) continue;
+            const ids = [
+                ...new Set([
+                    ...route.sourceIds,
+                    ...additions.map((source) => source.sourceId),
+                ]),
+            ].sort();
+            if (ids.length > 32) {
+                await this.enqueueWrite(corpusId, () =>
+                    this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                        state.discovery.error = `Question source membership overflow for ${route.viewId}; explicit partition required`;
+                    }),
+                );
+                continue;
+            }
+            await this.enqueueWrite(corpusId, async () => {
+                const snapshot = await this.viewStore.listViews(corpusId);
+                const current = snapshot.views.find(
+                    (entry) => entry.viewId === route.viewId,
+                );
+                if (!current || current.version !== view.version)
+                    throw new ViewBuildStaleError(
+                        "Question scope changed during routing",
+                    );
+                await this.viewStore.updateViewMaintenance({
+                    corpusId,
+                    viewId: route.viewId,
+                    expectedHead: snapshot.head,
+                    expectedVersion: current.version,
+                    maintenance: {
+                        schemaVersion: 1,
+                        scope: { mode: "currentSources", sourceIds: ids },
+                    },
+                });
+                await this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                    const current = state.discovery.routes.find(
+                        (entry) => entry.viewId === route.viewId,
+                    );
+                    if (current) current.sourceIds = ids;
+                });
+            });
+            this.scheduleSchemaMaintenance(corpusId);
+        }
+    }
+
+    private async waitKnowledgeBuild(
+        job: ViewBuildJob,
+        signal: AbortSignal,
+        checkpoint: KnowledgeCheckpoint,
+    ): Promise<ViewBuildJob> {
+        await this.enqueueWrite(checkpoint.corpusId, () =>
+            this.viewStore.updateKnowledgeState(
+                checkpoint.corpusId,
+                (state) => {
+                    const stored = state.checkpoints.find(
+                        (entry) =>
+                            entry.checkpointId === checkpoint.checkpointId,
+                    );
+                    if (!stored)
+                        throw new ViewBuildStaleError(
+                            "Knowledge checkpoint was removed",
+                        );
+                    if (stored.state === "superseded") return;
+                    stored.jobIds = [...new Set([...stored.jobIds, job.jobId])];
+                    stored.viewIds = [
+                        ...new Set([
+                            ...stored.viewIds,
+                            ...job.results.map((result) => result.viewId),
+                        ]),
+                    ];
+                    stored.updatedAt = now();
+                },
+            ),
+        );
+        if (job.state === "running") {
+            await this.viewBuilds.wait(job.jobId, signal);
+            const current = await this.getViewBuild(job);
+            if (!current)
+                throw new ViewBuildStaleError("Knowledge build was removed");
+            if (current.state === "running")
+                throw new ViewBuildStaleError(
+                    "Knowledge build has no active execution",
+                );
+            job = current;
+        }
+        return job;
+    }
+
+    private async maintainKnowledgeCheckpoint(
+        checkpoint: KnowledgeCheckpoint,
+        signal: AbortSignal,
+    ): Promise<KnowledgeMaintenanceResult> {
+        const { corpusId } = checkpoint;
+        const results: KnowledgeMaintenanceResult[] = [];
+        const pipelines = new Set(
+            checkpoint.families.map(
+                (family) =>
+                    ({
+                        questions: "schema-defined-v1",
+                        wiki: "informational-wiki-v1",
+                        projects: "informational-project-summary-v1",
+                        topics: "topics-v1",
+                    })[family],
+            ),
+        );
+        this.knowledgeMaintenance.add(corpusId);
+        try {
+            for (const job of await this.listViewBuilds(corpusId)) {
+                if (
+                    job.state === "running" &&
+                    (job.results.some(
+                        (result) =>
+                            pipelines.has(result.snapshot.pipeline) &&
+                            result.snapshot.inputs.some((input) =>
+                                checkpoint.sources.some(
+                                    (source) =>
+                                        source.sourceId === input.sourceId,
+                                ),
+                            ),
+                    ) ||
+                        (checkpoint.families.includes("topics") &&
+                            job.results.some(
+                                (result) => result.viewId === "topic-snapshot",
+                            )))
+                ) {
+                    const finished = await this.waitKnowledgeBuild(
+                        job,
+                        signal,
+                        checkpoint,
+                    );
+                    if (
+                        finished.results.every(
+                            (entry) =>
+                                entry.snapshot.pipeline === "topics-v1" &&
+                                entry.state === "stale",
+                        )
+                    )
+                        continue;
+                    results.push({
+                        state:
+                            finished.state === "complete" ? "ready" : "failed",
+                        jobIds: [job.jobId],
+                        viewIds: finished.results
+                            .filter((entry) => entry.revisionId)
+                            .map((entry) => entry.viewId),
+                        reasons:
+                            finished.state === "complete"
+                                ? []
+                                : finished.results.map((entry) => entry.reason),
+                    });
+                }
+            }
+            if (checkpoint.families.includes("questions")) {
+                const snapshot = await this.listViews(corpusId);
+                const questions = snapshot.views.filter(
+                    (view) =>
+                        view.content.kind === "schemaView" &&
+                        view.state !== "archived" &&
+                        view.definition.selector.sources.some((source) =>
+                            checkpoint.sources.some(
+                                (selected) =>
+                                    source.sourceId === selected.sourceId,
+                            ),
+                        ),
+                );
+                for (const view of questions) {
+                    results.push(
+                        await this.maintainKnowledgeQuestion(
+                            checkpoint,
+                            view,
+                            signal,
+                        ),
+                    );
+                }
+            }
+            for (const family of checkpoint.families)
+                if (family !== "questions")
+                    results.push(
+                        await this.maintainKnowledgeFamily(
+                            checkpoint,
+                            family,
+                            signal,
+                        ),
+                    );
+            const result = knowledgeMaintenanceResult(results);
+            const snapshot = await this.listViews(corpusId);
+            result.viewRevisions = snapshot.views
+                .filter((view) => result.viewIds.includes(view.viewId))
+                .map(({ viewId, revisionId }) => ({ viewId, revisionId }));
+            return result;
+        } finally {
+            this.knowledgeMaintenance.delete(corpusId);
+        }
+    }
+
+    private async maintainKnowledgeQuestion(
+        checkpoint: KnowledgeCheckpoint,
+        view: ViewVersion,
+        signal: AbortSignal,
+    ): Promise<KnowledgeMaintenanceResult> {
+        signal.throwIfAborted();
+        const result: KnowledgeMaintenanceResult = {
+            state: "ready",
+            viewIds: [],
+            jobIds: [],
+            reasons: [],
+        };
+        const { corpusId } = checkpoint;
+        if (
+            view.definition.selector.sources.some(
+                (source) =>
+                    !checkpoint.sources.some(
+                        (selected) =>
+                            selected.sourceId === source.sourceId &&
+                            selected.revisionId === source.revisionId,
+                    ),
+            )
+        ) {
+            return {
+                ...result,
+                state: "partial",
+                reasons: [
+                    `View ${view.viewId} depends on evidence outside the captured scope`,
+                ],
+            };
+        }
+        const plan = await this.planViewMaintenance({
+            corpusId,
+            viewIds: [view.viewId],
+        });
+        const target = plan.targets[0];
+        if (target.state === "blocked")
+            return { ...result, state: "blocked", reasons: [target.reason] };
+        if (target.state === "rebuild") {
+            const build = await this.maintainViews({
+                corpusId,
+                expectedHead: plan.expectedHead,
+                targets: [
+                    {
+                        viewId: view.viewId,
+                        expectedVersion: target.expectedVersion,
+                    },
+                ],
+            });
+            if (build.job) {
+                const finished = await this.waitKnowledgeBuild(
+                    build.job,
+                    signal,
+                    checkpoint,
+                );
+                result.jobIds.push(build.job.jobId);
+                if (finished.state !== "complete")
+                    return {
+                        ...result,
+                        state: "failed",
+                        reasons: finished.results.map((entry) => entry.reason),
+                    };
+            }
+        }
+        const latest = await this.listViews(corpusId);
+        const current = latest.views.find(
+            (entry) => entry.viewId === view.viewId,
+        );
+        if (!current)
+            throw new ViewBuildStaleError(
+                "Question was removed during maintenance",
+            );
+        if (await this.isPolicyQuestion(corpusId, current.viewId)) {
+            const publication = await this.publishView({
+                corpusId,
+                viewId: current.viewId,
+                revisionId: current.revisionId,
+                expectedHead: latest.head!,
+                expectedVersion: current.version,
+            });
+            if (publication.indexState !== "ready")
+                return {
+                    ...result,
+                    state: "failed",
+                    reasons: [publication.reason],
+                };
+        }
+        result.viewIds.push(view.viewId);
+        return result;
+    }
+
+    private async maintainKnowledgeFamily(
+        checkpoint: KnowledgeCheckpoint,
+        family: Exclude<KnowledgeFamily, "questions">,
+        signal: AbortSignal,
+    ): Promise<KnowledgeMaintenanceResult> {
+        signal.throwIfAborted();
+        const result: KnowledgeMaintenanceResult = {
+            state: "ready",
+            viewIds: [],
+            jobIds: [],
+            reasons: [],
+        };
+        const { corpusId } = checkpoint;
+        const capture = await this.captureKnowledge(corpusId);
+        if (
+            capture.sources.some(
+                (source) =>
+                    !checkpoint.sources.some(
+                        (selected) => selected.sourceId === source.sourceId,
+                    ),
+            )
+        ) {
+            return {
+                ...result,
+                state: "partial",
+                reasons: [
+                    `${family} corpus family includes sources outside checkpoint scope`,
+                ],
+            };
+        }
+        if (family !== "topics")
+            return this.maintainKnowledgePages(checkpoint, family, signal);
+        const topic = await this.viewStore.getTopicState(corpusId);
+        const runtime = await this.getCorpusRuntime(corpusId);
+        if (
+            !topic.building &&
+            !reconcileTopicFamily(
+                topic.family,
+                runtime.manifest.indexGeneration,
+                topic.snapshot?.inputFingerprint,
+                this.topicFingerprint(runtime),
+            ).dirty
+        )
+            return result;
+        const job = await this.rebuildTopics(corpusId);
+        result.jobIds.push(job.jobId);
+        if (
+            (await this.waitKnowledgeBuild(job, signal, checkpoint)).state !==
+            "complete"
+        )
+            return {
+                ...result,
+                state: "failed",
+                reasons: ["Topic maintenance did not complete"],
+            };
+        return result;
+    }
+
+    private async maintainKnowledgePages(
+        checkpoint: KnowledgeCheckpoint,
+        family: "wiki" | "projects",
+        signal: AbortSignal,
+    ): Promise<KnowledgeMaintenanceResult> {
+        const { corpusId } = checkpoint;
+        const result: KnowledgeMaintenanceResult = {
+            state: "ready",
+            viewIds: [],
+            jobIds: [],
+            reasons: [],
+        };
+        for (let page = 0; checkpoint.producerComplete || page < 3; page++) {
+            signal.throwIfAborted();
+            const familyState = await this.viewStore.getWikiFamily(
+                corpusId,
+                family,
+            );
+            if (familyState.error)
+                return {
+                    ...result,
+                    state: "blocked",
+                    reasons: [familyState.error],
+                };
+            if (!familyState.dirty) return result;
+            const snapshot = await this.listViews(corpusId);
+            const build = await this.maintainViews({
+                corpusId,
+                expectedHead: snapshot.head,
+                family,
+                operation: "update",
+            });
+            const progressed =
+                build.job && !result.jobIds.includes(build.job.jobId);
+            if (build.job) {
+                result.jobIds.push(build.job.jobId);
+                const finished = await this.waitKnowledgeBuild(
+                    build.job,
+                    signal,
+                    checkpoint,
+                );
+                result.viewIds.push(
+                    ...finished.results
+                        .filter((entry) => entry.revisionId)
+                        .map((entry) => entry.viewId),
+                );
+                if (finished.state !== "complete")
+                    return {
+                        ...result,
+                        state: "failed",
+                        reasons: finished.results.map((entry) => entry.reason),
+                    };
+            }
+            const next = await this.viewStore.getWikiFamily(corpusId, family);
+            if (
+                next.dirty &&
+                !progressed &&
+                next.cursor === familyState.cursor &&
+                next.indexVersion === familyState.indexVersion
+            )
+                return {
+                    ...result,
+                    state: "partial",
+                    reasons: [
+                        `${family} maintenance made no progress; pending content remains deferred`,
+                    ],
+                };
+        }
+        if ((await this.viewStore.getWikiFamily(corpusId, family)).dirty)
+            return {
+                ...result,
+                state: "partial",
+                reasons: [
+                    `${family} maintenance cursor remains after bounded checkpoint work`,
+                ],
+            };
+        return result;
+    }
+
+    private async recoverKnowledge(corpusId: string): Promise<void> {
+        const knowledge = await this.viewStore.getKnowledgeState(corpusId);
+        if (
+            !knowledge.checkpoints.some((checkpoint) =>
+                ["pending", "running"].includes(checkpoint.state),
+            ) &&
+            !knowledge.discovery.receipts.some(
+                (receipt) => receipt.state === "running",
+            )
+        )
+            return;
+        await this.enqueueWrite(corpusId, () =>
+            this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                for (const checkpoint of state.checkpoints)
+                    if (["pending", "running"].includes(checkpoint.state)) {
+                        checkpoint.state = "cancelled";
+                        checkpoint.reasons = [
+                            "Knowledge work was interrupted by service restart",
+                        ];
+                    }
+                for (const receipt of state.discovery.receipts)
+                    if (receipt.state === "running") {
+                        receipt.state = "failed";
+                        receipt.reason =
+                            "Discovery was interrupted; explicit bounded retry required";
+                        state.discovery.error = receipt.reason;
+                    }
+            }),
+        );
+    }
+
     public async getViewPage(
         request: SchemaViewPageRequest,
     ): Promise<SchemaViewPage> {
@@ -4398,7 +5397,12 @@ export class FileMemoryService
     }
 
     private scheduleSchemaMaintenance(corpusId: string): void {
-        if (this.closed || !this.viewDrafts || this.schemaTimers.has(corpusId))
+        if (
+            this.closed ||
+            !this.viewDrafts ||
+            this.schemaTimers.has(corpusId) ||
+            this.knowledgeMaintenance.has(corpusId)
+        )
             return;
         const timer = setTimeout(() => {
             this.schemaTimers.delete(corpusId);
@@ -5277,6 +6281,7 @@ export class FileMemoryService
 
     public async searchViews(
         request: ViewSearchRequest,
+        candidateViewIds?: ReadonlySet<string>,
     ): Promise<ViewSearchMatch[]> {
         const runtime = await this.requireViews(request.corpusId);
         if (
@@ -5320,6 +6325,8 @@ export class FileMemoryService
                 view,
                 publication,
             } of await this.viewStore.listPublishedViews(request.corpusId)) {
+                if (candidateViewIds && !candidateViewIds.has(current.viewId))
+                    continue;
                 if (current.state === "archived") continue;
                 if (
                     request.kinds &&
@@ -6559,7 +7566,8 @@ export class FileMemoryService
         if (
             !this.informationalWikiEnabled ||
             this.closed ||
-            this.ingestionTails.has(corpusId)
+            this.ingestionTails.has(corpusId) ||
+            this.knowledgeMaintenance.has(corpusId)
         )
             return;
         this.maintenance.request(
@@ -6644,6 +7652,7 @@ export class FileMemoryService
     private resumeBatchMaintenance(corpusId: string): void {
         if (this.closed) return;
         this.maintenance.wake();
+        this.knowledge.schedule(corpusId);
         const runtime = this.corpora.get(corpusId);
         if (!runtime) return;
         this.scheduleSourceSynopses(corpusId);
@@ -7840,6 +8849,7 @@ export class FileMemoryService
             !this.informationalWikiEnabled ||
             this.closed ||
             this.ingestionTails.has(corpusId) ||
+            this.knowledgeMaintenance.has(corpusId) ||
             !runtime.manifest.sources.length ||
             !supportsTopicIndex(runtime.index)
         )
@@ -8156,6 +9166,7 @@ export class FileMemoryService
     }
 
     private async invalidateMaintainedViews(corpusId: string): Promise<void> {
+        this.knowledge.schedule(corpusId);
         this.scheduleSourceSynopses(corpusId);
         const runtime = await this.getCorpusRuntime(corpusId);
         const { views } = await this.viewStore.listViews(corpusId);
@@ -8420,6 +9431,348 @@ export class FileMemoryService
         });
     }
 
+    private answerViewSources(view: ViewVersion): string[] {
+        return [
+            ...new Set([
+                ...view.content.citations.map((citation) => citation.sourceId),
+                ...(view.generation?.input?.inputs.map(
+                    (input) => input.sourceId,
+                ) ?? []),
+                ...(view.generation?.input?.influenceSources?.map(
+                    (source) => source.sourceId,
+                ) ?? []),
+            ]),
+        ];
+    }
+
+    private async eligibleAnswerViews(
+        request: MemoryAnswerRequest,
+    ): Promise<{ matches: AnswerViewEvidence[]; omittedCandidates: number }> {
+        const terms = indexedQueryTerms(request.question).map((term) =>
+            term.toLocaleLowerCase(),
+        );
+        const published = await this.viewStore.listPublishedViews(
+            request.corpusId,
+        );
+        const ranked = published
+            .filter(
+                ({ current, view }) =>
+                    current.state !== "archived" &&
+                    view &&
+                    (!request.sourceIds ||
+                        this.answerViewSources(view).every((id) =>
+                            request.sourceIds!.includes(id),
+                        )),
+            )
+            .map((entry) => {
+                const text =
+                    `${entry.view!.content.title} ${entry.view!.content.sections.map((section) => `${section.heading} ${section.body}`).join(" ")}`.toLocaleLowerCase();
+                return {
+                    ...entry,
+                    rank: terms.filter((term) => text.includes(term)).length,
+                };
+            })
+            .filter((entry) => entry.rank > 0)
+            .sort(
+                (a, b) =>
+                    b.rank - a.rank ||
+                    a.current.viewId.localeCompare(b.current.viewId),
+            );
+        const selected = ranked.slice(0, 32).slice(0, 8);
+        for (const entry of selected) {
+            if (entry.publication.blockedReason) continue;
+            if (entry.publication.indexState !== "ready")
+                throw new Error(
+                    `Maintained view index is not ready: ${entry.current.viewId}`,
+                );
+        }
+        const found = await this.searchViews(
+            {
+                corpusId: request.corpusId,
+                query: request.question,
+                freshness: "current",
+                limit: 8,
+            },
+            new Set(selected.map((entry) => entry.current.viewId)),
+        );
+        return {
+            matches: found.flatMap((match) => this.answerViewEvidence(match)),
+            omittedCandidates: Math.max(0, ranked.length - selected.length),
+        };
+    }
+
+    private answerViewEvidence(match: ViewSearchMatch): AnswerViewEvidence[] {
+        const matches: AnswerViewEvidence[] = [];
+        {
+            const view = match.view;
+            if (view.content.kind === "schemaView") {
+                const schema = view.definition.schemaView!;
+                for (const section of view.content.sections) {
+                    const slot = schema.slots.find(
+                        (slot) => slot.id === section.id,
+                    );
+                    if (
+                        !slot ||
+                        slot.approval !== "approved" ||
+                        section.details.freshness !== "current"
+                    )
+                        continue;
+                    const candidates = section.details.candidates.filter(
+                        (candidate) =>
+                            candidate.review !== "rejected" &&
+                            (section.details.selectedCandidateIds.includes(
+                                candidate.id,
+                            ) ||
+                                section.details.answerState === "conflicted"),
+                    );
+                    const state =
+                        section.details.answerState === "conflicted"
+                            ? ("conflicted" as const)
+                            : section.details.selectedCandidateIds.length
+                              ? ("selected" as const)
+                              : ("unknown" as const);
+                    const common = {
+                        influencingSourceIds: this.answerViewSources(view),
+                        supportingSources: candidates.flatMap(
+                            (candidate) => candidate.citations,
+                        ),
+                        opposingSources: candidates.flatMap(
+                            (candidate) => candidate.opposingCitations,
+                        ),
+                        review: section.details.reviewState,
+                        freshness: section.details.freshness,
+                        coverage: section.details.coverage,
+                    };
+                    const reference = {
+                        viewId: view.viewId,
+                        revisionId: view.revisionId,
+                        sectionId: section.id,
+                        state,
+                        contractVersion: questionContractRevision(
+                            view.definition,
+                            slot,
+                        ),
+                        rubricVersion: String(slot.rubric.version),
+                    };
+                    const observed = candidates.filter(
+                        (candidate) => candidate.origin === "source",
+                    );
+                    matches.push({
+                        ...common,
+                        kind: "derived",
+                        authorship: "informational",
+                        reference,
+                        text: `${slot.question}\nAnswer state: ${section.details.answerState}; review: ${section.details.reviewState}; coverage: ${section.details.coverage}.\n${JSON.stringify(observed.map((candidate) => ({ value: candidate.value, effectiveAt: candidate.effectiveAt, localChronology: candidate.localChronology })))}`,
+                        ...(state === "selected" && observed.length === 1
+                            ? { selectedValue: observed[0].value }
+                            : {}),
+                        ...(state === "conflicted"
+                            ? {
+                                  alternatives: observed.map(
+                                      (candidate) => candidate.value,
+                                  ),
+                              }
+                            : {}),
+                    });
+                    for (const candidate of candidates.filter(
+                        (candidate) =>
+                            candidate.origin === "user" &&
+                            section.details.selectedCandidateIds.includes(
+                                candidate.id,
+                            ),
+                    )) {
+                        matches.push({
+                            ...common,
+                            kind: "userAssertion",
+                            reference: {
+                                ...reference,
+                                candidateId: candidate.id,
+                                assertionOrigin: "user",
+                            },
+                            text: `${slot.question}\nUser assertion (not independent verification): ${JSON.stringify(candidate.value)}`,
+                            selectedValue: candidate.value,
+                        });
+                    }
+                }
+            } else {
+                matches.push({
+                    kind: "derived",
+                    authorship: "informational",
+                    reference: {
+                        viewId: view.viewId,
+                        revisionId: view.revisionId,
+                        state: "selected",
+                    },
+                    text: match.snippet,
+                    influencingSourceIds: this.answerViewSources(view),
+                    supportingSources: match.evidence,
+                    opposingSources: [],
+                    review: match.review,
+                    freshness: match.freshness,
+                    coverage: "partial",
+                });
+            }
+        }
+        return matches;
+    }
+
+    private async expandAnswerSource(
+        reference: AnswerSourceReference,
+        request: MemoryAnswerRequest,
+    ): Promise<MemoryEvidence | undefined> {
+        if (
+            request.sourceIds &&
+            !request.sourceIds.includes(reference.sourceId)
+        )
+            return undefined;
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        const source = runtime.manifest.sources.find(
+            (source) => source.sourceId === reference.sourceId,
+        );
+        const revision = source?.revisions.find(
+            (revision) =>
+                revision.revisionId === reference.revisionId &&
+                revision.state === "ready",
+        );
+        if (
+            !source ||
+            !revision ||
+            source.activeRevisionId !== revision.revisionId ||
+            runtime.manifest.knowledgeSuppressions?.some(
+                (suppression) => suppression.sourceId === source.sourceId,
+            )
+        )
+            throw new ViewBuildStaleError(
+                "Answer source is unavailable, replaced or suppressed",
+            );
+        if (!reference.locator)
+            throw new Error("Answer support requires an exact locator");
+        let snippet: string;
+        const chars = /^chars:(\d+)-(\d+)$/.exec(reference.locator);
+        if (chars) {
+            const start = Number(chars[1]),
+                end = Number(chars[2]);
+            if (
+                !Number.isSafeInteger(start) ||
+                !Number.isSafeInteger(end) ||
+                start < 0 ||
+                end <= start ||
+                end > revision.content.length
+            )
+                throw new Error(
+                    "Answer support character locator is out of range",
+                );
+            snippet = revision.content.slice(start, end);
+        } else if (reference.locator.startsWith("indexed:")) {
+            snippet = (
+                await this.getSourceContent({
+                    corpusId: request.corpusId,
+                    sourceId: source.sourceId,
+                    revisionId: revision.revisionId,
+                    indexedLocator: reference.locator,
+                })
+            ).content;
+        } else throw new Error("Unsupported answer support locator");
+        const context =
+            chars && revision.temporalContext
+                ? temporalSegments(
+                      revision.content,
+                      revision.temporalContext,
+                      revision.revisionId,
+                  ).find(
+                      (segment) =>
+                          segment.context &&
+                          segment.context.sourceSpan.start <=
+                              Number(chars[1]) &&
+                          segment.context.sourceSpan.end >= Number(chars[2]),
+                  )?.context
+                : undefined;
+        return {
+            evidenceId:
+                reference.evidenceId ??
+                `${source.sourceId}:${revision.revisionId}:${reference.locator}`,
+            corpusId: request.corpusId,
+            sourceId: source.sourceId,
+            revisionId: revision.revisionId,
+            title: source.title,
+            locator: reference.locator,
+            snippet,
+            sourceType: source.sourceType,
+            ...(source.canonicalUri
+                ? { canonicalUri: source.canonicalUri }
+                : {}),
+            ...(context ? { temporalContext: context } : {}),
+            score: 1,
+            indexedAt: revision.indexedAt ?? now(),
+        };
+    }
+
+    private async validateAnswerEvidence(
+        request: MemoryAnswerRequest,
+        evidence: AnswerEvidence[],
+    ): Promise<boolean> {
+        if (request.knowledgeCheckpointId) {
+            const checkpoint = await this.getKnowledgeCheckpoint({
+                corpusId: request.corpusId,
+                checkpointId: request.knowledgeCheckpointId,
+            });
+            const current = await this.captureKnowledge(request.corpusId);
+            if (
+                checkpoint.state !== "ready" ||
+                checkpoint.sources.some(
+                    (selected) =>
+                        !current.sources.some(
+                            (source) =>
+                                source.sourceId === selected.sourceId &&
+                                source.revisionId === selected.revisionId,
+                        ),
+                )
+            )
+                return false;
+        }
+        for (const item of evidence) {
+            if (item.kind === "source") {
+                const source = await this.expandAnswerSource(
+                    item.source,
+                    request,
+                );
+                if (!source || source.snippet !== item.source.snippet)
+                    return false;
+            } else {
+                const view = await this.viewStore.getView({
+                    corpusId: request.corpusId,
+                    viewId: item.reference.viewId,
+                });
+                if (!view || view.revisionId !== item.reference.revisionId)
+                    return false;
+                try {
+                    await this.assertViewPublicationFresh(view);
+                } catch (error) {
+                    if (error instanceof ViewBuildStaleError) return false;
+                    throw error;
+                }
+                const publication = await this.viewStore.getViewPublication({
+                    corpusId: request.corpusId,
+                    viewId: view.viewId,
+                });
+                if (
+                    publication.publishedRevisionId !== view.revisionId ||
+                    publication.blockedReason ||
+                    publication.indexState !== "ready"
+                )
+                    return false;
+                if (
+                    request.sourceIds &&
+                    this.answerViewSources(view).some(
+                        (sourceId) => !request.sourceIds!.includes(sourceId),
+                    )
+                )
+                    return false;
+            }
+        }
+        return true;
+    }
+
     public async answer(
         request: MemoryAnswerRequest,
     ): Promise<MemoryAnswerResult> {
@@ -8427,6 +9780,102 @@ export class FileMemoryService
         if (question.length === 0) {
             throw new Error("Memory question cannot be empty");
         }
+        if (request.knowledgeCheckpointId) {
+            const checkpoint = await this.getKnowledgeCheckpoint({
+                corpusId: request.corpusId,
+                checkpointId: request.knowledgeCheckpointId,
+            });
+            if (checkpoint.state !== "ready")
+                throw new Error(
+                    `Knowledge checkpoint is not ready: ${checkpoint.state}`,
+                );
+            if (
+                request.sourceIds?.some(
+                    (id) =>
+                        !checkpoint.sources.some(
+                            (source) => source.sourceId === id,
+                        ),
+                )
+            )
+                throw new Error(
+                    "Answer source scope exceeds its knowledge checkpoint",
+                );
+            request = {
+                ...request,
+                sourceIds:
+                    request.sourceIds ??
+                    checkpoint.sources.map((source) => source.sourceId),
+            };
+        }
+        await this.initialize();
+        const answerRuntime = await this.getCorpusRuntime(request.corpusId);
+        if (
+            request.answerMode !== "extractive" &&
+            answerRuntime.index.readFragments
+        ) {
+            const answer = () =>
+                answerIntegratedEvidence(
+                    request,
+                    {
+                        searchOriginal: (input) =>
+                            this.search({
+                                corpusId: input.corpusId,
+                                query: input.question,
+                                ...(input.sourceIds
+                                    ? { sourceIds: input.sourceIds }
+                                    : {}),
+                                ...(input.temporalContext
+                                    ? { temporalContext: input.temporalContext }
+                                    : {}),
+                                ...(input.includeDiagnostics
+                                    ? { includeDiagnostics: true }
+                                    : {}),
+                                indexedFragments: true,
+                                limit: Math.min(input.limit ?? 12, 12),
+                                maxResponseChars: Math.min(
+                                    input.maxResponseChars ?? 24000,
+                                    24000,
+                                ),
+                            }),
+                        ...(this.viewDrafts
+                            ? {
+                                  getEligibleViewMatches: (
+                                      input: MemoryAnswerRequest,
+                                  ) => this.eligibleAnswerViews(input),
+                              }
+                            : {}),
+                        expandSource: (reference, input) =>
+                            this.expandAnswerSource(reference, input),
+                        validateEvidence: ({ request: input, evidence }) =>
+                            this.validateAnswerEvidence(input, evidence),
+                    },
+                    {
+                        ...(this.wikiModelEndpoint
+                            ? { endpoint: this.wikiModelEndpoint }
+                            : {}),
+                        ...(this.indexedAnswerModel
+                            ? { model: this.indexedAnswerModel }
+                            : {}),
+                        outputTokens: Math.min(
+                            this.wikiBudget?.outputTokens ?? 4000,
+                            4000,
+                        ),
+                    },
+                );
+            return this.wikiBudget
+                ? runWithRequestBudget(
+                      new RequestBudget(this.wikiBudget),
+                      answer,
+                  )
+                : answer();
+        }
+        if (
+            request.retrievalPolicy === "sourcesAndViews" &&
+            request.answerMode !== "extractive"
+        )
+            throw new Error(
+                "Integrated answer retrieval is unsupported by this corpus index",
+            );
         if (
             request.answerMode !== "extractive" &&
             this.informationalWikiEnabled
@@ -12948,6 +14397,7 @@ export class FileMemoryService
             preparation.controller.abort(
                 new ViewBuildStaleError("Memory service is closing"),
             );
+        await this.knowledge.close();
         await Promise.allSettled(
             [...this.topicSummaryWork.values()].map((work) => work.promise),
         );

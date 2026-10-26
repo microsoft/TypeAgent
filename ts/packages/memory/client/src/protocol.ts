@@ -577,20 +577,162 @@ export const searchResultSchema = z.object({
     indexVersion: z.string(),
 });
 
-export const answerRequestSchema = z.object({
+export const answerRequestSchema = z.strictObject({
     corpusId: identifierSchema,
     question: z.string().min(1),
     limit: z.number().int().positive().max(100).optional(),
     maxResponseChars: z.number().int().positive().optional(),
     sourceIds: z.array(identifierSchema).optional(),
     answerMode: z.enum(["synthesized", "extractive"]).optional(),
+    retrievalPolicy: z.enum(["sourcesOnly", "sourcesAndViews"]).optional(),
+    includeDiagnostics: z.boolean().optional(),
+    knowledgeCheckpointId: identifierSchema.optional(),
+    temporalContext: z
+        .strictObject({
+            referenceTime: z
+                .union([
+                    z.string().min(1).max(8192),
+                    z.strictObject({
+                        raw: z.string().max(8192),
+                        kind: z.enum(["instant", "floating", "calendar"]),
+                        precision: z.enum([
+                            "year",
+                            "month",
+                            "day",
+                            "minute",
+                            "second",
+                            "millisecond",
+                        ]),
+                        localDateTime: z.string().max(8192),
+                        instantUtc: z.string().max(8192).optional(),
+                        offsetMinutes: z.number().finite().optional(),
+                    }),
+                ])
+                .optional(),
+            availabilityPolicy: z
+                .enum(["supplied-history", "as-of"])
+                .optional(),
+        })
+        .optional(),
 });
 
+export const answerDerivedReferenceSchema = z.strictObject({
+    viewId: identifierSchema,
+    revisionId: identifierSchema,
+    sectionId: identifierSchema.optional(),
+    itemId: z.string().min(1).max(8192).optional(),
+    state: z.enum(["selected", "unknown", "conflicted"]),
+    contractVersion: z.string().min(1).max(8192).optional(),
+    rubricVersion: z.string().min(1).max(8192).optional(),
+});
+export const answerAssertionReferenceSchema =
+    answerDerivedReferenceSchema.extend({
+        candidateId: identifierSchema,
+        assertionOrigin: z.string().min(1).max(8192),
+    });
+const answerSourceReferenceSchema = z.strictObject({
+    sourceId: identifierSchema,
+    revisionId: identifierSchema,
+    locator: z.string().max(8192).optional(),
+    evidenceId: z.string().max(8192).optional(),
+});
+const answerViewEvidenceBase = {
+    id: z.string().min(1).max(8192),
+    text: z.string().max(120000),
+    influencingSourceIds: identifierSchema.array().max(100000),
+    supportingSources: answerSourceReferenceSchema.array().max(1000),
+    opposingSources: answerSourceReferenceSchema.array().max(1000),
+    supportingEvidenceIds: z.string().array().max(1000),
+    opposingEvidenceIds: z.string().array().max(1000),
+    review: z.string().max(200),
+    freshness: z.string().max(200),
+    coverage: z.string().max(200),
+};
+export const indexedSelectionDiagnosticsSchema = z.strictObject({
+    terms: z.string().array(),
+    eligibleSourceIds: identifierSchema.array(),
+    blocks: z
+        .strictObject({
+            sourceId: identifierSchema,
+            revisionId: identifierSchema,
+            blockOrdinal: z.number().int().nonnegative(),
+            messageOrdinal: z.number().int().nonnegative().optional(),
+            score: z.number().finite(),
+            postingScore: z.number().finite().optional(),
+            languageScore: z.number().finite().optional(),
+            preferenceBoost: z.number().finite().optional(),
+            selected: z.boolean(),
+            emittedFragments: z.number().int().nonnegative(),
+            reason: z.enum(["selected", "block-limit"]),
+        })
+        .array(),
+    readChars: z.number().int().nonnegative(),
+    fragmentCount: z.number().int().nonnegative(),
+    deliveredFragmentCount: z.number().int().nonnegative().optional(),
+    responseChars: z.number().int().nonnegative().optional(),
+    limited: z.boolean(),
+});
+export const integratedAnswerDiagnosticsSchema = z.strictObject({
+    sourceSelection: indexedSelectionDiagnosticsSchema.optional(),
+    retrievalPolicy: z.enum(["default", "sourcesOnly", "sourcesAndViews"]),
+    retrievalMode: z.enum(["sourcesOnly", "sourcesAndViews", "degraded"]),
+    suppliedEvidence: z
+        .discriminatedUnion("kind", [
+            z.strictObject({
+                kind: z.literal("source"),
+                id: z.string().min(1).max(8192),
+                source: searchResultSchema.shape.matches.element,
+            }),
+            z.strictObject({
+                ...answerViewEvidenceBase,
+                kind: z.literal("derived"),
+                reference: answerDerivedReferenceSchema,
+                authorship: z.literal("informational"),
+            }),
+            z.strictObject({
+                ...answerViewEvidenceBase,
+                kind: z.literal("userAssertion"),
+                reference: answerAssertionReferenceSchema,
+            }),
+        ])
+        .array()
+        .max(1000),
+    selectedEvidenceIds: z.string().array().max(1000),
+    omittedViewCandidates: z.number().int().nonnegative(),
+    omittedSourceFragments: z.number().int().nonnegative(),
+    omittedViewBlocks: z.number().int().nonnegative(),
+    warnings: z.string().array().max(1000),
+    reconstructionCount: z.number().int().min(0).max(1),
+});
 export const answerResultSchema = z.object({
     question: z.string(),
     answer: z.string(),
     mode: z.enum(["synthesized", "extractive"]),
     citations: searchResultSchema.shape.matches,
+    derivedReferences: answerDerivedReferenceSchema
+        .array()
+        .max(1000)
+        .optional(),
+    assertionReferences: answerAssertionReferenceSchema
+        .array()
+        .max(1000)
+        .optional(),
+    readerContext: z
+        .object({
+            answerPath: z
+                .enum(["indexed-fragments", "knowpro", "sources-and-views"])
+                .optional(),
+            integratedAnswer: integratedAnswerDiagnosticsSchema.optional(),
+            retrievedMessageOrdinals: z.number().int().nonnegative().array(),
+            messageOrdinals: z.number().int().nonnegative().array(),
+            knowledgeMessageOrdinals: z.number().int().nonnegative().array(),
+            completedChunks: z.number().int().nonnegative(),
+            serializedContextChars: z.number().int().nonnegative(),
+            retrievedSourceIds: identifierSchema.array(),
+            messageSourceIds: identifierSchema.array(),
+            knowledgeSourceIds: identifierSchema.array(),
+        })
+        .optional(),
     grounded: z.literal(true),
     indexVersion: z.string(),
     warnings: z.array(z.string()),
@@ -626,6 +768,8 @@ export const knowledgeGraphSchema = z.object({
 export const capabilitiesSchema = z.object({
     derivedViews: z
         .object({
+            knowledge: z.boolean().optional(),
+            integratedAnswering: z.boolean().optional(),
             kinds: z
                 .enum([
                     "troubleshootingGuide",

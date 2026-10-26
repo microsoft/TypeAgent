@@ -33,6 +33,7 @@ import {
 import { loadMemoryHubCorpora, mapMemoryHubCorpora } from "./memoryHub.mjs";
 import { timed } from "./memoryHubQuerySupport.mjs";
 import { memoryHubSearchInsights } from "./memoryHubSearchInsights.mjs";
+import { tryMemoryHubIntegratedAnswer } from "./memoryHubIntegratedAnswer.mjs";
 export { timed } from "./memoryHubQuerySupport.mjs";
 
 export type MemoryHubReadService = MemoryService & Partial<MemoryViewService>;
@@ -224,6 +225,7 @@ async function viewResults(
     corpus: MemoryCenterCorpus,
     request: MemoryHubSearchRequest,
 ): Promise<MemoryHubEvidence[]> {
+    if (request.retrievalPolicy === "sourcesOnly") return [];
     const capabilities = await timed(service.getCapabilities());
     if (!capabilities.derivedViews?.search) return [];
     if (!service.searchViews)
@@ -684,6 +686,36 @@ export function createMemoryHubQueryFunctions(
                                 warnings: [],
                                 errors: [],
                             };
+                            try {
+                                if (
+                                    await tryMemoryHubIntegratedAnswer(
+                                        service,
+                                        corpora,
+                                        request,
+                                        result,
+                                    )
+                                ) {
+                                    result.insights = {
+                                        provider: "canonical",
+                                        status: "unsupported",
+                                        ...(request.corpusId === undefined
+                                            ? {}
+                                            : { corpusId: request.corpusId }),
+                                        topTopics: [],
+                                        relatedEntities: [],
+                                        message:
+                                            "Integrated answering returns exact evidence and maintained-knowledge references; separate query insights are not generated for this answer path.",
+                                    };
+                                    return result;
+                                }
+                            } catch (error) {
+                                result.errors.push({
+                                    corpusId: request.corpusId ?? "*",
+                                    operation: "answer",
+                                    message: message(error),
+                                });
+                                return result;
+                            }
                             const lists = await timeSearchStage(
                                 "hub.retrieval",
                                 () =>
