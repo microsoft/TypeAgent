@@ -31,6 +31,7 @@ export * from "./requestConstraints.js";
 export {
     getCopilotClient,
     getCopilotCliPath,
+    createCopilotRuntimeConnection,
     stopCopilotClient,
     createCopilotModelEndpointProvider,
     warmupCopilotClient,

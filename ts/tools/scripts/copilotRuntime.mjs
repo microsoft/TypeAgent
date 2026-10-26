@@ -95,9 +95,6 @@ export function defaultRuntimeRoot(env = process.env) {
     if (env.TYPEAGENT_COPILOT_RUNTIME_ROOT) {
         return path.resolve(env.TYPEAGENT_COPILOT_RUNTIME_ROOT);
     }
-    if (env.TYPEAGENT_RUNTIME_ROOT) {
-        return path.resolve(env.TYPEAGENT_RUNTIME_ROOT);
-    }
     if (process.platform === "win32" && env.LOCALAPPDATA) {
         return path.join(env.LOCALAPPDATA, "TypeAgent", "runtimes");
     }
@@ -514,7 +511,7 @@ export function resolveCopilotRuntime(
     );
 }
 
-async function inspectCopilot(executable) {
+async function inspectCopilot(executable, { runtimeOnly = false } = {}) {
     let sdk;
     try {
         sdk = await import("@github/copilot-sdk");
@@ -541,6 +538,9 @@ async function inspectCopilot(executable) {
     try {
         await client.start();
         const runtime = await client.getStatus();
+        if (runtimeOnly) {
+            return { runtime };
+        }
         const auth = await client.getAuthStatus();
         const models = auth.isAuthenticated ? await client.listModels() : [];
         return {
@@ -578,6 +578,8 @@ async function setupCopilot(manifest, options) {
     console.log(`GitHub Copilot runtime: ${executable}`);
 
     if (!options.login) {
+        await inspectCopilot(executable, { runtimeOnly: true });
+        console.log("GitHub Copilot runtime startup verified.");
         return 0;
     }
 
@@ -651,7 +653,7 @@ function printHelp() {
             "  --artifact-dir <path>",
             "  --manifest <path>",
             "  --runtime-root <path>",
-            "  --runtime-only",
+            "  --runtime-only       Verify runtime startup without signing in",
             "  --non-interactive",
             "  --device-code",
             "  --host <github-host>",

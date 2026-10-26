@@ -284,6 +284,19 @@ The managed Copilot CLI cache uses `TYPEAGENT_COPILOT_RUNTIME_ROOT`.
 `TYPEAGENT_RUNTIME_ROOT` is reserved for the bundled agent-server's application
 assets and must not be overridden by installer lifecycle actions.
 
+The runtime helper ignores `TYPEAGENT_RUNTIME_ROOT` when locating the managed
+cache. Without a dedicated override, it uses `%LOCALAPPDATA%\TypeAgent\runtimes`
+on Windows and `$XDG_DATA_HOME/TypeAgent/runtimes` (or
+`~/.local/share/TypeAgent/runtimes`) elsewhere. `--runtime-root` overrides these
+defaults and `TYPEAGENT_COPILOT_RUNTIME_ROOT`.
+
+Prerequisite setup starts the selected runtime and checks its SDK status even
+with `--runtime-only`; it does not require sign-in or model access for this
+check. Startup failures return a nonzero setup exit code. The MSI logs these as
+incomplete setup warnings without rolling back the installation. Reasoning and model clients use
+`TYPEAGENT_COPILOT_CLI_PATH` before `COPILOT_CLI_PATH`; an explicit client path,
+including the credit-budget evaluation override, takes precedence.
+
 **Output:**
 
 ```
