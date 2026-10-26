@@ -5,6 +5,11 @@ import { z } from "zod";
 import { runbookImportViewSchemas } from "./runbookImportSchemas.mjs";
 import { questionSchemas } from "./questionSchemas.mjs";
 import {
+    inventoryPageRequestSchema,
+    viewSummaryRequestSchema,
+    viewPublicationBatchRequestSchema,
+    graphQueryRequestSchema,
+    graphSupportRequestSchema,
     viewReadRequestSchema,
     viewSaveRequestSchema,
     viewArchiveRequestSchema,
@@ -84,6 +89,32 @@ function protocolInput(schema: {
 
 // Each entry is an explicitly exposed domain operation, never a browser-control method.
 const schemas: Record<ViewMethod, z.ZodType> = {
+    memoryHubGraph: protocolInput({
+        safeParse(value: unknown) {
+            if (!value || typeof value !== "object" || Array.isArray(value))
+                return graphQueryRequestSchema.safeParse(value);
+            const input = value as Record<string, unknown>;
+            const paged =
+                input.continuationToken !== undefined ||
+                input.expectedGeneration !== undefined;
+            return graphQueryRequestSchema.safeParse({
+                ...input,
+                corpusId:
+                    input.corpusId === undefined && !paged
+                        ? "all-memory"
+                        : input.corpusId,
+            });
+        },
+    }),
+    memoryHubGraphSupport: protocolInput(graphSupportRequestSchema),
+    memoryHubGraphEvent: z.strictObject({
+        corpusId: text,
+        eventId: text,
+        offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+    }),
+    memoryListViewSummaries: protocolInput(viewSummaryRequestSchema),
+    memoryListViewBuildSummaries: protocolInput(inventoryPageRequestSchema),
+    memoryGetViewPublications: protocolInput(viewPublicationBatchRequestSchema),
     memoryViewCapabilities: empty,
     memoryQueryTopics: protocolInput(topicQueryRequestSchema),
     memoryRebuildTopics: z.strictObject({

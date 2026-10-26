@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { createHash } from "node:crypto";
-import { conversationCorpusName } from "@typeagent/memory-service";
 import type {
     MemoryHubExploreResult,
     MemoryHubFunctions,
@@ -14,6 +13,80 @@ import {
     timed,
     type MemoryHubReadService,
 } from "./memoryHubQuery.mjs";
+import { readScopedKnowledge } from "./memoryHubScopedKnowledge.mjs";
+
+async function scopedOverview(
+    service: MemoryHubReadService,
+    corpusId: string,
+    result: MemoryHubExploreResult,
+) {
+    const [entities, topics] = await Promise.all([
+        readScopedKnowledge(service, corpusId, "entities"),
+        readScopedKnowledge(service, corpusId, "topics"),
+    ]);
+    if (!entities || !topics)
+        throw new Error("Scoped knowledge capability is unavailable.");
+    for (const inventory of [entities, topics])
+        for (const reason of inventory.first.coverage.reasons)
+            result.errors.push({
+                corpusId,
+                operation: "graph",
+                message: reason,
+            });
+    result.entities.push(
+        ...entities.items.map((item) => ({
+            id: item.id,
+            name: item.title,
+            types: entities.nodes.find((node) => node.id === item.id)!.types,
+            mentionCount: item.mentions ?? 0,
+            sources: item.sources,
+            ...(item.graphSupport ? { graphSupport: item.graphSupport } : {}),
+        })),
+    );
+    result.topics.push(
+        ...topics.items.map((item) => ({
+            id: item.id,
+            name: item.title,
+            mentionCount: item.mentions ?? 0,
+            sources: item.sources,
+            ...(item.graphSupport ? { graphSupport: item.graphSupport } : {}),
+        })),
+    );
+    const names = new Map(entities.nodes.map((node) => [node.id, node.label]));
+    result.relationships.push(
+        ...entities.edges.map((edge) => ({
+            id: edge.id,
+            fromId: edge.source,
+            toId: edge.target,
+            type: edge.type,
+            fromName: names.get(edge.source) ?? edge.source,
+            toName: names.get(edge.target) ?? edge.target,
+            count: edge.count,
+            sources: [],
+            graphSupport: {
+                corpusId,
+                generation: entities.first.generation,
+                edgeId: edge.id,
+            },
+        })),
+    );
+    result.counts.entities += entities.first.counts.nodes;
+    result.counts.topics += topics.first.counts.nodes;
+    result.counts.relationships += entities.first.counts.edges;
+    result.counts.events =
+        (result.counts.events ?? 0) + entities.first.coverage.events.eligible;
+    result.sourceInventory = "documents";
+    const sources = await timed(
+        service.listSourcesPage({ corpusId, pageSize: 6 }),
+    );
+    (result.contributingSources ??= []).push(
+        ...sources.items.map((source) => ({
+            corpusId,
+            sourceId: source.sourceId,
+            ...(source.title ? { title: source.title } : {}),
+        })),
+    );
+}
 
 export function identity(kind: string, corpusId: string, name: string): string {
     return JSON.stringify([kind, corpusId, name]);
@@ -66,13 +139,16 @@ async function explore(
         await Promise.all([
             (async () => {
                 try {
-                    if (corpus.name === conversationCorpusName)
-                        throw new Error(
-                            "Conversation event graphs are unavailable in the corpus graph API; use Search to inspect turn evidence.",
-                        );
+                    if (service.queryKnowledgeGraph) {
+                        await scopedOverview(service, corpus.corpusId, result);
+                        return;
+                    }
                     const graph = await timed(
                         service.getKnowledgeGraph(corpus.corpusId),
                     );
+                    result.counts.entities += graph.entities.length;
+                    result.counts.topics += graph.topics.length;
+                    result.counts.relationships += graph.relationships.length;
                     result.entities.push(
                         ...graph.entities.map((entity) => ({
                             id: identity(
@@ -144,16 +220,18 @@ async function explore(
             })(),
         ]);
     });
-    result.counts.entities = result.entities.length;
-    result.counts.topics = result.topics.length;
-    result.counts.relationships = result.relationships.length;
     const contributors = new Map(
         [...result.entities, ...result.topics, ...result.relationships]
             .flatMap((item) => item.sources)
             .map((source) => [JSON.stringify(source), source]),
     );
-    result.contributingSourceCount = contributors.size;
-    result.contributingSources = [...contributors.values()]
+    result.contributingSourceCount = result.sourceInventory
+        ? result.counts.sources
+        : contributors.size;
+    result.contributingSources = [
+        ...(result.contributingSources ?? []),
+        ...contributors.values(),
+    ]
         .sort(
             (a, b) =>
                 a.corpusId.localeCompare(b.corpusId) ||
@@ -161,30 +239,35 @@ async function explore(
         )
         .slice(0, maxNodes);
     await Promise.all(
-        result.contributingSources.slice(0, 6).map(async (source) => {
-            try {
-                const metadata = await timed(
-                    service.getSource(source.corpusId, source.sourceId),
-                );
-                if (!metadata)
-                    throw new Error(
-                        "Contributing source is no longer available.",
+        result.contributingSources
+            .filter((source) => !source.title)
+            .slice(0, 6)
+            .map(async (source) => {
+                try {
+                    const metadata = await timed(
+                        service.getSource(source.corpusId, source.sourceId),
                     );
-                source.title = metadata.title;
-            } catch (error) {
-                result.errors.push({
-                    corpusId: source.corpusId,
-                    operation: "sources",
-                    message:
-                        error instanceof Error ? error.message : String(error),
-                });
-            }
-        }),
+                    if (!metadata)
+                        throw new Error(
+                            "Contributing source is no longer available.",
+                        );
+                    source.title = metadata.title;
+                } catch (error) {
+                    result.errors.push({
+                        corpusId: source.corpusId,
+                        operation: "sources",
+                        message:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    });
+                }
+            }),
     );
     result.entities.sort(
         (a, b) => b.mentionCount - a.mentionCount || a.id.localeCompare(b.id),
     );
-    result.omittedEntities = Math.max(0, result.entities.length - maxNodes);
+    result.omittedEntities = Math.max(0, result.counts.entities - maxNodes);
     result.entities = result.entities.slice(0, maxNodes);
     result.relationships.sort(
         (a, b) => b.count - a.count || a.id.localeCompare(b.id),

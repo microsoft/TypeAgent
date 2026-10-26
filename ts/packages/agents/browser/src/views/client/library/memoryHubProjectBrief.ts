@@ -243,10 +243,6 @@ export function createProjectBriefEditor(
             true,
         ),
     );
-    if (content.status)
-        root.append(rbNode("p", `Completeness: ${content.status}`));
-    if (content.coverageNote)
-        root.append(rbNode("p", `Coverage: ${content.coverageNote}`));
     for (const section of content.sections) {
         const group = rbNode("fieldset");
         group.append(

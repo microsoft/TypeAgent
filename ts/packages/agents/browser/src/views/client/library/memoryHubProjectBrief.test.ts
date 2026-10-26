@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { inventoryFixture } from "./memoryHubInventoryTestData";
+
 import type { ProjectBriefContent } from "@typeagent/memory-service";
 import { createProjectBriefEditor } from "./memoryHubProjectBrief";
 import { mountMemoryHubViews } from "./memoryHubViews";
@@ -15,8 +17,6 @@ const evidence = invokeView as jest.Mock<Promise<unknown>, [string, unknown]>;
 const content: ProjectBriefContent = {
     kind: "projectBrief",
     construction: "informational-project-summary-v1",
-    status: "partial",
-    coverageNote: "Owner approval remains unverified",
     title: "Payments reliability",
     summary: "Project active; incident closed",
     citations: [
@@ -168,10 +168,6 @@ test("fixed project template uses human-readable fields, honest unknowns and exa
         "Project knowledge as-of: Unknown",
     );
     expect(editor.element.textContent).toContain("not executable guides");
-    expect(editor.element.textContent).toContain("Completeness: partial");
-    expect(editor.element.textContent).toContain(
-        "Coverage: Owner approval remains unverified",
-    );
     expect(editor.element.textContent).not.toContain('"inventoryIds"');
     expect(editor.element.textContent).not.toContain("Activate skill");
     change(editor.element, "Project brief title", "Edited project brief");
@@ -214,56 +210,63 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
         errors = [];
         invoke.mockReset();
         evidence.mockReset();
-        invoke.mockImplementation(async (method) => {
-            switch (method) {
-                case "memoryViewCapabilities":
-                    return {
-                        derivedViews: {
-                            builds: true,
-                            kinds: ["troubleshootingGuide", "projectBrief"],
-                        },
-                    };
-                case "memoryListCorpora":
-                    return [{ corpusId: "payments", name: "Payments" }];
-                case "memoryListViews":
-                    return { head, views: [view] };
-                case "memoryListViewBuilds":
-                    return [];
-                case "memoryGetViewPublicationPolicy":
-                    return { revision: 0, autoPublish: true, views: {} };
-                case "memoryGetViewPublication":
-                    return {
-                        viewId: view.viewId,
-                        indexState: "absent",
-                        reason: "Draft only",
-                    };
-                case "memoryListSources":
-                    return {
-                        items: [
-                            {
-                                sourceId: "status",
-                                title: "Status evidence",
-                                activeRevisionId: "current",
-                                revisions: [
-                                    { revisionId: "current", state: "ready" },
-                                ],
+        invoke.mockImplementation(
+            inventoryFixture(async (method) => {
+                switch (method) {
+                    case "memoryViewCapabilities":
+                        return {
+                            derivedViews: {
+                                builds: true,
+                                kinds: ["troubleshootingGuide", "projectBrief"],
                             },
-                        ],
-                        total: 1,
-                    };
-                case "memoryBuildViews":
-                    return {
-                        corpusId: "payments",
-                        jobId: "build",
-                        state: "complete",
-                        results: [],
-                    };
-                case "memorySaveViewDraft":
-                    return { commitId: head, version: view };
-                default:
-                    throw new Error(`Unexpected project operation ${method}`);
-            }
-        });
+                        };
+                    case "memoryListCorpora":
+                        return [{ corpusId: "payments", name: "Payments" }];
+                    case "memoryListViews":
+                        return { head, views: [view] };
+                    case "memoryListViewBuilds":
+                        return [];
+                    case "memoryGetViewPublicationPolicy":
+                        return { revision: 0, autoPublish: true, views: {} };
+                    case "memoryGetViewPublication":
+                        return {
+                            viewId: view.viewId,
+                            indexState: "absent",
+                            reason: "Draft only",
+                        };
+                    case "memoryListSources":
+                        return {
+                            items: [
+                                {
+                                    sourceId: "status",
+                                    title: "Status evidence",
+                                    activeRevisionId: "current",
+                                    revisions: [
+                                        {
+                                            revisionId: "current",
+                                            state: "ready",
+                                        },
+                                    ],
+                                },
+                            ],
+                            total: 1,
+                        };
+                    case "memoryBuildViews":
+                        return {
+                            corpusId: "payments",
+                            jobId: "build",
+                            state: "complete",
+                            results: [],
+                        };
+                    case "memorySaveViewDraft":
+                        return { commitId: head, version: view };
+                    default:
+                        throw new Error(
+                            `Unexpected project operation ${method}`,
+                        );
+                }
+            }),
+        );
         panel = mountMemoryHubViews(host, {
             scope: () => scope,
             onError: (error) => errors.push(error),
@@ -303,6 +306,7 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
             }),
         );
         click(host, "Payments reliability");
+        await settle();
         click(host, "Edit");
         expect(
             host.querySelector('[aria-label="Project brief fixed template"]'),
@@ -332,6 +336,7 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
         async (summary) => {
             await panel.refresh();
             click(host, "Payments reliability");
+            await settle();
             click(host, "Edit");
             change(host, "Project brief summary", summary);
             click(host, "Save explicit edits");
@@ -356,6 +361,7 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
     test("dirty project editor blocks builds without losing changes", async () => {
         await panel.refresh();
         click(host, "Payments reliability");
+        await settle();
         click(host, "Edit");
         change(host, "Project brief title", "Unsaved project brief");
         jest.spyOn(window, "confirm").mockReturnValue(false);
@@ -380,6 +386,7 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
         );
         await panel.refresh();
         click(host, "Payments reliability");
+        await settle();
         click(host, "Edit");
         click(host, "status @ current chars:0-12");
         await settle();
@@ -397,15 +404,17 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
     });
     test("older capabilities do not advertise or open an unsupported project kind", async () => {
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation((method, params) =>
-            method === "memoryViewCapabilities"
-                ? Promise.resolve({
-                      derivedViews: {
-                          builds: true,
-                          kinds: ["troubleshootingGuide"],
-                      },
-                  })
-                : original(method, params),
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryViewCapabilities"
+                    ? Promise.resolve({
+                          derivedViews: {
+                              builds: true,
+                              kinds: ["troubleshootingGuide"],
+                          },
+                      })
+                    : original(method, params),
+            ),
         );
         await panel.refresh();
         expect(host.textContent).not.toContain("Payments reliability");

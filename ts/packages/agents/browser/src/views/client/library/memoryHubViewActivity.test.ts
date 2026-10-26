@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { inventoryFixture } from "./memoryHubInventoryTestData";
+
 import type { ViewBuildJob, ViewVersion } from "@typeagent/memory-service";
 import { invokeMemory } from "./viewClient";
 import {
@@ -55,7 +57,9 @@ function job(state: ViewBuildJob["state"] = "partial"): ViewBuildJob {
 
 function textButton(host: HTMLElement, text: string): HTMLButtonElement {
     const found = [...host.querySelectorAll("button")].find(
-        (button) => button.textContent === text,
+        (button) =>
+            button.textContent === text ||
+            button.getAttribute("aria-label") === text,
     );
     if (!found) throw new Error(`Missing button ${text}`);
     return found;
@@ -63,25 +67,27 @@ function textButton(host: HTMLElement, text: string): HTMLButtonElement {
 
 beforeEach(() => {
     invoke.mockReset();
-    invoke.mockImplementation(async (method: string) => {
-        switch (method) {
-            case "memoryViewCapabilities":
-                return { derivedViews: { builds: true } };
-            case "memoryListCorpora":
-                return [
-                    { corpusId: "alpha", name: "Alpha" },
-                    { corpusId: "beta", name: "Beta" },
-                ];
-            case "memoryListViewBuilds":
-                return [job()];
-            case "memoryListViews":
-                return { head: null, views: [] };
-            case "memoryGetViewBuild":
-                return job();
-            default:
-                throw new Error(`Unexpected method ${method}`);
-        }
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async (method: string) => {
+            switch (method) {
+                case "memoryViewCapabilities":
+                    return { derivedViews: { builds: true } };
+                case "memoryListCorpora":
+                    return [
+                        { corpusId: "alpha", name: "Alpha" },
+                        { corpusId: "beta", name: "Beta" },
+                    ];
+                case "memoryListViewBuilds":
+                    return [job()];
+                case "memoryListViews":
+                    return { head: null, views: [] };
+                case "memoryGetViewBuild":
+                    return job();
+                default:
+                    throw new Error(`Unexpected method ${method}`);
+            }
+        }),
+    );
 });
 
 test("partial builds and failed targets remain explicit in Activity and Inbox", async () => {
@@ -102,9 +108,11 @@ test("partial builds and failed targets remain explicit in Activity and Inbox", 
     expect(attention.textContent).toContain("Wiki");
     expect(
         invoke.mock.calls.filter(
-            ([method]) => method === "memoryListViewBuilds",
+            ([method]) => method === "memoryListViewBuildSummaries",
         ),
-    ).toEqual([["memoryListViewBuilds", { corpusId: "alpha" }]]);
+    ).toEqual([
+        ["memoryListViewBuildSummaries", { corpusId: "alpha", pageSize: 25 }],
+    ]);
     textButton(attention, "Inspect operation").click();
     expect(onOpenBuild).toHaveBeenCalledWith("alpha", "job-1");
     mounted.dispose();
@@ -113,17 +121,19 @@ test("partial builds and failed targets remain explicit in Activity and Inbox", 
 test("cancellation is not displayed as acknowledged until the service says so", async () => {
     jest.useFakeTimers();
     const running = job("running");
-    invoke.mockImplementation(async (method: string) => {
-        if (method === "memoryViewCapabilities")
-            return { derivedViews: { builds: true } };
-        if (method === "memoryListCorpora")
-            return [{ corpusId: "alpha", name: "Alpha" }];
-        if (method === "memoryListViewBuilds") return [running];
-        if (method === "memoryGetViewBuild") return running;
-        if (method === "memoryListViews") return { head: null, views: [] };
-        if (method === "memoryCancelViewBuild") return running;
-        throw new Error(method);
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async (method: string) => {
+            if (method === "memoryViewCapabilities")
+                return { derivedViews: { builds: true } };
+            if (method === "memoryListCorpora")
+                return [{ corpusId: "alpha", name: "Alpha" }];
+            if (method === "memoryListViewBuilds") return [running];
+            if (method === "memoryGetViewBuild") return running;
+            if (method === "memoryListViews") return { head: null, views: [] };
+            if (method === "memoryCancelViewBuild") return running;
+            throw new Error(method);
+        }),
+    );
     const host = document.createElement("div");
     const mounted = mountMemoryHubViewActivity(
         host,
@@ -164,10 +174,12 @@ test("topic generations are not presented as openable Wiki article revisions", a
     value.results[0].topicGeneration = "topic-generation";
     value.results[0].reason = "Complete topic snapshot, not an article";
     const previous = invoke.getMockImplementation()!;
-    invoke.mockImplementation((method: string, request: unknown) =>
-        method === "memoryGetViewBuild"
-            ? Promise.resolve(value)
-            : previous(method, request),
+    invoke.mockImplementation(
+        inventoryFixture((method: string, request: unknown) =>
+            method === "memoryGetViewBuild"
+                ? Promise.resolve(value)
+                : previous(method, request),
+        ),
     );
     const host = document.createElement("div");
     const onOpenView = jest.fn();
@@ -222,36 +234,41 @@ test("current indexing attention is counted once and maintenance plans respect t
         provenance: "generated",
     }));
     invoke.mockImplementation(
-        async (
-            method: string,
-            params: { viewIds?: string[]; viewId?: string },
-        ) => {
-            if (method === "memoryViewCapabilities")
-                return { derivedViews: { builds: true, maintenance: true } };
-            if (method === "memoryListCorpora")
-                return [{ corpusId: "alpha", name: "Alpha" }];
-            if (method === "memoryListViewBuilds") return [];
-            if (method === "memoryListViews") return { head: "head", views };
-            if (method === "memoryPlanViewMaintenance")
-                return {
-                    corpusId: "alpha",
-                    expectedHead: "head",
-                    targets: params.viewIds!.map((viewId) => ({
-                        viewId,
-                        expectedVersion: 1,
-                        state: "pinned",
-                        reason: "Pinned",
-                    })),
-                };
-            if (method === "memoryGetViewPublication")
-                return {
-                    viewId: params.viewId,
-                    indexState:
-                        params.viewId === "guide-0" ? "failed" : "absent",
-                    reason: "Indexer unavailable",
-                };
-            throw new Error(method);
-        },
+        inventoryFixture(
+            async (
+                method: string,
+                params: { viewIds?: string[]; viewId?: string },
+            ) => {
+                if (method === "memoryViewCapabilities")
+                    return {
+                        derivedViews: { builds: true, maintenance: true },
+                    };
+                if (method === "memoryListCorpora")
+                    return [{ corpusId: "alpha", name: "Alpha" }];
+                if (method === "memoryListViewBuilds") return [];
+                if (method === "memoryListViews")
+                    return { head: "head", views };
+                if (method === "memoryPlanViewMaintenance")
+                    return {
+                        corpusId: "alpha",
+                        expectedHead: "head",
+                        targets: params.viewIds!.map((viewId) => ({
+                            viewId,
+                            expectedVersion: 1,
+                            state: "pinned",
+                            reason: "Pinned",
+                        })),
+                    };
+                if (method === "memoryGetViewPublication")
+                    return {
+                        viewId: params.viewId,
+                        indexState:
+                            params.viewId === "guide-0" ? "failed" : "absent",
+                        reason: "Indexer unavailable",
+                    };
+                throw new Error(method);
+            },
+        ),
     );
     const attention = document.createElement("div");
     const onAttentionCount = jest.fn();
@@ -271,12 +288,12 @@ test("current indexing attention is counted once and maintenance plans respect t
     const plans = invoke.mock.calls.filter(
         ([method]) => method === "memoryPlanViewMaintenance",
     );
-    expect(plans.map(([, params]) => params.viewIds.length)).toEqual([32, 1]);
-    expect(onAttentionCount).toHaveBeenLastCalledWith(1);
+    expect(plans.map(([, params]) => params.viewIds.length)).toEqual([25]);
+    expect(onAttentionCount).toHaveBeenLastCalledWith(2);
     expect(attention.textContent).toContain(
         "Indexing failed: Indexer unavailable",
     );
-    textButton(attention, "Inspect publication and retry indexing").click();
+    textButton(attention, "Retry indexing").click();
     expect(onOpenView).toHaveBeenCalledWith("alpha", "guide-0");
     mounted.scopeChanged();
     expect(attention.textContent).toBe("");

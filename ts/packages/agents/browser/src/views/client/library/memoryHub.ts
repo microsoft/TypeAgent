@@ -13,6 +13,7 @@ import { invokeView, invokeMemory } from "./viewClient";
 import { mountMemoryManagement } from "./memoryManagement";
 import { mountMemoryHubSearch } from "./memoryHubSearch";
 import { mountMemoryHubExplore } from "./memoryHubExplore";
+import { mountMemoryHubGraph } from "./memoryHubGraph";
 import { mountMemoryHubChanges } from "./memoryHubChanges";
 import { mountMemoryHubImports } from "./memoryHubImports";
 import { mountMemoryHubCapture } from "./memoryHubCapture";
@@ -68,6 +69,7 @@ let focusReturn: { corpusId: string; sourceId: string } | undefined;
 let manager: ReturnType<typeof mountMemoryManagement>;
 let searchPanel: ReturnType<typeof mountMemoryHubSearch>;
 let explorePanel: ReturnType<typeof mountMemoryHubExplore>;
+let graphPanel: ReturnType<typeof mountMemoryHubGraph>;
 let changesPanel: ReturnType<typeof mountMemoryHubChanges>;
 let importsPanel: ReturnType<typeof mountMemoryHubImports>;
 let capturePanel: ReturnType<typeof mountMemoryHubCapture>;
@@ -76,6 +78,7 @@ let draftViewsPanel: ReturnType<typeof mountMemoryHubViews>;
 let questionsPanel: ReturnType<typeof mountMemoryHubQuestions>;
 let viewActivityPanel: ReturnType<typeof mountMemoryHubViewActivity>;
 let viewAttentionCount = 0;
+let questionAttentionCount = 0;
 
 let runbookImportsPanel: ReturnType<typeof mountMemoryHubRunbookImports>;
 let webMaintenancePanel: ReturnType<typeof mountMemoryHubWebMaintenance>;
@@ -86,6 +89,7 @@ let pendingSearchQuery: string | undefined;
 function invalidateDiscovery(): void {
     searchPanel.scopeChanged();
     explorePanel.scopeChanged();
+    graphPanel?.scopeChanged();
 }
 
 const PDF_CHIP = "pdf";
@@ -208,6 +212,31 @@ function mountPhaseTwo(): void {
         scope: selectedScope,
         onOpenSource,
         onError,
+    });
+    graphPanel = mountMemoryHubGraph(el("hubWebExplore"), {
+        scope: selectedScope,
+        onOpenSource,
+        onError,
+        onRouteChanged: (kind, selection) => {
+            if (parseRoute(location.hash).page !== "explore") return;
+            const route: HubRoute =
+                kind === "entities"
+                    ? {
+                          page: "explore",
+                          webView: "entities",
+                          webEntity: selection,
+                      }
+                    : {
+                          page: "explore",
+                          webView: "topics",
+                          webTopic: `${kind === "hierarchy" ? "hierarchy" : "cooccurrence"}:${selection ?? ""}`,
+                      };
+            const hash = routeHash(route);
+            if (hash !== location.hash) {
+                history.pushState(history.state, "", hash);
+                lastHash = hash;
+            }
+        },
     });
     changesPanel = mountMemoryHubChanges(el("hubChanges"), {
         scope: selectedScope,
@@ -372,15 +401,10 @@ function inboxCard(item: MemoryHubInboxItem, dismissed: boolean): HTMLElement {
             }),
         );
     } else {
-        const more = [
-            {
-                label: "Snooze 1 day",
-                icon: "fa-bell-slash",
-                action: () => hideInboxItem(item, Date.now() + 86_400_000),
-            },
-        ];
         actions.append(
-            menuButton("More actions", more),
+            iconButton("fa-bell-slash", "Snooze 1 day", () =>
+                hideInboxItem(item, Date.now() + 86_400_000),
+            ),
             iconButton("fa-xmark", "Dismiss", () => hideInboxItem(item)),
         );
     }
@@ -447,7 +471,8 @@ function renderInboxChips(available: MemoryHubInboxItem[]): void {
 
 function renderInbox(): void {
     const counts = inboxCounts(snapshot.inbox, hidden, scope || undefined);
-    const attentionCount = counts.inbox + viewAttentionCount;
+    const attentionCount =
+        counts.inbox + viewAttentionCount + questionAttentionCount;
     el("inboxBadge").textContent = snapshotAvailable
         ? String(attentionCount)
         : "—";
@@ -488,7 +513,7 @@ function renderInbox(): void {
             .slice(inboxPage * 25, (inboxPage + 1) * 25)
             .map((item) => inboxCard(item, dismissed)),
     );
-    if (!items.length && !viewAttentionCount)
+    if (!items.length && !viewAttentionCount && !questionAttentionCount)
         list.append(
             inboxEmpty(
                 dismissed,
@@ -525,7 +550,7 @@ function renderErrors(): void {
     el("hubStatus").textContent = messages.length ? "Degraded" : "Connected";
 }
 
-async function refreshSnapshot(): Promise<void> {
+async function refreshSnapshot(refreshQuestions = true): Promise<void> {
     const version = ++snapshotVersion;
     let result: MemoryHubSnapshot;
     try {
@@ -582,6 +607,11 @@ async function refreshSnapshot(): Promise<void> {
     renderAddTargets();
     renderInbox();
     renderErrors();
+    if (!refreshQuestions) return;
+    if (questionsPanel && parseRoute(location.hash).page === "questions")
+        await questionsPanel.refresh();
+    else if (questionsPanel && parseRoute(location.hash).page === "inbox")
+        await questionsPanel.refreshAttention();
 }
 
 function renderAddTargets(): void {
@@ -1039,7 +1069,7 @@ function updateExploreScope(
 ): void {
     if (visiblePage !== "explore") return;
     const badge = el("exploreScopeBadge");
-    const browserOnly = !!route.webView;
+    const browserOnly = route.webView === "analytics";
     badge.classList.toggle("warn", browserOnly);
     badge.title = browserOnly
         ? "This view always reads TypeAgent Browser Memory and ignores the scope selector."
@@ -1054,7 +1084,14 @@ function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
     if (visiblePage !== "questions") questionsPanel.hide();
     if (visiblePage !== "activity") viewActivityPanel.hide();
     if (visiblePage !== "settings") webMaintenancePanel.hide();
-    if (visiblePage !== "explore" || !route.webView) webExplorePanel.hide();
+    if (visiblePage !== "explore" || route.webView !== "analytics")
+        webExplorePanel.hide();
+    if (
+        visiblePage !== "explore" ||
+        !route.webView ||
+        route.webView === "analytics"
+    )
+        graphPanel.hide();
     if (visiblePage !== "explore" || route.webView) explorePanel.hide();
     el("hubExplore").hidden = !!route.webView;
     updateExploreNavigation(route.webView);
@@ -1139,8 +1176,6 @@ async function showSourceRoute(
     sourceId: string,
     version: number,
 ): Promise<void> {
-    await manager.selectSource(sourceId);
-    if (version !== routeVersion) return;
     const corpusName =
         snapshot.corpora.find((corpus) => corpus.corpusId === corpusId)?.name ??
         "unavailable";
@@ -1148,7 +1183,10 @@ async function showSourceRoute(
         `Source corpus: ${corpusName}${scope && corpusId !== scope ? " (outside selected scope)" : ""}`;
     el("hubDrawer").classList.remove("hidden");
     await showTab("content");
+    if (version !== routeVersion) return;
     el("drawerClose").focus();
+    await manager.selectSource(sourceId, corpusId);
+    if (version !== routeVersion) return;
 }
 
 async function showManagedRoute(
@@ -1156,7 +1194,12 @@ async function showManagedRoute(
     item: MemoryHubInboxItem | undefined,
     version: number,
 ): Promise<void> {
-    if (!route.webView && !route.corpusId && scope && !namedScopeAvailable())
+    if (
+        route.webView !== "analytics" &&
+        !route.corpusId &&
+        scope &&
+        !namedScopeAvailable()
+    )
         throw new Error(
             "The selected corpus no longer exists. Choose another scope.",
         );
@@ -1176,11 +1219,13 @@ async function showManagedRoute(
         return;
     }
     if (route.page === "inbox" || route.webView) return;
-    await manager.selectCorpus(corpusId);
-    if (version !== routeVersion) return;
     if (route.page === "library" && route.objectId) {
         await showSourceRoute(corpusId, route.objectId, version);
-    } else if (route.page === "activity" && route.objectId) {
+        return;
+    }
+    await manager.selectCorpus(corpusId);
+    if (version !== routeVersion) return;
+    if (route.page === "activity" && route.objectId) {
         el("page-activity").dataset.activityTab = "jobs";
         if (route.activityKind !== "view-build")
             await showJob(corpusId, route.objectId, version);
@@ -1211,9 +1256,10 @@ function restoreFocus(visiblePage: (typeof pages)[number]): void {
 
 async function applyRoute(): Promise<void> {
     const version = ++routeVersion;
+    manager.cancelSourceSelection();
     const route = parseRoute(location.hash);
     if (route.page === "inbox") {
-        await refreshSnapshot();
+        await refreshSnapshot(false);
         if (version !== routeVersion) return;
     }
     const item =
@@ -1234,7 +1280,7 @@ async function applyRoute(): Promise<void> {
         await searchPanel.show(query);
     } else if (route.page === "explore") {
         if (!route.webView) await explorePanel.show();
-        else
+        else if (route.webView === "analytics")
             await webExplorePanel.show({
                 view: route.webView,
                 ...(route.webEntity === undefined
@@ -1243,6 +1289,14 @@ async function applyRoute(): Promise<void> {
                 ...(route.webTopic === undefined
                     ? {}
                     : { topic: route.webTopic }),
+            });
+        else
+            await graphPanel.show({
+                view: route.webView,
+                selection:
+                    route.webView === "entities"
+                        ? route.webEntity
+                        : route.webTopic,
             });
     } else if (route.page === "activity") {
         await viewActivityPanel.show(
@@ -1259,7 +1313,11 @@ async function applyRoute(): Promise<void> {
     }
     if (version !== routeVersion) return;
     renderInbox();
-    if (route.page === "inbox") await viewActivityPanel.refresh();
+    if (route.page === "inbox")
+        await Promise.all([
+            questionsPanel.refreshAttention(),
+            viewActivityPanel.refresh(),
+        ]);
     restoreFocus(visiblePage);
 }
 
@@ -1272,6 +1330,28 @@ export async function mountMemoryHub(): Promise<void> {
     el("hubRefresh").onclick = () => location.reload();
     await loadManagement();
     mountPhaseTwo();
+    questionsPanel = mountMemoryHubQuestions(
+        el("hubQuestions"),
+        el("hubQuestionAttention"),
+        {
+            scope: () => scope || undefined,
+            corpora: () => snapshot.corpora,
+            hidden,
+            persistHidden,
+            onError: (error) => {
+                void hubAction(async () => {
+                    throw error;
+                });
+            },
+            onOpenSource: (corpusId, objectId) => {
+                open({ page: "library", corpusId, objectId });
+            },
+            onAttentionCount: (count) => {
+                questionAttentionCount = count;
+                renderInbox();
+            },
+        },
+    );
 
     draftViewsPanel = mountMemoryHubViews(el("hubDraftViews"), {
         scope: () => scope || undefined,
@@ -1292,27 +1372,10 @@ export async function mountMemoryHub(): Promise<void> {
         onChanged: async () => {
             invalidateDiscovery();
             await refreshSnapshot();
-            await viewActivityPanel.refresh();
+            if (["inbox", "activity"].includes(parseRoute(location.hash).page))
+                await viewActivityPanel.refresh();
         },
     });
-    questionsPanel = mountMemoryHubQuestions(
-        el("hubQuestions"),
-        el("hubQuestionAttention"),
-        {
-            scope: () => scope || undefined,
-            corpora: () => snapshot.corpora,
-            hidden,
-            persistHidden: () =>
-                localStorage.setItem(HIDE_KEY, JSON.stringify(hidden)),
-            onError: (error) => {
-                void hubAction(async () => {
-                    throw error;
-                });
-            },
-            onOpenSource: (corpusId, objectId) =>
-                open({ page: "library", corpusId, objectId }),
-        },
-    );
     viewActivityPanel = mountMemoryHubViewActivity(
         el("hubViewActivity"),
         el("hubViewAttention"),
@@ -1387,8 +1450,6 @@ export async function mountMemoryHub(): Promise<void> {
             localStorage.getItem("memoryHub.ask") ??
             ""
         ).trim() || undefined;
-    await hubAction(refreshSnapshot);
-    if (snapshotAvailable) await hubAction(applyRoute);
     el("hubRefresh").onclick = null;
     const query =
         new URLSearchParams(location.search).get("query") ??
@@ -1430,7 +1491,7 @@ export async function mountMemoryHub(): Promise<void> {
         if (!discardChanges()) return;
         void hubAction(async () => {
             invalidateDiscovery();
-            await refreshSnapshot();
+            await refreshSnapshot(parseRoute(location.hash).page !== "inbox");
             await applyRoute();
         });
     });
@@ -1451,7 +1512,10 @@ export async function mountMemoryHub(): Promise<void> {
         renderErrors();
         inboxPage = 0;
         const route = parseRoute(location.hash);
-        location.hash = routeHash({ page: route.page });
+        location.hash = routeHash({
+            page: route.page,
+            ...(route.webView ? { webView: route.webView } : {}),
+        });
         void hubAction(applyRoute);
     });
     el("inboxDismissed").addEventListener("change", () => {
@@ -1570,8 +1634,22 @@ export async function mountMemoryHub(): Promise<void> {
         webMaintenancePanel.dispose();
         viewPreferencesPanel.dispose();
         webExplorePanel.dispose();
+        graphPanel.dispose();
         window.removeEventListener("beforeunload", guardPreferences);
     });
+    const initialRoute = parseRoute(location.hash);
+    if (
+        initialRoute.corpusId &&
+        initialRoute.objectId &&
+        (initialRoute.page === "views" || initialRoute.page === "library")
+    ) {
+        const detail = hubAction(applyRoute);
+        await hubAction(() => refreshSnapshot(false));
+        await detail;
+    } else {
+        await hubAction(() => refreshSnapshot(false));
+        if (snapshotAvailable) await hubAction(applyRoute);
+    }
 }
 
 if (document.body.dataset.memoryHub) void hubAction(mountMemoryHub);

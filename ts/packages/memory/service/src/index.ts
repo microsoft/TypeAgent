@@ -11,6 +11,7 @@ export * from "./procedureMarkdown.js";
 export * from "./revisionAssetStore.js";
 export * from "./rpcFacade.js";
 export * from "./types.js";
+export * from "./graphTypes.js";
 export * from "./sourceSynopsis.js";
 export * from "./wikiBudget.js";
 export * from "./viewHostOptions.js";

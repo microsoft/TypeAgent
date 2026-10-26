@@ -1,5 +1,12 @@
 # @typeagent/memory-mcp-server
 
+Supporting hosts expose `memory_graph_query` and `memory_graph_support` for
+bounded document/event graph projections and exact provenance pages. Tool
+registration follows the host's actual graph capability. Responses include
+coverage states, counts, budgets and generation-bound continuations; graph reads
+do not silently build an index or imply checkpoint readiness. Summary inventory
+tools provide paginated view/build metadata and batched publication status.
+
 MCP tools for importing content, searching sources, answering questions with
 citations, and managing memory. The server calls `MemoryService`; it does not
 implement a separate memory store or retrieval engine. Destructive tools use

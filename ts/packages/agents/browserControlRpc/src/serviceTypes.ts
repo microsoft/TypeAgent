@@ -2,6 +2,12 @@
 // Licensed under the MIT License.
 
 import type {
+    InventoryPageRequest,
+    ViewSummaryRequest,
+    ViewSummaryPage,
+    ViewBuildSummary,
+    ViewPublicationBatchRequest,
+    MemoryPage,
     QuestionSummaryRequest,
     QuestionSummaryPage,
     QuestionReadRequest,
@@ -253,6 +259,15 @@ export type MemoryCenterActivityFilter = {
 };
 
 export type MemoryCenterInvokeFunctions = {
+    memoryListViewSummaries(
+        params: ViewSummaryRequest,
+    ): Promise<ViewSummaryPage>;
+    memoryListViewBuildSummaries(
+        params: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>>;
+    memoryGetViewPublications(
+        params: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]>;
     memoryGetViewPublicationPolicy(params: {
         corpusId: string;
     }): Promise<ViewPublicationPolicy>;

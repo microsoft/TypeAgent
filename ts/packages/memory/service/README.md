@@ -10,6 +10,28 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Scoped knowledge graphs and read inventories
+
+`queryKnowledgeGraph` reads bounded entity, raw-topic or maintained-hierarchy
+projections across eligible documents and conversation events. Evidence-kind and
+event filters apply before aggregation. Responses report independent document,
+event and topic coverage (`ready`, `building`, `stale`, `error` or `unsupported`),
+exact support counts, omitted counts and response budgets. Index preparation is
+scheduled separately from graph reads; an unavailable projection is not an empty,
+ready graph.
+
+Node, edge and support pages bind to a stable generation. `queryGraphSupport`
+returns exact source revisions or event identities; evidence changes invalidate
+continuations. Forgetting, suppression and authority constraints also apply to
+projections and drilldown. Maintained hierarchy summaries reuse topic maintenance
+and lazy concept summaries; these graph APIs do not require knowledge checkpoints
+or integrated answering.
+
+View, build and publication summary operations avoid loading full evidence bodies
+for list navigation. A committed read projection preserves historical conflict
+fallback and source eligibility checks. View/event index preparation can release
+the writer lease, then revalidates captured evidence before installation.
+
 ## Document import token budgets
 
 Text, Markdown, HTML/web and VTT retain their format-specific parsers and then
