@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 import { TypeAgentServer } from "./typeAgentServer.js";
-import { loadConfig } from "@typeagent/config";
+import { loadApiRuntime } from "./containerBootstrap.js";
+import { startAfterBootstrap } from "./startup.js";
+import { resolveApiAgentProfile } from "./hostedAgentProfile.js";
 import { otel } from "@typeagent/telemetry";
 import registerDebug from "debug";
 
@@ -39,26 +41,32 @@ process.once("SIGTERM", () => {
 });
 
 async function main(): Promise<void> {
-    // Load config from YAML layers + Key Vault (replacing legacy dotenv).
-    await loadConfig({ keyVault: {}, strict: false });
-    const telemetryConfig = otel.resolveTelemetryConfig();
-    await otel.initTelemetry({
-        config: telemetryConfig,
-        processName: "api-server",
-        debugModules: [registerDebug],
-        debugBridge: {
-            includedNamespacePrefixes: ["typeagent:", "agent-server:"],
-        },
+    await startAfterBootstrap(loadApiRuntime, async (runtime) => {
+        const telemetryConfig = otel.resolveTelemetryConfig();
+        await otel.initTelemetry({
+            config: telemetryConfig,
+            processName: "api-server",
+            debugModules: [registerDebug],
+            debugBridge: {
+                includedNamespacePrefixes: ["typeagent:", "agent-server:"],
+            },
+        });
+        if (shutdownRequested) {
+            return;
+        }
+
+        typeAgentServer = new TypeAgentServer(
+            (exitCode) => {
+                void shutdownHost(exitCode);
+            },
+            telemetryConfig.structuredLogs === true,
+            runtime.config,
+            resolveApiAgentProfile(process.env),
+            runtime.azureCredentialFactory,
+        );
+
+        await typeAgentServer.start();
     });
-    if (shutdownRequested) {
-        return;
-    }
-
-    typeAgentServer = new TypeAgentServer((exitCode) => {
-        void shutdownHost(exitCode);
-    }, telemetryConfig.structuredLogs === true);
-
-    await typeAgentServer.start();
 }
 
 await main().catch(async (error) => {

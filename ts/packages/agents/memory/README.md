@@ -1,10 +1,11 @@
 # TypeAgent memory agent
 
-`@typeagent/memory-agent` is the first-party AppAgent for the durable
-`@typeagent/memory-service`. The host must inject either a `MemoryService`
-directly as `AppAgentInitSettings.options`, or an options object containing
-`{ memoryServiceClient: MemoryService }`. This package does not create or own
-a memory store.
+Use `@memory` to import Markdown files, search saved content, ask questions with
+citations, and manage sources and ingestion jobs. The agent uses the host's
+`@typeagent/memory-service`; it does not create a separate store.
+
+Hosts must inject a `MemoryService` directly as `AppAgentInitSettings.options`,
+or pass `{ memoryServiceClient: MemoryService }`. See [Host setup](#host-setup).
 
 ## Role and relationship to the MCP server
 
@@ -40,13 +41,10 @@ TypeAgent user -> native @memory agent -> injected MemoryService
 External client -> memory MCP server   -> the same MemoryService
 ```
 
-The dynamically generated `@memory-mcp` agent is intentionally registered next
-to native `@memory`. This is a design decision, not an oversight: together with
-the Copilot CLI memory plugin (which has its own store and is deliberately not
-connected to the durable service), it is one arm of an experiment to learn
-which path makes an externally consumable MCP package easier to build and
-support. Native `@memory` remains the preferred TypeAgent interaction surface;
-do not remove or hide either agent until the experiment concludes.
+Native `@memory` is the preferred TypeAgent interface. The dynamically generated
+`@memory-mcp` agent is also registered so the project can compare native and MCP
+integration. Keep both available during that experiment. The Copilot CLI memory
+plugin has its own store and does not connect to the durable service.
 
 The agent must not independently implement knowledge extraction, indexing,
 revision semantics, retrieval ranking, deletion cleanup, or durable job state.
@@ -68,6 +66,7 @@ cancel those durable jobs explicitly.
 
 - `@memory corpus create|list|use|info|clear`
 - `@memory import file|folder|status|cancel`
+- `@memory import session <path> --type agent-session-jsonl|copilot-session-jsonl --session <id> [--repository <repository>] [--commit <commit>] [--environment <environment>] [--maxBytes <bytes>]`
 - `@memory sources list|show|knowledge|replace|forget`
 - `@memory search`, `@memory ask`, `@memory explain`
 - `@memory jobs list|show|cancel`
@@ -78,14 +77,51 @@ cancel those durable jobs explicitly.
 corpus, retained for 90 days. Unsupported services fail explicitly; history
 is not synthesized from session logs.
 
-Imported instructions remain source evidence. Derived Views are built explicitly
-through the memory Views service; importing a document does not detect procedure
-candidates, save procedures, review an edition, or grant execution permission.
+Imported instructions remain source evidence. With the default-enabled
+informational capability, committed index changes can schedule automatic
+Wiki/Projects and Topics work; explicit builds and maintenance use the same
+owning service. Importing does not detect saved-procedure candidates, save
+procedures, review an edition, or grant execution permission. See
+[the current-system map](../../../docs/architecture/memory/current-system.md)
+and [View maintenance](../../../docs/architecture/memory/view-maintenance.md).
 
 Corpus clearing, source replacement, and source forgetting use a preview token.
 Run the command once, inspect the preview, then repeat it with `--confirm
-<token>`. Tokens expire after five minutes; replacement confirmation also fails
-if the source revision or file content changed.
+<token>`. Clear and replacement tokens expire after five minutes; source-forget
+tokens expire after ten minutes. Replacement confirmation also fails if the
+source revision or file content changed.
+
+## Explicit agent-session import
+
+After selecting an active corpus, explicitly opt in with, for example:
+
+```text
+@memory import session "sessions\events.jsonl" --type copilot-session-jsonl --session session-42 --repository example/repo --commit abc123 --environment development
+```
+
+`agent-session-jsonl` is also supported. The trusted host streams the selected
+regular file into sequential chunks of at most 512 KiB UTF-8 and 1,000 lines,
+polling each receipt before advancing its expected cursor and sealing the
+session. The default file limit is 50 MiB; `--maxBytes` can lower it.
+Optional `--repository`, `--commit`, and `--environment` scope flags are
+forwarded unchanged on every chunk and the finalization request.
+The reader reuses native import containment checks, refuses linked files,
+rejects oversized individual lines and invalid UTF-8, and detects file changes
+before finalization. Paths never cross MCP. The exported
+`importAgentSessionPath(service, options)` helper also accepts optional scope,
+an abort signal, polling interval, and polling timeout.
+
+The command waits for completion and displays the durable import receipt.
+Use `getAgentSessionImport({ corpusId, sessionId })` and
+`cancelAgentSessionImport({ corpusId, sessionId })` on the injected service or
+typed client for subsequent status/cancellation. A retry must replay the
+unchanged file with the same session ID; stable positional chunk keys and the
+store's request hashes make exact retries idempotent and reject changed
+content. Replays validate every earlier chunk even when an old key returns a
+newer receipt; the reader retains each chunk's original expected cursor.
+Import errors leave already accepted chunks observable.
+Unsupported hosts fail explicitly. Ordinary Markdown imports and
+natural-language ingestion do not infer agent sessions.
 
 ## Markdown import
 
@@ -110,11 +146,12 @@ states, so a batch remains running while accepted jobs are indexing. Restored
 batches reconstruct their current state from those jobs. `--wait` also waits
 for terminal service job states before the import command returns.
 
-`ask` calls `MemoryService.answer`, which by default synthesizes the answer with
-KnowPro's answer generator over the retrieved evidence, and renders it with
-citation metadata. `ask --extractive` returns the ranked evidence snippets
-verbatim. `explain` shows the answer and citations retained from
-the latest session answer.
+`ask` calls `MemoryService.answer` and renders citation metadata. When
+informational support is enabled, non-extractive answers use indexed source
+fragments and the informational evidence-answer path; otherwise the service
+uses its corpus-index/KnowPro answer path. `ask --extractive` returns ranked
+evidence snippets. Neither branch silently substitutes an extractive success
+for synthesis failure. `explain` shows the latest session answer and citations.
 
 ## Host setup
 

@@ -3,6 +3,7 @@
 
 import { z } from "zod";
 import { runbookImportViewSchemas } from "./runbookImportSchemas.mjs";
+import { questionSchemas } from "./questionSchemas.mjs";
 import {
     viewReadRequestSchema,
     viewSaveRequestSchema,
@@ -18,6 +19,8 @@ import {
     viewMaintenanceRequestSchema,
     viewMaintenanceUpdateSchema,
     viewMaintenanceReadSchema,
+    sourceSynopsisRequestSchema,
+    topicQueryRequestSchema,
 } from "@typeagent/memory-client";
 import type {
     ViewMethod,
@@ -82,6 +85,10 @@ function protocolInput(schema: {
 // Each entry is an explicitly exposed domain operation, never a browser-control method.
 const schemas: Record<ViewMethod, z.ZodType> = {
     memoryViewCapabilities: empty,
+    memoryQueryTopics: protocolInput(topicQueryRequestSchema),
+    memoryRebuildTopics: z.strictObject({
+        corpusId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/),
+    }),
     memoryListViews: z.strictObject(corpus),
     memoryGetView: protocolInput(viewReadRequestSchema),
     memorySaveViewDraft: protocolInput(viewSaveRequestSchema),
@@ -107,6 +114,7 @@ const schemas: Record<ViewMethod, z.ZodType> = {
     memoryGetViewConflict: protocolInput(viewConflictReadSchema),
     memoryResolveViewConflict: protocolInput(viewResolutionSchema),
     ...runbookImportViewSchemas,
+    ...questionSchemas,
     memoryHubViewUsedBy: z.strictObject({ ...source, ...page }),
     memoryHubSourceOriginal: z.strictObject({
         ...source,
@@ -133,9 +141,15 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         dateTo: z.iso.datetime({ offset: true }).optional(),
         conversationScope: z.enum(["none", "current", "all"]).optional(),
         viewKinds: z
-            .enum(["troubleshootingGuide", "projectBrief", "timeline", "wiki"])
+            .enum([
+                "troubleshootingGuide",
+                "projectBrief",
+                "timeline",
+                "wiki",
+                "schemaView",
+            ])
             .array()
-            .max(4)
+            .max(5)
             .optional(),
     }),
     memoryHubEvidence: z.discriminatedUnion("kind", [
@@ -234,6 +248,9 @@ const schemas: Record<ViewMethod, z.ZodType> = {
             .optional(),
     }),
     memoryGetSource: z.strictObject(source),
+    memoryGetSourceSynopsis: protocolInput(
+        sourceSynopsisRequestSchema.strict(),
+    ),
     memoryGetSourceContent: z.strictObject({
         ...source,
         revisionId: optionalText,

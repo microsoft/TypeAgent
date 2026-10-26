@@ -3,4 +3,5 @@
 
 module.exports = {
     ...require("../../../jest.config.js"),
+    ...(process.env.CI === "true" ? { workerIdleMemoryLimit: "1GB" } : {}),
 };

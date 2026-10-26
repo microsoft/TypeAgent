@@ -7,9 +7,14 @@ import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import {
     InProcessMemoryServiceClient,
     McpMemoryServiceClient,
+    agentSessionToolNames,
     changeReceiptSchema,
     memoryToolNames,
+    topicToolNames,
     viewToolNames,
+    schemaViewToolNames,
+    acquisitionToolNames,
+    inventoryToolNames,
 } from "@typeagent/memory-client";
 import type {
     DocumentIngestRequest,
@@ -408,8 +413,13 @@ describe("MemoryMcpServer", () => {
         const tools = await client.listTools();
         expect(tools.tools.map((tool) => tool.name).sort()).toEqual(
             [
+                ...Object.values(agentSessionToolNames),
                 ...Object.values(memoryToolNames),
+                ...Object.values(topicToolNames),
                 ...Object.values(viewToolNames),
+                ...Object.values(schemaViewToolNames),
+                ...Object.values(acquisitionToolNames),
+                ...Object.values(inventoryToolNames),
             ].sort(),
         );
     });

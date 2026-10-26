@@ -8,9 +8,11 @@ import path from "node:path";
 import {
     createDocMemorySettings,
     docPartsFromMarkdown,
+    countDocTokens,
 } from "@typeagent/conversation-memory";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { createKnowProCorpusIndex } from "../src/knowProCorpusIndex.js";
+import type { IngestionSource, SourceType } from "../src/types.js";
 
 const markdown =
     "# Zephyr report\r\n\r\nZephyr **recovery** preserves source identity.\r\n";
@@ -41,6 +43,7 @@ describe("Markdown source persistence with stubbed KnowPro", () => {
 
     function openService(): FileMemoryService {
         return new FileMemoryService(root, {
+            informationalViews: false,
             indexFactory: (corpusId, directory) =>
                 createKnowProCorpusIndex(corpusId, directory, () => {
                     const settings = createDocMemorySettings(64, undefined, {
@@ -165,7 +168,7 @@ describe("Markdown source persistence with stubbed KnowPro", () => {
                 {
                     collectLinkKnowledge: false,
                     collectStructuralKnowledge: false,
-                    maxTokensPerPart: 7500,
+                    maxTokensPerPart: 24000,
                 },
             ).map((part) => part.textChunks.join("\n"));
             expect(expectedSnippets).toContain(evidence.snippet);
@@ -200,6 +203,85 @@ describe("Markdown source persistence with stubbed KnowPro", () => {
         ).toBe(true);
     }
 
+    const tokenBudgetFormats: SourceType[] = [
+        "text",
+        "markdown",
+        "web",
+        "html",
+        "vtt",
+    ];
+    test.each(tokenBudgetFormats)(
+        "durable %s ingestion budgets actual extraction inputs and retains the source",
+        async (sourceType) => {
+            const body =
+                "Zephyr " + "\uC548\uB155\uD558\uC138\uC694".repeat(2_000);
+            const content =
+                sourceType === "html"
+                    ? `<html><body><p>${body}</p></body></html>`
+                    : sourceType === "vtt"
+                      ? `WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n<v Alice>${body}</v>\n`
+                      : body;
+            const source: IngestionSource = {
+                sourceId: sourceType,
+                sourceType,
+                title: "Token budget",
+            };
+            if (sourceType === "html") {
+                source.html = content;
+            } else if (sourceType === "markdown" || sourceType === "web") {
+                source.markdown = content;
+            } else {
+                source.text = content;
+            }
+            const { corpusId } = await service.createCorpus("Token budget");
+            const job = await service.ingestDocument({ corpusId, source });
+            await waitForJob(service, job.jobId);
+            expect(extracted.length).toBeGreaterThan(0);
+            for (const input of extracted) {
+                expect(countDocTokens(input)).toBeLessThanOrEqual(24_000);
+            }
+            expect(
+                (
+                    await service.getSourceContent({
+                        corpusId,
+                        sourceId: sourceType,
+                    })
+                ).content,
+            ).toBe(content);
+        },
+        30_000,
+    );
+
+    test("coalesced KnowPro append preserves extraction scope and stable message citations through restart", async () => {
+        const { corpusId } = await service.createCorpus(
+            "Grouped Markdown reports",
+        );
+        await ingest(corpusId, "seed");
+        const perSourceExtractions = extracted.length;
+        await service.withIngestionGroup(async () => {
+            await Promise.all([
+                ingest(corpusId, "first"),
+                ingest(corpusId, "second"),
+            ]);
+        });
+        await checkEvidence(corpusId, ["seed", "first", "second"]);
+        expect(extracted.length).toBe(perSourceExtractions * 3);
+        const citations = async () =>
+            (
+                await service.search({ corpusId, query: "Zephyr", limit: 20 })
+            ).matches.map((hit) => ({
+                sourceId: hit.sourceId,
+                locator: hit.locator,
+                snippet: hit.snippet,
+            }));
+        const before = await citations();
+        await service.close();
+        service = openService();
+        await checkEvidence(corpusId, ["seed", "first", "second"]);
+        expect(await citations()).toEqual(before);
+        expect(extracted.length).toBe(perSourceExtractions * 3);
+    });
+
     test("uses ordinary Markdown and retains source attribution through append, restart, and reindex", async () => {
         const { corpusId } = await service.createCorpus("Markdown reports");
         await ingest(corpusId, "first");
@@ -225,6 +307,126 @@ describe("Markdown source persistence with stubbed KnowPro", () => {
                 path.join(root, corpusId, "index", manifest.indexGeneration),
             ),
         ).not.toContain("document-projection.json");
+    });
+
+    test("delta replacement extracts only changed content, filters tombstones before limits, and keeps retained citations stable", async () => {
+        const { corpusId } = await service.createCorpus(
+            "Delta Markdown reports",
+        );
+        for (const id of ["first", "unchanged", "also-unchanged"])
+            await ingest(corpusId, id);
+        const citations = async () =>
+            (
+                await service.search({ corpusId, query: "Zephyr", limit: 20 })
+            ).matches
+                .map((hit) => ({
+                    sourceId: hit.sourceId,
+                    revisionId: hit.revisionId,
+                    locator: hit.locator,
+                    snippet: hit.snippet,
+                }))
+                .sort((left, right) =>
+                    left.sourceId.localeCompare(right.sourceId),
+                );
+        const retained = (await citations()).filter(
+            (hit) => hit.sourceId !== "first",
+        );
+        const replace = async (text: string) => {
+            const current = (await service.getSource(corpusId, "first"))!;
+            const job = await service.replaceSource({
+                corpusId,
+                sourceId: "first",
+                expectedActiveRevisionId: current.activeRevisionId,
+                source: {
+                    sourceType: "markdown",
+                    title: "Changing report",
+                    markdown: text,
+                    tags: ["changing"],
+                },
+            });
+            await waitForJob(service, job.jobId);
+        };
+        for (let revision = 0; revision < 8; revision++) {
+            const before = extracted.length;
+            await replace(
+                `# Zephyr\n\nZephyr private-delta-${revision} recovery.`,
+            );
+            expect(extracted.length - before).toBe(1);
+            const result = await service.search({
+                corpusId,
+                query: "Zephyr",
+                tags: ["changing"],
+                limit: 1,
+            });
+            expect(result.matches).toHaveLength(1);
+            expect(result.matches[0]?.snippet).toContain(
+                `private-delta-${revision}`,
+            );
+        }
+        expect(
+            (await citations()).filter((hit) => hit.sourceId !== "first"),
+        ).toEqual(retained);
+        const beforeRestart = await citations();
+        const fragments = await service.search({
+            corpusId,
+            query: "Zephyr",
+            indexedFragments: true,
+            tags: ["changing"],
+            limit: 1,
+        });
+        expect(fragments.matches).toHaveLength(1);
+        expect(fragments.matches[0].snippet).toContain("private-delta-7");
+        const graph = await service.getKnowledgeGraph(corpusId);
+        expect(
+            graph.entities.find((entity) => entity.name === "Zephyr")
+                ?.mentionCount,
+        ).toBe(3);
+        expect(
+            graph.topics.find((topic) => topic.name === "recovery")
+                ?.mentionCount,
+        ).toBe(3);
+        const extractionCount = extracted.length;
+        await service.close();
+        service = openService();
+        expect(await citations()).toEqual(beforeRestart);
+        expect(extracted).toHaveLength(extractionCount);
+        await replace(markdown);
+        expect(extracted).toHaveLength(extractionCount);
+        expect(
+            (await service.getSource(corpusId, "first"))?.activeRevisionId,
+        ).toBe(contentHash);
+        await service.close();
+        service = openService();
+        expect(
+            (await citations()).find((hit) => hit.sourceId === "first")
+                ?.locator,
+        ).toBe("message:0");
+        const preview = await service.previewForgetSource(corpusId, "first");
+        await service.forgetSource({
+            corpusId,
+            sourceId: "first",
+            confirmationToken: preview.confirmationToken,
+        });
+        for (const directory of ["index", "revision-text"]) {
+            const rootDirectory = path.join(root, corpusId, directory);
+            const inspect = async (folder: string): Promise<void> => {
+                for (const entry of await readdir(folder, {
+                    withFileTypes: true,
+                })) {
+                    const file = path.join(folder, entry.name);
+                    if (entry.isDirectory()) await inspect(file);
+                    else
+                        expect(await readFile(file, "utf8")).not.toContain(
+                            "private-delta-",
+                        );
+                }
+            };
+            await inspect(rootDirectory);
+        }
+        expect((await citations()).map((hit) => hit.sourceId)).toEqual([
+            "also-unchanged",
+            "unchanged",
+        ]);
     });
 
     test.each(["search", "append"])(
@@ -272,6 +474,7 @@ describe("Markdown source persistence with stubbed KnowPro", () => {
             expect(migrated.indexGeneration).not.toBe(manifest.indexGeneration);
             expect(migrated.sources[0].revisions).toEqual(retainedRevisions);
             expect(await readdir(path.join(root, corpusId, "index"))).toEqual([
+                ".segments",
                 migrated.indexGeneration,
             ]);
             expect(

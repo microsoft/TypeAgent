@@ -15,9 +15,9 @@
  *   - ollama:  local OpenAI-compatible chat (`ollama serve`).
  *   - copilot: GitHub Copilot SDK chat (requires an authenticated `copilot` CLI).
  *
- * Embeddings default to the matching provider for Copilot, and to the bundled
- * CPU-only local embedder for Ollama. Callers can override that choice or
- * disable embeddings entirely.
+ * Embeddings default to pinned offline CPU/FP32 MiniLM for either provider.
+ * Gemma and hosted profiles are explicit choices. No model downloads occur
+ * without separate consent; selection is fixed until the server restarts.
  *
  * Config path precedence mirrors getKeys / the @typeagent/config loader:
  *   --out
@@ -37,7 +37,11 @@
  *   --embedding <mode>          copilot | local | ollama | openai | none.
  *   --embedding-endpoint <url>  Embedding endpoint (openai mode; full path).
  *   --embedding-model <name>    Embedding model name.
- *   --local-embedding-model <n> transformers.js model (default Xenova/all-MiniLM-L6-v2).
+ *   --local-embedding-model <n> minilm (default) | embeddinggemma; known IDs also accepted.
+ *   --default-embedding-model <alias> Select a named profile (or none).
+ *   --embedding-size <n>        Required dimensions for unknown hosted models.
+ *   --download-local-embedding [0|1] Explicit download consent (default: no).
+ *   --preserve-embedding-selection Keep existing embedding selection during upgrades.
  *   --local-embedding-cache-dir <path>
  *                               Persistent cache for local model files.
  *   --openai-key <key>          API key for openai embedding mode.
@@ -45,9 +49,16 @@
  */
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import yaml from "js-yaml";
+import {
+    downloadEmbeddingConsent,
+    provisionLocalEmbedding,
+    selectConfiguredEmbeddingAlias,
+    selectLocalEmbedding,
+    selectedLocalEmbedding,
+} from "./localEmbeddingModels.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -60,7 +71,6 @@ const DEFAULT_COPILOT_FALLBACK_MODELS = [
     "gpt-5.4",
 ];
 const DEFAULT_COPILOT_EMBEDDING_MODEL = "text-embedding-3-small";
-const DEFAULT_LOCAL_EMBEDDING_MODEL = "Xenova/all-MiniLM-L6-v2";
 const DEFAULT_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text";
 
 function arg(name, fallback) {
@@ -98,58 +108,6 @@ function ollamaBaseUrl(url) {
     return base;
 }
 
-// Minimal YAML emitter for the flat/nested shape we produce. Values are only
-// strings/numbers here, so quote strings that could otherwise be misparsed.
-function yamlScalar(value) {
-    if (typeof value === "number") {
-        return String(value);
-    }
-    const s = String(value);
-    // Quote when it contains characters YAML would treat specially, or looks
-    // like a non-string scalar. URLs (with ':') as *values* are fine unquoted
-    // in block style, but quoting is safest for keys like api paths.
-    if (
-        s === "" ||
-        /^[\s]|[\s]$/.test(s) ||
-        /[:#{}\[\],&*!|>'"%@`]/.test(s) ||
-        /^(true|false|null|yes|no|on|off|~)$/i.test(s) ||
-        /^[-+]?\d/.test(s)
-    ) {
-        return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-    }
-    return s;
-}
-
-// Render a nested plain-object tree into block-style YAML.
-function renderYaml(node, indent = 0) {
-    const pad = "  ".repeat(indent);
-    let out = "";
-    for (const [key, value] of Object.entries(node)) {
-        if (value === undefined || value === null) {
-            continue;
-        }
-        if (typeof value === "object" && !Array.isArray(value)) {
-            const nested = renderYaml(value, indent + 1);
-            if (nested.trim().length === 0) {
-                continue;
-            }
-            out += `${pad}${key}:\n${nested}`;
-        } else if (Array.isArray(value)) {
-            if (value.length === 0) {
-                out += `${pad}${key}: []\n`;
-                continue;
-            }
-            out += `${pad}${key}:\n`;
-            for (const item of value) {
-                out += `${pad}  - ${yamlScalar(item)}\n`;
-            }
-        } else {
-            out += `${pad}${key}: ${yamlScalar(value)}\n`;
-        }
-    }
-    return out;
-}
-
 function buildConfigTree(options) {
     const {
         provider,
@@ -171,7 +129,6 @@ function buildConfigTree(options) {
     if (provider === "ollama") {
         // Ollama exposes an OpenAI-compatible surface. The `local` sub-section
         // emits OLLAMA_ENDPOINT (base URL; aiclient appends the chat path).
-        openAI.apiKey = "ollama"; // dummy, non-empty
         openAI.local = {
             apiKey: "None",
             endpoint: ollamaBaseUrl(ollamaHost),
@@ -195,14 +152,11 @@ function buildConfigTree(options) {
                 embeddingModel || DEFAULT_COPILOT_EMBEDDING_MODEL;
             break;
         case "local":
-            embeddingSection.provider = "local";
-            embeddingSection.model =
-                localEmbeddingModel || DEFAULT_LOCAL_EMBEDDING_MODEL;
-            if (localEmbeddingCacheDir) {
-                embeddingSection.cacheDir = path.resolve(
-                    localEmbeddingCacheDir,
-                );
-            }
+            selectLocalEmbedding(
+                tree,
+                localEmbeddingModel || "minilm",
+                localEmbeddingCacheDir,
+            );
             break;
         case "ollama":
             openAI.apiKey ??= "ollama";
@@ -231,8 +185,38 @@ function buildConfigTree(options) {
     if (Object.keys(openAI).length > 0) {
         tree.openAI = openAI;
     }
-    tree.embedding = embeddingSection;
+    applyNamedEmbedding(tree, options, embeddingSection, openAI);
     return tree;
+}
+
+function applyNamedEmbedding(tree, options, embeddingSection, openAI) {
+    const { embedding } = options;
+    if (embedding !== "local" && embedding !== "none") {
+        const model = embeddingSection.model || openAI.modelEmbedding;
+        const knownSizes = {
+            "text-embedding-3-small": 1536,
+            "text-embedding-3-large": 3072,
+            "text-embedding-ada-002": 1536,
+            "nomic-embed-text": 768,
+        };
+        const size = options.embeddingSize ?? knownSizes[model];
+        if (!Number.isSafeInteger(size) || size <= 0) {
+            throw new Error(
+                "Unknown embedding dimensions; pass --embedding-size <positive integer>.",
+            );
+        }
+        tree.defaultEmbeddingModel = `${embedding}-embedding`;
+        tree.embeddingModels = {
+            [tree.defaultEmbeddingModel]: {
+                provider: embeddingSection.provider,
+                model,
+                size,
+                modalities: ["text"],
+            },
+        };
+    } else if (embedding === "none") {
+        tree.defaultEmbeddingModel = "none";
+    }
 }
 
 function header(provider, embedding) {
@@ -251,7 +235,89 @@ function header(provider, embedding) {
     ].join("\n");
 }
 
-function main() {
+function mergeConfig(existing, generated) {
+    const merged = { ...existing };
+    for (const [key, value] of Object.entries(generated)) {
+        merged[key] =
+            value && typeof value === "object" && !Array.isArray(value)
+                ? mergeConfig(existing?.[key] ?? {}, value)
+                : value;
+    }
+    return merged;
+}
+
+function mergeExistingConfig(tree, outPath) {
+    let preservedEmbeddingSelection = false;
+    if (fs.existsSync(outPath) && hasFlag("--force")) {
+        const existing = yaml.load(fs.readFileSync(outPath, "utf8")) ?? {};
+        if (typeof existing !== "object" || Array.isArray(existing)) {
+            throw new Error("Existing config must be a YAML mapping.");
+        }
+        const preserve =
+            hasFlag("--preserve-embedding-selection") ||
+            (!hasFlag("--embedding") && !hasFlag("--local-embedding-model"));
+        if (
+            preserve &&
+            (existing.defaultEmbeddingModel || existing.embedding)
+        ) {
+            preservedEmbeddingSelection = true;
+            delete tree.defaultEmbeddingModel;
+            delete tree.embeddingModels;
+            delete tree.embedding;
+        } else {
+            delete existing.embedding;
+            delete existing.defaultEmbeddingModel;
+        }
+        tree = mergeConfig(existing, tree);
+    }
+    return { tree, preservedEmbeddingSelection };
+}
+
+async function prepareEmbeddingSelection(
+    tree,
+    outPath,
+    preservedEmbeddingSelection,
+    embedding,
+) {
+    if (arg("--default-embedding-model")) {
+        await selectConfiguredEmbeddingAlias(
+            tree,
+            arg("--default-embedding-model"),
+            outPath,
+        );
+    }
+    let download = downloadEmbeddingConsent();
+    if (download && tree.defaultEmbeddingModel) {
+        await selectConfiguredEmbeddingAlias(
+            tree,
+            tree.defaultEmbeddingModel,
+            outPath,
+        );
+    }
+    const selectedProvider =
+        tree.embeddingModels?.[tree.defaultEmbeddingModel]?.provider ??
+        tree.embedding?.provider;
+    if (preservedEmbeddingSelection && selectedProvider !== "local") {
+        download = false;
+    }
+    if (
+        download &&
+        !tree.defaultEmbeddingModel &&
+        tree.embedding?.provider === "local"
+    ) {
+        selectLocalEmbedding(
+            tree,
+            tree.embedding.runtime ?? tree.embedding.model ?? "minilm",
+            tree.embedding.cacheDir,
+        );
+    }
+    const localDefinition = download ? selectedLocalEmbedding(tree) : undefined;
+    const embeddingSelection =
+        tree.defaultEmbeddingModel ?? tree.embedding?.provider ?? embedding;
+    return { download, localDefinition, selectedProvider, embeddingSelection };
+}
+
+async function main() {
     const provider = (arg("--provider") ?? "").toLowerCase();
     if (provider !== "ollama" && provider !== "copilot") {
         console.error(
@@ -261,9 +327,7 @@ function main() {
         return 1;
     }
 
-    const embedding = (
-        arg("--embedding") ?? (provider === "copilot" ? "copilot" : "local")
-    ).toLowerCase();
+    const embedding = (arg("--embedding") ?? "local").toLowerCase();
     const validEmbedding = ["copilot", "local", "ollama", "openai", "none"];
     if (!validEmbedding.includes(embedding)) {
         console.error(
@@ -280,20 +344,36 @@ function main() {
         embedding,
         embeddingEndpoint: arg("--embedding-endpoint"),
         embeddingModel: arg("--embedding-model"),
+        embeddingSize:
+            arg("--embedding-size") === undefined
+                ? undefined
+                : Number(arg("--embedding-size")),
         localEmbeddingModel: arg("--local-embedding-model"),
         localEmbeddingCacheDir: arg("--local-embedding-cache-dir"),
         openaiKey: arg("--openai-key"),
     };
 
-    const tree = buildConfigTree(options);
-    const yaml = header(provider, embedding) + renderYaml(tree);
+    const outPath = resolveOutPath();
+    const { tree, preservedEmbeddingSelection } = mergeExistingConfig(
+        buildConfigTree(options),
+        outPath,
+    );
+    const { download, localDefinition, selectedProvider, embeddingSelection } =
+        await prepareEmbeddingSelection(
+            tree,
+            outPath,
+            preservedEmbeddingSelection,
+            embedding,
+        );
+    const output =
+        header(provider, embeddingSelection) +
+        yaml.dump(tree, { indent: 2, lineWidth: -1, noRefs: true });
 
     if (hasFlag("--dry-run")) {
-        process.stdout.write(yaml);
+        process.stdout.write(output);
         return 0;
     }
 
-    const outPath = resolveOutPath();
     if (fs.existsSync(outPath) && !hasFlag("--force")) {
         console.error(
             `Refusing to overwrite existing ${outPath} (pass --force to replace it).`,
@@ -301,10 +381,13 @@ function main() {
         return 1;
     }
 
+    if (download) {
+        await provisionLocalEmbedding(localDefinition, { allowDownload: true });
+    }
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    fs.writeFileSync(outPath, yaml, "utf8");
+    fs.writeFileSync(outPath, output, "utf8");
     console.log(
-        `Wrote self-host config (${provider} chat, ${embedding} embeddings) to ${outPath}`,
+        `Wrote self-host config (${provider} chat, ${embeddingSelection} embeddings) to ${outPath}`,
     );
     if (provider === "ollama") {
         console.log(
@@ -313,11 +396,11 @@ function main() {
     } else {
         console.log("  Prereq: an authenticated 'copilot' CLI (github login).");
     }
-    if (embedding === "local") {
+    if (selectedProvider === "local") {
         console.log(
-            "  Embeddings: bundled CPU-only local model (downloads weights on first use).",
+            "  Embeddings: selected pinned CPU/FP32 model, offline-only. Stage its complete snapshot or explicitly pass --download-local-embedding. Restart the server to switch models.",
         );
-    } else if (embedding === "none") {
+    } else if (embeddingSelection === "none") {
         console.log(
             "  Embeddings: disabled — semantic search / fuzzy features degrade gracefully.",
         );
@@ -325,4 +408,11 @@ function main() {
     return 0;
 }
 
-process.exit(main());
+main()
+    .then((code) => {
+        process.exitCode = code;
+    })
+    .catch((error) => {
+        console.error(`generate-selfhost-config: ${error.message}`);
+        process.exitCode = 1;
+    });

@@ -155,7 +155,6 @@ public class TestEndToEnd : TypeChatTest
     //    LanguageModel lm = new LanguageModel(_config.OpenAI);
     //    TranslationSettings settings = new TranslationSettings
     //    {
-    //        MaxTokens = 1000,
     //        Temperature = 0.5,
     //    };
 

@@ -16,7 +16,7 @@ import type {
 } from "@typeagent/memory-service";
 import { invokeMemory, invokeView } from "./viewClient";
 import { rbButton, rbError, rbNode, rbMarkdown } from "./memoryHubDocumentUi";
-import { viewSheet } from "./memoryHubViewUi";
+import { viewRevisionTime, viewSheet } from "./memoryHubViewUi";
 import {
     listReadyViewSources,
     listViewTimelineEvents,
@@ -32,6 +32,7 @@ import { createGuideEditor } from "./memoryHubGuide";
 import { viewContentToText } from "@typeagent/memory-service/view-text";
 
 const viewKindLabels: Record<ViewKind, string> = {
+    schemaView: "Schema-defined questions",
     wiki: "Knowledge wiki",
     timeline: "Evidence-linked timeline",
     projectBrief: "Project brief",
@@ -167,7 +168,13 @@ export function mountMemoryHubViews(
     let maintenanceSupported = false;
     let buildsSupported = false;
     let route:
-        | { corpusId: string; viewId: string; revisionId?: string }
+        | {
+              corpusId: string;
+              viewId: string;
+              revisionId?: string;
+              pageId?: string;
+              itemKey?: string;
+          }
         | undefined;
     let activeCorpus: string | undefined;
     let builder: ReturnType<typeof viewSheet> | undefined;
@@ -423,7 +430,13 @@ export function mountMemoryHubViews(
     }
 
     async function renderRoute(
-        target: { corpusId: string; viewId: string; revisionId?: string },
+        target: {
+            corpusId: string;
+            viewId: string;
+            revisionId?: string;
+            pageId?: string;
+            itemKey?: string;
+        },
         current: number,
     ): Promise<void> {
         const latest = snapshot.views.find(
@@ -431,9 +444,16 @@ export function mountMemoryHubViews(
                 view.corpusId === target.corpusId &&
                 view.viewId === target.viewId,
         );
-        const view = target.revisionId
-            ? await invokeMemory("memoryGetView", target)
-            : latest;
+        const view =
+            target.revisionId || !latest
+                ? await invokeMemory("memoryGetView", {
+                      corpusId: target.corpusId,
+                      viewId: target.viewId,
+                      ...(target.revisionId
+                          ? { revisionId: target.revisionId }
+                          : {}),
+                  })
+                : latest;
         if (disposed || current !== sequence) return;
         if (!view) {
             comparison.replaceChildren(
@@ -455,7 +475,21 @@ export function mountMemoryHubViews(
             throw new Error(
                 "The service did not return the requested exact view revision",
             );
+        if (view.content.kind === "schemaView") {
+            await renderSchemaPage(target, current);
+            return;
+        }
+        if (view.redirect && !target.revisionId) {
+            await renderCurrentWikiRedirect(view.redirect, target, current);
+            return;
+        }
         showPreview(view);
+        if (target.pageId)
+            focusArticlePage(
+                view.redirect?.anchors.find(
+                    (anchor) => anchor.from === target.pageId,
+                )?.to ?? target.pageId,
+            );
         if (target.revisionId) {
             comparison.querySelector(".hub-view-actions")?.replaceChildren(
                 rbNode(
@@ -467,10 +501,59 @@ export function mountMemoryHubViews(
                 rbNode("p", `Revision: ${view.revisionId}`),
                 rbButton("Back to views", backToViews),
                 rbButton("Open current view", () => {
-                    void showView(view.corpusId, view.viewId);
+                    void showView(
+                        view.corpusId,
+                        view.redirect?.viewId ?? view.viewId,
+                    );
                 }),
             );
         }
+    }
+
+    async function renderSchemaPage(
+        target: Parameters<typeof renderRoute>[0],
+        current: number,
+    ): Promise<void> {
+        const page = await invokeMemory("memoryGetViewPage", {
+            corpusId: target.corpusId,
+            viewId: target.viewId,
+            ...(target.revisionId ? { revisionId: target.revisionId } : {}),
+            ...(target.pageId ? { slotId: target.pageId } : {}),
+            ...(target.itemKey ? { itemKey: target.itemKey } : {}),
+        });
+        if (disposed || current !== sequence) return;
+        drafts.hidden = controls.hidden = true;
+        comparison.replaceChildren(
+            rbMarkdown(page.markdown),
+            rbButton("Review questions", () => {
+                window.location.hash = `#/questions/${encodeURIComponent(target.corpusId)}/${encodeURIComponent(target.viewId)}`;
+            }),
+            rbButton("Back to views", backToViews),
+        );
+    }
+
+    async function renderCurrentWikiRedirect(
+        redirect: NonNullable<ViewVersion["redirect"]>,
+        target: Parameters<typeof renderRoute>[0],
+        current: number,
+    ): Promise<void> {
+        const pageId =
+            target.pageId &&
+            redirect.anchors.find((anchor) => anchor.from === target.pageId)
+                ?.to;
+        if (target.pageId && !pageId)
+            throw new Error(
+                "Old article anchor is unavailable; open the canonical article directly",
+            );
+        route = {
+            corpusId: target.corpusId,
+            viewId: redirect.viewId,
+            ...(pageId ? { pageId } : {}),
+        };
+        const destination = `#/views/${encodeURIComponent(target.corpusId)}/${encodeURIComponent(redirect.viewId)}${pageId ? `/page/${encodeURIComponent(pageId)}` : ""}`;
+        if (options.onNavigate) options.onNavigate(destination);
+        else window.location.hash = destination;
+        await renderRoute(route, current);
     }
 
     function backToViews(): void {
@@ -482,6 +565,18 @@ export function mountMemoryHubViews(
         else void action(refresh);
         if (options.onNavigate) options.onNavigate("#/views");
         else window.location.hash = "#/views";
+    }
+
+    function focusArticlePage(pageId: string): void {
+        const page = [
+            ...comparison.querySelectorAll<HTMLElement>("[data-page]"),
+        ].find((entry) => entry.dataset.page === pageId);
+        if (!page)
+            throw new Error(
+                "Requested article anchor is unavailable in this revision",
+            );
+        page.focus();
+        page.scrollIntoView?.({ block: "start" });
     }
 
     async function openBuilder(
@@ -1272,6 +1367,67 @@ export function mountMemoryHubViews(
         options.onOpenView?.(corpusId, viewId, revisionId);
     }
 
+    function appendEditorialControls(
+        view: ViewVersion,
+        article: HTMLElement,
+        more: HTMLElement,
+    ): void {
+        if (view.relatedArticles?.length) {
+            const related = rbNode("nav");
+            related.setAttribute("aria-label", "Related articles");
+            related.append(rbNode("h3", "Related articles"));
+            for (const entry of view.relatedArticles)
+                related.append(
+                    rbButton(entry.title, () => {
+                        void action(() =>
+                            showView(view.corpusId, entry.viewId),
+                        );
+                    }),
+                );
+            article.append(related);
+        }
+        const protectedTargets = view.protectedTargets ?? [];
+        if (
+            !view.generation ||
+            !(view.content.kind === "wiki" || view.definition.projectSummary)
+        )
+            return;
+        for (const target of protectedTargets)
+            more.append(
+                rbButton(`Unlock generated updates: ${target}`, () => {
+                    void action(async () => {
+                        if (!discardChanges()) return;
+                        await invokeMemory("memorySaveViewDraft", {
+                            corpusId: view.corpusId,
+                            viewId: view.viewId,
+                            expectedHead:
+                                heads.get(view.corpusId) ?? snapshot.head,
+                            expectedVersion: view.version,
+                            definition: {
+                                viewId: view.viewId,
+                                kind: view.definition.kind,
+                                selector: view.definition.selector,
+                                ...(view.definition.wiki
+                                    ? { wiki: view.definition.wiki }
+                                    : {}),
+                                ...(view.definition.projectSummary
+                                    ? {
+                                          projectSummary:
+                                              view.definition.projectSummary,
+                                      }
+                                    : {}),
+                            },
+                            content: view.content,
+                            relationships: editableEdges(view),
+                            unlockProtection: [target],
+                        });
+                        await changed();
+                        await refresh();
+                    });
+                }),
+            );
+    }
+
     function showPreview(view: ViewVersion): void {
         if (!supportedKinds.includes(view.content.kind)) {
             comparison.replaceChildren(
@@ -1293,6 +1449,7 @@ export function mountMemoryHubViews(
                 "p",
                 `${viewKindLabels[view.content.kind]} - version ${view.version}`,
             ),
+            ...viewRevisionTime(view.createdAt),
         );
         if (view.content.summary)
             article.append(rbMarkdown(view.content.summary));
@@ -1302,13 +1459,17 @@ export function mountMemoryHubViews(
             for (const section of view.content.sections)
                 contents.append(
                     rbButton(section.heading, () => {
-                        const page = [
-                            ...article.querySelectorAll<HTMLElement>(
-                                "[data-page]",
-                            ),
-                        ].find((page) => page.dataset.page === section.id);
-                        page?.focus();
-                        page?.scrollIntoView?.({ block: "start" });
+                        focusArticlePage(section.id);
+                        const revisionId = route?.revisionId;
+                        route = {
+                            corpusId: view.corpusId,
+                            viewId: view.viewId,
+                            pageId: section.id,
+                            ...(revisionId ? { revisionId } : {}),
+                        };
+                        const destination = `#/views/${encodeURIComponent(view.corpusId)}/${encodeURIComponent(view.viewId)}${revisionId ? `/revision/${encodeURIComponent(revisionId)}` : ""}/page/${encodeURIComponent(section.id)}`;
+                        if (options.onNavigate) options.onNavigate(destination);
+                        else window.location.hash = destination;
                     }),
                 );
             article.append(contents);
@@ -1372,6 +1533,7 @@ export function mountMemoryHubViews(
         const more = rbNode("details", undefined, "hub-view-more-actions");
         const moreSummary = rbNode("summary", "More actions");
         more.append(moreSummary);
+        appendEditorialControls(view, article, more);
         more.addEventListener("keydown", (event) => {
             if (event.key !== "Escape" || !more.open) return;
             event.preventDefault();
@@ -2005,6 +2167,8 @@ export function mountMemoryHubViews(
                 corpusId?: string;
                 viewId?: string;
                 revisionId?: string;
+                pageId?: string;
+                itemKey?: string;
             } = {},
         ) => {
             if (!discardChanges()) return;
@@ -2017,6 +2181,8 @@ export function mountMemoryHubViews(
                           corpusId: value.corpusId,
                           viewId: value.viewId,
                           revisionId: value.revisionId,
+                          pageId: value.pageId,
+                          itemKey: value.itemKey,
                       }
                     : undefined;
             if (busy) refreshPending = true;
@@ -2031,6 +2197,8 @@ export function mountMemoryHubViews(
             corpusId: string;
             viewId: string;
             revisionId?: string;
+            pageId?: string;
+            itemKey?: string;
         }) => {
             if (!discardChanges()) return;
             sequence++;

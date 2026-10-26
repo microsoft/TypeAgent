@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d9df400c638f6c08f0fd0904d0aed59e4940a103f54fb5b2892930e429914922 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=20e6508ac26b47ad3c97ff2797ca79a0a1779cd83be53e5cd17940faf03c5e31 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/memory-service — AI-generated documentation
@@ -22,19 +22,30 @@ Transport-independent memory corpus service
 
 - default → [./dist/index.js](./dist/index.js)
 - `./rpc` → [./dist/rpcFacade.js](./dist/rpcFacade.js)
+- `./benchmark` → [./dist/benchmarkBridge.js](./dist/benchmarkBridge.js)
+- `./agent-edition-validation` → [./dist/agentEditionValidation.js](./dist/agentEditionValidation.js)
+- `./procedure-markdown` → [./dist/procedureMarkdown.js](./dist/procedureMarkdown.js)
+- `./procedureMarkdown` → [./dist/procedureMarkdown.js](./dist/procedureMarkdown.js)
+- `./view-text` → [./dist/viewText.js](./dist/viewText.js)
 
 ### Dependencies
 
 Workspace:
 
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/config](../../../packages/config/README.md)
 - [@typeagent/conversation-memory](../../../packages/memory/conversation/README.md)
+- [@typeagent/knowledge-processor](../../../packages/knowledgeProcessor/README.md)
 - [@typeagent/knowpro](../../../packages/knowPro/README.md)
+- [@typeagent/textpro](../../../packages/textPro/README.md)
 
-External: `proper-lockfile`
+External: `isomorphic-git`, `node-diff3`, `proper-lockfile`, `typechat`
 
 ### Used by
 
+- [@typeagent/benchmarks](../../../packages/benchmarks/README.md)
 - [@typeagent/browser](../../../packages/agents/browser/README.md)
+- [@typeagent/browser-control-rpc](../../../packages/agents/browserControlRpc/README.md)
 - [@typeagent/memory-agent](../../../packages/agents/memory/README.md)
 - [@typeagent/memory-client](../../../packages/memory/client/README.md)
 - [@typeagent/memory-mcp-server](../../../packages/memory/mcp-server/README.md)
@@ -44,10 +55,32 @@ External: `proper-lockfile`
 
 ### Files of interest
 
-`./src/indexSchema.ts`, `./src/index.ts`, `./src/fileMemoryService.ts`, …and 5 more under `./src/`.
+- [./src/indexSchema.ts](./src/indexSchema.ts)
+- [./src/index.ts](./src/index.ts)
+- [./src/agentEdition.ts](./src/agentEdition.ts)
+- [./src/agentEditionValidation.ts](./src/agentEditionValidation.ts)
+- [./src/agentSessionDistillation.ts](./src/agentSessionDistillation.ts)
+- [./src/agentSessionParsing.ts](./src/agentSessionParsing.ts)
+- [./src/agentSessionStore.ts](./src/agentSessionStore.ts)
+- [./src/agentSessionTypes.ts](./src/agentSessionTypes.ts)
+- [./src/batchImport.ts](./src/batchImport.ts)
+- [./src/benchmarkBridge.ts](./src/benchmarkBridge.ts)
+- _…and 68 more under `./src/`._
+
+### Environment variables
+
+_7 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+
+- `TYPEAGENT_BENCHMARK_COMMIT_DOCUMENTS`
+- `TYPEAGENT_BENCHMARK_MAINTENANCE_MODE`
+- `TYPEAGENT_BENCHMARK_MODEL`
+- `TYPEAGENT_EMBEDDING_MODEL`
+- `TYPEAGENT_EMBEDDING_PROVIDER`
+- `TYPEAGENT_EMBEDDING_SIZE`
+- `TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT`
 
 ---
 
-_Auto-generated against commit `9fc6f4ab76b32ea5c60ad14107ee3d95c276c83b` on `2026-10-01T08:35:59.559Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-service docs:verify-links` to spot-check._
+_Auto-generated against commit `73fbbd085b9f687f05f7b8036f0e2c66ac7f0355` on `2026-10-24T18:29:20.864Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-service docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

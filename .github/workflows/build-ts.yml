@@ -7,6 +7,8 @@ name: build-ts
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "17 8 * * *"
   push:
     branches: ["main"]
   pull_request:
@@ -15,8 +17,8 @@ on:
     branches: ["main"]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 permissions:
   pull-requests: read
@@ -31,8 +33,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
-        version: [22, 24]
+        os: ${{ github.event_name == 'schedule' && fromJSON('["macos-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
+        version: ["22.23.4", "24.22.1", "26.12.1"]
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -55,12 +57,12 @@ jobs:
             ts:
               - "ts/**"
               - ".github/workflows/build-ts.yml"
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         with:
           node-version: ${{ matrix.version }}
@@ -142,17 +144,27 @@ jobs:
         working-directory: ts
         run: |
           pnpm run postinstall:better-sqlite3-node-restore
-      # Runs the unit suite once, then reruns only the packages that owned a
-      # failing test up to two times (serially), stopping early on success.
-      # Flaky tests are reported as annotations / a step summary but do not fail
-      # the build; the final retry package suite must otherwise pass.
+      # macOS gates use an explicit compatibility selection. Scheduled and
+      # manual runs retain full macOS coverage on all supported Node versions.
       - name: Test
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
+        shell: pwsh
         env:
           TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS: ${{ runner.os == 'Windows' && '1' || '0' }}
+          TYPEAGENT_TEST_PROFILE: ${{ runner.os == 'macOS' && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && 'macos-compat' || 'full' }}
         run: |
-          node tools/scripts/runTestLocalWithSummary.mjs
+          $log = Join-Path $env:RUNNER_TEMP 'typeagent-test.log'
+          node tools/scripts/runTestLocalWithSummary.mjs 2>&1 | Tee-Object -FilePath $log
+          exit $LASTEXITCODE
+      - name: Upload test log
+        if: ${{ always() && (github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false') }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-log-${{ matrix.os }}-${{ matrix.version }}
+          path: ${{ runner.temp }}/typeagent-test.log
+          if-no-files-found: ignore
+          retention-days: 14
       - name: UI tests (requires display)
         if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false') && runner.os == 'Linux' }}
         working-directory: ts

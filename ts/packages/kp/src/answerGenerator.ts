@@ -121,7 +121,8 @@ export async function generateAnswer(
     }
 
     const model = openai.createChatModel(modelName);
-    model.completionSettings.max_completion_tokens = 4096;
+    systemPrompt +=
+        "\nAim for approximately 4096 tokens in the final answer only, excluding reasoning; preserve all necessary evidence.";
     const responseText = await callLLM(model, systemPrompt, userPrompt);
     if (!responseText.trim()) {
         throw new Error("Answer generation returned an empty response");

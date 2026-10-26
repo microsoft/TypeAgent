@@ -12,6 +12,7 @@ const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 export const tsRoot = path.resolve(scriptsDir, "..", "..");
 
 export const runtimeExternalPackages = [
+    "@huggingface/transformers",
     "@anthropic-ai/claude-agent-sdk",
     "@azure/msal-node-extensions",
     "@github/copilot-sdk",

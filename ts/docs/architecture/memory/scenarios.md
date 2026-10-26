@@ -1,184 +1,154 @@
 # TypeAgent memory scenarios
 
-**Audience:** product engineers, application-agent authors, evaluators, and
-demo owners.
-
-This guide describes what a user can do today, which memory content serves the
-scenario, and where the current boundary lies. All scenarios use the durable
-memory service and KnowPro retrieval; see [Memory architecture](memory.md).
+Use these workflows to find saved information, build a knowledge base, and
+maintain generated documents. [Current system](current-system.md) explains the
+implementation. The [implementation ledger](https://github.com/microsoft/TypeAgent/blob/main/ts/docs/plans/memory-system/STATUS.md)
+tracks test results and release readiness.
 
 ## Capability map
 
-| Scenario                              | User surface                                                             | Memory content              | State                                                                                |
-| ------------------------------------- | ------------------------------------------------------------------------ | --------------------------- | ------------------------------------------------------------------------------------ |
-| Recall earlier conversation content   | Conversational lookup, `@conversation-memory`, reasoning `search_memory` | Conversation events         | Available; parity acceptance pending                                                 |
-| Find an earlier conversation          | `@conversation find`, `search`, `summarize`, and `index`                 | Conversation events         | Available                                                                            |
-| Build a local Markdown knowledge base | Native `@memory` commands                                                | Durable sources             | Available; end-to-end acceptance pending                                             |
-| Remember and inspect web activity     | Browser actions, "Save this page", Memory Center                         | Durable sources and events  | Implemented; live browser validation pending                                         |
-| Ask about a saved page in chat        | Reasoning `search_memory`                                                | Sources, events, procedures | Implemented; live check pending                                                      |
-| Reuse a personal procedure            | Memory Center, memory service and MCP procedure tools                    | Procedure versions          | Storage, retrieval and promotion API available; no promotion UI or feedback loop     |
-| Connect another application           | Memory MCP endpoint                                                      | Same durable service        | Available through authenticated loopback MCP; discovery for external clients pending |
+| Scenario                          | Surface                                          | Evidence or knowledge                 | Limit                                                           |
+| --------------------------------- | ------------------------------------------------ | ------------------------------------- | --------------------------------------------------------------- |
+| Recall or locate conversations    | Conversation commands, reasoning `search_memory` | Profile events                        | Backfill imports user turns only                                |
+| Manage a local knowledge base     | Native `@memory`                                 | Retained sources and revisions        | The host validates paths. The content pipeline needs a model    |
+| Capture and inspect web activity  | Browser and Memory Hub                           | Captured sources plus separate events | Listing a URL doesn't index its content                         |
+| Browse Wiki and Projects          | Hub, View-capable service/RPC/MCP                | Bounded indexed derived documents     | Informational, not exhaustive, not approved                     |
+| Edit and refresh knowledge        | Hub editing and family controls                  | Generated base plus protected edits   | Conflicts and limits are explicit. Privacy overrides protection |
+| Build a timeline or guide         | Hub and typed View APIs                          | Selected full-evidence inputs         | Own validation and time rules. Nothing is executed              |
+| Recover publication/index failure | Hub and View APIs                                | Exact published revision              | Retry the index. Don't rebuild to hide the failure              |
+| Connect another application       | Configured MCP client                            | The owning service's typed operations | Authentication, configuration and store ownership are explicit  |
 
 ## Scenario 1: Find a previous conversation
 
-**Example:** "Find the conversation where we planned the browser memory
-migration."
+Use `@conversation find` for an approximate name and `search` for what was
+discussed. Use `summarize` for the conversations you pick, and `index` to backfill
+from display logs. With the service, live turns become typed events, and content
+search ranks those events and groups them by conversation.
 
-```mermaid
-flowchart LR
-    Q[Content query] --> CMD[@conversation search]
-    CMD --> SEARCH[searchEvents on the profile conversation corpus]
-    SEARCH --> GROUP[Group KnowPro-ranked events by conversation ID]
-    GROUP --> REG[Resolve current names]
-    REG --> RESULT[Ranked conversations and snippets]
-```
-
-Use `@conversation find` when the name is approximately known. Use
-`@conversation search` when only the discussed content is known. Use
-`@conversation index` to backfill historical display logs (user turns); live
-turns are recorded automatically as typed events.
-
-Current boundary: deleting a conversation purges its ledger events and writes a
-tombstone, but physical compaction of derived projections is not implemented.
+Check that results point to current conversations and show their authority and
+provenance. Assistant evidence is not a verified observation. Deleting a
+conversation removes its events and records a tombstone.
 
 ## Scenario 2: Build and manage a Markdown knowledge base
 
-**Example:** import a project wiki, ask "What are the release gates?", inspect
-the cited source, replace an outdated page, and forget a retired page.
+1. Create a collection with `@memory corpus create`, then select it with
+   `@memory corpus use`. Commands call a collection a _corpus_.
+2. Submit files or folders with `@memory import`, then check the batch and job status.
+3. Query with `@memory search` or `ask`. `ask --extractive` returns snippets.
+4. Inspect source content, revisions and knowledge, and reopen citations with `explain`.
+5. To replace or forget a source, preview the change and confirm that operation.
 
-Typical flow:
+Imports use one `content` pipeline and have no profiles. The host validates paths,
+including symlinks and junctions, and enforces glob, file-size, byte and concurrency
+limits. MCP clients list their own files and submit the content.
 
-1. `@memory corpus create` and `@memory corpus use` select the durable corpus.
-2. `@memory import folder` submits Markdown files. There are no import
-   profiles; every import uses the `content` pipeline.
-3. `@memory import status` and job commands report durable progress.
-4. `@memory search` returns evidence; `@memory ask` returns an answer
-   synthesized by KnowPro from the evidence, with citations (`--extractive`
-   returns the ranked snippets verbatim); `@memory explain` reopens the latest
-   citations.
-5. Source commands show content, revisions, and derived knowledge.
-6. Replacement and forgetting require a preview followed by explicit
-   confirmation.
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Agent as Native @memory agent
-    participant Service as Durable memory service
-    participant Store as Source + index generations
-
-    User->>Agent: import folder
-    Agent->>Agent: enumerate, realpath, enforce limits
-    Agent->>Service: ingest accepted document content
-    Service->>Store: persist revision and indexing job
-    Service-->>Agent: durable job ID
-    User->>Agent: ask a question
-    Agent->>Service: answer (synthesized from KnowPro evidence)
-    Service-->>User: answer + citations
-```
-
-The host, not the service, reads local paths. Symlink and junction escapes are
-rejected, and folder imports enforce file count, byte, glob, and concurrency
-limits.
+Indexing a source and the automatic derived work succeed or fail separately. A
+failed Wiki target doesn't invalidate a source that indexed correctly.
 
 ## Scenario 3: Remember web pages and activity
 
-**Example:** "Find the browser page about Luna indexing that I bookmarked last
-week."
+"Save this page", bookmarks, history and HTML imports all bring actual content
+to the service. Listing URLs alone doesn't index them. Visit, bookmark, capture
+and import events stay separate from the page sources they link to.
 
-The browser stores captured page content as a durable web source and records
-activity separately as `visited`, `bookmarked`, `captured`, or `imported`
-events. Searches can combine content with URL, domain, page type, source,
-activity type, and time filters. The latest matching activity is returned with
-source evidence. A page-level question is answered by the service from the
-matching page sources.
-
-```mermaid
-flowchart TB
-    PAGE[Normalized page content] --> SOURCE[Durable web source]
-    ACTIVITY[Visit, bookmark, capture, import] --> EVENT[Durable event]
-    EVENT -->|linkedSourceId| SOURCE
-    QUERY[Content + activity filters] --> SEARCH[Browser memory search]
-    SOURCE --> SEARCH
-    EVENT --> SEARCH
-    SEARCH --> MATCH[Evidence + source + latest activity]
-```
-
-"Save this page" in the browser context menu captures the clicked tab, indexes
-it, and runs how-to candidate detection on the same revision. The Memory Center
-can inspect and manage corpora, sources, revisions, derived knowledge, jobs,
-replacement, forgetting, curation, and reindexing. Live acceptance for browser
-capture/import, cancellation, and performance remains pending.
-
-Browser history and bookmark enumeration is not indexing: imported URLs are
-fetched and their original content is submitted to the service.
+In the Hub, inspect acquired batches, members that failed, exact revision assets,
+source synopses and knowledge. A synopsis helps you navigate, and the original
+retained content is what you cite. When you compare searches, use the activity
+and time filters. Capture time isn't the time a claim was true.
 
 ## Scenario 4: Carry verified outcomes across conversations
 
-The dispatcher writes typed durable events for user turns, assistant evidence,
-verified action results, explicit decisions, and task outcomes. Retrieval
-searches the current conversation first and then the profile corpus.
+The dispatcher records user assertions, assistant evidence, verified tool results,
+explicit decisions and task outcomes, each with its own authority label.
+Reasoning combines conversation recall with saved-document search.
 
-The authority labels let consumers distinguish evidence classes:
+Look at each result's type and outcome and at its source and turn identity. A
+failed tool action is evidence that it failed, not a fact that it worked. Reasoning
+doesn't search saved procedures or derived Views, even though the service can.
 
-- assistant text is evidence only and non-authoritative;
-- user statements are assertions;
-- tool results are verified observations (a failed result is a verified
-  observation of failure, with `outcome: failed`);
-- explicit decisions are marked explicit;
-- task outcomes recorded by the reasoning agent are evidence only.
+<a id="scenario-5-preserve-personal-procedures"></a>
 
-Current boundary: the event substrate, inspection, search, and forgetting are
-implemented, but parity acceptance with older conversation-memory behavior is
-not complete, and recorded turns can be inspected and forgotten but not
-corrected.
+## Scenario 5: Browse automatically maintained Wiki and Projects
 
-## Scenario 5: Preserve personal procedures
+Save useful sources to a named collection. The enabled families find subjects in
+the real index and produce bounded pages and briefs linked to their sources. You
+don't pick every input or approve each informational page.
 
-**Example:** retain a reviewed troubleshooting guide with citations to the
-documents from which it was derived.
+For each target, check whether it is updating, limited or in error, and check its
+exact citations. Projects keep goals, owners, milestones and status dimensions
+separate, and shared vocabulary doesn't merge two initiatives. One substantial
+source can justify a page, but generated output isn't a complete inventory.
 
-The durable service can detect procedure candidates during eligible Markdown
-or text ingestion, then draft, reject, save, list, search, retrieve, archive,
-and version procedures. Saved versions are immutable and include canonical
-JSON, deterministic Markdown, hashes, lineage, and source-revision citations.
-Replacing or forgetting a cited source creates a new stale procedure version
-without rewriting history.
+Instruction documents and troubleshooting Views provide guidance. To automate
+a task, use [macros](../workflows/macros.md) or a provider-owned flow separately.
 
-Current boundary: a retrieved procedure is guidance, not permission to execute
-actions. A saved procedure can be previewed and promoted to an Agent Skill or
-macro draft through RPC and the Copilot plugin tools; there is no promotion UI,
-feedback collection, or automatic execution.
+<a id="scenario-6-integrate-an-external-client"></a>
 
-## Scenario 6: Integrate an external client
+## Scenario 6: Integrate an external application
 
-The agent server publishes an authenticated loopback MCP endpoint for the
-durable memory service. External clients receive the same corpus, ingestion,
-search, answer, event, management, and procedure semantics as the native
-agent. They do not receive TypeAgent-host-only local-folder access; the client
-must enumerate its own files and submit content.
+A configured MCP client uses the owning service's typed tools for content, events,
+management and Views. The host's authenticated loopback endpoint doesn't mean
+every client can discover its credentials automatically. A standalone owner needs
+an explicitly configured store. Don't assume it shares a running profile, and
+don't open that profile at the same time.
 
-Current boundary: the endpoint address and token are not yet published to
-external clients, and the standalone stdio server opens its own store.
+Use the native `@memory` agent for local commands and the runtime `@memory-mcp`
+agent for MCP access to the same service. The workspace memory plugin has a
+separate store; it does not share the profile's memory.
 
-The dynamic `@memory-mcp` agent beside native `@memory`, and the Copilot CLI
-memory plugin with its own store, are deliberate parallel experiments to learn
-which path makes an externally consumable MCP package easier. Native `@memory`
-remains the preferred TypeAgent interaction.
+## Scenario 7: Edit knowledge and refresh without losing intent
+
+In the Hub, edit a Wiki title, category, note or exclusion, or edit the prose.
+The View keeps its stable identity. After new indexed evidence arrives, check the
+updated page and its protected edit units. An explicit unlock lets maintenance
+revise a protected unit. An edit that truly overlaps stays a recoverable conflict.
+
+Use family update and rebuild to request maintenance, or pause and resume to
+control automatic work. These settings persist when you reopen the collection.
+Unchanged evidence does not trigger synthesis. Automatic consolidation applies
+only to generated articles without human edits; old article IDs redirect to the
+canonical article, while exact historical reads remain available. See
+[Maintenance](view-maintenance.md).
+
+## Scenario 8: Build a timeline or troubleshooting guide
+
+In the Hub or the typed View API, select eligible exact revisions. For a timeline,
+also select canonical events and time bounds. Inspect the job's receipt for each
+target, the inventory and support results, the generated base and the exact
+citations. An empty or blocked checkpoint never yields an invented document.
+
+To keep a source scope current, preview maintenance before you start it.
+Future events aren't discovered dynamically. You can edit the narrative,
+but you can't invent a source-owned event identity or time. Resolve conflicts
+explicitly. See [Derived Views](derived-views.md).
+
+## Scenario 9: Recover a published but unsearchable document
+
+Compare the built, published and indexed revision IDs. If the derived index
+failed, the publication commit still stands, but the revision isn't searchable.
+Retry the exact index, using the current concurrency guards. Don't generate
+another document to hide the failure. Default derived search must leave out stale,
+conflicted or ineligible evidence.
+
+## Scenario 10: Forget a source across its derivatives
+
+Preview the affected source, confirm the removal, and watch for progress and
+errors. Once removal is authorized, corpus content reads stay withheld until the
+dependent local index, View, history, asset, batch and context data are cleaned
+up, and a restart resumes that cleanup. A protected human edit can't keep the
+forgotten evidence, and neither can a late model response. External exports and
+backups follow their own lifecycle.
 
 ## Evaluation checklist
 
-For demos and acceptance runs, verify evidence rather than only command
-success:
-
-- search results resolve to the expected source or conversation;
-- answers include resolvable citations, and `--extractive` shows the same
-  evidence verbatim;
-- replacement creates a new active revision and rejects stale confirmation;
-- forgotten content no longer appears in search or derived knowledge;
-- cancellation has one terminal result and cancelled content is not
-  searchable;
-- restart restores corpus selection, import status, jobs, sources, and
-  retrieval;
-- event results expose producer, type, time, authority, and source or
-  conversation provenance.
+- Citations reopen the exact source, revision and range, or the canonical event.
+- Test query validity, citation identity and claim support separately. An output
+  with the same shape isn't a quality pass.
+- No-ops, family pause and restart, cancellation and partial failures stay visible.
+- Source indexing doesn't wait for View synthesis to succeed.
+- Explicit human edits survive a supported refresh, or they produce a conflict you can inspect.
+- Retrying publication or indexing keeps exact versions. Derived content isn't
+  counted as independent corroboration.
+- Forgetting blocks queued and late reads and removes dependent local payloads.
+- For any live qualification claim, record the model, corpus or fixture, commit,
+  workload, time and limitations. Offline stubs and source inspection are not live runs.

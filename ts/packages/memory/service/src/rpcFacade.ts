@@ -7,6 +7,7 @@ import type {
     MemoryService,
 } from "./types.js";
 import type { MemoryViewService } from "./viewTypes.js";
+import type { MemoryTopicService } from "./topicTypes.js";
 
 export interface MemoryJobWaitOptions {
     signal?: AbortSignal;
@@ -20,8 +21,62 @@ function unsupportedCapability(operation: string): Promise<never> {
 
 export function createMemoryServiceRpcFacade(
     service: MemoryService & Partial<MemoryViewService>,
-): MemoryService & MemoryViewService {
+): MemoryService & MemoryViewService & MemoryTopicService {
     return {
+        listQuestionSummaries: (request) =>
+            service.listQuestionSummaries?.(request) ??
+            unsupportedCapability("question summaries"),
+        getQuestion: (request) =>
+            service.getQuestion?.(request) ??
+            unsupportedCapability("question detail"),
+        requestAcquisition: (request) =>
+            service.requestAcquisition?.(request) ??
+            unsupportedCapability("acquisition requests"),
+        listAcquisitions: (corpusId) =>
+            service.listAcquisitions?.(corpusId) ??
+            unsupportedCapability("acquisition status"),
+        cancelAcquisition: (request) =>
+            service.cancelAcquisition?.(request) ??
+            unsupportedCapability("acquisition cancellation"),
+        runAcquisitions: (corpusId) =>
+            service.runAcquisitions?.(corpusId) ??
+            unsupportedCapability("acquisition runs"),
+        startAcquisitionPeriodic: (request) =>
+            service.startAcquisitionPeriodic?.(request) ??
+            unsupportedCapability("periodic acquisition"),
+        listQuestions: (corpusId) =>
+            service.listQuestions?.(corpusId) ??
+            unsupportedCapability("questions"),
+        editQuestion: (request) =>
+            service.editQuestion?.(request) ??
+            unsupportedCapability("question editing"),
+        getViewPage: (request) =>
+            service.getViewPage?.(request) ??
+            unsupportedCapability("view pages"),
+        proposeSchemaView: (request) =>
+            service.proposeSchemaView?.(request) ??
+            unsupportedCapability("schema proposals"),
+        discoverSchemaQuestions: (request) =>
+            service.discoverSchemaQuestions?.(request) ??
+            unsupportedCapability("question discovery"),
+        importAgentSession: (request) =>
+            service.importAgentSession?.(request) ??
+            unsupportedCapability("agent session imports"),
+        getAgentSessionImport: (request) =>
+            service.getAgentSessionImport?.(request) ??
+            unsupportedCapability("agent session import status"),
+        cancelAgentSessionImport: (request) =>
+            service.cancelAgentSessionImport?.(request) ??
+            unsupportedCapability("agent session import cancellation"),
+        searchAgentMemories: (request) =>
+            service.searchAgentMemories?.(request) ??
+            unsupportedCapability("agent memory search"),
+        queryTopics: (request) =>
+            service.queryTopics?.(request) ??
+            unsupportedCapability("topic queries"),
+        rebuildTopics: (corpusId) =>
+            service.rebuildTopics?.(corpusId) ??
+            unsupportedCapability("topic rebuilds"),
         planViewMaintenance: (...args) =>
             service.planViewMaintenance?.(...args) ??
             unsupportedCapability("view maintenance planning"),
@@ -130,6 +185,9 @@ export function createMemoryServiceRpcFacade(
         listSourcesPage: (...args) => service.listSourcesPage(...args),
         getSource: (...args) => service.getSource(...args),
         getSourceContent: (...args) => service.getSourceContent(...args),
+        getSourceSynopsis: (request) =>
+            service.getSourceSynopsis?.(request) ??
+            unsupportedCapability("source synopses"),
         getSourceKnowledge: (...args) => service.getSourceKnowledge(...args),
         listSourceKnowledgeSuppressions: (...args) =>
             service.listSourceKnowledgeSuppressions!(...args),
@@ -182,19 +240,15 @@ export async function waitForMemoryJob(
         ) {
             return job;
         }
-        await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(resolve, interval);
-            options.signal?.addEventListener(
-                "abort",
-                () => {
-                    clearTimeout(timeout);
-                    reject(
-                        options.signal?.reason ??
-                            new Error("Job wait cancelled"),
-                    );
-                },
-                { once: true },
-            );
+        await new Promise<void>((resolve) => {
+            const finished = () => {
+                clearTimeout(timeout);
+                options.signal?.removeEventListener("abort", finished);
+                resolve();
+            };
+            const timeout = setTimeout(finished, interval);
+            options.signal?.addEventListener("abort", finished, { once: true });
+            if (options.signal?.aborted) finished();
         });
     }
 }

@@ -41,9 +41,11 @@
     "@typeagent/telemetry": "workspace:*",
     "async": "^3.2.5",
     "debug": "^4.4.0",
+    "gpt-tokenizer": "^2.9.0",
     "typechat": "^0.1.1"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@types/async": "^3.2.24",
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
@@ -53,9 +55,9 @@
     "typescript": "~5.4.5"
   },
   "optionalDependencies": {
-    "@huggingface/transformers": "^3.8.1"
+    "@huggingface/transformers": "4.3.1"
   },
   "engines": {
-    "node": ">=22"
+    "node": "^22.23.4 || ^24.22.1 || ^26.12.1"
   }
 }

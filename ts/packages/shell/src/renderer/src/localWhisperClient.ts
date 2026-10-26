@@ -1,14 +1,20 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { getLocalWhisperTranscription } from "@typeagent/common-utils";
+
 export class WhisperRecognizer {
     private audioContext: AudioContext | null = null;
     private mediaStreamSource: MediaStreamAudioSourceNode | null = null;
     private analyser: AnalyserNode | null = null;
     private mediaRecorder: MediaRecorder | null = null;
-    private silenceTimeout: any = null;
+    private silenceTimeout: ReturnType<typeof setTimeout> | null = null;
+    private recordingId = 0;
     private awaitingResult = false;
     private recognizedFired = false;
+    private transcriptionFailed = false;
+    private errorCallback: (error: Error) => void = (error) =>
+        console.error(error);
     private recognizingCallback:
         | ((result: { text: string }) => void)
         | undefined;
@@ -16,13 +22,20 @@ export class WhisperRecognizer {
         | ((result: { text: string }) => void)
         | undefined;
     private audioChunks: Blob[] = [];
-
-    constructor() {}
+    private stream?: MediaStream;
+    private disposed = false;
+    private animationFrame?: number;
+    private httpController: AbortController | undefined;
 
     async initialize() {
         const stream = await navigator.mediaDevices.getUserMedia({
             audio: true,
         });
+        this.stream = stream;
+        if (this.disposed) {
+            stream.getTracks().forEach((track) => track.stop());
+            return;
+        }
 
         this.audioContext = new AudioContext();
         this.mediaStreamSource =
@@ -32,8 +45,10 @@ export class WhisperRecognizer {
         this.mediaStreamSource.connect(this.analyser);
 
         this.mediaRecorder = new MediaRecorder(stream);
-        this.mediaRecorder.ondataavailable = async (e) => {
-            this.audioChunks.push(e.data);
+        this.mediaRecorder.ondataavailable = async (event) => {
+            if (this.disposed || this.transcriptionFailed) return;
+            const recordingId = this.recordingId;
+            this.audioChunks.push(event.data);
 
             if (
                 this.mediaRecorder!.state === "inactive" ||
@@ -42,15 +57,55 @@ export class WhisperRecognizer {
                 const blob = new Blob(this.audioChunks, {
                     type: "audio/mpeg-3",
                 });
-                const text = await this.getTranscription(blob);
-                if (this.mediaRecorder!.state === "inactive") {
-                    if (this.recognizedCallback && !this.recognizedFired) {
-                        this.recognizedCallback({ text });
-                        this.recognizedFired = true;
+                this.httpController?.abort();
+                const controller = new AbortController();
+                this.httpController = controller;
+                this.awaitingResult = true;
+
+                try {
+                    const text = await this.getTranscription(
+                        blob,
+                        controller.signal,
+                    );
+                    if (
+                        controller.signal.aborted ||
+                        this.disposed ||
+                        recordingId !== this.recordingId ||
+                        this.transcriptionFailed
+                    ) {
+                        return;
                     }
-                } else {
-                    if (this.recognizingCallback) {
-                        this.recognizingCallback({ text });
+                    if (this.mediaRecorder!.state === "inactive") {
+                        if (this.recognizedCallback && !this.recognizedFired) {
+                            this.recognizedFired = true;
+                            this.recognizedCallback({ text });
+                        }
+                    } else {
+                        this.recognizingCallback?.({ text });
+                    }
+                } catch (error) {
+                    if (
+                        controller.signal.aborted ||
+                        this.disposed ||
+                        recordingId !== this.recordingId ||
+                        this.transcriptionFailed
+                    ) {
+                        return;
+                    }
+                    this.transcriptionFailed = true;
+                    if (this.mediaRecorder?.state === "recording") {
+                        this.mediaRecorder.stop();
+                    }
+                    const failure =
+                        error instanceof Error
+                            ? error
+                            : new Error(String(error));
+                    console.error("Local transcription failed:", failure);
+                    this.errorCallback(failure);
+                } finally {
+                    if (this.httpController === controller) {
+                        this.httpController = undefined;
+                        this.awaitingResult = false;
                     }
                 }
             }
@@ -58,14 +113,55 @@ export class WhisperRecognizer {
     }
 
     startRecording() {
+        if (this.disposed || this.mediaRecorder?.state !== "inactive") return;
+        this.recordingId++;
+        this.httpController?.abort();
+        this.httpController = undefined;
         this.audioChunks = [];
+        this.awaitingResult = false;
         this.recognizedFired = false;
-        this.mediaRecorder?.start(200);
-        this.checkForSilence();
+        this.transcriptionFailed = false;
+        if (this.silenceTimeout !== null) {
+            clearTimeout(this.silenceTimeout);
+            this.silenceTimeout = null;
+        }
+        this.mediaRecorder.start(200);
+        this.checkForSilence(this.recordingId);
     }
 
     stopRecording() {
-        this.mediaRecorder?.stop();
+        if (this.mediaRecorder?.state === "recording") {
+            this.mediaRecorder.stop();
+        }
+    }
+
+    onError(callback: (error: Error) => void) {
+        this.errorCallback = callback;
+    }
+
+    dispose() {
+        if (this.disposed) return;
+        this.disposed = true;
+        this.httpController?.abort();
+        this.stopRecording();
+        if (this.animationFrame !== undefined) {
+            cancelAnimationFrame(this.animationFrame);
+        }
+        if (this.silenceTimeout !== null) clearTimeout(this.silenceTimeout);
+        this.stream?.getTracks().forEach((track) => track.stop());
+        this.mediaStreamSource?.disconnect();
+        this.analyser?.disconnect();
+        if (this.audioContext?.state !== "closed") {
+            void this.audioContext
+                ?.close()
+                .catch((error: unknown) =>
+                    this.errorCallback(
+                        error instanceof Error
+                            ? error
+                            : new Error(String(error)),
+                    ),
+                );
+        }
     }
 
     onRecognizing(callback: (result: { text: string }) => void) {
@@ -76,21 +172,22 @@ export class WhisperRecognizer {
         this.recognizedCallback = callback;
     }
 
-    private async getTranscription(blob: Blob): Promise<string> {
-        this.awaitingResult = true;
-        const formData = new FormData();
-        formData.append("file", blob);
-        const response = await fetch("http://localhost:8001/transcribe", {
-            method: "POST",
-            body: formData,
-        });
-
-        const responseBody = await response.json();
-        this.awaitingResult = false;
-        return responseBody.transcription;
+    private async getTranscription(
+        blob: Blob,
+        signal: AbortSignal,
+    ): Promise<string> {
+        return getLocalWhisperTranscription(blob, signal);
     }
 
-    private checkForSilence() {
+    private checkForSilence(recordingId: number) {
+        if (
+            this.disposed ||
+            recordingId !== this.recordingId ||
+            this.transcriptionFailed ||
+            this.mediaRecorder?.state !== "recording"
+        ) {
+            return;
+        }
         const bufferLength = this.analyser!.fftSize;
         const amplitudeArray = new Float32Array(bufferLength || 0);
         const silenceDuration = 1000;
@@ -101,23 +198,29 @@ export class WhisperRecognizer {
         const volume = this.getVolume(amplitudeArray);
 
         if (volume < silenceThreshold) {
-            if (
-                !this.silenceTimeout &&
-                this.mediaRecorder!.state !== "inactive"
-            ) {
-                this.silenceTimeout = setTimeout(() => {
-                    this.mediaRecorder?.stop();
+            if (this.silenceTimeout === null) {
+                const timeout = setTimeout(() => {
+                    if (this.silenceTimeout !== timeout) return;
                     this.silenceTimeout = null;
+                    if (
+                        recordingId === this.recordingId &&
+                        this.mediaRecorder?.state === "recording"
+                    ) {
+                        this.mediaRecorder.stop();
+                    }
                 }, silenceDuration);
+                this.silenceTimeout = timeout;
             }
-        } else {
-            if (this.silenceTimeout) {
-                clearTimeout(this.silenceTimeout);
-                this.silenceTimeout = null;
-            }
+        } else if (this.silenceTimeout !== null) {
+            clearTimeout(this.silenceTimeout);
+            this.silenceTimeout = null;
         }
 
-        requestAnimationFrame(() => this.checkForSilence());
+        this.animationFrame = requestAnimationFrame(() => {
+            if (recordingId === this.recordingId) {
+                this.checkForSilence(recordingId);
+            }
+        });
     }
 
     private getVolume(amplitudeArray: Float32Array) {

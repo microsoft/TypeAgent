@@ -3,12 +3,17 @@
 
 import type { ViewDefinitionInput } from "./viewTypes.js";
 
+const indexedEvidenceRecipe = ":indexed-evidence-v2";
+
 export function viewSynthesisIdentity(
     model: string,
     definition: ViewDefinitionInput,
+    consolidation = false,
 ): string {
-    if (definition.projectSummary) return `${model}:project-attribution-v3`;
-    if (definition.wiki) return `${model}:wiki-source-contribution-v3`;
+    if (definition.projectSummary)
+        return `${model}:project-attribution-v6:editorial-v1${indexedEvidenceRecipe}`;
+    if (definition.wiki)
+        return `${model}:wiki-source-contribution-v6:editorial-v1${consolidation ? ":consolidation-v1" : ""}${indexedEvidenceRecipe}`;
     return model;
 }
 

@@ -64,6 +64,12 @@ export function createWikiEditor(
             rbNode("p", `Stable page: ${page.id}; ${details.taxonomy}`),
             rbNode("pre", page.body),
             rbNode("p", content.summary),
+            ...(content.status
+                ? [rbNode("p", `Completeness: ${content.status}`)]
+                : []),
+            ...(content.coverageNote
+                ? [rbNode("p", `Coverage: ${content.coverageNote}`)]
+                : []),
             rbNode("p", details.note),
         );
         for (const edge of edges.filter(

@@ -4,6 +4,10 @@
 import { EnvVars, ModelType } from "./apiTypes.js";
 import type { CommonApiSettings } from "./openai.js";
 import { getEnvSetting, getIntFromEnv } from "./common.js";
+import {
+    applyChatModelRequestDefaults,
+    DEFAULT_OPENAI_CHAT_MODEL,
+} from "./chatModelDefaults.js";
 
 export type OpenAIApiSettings = CommonApiSettings & {
     provider: "openai";
@@ -29,8 +33,10 @@ export function openAIApiSettingsFromEnv(
     endpointName?: string,
     requireEndpoint: boolean = false,
 ): OpenAIApiSettings {
+    if (modelType === ModelType.Decision)
+        throw new Error("OpenAI does not support native decisions");
     env ??= process.env;
-    return {
+    const settings: OpenAIApiSettings = {
         provider: "openai",
         modelType: modelType,
         apiKey: getEnvSetting(env, EnvVars.OPENAI_API_KEY, endpointName),
@@ -44,7 +50,9 @@ export function openAIApiSettingsFromEnv(
             requireEndpoint,
         ),
         modelName: getEnvSetting(
-            env,
+            modelType === ModelType.Chat
+                ? { OPENAI_MODEL: DEFAULT_OPENAI_CHAT_MODEL, ...env }
+                : env,
             modelType === ModelType.Chat
                 ? EnvVars.OPENAI_MODEL
                 : EnvVars.OPENAI_MODEL_EMBEDDING,
@@ -87,4 +95,6 @@ export function openAIApiSettingsFromEnv(
                 "false",
             ) === "true",
     };
+    applyChatModelRequestDefaults(settings);
+    return settings;
 }

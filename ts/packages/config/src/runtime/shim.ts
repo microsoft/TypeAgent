@@ -18,6 +18,12 @@
 
 import { regionToEnvSuffix } from "./regions.js";
 import {
+    validateEmbeddingConfig,
+    resolveEmbeddingConfig,
+    EMBEDDING_MODELS_KEY,
+    DEFAULT_EMBEDDING_MODEL_KEY,
+} from "./embedding.js";
+import {
     MODEL_REQUEST_CONSTRAINTS_KEY,
     modelRequestConstraintsToTree,
 } from "./requestConstraints.js";
@@ -139,7 +145,12 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
  * global.
  */
 export function configToEnv(config: Config): EnvOutput {
+    resolveEmbeddingConfig(config);
     const out: EnvOutput = {};
+    if (config.embeddingModels !== undefined)
+        out[EMBEDDING_MODELS_KEY] = JSON.stringify(config.embeddingModels);
+    if (config.defaultEmbeddingModel !== undefined)
+        out[DEFAULT_EMBEDDING_MODEL_KEY] = config.defaultEmbeddingModel;
     if (config.modelRequestConstraints)
         out[MODEL_REQUEST_CONSTRAINTS_KEY] = JSON.stringify(
             modelRequestConstraintsToTree(config.modelRequestConstraints),
@@ -251,6 +262,9 @@ export function configToEnv(config: Config): EnvOutput {
 
     // Embedding provider selection.
     if (config.embedding) {
+        validateEmbeddingConfig(config.embedding);
+        if (config.embedding.deployment !== undefined)
+            out.TYPEAGENT_EMBEDDING_DEPLOYMENT = config.embedding.deployment;
         if (config.embedding.provider !== undefined)
             out.TYPEAGENT_EMBEDDING_PROVIDER = config.embedding.provider;
         if (config.embedding.model !== undefined)
@@ -263,6 +277,36 @@ export function configToEnv(config: Config): EnvOutput {
             out.TYPEAGENT_EMBEDDING_MAX_BATCH_SIZE = String(
                 config.embedding.maxBatchSize,
             );
+        if (config.embedding.runtime !== undefined)
+            out.TYPEAGENT_EMBEDDING_RUNTIME = config.embedding.runtime;
+        if (config.embedding.modalities !== undefined)
+            out.TYPEAGENT_EMBEDDING_MODALITIES = JSON.stringify(
+                config.embedding.modalities,
+            );
+        if (config.embedding.revision !== undefined)
+            out.TYPEAGENT_EMBEDDING_REVISION = config.embedding.revision;
+        if (config.embedding.localFilesOnly !== undefined)
+            out.TYPEAGENT_EMBEDDING_LOCAL_FILES_ONLY = config.embedding
+                .localFilesOnly
+                ? "1"
+                : "0";
+        if (config.embedding.maxPending !== undefined)
+            out.TYPEAGENT_EMBEDDING_MAX_PENDING = String(
+                config.embedding.maxPending,
+            );
+    }
+
+    if (config.decision) {
+        const d = config.decision;
+        if (d.provider !== undefined)
+            out.TYPEAGENT_DECISION_PROVIDER = d.provider;
+        if (d.azure?.deploymentKey !== undefined)
+            out.TYPEAGENT_DECISION_AZURE_DEPLOYMENT_KEY = d.azure.deploymentKey;
+        if (d.azure?.deploymentName !== undefined)
+            out.TYPEAGENT_DECISION_AZURE_DEPLOYMENT_NAME =
+                d.azure.deploymentName;
+        if (d.copilot?.model !== undefined)
+            out.TYPEAGENT_DECISION_COPILOT_MODEL = d.copilot.model;
     }
 
     // Extra: untyped passthrough. Last so it can override typed values

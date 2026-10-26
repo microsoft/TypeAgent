@@ -163,6 +163,8 @@ describe("conservative indexed grouping", () => {
             generate: async (input) => {
                 generated++;
                 return hydrateInformational(input, {
+                    summary: "Grounded reference summary.",
+                    status: "partial",
                     title: "Human-readable accountability",
                     prose: input.inputs
                         .map((source) => source.content)
@@ -240,7 +242,7 @@ describe("conservative indexed grouping", () => {
             const { corpusId } = await service.createCorpus(
                 "Real indexed usefulness",
             );
-            for (const family of ["wiki", "projects"] as const) {
+            for (const family of ["wiki", "projects", "topics"] as const) {
                 await service.maintainViews({
                     corpusId,
                     expectedHead: (await service.listViews(corpusId)).head,
@@ -383,7 +385,7 @@ describe("conservative indexed grouping", () => {
             const symbolsCorpus = (
                 await service.createCorpus("Exact symbol identity")
             ).corpusId;
-            for (const family of ["wiki", "projects"] as const)
+            for (const family of ["wiki", "projects", "topics"] as const)
                 await service.maintainViews({
                     corpusId: symbolsCorpus,
                     expectedHead: (await service.listViews(symbolsCorpus)).head,
@@ -436,7 +438,7 @@ describe("conservative indexed grouping", () => {
             const ambiguousCorpus = (
                 await service.createCorpus("Folded symbol ambiguity")
             ).corpusId;
-            for (const family of ["wiki", "projects"] as const)
+            for (const family of ["wiki", "projects", "topics"] as const)
                 await service.maintainViews({
                     corpusId: ambiguousCorpus,
                     expectedHead: (await service.listViews(ambiguousCorpus))

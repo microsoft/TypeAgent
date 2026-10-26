@@ -15,6 +15,15 @@ Derived memory Views are enabled by default in the durable memory host.
 requires no user opt-in. Builds remain explicit, provider failures remain errors,
 and enablement does not grant publication, review or execution authority.
 
+## Automations page
+
+Both WebSocket and embedded hosts supply the browser agent with
+`automations: { instanceDir }`. The browser combines its WebFlows with the
+TaskFlow and PowerShell flow stores under that instance directory. This
+initialization is independent of Copilot recording and macro lifecycle RPCs.
+No Copilot macro manager or plugin catalog is exposed to the page; an absent
+macro source is not shown as an unavailable provider.
+
 ## Runbook host capabilities
 
 Both WebSocket and embedded hosts inject the named, plain-object
@@ -48,9 +57,10 @@ credentials or schema-validator functions are exposed.
   a bare name. A defensive direct-compound callback path preserves only
   canonical two-string JSON pairs with the exact server; this does not relax
   the canonical store's component-identifier requirements.
-- Macro targets use the current approved immutable macro ID/version and a
-  canonical input/step fingerprint. Draft/disabled/suppressed, agent-required
-  and secret-input macros are excluded. Secret-input MCP schemas are excluded.
+- Macro targets are unavailable: checked programs and recording/authoring
+  lifecycle operations belong to the Copilot plugin, not the agent server.
+  The server does not create a macro manager or read the plugin catalog.
+  Secret-input MCP schemas are excluded.
   Flows are **not** binding targets: existing flow catalogs do not provide
   immutable, approved version snapshots; visible/active does not mean approved.
 - `suggestBindings({inputSchema, commandText?})` ranks approved automation,

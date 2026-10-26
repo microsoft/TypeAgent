@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import git from "isomorphic-git";
+import git, { type TreeEntry } from "isomorphic-git";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { access, mkdir, readFile, rename, rm } from "node:fs/promises";
@@ -9,6 +9,11 @@ import path from "node:path";
 import lockfile from "proper-lockfile";
 import { writeRunbookJson } from "./durableRunbookJson.js";
 import { retryFilesystemPublication } from "./filesystemPublication.js";
+import {
+    readViewRecord,
+    viewRecordsPath,
+    writeViewRecords,
+} from "./viewHistoryRecords.js";
 
 const ref = "refs/heads/typeagent-history";
 
@@ -25,6 +30,7 @@ async function exists(file: string): Promise<boolean> {
 export interface HistorySnapshot<T> {
     head: string | null;
     state: T;
+    stateBytes: number;
 }
 
 export type ViewHistoryFaultPoint =
@@ -47,6 +53,7 @@ export class ViewHistory<T> {
         private readonly checkpoint?: (
             point: ViewHistoryFaultPoint,
         ) => Promise<void>,
+        private readonly records?: (state: T) => Record<string, unknown>,
     ) {
         this.gitdir = path.join(directory, "view-history.git");
         this.gate = path.join(directory, "view-history-purge.json");
@@ -79,12 +86,14 @@ export class ViewHistory<T> {
         return { fs: this.filesystem, gitdir: this.gitdir };
     }
 
-    private async lock(): Promise<() => Promise<void>> {
+    private async lock(retry = false): Promise<() => Promise<void>> {
         await mkdir(this.directory, { recursive: true });
         return lockfile.lock(this.directory, {
             realpath: false,
             lockfilePath: `${this.gitdir}.lock`,
-            retries: 0,
+            retries: retry
+                ? { retries: 20, minTimeout: 10, maxTimeout: 100 }
+                : 0,
         });
     }
 
@@ -98,23 +107,41 @@ export class ViewHistory<T> {
         oid?: string,
         bypassGate = false,
     ): Promise<HistorySnapshot<T>> {
-        if (!bypassGate && (await exists(this.gate)))
-            throw new Error(
-                "View history is quarantined pending privacy purge",
-            );
+        if (!bypassGate) await this.assertReadable();
         const head = oid ?? (await this.head());
         if (!head) {
-            return { head: null, state: this.empty() };
+            const state = this.empty();
+            return {
+                head: null,
+                state,
+                stateBytes: 0,
+            };
         }
         const blob = await git.readBlob({
             ...this.options(),
             oid: head,
             filepath: "state.json",
         });
+        if (!bypassGate) await this.assertReadable();
         return {
             head,
             state: JSON.parse(Buffer.from(blob.blob).toString("utf8")) as T,
+            stateBytes: blob.blob.byteLength,
         };
+    }
+
+    public async assertReadable(): Promise<void> {
+        if (await exists(this.gate))
+            throw new Error(
+                "View history is quarantined pending privacy purge",
+            );
+    }
+
+    public async assertHead(expected: string | null): Promise<void> {
+        await this.assertReadable();
+        if ((await this.head()) !== expected)
+            throw new Error("View history changed during read operation");
+        await this.assertReadable();
     }
 
     public async commit(
@@ -151,6 +178,9 @@ export class ViewHistory<T> {
             const previous = head
                 ? (await git.readTree({ ...this.options(), oid: head })).tree
                 : [];
+            const previousByPath = new Map(
+                previous.map((entry) => [entry.path, entry]),
+            );
             const entries = [];
             for (const [name, text] of Object.entries({
                 "state.json": JSON.stringify(state),
@@ -160,9 +190,9 @@ export class ViewHistory<T> {
                     ...this.options(),
                     blob: Buffer.from(text, "utf8"),
                 });
-                const unchanged = previous.find(
-                    (entry) => entry.path === name && entry.oid === oid,
-                );
+                const previousEntry = previousByPath.get(name);
+                const unchanged =
+                    previousEntry?.oid === oid ? previousEntry : undefined;
                 entries.push(
                     unchanged ?? {
                         mode: "100644",
@@ -172,6 +202,10 @@ export class ViewHistory<T> {
                     },
                 );
             }
+            if (this.records)
+                entries.push(
+                    await writeViewRecords(this.options(), this.records(state)),
+                );
             await this.checkpoint?.("blob");
             const tree = await git.writeTree({
                 ...this.options(),
@@ -227,6 +261,102 @@ export class ViewHistory<T> {
         );
     }
 
+    public async historyForRecord<R>(
+        id: string,
+        expectedHead?: string | null,
+    ): Promise<Array<{ commitId: string; record: R | undefined }>> {
+        await this.assertReadable();
+        const head =
+            expectedHead === undefined ? await this.head() : expectedHead;
+        await this.assertHead(head);
+        if (!head) return [];
+        const commits = await git.log({ ...this.options(), ref: head });
+        const records = new Map<string, Promise<R>>();
+        const trees = new Map<string, Promise<TreeEntry[]>>();
+        const readTree = (oid: string) => {
+            let tree = trees.get(oid);
+            if (!tree) {
+                tree = git
+                    .readTree({ ...this.options(), oid })
+                    .then((result) => result.tree);
+                trees.set(oid, tree);
+            }
+            return tree;
+        };
+        const roots = await Promise.all(
+            commits.map((entry) => readTree(entry.commit.tree)),
+        );
+        const recordTrees: Array<TreeEntry[] | Promise<TreeEntry[]>> = [];
+        for (const [index, entry] of commits.entries()) {
+            const recordEntry = roots[index].find(
+                (entry) => entry.path === viewRecordsPath,
+            );
+            recordTrees.push(
+                recordEntry
+                    ? readTree(recordEntry.oid)
+                    : await this.legacyRecordTree(entry.oid, head),
+            );
+        }
+        const result = await Promise.all(
+            commits.map(async (entry, index) => ({
+                commitId: entry.oid,
+                record: await readViewRecord(
+                    this.options(),
+                    await recordTrees[index],
+                    id,
+                    records,
+                ),
+            })),
+        );
+        await this.assertHead(head);
+        return result;
+    }
+
+    private async legacyRecordTree(
+        commitId: string,
+        expectedHead: string,
+    ): Promise<TreeEntry[]> {
+        const cache = path.join(this.gitdir, "view-record-index", commitId);
+        const cached = await this.cachedRecordTree(cache);
+        if (cached) return cached;
+        // Legacy commits are immutable. Rebuild their full-fidelity per-View
+        // records once, inside the repository removed by the privacy swap.
+        const release = await this.lock(true);
+        try {
+            await this.assertHead(expectedHead);
+            const cached = await this.cachedRecordTree(cache);
+            if (cached) return cached;
+            if (!this.records)
+                throw new Error("View history record selector is required");
+            const { oid } = await writeViewRecords(
+                this.options(),
+                this.records((await this.read(commitId)).state),
+            );
+            await writeRunbookJson(cache, oid);
+            return (await git.readTree({ ...this.options(), oid })).tree;
+        } finally {
+            await release();
+        }
+    }
+
+    private async cachedRecordTree(
+        cache: string,
+    ): Promise<TreeEntry[] | undefined> {
+        try {
+            const oid = await readFile(cache, "utf8");
+            if (/^[a-f0-9]{40}$/.test(oid))
+                return (await git.readTree({ ...this.options(), oid })).tree;
+        } catch (error) {
+            if (
+                !["ENOENT", "NotFoundError", "ObjectTypeError"].includes(
+                    (error as NodeJS.ErrnoException).code ?? "",
+                )
+            )
+                throw error;
+        }
+        return undefined;
+    }
+
     public async purge(
         sourceId: string,
         sanitize: (state: T, sourceId: string) => T,
@@ -273,7 +403,12 @@ export class ViewHistory<T> {
                 (await this.read(undefined, true)).state,
                 sourceId,
             );
-            const fresh = new ViewHistory<T>(replacement, this.empty);
+            const fresh = new ViewHistory<T>(
+                replacement,
+                this.empty,
+                undefined,
+                this.records,
+            );
             const snapshot = await fresh.read();
             if (!snapshot.head)
                 await fresh.commit(

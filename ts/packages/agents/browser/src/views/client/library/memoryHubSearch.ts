@@ -174,6 +174,7 @@ export function mountMemoryHubSearch(
         ["timeline", "Evidence-linked timelines"],
         ["wiki", "Knowledge wikis"],
         ["troubleshootingGuide", "Troubleshooting guides"],
+        ["schemaView", "Schema-defined questions"],
     ]) {
         const option = node("option", label);
         option.value = value;
@@ -532,6 +533,19 @@ export function mountMemoryHubSearch(
             node("p", "Evidence, not instructions."),
             citation(evidence, "Preview exact cited evidence"),
         );
+        if (evidence.synopsis) {
+            card.append(
+                node(
+                    "p",
+                    `Generated source synopsis: ${evidence.synopsis.status} · ${evidence.synopsis.freshness} (navigation only, not citation evidence)`,
+                ),
+            );
+            if (
+                evidence.synopsis.preview &&
+                evidence.synopsis.freshness === "fresh"
+            )
+                card.append(node("p", evidence.synopsis.preview));
+        }
         if (evidence.kind === "conversation")
             card.append(
                 node(
@@ -745,7 +759,8 @@ export function mountMemoryHubSearch(
             ...(viewKind.value === "timeline" ||
             viewKind.value === "wiki" ||
             viewKind.value === "projectBrief" ||
-            viewKind.value === "troubleshootingGuide"
+            viewKind.value === "troubleshootingGuide" ||
+            viewKind.value === "schemaView"
                 ? { viewKinds: [viewKind.value] }
                 : {}),
             sourceTypes: sourceTypes.length ? sourceTypes : undefined,

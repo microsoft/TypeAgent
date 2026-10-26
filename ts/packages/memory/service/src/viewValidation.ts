@@ -29,6 +29,10 @@ import {
     validateProjectSelector,
 } from "./informationalProject.js";
 import { informationalView } from "./informationalView.js";
+import {
+    validateSchemaViewDefinition,
+    validateSchemaViewContent,
+} from "./schemaView.js";
 
 function text(value: unknown, label: string): asserts value is string {
     if (typeof value !== "string" || !value.trim())
@@ -112,17 +116,19 @@ function validateSections(sections: ViewSection[], kind: string): Set<string> {
                 ? ["event"]
                 : kind === "wiki"
                   ? ["page"]
-                  : kind === "projectBrief"
-                    ? projectBriefRoles
-                    : [
-                          "description",
-                          "prerequisites",
-                          "diagnostic",
-                          "guard",
-                          "verification",
-                          "recovery",
-                          "context",
-                      ];
+                  : kind === "schemaView"
+                    ? ["question"]
+                    : kind === "projectBrief"
+                      ? projectBriefRoles
+                      : [
+                            "description",
+                            "prerequisites",
+                            "diagnostic",
+                            "guard",
+                            "verification",
+                            "recovery",
+                            "context",
+                        ];
         if (!allowed.includes(section.role))
             throw new Error("Unsupported guide section role");
         text(section.heading, "Section heading");
@@ -316,9 +322,25 @@ export function validateViewDraft(request: ViewSaveRequest): void {
             "definition",
             "content",
             "relationships",
+            "unlockProtection",
         ],
         "view request",
     );
+    if (
+        request.unlockProtection !== undefined &&
+        (!Array.isArray(request.unlockProtection) ||
+            !request.unlockProtection.length ||
+            request.unlockProtection.length > 32 ||
+            request.unlockProtection.some(
+                (target) =>
+                    typeof target !== "string" ||
+                    !target ||
+                    target.length > 240,
+            ) ||
+            new Set(request.unlockProtection).size !==
+                request.unlockProtection.length)
+    )
+        throw new Error("Invalid editorial protection unlock targets");
     assertViewIdentifier("view ID", request.viewId);
     if (
         !Number.isSafeInteger(request.expectedVersion) ||
@@ -332,9 +354,13 @@ export function validateViewDraft(request: ViewSaveRequest): void {
     )
         throw new Error("Expected view history head is required");
     if (
-        !["troubleshootingGuide", "projectBrief", "timeline", "wiki"].includes(
-            request.definition?.kind,
-        ) ||
+        ![
+            "troubleshootingGuide",
+            "projectBrief",
+            "timeline",
+            "wiki",
+            "schemaView",
+        ].includes(request.definition?.kind) ||
         request.content?.kind !== request.definition?.kind
     )
         throw new Error("Unsupported view kind or mismatched content kind");
@@ -342,12 +368,21 @@ export function validateViewDraft(request: ViewSaveRequest): void {
         throw new Error("View definition identity does not match");
     onlyKeys(
         request.definition,
-        ["viewId", "kind", "selector", "maintenance", "wiki", "projectSummary"],
+        [
+            "viewId",
+            "kind",
+            "selector",
+            "maintenance",
+            "wiki",
+            "projectSummary",
+            "schemaView",
+        ],
         "view definition",
     );
     validateMaintenanceDefinition(request.definition);
     validateWikiSelector(request.definition);
     validateProjectSelector(request.definition);
+    validateSchemaViewDefinition(request.definition);
     if (!!request.definition.wiki !== informationalWiki(request.content))
         throw new Error("Wiki content and construction definition differ");
     if (
@@ -381,6 +416,8 @@ function validateDraftContent(
     }
     if (request.content.kind === "timeline") validateTimeline(request.content);
     if (request.content.kind === "wiki") validateWiki(request.content);
+    if (request.content.kind === "schemaView")
+        validateSchemaViewContent(request.definition, request.content);
     if (request.content.agentEdition !== undefined)
         throw new Error(
             "Agent editions are not supported in derived view drafts",
@@ -395,11 +432,12 @@ function validateDraftContent(
             "citations",
             ...(request.content.kind === "timeline" ? ["generatedAt"] : []),
             ...(request.content.kind === "wiki"
-                ? ["index", "construction"]
+                ? ["index", "construction", "status", "coverageNote"]
                 : []),
             ...(request.content.kind === "projectBrief"
-                ? ["construction"]
+                ? ["construction", "status", "coverageNote"]
                 : []),
+            ...(request.content.kind === "schemaView" ? ["construction"] : []),
         ],
         "guide content",
     );

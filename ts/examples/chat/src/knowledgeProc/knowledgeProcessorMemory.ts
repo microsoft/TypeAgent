@@ -606,7 +606,7 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
         const chatModelSettings = openai.apiSettingsFromEnv(
             openai.ModelType.Chat,
             undefined,
-            "GPT_4_O",
+            "GPT_6_LUNA",
         );
         chatModelSettings.retryPauseMs = 10000;
         const chatModel = openai.createJsonChatModel(chatModelSettings, [
@@ -720,7 +720,7 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
         /*    const chatModelSettings = openai.apiSettingsFromEnv(
             openai.ModelType.Chat,
             undefined,
-            "GPT_4_O_MINI",
+            "GPT_6_LUNA",
         );
         */
         const chatModelSettings = openai.localOpenAIApiSettingsFromEnv(

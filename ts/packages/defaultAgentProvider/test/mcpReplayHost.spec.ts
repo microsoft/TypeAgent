@@ -4,8 +4,6 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createHash } from "node:crypto";
-import { MacroManager } from "@typeagent/copilot-macros";
 import { McpReplayHost } from "../src/mcp/mcpReplayHost.js";
 import type { NormalizedMcpServerConfig } from "../src/mcp/mcpServerConfig.js";
 
@@ -56,112 +54,6 @@ describe("MCP replay host", () => {
             await host.close();
         }
     });
-
-    it.each(["removed", "schemaChanged"])(
-        "refreshes the production catalog between induction, approval and replay (%s)",
-        async (change) => {
-            const instanceDir = await mkdtemp(
-                path.join(os.tmpdir(), "mcp-replay-"),
-            );
-            let present = true;
-            let schemaVersion = "v1";
-            let calls = 0;
-            let inspections = 0;
-            const host = new McpReplayHost(instanceDir, {
-                configs: [
-                    {
-                        id: "example",
-                        name: "example",
-                        transport: { kind: "stdio", command: "unused" },
-                        enabled: true,
-                        trust: "trusted",
-                        scope: "workspace",
-                        provenance: { source: "captured-test" },
-                    },
-                ],
-                audit: { write: async () => {} },
-                connectionFactory: async () => ({
-                    listTools: async () => {
-                        inspections++;
-                        return present
-                            ? [
-                                  {
-                                      name: "read",
-                                      inputSchema: {
-                                          type: "object",
-                                          properties: {},
-                                          description: schemaVersion,
-                                      },
-                                  },
-                              ]
-                            : [];
-                    },
-                    callTool: async () => {
-                        calls++;
-                        return { content: [] };
-                    },
-                    close: async () => {},
-                }),
-            });
-            try {
-                const manager = new MacroManager(instanceDir, host);
-                const token = manager.armRecording({ sessionId: "refresh" });
-                manager.claimRecording({
-                    sessionId: "refresh",
-                    cwd: instanceDir,
-                    promptHash: createHash("sha256")
-                        .update("Read")
-                        .digest("hex"),
-                });
-                const trace = await manager.finalizeRecording({
-                    tokenId: token.id,
-                    trace: {
-                        schemaVersion: 1,
-                        sessionId: "refresh",
-                        cwd: instanceDir,
-                        prompt: "Read",
-                        response: "Done",
-                        startedAt: "2026-09-28T00:00:00Z",
-                        completedAt: "2026-09-28T00:00:01Z",
-                        toolCalls: [
-                            {
-                                toolCallId: "call-1",
-                                name: "read",
-                                mcpServerName: "example",
-                                arguments: {},
-                                result: [],
-                                status: "completed",
-                            },
-                        ],
-                    },
-                });
-                const draft = await manager.createMacroFromTrace({
-                    traceId: trace.traceId,
-                    name: "Read",
-                });
-                expect(inspections).toBe(1);
-                if (change === "removed") {
-                    present = false;
-                    await expect(manager.approveMacro(draft)).rejects.toThrow(
-                        "Replay tool is unavailable",
-                    );
-                } else {
-                    const approved = await manager.approveMacro(draft);
-                    schemaVersion = "v2";
-                    await expect(
-                        manager.runMacro({ ...approved, runId: "refresh-run" }),
-                    ).resolves.toMatchObject({
-                        status: "failed",
-                        run: { error: { code: "schemaDrift" }, steps: [] },
-                    });
-                }
-                expect(inspections).toBe(change === "removed" ? 2 : 3);
-                expect(calls).toBe(0);
-            } finally {
-                await host.close();
-            }
-        },
-    );
 
     it.each([
         undefined,

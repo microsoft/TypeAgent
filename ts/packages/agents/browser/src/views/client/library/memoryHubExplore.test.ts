@@ -75,6 +75,33 @@ function click(label: string) {
 async function settle() {
     for (let index = 0; index < 20; index++) await Promise.resolve();
 }
+
+test("Overview mounts production topic browsing with the selected corpus RPC scope", async () => {
+    invoke.mockResolvedValue({
+        generation: null,
+        nodes: [],
+        parents: [],
+        related: [],
+        neighborhoods: [],
+        totalNodes: 0,
+        matchingNodes: 0,
+        omittedNodes: 0,
+        omittedParents: 0,
+        omittedRelated: 0,
+        omittedNeighborhoods: 0,
+        limits: ["Not yet maintained"],
+        io: { stateBytes: 2, snapshotBytes: 4, elapsedMs: 1 },
+    });
+    click("Browse topics");
+    await settle();
+    expect(invoke).toHaveBeenCalledWith("memoryQueryTopics", {
+        corpusId: "a",
+        curated: true,
+        search: "",
+        pageSize: 24,
+    });
+    expect(host.textContent).toContain("0 maintained topics");
+});
 beforeEach(() => {
     invoke.mockReset();
     scope = "a";

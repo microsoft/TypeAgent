@@ -19,7 +19,8 @@ function makeRequest(overrides: Partial<ModelRequest> = {}): ModelRequest {
             { role: "system", content: "You are helpful." },
             { role: "user", content: "Hello" },
         ] as PromptSection[],
-        completionSettings: { temperature: 0.5, max_completion_tokens: 100 },
+        completionSettings: { temperature: 0.5 },
+        providerOutputTokens: 100,
         defaultParams: {},
         disableResponseFormat: false,
         ...overrides,
@@ -149,6 +150,42 @@ describe("ChatCompletionsWireApiProvider (default path is byte-identical)", () =
         expect(r.success).toBe(false);
     });
 
+    test.each([
+        { mode: "plain", request: makeRequest() },
+        {
+            mode: "structured",
+            request: makeRequest({
+                jsonSchema: { name: "Result", schema: { type: "object" } },
+            }),
+        },
+        {
+            mode: "function",
+            request: makeRequest({
+                jsonSchema: [{ type: "function", function: { name: "do_it" } }],
+            }),
+        },
+    ])("rejects content-filtered $mode responses", ({ request }) => {
+        for (const content of ["", "partial response"]) {
+            expect(
+                adapter.parseResponse(
+                    {
+                        id: "filtered",
+                        choices: [
+                            {
+                                finish_reason: "content_filter",
+                                message: { role: "assistant", content },
+                            },
+                        ],
+                    },
+                    request,
+                ),
+            ).toEqual({
+                success: false,
+                message: "Model response blocked by content filter",
+            });
+        }
+    });
+
     test("parseResponse unwraps a single tool call for function calling", () => {
         const req = makeRequest({
             jsonSchema: [{ type: "function", function: { name: "do_it" } }],
@@ -262,8 +299,8 @@ describe("MessagesWireApiProvider", () => {
             modelName: "claude-3-5-sonnet",
             completionSettings: {
                 temperature: 0.3,
-                max_completion_tokens: 256,
             },
+            providerOutputTokens: 256,
         });
         const body = adapter.buildRequestBody(req) as Record<string, any>;
         expect(body.model).toBe("claude-3-5-sonnet");
@@ -278,9 +315,9 @@ describe("MessagesWireApiProvider", () => {
         const body = adapter.buildRequestBody(
             makeRequest({
                 completionSettings: {
-                    max_completion_tokens: 256,
                     reasoning_effort: "max",
                 },
+                providerOutputTokens: 256,
             }),
         ) as Record<string, unknown>;
         expect(body.output_config).toEqual({ effort: "max" });
@@ -292,19 +329,19 @@ describe("MessagesWireApiProvider", () => {
             const body = adapter.buildRequestBody(
                 makeRequest({
                     completionSettings: {
-                        max_completion_tokens: 256,
                         reasoning_effort: reasoningEffort,
                     },
+                    providerOutputTokens: 256,
                 }),
             ) as Record<string, unknown>;
             expect(body.output_config).toEqual({ effort: reasoningEffort });
         },
     );
 
-    test("buildRequestBody throws when max_completion_tokens is missing", () => {
-        const req = makeRequest({ completionSettings: {} });
+    test("buildRequestBody throws when verified provider capacity is missing", () => {
+        const req = makeRequest({ providerOutputTokens: undefined });
         expect(() => adapter.buildRequestBody(req)).toThrow(
-            /max_completion_tokens/,
+            /verified provider output capacity/,
         );
     });
 
@@ -443,18 +480,19 @@ describe("MessagesWireApiProvider", () => {
 describe("ResponsesWireApiProvider", () => {
     const adapter = adapterFor("responses");
 
-    test("buildRequestBody uses input array + instructions + max_output_tokens", () => {
+    test("buildRequestBody uses input array + instructions without optional output caps", () => {
         const req = makeRequest({
             defaultParams: { model: "gpt-5-codex" },
             completionSettings: {
                 temperature: 0.2,
-                max_completion_tokens: 512,
             },
         });
         const body = adapter.buildRequestBody(req) as Record<string, any>;
         expect(body.model).toBe("gpt-5-codex");
         expect(body.instructions).toBe("You are helpful.");
-        expect(body.max_output_tokens).toBe(512);
+        expect(body).not.toHaveProperty("max_output_tokens");
+        expect(body).not.toHaveProperty("max_tokens");
+        expect(body).not.toHaveProperty("max_completion_tokens");
         expect(body.temperature).toBe(0.2);
         expect(Array.isArray(body.input)).toBe(true);
         expect(body.input[0].role).toBe("user");

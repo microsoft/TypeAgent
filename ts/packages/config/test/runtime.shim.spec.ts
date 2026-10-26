@@ -99,11 +99,10 @@ describe("configToEnv: shim projection", () => {
         }
     });
 
-    test("leaves an unknown embedding provider value in extras", () => {
-        const out = configToEnv(
+    test("rejects an unknown embedding provider", () => {
+        expect(() =>
             buildConfig({ TYPEAGENT_EMBEDDING_PROVIDER: "bogus" }),
-        );
-        expect(out.TYPEAGENT_EMBEDDING_PROVIDER).toBe("bogus");
+        ).toThrow("embedding.provider");
     });
 
     test("preserves extras verbatim", () => {

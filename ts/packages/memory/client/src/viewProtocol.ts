@@ -2,6 +2,11 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
+import { topicBuildInputSchema } from "./topicProtocol.js";
+import {
+    schemaViewDefinitionSchema,
+    schemaViewContentSchema,
+} from "./schemaViewProtocol.js";
 import {
     viewMaintenanceDefinitionSchema,
     viewMaintenanceManifestSchema,
@@ -34,6 +39,7 @@ export const viewSourceUsagePageSchema = z.strictObject({
                 "projectBrief",
                 "timeline",
                 "wiki",
+                "schemaView",
             ]),
             title: text,
             state: z.enum(["draft", "stale", "archived"]),
@@ -67,6 +73,7 @@ export const viewDefinitionSchema = z
             "projectBrief",
             "timeline",
             "wiki",
+            "schemaView",
         ]),
         selector: viewSelectorSchema,
         maintenance: viewMaintenanceDefinitionSchema.optional(),
@@ -86,8 +93,22 @@ export const viewDefinitionSchema = z
                 excludedSourceIds: id.array().max(32),
             })
             .optional(),
+        schemaView: schemaViewDefinitionSchema.optional(),
     })
     .superRefine((definition, context) => {
+        if (
+            (definition.kind === "schemaView") !== !!definition.schemaView ||
+            (definition.schemaView &&
+                (definition.wiki ||
+                    definition.projectSummary ||
+                    !definition.maintenance))
+        )
+            context.addIssue({
+                code: "custom",
+                path: ["schemaView"],
+                message:
+                    "Schema-defined views require their definition and an explicit maintenance scope",
+            });
         if (
             (definition.kind === "wiki") !== !!definition.wiki ||
             (definition.wiki &&
@@ -368,6 +389,7 @@ const informationalProjectDetails = z.discriminatedUnion("kind", [
             })
             .array()
             .max(128),
+        openQuestions: text.array().max(128).optional(),
     }),
     z.strictObject({
         kind: z.literal("context"),
@@ -378,6 +400,8 @@ const informationalProjectDetails = z.discriminatedUnion("kind", [
 const informationalProjectContent = guideContent.extend({
     kind: z.literal("projectBrief"),
     construction: z.literal("informational-project-summary-v1"),
+    status: z.enum(["partial", "sufficient"]).optional(),
+    coverageNote: text.optional(),
     sections: section
         .extend({ details: informationalProjectDetails })
         .array()
@@ -416,9 +440,11 @@ const timelineContent = guideContent.extend({
         .min(1)
         .max(1000),
 });
-const wikiContent = guideContent.extend({
+const wikiContentShape = guideContent.extend({
     kind: z.literal("wiki"),
     construction: z.literal("informational-wiki-v1"),
+    status: z.enum(["partial", "sufficient"]).optional(),
+    coverageNote: text.optional(),
     index: z
         .strictObject({
             pageId: id,
@@ -427,7 +453,7 @@ const wikiContent = guideContent.extend({
         })
         .array()
         .min(1)
-        .max(1),
+        .max(32),
     sections: z
         .strictObject({
             id,
@@ -439,14 +465,59 @@ const wikiContent = guideContent.extend({
                 construction: z.literal("informational-wiki-v1"),
                 taxonomy: z.enum(["concept", "system", "project"]),
                 note: z.string().max(4000),
-                mergedPageIds: id.array().length(0),
+                mergedPageIds: id.array().max(31),
             }),
         })
         .array()
         .min(1)
-        .max(1),
+        .max(32),
+});
+const wikiContent = wikiContentShape.superRefine((wiki, context) => {
+    const root = wiki.sections[0];
+    if (!root) {
+        context.addIssue({
+            code: "custom",
+            path: ["sections"],
+            message: "Wiki requires at least one page",
+        });
+        return;
+    }
+    const children = wiki.sections.slice(1);
+    const merged = root.details.mergedPageIds;
+    if (
+        new Set(wiki.sections.map((page) => page.id)).size !==
+            wiki.sections.length ||
+        wiki.index.length !== wiki.sections.length ||
+        merged.length !== children.length ||
+        new Set(merged).size !== merged.length ||
+        !children.every(
+            (page) =>
+                merged.includes(page.id) &&
+                page.details.mergedPageIds.length === 0,
+        )
+    )
+        context.addIssue({
+            code: "custom",
+            path: ["sections"],
+            message:
+                "Wiki requires one page or an exact registered consolidation index",
+        });
+    for (const [position, page] of wiki.sections.entries()) {
+        const entry = wiki.index[position];
+        if (
+            entry?.pageId !== page.id ||
+            entry.title !== page.heading ||
+            entry.taxonomy !== page.details.taxonomy
+        )
+            context.addIssue({
+                code: "custom",
+                path: ["index", position],
+                message: "Wiki index must match the exact current pages",
+            });
+    }
 });
 const content = z.union([
+    schemaViewContentSchema,
     guideContent,
 
     timelineContent,
@@ -454,10 +525,11 @@ const content = z.union([
     informationalProjectContent,
 ]);
 const requestContent = z.union([
+    schemaViewContentSchema,
     guideContent.extend({ citations: citation.array().max(1000) }),
 
     timelineContent.extend({ citations: citation.array().max(1000) }),
-    wikiContent.extend({ citations: citation.array().max(1000) }),
+    wikiContent.safeExtend({ citations: citation.array().max(1000) }),
     informationalProjectContent.extend({
         citations: citation.array().max(1000),
     }),
@@ -471,6 +543,7 @@ export const viewSynthesisSchema = z.strictObject({
         "projectSummary",
         "chronology",
         "knowledgePages",
+        "schemaAnswers",
     ]),
     missingEvidence: text.array().max(100),
 });
@@ -505,6 +578,14 @@ export const viewSaveRequestSchema = z.strictObject({
     definition: viewDefinitionSchema,
     content: requestContent,
     relationships: requestEdge.array().max(1000),
+    unlockProtection: z
+        .string()
+        .min(1)
+        .max(240)
+        .array()
+        .min(1)
+        .max(32)
+        .optional(),
 });
 export const viewReadRequestSchema = z.strictObject({
     corpusId: id,
@@ -585,9 +666,15 @@ export const viewSearchRequestSchema = z.strictObject({
     limit: z.number().int().min(1).max(100).optional(),
     freshness: z.literal("current"),
     kinds: z
-        .enum(["troubleshootingGuide", "projectBrief", "timeline", "wiki"])
+        .enum([
+            "troubleshootingGuide",
+            "projectBrief",
+            "timeline",
+            "wiki",
+            "schemaView",
+        ])
         .array()
-        .max(4)
+        .max(5)
         .optional(),
 });
 const snapshot = z.object({
@@ -618,18 +705,106 @@ const snapshot = z.object({
         })
         .array()
         .max(32),
+    influenceSources: source.array().optional(),
+    topicInput: topicBuildInputSchema.optional(),
     pipeline: z.enum([
         "troubleshooting-v1",
         "timeline-v1",
         "informational-wiki-v1",
         "informational-project-summary-v1",
+        "topics-v1",
+        "schema-defined-v1",
     ]),
     selectionFingerprint: hash.optional(),
+    informationalRetrieval: z
+        .strictObject({
+            indexGeneration: z.string().uuid(),
+            sources: source.array().min(1),
+            followSources: source.array(),
+        })
+        .superRefine((context, issue) => {
+            const references = new Map(
+                context.sources.map((item) => [item.sourceId, item.revisionId]),
+            );
+            if (
+                references.size !== context.sources.length ||
+                new Set(context.followSources.map((item) => item.sourceId))
+                    .size !== context.followSources.length ||
+                context.followSources.some(
+                    (item) => references.get(item.sourceId) !== item.revisionId,
+                )
+            )
+                issue.addIssue({
+                    code: "custom",
+                    message: "Invalid informational retrieval source scope",
+                });
+        })
+        .optional(),
     model: text,
     fingerprint: hash,
     publicationPolicy: viewEffectivePolicySchema.optional(),
     maintenance: viewMaintenanceSnapshotSchema.optional(),
+    editorial: z
+        .strictObject({
+            generatedBaseId: id,
+            targetRevisionId: id,
+            generatedBase: z.object({
+                content: requestContent,
+                relationships: requestEdge.array().max(1000),
+            }),
+            protectedTargets: z.string().min(1).max(240).array().max(1000),
+            unlockedTargets: z.string().min(1).max(240).array().max(1000),
+        })
+        .optional(),
 });
+const consolidationReceipt = z.object({
+    identity: hash,
+    stage: z.enum(["prepared", "accepted", "redirected", "ready", "stale"]),
+    survivorViewId: id,
+    retiringViewId: id,
+    retiringRevisionId: id,
+    retiringVersion: z.number().int().positive(),
+    input: snapshot,
+    output: viewSynthesisSchema,
+    anchors: z.strictObject({ from: id, to: id }).array().max(32),
+    assessment: z.strictObject({
+        relation: z.enum(["samePurpose", "distinct"]),
+        reason: z.enum([
+            "same-scoped-purpose",
+            "distinct-purpose",
+            "distinct-scope",
+            "unqualified-purpose",
+        ]),
+        scope: z.strictObject({
+            system: z.string().max(200),
+            initiative: z.string().max(200),
+            purpose: z.string().max(600),
+        }),
+        criticalDistinctions: z
+            .strictObject({
+                fragmentId: z.string().regex(/^f(0|[1-9]\d*)$/),
+                statement: z.string().min(1).max(600),
+            })
+            .array()
+            .max(12),
+    }),
+    verification: z.strictObject({
+        safe: z.boolean(),
+        failures: z
+            .enum([
+                "quantity",
+                "statistic-cohort",
+                "command-lease",
+                "scope-state",
+                "correction-withdrawal",
+            ])
+            .array()
+            .max(5),
+    }),
+    acceptedRevisionId: id.optional(),
+    redirectRevisionId: id.optional(),
+});
+
 export const viewBuildJobSchema = z.object({
     jobId: z.string().uuid(),
     corpusId: id,
@@ -671,7 +846,9 @@ export const viewBuildJobSchema = z.object({
                 "interrupted",
             ]),
             reason: z.string(),
+            wikiConsolidation: consolidationReceipt.optional(),
             revisionId: id.optional(),
+            topicGeneration: id.optional(),
             conflictId: z.string().uuid().optional(),
             missingEvidence: z.string().array().optional(),
             ...inventoryEvidence,
@@ -693,6 +870,8 @@ const edits = z
         newValue: z.unknown().optional(),
         operation: z.enum(["set", "delete"]),
         status: z.enum(["active", "merged", "conflicted", "cleared"]),
+        protection: z.string().min(1).max(240).array().max(32).optional(),
+        unlockedTargets: z.string().min(1).max(240).array().max(32).optional(),
     })
     .array();
 const systemEdge = z.object({
@@ -708,6 +887,13 @@ const systemEdge = z.object({
     ]),
 });
 export const viewVersionSchema = z.object({
+    redirect: z
+        .strictObject({
+            viewId: id,
+            acceptedRevisionId: id,
+            anchors: z.strictObject({ from: id, to: id }).array().max(32),
+        })
+        .optional(),
     corpusId: id,
     viewId: id,
     revisionId: id,
@@ -715,6 +901,12 @@ export const viewVersionSchema = z.object({
     state: z.enum(["draft", "stale", "archived"]),
     createdAt: z.string(),
     actor: text,
+    protectedTargets: z.string().min(1).max(240).array().max(1000).optional(),
+    relatedArticles: z
+        .strictObject({ viewId: id, revisionId: id, title: text })
+        .array()
+        .max(8)
+        .optional(),
     baseRevisionId: id.optional(),
     provenance: z.enum(["human", "generated", "merged"]),
     maintenance: viewMaintenanceManifestSchema.optional(),
@@ -762,13 +954,16 @@ export const viewVersionSchema = z.object({
             "projectBrief",
             "timeline",
             "wiki",
+            "schemaView",
         ]),
         selector: viewSelectorSchema,
         maintenance: viewMaintenanceDefinitionSchema.optional(),
         wiki: viewDefinitionSchema.shape.wiki,
         projectSummary: viewDefinitionSchema.shape.projectSummary,
+        schemaView: viewDefinitionSchema.shape.schemaView,
     }),
     content: z.union([
+        schemaViewContentSchema,
         informationalProjectContent,
         timelineContent,
         wikiContent,
@@ -802,6 +997,7 @@ export const viewVersionSchema = z.object({
                     "projectSummary",
                     "chronology",
                     "knowledgePages",
+                    "schemaAnswers",
                 ])
                 .optional(),
             missingEvidence: z.string().array().max(100).optional(),

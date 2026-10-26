@@ -2,6 +2,17 @@
 // Licensed under the MIT License.
 
 import type {
+    QuestionSummaryRequest,
+    QuestionSummaryPage,
+    QuestionReadRequest,
+    MemoryQuestion,
+    AcquisitionRequest,
+    QuestionInventory,
+    QuestionEditRequest,
+    SchemaViewPageRequest,
+    SchemaViewPage,
+    SchemaViewProposalRequest,
+    SchemaQuestionDiscoveryRequest,
     MemoryServiceCapabilities,
     ViewBuildRequest,
     ViewBuildJobRequest,
@@ -29,7 +40,32 @@ import type {
     ViewSearchMatch,
     MemoryEvent,
     MemoryEventListRequest,
+    SourceSynopsisPreview,
+    SourceSynopsis,
+    SourceSynopsisRequest,
+    TopicQueryRequest,
+    TopicQueryPage,
 } from "@typeagent/memory-service";
+import type { CrosswordDecisionCapabilities } from "./crosswordDecisionTypes.js";
+
+export type MemoryAcquisitionProgress = Pick<
+    AcquisitionRequest,
+    | "corpusId"
+    | "requestId"
+    | "sourceId"
+    | "state"
+    | "createdAt"
+    | "updatedAt"
+    | "calls"
+    | "retries"
+    | "consumers"
+> & {
+    hasError: boolean;
+    receipt?: Pick<
+        NonNullable<AcquisitionRequest["receipt"]>,
+        "jobId" | "revisionId" | "state"
+    >;
+};
 
 // =============================================
 // Agent-side operations (forwarded via WebSocket)
@@ -62,6 +98,7 @@ export type MemoryCenterRevision = {
     capturedAt?: string;
     sourceModifiedAt?: string;
     indexedAt?: string;
+    synopsis?: SourceSynopsisPreview;
     pipelineVersion: string;
     pipeline?: {
         mode: "basic" | "summary" | "content" | "full";
@@ -233,7 +270,36 @@ export type MemoryCenterInvokeFunctions = {
     ): Promise<ViewPublicationStatus>;
     memorySearchViews(params: ViewSearchRequest): Promise<ViewSearchMatch[]>;
     memoryViewCapabilities(params: {}): Promise<MemoryServiceCapabilities>;
+    memoryQueryTopics(params: TopicQueryRequest): Promise<TopicQueryPage>;
+    memoryRebuildTopics(params: { corpusId: string }): Promise<ViewBuildJob>;
     memoryListViews(params: { corpusId: string }): Promise<ViewSnapshot>;
+    memoryListQuestionSummaries(
+        params: QuestionSummaryRequest,
+    ): Promise<QuestionSummaryPage>;
+    memoryGetQuestion(
+        params: QuestionReadRequest,
+    ): Promise<MemoryQuestion | undefined>;
+    memoryListQuestions(params: {
+        corpusId: string;
+    }): Promise<QuestionInventory>;
+    memoryListAcquisitions(params: {
+        corpusId: string;
+    }): Promise<MemoryAcquisitionProgress[]>;
+    memoryRunAcquisitions(params: {
+        corpusId: string;
+    }): Promise<MemoryAcquisitionProgress[]>;
+    memoryCancelAcquisition(params: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<MemoryAcquisitionProgress>;
+    memoryEditQuestion(params: QuestionEditRequest): Promise<ViewHistoryEntry>;
+    memoryGetViewPage(params: SchemaViewPageRequest): Promise<SchemaViewPage>;
+    memoryProposeSchemaView(
+        params: SchemaViewProposalRequest,
+    ): Promise<ViewHistoryEntry>;
+    memoryDiscoverSchemaQuestions(
+        params: SchemaQuestionDiscoveryRequest,
+    ): Promise<ViewHistoryEntry>;
     memoryGetView(params: ViewReadRequest): Promise<ViewVersion | undefined>;
     memorySaveViewDraft(params: ViewSaveRequest): Promise<ViewHistoryEntry>;
     memoryArchiveView(params: ViewArchiveRequest): Promise<ViewHistoryEntry>;
@@ -293,6 +359,9 @@ export type MemoryCenterInvokeFunctions = {
         maxChars?: number;
         indexedLocator?: string;
     }): Promise<MemoryCenterContent>;
+    memoryGetSourceSynopsis(
+        params: SourceSynopsisRequest,
+    ): Promise<SourceSynopsis>;
     memoryGetSourceKnowledge(params: {
         corpusId: string;
         sourceId: string;
@@ -649,6 +718,7 @@ export type ExtensionLocalInvokeFunctions = {
     getViewHostUrl(): Promise<{ url?: string }>;
 
     // Settings
+    getCrosswordDecisionCapabilities(): Promise<CrosswordDecisionCapabilities>;
     settingsUpdated(params: { settings: any }): Promise<{ success: boolean }>;
     autoIndexSettingChanged(params: {
         enabled: boolean;

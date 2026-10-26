@@ -31,6 +31,9 @@ import {
     viewSourceUsagePageSchema,
     viewToolNames,
     viewVersionSchema,
+    topicQueryRequestSchema,
+    topicQueryPageSchema,
+    topicToolNames,
 } from "@typeagent/memory-client";
 import type {
     MemoryService,
@@ -50,14 +53,62 @@ import type {
 } from "@typeagent/memory-service";
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import { z } from "zod";
+import { registerSchemaViewTools } from "./schemaViewTools.js";
 
 export function registerViewTools(
     server: McpServer,
     service: MemoryService & Partial<MemoryViewService>,
     run: (operation: () => Promise<unknown>) => Promise<CallToolResult>,
 ): void {
+    registerSchemaViewTools(server, service, run);
     const views = createMemoryServiceRpcFacade(service);
     const corpus = z.strictObject({ corpusId: z.string().min(1).max(200) });
+    server.registerTool(
+        topicToolNames.queryTopics,
+        {
+            description:
+                "Browse maintained concepts or raw topic evidence with generation-bound pagination and explicit omissions. Ordinary queries do not generate prose. Set curated:true, one topicId and summarize:true only for an explicit concept detail request; this generates and caches an evidence-grounded summary. Response bounds do not bound store IO.",
+            inputSchema: topicQueryRequestSchema,
+            outputSchema: z.object({ result: topicQueryPageSchema }),
+        },
+        (request) =>
+            run(() =>
+                views.queryTopics({
+                    corpusId: request.corpusId,
+                    ...(request.topicId !== undefined
+                        ? { topicId: request.topicId }
+                        : {}),
+                    ...(request.search !== undefined
+                        ? { search: request.search }
+                        : {}),
+                    ...(request.depth !== undefined
+                        ? { depth: request.depth }
+                        : {}),
+                    ...(request.pageSize !== undefined
+                        ? { pageSize: request.pageSize }
+                        : {}),
+                    ...(request.continuationToken !== undefined
+                        ? { continuationToken: request.continuationToken }
+                        : {}),
+                    ...(request.curated !== undefined
+                        ? { curated: request.curated }
+                        : {}),
+                    ...(request.summarize !== undefined
+                        ? { summarize: request.summarize }
+                        : {}),
+                }),
+            ),
+    );
+    server.registerTool(
+        topicToolNames.rebuildTopics,
+        {
+            description:
+                "Rebuild complete eligible topic incidence and grounded summaries using existing corpus view maintenance jobs; no article or execution authority.",
+            inputSchema: corpus,
+            outputSchema: z.object({ result: viewBuildJobSchema }),
+        },
+        ({ corpusId }) => run(() => views.rebuildTopics(corpusId)),
+    );
     server.registerTool(
         viewToolNames.getSourceViewUsage,
         {

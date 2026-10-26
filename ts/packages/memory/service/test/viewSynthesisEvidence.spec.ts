@@ -11,6 +11,7 @@ import { evidenceArray, evidenceRecord } from "../src/viewSynthesisEvidence.js";
 import type { ViewBuildJob, ViewSynthesisOutput } from "../src/viewTypes.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { inventoryTestAnswer } from "./viewInventoryTestModel.js";
+import { createOfflineEmbeddingModel } from "./offlineEmbedding.js";
 
 // Jest 29 exposes this ESM API, but @types/jest does not declare it.
 const runtimeJest = import.meta.jest;
@@ -27,18 +28,7 @@ let pausedStage: string | undefined;
 let pause: Promise<void> | undefined;
 const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
 const embeddings: string[] = [];
-const offlineEmbedding = {
-    maxBatchSize: 8,
-    generateEmbedding: async (text: string) => {
-        embeddings.push(text);
-        return {
-            success: true as const,
-            data: Array.from({ length: 1536 }, (_, index) =>
-                index === 0 ? 1 : 0,
-            ),
-        };
-    },
-};
+const offlineEmbedding = createOfflineEmbeddingModel(embeddings);
 const complete = jest.fn(
     async (
         messages: Array<{ role: string; content: string }>,
@@ -73,6 +63,7 @@ const { createKnowProCorpusIndex } = await import(
 const { createDocMemorySettings } = await import(
     "@typeagent/conversation-memory"
 );
+const { readConversationDataFromFile } = await import("@typeagent/knowpro");
 const { viewHash } = await import("../src/viewMerge.js");
 const { effectiveViewPublicationPolicy } = await import(
     "../src/viewPublication.js"
@@ -647,8 +638,17 @@ describe("actual configured evidence-first adapter and durable service", () => {
             viewHash("guide"),
             viewHash(revisionId),
         );
+        const persisted = await readConversationDataFromFile(
+            directory,
+            "corpus",
+            offlineEmbedding.embeddingIdentity?.dimensions,
+        );
         expect(
-            (await stat(path.join(directory, "corpus_embeddings.bin"))).size,
+            persisted?.messageIndexData?.indexData?.embeddings.length,
+        ).toBeGreaterThan(0);
+        expect(
+            persisted?.relatedTermsIndexData?.textEmbeddingData?.embeddings
+                .length,
         ).toBeGreaterThan(0);
         await service.close();
         service = create();

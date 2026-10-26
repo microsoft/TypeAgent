@@ -15,6 +15,48 @@ function event(
 }
 
 describe("extension trace assembler", () => {
+    it("retains original result bytes only for selected private evidence capture, without inventing model visibility", () => {
+        const assembler = new ExtensionTraceAssembler("session", ".", true);
+        const original = {
+            structuredContent: {
+                base64Content: Buffer.alloc(1_100_000, 65).toString("base64"),
+                sizeBytes: 1_100_000,
+            },
+            content: [],
+        };
+        assembler.record(
+            event("user.message", "2026-10-01T00:00:00Z", {
+                content: "Retrieve original",
+            }),
+        );
+        assembler.record(
+            event("tool.execution_start", "2026-10-01T00:00:01Z", {
+                toolCallId: "blob",
+                toolName: "fetch_blob",
+                arguments: { path: "/drives/d/items/i/content" },
+            }),
+        );
+        assembler.record(
+            event("tool.execution_complete", "2026-10-01T00:00:02Z", {
+                toolCallId: "blob",
+                success: true,
+                result: original,
+            }),
+        );
+        assembler.record(
+            event("assistant.message", "2026-10-01T00:00:03Z", {
+                content: "Done",
+            }),
+        );
+        const trace = assembler.finish()!;
+        expect(trace.toolCalls[0].result).toEqual(original);
+        expect(trace.toolCalls[0].modelResult).toBeUndefined();
+        original.structuredContent.base64Content = "";
+        expect(
+            (trace.toolCalls[0].result as typeof original).structuredContent
+                .base64Content.length,
+        ).toBeGreaterThan(1024 * 1024);
+    });
     it.each(["report_intent", "functions.report_intent"])(
         "excludes native %s telemetry from learned operations",
         (toolName) => {

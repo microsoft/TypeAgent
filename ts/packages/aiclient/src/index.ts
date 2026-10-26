@@ -3,6 +3,8 @@
 
 export * from "./common.js";
 export * from "./models.js";
+export * from "./decisionModels.js";
+export * from "./embeddingInput.js";
 export {
     instrumentChatModel,
     resetLlmClassificationDiagnostics,
@@ -66,6 +68,7 @@ export {
     getRuntimeConfig,
     setRuntimeConfig,
     initRuntimeConfigFromProcessEnv,
+    getRuntimeConfigGeneration,
 } from "./runtimeConfig.js";
 export {
     createLocalEmbeddingModel,
@@ -83,3 +86,6 @@ export {
     tryCreateEmbeddingModel,
     type EmbeddingProvider,
 } from "./embeddingProvider.js";
+export * from "./embeddingIdentity.js";
+export * from "./candidateEmbedding.js";
+export * from "./gemmaEmbedding.js";

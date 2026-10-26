@@ -61,6 +61,118 @@ function buildValue() {
 }
 
 describe("model learning JSON parsers", () => {
+    it("retains explicit deferred program obligations separately from blocking uncertainties", () => {
+        const value = {
+            ...recipeValue(),
+            programRequirements: ["Classify the captured message by meaning"],
+        };
+        expect(parseMacroExecutionRecipe(value)).toEqual(value);
+    });
+
+    it.each([
+        { value: null },
+        { value: 3 },
+        { value: [""] },
+        { value: [3] },
+        { value: Array(101).fill("Classify the captured message") },
+    ])(
+        "rejects malformed or unbounded deferred requirements: %j",
+        ({ value }) => {
+            expect(() =>
+                parseMacroExecutionRecipe({
+                    ...recipeValue(),
+                    programRequirements: value,
+                }),
+            ).toThrow();
+        },
+    );
+
+    it.each([
+        [
+            "build",
+            (build: ReturnType<typeof buildValue>) =>
+                Object.assign(build, { macroId: "PRIVATE-VALUE" }),
+        ],
+        [
+            "build.inputs[0]",
+            (build: ReturnType<typeof buildValue>) =>
+                Object.assign(build.inputs[0], { parameters: "PRIVATE-VALUE" }),
+        ],
+        [
+            "build.steps[0]",
+            (build: ReturnType<typeof buildValue>) =>
+                Object.assign(build.steps[0], { args: "PRIVATE-VALUE" }),
+        ],
+        [
+            "build.steps[0].arguments",
+            (build: ReturnType<typeof buildValue>) =>
+                Object.assign(build.steps[0].arguments, {
+                    output: "PRIVATE-VALUE",
+                }),
+        ],
+        [
+            "build.steps[0].arguments.bindings[0]",
+            (build: ReturnType<typeof buildValue>) =>
+                Object.assign(build.steps[0].arguments.bindings[0], {
+                    value: "PRIVATE-VALUE",
+                }),
+        ],
+        [
+            "build.steps[0].arguments.bindings[0].expression",
+            (build: ReturnType<typeof buildValue>) =>
+                Object.assign(build.steps[0].arguments.bindings[0].expression, {
+                    path: ["PRIVATE-VALUE"],
+                }),
+        ],
+        [
+            "build.steps[0].postconditions[0]",
+            (build: ReturnType<typeof buildValue>) =>
+                Object.assign(build.steps[0].postconditions[0], {
+                    output: "PRIVATE-VALUE",
+                }),
+        ],
+    ])(
+        "reports precise body-free unsupported-field location %s",
+        (location, mutate) => {
+            const build = buildValue();
+            mutate(build);
+            try {
+                parseMacroLearningBuild(build);
+                throw new Error("Expected strict rejection.");
+            } catch (error) {
+                expect(error).toMatchObject({
+                    name: "LearningObjectValidationError",
+                    validationPath: location,
+                    receivedType: "object",
+                });
+                expect(String(error)).not.toContain("PRIVATE-VALUE");
+                expect(JSON.stringify(error)).not.toContain("PRIVATE-VALUE");
+            }
+        },
+    );
+
+    it("hashes unrecognized payload-bearing key names and never echoes non-object values", () => {
+        for (const value of [
+            "PRIVATE-DOCUMENT-BODY",
+            {
+                ...buildValue(),
+                "PRIVATE-DOCUMENT-TITLE": "PRIVATE-DOCUMENT-BODY",
+            },
+        ]) {
+            try {
+                parseMacroLearningBuild(value);
+                throw new Error("Expected strict rejection.");
+            } catch (error) {
+                expect(error).toMatchObject({
+                    name: "LearningObjectValidationError",
+                    validationPath: "build",
+                });
+                expect(String(error)).not.toContain("PRIVATE-DOCUMENT");
+                expect(JSON.stringify(error)).not.toContain("PRIVATE-DOCUMENT");
+            }
+        }
+    });
+
     it("exports safe recipe and build ingestion without caller casts", () => {
         const recipe: unknown = JSON.parse(JSON.stringify(recipeValue()));
         const build: unknown = JSON.parse(JSON.stringify(buildValue()));

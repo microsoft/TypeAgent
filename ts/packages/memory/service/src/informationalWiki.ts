@@ -61,51 +61,85 @@ export function validateWikiSelector(definition: ViewDefinitionInput): void {
         throw new Error("Invalid informational wiki retrieval definition");
 }
 
+function validateConsolidationIndex(content: WikiContent): void {
+    const merged = content.sections[0]?.details.mergedPageIds ?? [];
+    const children = content.sections.slice(1).map((section) => section.id);
+    if (
+        !content.sections.length ||
+        content.sections.length > 32 ||
+        content.index.length !== content.sections.length ||
+        merged.length !== children.length ||
+        new Set(merged).size !== merged.length ||
+        !children.every((id) => merged.includes(id))
+    )
+        throw new Error(
+            "An informational wiki record contains exactly one page or an exact accepted consolidation index",
+        );
+}
+
+function isInformationalSummary(value: unknown): value is string {
+    return (
+        typeof value === "string" &&
+        value.trim().length > 0 &&
+        value.length <= 4000
+    );
+}
+
+function isArticleCompleteness(
+    value: unknown,
+): value is NonNullable<WikiContent["status"]> {
+    return value === "partial" || value === "sufficient";
+}
+
 export function validateInformationalContent(content: WikiContent): void {
-    if (content.sections.length !== 1 || content.index.length !== 1)
-        throw new Error(
-            "An informational wiki record contains exactly one page",
-        );
-    const page = content.sections[0];
     if (
-        page.details.kind !== "page" ||
-        !("construction" in page.details) ||
-        page.details.construction !== "informational-wiki-v1" ||
-        Object.keys(page.details).some(
-            (key) =>
-                ![
-                    "kind",
-                    "construction",
-                    "taxonomy",
-                    "note",
-                    "mergedPageIds",
-                ].includes(key),
-        ) ||
-        !["concept", "system", "project"].includes(page.details.taxonomy) ||
-        typeof page.details.note !== "string" ||
-        page.details.note.length > 4000 ||
-        page.details.mergedPageIds.length !== 0 ||
-        !content.summary?.startsWith(
-            "Limited summary: selected indexed fragments only;",
-        )
+        content.coverageNote !== undefined &&
+        (typeof content.coverageNote !== "string" ||
+            content.coverageNote.length > 4000)
     )
-        throw new Error(
-            "Invalid informational wiki page or missing explicit coverage limit",
-        );
-    const expected = wikiIndex(content.sections)[0];
-    const actual = content.index[0];
-    if (
-        !actual ||
-        actual.pageId !== expected.pageId ||
-        actual.title !== expected.title ||
-        actual.taxonomy !== expected.taxonomy ||
-        Object.keys(actual).some(
-            (key) => !["pageId", "title", "taxonomy"].includes(key),
+        throw new Error("Invalid informational coverage note");
+    validateConsolidationIndex(content);
+    for (const [position, page] of content.sections.entries()) {
+        if (
+            page.details.kind !== "page" ||
+            !("construction" in page.details) ||
+            page.details.construction !== "informational-wiki-v1" ||
+            Object.keys(page.details).some(
+                (key) =>
+                    ![
+                        "kind",
+                        "construction",
+                        "taxonomy",
+                        "note",
+                        "mergedPageIds",
+                    ].includes(key),
+            ) ||
+            !["concept", "system", "project"].includes(page.details.taxonomy) ||
+            typeof page.details.note !== "string" ||
+            page.details.note.length > 4000 ||
+            (position > 0 && page.details.mergedPageIds.length !== 0) ||
+            !isInformationalSummary(content.summary) ||
+            (content.status !== undefined &&
+                !isArticleCompleteness(content.status))
         )
-    )
-        throw new Error(
-            "Informational index must match the exact current page",
-        );
+            throw new Error(
+                "Invalid informational wiki page or missing explicit coverage limit",
+            );
+        const expected = wikiIndex(content.sections)[position];
+        const actual = content.index[position];
+        if (
+            !actual ||
+            actual.pageId !== expected.pageId ||
+            actual.title !== expected.title ||
+            actual.taxonomy !== expected.taxonomy ||
+            Object.keys(actual).some(
+                (key) => !["pageId", "title", "taxonomy"].includes(key),
+            )
+        )
+            throw new Error(
+                "Informational index must match the exact current page",
+            );
+    }
 }
 
 export function validateInformationalOutput(
@@ -161,6 +195,11 @@ export function informationalSchema(ids: string[]): StructuredOutputJsonSchema {
             additionalProperties: false,
             properties: {
                 title: { type: "string" },
+                summary: { type: "string" },
+                status: {
+                    type: "string",
+                    enum: ["partial", "sufficient"],
+                },
                 prose: { type: "string" },
                 limits: { type: "string" },
                 citationIds: {
@@ -168,7 +207,14 @@ export function informationalSchema(ids: string[]): StructuredOutputJsonSchema {
                     items: { type: "string", enum: ids },
                 },
             },
-            required: ["title", "prose", "limits", "citationIds"],
+            required: [
+                "title",
+                "summary",
+                "status",
+                "prose",
+                "limits",
+                "citationIds",
+            ],
         },
     };
 }
@@ -176,13 +222,21 @@ export function informationalSchema(ids: string[]): StructuredOutputJsonSchema {
 export function hydrateInformational(
     input: ViewBuildSnapshot,
     value: unknown,
-): ViewSynthesisOutput {
+): ViewSynthesisOutput & {
+    content: WikiContent &
+        Required<Pick<WikiContent, "status" | "coverageNote">>;
+} {
     if (
         !value ||
         typeof value !== "object" ||
         !("title" in value) ||
         typeof value.title !== "string" ||
         !value.title.trim() ||
+        !("summary" in value) ||
+        !("status" in value) ||
+        (value.summary !== undefined &&
+            !isInformationalSummary(value.summary)) ||
+        (value.status !== undefined && !isArticleCompleteness(value.status)) ||
         !("prose" in value) ||
         typeof value.prose !== "string" ||
         !value.prose.trim() ||
@@ -193,7 +247,15 @@ export function hydrateInformational(
         !Array.isArray(value.citationIds) ||
         !value.citationIds.length ||
         Object.keys(value).some(
-            (key) => !["title", "prose", "limits", "citationIds"].includes(key),
+            (key) =>
+                ![
+                    "title",
+                    "summary",
+                    "status",
+                    "prose",
+                    "limits",
+                    "citationIds",
+                ].includes(key),
         )
     )
         throw new Error("Invalid informational synthesis response");
@@ -207,17 +269,27 @@ export function hydrateInformational(
         return citation;
     });
     const viewId = input.definition.viewId;
-    const content: WikiContent = {
+    if (
+        typeof value.summary !== "string" ||
+        !isArticleCompleteness(value.status)
+    )
+        throw new Error(
+            "Informational synthesis requires summary and completeness",
+        );
+    const content: WikiContent &
+        Required<Pick<WikiContent, "status" | "coverageNote">> = {
         kind: "wiki",
         construction: "informational-wiki-v1",
+        status: value.status,
+        coverageNote: value.limits.trim(),
         title: value.title,
-        summary: `Limited summary: selected indexed fragments only; ${value.limits}. Updated ${new Date().toISOString()}. Search sources or retry a deeper bounded refresh.`,
+        summary: value.summary.trim(),
         sections: [
             {
                 id: viewId,
                 role: "page",
                 heading: value.title,
-                body: `${value.prose}\n\nCoverage limits: ${value.limits}`,
+                body: value.prose,
                 details: {
                     kind: "page",
                     construction: "informational-wiki-v1",

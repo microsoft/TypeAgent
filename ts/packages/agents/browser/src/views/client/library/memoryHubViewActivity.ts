@@ -42,11 +42,13 @@ export function viewBuildSummary(job: ViewBuildJob): string {
 }
 
 function resultTitle(result: ViewBuildTargetResult): string {
+    if (result.snapshot.pipeline === "topics-v1") return "Maintained topics";
     const labels = {
         wiki: "Wiki",
         projectBrief: "Project brief",
         timeline: "Timeline",
         troubleshootingGuide: "Troubleshooting guide",
+        schemaView: "Schema-defined questions",
     };
     return labels[result.snapshot.definition.kind];
 }
@@ -166,8 +168,30 @@ export function mountMemoryHubViewActivity(
                 rbNode("span", states[result.state]),
                 rbNode("p", result.reason),
             );
-            row.append(
-                rbButton(
+            if (result.wikiConsolidation) {
+                const effect = result.wikiConsolidation;
+                row.append(
+                    rbNode(
+                        "p",
+                        `Consolidation effect: ${effect.stage}; derivative readiness is separate from canonical acceptance.`,
+                    ),
+                    rbButton("Open canonical article", () =>
+                        options.onOpenView(job.corpusId, effect.survivorViewId),
+                    ),
+                    rbButton("Open original article link", () =>
+                        options.onOpenView(job.corpusId, effect.retiringViewId),
+                    ),
+                );
+            }
+            if (result.snapshot.pipeline === "topics-v1") {
+                row.append(
+                    rbNode(
+                        "p",
+                        `Topic generation ${result.topicGeneration ?? "pending"}; browse the snapshot in Overview, not an article.`,
+                    ),
+                );
+            } else {
+                const open = rbButton(
                     result.conflictId ? "Resolve conflict" : "Open view",
                     () =>
                         options.onOpenView(
@@ -175,16 +199,17 @@ export function mountMemoryHubViewActivity(
                             result.viewId,
                             result.conflictId ? undefined : result.revisionId,
                         ),
-                ),
-            );
-            if (
-                !result.revisionId &&
-                !result.conflictId &&
-                !["draft", "merged", "published", "searchable"].includes(
-                    result.state,
+                );
+                row.append(open);
+                if (
+                    !result.revisionId &&
+                    !result.conflictId &&
+                    !["draft", "merged", "published", "searchable"].includes(
+                        result.state,
+                    )
                 )
-            )
-                row.querySelector("button")!.disabled = true;
+                    open.disabled = true;
+            }
             if (result.publication)
                 row.append(
                     rbNode(

@@ -36,6 +36,72 @@ run `pnpm run dev`. Output goes to `dist/extension/` (Chrome/Edge) and
    - go back
    - etc.
 
+## Crossword Decision mode
+
+In extension options, set **Crossword mode** to **Decision** to resolve clues
+on demand rather than extracting a complete Generative schema. Generative
+remains the default. Decision mode reports unavailable providers, unsupported
+layouts and ambiguous selections explicitly; it does not fall back to chat.
+
+Configure `decision.provider` as `copilot`, `azure`, or `inherit` in the
+TypeAgent runtime configuration. See the
+[native Decision configuration](../../config/README.md#native-decision-configuration)
+and [AI client API](../../aiclient/README.md#native-decisions) for provider
+settings and Azure deployment requirements.
+
+Discovery classifies visible regions before selecting a clue from bounded
+candidate choices. The Hybrid2 strategy caches selected regions for subsequent
+clues. Entry uses the selected live node; clue reads request a literal body
+string only when needed and cache it. Clue-text sentinels invalidate the puzzle
+on replacement or text changes without treating ordinary grid progress as a
+new puzzle. Frame/document identity, configuration changes, cancellation and
+deadlines remain part of the request lifecycle.
+
+### Tests
+
+Build from the repository's `ts` directory before running compiled tests:
+
+```powershell
+pnpm run build
+pnpm --filter @typeagent/browser run test:crossword
+pnpm --filter @typeagent/browser-extension run test:crossword
+pnpm --filter @typeagent/aiclient run test:local
+pnpm --filter @typeagent/config run test:local
+```
+
+The browser tests cover native Azure/Copilot wire adapters with mocked HTTP,
+batching, Azure 422 repacking, model-owned ambiguity, body reads and cache
+invalidation. Extension unit tests cover settings, private/frame RPC, collection,
+sentinels and verified entry.
+
+For optional browser integration tests, install Chromium with Playwright or
+use an existing Edge/Chrome installation. Prepare the pinned Exolve renderer
+once, then run the offline isolated-world scenarios:
+
+```powershell
+pnpm --filter @typeagent/browser-extension run test:crossword:setup
+pnpm --filter @typeagent/browser-extension run test:crossword:chromium
+```
+
+The fixture, puzzle and renderer license live in
+[test/fixtures/crossword](test/fixtures/crossword); no example package is needed.
+Renderer setup downloads only hash-verified assets from a pinned revision.
+Native-model lanes are disabled unless `TYPEAGENT_CROSSWORD_LIVE=1` is set.
+
+The optional installed-extension harness uses actual typed AppAgent actions
+through the service worker and backend, not natural-language dispatcher routing:
+
+```powershell
+$output = Join-Path $env:TEMP ('crossword-e2e-' + [guid]::NewGuid())
+pnpm --filter @typeagent/browser-extension run test:crossword:extension -- $output --demo --mode=decision --site=exolve --headed --reads
+```
+
+This command makes native inference calls and records the owned page. Use it
+only with authorized provider access and recording consent. `--preflight`
+checks the page without inference or recording. The default local fixture is
+deterministic; the optional Seattle and Universal scenarios assert specific
+editions and are not general all-puzzle qualification.
+
 ## Chat panel
 
 The extension's chat panel supports the same `@conversation` slash
@@ -109,8 +175,7 @@ all PDF layouts or full-book performance.
 
 See [PDF Markdown import boundaries](../browser/docs/pdf-markdown-import.md).
 
-See the [implementation coverage and mandatory remaining gates](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-01_pdf-document-understanding-proposal/implementation-status.md)
-in the sibling codeDocs checkout. Passing offline import/bridge tests does not
+Passing offline import/bridge tests does not
 mean that all PDF work packages or live acceptance scenarios are complete.
 
 ## Trademarks

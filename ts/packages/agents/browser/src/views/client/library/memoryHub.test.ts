@@ -651,6 +651,29 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     );
     expect(value("hubSettings").querySelector("#saveHowToSettings")).toBeNull();
     expect(value("createCorpusDialog").parentElement).toBe(document.body);
+    const originalInvoke = invoke.getMockImplementation()!;
+    invoke.mockImplementation((method, params) => {
+        if (method === "memoryViewCapabilities")
+            return Promise.resolve({
+                derivedViews: { kinds: ["schemaView"], builds: true },
+            });
+        if (method === "memoryListQuestionSummaries")
+            return Promise.resolve({ head: null, items: [], total: 0 });
+        return originalInvoke(method, params);
+    });
+    history.replaceState({}, "", "#/questions/a");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
+    expect(value("page-questions").classList.contains("hidden")).toBe(false);
+    expect(invoke).toHaveBeenCalledWith("memoryListQuestionSummaries", {
+        corpusId: "a",
+        pageSize: 25,
+    });
+    expect(value("hubError").textContent).toBe("");
+    invoke.mockImplementation(originalInvoke);
+    history.replaceState({}, "", "#/inbox");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
     value("hubInbox")
         .querySelector<HTMLButtonElement>('[aria-label="Dismiss"]')!
         .click();

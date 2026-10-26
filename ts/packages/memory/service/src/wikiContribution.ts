@@ -151,6 +151,10 @@ export function wikiContributionInput(
         expectedVersion: canonical.version,
         bounds: incoming.bounds,
         inputs,
+        influenceSources: [
+            ...(prior.influenceSources ?? []),
+            ...(incoming.influenceSources ?? []),
+        ],
         pipeline: "informational-wiki-v1",
         model: incoming.model,
         selectionFingerprint: viewHash(passages),
@@ -159,6 +163,9 @@ export function wikiContributionInput(
             query,
             purpose: assessment.purpose,
             essentialDistinctions,
+            priorProse: canonical.content.sections
+                .map((section) => section.body)
+                .join("\n\n"),
         },
     };
     return { ...snapshot, fingerprint: viewHash(snapshot) };

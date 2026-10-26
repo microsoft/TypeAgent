@@ -18,6 +18,7 @@
  */
 
 import { DEFAULT_COPILOT_MODEL } from "./copilotModelDefaults.js";
+import { DEFAULT_AZURE_CHAT_DEPLOYMENT } from "./chatModelDefaults.js";
 
 export type ProviderMode = "azure" | "openai" | "ollama" | "copilot";
 
@@ -29,20 +30,40 @@ export const PROVIDER_MODES: readonly ProviderMode[] = [
 ] as const;
 
 let active: ProviderMode | undefined;
+let configured: ProviderMode | undefined;
+let overrideGeneration = 0;
+
+export function getProviderOverrideGeneration(): number {
+    return overrideGeneration;
+}
+
+export function setConfiguredModelProvider(
+    mode: ProviderMode | undefined,
+): void {
+    configured = mode;
+}
 
 export function getActiveModelProvider(): ProviderMode | undefined {
     if (active !== undefined) {
         return active;
     }
-    const configured =
+    if (configured !== undefined) return configured;
+
+    const environmentProvider =
         process.env.TYPEAGENT_MODEL_PROVIDER?.trim().toLowerCase();
-    return configured !== undefined &&
-        (PROVIDER_MODES as readonly string[]).includes(configured)
-        ? (configured as ProviderMode)
+    return environmentProvider !== undefined &&
+        (PROVIDER_MODES as readonly string[]).includes(environmentProvider)
+        ? (environmentProvider as ProviderMode)
         : undefined;
 }
 
+/** Explicit in-memory override only; does not consult ambient process config. */
+export function getModelProviderOverride(): ProviderMode | undefined {
+    return active;
+}
+
 export function setActiveModelProvider(mode: ProviderMode | undefined): void {
+    if (active !== mode) overrideGeneration++;
     active = mode;
 }
 
@@ -74,8 +95,8 @@ export function usesProviderDefault(canonical: string): boolean {
 }
 
 /**
- * Built-in name maps per non-Azure mode. Azure mode is identity — the
- * canonical names already are Azure deployment names, so no rewriting.
+ * Built-in name maps per non-Azure mode. Azure names are identity-mapped
+ * except DEFAULT, which selects the shared named Luna deployment.
  * OpenAI mode is identity for now (callers rarely use OpenAI-specific
  * names; the `openai:LOCAL` form is the explicit escape).
  */
@@ -116,6 +137,9 @@ export function resolveTarget(mode: ProviderMode, canonical: string): string {
         case "ollama":
             return isCanonicalName(key) ? OLLAMA_MAP[key] : OLLAMA_MAP.DEFAULT;
         case "azure":
+            return key === "DEFAULT"
+                ? DEFAULT_AZURE_CHAT_DEPLOYMENT
+                : canonical;
         case "openai":
             // Identity: pass the original name through (callers already
             // use Azure-deployment-style names).

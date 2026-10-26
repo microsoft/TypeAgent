@@ -26,6 +26,18 @@ Additionally, if you are running MS Graph based sample agents like Calendar and 
 del %LOCALAPPDATA%\.IdentityService\typeagent-tokencache
 ```
 
+## Browser tabs
+
+The tab bar displays page titles and URL tooltips as literal text, including quotes, ampersands, and angle brackets. Empty titles use "New Tab", and missing or failed favicons use the default icon.
+
+Click a tab to switch to it. The close button or a middle click closes a tab, and closing the last tab retains the existing layout-toggle behavior.
+
+The [browser tab label tests](./test/browserTabLabels.spec.ts) exercise the view-host HTML in Chromium with an in-memory IPC bridge. They do not start the agent server or require API keys. Run them from this package directory:
+
+```shell
+pnpm exec playwright test browserTabLabels.spec.ts --project=chromium --no-deps
+```
+
 ## Conversation Management
 
 When connected to the agent server (remote mode), TypeAgent Shell supports full multi-conversation management. Conversations persist across sessions and can be created, renamed, switched, and deleted from the UI.
@@ -93,7 +105,7 @@ To read the chat view from another device, such as a phone on a trusted home net
 
 ### Azure Speech to Text service (Optional)
 
-Currently, TypeAgent Shell optionally supports voice input via Azure Speech Services or [Local Whisper Service](../../../python/stt/whisperService/) in addition to keyboard input.
+Voice input supports Azure (default), Python [Whisper](../../../python/stt/whisperService/), and Windows x64 Nemotron. Select with `@shell speechProvider azure|whisper|nemotron`; Nemotron downloads on first selection.
 
 To set up Azure [Speech to Text service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/index-speech-to-text), the following variables in `config.local.yaml` (under `speech`) or the legacy `.env` are needed:
 

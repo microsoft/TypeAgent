@@ -3,6 +3,13 @@
 
 import type { AgentEdition } from "./agentEdition.js";
 import type {
+    AgentMemorySearchRequest,
+    AgentMemorySearchResult,
+    AgentSessionImportReceipt,
+    AgentSessionImportRequest,
+    AgentSessionReadRequest,
+} from "./agentSessionTypes.js";
+import type {
     MemoryBatchImport,
     MemoryBatchImportLookup,
     MemoryBatchImportRequest,
@@ -75,6 +82,8 @@ export interface SourceDocument {
 }
 
 export interface SourceRevision {
+    authoredAt?: string;
+    temporalContext?: import("@typeagent/knowpro").SourceTemporalContext;
     revisionId: string;
     sourceId: string;
     contentHash: string;
@@ -89,7 +98,46 @@ export interface SourceRevision {
     };
     embeddingIdentity?: string;
     assets?: RevisionAssetDescriptor[];
+    synopsis?: SourceSynopsisPreview;
     state: "accepted" | "processing" | "ready" | "failed" | "deleted";
+}
+
+export interface SourceSynopsisPreview {
+    status: "pending" | "ready" | "failed" | "unavailable";
+    freshness: "fresh" | "stale";
+    preview?: string;
+    generatedVersion: number;
+    recipe: string;
+    inputHash: string;
+    generatedAt?: string;
+    reason?: string;
+}
+
+export interface SourceSynopsis extends SourceSynopsisPreview {
+    corpusId: string;
+    sourceId: string;
+    revisionId: string;
+    overview?: string;
+    evidence: {
+        coordinateSpace: "retained-utf16";
+        start: number;
+        end: number;
+        excerpt: string;
+    }[];
+    influenceSources: { sourceId: string; revisionId: string }[];
+    coverage: {
+        method: "direct" | "source-order-sections";
+        scannedChars: number;
+        totalChars: number;
+        sectionCount: number;
+    };
+    limitations: string[];
+}
+
+export interface SourceSynopsisRequest {
+    corpusId: string;
+    sourceId: string;
+    revisionId?: string;
 }
 
 export interface MemorySource extends SourceDocument {
@@ -97,6 +145,8 @@ export interface MemorySource extends SourceDocument {
 }
 
 export interface IngestionSource {
+    authoredAt?: string;
+    temporalContext?: import("@typeagent/knowpro").SourceTemporalContext;
     sourceId?: string;
     sourceType: SourceType;
     title: string;
@@ -267,6 +317,8 @@ export interface JobListRequest {
 }
 
 export interface MemorySearchRequest {
+    includeDiagnostics?: boolean;
+    temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
     traceId?: string;
     corpusId: string;
     query: string;
@@ -281,6 +333,7 @@ export interface MemorySearchRequest {
 }
 
 export interface MemoryEvidence {
+    temporalContext?: import("@typeagent/knowpro").MessageTemporalContext;
     evidenceId: string;
     corpusId: string;
     sourceId: string;
@@ -293,9 +346,11 @@ export interface MemoryEvidence {
     sourceType: SourceType;
     capturedAt?: string;
     indexedAt: string;
+    synopsis?: SourceSynopsisPreview;
 }
 
 export interface MemorySearchResult {
+    indexedSelection?: IndexedSelectionDiagnostics;
     query: string;
     matches: MemoryEvidence[];
     warnings: string[];
@@ -306,16 +361,18 @@ export interface MemorySearchResult {
 export type AnswerMode = "synthesized" | "extractive";
 
 export interface MemoryAnswerRequest {
+    includeDiagnostics?: boolean;
+    temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
     corpusId: string;
     question: string;
     limit?: number;
     maxResponseChars?: number;
     sourceIds?: string[];
     /**
-     * `synthesized` generates the answer with KnowPro's answer generator over
-     * the retrieved evidence. `extractive` returns the ranked evidence
-     * snippets verbatim. When omitted, `synthesized` is used if the corpus
-     * index supports it and `extractive` otherwise.
+     * `synthesized` uses the configured product answer path: bounded indexed
+     * evidence when informational views are enabled, otherwise the corpus
+     * index's answer generator. `extractive` returns ranked snippets verbatim.
+     * Omission selects synthesis when supported, otherwise extraction.
      */
     answerMode?: AnswerMode;
 }
@@ -328,6 +385,7 @@ export interface MemoryAnswerResult {
     grounded: true;
     indexVersion: string;
     warnings: string[];
+    readerContext?: AnswerContextDiagnostics;
 }
 
 export type MemoryEventSourceKind =
@@ -496,7 +554,11 @@ export interface SourceKnowledgeSuppressionRequest
 export interface MemoryServiceCapabilities {
     derivedViews?: {
         kinds: Array<
-            "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki"
+            | "troubleshootingGuide"
+            | "projectBrief"
+            | "timeline"
+            | "wiki"
+            | "schemaView"
         >;
         drafts: true;
         history: true;
@@ -518,6 +580,8 @@ export interface MemoryServiceCapabilities {
         exactSearch: boolean;
         management: boolean;
         groundedAnswer: boolean;
+        sourceSynopses?: boolean;
+        agentSessionImportTypes?: AgentSessionImportRequest["importType"][];
     };
     warnings: string[];
 }
@@ -561,6 +625,24 @@ export interface ProcedureVersion {
 export interface MemoryService {
     initialize?(): Promise<void>;
     close?(): Promise<void>;
+    deferMaintenance?(): () => void;
+    getMaintenanceStatus?(): import("./maintenanceScheduler.js").MaintenanceStatus;
+    drainMaintenance?(
+        timeoutMs?: number,
+        signal?: AbortSignal,
+    ): Promise<import("./maintenanceScheduler.js").MaintenanceStatus>;
+    importAgentSession?(
+        request: AgentSessionImportRequest,
+    ): Promise<AgentSessionImportReceipt>;
+    getAgentSessionImport?(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt | undefined>;
+    cancelAgentSessionImport?(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt>;
+    searchAgentMemories?(
+        request: AgentMemorySearchRequest,
+    ): Promise<AgentMemorySearchResult>;
     createCorpus(name: string, description?: string): Promise<MemoryCorpus>;
     listCorpora(): Promise<MemoryCorpus[]>;
     getCorpus(corpusId: string): Promise<MemoryCorpusStatus | undefined>;
@@ -593,6 +675,7 @@ export interface MemoryService {
         sourceId: string,
     ): Promise<MemorySource | undefined>;
     getSourceContent(request: SourceContentRequest): Promise<SourceContent>;
+    getSourceSynopsis?(request: SourceSynopsisRequest): Promise<SourceSynopsis>;
     getSourceKnowledge(
         corpusId: string,
         sourceId: string,
@@ -667,6 +750,7 @@ export interface IndexedDocument {
 }
 
 export interface CorpusIndexMatch {
+    temporalContext?: import("@typeagent/knowpro").MessageTemporalContext;
     sourceId: string;
     revisionId: string;
     snippet: string;
@@ -678,11 +762,53 @@ export interface CorpusIndexAnswer {
     answer?: string | undefined;
     whyNoAnswer?: string | undefined;
     matches: CorpusIndexMatch[];
+    readerContext?: AnswerContextDiagnostics;
+}
+
+export interface AnswerContextDiagnostics {
+    answerPath?: "indexed-fragments" | "knowpro";
+    indexedAnswer?: {
+        selection?: IndexedSelectionDiagnostics;
+        refinement?: {
+            queries: string[];
+            initialContext?: AnswerContextDiagnostics;
+            selections: IndexedSelectionDiagnostics[];
+        };
+        temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
+        fragments: MemoryEvidence[];
+        response: {
+            status: "answered" | "noAnswer";
+            answer: string;
+            citationIds: string[];
+        };
+    };
+    queryPlan?: import("@typeagent/knowpro").LanguageSearchDebugContext;
+    chunks?: {
+        ordinal: number;
+        messageOrdinals: number[];
+        semanticRefOrdinals: number[];
+        serializedChars: number;
+        response: import("@typeagent/knowpro").AnswerResponse;
+    }[];
+    combinations?: {
+        ordinal: number;
+        inputs: import("@typeagent/knowpro").AnswerResponse[];
+        output: import("@typeagent/knowpro").AnswerResponse;
+    }[];
+    retrievedMessageOrdinals: number[];
+    messageOrdinals: number[];
+    knowledgeMessageOrdinals: number[];
+    completedChunks: number;
+    serializedContextChars: number;
+    retrievedSourceIds: string[];
+    messageSourceIds: string[];
+    knowledgeSourceIds: string[];
 }
 
 export interface IndexedSubject {
     term: string;
     postingCount: number;
+    salience?: number;
     sourceIds: string[];
     initiative?: boolean;
     identity?: IndexedSubjectIdentity;
@@ -699,21 +825,59 @@ export interface IndexedFragment extends CorpusIndexMatch {
 }
 
 export interface IndexedFragmentRequest {
+    includeDiagnostics?: boolean;
+    temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
     terms: string[];
     query?: string;
     sourceIds: string[];
+    followSources?: Array<{ sourceId: string; revisionId: string }>;
     maxFragments?: number;
     maxCharsPerFragment?: number;
     maxReadChars?: number;
 }
 
 export interface IndexedFragmentSelection {
+    diagnostics?: IndexedSelectionDiagnostics;
     fragments: IndexedFragment[];
     readChars: number;
     limited: boolean;
 }
 
+export interface IndexedSelectionDiagnostics {
+    terms: string[];
+    eligibleSourceIds: string[];
+    blocks: Array<{
+        sourceId: string;
+        revisionId: string;
+        blockOrdinal: number;
+        messageOrdinal?: number;
+        score: number;
+        postingScore?: number;
+        languageScore?: number;
+        preferenceBoost?: number;
+        selected: boolean;
+        emittedFragments: number;
+        reason: "selected" | "block-limit";
+    }>;
+    readChars: number;
+    fragmentCount: number;
+    deliveredFragmentCount?: number;
+    responseChars?: number;
+    limited: boolean;
+}
+
 export interface CorpusIndex {
+    rebuildRetained?(
+        previous: CorpusIndex,
+        documents: IndexedDocument[],
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<boolean>;
+    replace?(
+        document: IndexedDocument,
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<void>;
     initialize(): Promise<void>;
     listSubjects?(
         offset: number,
@@ -742,11 +906,14 @@ export interface CorpusIndex {
         query: string,
         limit: number,
         tags?: string[],
+        temporalContext?: import("@typeagent/knowpro").TemporalQueryContext,
     ): Promise<CorpusIndexMatch[]>;
     answer?(
         query: string,
         limit: number,
         sourceIds?: ReadonlySet<string>,
+        temporalContext?: import("@typeagent/knowpro").TemporalQueryContext,
+        includeDiagnostics?: boolean,
     ): Promise<CorpusIndexAnswer>;
     getKnowledgeGraph(
         sourceIds?: ReadonlySet<string>,

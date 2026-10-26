@@ -122,6 +122,9 @@ for (const kind of [
                         assert.equal(inventory, undefined);
                         return hydrateInformational(input, {
                             title: "Read only wiki",
+                            summary:
+                                "Read-only operation has no confirmed recovery and requires fresh approval.",
+                            status: "partial",
                             prose: input.inputs
                                 .map((source) => source.content)
                                 .join("\n\n"),

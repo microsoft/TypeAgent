@@ -3,6 +3,10 @@
 
 import type { ConfigTree, FlatEnv } from "./types.js";
 import { isTypedSectionKey, typedSectionToFlat } from "./runtime/tree.js";
+import {
+    EMBEDDING_MODELS_KEY,
+    mergeEmbeddingModels,
+} from "./runtime/embedding.js";
 
 /**
  * Top-level keys whose contents are passed through verbatim into the
@@ -189,6 +193,7 @@ function expandValueGroup(
 }
 
 const PRESERVED_FALSE_KEYS = new Set([
+    "TYPEAGENT_EMBEDDING_LOCAL_FILES_ONLY",
     "TYPEAGENT_MEMORY_VIEW_DRAFTS",
     "TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS",
     "TELEMETRY_DEBUGBRIDGE",
@@ -229,7 +234,10 @@ export function mergeFlat(...maps: FlatEnv[]): FlatEnv {
     const out: FlatEnv = {};
     for (const m of maps) {
         for (const k of Object.keys(m)) {
-            out[k] = m[k];
+            out[k] =
+                k === EMBEDDING_MODELS_KEY && out[k] !== undefined
+                    ? mergeEmbeddingModels(out[k], m[k])
+                    : m[k];
         }
     }
     return out;

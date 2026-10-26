@@ -4,8 +4,17 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { buildSync } from "esbuild";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { copyFile, fileMetrics, tsRoot, writeJson } from "./bundleUtils.mjs";
+import {
+    copyFile,
+    copyRuntimeTree,
+    fileMetrics,
+    tsRoot,
+    writeJson,
+} from "./bundleUtils.mjs";
 
 const runtimeFiles = [
     ".mcp.json",
@@ -31,8 +40,10 @@ function parseArgs(argv) {
     return args;
 }
 
-export function stageCopilotPlugin(out) {
-    const sourceRoot = path.join(tsRoot, "packages", "copilot-plugin");
+export function stageCopilotPlugin(
+    out,
+    { sourceRoot = path.join(tsRoot, "packages", "copilot-plugin") } = {},
+) {
     fs.rmSync(out, { recursive: true, force: true });
     for (const relative of runtimeFiles) {
         const source = path.join(sourceRoot, relative);
@@ -47,16 +58,76 @@ export function stageCopilotPlugin(out) {
     if (!fs.existsSync(extension)) {
         throw new Error(`Copilot plugin runtime file is missing: ${extension}`);
     }
-    copyFile(extension, path.join(out, extensionTarget));
+    const extensionLoader = path.join(sourceRoot, extensionTarget);
+    copyFile(extensionLoader, path.join(out, extensionTarget));
     for (const directory of ["agents", "skills"]) {
         fs.cpSync(path.join(sourceRoot, directory), path.join(out, directory), {
             recursive: true,
         });
     }
+    copyRuntimeTree(path.join(sourceRoot, "dist"), path.join(out, "dist"));
+    fs.cpSync(
+        path.join(sourceRoot, "dist", "recipe-runtime"),
+        path.join(out, "dist", "recipe-runtime"),
+        { recursive: true },
+    );
+    const bundled = buildSync({
+        absWorkingDir: sourceRoot,
+        entryPoints: {
+            "hooks/hook-router": path.join(
+                sourceRoot,
+                "dist",
+                "hooks",
+                "hook-router.js",
+            ),
+            "mcp/server": path.join(sourceRoot, "dist", "mcp", "server.js"),
+        },
+        outdir: path.join(out, "dist"),
+        bundle: true,
+        platform: "node",
+        format: "esm",
+        target: "node22",
+        sourcemap: true,
+        metafile: true,
+        external: ["bufferutil", "utf-8-validate"],
+        banner: {
+            js: "import { createRequire as __stageRequireFactory } from 'module'; const require = __stageRequireFactory(import.meta.url);",
+        },
+        logLevel: "silent",
+    });
+    for (const entry of ["hooks/hook-router.js", "mcp/server.js"])
+        execFileSync(
+            process.execPath,
+            ["--check", path.join(out, "dist", entry)],
+            {
+                timeout: 10000,
+                stdio: ["ignore", "pipe", "pipe"],
+            },
+        );
+    const inputs = Object.keys(bundled.metafile.inputs).map((relative) => {
+        const file = path.resolve(sourceRoot, relative);
+        return {
+            file,
+            sha256: createHash("sha256")
+                .update(fs.readFileSync(file))
+                .digest("hex"),
+        };
+    });
     const metrics = fileMetrics(out);
     writeJson(path.join(out, "bundle-manifest.json"), {
         package: "@typeagent/copilot-plugin",
         runtimeFiles: [...runtimeFiles, extensionTarget],
+        runtimeClosure: {
+            method: "bundle current compiled JS dependency graph; retain complete dist runtime/assets/shared helpers",
+            inputs,
+            outputs: bundled.metafile.outputs,
+            extensionSha256: createHash("sha256")
+                .update(fs.readFileSync(extension))
+                .digest("hex"),
+            extensionLoaderSha256: createHash("sha256")
+                .update(fs.readFileSync(extensionLoader))
+                .digest("hex"),
+        },
         metrics,
     });
     return metrics;

@@ -224,6 +224,7 @@ export function resolveViewMaintenance(
         fingerprint: viewHash([
             "view-maintenance-v1",
             definition.kind,
+            ...(definition.schemaView ? [definition.schemaView] : []),
             maintenance,
             dependencies,
             bounds,
@@ -264,7 +265,7 @@ function membershipBlocker(
     )
         return "A configured source is missing or inaccessible";
     if (
-        !selected.length ||
+        (!selected.length && definition.kind !== "schemaView") ||
         selected.length + (definition.selector.events?.length ?? 0) > 32
     )
         return "Resolved scope requires 1 to 32 sources; empty scope and overflow require review";

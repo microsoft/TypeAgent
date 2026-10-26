@@ -34,6 +34,11 @@ import type { AzureApiSettings } from "./azureSettings.js";
 import { ModelType } from "./apiTypes.js";
 import type { ApiSettings } from "./openai.js";
 import type { OpenAIApiSettings } from "./openaiSettings.js";
+import {
+    applyChatModelRequestDefaults,
+    DEFAULT_AZURE_CHAT_DEPLOYMENT,
+    DEFAULT_OPENAI_CHAT_MODEL,
+} from "./chatModelDefaults.js";
 
 const azureTokenProvider = createAzureTokenProvider(
     AzureTokenScopes.CogServices,
@@ -108,18 +113,29 @@ export function getDeployment(
  *
  * Mirrors `azureApiSettingsFromEnv` exactly; identity auth gets the
  * shared Azure token provider attached.
+ * Pool discovery supplies its exact endpoint to distinguish PTU/PAYG members
+ * in the same region instead of reselecting the first regional match.
  */
 export function azureApiSettingsFromConfig(
     config: Config,
     modelType: ModelType,
     deploymentName?: string,
     region?: Region,
+    endpointOverride?: DeploymentEndpoint,
 ): AzureApiSettings {
     const ao = config.azureOpenAI;
 
-    let endpoint: DeploymentEndpoint | undefined;
-    if (deploymentName !== undefined) {
+    let endpoint: DeploymentEndpoint | undefined = endpointOverride;
+    if (endpoint === undefined && deploymentName !== undefined) {
         endpoint = getDeploymentEndpoint(config, deploymentName, region);
+        if (
+            endpoint === undefined &&
+            modelType === ModelType.Chat &&
+            deploymentName.toUpperCase() === DEFAULT_AZURE_CHAT_DEPLOYMENT
+        )
+            throw new Error(
+                "No Azure OpenAI endpoint configured for deployment 'gpt_6_luna'",
+            );
     }
 
     if (endpoint === undefined) {
@@ -140,6 +156,8 @@ export function azureApiSettingsFromConfig(
                 break;
             case ModelType.Video:
                 endpoint = ao.defaultVideo;
+                break;
+            case ModelType.Decision:
                 break;
         }
     }
@@ -180,6 +198,7 @@ export function azureApiSettingsFromConfig(
             ? { wireApi: endpoint.wireApi }
             : {}),
     };
+    applyChatModelRequestDefaults(settings);
     return settings;
 }
 
@@ -191,6 +210,8 @@ export function openAIApiSettingsFromConfig(
     config: Config,
     modelType: ModelType,
 ): OpenAIApiSettings {
+    if (modelType === ModelType.Decision)
+        throw new Error("OpenAI does not support native decisions");
     const oai = config.openAI;
     if (!oai) {
         throw new Error("No OpenAI configuration available");
@@ -211,9 +232,7 @@ export function openAIApiSettingsFromConfig(
         apiKey: oai.apiKey,
         endpoint,
         ...(modelType === ModelType.Chat
-            ? oai.model !== undefined
-                ? { modelName: oai.model }
-                : {}
+            ? { modelName: oai.model ?? DEFAULT_OPENAI_CHAT_MODEL }
             : oai.modelEmbedding !== undefined
               ? { modelName: oai.modelEmbedding }
               : {}),
@@ -226,6 +245,7 @@ export function openAIApiSettingsFromConfig(
         maxRetryAttempts: oai.maxRetryAttempts,
         ...(requestConstraints ? { requestConstraints } : {}),
     };
+    applyChatModelRequestDefaults(settings);
     return settings;
 }
 
@@ -245,15 +265,24 @@ export function apiSettingsFromConfig(
     deploymentName?: string,
     region?: Region,
 ): ApiSettings {
+    const selectedDeployment =
+        modelType === ModelType.Chat &&
+        deploymentName === undefined &&
+        (config.azureOpenAI.defaultChat !== undefined ||
+            config.azureOpenAI.deployments.size > 0)
+            ? DEFAULT_AZURE_CHAT_DEPLOYMENT.toLowerCase()
+            : deploymentName;
     // Try Azure first.
     try {
         return azureApiSettingsFromConfig(
             config,
             modelType,
-            deploymentName,
+            selectedDeployment,
             region,
         );
     } catch (azureError) {
+        if (selectedDeployment?.toUpperCase() === DEFAULT_AZURE_CHAT_DEPLOYMENT)
+            throw azureError;
         // Fall back to OpenAI if it's configured; otherwise rethrow
         // the more informative Azure error.
         if (config.openAI?.apiKey) {

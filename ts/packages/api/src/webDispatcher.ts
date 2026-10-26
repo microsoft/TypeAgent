@@ -5,6 +5,7 @@ import {
     awaitCommand,
     CommandResult,
     createDispatcher,
+    DefaultIndexingServiceRegistry,
     ProcessCommandOptions,
     SubmitResult,
 } from "agent-dispatcher";
@@ -18,12 +19,18 @@ import {
     getDefaultAppAgentProviders,
     getDefaultAppAgentSources,
     getDefaultConstructionProvider,
+    getDefaultDispatcherOptions,
     getIndexingServiceRegistry,
 } from "default-agent-provider";
 import WebSocket from "ws";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import registerDebug from "debug";
 import { FullAction } from "@typeagent/agent-cache";
+import {
+    HOSTED_API_AGENT_CONFIG,
+    loadHostedApiAgentProviders,
+    type ApiAgentProfile,
+} from "./hostedAgentProfile.js";
 
 const debug = registerDebug("typeagent:webserver:api");
 registerDebug.enable("typeagent:webserver:*");
@@ -36,6 +43,7 @@ export interface WebDispatcher {
 
 export async function createWebDispatcher(
     structuredLogs: boolean,
+    agentProfile: ApiAgentProfile = "default",
 ): Promise<WebDispatcher> {
     let ws: WebSocket | null = null;
     const clientIOChannel = createChannelAdapter((message: any) =>
@@ -50,12 +58,22 @@ export async function createWebDispatcher(
     debug("Creating Web Dispatcher...");
 
     const instanceDir = getInstanceDir();
+    const hosted = agentProfile === "hosted";
+    const appAgentProviders = hosted
+        ? await loadHostedApiAgentProviders()
+        : getDefaultAppAgentProviders(instanceDir);
+    const appAgentSources = hosted
+        ? []
+        : getDefaultAppAgentSources(instanceDir, {
+              excludePathSources: true,
+          });
+    const indexingServiceRegistry = hosted
+        ? new DefaultIndexingServiceRegistry()
+        : await getIndexingServiceRegistry(instanceDir);
     const clientIO = createClientIORpcClient(clientIOChannel.channel);
     const dispatcher = await createDispatcher("api", {
-        appAgentProviders: getDefaultAppAgentProviders(instanceDir),
-        appAgentSources: getDefaultAppAgentSources(instanceDir, {
-            excludePathSources: true,
-        }),
+        appAgentProviders,
+        appAgentSources,
         persistSession: true,
         persistDir: instanceDir,
         storageProvider: getFsStorageProvider(),
@@ -66,8 +84,12 @@ export async function createWebDispatcher(
             structuredLogs,
         },
         clientIO: clientIO,
-        constructionProvider: getDefaultConstructionProvider(),
-        indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),
+        ...(hosted
+            ? getDefaultDispatcherOptions(HOSTED_API_AGENT_CONFIG)
+            : {
+                  constructionProvider: getDefaultConstructionProvider(),
+              }),
+        indexingServiceRegistry,
     });
 
     let settingSummary: string = "";

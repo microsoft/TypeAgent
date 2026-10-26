@@ -5,14 +5,75 @@ import { createHash } from "node:crypto";
 import type {
     IndexedFragmentRequest,
     IndexedFragmentSelection,
+    IndexedSelectionDiagnostics,
 } from "./types.js";
 
 export interface IndexedBlock {
+    temporalContext?: import("@typeagent/knowpro").MessageTemporalContext;
     sourceId: string;
     revisionId: string;
     blockOrdinal: number;
+    messageOrdinal?: number;
     text: string;
     score: number;
+    postingScore?: number;
+    languageScore?: number;
+    preferenceBoost?: number;
+}
+
+const queryStopWords = new Set([
+    "what",
+    "which",
+    "does",
+    "about",
+    "with",
+    "from",
+    "have",
+    "that",
+    "this",
+    "their",
+    "were",
+    "when",
+    "where",
+    "should",
+    "would",
+    "could",
+    "how",
+    "why",
+    "the",
+    "and",
+    "for",
+    "are",
+    "can",
+    "was",
+    "not",
+    "did",
+    "its",
+    "is",
+    "to",
+    "of",
+    "in",
+    "a",
+    "an",
+    "i",
+    "my",
+    "me",
+    "your",
+    "our",
+    "had",
+    "has",
+    "been",
+    "many",
+    "much",
+]);
+
+export function indexedQueryTerms(query: string): string[] {
+    return [
+        ...new Set(query.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ?? []),
+    ].filter(
+        (term) =>
+            term.length > 1 && term.length <= 200 && !queryStopWords.has(term),
+    );
 }
 
 export function indexedTextHash(text: string): string {
@@ -113,63 +174,187 @@ function diverseBlocks(blocks: IndexedBlock[], limit: number): IndexedBlock[] {
     return selected;
 }
 
+function queryBlocks(
+    blocks: IndexedBlock[],
+    terms: string[],
+    limit: number,
+): IndexedBlock[] {
+    const remaining = blocks.map((block, order) => ({
+        block,
+        order,
+        words: new Set(
+            block.text.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ?? [],
+        ),
+    }));
+    const covered = new Set<string>();
+    const sourceCounts = new Map<string, number>();
+    const selected: IndexedBlock[] = [];
+    while (remaining.length && selected.length < limit) {
+        const utility = (entry: (typeof remaining)[number]) => {
+            const novel = terms.filter(
+                (term) => entry.words.has(term) && !covered.has(term),
+            ).length;
+            return (
+                (entry.block.score * (1 + novel / Math.max(1, terms.length))) /
+                Math.sqrt(1 + (sourceCounts.get(entry.block.sourceId) ?? 0))
+            );
+        };
+        remaining.sort((a, b) => utility(b) - utility(a) || a.order - b.order);
+        const entry = remaining.shift()!;
+        selected.push(entry.block);
+        sourceCounts.set(
+            entry.block.sourceId,
+            (sourceCounts.get(entry.block.sourceId) ?? 0) + 1,
+        );
+        terms.forEach((term) => {
+            if (entry.words.has(term)) covered.add(term);
+        });
+    }
+    return selected;
+}
+
 const contextualHeading =
     /^#{1,6} [^\n]*(qualif|contrast|warn|correct|limit|caveat|counterexample|scope|observation|measurement)/im;
+
+interface WindowCandidate {
+    block: IndexedBlock;
+    offset: number;
+    matched?: boolean;
+    context?: boolean;
+}
+
+function representativeMatches(text: string, pattern: RegExp) {
+    const matches = [...text.matchAll(pattern)];
+    return [
+        ...new Set([0, matches.length - 1, Math.floor(matches.length / 2)]),
+    ].flatMap((index) => (matches[index] ? [matches[index]] : []));
+}
+
+function passageOffset(text: string, found: number, window: number): number {
+    const context = Math.min(256, Math.floor(window / 4));
+    const boundary = text.lastIndexOf("\n\n", found);
+    const paragraph = boundary < 0 ? 0 : boundary + 2;
+    return Math.max(
+        0,
+        paragraph > found - context ? paragraph : found - context,
+    );
+}
+
+function matchedWindows(
+    block: IndexedBlock,
+    selectors: string[],
+    window: number,
+    wholeWords: boolean,
+): WindowCandidate[] {
+    return selectors.flatMap((selector) => {
+        if (wholeWords && !/[\p{L}\p{N}]{2}/u.test(selector)) return [];
+        const pattern = selector
+            .trim()
+            .split(/\s+/)
+            .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+            .join("\\s+");
+        return representativeMatches(
+            block.text,
+            new RegExp(
+                wholeWords
+                    ? `(?<![\\p{L}\\p{N}_])${pattern}(?![\\p{L}\\p{N}_])`
+                    : pattern,
+                "giu",
+            ),
+        ).map((match) => ({
+            block,
+            offset: passageOffset(block.text, match.index, window),
+            matched: true,
+        }));
+    });
+}
+
+function associatedContext(
+    block: IndexedBlock,
+    passages: WindowCandidate[],
+    headings: RegExpExecArray[],
+): WindowCandidate[] {
+    const tables = [
+        ...block.text.matchAll(/^\|[^\n]*\|\r?\n\|[ \t:|-]+\|[ \t]*$/gm),
+    ];
+    return passages.flatMap((passage) =>
+        [headings, tables].flatMap((items) => {
+            const nearest = items
+                .filter((item) => item.index <= passage.offset)
+                .at(-1);
+            return nearest
+                ? [{ block, offset: nearest.index, context: true }]
+                : [];
+        }),
+    );
+}
 
 function candidateWindows(
     blocks: IndexedBlock[],
     terms: string[],
+    selectors: string[],
     window: number,
-): Array<Array<{ block: IndexedBlock; offset: number }>> {
+    wholeWords: boolean,
+): WindowCandidate[][] {
     return blocks.map((block) => {
         const headings = [...block.text.matchAll(/^#{1,6} .+$/gm)];
-        const important = headings.filter((heading) =>
-            contextualHeading.test(heading[0]),
-        );
-        const matchedPassages = terms
-            .flatMap((term) => {
-                const lower = block.text.toLocaleLowerCase();
-                const offsets: number[] = [];
-                let start = window;
-                for (let index = 0; index < 3; index++) {
-                    const found = lower.indexOf(term, start);
-                    if (found < 0) break;
-                    const paragraph = block.text.lastIndexOf("\n\n", found);
-                    offsets.push(
-                        paragraph < 0
-                            ? Math.floor(found / window) * window
-                            : paragraph + 2,
-                    );
-                    start = found + window;
-                }
-                return offsets;
-            })
-            .sort((a, b) => {
-                const coverage = (offset: number) =>
-                    terms.filter((term) =>
-                        block.text
-                            .slice(offset, offset + window)
-                            .toLocaleLowerCase()
-                            .includes(term),
-                    ).length;
-                return coverage(b) - coverage(a) || a - b;
-            });
-        const offsets = [
-            ...new Set([
-                0,
-                ...important.map((heading) => heading.index),
-                ...headings
-                    .filter((heading) =>
-                        terms.some((term) =>
-                            heading[0].toLocaleLowerCase().includes(term),
-                        ),
-                    )
-                    .map((heading) => heading.index),
-                ...matchedPassages,
-                ...balancedOffsets(block.text.length, window),
-            ]),
+        const passages = matchedWindows(block, selectors, window, wholeWords);
+        const words = matchedWindows(block, terms, window, wholeWords);
+        const primary = passages.length ? passages : words;
+        if (wholeWords) {
+            const coverage = (candidate: WindowCandidate) => {
+                const text = block.text
+                    .slice(candidate.offset, candidate.offset + window)
+                    .toLocaleLowerCase();
+                const words = new Set<string>(
+                    text.match(/[\p{L}\p{N}-]+/gu) ?? [],
+                );
+                return terms.filter((term) => words.has(term)).length;
+            };
+            primary.sort((a, b) => coverage(b) - coverage(a));
+        }
+        const qualifications = representativeMatches(
+            block.text,
+            /\b(qualif\w*|caveat|counterexample|correct\w*|withdraw\w*|retract\w*|exception|scope)\b/giu,
+        ).map((match) => ({
+            block,
+            offset: passageOffset(block.text, match.index, window),
+            matched: true,
+            context: true,
+        }));
+        const candidates: WindowCandidate[] = [
+            ...primary.slice(0, 2),
+            { block, offset: 0 },
+            ...associatedContext(block, primary.slice(0, 2), headings),
+            ...qualifications.slice(0, 2),
+            ...headings
+                .filter((heading) => contextualHeading.test(heading[0]))
+                .map((heading) => ({
+                    block,
+                    offset: heading.index,
+                    context: true,
+                })),
+            ...primary.slice(2),
+            ...headings
+                .filter((heading) =>
+                    terms.some((term) =>
+                        heading[0].toLocaleLowerCase().includes(term),
+                    ),
+                )
+                .map((heading) => ({ block, offset: heading.index })),
+            ...words,
+            ...qualifications.slice(2),
+            ...balancedOffsets(block.text.length, window).map((offset) => ({
+                block,
+                offset,
+            })),
         ];
-        return offsets.map((offset) => ({ block, offset }));
+        const seen = new Set<number>();
+        return candidates.filter((candidate) => {
+            if (seen.has(candidate.offset)) return false;
+            seen.add(candidate.offset);
+            return true;
+        });
     });
 }
 
@@ -179,11 +364,126 @@ interface FragmentSelectionState {
     neighborhoodChars: number;
     limited: boolean;
     seen: Set<string>;
-    selectedRanges: Map<string, Array<{ start: number; end: number }>>;
+    selectedRanges: Map<
+        string,
+        Array<{
+            start: number;
+            end: number;
+            fragment: IndexedFragmentSelection["fragments"][number];
+        }>
+    >;
+}
+
+function selectionDiagnostics(
+    candidates: IndexedBlock[],
+    selected: IndexedBlock[],
+    request: IndexedFragmentRequest,
+    state: FragmentSelectionState,
+): IndexedSelectionDiagnostics {
+    return {
+        terms: [...request.terms],
+        eligibleSourceIds: [...request.sourceIds],
+        blocks: candidates.map((block) => ({
+            sourceId: block.sourceId,
+            revisionId: block.revisionId,
+            blockOrdinal: block.blockOrdinal,
+            ...(block.messageOrdinal !== undefined
+                ? { messageOrdinal: block.messageOrdinal }
+                : {}),
+            score: block.score,
+            ...(block.postingScore !== undefined
+                ? { postingScore: block.postingScore }
+                : {}),
+            ...(block.languageScore !== undefined
+                ? { languageScore: block.languageScore }
+                : {}),
+            ...(block.preferenceBoost !== undefined
+                ? { preferenceBoost: block.preferenceBoost }
+                : {}),
+            selected: selected.includes(block),
+            emittedFragments:
+                state.selectedRanges.get(
+                    `${block.sourceId}:${block.revisionId}:${block.blockOrdinal}`,
+                )?.length ?? 0,
+            reason: selected.includes(block) ? "selected" : "block-limit",
+        })),
+        readChars: state.readChars,
+        fragmentCount: state.fragments.length,
+        limited: state.limited,
+    };
+}
+
+function recordFragment(
+    block: IndexedBlock,
+    start: number,
+    end: number,
+    snippet: string,
+    maxFragments: number,
+    state: FragmentSelectionState,
+): void {
+    const locator = indexedLocator(block, start, end);
+    const key = `${block.sourceId}:${block.revisionId}:${locator}`;
+    if (state.seen.has(key)) return;
+    const blockKey = `${block.sourceId}:${block.revisionId}:${block.blockOrdinal}`;
+    const ranges = state.selectedRanges.get(blockKey) ?? [];
+    if (ranges.some((range) => range.start <= start && range.end >= end))
+        return;
+    const fragment = {
+        ...(block.temporalContext
+            ? { temporalContext: block.temporalContext }
+            : {}),
+        sourceId: block.sourceId,
+        revisionId: block.revisionId,
+        locator,
+        snippet,
+        score: block.score,
+    };
+    state.seen.add(key);
+    const subsumed = ranges.filter(
+        (range) => start <= range.start && end >= range.end,
+    );
+    if (subsumed.length) {
+        const retained = subsumed[0];
+        const replaced = new Set(subsumed.map((range) => range.fragment));
+        Object.assign(retained.fragment, fragment);
+        retained.start = start;
+        retained.end = end;
+        state.fragments = state.fragments.filter(
+            (item) => item === retained.fragment || !replaced.has(item),
+        );
+        state.selectedRanges.set(
+            blockKey,
+            ranges.filter(
+                (range) => range === retained || !replaced.has(range.fragment),
+            ),
+        );
+    } else {
+        ranges.push({ start, end, fragment });
+        state.selectedRanges.set(blockKey, ranges);
+        state.fragments.push(fragment);
+    }
+    if (state.fragments.length >= maxFragments) state.limited = true;
+}
+
+function uncoveredRange(
+    start: number,
+    end: number,
+    ranges: Array<{ start: number; end: number }>,
+): { start: number; end: number } | undefined {
+    const gaps: Array<{ start: number; end: number }> = [];
+    for (const range of [...ranges].sort((a, b) => a.start - b.start)) {
+        if (range.end <= start) continue;
+        if (range.start >= end) break;
+        if (range.start > start) gaps.push({ start, end: range.start });
+        start = Math.max(start, range.end);
+        if (start >= end) break;
+    }
+    if (start < end) gaps.push({ start, end });
+    return gaps.sort((a, b) => b.end - b.start - (a.end - a.start))[0];
 }
 
 function readCandidate(
-    item: { block: IndexedBlock; offset: number },
+    item: WindowCandidate,
     request: IndexedFragmentRequest,
     terms: string[],
     window: number,
@@ -193,6 +493,16 @@ function readCandidate(
 ): void {
     const { block } = item;
     let offset = item.offset;
+    const blockKey = `${block.sourceId}:${block.revisionId}:${block.blockOrdinal}`;
+    const ranges = state.selectedRanges.get(blockKey) ?? [];
+    if (
+        ranges.some(
+            (range) =>
+                range.start <= offset &&
+                range.end >= Math.min(block.text.length, offset + window),
+        )
+    )
+        return;
     const contextChars = Math.min(
         offset,
         1000,
@@ -206,6 +516,7 @@ function readCandidate(
         const heading = nearby.lastIndexOf("\n## ");
         if (
             heading >= 0 &&
+            !item.matched &&
             !/^#{1,6} /m.test(block.text.slice(offset, offset + 8))
         )
             offset = offset - contextChars + heading + 1;
@@ -214,44 +525,35 @@ function readCandidate(
         state.limited = true;
         return;
     }
-    const end = Math.min(
+    if (offset > 0 && /[\uDC00-\uDFFF]/.test(block.text[offset])) offset--;
+    let end = Math.min(
         block.text.length,
         offset + window,
         offset + readLimit - state.readChars,
     );
+    if (end < block.text.length && /[\uD800-\uDBFF]/.test(block.text[end - 1]))
+        end--;
+    if (end <= offset) {
+        state.limited = true;
+        return;
+    }
+    if (request.query) {
+        const uncovered = uncoveredRange(offset, end, ranges);
+        if (!uncovered) return;
+        offset = uncovered.start;
+        end = uncovered.end;
+    }
     const snippet = block.text.slice(offset, end);
     state.readChars += snippet.length;
     const lower = snippet.toLocaleLowerCase();
     if (
         !terms.some((term) => lower.includes(term)) &&
+        !item.context &&
         !request.query &&
         !contextualHeading.test(snippet)
     )
         return;
-    const locator = indexedLocator(block, offset, end);
-    const key = `${block.sourceId}:${block.revisionId}:${locator}`;
-    if (state.seen.has(key)) return;
-    const blockKey = `${block.sourceId}:${block.revisionId}:${block.blockOrdinal}`;
-    const ranges = state.selectedRanges.get(blockKey) ?? [];
-    if (
-        ranges.some(
-            (range) =>
-                (range.start <= offset && range.end >= end) ||
-                (offset <= range.start && end >= range.end),
-        )
-    )
-        return;
-    state.seen.add(key);
-    ranges.push({ start: offset, end });
-    state.selectedRanges.set(blockKey, ranges);
-    state.fragments.push({
-        sourceId: block.sourceId,
-        revisionId: block.revisionId,
-        locator,
-        snippet,
-        score: block.score,
-    });
-    if (state.fragments.length >= maxFragments) state.limited = true;
+    recordFragment(block, offset, end, snippet, maxFragments, state);
 }
 
 export function selectIndexedFragments(
@@ -262,9 +564,8 @@ export function selectIndexedFragments(
     const window = bound(request.maxCharsPerFragment, 2000, 2000);
     const readLimit = bound(request.maxReadChars, 32000, 32000);
     if (
-        !request.terms.length ||
+        (!request.terms.length && request.query === undefined) ||
         (request.query !== undefined && !request.query.trim()) ||
-        request.terms.length > 8 ||
         request.terms.some((term) => !term.trim() || term.length > 200)
     )
         throw new Error("Invalid bounded indexed-fragment selector");
@@ -288,12 +589,17 @@ export function selectIndexedFragments(
     const candidates = [...blocks].filter((block) =>
         eligible.has(block.sourceId),
     );
-    const selected = diverseBlocks(
-        candidates,
-        Math.max(2, Math.floor(maxFragments / 3)),
-    );
+    const selected = request.query
+        ? queryBlocks(candidates, terms, maxFragments)
+        : diverseBlocks(candidates, Math.max(2, Math.floor(maxFragments / 3)));
     state.limited = candidates.length > selected.length;
-    const windows = candidateWindows(selected, terms, window);
+    const windows = candidateWindows(
+        selected,
+        terms,
+        request.terms,
+        window,
+        request.query !== undefined,
+    );
     // Interleave sources so an earlier long block cannot hide a newly indexed correction.
     for (
         let index = 0;
@@ -332,5 +638,15 @@ export function selectIndexedFragments(
         fragments: state.fragments,
         readChars: state.readChars,
         limited: state.limited,
+        ...(request.includeDiagnostics
+            ? {
+                  diagnostics: selectionDiagnostics(
+                      candidates,
+                      selected,
+                      request,
+                      state,
+                  ),
+              }
+            : {}),
     };
 }

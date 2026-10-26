@@ -2,7 +2,13 @@
 // Licensed under the MIT License.
 
 import { getActiveTab } from "./tabManager";
-import { getRecordedActions, saveRecordedActions } from "./storage";
+import {
+    getRecordedActions,
+    saveRecordedActions,
+    getCrosswordDecisionSettings,
+    notifyCrosswordModeChanged,
+} from "./storage";
+import { forwardCrosswordDecisionRpc } from "./crosswordDecisionRpc";
 import {
     sendActionToAgent,
     ensureWebsocketConnected,
@@ -71,7 +77,25 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryListEvents: (params) => forward("memoryListEvents", params),
         memoryViewCapabilities: (params) =>
             forward("memoryViewCapabilities", params),
+        memoryQueryTopics: (params) => forward("memoryQueryTopics", params),
+        memoryRebuildTopics: (params) => forward("memoryRebuildTopics", params),
         memoryListViews: (params) => forward("memoryListViews", params),
+        memoryListQuestions: (params) => forward("memoryListQuestions", params),
+        memoryListQuestionSummaries: (params) =>
+            forward("memoryListQuestionSummaries", params),
+        memoryGetQuestion: (params) => forward("memoryGetQuestion", params),
+        memoryEditQuestion: (params) => forward("memoryEditQuestion", params),
+        memoryGetViewPage: (params) => forward("memoryGetViewPage", params),
+        memoryProposeSchemaView: (params) =>
+            forward("memoryProposeSchemaView", params),
+        memoryDiscoverSchemaQuestions: (params) =>
+            forward("memoryDiscoverSchemaQuestions", params),
+        memoryListAcquisitions: (params) =>
+            forward("memoryListAcquisitions", params),
+        memoryRunAcquisitions: (params) =>
+            forward("memoryRunAcquisitions", params),
+        memoryCancelAcquisition: (params) =>
+            forward("memoryCancelAcquisition", params),
         memoryGetView: (params) => forward("memoryGetView", params),
         memorySaveViewDraft: (params) => forward("memorySaveViewDraft", params),
         memoryArchiveView: (params) => forward("memoryArchiveView", params),
@@ -106,6 +130,8 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryResolveViewConflict: (params) =>
             forward("memoryResolveViewConflict", params),
         memoryGetSource: (params) => forward("memoryGetSource", params),
+        memoryGetSourceSynopsis: (params) =>
+            forward("memoryGetSourceSynopsis", params),
         memoryGetSourceContent: (params) =>
             forward("memoryGetSourceContent", params),
         memoryGetSourceKnowledge: (params) =>
@@ -205,11 +231,22 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         },
 
         async settingsUpdated(params: any) {
-            console.log("Settings updated:", params.settings);
+            const { mode, strategy } = await getCrosswordDecisionSettings();
             await chrome.storage.local.set({
-                knowledgeSettings: params.settings,
+                knowledgeSettings: {
+                    ...params.settings,
+                    crosswordMode: mode,
+                    crosswordDecisionStrategy: strategy,
+                },
             });
+            await notifyCrosswordModeChanged(mode);
             return { success: true };
+        },
+
+        async getCrosswordDecisionCapabilities() {
+            return forwardCrosswordDecisionRpc(
+                "getCrosswordDecisionCapabilities",
+            );
         },
 
         async autoIndexSettingChanged(params: any) {

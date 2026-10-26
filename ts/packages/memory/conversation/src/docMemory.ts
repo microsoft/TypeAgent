@@ -14,6 +14,11 @@ import { TypeChatLanguageModel } from "typechat";
 import { fileURLToPath } from "url";
 import { importDocMemoryFromTextFile } from "./docImport.js";
 import { ChatModel } from "@typeagent/aiclient";
+import {
+    getIndexingErrors,
+    readMemoryDataFromFile,
+    writeMemoryDataToFile,
+} from "./common.js";
 
 export class DocPartMeta extends MessageMetadata {
     constructor(public sourceUrl?: string | undefined) {
@@ -99,6 +104,7 @@ export class DocMemory
     public semanticRefIndex: kp.TermToSemanticRefIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public indexingState: DocIndexingState;
+    private hasKnownIndexingState: boolean;
 
     constructor(
         nameTag: string = "",
@@ -127,6 +133,7 @@ export class DocMemory
             lastSemanticRefOrdinal: -1,
             lastIndexed: new Date(),
         };
+        this.hasKnownIndexingState = docParts.length === 0;
         // Customize the search query translator for scoped queries
         customizeScopeQueryProcessing(
             this.settings.queryTranslator!,
@@ -138,6 +145,16 @@ export class DocMemory
         return this;
     }
 
+    public get hasCompleteIndex(): boolean {
+        return (
+            this.hasKnownIndexingState &&
+            this.indexingState.lastMessageOrdinal ===
+                this.messages.length - 1 &&
+            this.indexingState.lastSemanticRefOrdinal ===
+                this.semanticRefs.length - 1
+        );
+    }
+
     /**
      * Build a new index for this document memory. The index uses all available document parts
      * @param {kp.IndexingEventHandlers} eventHandler
@@ -146,15 +163,19 @@ export class DocMemory
     public async buildIndex(
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
+        await this.prepareEmbeddings();
         this.beginIndexing();
         try {
-            const result = await kp.buildConversationIndex(
-                this,
-                this.settings.conversationSettings,
+            return await this.indexAndTrackCompletion(
+                (handlers) =>
+                    kp.buildConversationIndex(
+                        this,
+                        this.settings.conversationSettings,
+                        handlers,
+                    ),
                 eventHandler,
+                true,
             );
-            this.updateIndexingState();
-            return result;
         } finally {
             this.endIndexing();
         }
@@ -170,20 +191,23 @@ export class DocMemory
     public async addToIndex(
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
+        await this.prepareEmbeddings();
         this.beginIndexing();
         try {
             const messageOrdinalStartAt =
                 this.indexingState.lastMessageOrdinal + 1;
             if (messageOrdinalStartAt < this.messages.length) {
-                const result = await kp.addToConversationIndex(
-                    this,
-                    this.settings.conversationSettings,
-                    messageOrdinalStartAt,
-                    this.semanticRefs.length,
+                return await this.indexAndTrackCompletion(
+                    (handlers) =>
+                        kp.addToConversationIndex(
+                            this,
+                            this.settings.conversationSettings,
+                            messageOrdinalStartAt,
+                            this.semanticRefs.length,
+                            handlers,
+                        ),
                     eventHandler,
                 );
-                this.updateIndexingState();
-                return result;
             }
             return {};
         } finally {
@@ -203,21 +227,29 @@ export class DocMemory
         eventHandler?: kp.IndexingEventHandlers,
         overrideSettings?: DocMemorySettings,
     ): Promise<kp.IndexingResults> {
+        if (overrideSettings && overrideSettings !== this.settings) {
+            throw new Error(
+                "Per-part embedding settings are unsafe. Update memory settings and rebuild all embeddings instead.",
+            );
+        }
+        await this.prepareEmbeddings();
         this.beginIndexing();
         try {
             this.messages.append(docPart);
             const messageOrdinal = this.messages.length - 1;
 
             const settings = overrideSettings || this.settings;
-            const result = await kp.addToConversationIndex(
-                this,
-                settings.conversationSettings,
-                messageOrdinal,
-                this.semanticRefs.length,
+            return await this.indexAndTrackCompletion(
+                (handlers) =>
+                    kp.addToConversationIndex(
+                        this,
+                        settings.conversationSettings,
+                        messageOrdinal,
+                        this.semanticRefs.length,
+                        handlers,
+                    ),
                 eventHandler,
             );
-            this.updateIndexingState();
-            return result;
         } finally {
             this.endIndexing();
         }
@@ -235,6 +267,7 @@ export class DocMemory
         updatedItem: DocPart,
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<kp.IndexingResults> {
+        await this.prepareEmbeddings();
         this.beginIndexing();
         try {
             this.removeSemanticRefsForMessage(messageOrdinal);
@@ -298,6 +331,39 @@ export class DocMemory
         }
     }
 
+    private async indexAndTrackCompletion(
+        run: (
+            handlers: kp.IndexingEventHandlers,
+        ) => Promise<kp.IndexingResults>,
+        eventHandler?: kp.IndexingEventHandlers,
+        fullBuild = false,
+    ): Promise<kp.IndexingResults> {
+        const wasKnown = this.hasKnownIndexingState;
+        this.hasKnownIndexingState = false;
+        let completed = true;
+        const track = (proceed: boolean) => {
+            completed &&= proceed;
+            return proceed;
+        };
+        const handlers = { ...eventHandler };
+        const { onKnowledgeExtracted, onEmbeddingsCreated, onTextIndexed } =
+            eventHandler ?? {};
+        if (onKnowledgeExtracted)
+            handlers.onKnowledgeExtracted = (...args) =>
+                track(onKnowledgeExtracted(...args));
+        if (onEmbeddingsCreated)
+            handlers.onEmbeddingsCreated = (...args) =>
+                track(onEmbeddingsCreated(...args));
+        if (onTextIndexed)
+            handlers.onTextIndexed = (...args) => track(onTextIndexed(...args));
+        const result = await run(handlers);
+        if (completed && !getIndexingErrors(result)) {
+            this.updateIndexingState();
+            this.hasKnownIndexingState = fullBuild || wasKnown;
+        }
+        return result;
+    }
+
     private updateIndexingState(): void {
         this.indexingState.lastMessageOrdinal = this.messages.length - 1;
         this.indexingState.lastSemanticRefOrdinal =
@@ -310,7 +376,10 @@ export class DocMemory
      * @returns
      */
     public async serialize(): Promise<DocMemoryData> {
+        const identities = await this.prepareEmbeddings();
         const data: DocMemoryData = {
+            embeddingIdentities:
+                Object.keys(identities).length > 0 ? identities : undefined,
             nameTag: this.nameTag,
             messages: this.messages.getAll(),
             tags: this.tags,
@@ -320,6 +389,7 @@ export class DocMemory
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
             messageIndexData: this.secondaryIndexes.messageIndex?.serialize(),
             indexingState: this.indexingState,
+            indexingComplete: this.hasCompleteIndex,
         };
         return data;
     }
@@ -329,6 +399,16 @@ export class DocMemory
      * @param docMemoryData
      */
     public async deserialize(docMemoryData: DocMemoryData): Promise<void> {
+        const identities = await this.prepareEmbeddings();
+        kp.validateConversationEmbeddingIdentities(
+            docMemoryData,
+            identities,
+            this.settings.embeddingSize,
+        );
+        this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
+            this.settings.conversationSettings,
+        );
+        this.semanticRefIndex = new kp.TermToSemanticRefIndex();
         this.nameTag = docMemoryData.nameTag;
         const docParts = docMemoryData.messages.map((m) => {
             return docPartClassFromJsonObj(m);
@@ -357,6 +437,9 @@ export class DocMemory
             );
         }
 
+        this.hasKnownIndexingState =
+            docMemoryData.indexingState !== undefined &&
+            docMemoryData.indexingComplete !== false;
         if (docMemoryData.indexingState) {
             this.indexingState = {
                 ...docMemoryData.indexingState,
@@ -385,9 +468,17 @@ export class DocMemory
     public async writeToFile(
         dirPath: string,
         baseFileName: string,
+        segmented = false,
     ): Promise<void> {
+        await this.prepareEmbeddings();
         const data = await this.serialize();
-        await kp.writeConversationDataToFile(data, dirPath, baseFileName);
+        await writeMemoryDataToFile(
+            data,
+            this.settings.conversationSettings,
+            dirPath,
+            baseFileName,
+            segmented,
+        );
     }
 
     /**
@@ -402,18 +493,96 @@ export class DocMemory
         dirPath: string,
         baseFileName: string,
         settings?: DocMemorySettings,
+        options?: {
+            rebuildEmbeddings?: boolean;
+            loadEmbeddings?: boolean;
+        },
     ): Promise<DocMemory | undefined> {
         const docMemory = new DocMemory(undefined, undefined, settings);
-        const data = await kp.readConversationDataFromFile(
-            dirPath,
-            baseFileName,
-            docMemory.settings.conversationSettings.relatedTermIndexSettings
-                .embeddingIndexSettings?.embeddingSize,
-        );
+        if (options?.loadEmbeddings === false) {
+            const indexes = docMemory.settings.conversationSettings;
+            if (
+                options.rebuildEmbeddings ||
+                [
+                    indexes.relatedTermIndexSettings.embeddingIndexSettings,
+                    indexes.messageTextIndexSettings.embeddingIndexSettings,
+                    indexes.threadSettings,
+                ].some((lane) => lane?.embeddingModel !== undefined)
+            ) {
+                throw new Error(
+                    "Text-only loading requires disabled embedding lanes and cannot rebuild embeddings.",
+                );
+            }
+        }
+        await docMemory.prepareEmbeddings();
+        let data: kp.IConversationDataWithIndexes | undefined;
+        try {
+            data = await readMemoryDataFromFile(
+                docMemory.settings.conversationSettings,
+                dirPath,
+                baseFileName,
+                options,
+            );
+        } catch (error) {
+            if (
+                !options?.rebuildEmbeddings ||
+                !(error instanceof kp.PersistedEmbeddingIdentityError)
+            ) {
+                throw error;
+            }
+            data = error.conversationData;
+        }
         if (data) {
-            docMemory.deserialize(data);
+            await docMemory.deserialize(data);
+            if (options?.rebuildEmbeddings) {
+                await docMemory.rebuildEmbeddings();
+            }
+        } else {
+            return undefined;
         }
         return docMemory;
+    }
+
+    /**
+     * Replace every vector using retained text and semantic refs, without
+     * invoking knowledge extraction. Save explicitly to commit the new space.
+     */
+    public async rebuildEmbeddings(
+        eventHandler?: kp.IndexingEventHandlers,
+    ): Promise<kp.SecondaryIndexingResults> {
+        if (
+            !this.settings.conversationSettings.messageTextIndexSettings
+                .embeddingIndexSettings.embeddingModel
+        ) {
+            throw new Error(
+                "Configure an embedding model before rebuilding document embeddings.",
+            );
+        }
+        this.embeddingRebuildRequired = true;
+        await this.prepareEmbeddingRebuild();
+        this.beginIndexing();
+        try {
+            const aliases =
+                this.secondaryIndexes.termToRelatedTermsIndex.aliases.serialize();
+            this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
+                this.settings.conversationSettings,
+            );
+            this.secondaryIndexes.termToRelatedTermsIndex.aliases.deserialize(
+                aliases,
+            );
+            const result = await kp.buildSecondaryIndexes(
+                this,
+                this.settings.conversationSettings,
+                eventHandler,
+            );
+            const error = getIndexingErrors({ secondaryIndexResults: result });
+            if (error) throw new Error(`Embedding rebuild failed: ${error}`);
+            this.updateIndexingState();
+            this.embeddingRebuildRequired = false;
+            return result;
+        } finally {
+            this.endIndexing();
+        }
     }
 
     /**
@@ -435,13 +604,19 @@ export class DocMemory
         docName?: string,
         settings?: DocMemorySettings,
     ) {
-        return importDocMemoryFromTextFile(docFilePath, maxCharsPerChunk);
+        return importDocMemoryFromTextFile(
+            docFilePath,
+            maxCharsPerChunk,
+            docName,
+            settings ?? this.settings,
+        );
     }
 }
 
 export interface DocMemoryData
-    extends kp.IConversationDataWithIndexes<DocPart> {
+    extends kp.EmbeddingIdentifiedConversationData<DocPart> {
     indexingState?: DocIndexingState;
+    indexingComplete?: boolean;
 }
 
 export class DocPartSerializer implements kp.JsonSerializer<DocPart> {
@@ -484,7 +659,8 @@ function customizeScopeQueryProcessing(
  * @returns
  */
 function docPartClassFromJsonObj(jMsg: DocPart): DocPart {
-    const jMeta: DocPartMeta = jMsg.metadata;
+    const jMeta = new DocPartMeta(jMsg.metadata?.sourceUrl);
+    jMeta.temporalContext = jMsg.metadata?.temporalContext;
     const part = new DocPart(
         jMsg.textChunks,
         jMeta,

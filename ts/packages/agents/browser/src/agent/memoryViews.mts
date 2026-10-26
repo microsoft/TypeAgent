@@ -7,11 +7,28 @@ import type {
     MemoryViewService,
 } from "@typeagent/memory-service";
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
+import type { MemoryAcquisitionProgressService } from "@typeagent/memory-client";
+import {
+    acquisitionProgress,
+    acquisitionOperation,
+} from "./memoryAcquisitionProgress.mjs";
 
 type ViewMethods = Pick<
     MemoryCenterInvokeFunctions,
     | "memoryViewCapabilities"
+    | "memoryQueryTopics"
+    | "memoryRebuildTopics"
     | "memoryListViews"
+    | "memoryListQuestions"
+    | "memoryListQuestionSummaries"
+    | "memoryGetQuestion"
+    | "memoryListAcquisitions"
+    | "memoryRunAcquisitions"
+    | "memoryCancelAcquisition"
+    | "memoryEditQuestion"
+    | "memoryGetViewPage"
+    | "memoryProposeSchemaView"
+    | "memoryDiscoverSchemaQuestions"
     | "memoryGetView"
     | "memorySaveViewDraft"
     | "memoryArchiveView"
@@ -39,9 +56,63 @@ export function createMemoryViewFunctions(
     service: () => MemoryService & Partial<MemoryViewService>,
 ): ViewMethods {
     const views = () => createMemoryServiceRpcFacade(service());
+    const progressClient = () =>
+        service() as MemoryService &
+            Partial<MemoryViewService & MemoryAcquisitionProgressService>;
+    function required<K extends keyof MemoryViewService>(
+        name: K,
+    ): NonNullable<MemoryViewService[K]> {
+        const value = service();
+        const method = value[name];
+        if (typeof method !== "function")
+            throw new Error(
+                `Schema-defined questions capability unavailable: ${String(name)}`,
+            );
+        return method.bind(value) as NonNullable<MemoryViewService[K]>;
+    }
     return {
         memoryViewCapabilities: () => service().getCapabilities(),
+        memoryQueryTopics: (request) => views().queryTopics(request),
+        memoryRebuildTopics: ({ corpusId }) => views().rebuildTopics(corpusId),
         memoryListViews: ({ corpusId }) => views().listViews(corpusId),
+        memoryListQuestions: ({ corpusId }) =>
+            required("listQuestions")(corpusId),
+        memoryListQuestionSummaries: (request) =>
+            required("listQuestionSummaries")(request),
+        memoryGetQuestion: (request) => required("getQuestion")(request),
+        memoryListAcquisitions: ({ corpusId }) =>
+            acquisitionOperation(async () => {
+                const client = progressClient();
+                if (client.listAcquisitionProgress)
+                    return client.listAcquisitionProgress(corpusId);
+                return (await required("listAcquisitions")(corpusId)).map(
+                    acquisitionProgress,
+                );
+            }),
+        memoryRunAcquisitions: ({ corpusId }) =>
+            acquisitionOperation(async () => {
+                const client = progressClient();
+                if (client.runAcquisitionProgress)
+                    return client.runAcquisitionProgress(corpusId);
+                return (await required("runAcquisitions")(corpusId)).map(
+                    acquisitionProgress,
+                );
+            }),
+        memoryCancelAcquisition: (request) =>
+            acquisitionOperation(async () => {
+                const client = progressClient();
+                if (client.cancelAcquisitionProgress)
+                    return client.cancelAcquisitionProgress(request);
+                return acquisitionProgress(
+                    await required("cancelAcquisition")(request),
+                );
+            }),
+        memoryEditQuestion: (request) => required("editQuestion")(request),
+        memoryGetViewPage: (request) => required("getViewPage")(request),
+        memoryProposeSchemaView: (request) =>
+            required("proposeSchemaView")(request),
+        memoryDiscoverSchemaQuestions: (request) =>
+            required("discoverSchemaQuestions")(request),
         memoryGetView: (request) => views().getView(request),
         memorySaveViewDraft: (request) => views().saveViewDraft(request),
         memoryArchiveView: (request) => views().archiveView(request),

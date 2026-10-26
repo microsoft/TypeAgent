@@ -8,6 +8,7 @@ export interface EmailHeader {
     bcc?: EmailAddress[] | undefined;
     subject?: string | undefined;
     sentOn?: string | undefined;
+    sentOnRaw?: string | undefined;
     receivedOn?: string | undefined;
     importance?: string | undefined;
     sourcePath?: string | undefined;

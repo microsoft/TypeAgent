@@ -3,12 +3,14 @@
 
 import { PromptSection, Result, success } from "typechat";
 import { timeSearchStage } from "./searchTiming.js";
+import { withQueryEmbeddingCache } from "./queryEmbeddingCache.js";
 import {
     IConversation,
     KnowledgeType,
     SearchSelectExpr,
     SearchTermGroup,
     WhenFilter,
+    DateRange,
 } from "./interfaces.js";
 import {
     ConversationSearchResult,
@@ -29,6 +31,9 @@ import * as querySchema from "./searchQuerySchema.js";
 import * as querySchema2 from "./searchQuerySchema_v2.js";
 import { PropertyTermSet } from "./collections.js";
 import { dateRangeFromDateTimeRange } from "./common.js";
+import type { DateTime } from "./dateTimeSchema.js";
+import { parseTemporalValue } from "./temporal.js";
+import type { TemporalQueryRange } from "./temporalSchema.js";
 import { PropertyNames } from "./propertyIndex.js";
 import {
     createOrTermGroup,
@@ -46,6 +51,39 @@ import {
     APIs for searching with Natural Language
     Work in progress; frequent improvements/tweaks
 */
+
+function compileTimeRange(
+    filter: querySchema2.ScopeFilter,
+): DateRange | TemporalQueryRange | undefined {
+    if (!filter.timeRange) return undefined;
+    if (filter.timeDimension === undefined && filter.timeDomain === undefined)
+        return dateRangeFromDateTimeRange(filter.timeRange);
+    const domain = filter.timeDomain ?? "calendar";
+    const canonical = (value: DateTime) => {
+        const pad = (number: number, length = 2) =>
+            String(number).padStart(length, "0");
+        const date = `${pad(value.date.year, 4)}-${pad(value.date.month)}-${pad(value.date.day)}`;
+        const time = value.time
+            ? `T${pad(value.time.hour)}:${pad(value.time.minute)}:${pad(value.time.seconds)}`
+            : "";
+        const parsed = parseTemporalValue(
+            `${date}${time}${domain === "instant" ? (time ? "Z" : "T00:00:00Z") : ""}`,
+        );
+        return domain === "instant" ? parsed.instantUtc! : parsed.localDateTime;
+    };
+    const start = canonical(filter.timeRange.startDate);
+    const end = filter.timeRange.stopDate
+        ? canonical(filter.timeRange.stopDate)
+        : undefined;
+    if (end !== undefined && start > end)
+        throw new Error("Temporal query range ends before it starts");
+    return {
+        dimension: filter.timeDimension ?? "message",
+        domain,
+        start,
+        ...(end === undefined ? {} : { end }),
+    };
+}
 
 /**
  * Filter options for language search.
@@ -70,6 +108,15 @@ export type LanguageSearchFilter = {
  * @returns {ConversationSearchResult} Conversation search results.
  */
 export async function searchConversationWithLanguage(
+    ...args: Parameters<typeof searchConversationWithLanguageCore>
+): Promise<Result<ConversationSearchResult[]>> {
+    return withQueryEmbeddingCache(
+        () => searchConversationWithLanguageCore(...args),
+        args[3]?.reuseQueryEmbeddings !== false,
+    );
+}
+
+async function searchConversationWithLanguageCore(
     conversation: IConversation,
     searchText: string,
     queryTranslator: SearchQueryTranslator,
@@ -275,6 +322,7 @@ export function createLanguageQueryCompileOptions(): LanguageQueryCompileOptions
 }
 
 export interface LanguageSearchOptions extends SearchOptions {
+    reuseQueryEmbeddings?: boolean;
     compileOptions: LanguageQueryCompileOptions;
     fallbackRagOptions?: LanguageSearchRagOptions | undefined;
     modelInstructions?: PromptSection[] | undefined;
@@ -496,7 +544,7 @@ class SearchQueryCompiler {
         }
         if (filter.timeRange) {
             when ??= {};
-            when.dateRange = dateRangeFromDateTimeRange(filter.timeRange);
+            when.dateRange = compileTimeRange(filter);
         }
         if (this.langSearchFilter) {
             if (this.langSearchFilter.knowledgeType) {
@@ -989,7 +1037,7 @@ class SearchQueryCompiler {
     ): WhenFilter | undefined {
         when ??= {};
         if (filter.timeRange) {
-            when.dateRange = dateRangeFromDateTimeRange(filter.timeRange);
+            when.dateRange = compileTimeRange(filter);
         }
         if (
             filter.entitySearchTerms !== undefined &&
@@ -1125,15 +1173,19 @@ export async function searchConversationWithLanguage2(
     langSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<ConversationSearchResult[]>> {
-    return timeSearchStage("knowpro.language.total", () =>
-        searchConversationWithLanguage2Core(
-            conversation,
-            searchText,
-            queryTranslator,
-            options,
-            langSearchFilter,
-            debugContext,
-        ),
+    return withQueryEmbeddingCache(
+        () =>
+            timeSearchStage("knowpro.language.total", () =>
+                searchConversationWithLanguage2Core(
+                    conversation,
+                    searchText,
+                    queryTranslator,
+                    options,
+                    langSearchFilter,
+                    debugContext,
+                ),
+            ),
+        options?.reuseQueryEmbeddings !== false,
     );
 }
 

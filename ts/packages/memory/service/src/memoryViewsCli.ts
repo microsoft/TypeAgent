@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 import { FileMemoryService } from "./fileMemoryService.js";
 import { getConfiguredMemoryViewOptions } from "./viewHostOptions.js";
 import { createMemoryServiceRpcFacade } from "./rpcFacade.js";
+import { parseViewPageUri } from "./schemaViewOperations.js";
 import type {
     MemoryViewService,
     ViewArchiveRequest,
@@ -31,8 +32,20 @@ node dist/memoryViewsCli.js --store <private-store> <command> [arguments]
   events <corpusId> [continuationToken]
   event <corpusId> <eventId>
   source <corpusId> <sourceId> [revisionId]
+  synopsis <corpusId> <sourceId> [revisionId]
+  topics <request.json>
+  rebuild-topics <corpusId>
   read <corpusId> <viewId> [revisionId]
   history <corpusId> <viewId>
+  questions <corpusId>
+  page <memory-view-uri>
+  edit-question <request.json>
+  propose-schema <request.json>
+  discover-questions <request.json>
+  acquisitions <corpusId>
+  acquire <request.json>
+  run-acquisitions <corpusId>
+  cancel-acquisition <request.json>
   save <request.json>
   archive <request.json>
   build <request.json>
@@ -53,7 +66,7 @@ node dist/memoryViewsCli.js --store <private-store> <command> [arguments]
   retry-index <request.json>
   search <corpusId> <query>
 The store must not be owned by a running server. Actor comes from the local OS identity.
-Build accepts troubleshootingGuide, projectBrief, timeline or wiki definitions and uses configured synthesis. Project summaries require a projectSummary selector with construction informational-project-summary-v1, query, aliases and excludedSourceIds; an empty source selector searches all eligible indexed sources. Automatic wiki/projects family update, rebuild, pause and resume requests use maintain with corpusId and expectedHead, without source selection. Wikis use bounded concept/system/project pages with stable identities and exact citations; editorial renames preserve identity. Timelines use timelineEvidence selectors with exact document revisions and canonical event IDs, with host-enforced knowledge/occurrence bounds. Fixed readers have no execution/skill controls. Eligible artifacts can publish and index. No reset, source deletion, skill approval or execution is performed.`;
+Build accepts troubleshootingGuide, projectBrief, timeline, wiki or schemaView definitions and uses configured synthesis. Schema views require schema-defined-v1 and data-only approved question slots; reads/pages do not invoke models. Proposals require explicit approval. Acquisition is disabled unless a host supplies individually authorized read tools and policy. Project summaries require a projectSummary selector with construction informational-project-summary-v1, query, aliases and excludedSourceIds; an empty source selector searches all eligible indexed sources. Automatic wiki/projects family update, rebuild, pause and resume requests use maintain with corpusId and expectedHead, without source selection. Wikis use bounded concept/system/project pages with stable identities and exact citations; editorial renames preserve identity. Timelines use timelineEvidence selectors with exact document revisions and canonical event IDs, with host-enforced knowledge/occurrence bounds. Fixed readers have no execution/skill controls. Eligible artifacts can publish and index. No reset, source deletion, skill approval or execution is performed.`;
 
 const argumentCounts = new Map<string, readonly [number, number]>([
     ["corpora", [0, 0]],
@@ -64,8 +77,20 @@ const argumentCounts = new Map<string, readonly [number, number]>([
     ["events", [1, 2]],
     ["event", [2, 2]],
     ["source", [2, 3]],
+    ["synopsis", [2, 3]],
+    ["topics", [1, 1]],
+    ["rebuild-topics", [1, 1]],
     ["read", [2, 3]],
     ["history", [2, 2]],
+    ["questions", [1, 1]],
+    ["page", [1, 1]],
+    ["edit-question", [1, 1]],
+    ["propose-schema", [1, 1]],
+    ["discover-questions", [1, 1]],
+    ["acquisitions", [1, 1]],
+    ["acquire", [1, 1]],
+    ["run-acquisitions", [1, 1]],
+    ["cancel-acquisition", [1, 1]],
     ["save", [1, 1]],
     ["archive", [1, 1]],
     ["build", [1, 1]],
@@ -112,6 +137,53 @@ const viewCommands = new Map<
         values: string[],
     ) => Promise<unknown>
 >([
+    ["questions", (rpc, values) => rpc.listQuestions!(values[0])],
+    ["page", (rpc, values) => rpc.getViewPage!(parseViewPageUri(values[0]))],
+    [
+        "edit-question",
+        async (rpc, values) =>
+            rpc.editQuestion!(JSON.parse(await readFile(values[0], "utf8"))),
+    ],
+    [
+        "propose-schema",
+        async (rpc, values) =>
+            rpc.proposeSchemaView!(
+                JSON.parse(await readFile(values[0], "utf8")),
+            ),
+    ],
+    [
+        "discover-questions",
+        async (rpc, values) =>
+            rpc.discoverSchemaQuestions!(
+                JSON.parse(await readFile(values[0], "utf8")),
+            ),
+    ],
+    ["acquisitions", (rpc, values) => rpc.listAcquisitions!(values[0])],
+    [
+        "acquire",
+        async (rpc, values) =>
+            rpc.requestAcquisition!(
+                JSON.parse(await readFile(values[0], "utf8")),
+            ),
+    ],
+    ["run-acquisitions", (rpc, values) => rpc.runAcquisitions!(values[0])],
+    [
+        "cancel-acquisition",
+        async (rpc, values) =>
+            rpc.cancelAcquisition!(
+                JSON.parse(await readFile(values[0], "utf8")),
+            ),
+    ],
+    [
+        "topics",
+        async (rpc, values) =>
+            rpc.queryTopics(JSON.parse(await readFile(values[0], "utf8"))),
+    ],
+    [
+        "rebuild-topics",
+        async (rpc, values) =>
+            waitForViewBuild(rpc, await rpc.rebuildTopics(values[0])),
+    ],
     [
         "plan-maintenance",
         async (rpc, values) =>
@@ -280,6 +352,12 @@ export async function runMemoryViewsCli(args: string[]): Promise<unknown> {
         const operation = viewCommands.get(command);
         if (operation) return await operation(rpc, values);
         switch (command) {
+            case "synopsis":
+                return await rpc.getSourceSynopsis!({
+                    corpusId: values[0],
+                    sourceId: values[1],
+                    ...(values[2] ? { revisionId: values[2] } : {}),
+                });
             case "capabilities":
                 return await rpc.getCapabilities();
             case "corpora":

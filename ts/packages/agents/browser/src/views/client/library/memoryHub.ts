@@ -18,6 +18,7 @@ import { mountMemoryHubImports } from "./memoryHubImports";
 import { mountMemoryHubCapture } from "./memoryHubCapture";
 
 import { mountMemoryHubViews } from "./memoryHubViews";
+import { mountMemoryHubQuestions } from "./memoryHubQuestions";
 import { mountMemoryHubViewActivity } from "./memoryHubViewActivity";
 import { renderDerivedViewUsage } from "./memoryHubViewUsage";
 
@@ -72,6 +73,7 @@ let importsPanel: ReturnType<typeof mountMemoryHubImports>;
 let capturePanel: ReturnType<typeof mountMemoryHubCapture>;
 
 let draftViewsPanel: ReturnType<typeof mountMemoryHubViews>;
+let questionsPanel: ReturnType<typeof mountMemoryHubQuestions>;
 let viewActivityPanel: ReturnType<typeof mountMemoryHubViewActivity>;
 let viewAttentionCount = 0;
 
@@ -128,6 +130,7 @@ function discardChanges(): boolean {
     return (
         manager.discardChanges() &&
         (draftViewsPanel?.discardChanges() ?? true) &&
+        (questionsPanel?.discardChanges() ?? true) &&
         (viewPreferencesPanel?.discardChanges() ?? true) &&
         (runbookImportsPanel?.discardChanges() ?? true)
     );
@@ -1048,6 +1051,7 @@ function updateExploreScope(
 
 function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
     if (visiblePage !== "views") draftViewsPanel.hide();
+    if (visiblePage !== "questions") questionsPanel.hide();
     if (visiblePage !== "activity") viewActivityPanel.hide();
     if (visiblePage !== "settings") webMaintenancePanel.hide();
     if (visiblePage !== "explore" || !route.webView) webExplorePanel.hide();
@@ -1157,11 +1161,17 @@ async function showManagedRoute(
             "The selected corpus no longer exists. Choose another scope.",
         );
     const corpusId = item?.corpusId ?? route.corpusId ?? scope;
+    if (route.page === "questions") {
+        await questionsPanel.show(route.objectId, corpusId || undefined);
+        return;
+    }
     if (route.page === "views") {
         await draftViewsPanel.show({
             corpusId: corpusId || undefined,
             viewId: route.objectId,
             revisionId: route.viewRevisionId,
+            pageId: route.viewPageId,
+            itemKey: route.viewItemKey,
         });
         return;
     }
@@ -1285,6 +1295,24 @@ export async function mountMemoryHub(): Promise<void> {
             await viewActivityPanel.refresh();
         },
     });
+    questionsPanel = mountMemoryHubQuestions(
+        el("hubQuestions"),
+        el("hubQuestionAttention"),
+        {
+            scope: () => scope || undefined,
+            corpora: () => snapshot.corpora,
+            hidden,
+            persistHidden: () =>
+                localStorage.setItem(HIDE_KEY, JSON.stringify(hidden)),
+            onError: (error) => {
+                void hubAction(async () => {
+                    throw error;
+                });
+            },
+            onOpenSource: (corpusId, objectId) =>
+                open({ page: "library", corpusId, objectId }),
+        },
+    );
     viewActivityPanel = mountMemoryHubViewActivity(
         el("hubViewActivity"),
         el("hubViewAttention"),

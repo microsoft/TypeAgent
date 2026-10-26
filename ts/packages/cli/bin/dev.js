@@ -5,7 +5,10 @@
 import { loadConfigSync } from "@typeagent/config";
 import { otel } from "@typeagent/telemetry";
 import registerDebug from "debug";
-import { registerEarlyTelemetrySignalHandlers } from "../src/telemetry.ts";
+import {
+    registerEarlyTelemetrySignalHandlers,
+    shutdownCli,
+} from "../src/telemetry.ts";
 loadConfigSync();
 
 registerEarlyTelemetrySignalHandlers();
@@ -22,10 +25,10 @@ async function main() {
         });
         await run(process.argv.slice(2), import.meta.url);
         await flush();
-        await otel.shutdownTelemetry();
+        await shutdownCli();
     } catch (error) {
-        await otel.shutdownTelemetry().catch((shutdownError) => {
-            console.error("Failed to shut down telemetry:", shutdownError);
+        await shutdownCli().catch((shutdownError) => {
+            console.error("Failed to shut down CLI:", shutdownError);
         });
         await handle(error);
     }

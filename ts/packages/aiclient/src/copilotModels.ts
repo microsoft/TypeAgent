@@ -23,6 +23,7 @@ import {
     CompletionSettings,
     CompletionJsonSchema,
     CompleteUsageStatsCallback,
+    rejectCompletionLimits,
 } from "./models.js";
 import {
     CopilotApiSettings,
@@ -921,6 +922,8 @@ export function createCopilotChatModel(
 ): ChatModelWithStreaming {
     // The SDK is used only to mint a provider endpoint; translation requests
     // are then issued as plain HTTP chat/completions calls.
+    if (settings.modelType !== "chat")
+        throw new Error("Native decisions cannot be used as chat models");
     const endpointProvider = createCopilotEndpointProvider(settings);
     return createCopilotTransportModel(
         settings,
@@ -1060,7 +1063,10 @@ export function createCopilotTransportModel(
     tags: string[] | undefined,
     endpointProvider: CopilotEndpointProvider,
 ): ChatModelWithStreaming {
+    if (settings.modelType !== "chat")
+        throw new Error("Native decisions cannot be used as chat models");
     const resolvedCompletionSettings = completionSettings ?? {};
+    rejectCompletionLimits(resolvedCompletionSettings);
     resolvedCompletionSettings.n ??= 1;
     // Match the Azure default; translation calls want deterministic output.
     resolvedCompletionSettings.temperature ??= 0;
@@ -1110,25 +1116,18 @@ export function createCopilotTransportModel(
                     );
                 }
                 adapter = adapterFor(ep.wireApi);
+                rejectCompletionLimits(resolvedCompletionSettings);
                 let wireCompletionSettings = resolvedCompletionSettings;
                 if (ep.wireApi === "responses") {
-                    const {
-                        temperature: _temperature,
-                        max_tokens,
-                        max_completion_tokens,
-                        ...remainingSettings
-                    } = resolvedCompletionSettings;
-                    const maxOutputTokens = max_completion_tokens ?? max_tokens;
-                    wireCompletionSettings = {
-                        ...remainingSettings,
-                        ...(maxOutputTokens !== undefined
-                            ? { max_completion_tokens: maxOutputTokens }
-                            : {}),
-                    };
+                    const { temperature: _temperature, ...remainingSettings } =
+                        resolvedCompletionSettings;
+                    wireCompletionSettings = remainingSettings;
                 }
                 const nextModelRequest: ModelRequest = {
                     messages,
                     completionSettings: wireCompletionSettings,
+                    providerOutputTokens:
+                        settings.requestConstraints?.outputTokens,
                     defaultParams: { model: ep.model },
                     disableResponseFormat: false,
                     modelName: ep.model,

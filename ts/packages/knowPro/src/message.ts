@@ -262,28 +262,34 @@ export function getEnclosingDateRangeForMessages(
     messages: IMessageCollection,
     messageOrdinals: Iterable<MessageOrdinal>,
 ): DateRange | undefined {
-    const textRange = getEnclosingTextRange(messageOrdinals);
-    if (!textRange) {
-        return undefined;
+    let start: number | undefined;
+    let end: number | undefined;
+    for (const ordinal of messageOrdinals) {
+        const timestamp = messages.get(ordinal).timestamp;
+        if (!timestamp) continue;
+        const value = new Date(timestamp).getTime();
+        if (!Number.isFinite(value))
+            throw new Error("Invalid message timestamp");
+        start = start === undefined ? value : Math.min(start, value);
+        end = end === undefined ? value : Math.max(end, value);
     }
-    return getEnclosingDateRangeForTextRange(messages, textRange);
+    return start === undefined
+        ? undefined
+        : { start: new Date(start), end: new Date(end!) };
 }
 
 export function getEnclosingDateRangeForTextRange(
     messages: IMessageCollection,
     range: TextRange,
 ): DateRange | undefined {
-    const startTimestamp = messages.get(range.start.messageOrdinal).timestamp;
-    if (!startTimestamp) {
-        return undefined;
+    const start = range.start.messageOrdinal;
+    const stop = range.end
+        ? range.end.messageOrdinal + ((range.end.chunkOrdinal ?? 0) > 0 ? 1 : 0)
+        : start + 1;
+    function* ordinals() {
+        for (let ordinal = start; ordinal < stop; ordinal++) yield ordinal;
     }
-    const endTimestamp = range.end
-        ? messages.get(range.end.messageOrdinal).timestamp
-        : undefined;
-    return {
-        start: new Date(startTimestamp),
-        end: endTimestamp ? new Date(endTimestamp) : undefined,
-    };
+    return getEnclosingDateRangeForMessages(messages, ordinals());
 }
 
 export function getEnclosingMetadataForMessages(

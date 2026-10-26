@@ -64,6 +64,10 @@ export type SearchFilter = {
     searchTerms?: string[];
     // Use only if request explicitly asks for time range, particular year, month etc.
     timeRange?: DateTimeRange | undefined; // in this time range
+    // Message time means when something was said; event time means when the described event happened.
+    timeDimension?: "message" | "event";
+    // Calendar compares source-local dates without inventing a timezone. Default: calendar.
+    timeDomain?: "calendar" | "instant";
 };
 
 export type SearchExpr = {
