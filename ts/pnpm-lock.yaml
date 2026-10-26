@@ -6,6 +6,8 @@ settings:
 
 overrides:
   '@azure/core-xml': '>=1.5.0 <2.0.0'
+  '@azure/identity': '>=4.13.1 <5.0.0'
+  '@azure/msal-browser': '>=5.25.1 <6.0.0'
   '@huggingface/transformers@3>sharp': '>=0.35.4 <0.36.0'
   express>path-to-regexp: 0.1.13
   fast-xml-parser: '>=5.5.7 <6.0.0'
@@ -49,7 +51,7 @@ importers:
         version: 8.0.0(supports-color@8.1.1)(typescript@5.9.3)
       markdown-link-check:
         specifier: ^3.14.2
-        version: 3.14.2
+        version: 3.14.2(supports-color@8.1.1)
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -855,8 +857,8 @@ importers:
         specifier: ^2.2.0
         version: 2.2.0(ws@8.21.3)(zod@3.25.76)
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.13.1
       '@typeagent/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/typeagent
@@ -1302,7 +1304,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.26.0(zod@4.6.7))(zod@4.4.3)
       '@github/copilot-sdk':
         specifier: 1.0.13
         version: 1.0.13
@@ -1604,7 +1606,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.26.0(zod@4.6.7))(zod@4.4.3)
       '@azure/msal-node-extensions':
         specifier: ^1.5.0
         version: 1.5.13
@@ -1652,10 +1654,10 @@ importers:
         version: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
       puppeteer-extra-plugin-adblocker:
         specifier: ^2.13.6
-        version: 2.13.6(encoding@0.1.13)(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))(puppeteer@25.14.0(yauzl@2.10.0))
+        version: 2.13.6(encoding@0.1.13)(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
       puppeteer-extra-plugin-stealth:
         specifier: ^2.11.2
-        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))
+        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(supports-color@8.1.1)
       sharp:
         specifier: 0.35.5
         version: 0.35.5(@types/node@22.20.5)
@@ -1746,8 +1748,8 @@ importers:
   packages/agentServer/server:
     dependencies:
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.13.1
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
@@ -1861,8 +1863,8 @@ importers:
   packages/agents/agentUtils/graphUtils:
     dependencies:
       '@azure/identity':
-        specifier: ^4.9.1
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.13.1
       '@azure/identity-broker':
         specifier: ^1.4.0
         version: 1.4.0
@@ -1874,7 +1876,7 @@ importers:
         version: 1.2.0
       '@microsoft/microsoft-graph-client':
         specifier: ^3.0.7
-        version: 3.0.7(@azure/identity@4.10.0)
+        version: 3.0.7(@azure/identity@4.13.1)
       '@typeagent/agent-runtime':
         specifier: workspace:*
         version: link:../../../typeagent
@@ -2136,10 +2138,10 @@ importers:
         version: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
       puppeteer-extra-plugin-adblocker:
         specifier: ^2.13.6
-        version: 2.13.6(encoding@0.1.13)(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
+        version: 2.13.6(encoding@0.1.13)(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))(puppeteer@25.14.0(yauzl@2.10.0))
       puppeteer-extra-plugin-stealth:
         specifier: ^2.11.2
-        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(supports-color@8.1.1)
+        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))
       readline:
         specifier: ^1.3.0
         version: 1.3.0
@@ -4021,8 +4023,8 @@ importers:
   packages/aiclient:
     dependencies:
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.13.1
       '@github/copilot-sdk':
         specifier: 1.0.13
         version: 1.0.13
@@ -4089,8 +4091,8 @@ importers:
         specifier: ^3.726.0
         version: 3.1004.0(@aws-sdk/client-s3@3.1004.0)
       '@azure/identity':
-        specifier: ^4.9.1
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.13.1
       '@azure/storage-blob':
         specifier: ^12.26.0
         version: 12.27.0
@@ -4178,10 +4180,10 @@ importers:
     dependencies:
       '@azure/ai-projects':
         specifier: ^2.2.0
-        version: 2.2.0(ws@8.21.3)(zod@3.25.76)
+        version: 2.2.0(ws@8.22.0)(zod@3.25.76)
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.13.1
       '@typeagent/agent-runtime':
         specifier: workspace:*
         version: link:../typeagent
@@ -4760,8 +4762,8 @@ importers:
   packages/config:
     dependencies:
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.13.1
       '@azure/keyvault-secrets':
         specifier: ^4.9.0
         version: 4.11.2
@@ -5197,8 +5199,8 @@ importers:
         specifier: ^4.2.1
         version: 4.9.1(@azure/core-client@1.10.1)
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.13.1
       '@github/copilot-sdk':
         specifier: 1.0.13
         version: 1.0.13
@@ -6300,7 +6302,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.26.0(zod@4.6.7))(zod@4.4.3)
     devDependencies:
       '@types/node':
         specifier: ^22.20.5
@@ -6315,8 +6317,8 @@ importers:
   packages/shell:
     dependencies:
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.13.1
       '@azure/msal-node-extensions':
         specifier: ^1.5.0
         version: 1.5.13
@@ -7210,8 +7212,8 @@ importers:
         specifier: ^9.0.0
         version: 9.0.0
       '@azure/identity':
-        specifier: ^4.9.1
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.13.1
       '@azure/keyvault-certificates':
         specifier: ^4.9.0
         version: 4.10.3
@@ -7717,10 +7719,6 @@ packages:
     resolution: {integrity: sha1-xu7f/+cjrEIkx/v6rvj3Uyqv2A8=}
     engines: {node: '>=18.0.0'}
 
-  '@azure/identity@4.10.0':
-    resolution: {integrity: sha1-EM/kkge00RHr46qzreR1YcKFLG0=}
-    engines: {node: '>=18.0.0'}
-
   '@azure/identity@4.13.1':
     resolution: {integrity: sha1-vcCRZYuqWaR+6furSHpLsBhym8M=}
     engines: {node: '>=20.0.0'}
@@ -7757,12 +7755,8 @@ packages:
     resolution: {integrity: sha1-Cey+hAiSgQAjgn7y2DjyGaUcHDU=}
     engines: {node: '>=14.0.0'}
 
-  '@azure/msal-browser@4.12.0':
-    resolution: {integrity: sha1-D2VoxA/BvvQVOh8p/OH8b/CddbQ=}
-    engines: {node: '>=0.8.0'}
-
-  '@azure/msal-browser@5.11.0':
-    resolution: {integrity: sha1-As8ggkpKGBWrtQ74jYkQh7cwCcc=}
+  '@azure/msal-browser@5.25.1':
+    resolution: {integrity: sha512-NDW2/bz2Pz71EJAlhSw+jg1kpRIWtrzj0gCzcHuG1u7iLvSOHpUc5lICkDA9x0bbeityxTneiunSBluvS+/y4w==}
     engines: {node: '>=0.8.0'}
 
   '@azure/msal-common@15.17.0':
@@ -7777,12 +7771,12 @@ packages:
     resolution: {integrity: sha1-XL1Y25GUj5I4LoxijzSlf0adOnQ=}
     engines: {node: '>=0.8.0'}
 
-  '@azure/msal-common@16.6.0':
-    resolution: {integrity: sha1-Dog6W2oYzwDafJYSLGU18wyPtOU=}
+  '@azure/msal-common@16.14.2':
+    resolution: {integrity: sha512-HOBR0Gfo39TMrkxNG8k6cfjRkrRjXZc3JQs3ebMWQc9S4cihuknMYra3sgmzbZB752oQBqBN9+WF7c826p2vIQ==}
     engines: {node: '>=0.8.0'}
 
-  '@azure/msal-common@16.6.2':
-    resolution: {integrity: sha1-SqeR2yxPN/UDv+EPWux2/VUtr44=}
+  '@azure/msal-common@16.6.0':
+    resolution: {integrity: sha1-Dog6W2oYzwDafJYSLGU18wyPtOU=}
     engines: {node: '>=0.8.0'}
 
   '@azure/msal-node-extensions@1.5.13':
@@ -12876,7 +12870,7 @@ packages:
     engines: {node: '>=12'}
 
   cliui@9.0.1:
-    resolution: {integrity: sha1-b3iQ84b28feZU63B943sRvzC0pE=}
+    resolution: {integrity: sha512-k7ndgKhwoQveBL+/1tqGJYNz097I7WOvwbmmU2AR5+magtbjPWQTS1C5vzGkBC8Ym8UWRzfKUzUUqFLypY4Q+w==}
     engines: {node: '>=20'}
 
   clone-deep@0.2.4:
@@ -16507,7 +16501,7 @@ packages:
     resolution: {integrity: sha1-Grpmk7DyVSWKBJ1iEykykyKq1Vg=}
 
   node-addon-api@8.9.2:
-    resolution: {integrity: sha1-23rJShP/2bVebLBFhL1e+OHXSxg=}
+    resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
     engines: {node: ^18 || ^20 || >= 21}
 
   node-api-version@0.2.1:
@@ -16671,10 +16665,6 @@ packages:
 
   onnxruntime-web@1.31.0-dev.20260914-8d85527a0:
     resolution: {integrity: sha512-Iy7rtadoBgxS/LLvDr3QW38DB1PNXRnr0GJMcL0TAt7c9qjgVQl83UlGCVyeAnK2InpmW8Uc3PL8XIuqtDeF6g==}
-
-  open@10.1.0:
-    resolution: {integrity: sha1-p3lebl1Rmr5ChtmTe7JLURIlmOE=}
-    engines: {node: '>=18'}
 
   open@10.1.2:
     resolution: {integrity: sha1-1d9AmEdVyanDyT34FWoSRn6IKSU=}
@@ -19089,9 +19079,6 @@ packages:
   webcrypto-core@1.9.2:
     resolution: {integrity: sha512-gsXecm82UQNlTBURJGuqOWy1Ww08S3kZUcr3aOJS02Pk0xLtkfeUAVC0u0xhgdonFme80edSJUIJyuvL/7250Q==}
 
-  webdriver-bidi-protocol@0.4.1:
-    resolution: {integrity: sha1-1BHnuOFYQI2DuxZrC08QVPo/B34=}
-
   webdriver-bidi-protocol@1.0.1:
     resolution: {integrity: sha512-WXWs/aXF2a6Al1Z2/V/7Gp2oPZOAAmHjJOTmv4KCXRJ122IMj3tSSMc6a4q3K4QOmhQbse/Ahr+oTVJOU2dUiw==}
 
@@ -19455,7 +19442,7 @@ packages:
     engines: {node: '>=12'}
 
   yargs-parser@22.0.0:
-    resolution: {integrity: sha1-h7gglAUbBWdxc0bs0A/RSASzV8g=}
+    resolution: {integrity: sha512-rwu/ClNdSMpkSrUb+d6BRsSkLUq1fmfsY6TOpYzTwvwkg1/NRG85KBy3kq++A8LKQwX6lsu+aWad+2khvuXrqw==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=23}
 
   yargs-unparser@2.0.0:
@@ -19632,10 +19619,10 @@ snapshots:
       '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.162
       '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.162
 
-  '@anthropic-ai/claude-agent-sdk@0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)':
+  '@anthropic-ai/claude-agent-sdk@0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.26.0(zod@4.6.7))(zod@4.4.3)':
     dependencies:
-      '@anthropic-ai/sdk': 0.93.0(zod@4.4.3)
-      '@modelcontextprotocol/sdk': 1.26.0(zod@4.4.3)
+      '@anthropic-ai/sdk': 0.93.0(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.6.7)
       zod: 4.4.3
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.162
@@ -19665,11 +19652,11 @@ snapshots:
     optionalDependencies:
       zod: 4.3.6
 
-  '@anthropic-ai/sdk@0.93.0(zod@4.4.3)':
+  '@anthropic-ai/sdk@0.93.0(zod@4.6.7)':
     dependencies:
       json-schema-to-ts: 3.1.1
     optionalDependencies:
-      zod: 4.4.3
+      zod: 4.6.7
 
   '@asamuzakjp/css-color@5.0.1':
     dependencies:
@@ -20216,6 +20203,27 @@ snapshots:
       - ws
       - zod
 
+  '@azure/ai-projects@2.2.0(ws@8.22.0)(zod@3.25.76)':
+    dependencies:
+      '@azure-rest/core-client': 2.4.0
+      '@azure/abort-controller': 2.1.2
+      '@azure/core-auth': 1.10.1
+      '@azure/core-lro': 3.2.0
+      '@azure/core-paging': 1.6.2
+      '@azure/core-rest-pipeline': 1.22.2
+      '@azure/core-sse': 2.2.0
+      '@azure/core-tracing': 1.3.1
+      '@azure/core-util': 1.13.1
+      '@azure/identity': 4.13.1
+      '@azure/logger': 1.3.0
+      '@azure/storage-blob': 12.27.0
+      openai: 6.41.0(ws@8.22.0)(zod@3.25.76)
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+      - ws
+      - zod
+
   '@azure/arm-authorization@9.0.0':
     dependencies:
       '@azure/core-auth': 1.9.0
@@ -20244,7 +20252,7 @@ snapshots:
 
   '@azure/core-auth@1.9.0':
     dependencies:
-      '@azure/abort-controller': 2.1.2
+      '@azure/abort-controller': 2.2.0
       '@azure/core-util': 1.14.0
       tslib: 2.8.1
     transitivePeerDependencies:
@@ -20276,7 +20284,7 @@ snapshots:
 
   '@azure/core-client@1.9.2':
     dependencies:
-      '@azure/abort-controller': 2.1.2
+      '@azure/abort-controller': 2.2.0
       '@azure/core-auth': 1.11.0
       '@azure/core-rest-pipeline': 1.25.0
       '@azure/core-tracing': 1.4.0
@@ -20288,7 +20296,7 @@ snapshots:
 
   '@azure/core-http-compat@2.1.2':
     dependencies:
-      '@azure/abort-controller': 2.1.2
+      '@azure/abort-controller': 2.2.0
       '@azure/core-client': 1.11.0
       '@azure/core-rest-pipeline': 1.25.0
     transitivePeerDependencies:
@@ -20328,7 +20336,7 @@ snapshots:
 
   '@azure/core-rest-pipeline@1.20.0':
     dependencies:
-      '@azure/abort-controller': 2.1.2
+      '@azure/abort-controller': 2.2.0
       '@azure/core-auth': 1.11.0
       '@azure/core-tracing': 1.4.0
       '@azure/core-util': 1.14.0
@@ -20380,7 +20388,7 @@ snapshots:
 
   '@azure/core-util@1.11.0':
     dependencies:
-      '@azure/abort-controller': 2.1.2
+      '@azure/abort-controller': 2.2.0
       tslib: 2.8.1
 
   '@azure/core-util@1.13.1':
@@ -20442,22 +20450,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@azure/identity@4.10.0':
-    dependencies:
-      '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.9.0
-      '@azure/core-client': 1.9.2
-      '@azure/core-rest-pipeline': 1.20.0
-      '@azure/core-tracing': 1.2.0
-      '@azure/core-util': 1.11.0
-      '@azure/logger': 1.2.0
-      '@azure/msal-browser': 4.12.0
-      '@azure/msal-node': 3.5.3
-      open: 10.1.0
-      tslib: 2.8.1
-    transitivePeerDependencies:
-      - supports-color
-
   '@azure/identity@4.13.1':
     dependencies:
       '@azure/abort-controller': 2.2.0
@@ -20467,7 +20459,7 @@ snapshots:
       '@azure/core-tracing': 1.4.0
       '@azure/core-util': 1.14.0
       '@azure/logger': 1.4.0
-      '@azure/msal-browser': 5.11.0
+      '@azure/msal-browser': 5.25.1
       '@azure/msal-node': 5.2.0
       open: 10.2.0
       tslib: 2.8.1
@@ -20568,13 +20560,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@azure/msal-browser@4.12.0':
+  '@azure/msal-browser@5.25.1':
     dependencies:
-      '@azure/msal-common': 15.6.0
-
-  '@azure/msal-browser@5.11.0':
-    dependencies:
-      '@azure/msal-common': 16.6.2
+      '@azure/msal-common': 16.14.2
 
   '@azure/msal-common@15.17.0': {}
 
@@ -20582,9 +20570,9 @@ snapshots:
 
   '@azure/msal-common@16.12.0': {}
 
-  '@azure/msal-common@16.6.0': {}
+  '@azure/msal-common@16.14.2': {}
 
-  '@azure/msal-common@16.6.2': {}
+  '@azure/msal-common@16.6.0': {}
 
   '@azure/msal-node-extensions@1.5.13':
     dependencies:
@@ -22769,12 +22757,12 @@ snapshots:
     dependencies:
       '@chevrotain/types': 11.1.2
 
-  '@microsoft/microsoft-graph-client@3.0.7(@azure/identity@4.10.0)':
+  '@microsoft/microsoft-graph-client@3.0.7(@azure/identity@4.13.1)':
     dependencies:
       '@babel/runtime': 7.27.0
       tslib: 2.6.2
     optionalDependencies:
-      '@azure/identity': 4.10.0
+      '@azure/identity': 4.13.1
 
   '@microsoft/microsoft-graph-types@2.40.0': {}
 
@@ -23194,6 +23182,28 @@ snapshots:
       raw-body: 3.0.2
       zod: 4.4.3
       zod-to-json-schema: 3.25.2(zod@4.4.3)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.26.0(zod@4.6.7)':
+    dependencies:
+      '@hono/node-server': 1.19.17(hono@4.13.5)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.0
+      express: 5.2.1
+      express-rate-limit: 8.5.2(express@5.2.1)
+      hono: 4.13.5
+      jose: 6.2.8
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.1
+      raw-body: 3.0.2
+      zod: 4.6.7
+      zod-to-json-schema: 3.25.2(zod@4.6.7)
     transitivePeerDependencies:
       - supports-color
 
@@ -23893,9 +23903,9 @@ snapshots:
   '@puppeteer/browsers@2.6.1(supports-color@8.1.1)':
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
-      extract-zip: 2.0.1
+      extract-zip: 2.0.1(supports-color@8.1.1)
       progress: 2.0.3
-      proxy-agent: 6.5.0
+      proxy-agent: 6.5.0(supports-color@8.1.1)
       semver: 7.8.5
       tar-fs: 3.1.3
       unbzip2-stream: 1.4.3
@@ -28531,7 +28541,7 @@ snapshots:
 
   extend@3.0.2: {}
 
-  extract-zip@2.0.1:
+  extract-zip@2.0.1(supports-color@8.1.1):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       get-stream: 5.2.0
@@ -28923,7 +28933,7 @@ snapshots:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
-  get-uri@6.0.4:
+  get-uri@6.0.4(supports-color@8.1.1):
     dependencies:
       basic-ftp: 5.3.0
       data-uri-to-buffer: 6.0.2
@@ -30892,7 +30902,7 @@ snapshots:
       ms: 2.1.3
       needle: 3.5.0
       node-email-verifier: 3.4.1
-      proxy-agent: 6.5.0
+      proxy-agent: 6.5.0(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -31103,7 +31113,7 @@ snapshots:
       punycode.js: 2.3.1
       uc.micro: 2.1.0
 
-  markdown-link-check@3.14.2:
+  markdown-link-check@3.14.2(supports-color@8.1.1):
     dependencies:
       async: 3.2.6
       chalk: 5.6.2
@@ -31112,7 +31122,7 @@ snapshots:
       markdown-link-extractor: 4.0.3
       needle: 3.3.1
       progress: 2.0.3
-      proxy-agent: 6.5.0
+      proxy-agent: 6.5.0(supports-color@8.1.1)
       xmlbuilder2: 4.0.3
     transitivePeerDependencies:
       - supports-color
@@ -31991,13 +32001,6 @@ snapshots:
       platform: 1.3.6
       protobufjs: 7.6.5
 
-  open@10.1.0:
-    dependencies:
-      default-browser: 5.5.0
-      define-lazy-prop: 3.0.0
-      is-inside-container: 1.0.0
-      is-wsl: 3.1.1
-
   open@10.1.2:
     dependencies:
       default-browser: 5.2.1
@@ -32036,6 +32039,11 @@ snapshots:
   openai@6.41.0(ws@8.21.3)(zod@3.25.76):
     optionalDependencies:
       ws: 8.21.3
+      zod: 3.25.76
+
+  openai@6.41.0(ws@8.22.0)(zod@3.25.76):
+    optionalDependencies:
+      ws: 8.22.0
       zod: 3.25.76
 
   optionator@0.9.4:
@@ -32176,12 +32184,12 @@ snapshots:
 
   p-try@2.2.0: {}
 
-  pac-proxy-agent@7.2.0:
+  pac-proxy-agent@7.2.0(supports-color@8.1.1):
     dependencies:
       '@tootallnate/quickjs-emscripten': 0.23.0
       agent-base: 7.1.3
       debug: 4.4.3(supports-color@8.1.1)
-      get-uri: 6.0.4
+      get-uri: 6.0.4(supports-color@8.1.1)
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
       pac-resolver: 7.0.1
@@ -32638,14 +32646,14 @@ snapshots:
       forwarded: 0.2.0
       ipaddr.js: 1.9.1
 
-  proxy-agent@6.5.0:
+  proxy-agent@6.5.0(supports-color@8.1.1):
     dependencies:
       agent-base: 7.1.3
       debug: 4.4.3(supports-color@8.1.1)
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
       lru-cache: 7.18.3
-      pac-proxy-agent: 7.2.0
+      pac-proxy-agent: 7.2.0(supports-color@8.1.1)
       proxy-from-env: 1.1.0
       socks-proxy-agent: 8.0.5
     transitivePeerDependencies:
@@ -35077,8 +35085,6 @@ snapshots:
       asn1js: 3.0.10
       tslib: 2.8.1
 
-  webdriver-bidi-protocol@0.4.1: {}
-
   webdriver-bidi-protocol@1.0.1: {}
 
   webidl-conversions@3.0.1: {}
@@ -35619,6 +35625,10 @@ snapshots:
   zod-to-json-schema@3.25.2(zod@4.4.3):
     dependencies:
       zod: 4.4.3
+
+  zod-to-json-schema@3.25.2(zod@4.6.7):
+    dependencies:
+      zod: 4.6.7
 
   zod@3.23.8: {}
 
