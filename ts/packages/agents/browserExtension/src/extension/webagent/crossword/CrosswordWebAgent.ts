@@ -15,6 +15,13 @@ import {
     registrationStorage,
 } from "../../contentScript/webAgentStorage";
 import { extractCrosswordSchema } from "../webAgentRpc";
+import { crosswordBridge, getCrosswordMode } from "./decisionBridge";
+import { CrosswordSentinels } from "../../contentScript/crossword/sentinels";
+import {
+    enterCrossword,
+    hasVerifiedCrosswordEntry,
+    typeCrosswordKey,
+} from "../../contentScript/crossword/entry";
 
 declare global {
     interface Window {
@@ -79,9 +86,7 @@ type GetClueValue = {
 };
 
 interface CrosswordObserverState {
-    observer: MutationObserver;
-    monitoredSelectors: string[];
-    monitoredTexts: string[];
+    observer: CrosswordSentinels;
     debounceTimer: number | null;
 }
 
@@ -93,6 +98,13 @@ export class CrosswordWebAgent implements WebAgent {
     private observerState: CrosswordObserverState | null = null;
     private context: WebAgentContext | null = null;
     private registered = false;
+    private legacyLoading: Promise<void> | null = null;
+
+    async initializeOnDemand(context: WebAgentContext): Promise<void> {
+        if ((await getCrosswordMode()) !== "decision") return;
+        this.context = context;
+        await this.registerWithTypeAgent();
+    }
 
     async initialize(context: WebAgentContext): Promise<void> {
         const initStart = performance.now();
@@ -118,6 +130,33 @@ export class CrosswordWebAgent implements WebAgent {
             `[CrosswordWebAgent] Early registration done in ${regElapsed}ms`,
         );
 
+        let mode: "generative" | "decision";
+        try {
+            mode = await getCrosswordMode();
+        } catch (error) {
+            await context.notify(
+                "Crossword mode is unavailable; no resolver fallback was attempted.",
+                notificationId,
+            );
+            throw error;
+        }
+        if (mode === "decision") {
+            await context.notify(
+                "Crossword Decision mode is ready on demand (uncalibrated local pilot). Unsupported layouts or unavailable decisions are reported without fallback.",
+                notificationId,
+            );
+            return;
+        }
+        await this.loadGenerative(url, notificationId, initStart);
+    }
+
+    private async loadGenerative(
+        url: string,
+        notificationId: string,
+        initStart: number,
+    ): Promise<void> {
+        const context = this.context;
+        if (!context) throw new Error("Crossword context not available");
         const cacheStart = performance.now();
         this.schema = crosswordSchemaStorage.get(url);
         const cacheElapsed = (performance.now() - cacheStart).toFixed(0);
@@ -163,7 +202,7 @@ export class CrosswordWebAgent implements WebAgent {
             );
 
             await context.notify(
-                `The crossword is fully loaded and ready for interaction with ${acrossCount} across and ${downCount} down clues. Try asking questions like "What is the clue for 1 across?" or "Enter 'Foo' in the answer for 2 down."`,
+                `The crossword is fully loaded and ready for interaction with ${acrossCount} across and ${downCount} down clues (Generative mode; verified entry on supported Exolve, PZZL and Universal grids). Try asking questions like "What is the clue for 1 across?" or "Enter 'Foo' in the answer for 2 down."`,
                 notificationId,
             );
 
@@ -289,7 +328,7 @@ export class CrosswordWebAgent implements WebAgent {
                         }
                         case "getClueValue": {
                             const params = action.parameters;
-                            const clueText = webAgent.executeGetClueValue(
+                            const clueText = await webAgent.executeGetClueValue(
                                 params.clueNumber,
                                 params.clueDirection,
                             );
@@ -311,6 +350,9 @@ export class CrosswordWebAgent implements WebAgent {
                         `[CrosswordWebAgent] executeAction error:`,
                         error,
                     );
+                    await webAgent.context?.notify(
+                        `Crossword action failed: ${error instanceof Error ? error.message : "unknown error"}`,
+                    );
                     throw error;
                 }
             },
@@ -322,6 +364,16 @@ export class CrosswordWebAgent implements WebAgent {
         clueNumber: number,
         clueDirection: "across" | "down",
     ): Promise<void> {
+        if ((await getCrosswordMode()) === "decision") {
+            this.disconnectObserver();
+            await crosswordBridge("enterText", {
+                value,
+                clueNumber,
+                clueDirection,
+            });
+            return;
+        }
+        await this.ensureGenerative();
         if (!this.schema || !this.context) {
             throw new Error("Crossword schema not available");
         }
@@ -331,12 +383,34 @@ export class CrosswordWebAgent implements WebAgent {
             throw new Error(`Clue ${clueNumber} ${clueDirection} not found`);
         }
 
+        const nodes = document.querySelectorAll(clue.selector);
+        if (nodes.length !== 1)
+            throw new Error("Crossword clue selector must match one element");
+        const node = nodes[0];
+        if (hasVerifiedCrosswordEntry(node)) {
+            enterCrossword(
+                { root: document.body },
+                { node },
+                value,
+                clueNumber,
+                clueDirection,
+                () => {
+                    if (
+                        !node.isConnected ||
+                        document.querySelector(clue.selector) !== node
+                    )
+                        throw new Error("stale: selected clue detached");
+                },
+            );
+            return;
+        }
+
         await this.context.ui.clickOn(clue.selector);
         await new Promise((resolve) => setTimeout(resolve, 100));
 
         const textUpper = String(value).toUpperCase();
         for (const char of textUpper) {
-            await this.typeKey(char);
+            typeCrosswordKey(char);
             await new Promise((resolve) => setTimeout(resolve, 50));
         }
 
@@ -345,10 +419,20 @@ export class CrosswordWebAgent implements WebAgent {
         );
     }
 
-    private executeGetClueValue(
+    private async executeGetClueValue(
         clueNumber: number,
         clueDirection: "across" | "down",
-    ): string {
+    ): Promise<string> {
+        if ((await getCrosswordMode()) === "decision") {
+            this.disconnectObserver();
+            return (
+                await crosswordBridge<{ text: string }>("readClue", {
+                    clueNumber,
+                    clueDirection,
+                })
+            ).text;
+        }
+        await this.ensureGenerative();
         if (!this.schema) {
             throw new Error("Crossword schema not available");
         }
@@ -359,6 +443,18 @@ export class CrosswordWebAgent implements WebAgent {
         }
 
         return clue.text;
+    }
+
+    private async ensureGenerative(): Promise<void> {
+        if (this.schema || !this.context) return;
+        this.legacyLoading ??= this.loadGenerative(
+            this.context.getCurrentUrl(),
+            `crossword-${Date.now()}`,
+            performance.now(),
+        ).finally(() => {
+            this.legacyLoading = null;
+        });
+        await this.legacyLoading;
     }
 
     private setupMutationObserver(): void {
@@ -372,7 +468,6 @@ export class CrosswordWebAgent implements WebAgent {
         ];
         const sampleClues = allClues.slice(0, 5);
         const selectors = sampleClues.map((c) => c.selector).filter(Boolean);
-        const texts = sampleClues.map((c) => c.text);
 
         if (selectors.length === 0) {
             console.log(
@@ -386,83 +481,23 @@ export class CrosswordWebAgent implements WebAgent {
             selectors,
         );
 
-        const observer = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                if (this.hasRelevantChange(mutation, selectors, texts)) {
-                    this.handleClueChange();
-                    break;
-                }
-            }
-        });
+        const observer = new CrosswordSentinels(() => this.handleClueChange());
 
         selectors.forEach((selector) => {
             const element = document.querySelector(selector);
             if (element) {
-                observer.observe(element, {
-                    characterData: true,
-                    childList: true,
-                    subtree: true,
-                });
-
-                if (element.parentElement) {
-                    observer.observe(element.parentElement, {
-                        childList: true,
-                    });
-                }
+                observer.watch(element);
             }
         });
 
         this.observerState = {
             observer,
-            monitoredSelectors: selectors,
-            monitoredTexts: texts,
             debounceTimer: null,
         };
 
         console.log(
             "[CrosswordWebAgent] Mutation observer set up successfully",
         );
-    }
-
-    private hasRelevantChange(
-        mutation: MutationRecord,
-        selectors: string[],
-        texts: string[],
-    ): boolean {
-        if (mutation.type === "characterData") {
-            const newText = mutation.target.textContent || "";
-            return !texts.some((text) => newText.includes(text));
-        }
-
-        if (mutation.type === "childList") {
-            for (const node of Array.from(mutation.removedNodes)) {
-                if (node instanceof Element) {
-                    for (const selector of selectors) {
-                        if (
-                            node.matches(selector) ||
-                            node.querySelector(selector)
-                        ) {
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            for (const node of Array.from(mutation.addedNodes)) {
-                if (node instanceof Element) {
-                    for (const selector of selectors) {
-                        if (
-                            node.matches(selector) ||
-                            node.querySelector(selector)
-                        ) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-
-        return false;
     }
 
     private handleClueChange(): void {
@@ -472,19 +507,23 @@ export class CrosswordWebAgent implements WebAgent {
             clearTimeout(this.observerState.debounceTimer);
         }
 
-        this.observerState.debounceTimer = window.setTimeout(async () => {
+        const state = this.observerState;
+        state.debounceTimer = window.setTimeout(async () => {
+            state.debounceTimer = null;
             console.log(
                 "[CrosswordWebAgent] Clue change detected, refreshing schema only",
             );
 
             await this.refreshSchemaOnly();
-
-            this.observerState!.debounceTimer = null;
         }, 500);
     }
 
     private async refreshSchemaOnly(): Promise<void> {
         if (!this.context) return;
+        if ((await getCrosswordMode()) === "decision") {
+            this.disconnectObserver();
+            return;
+        }
 
         const url = this.context.getCurrentUrl();
         crosswordSchemaStorage.remove(url);
@@ -512,7 +551,7 @@ export class CrosswordWebAgent implements WebAgent {
     private disconnectObserver(): void {
         if (this.observerState?.observer) {
             console.log("[CrosswordWebAgent] Disconnecting mutation observer");
-            this.observerState.observer.disconnect();
+            this.observerState.observer.dispose();
 
             if (this.observerState.debounceTimer) {
                 clearTimeout(this.observerState.debounceTimer);
@@ -520,41 +559,6 @@ export class CrosswordWebAgent implements WebAgent {
 
             this.observerState = null;
         }
-    }
-
-    private async typeKey(char: string): Promise<void> {
-        const keydownEvent = new KeyboardEvent("keydown", {
-            key: char,
-            code: `Key${char.toUpperCase()}`,
-            charCode: char.charCodeAt(0),
-            keyCode: char.charCodeAt(0),
-            which: char.charCodeAt(0),
-            bubbles: true,
-            cancelable: true,
-        });
-        document.activeElement?.dispatchEvent(keydownEvent);
-
-        const keypressEvent = new KeyboardEvent("keypress", {
-            key: char,
-            code: `Key${char.toUpperCase()}`,
-            charCode: char.charCodeAt(0),
-            keyCode: char.charCodeAt(0),
-            which: char.charCodeAt(0),
-            bubbles: true,
-            cancelable: true,
-        });
-        document.activeElement?.dispatchEvent(keypressEvent);
-
-        const keyupEvent = new KeyboardEvent("keyup", {
-            key: char,
-            code: `Key${char.toUpperCase()}`,
-            charCode: char.charCodeAt(0),
-            keyCode: char.charCodeAt(0),
-            which: char.charCodeAt(0),
-            bubbles: true,
-            cancelable: true,
-        });
-        document.activeElement?.dispatchEvent(keyupEvent);
     }
 
     handleContinuation(

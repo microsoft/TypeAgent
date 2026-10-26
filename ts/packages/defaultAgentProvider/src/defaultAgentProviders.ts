@@ -75,6 +75,15 @@ import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:defaultAgentProvider:source");
 
+export function getBundledAppAgentProvider(
+    configName?: string,
+    executionModeOverrides: Parameters<
+        typeof createBundledAppAgentProvider
+    >[1] = {},
+): AppAgentProvider {
+    return createBundledAppAgentProvider(configName, executionModeOverrides);
+}
+
 // The directory under `installDir` that holds every per-agent, version-scoped
 // install root. GC (prune-on-swap + startup orphan sweep) operates
 // only within this directory, never the legacy shared `installDir/node_modules`,
@@ -191,7 +200,7 @@ export function getDefaultAppAgentProviders(
 ): AppAgentProvider[] {
     // The bundled agents are always present as their own static provider.
     const providers: AppAgentProvider[] = [
-        createBundledAppAgentProvider(configName, executionModeOverrides),
+        getBundledAppAgentProvider(configName, executionModeOverrides),
     ];
     const instanceConfigs =
         typeof instanceDirOrConfigProvider === "string"

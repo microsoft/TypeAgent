@@ -438,6 +438,17 @@ test("whole generated Markdown original is independently verified, without trial
     assert.equal(result.runId, null);
 });
 
+test("the retired native lifecycle projection is blocked rather than dynamically revived", async (t) => {
+    const f = await fixture(t, { binaryFile: false });
+    f.current.nativeProjection = {};
+    const result = await verdict(f);
+    assert.equal(result.status, "blocked");
+    assert.equal(
+        result.code,
+        "retiredNativeLifecycleProjectionReRecordWithPluginOwner",
+    );
+});
+
 test(">1MiB generated DOCX including 17 media parts survives bounded artifact views", async (t) => {
     const f = await fixture(t);
     assert.ok(f.bytes.length > 1024 * 1024);

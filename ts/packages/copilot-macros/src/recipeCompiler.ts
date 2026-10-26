@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import ts from "typescript";
-import { join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { RecipeArtifact } from "./recipeContracts.js";
 import { recipeRuntimeAbi } from "./recipeContracts.js";
 import { recipeDigest } from "./recipeValidation.js";
@@ -37,6 +37,10 @@ export const recipeCompilerIdentity = Object.freeze({
 });
 
 const checkedExecutables = new Map<string, string>();
+const librarySources = new Map<
+    string,
+    { text: string; parserOptions: string; source: ts.SourceFile }
+>();
 
 let libraryDirectory: string | undefined;
 
@@ -46,6 +50,7 @@ export function configureRecipeCompilerAssets(assets: {
 }): void {
     libraryDirectory = assets.libraryDirectory;
     checkedExecutables.clear();
+    librarySources.clear();
 }
 
 function remember(sourceDigest: string, executableDigest: string): void {
@@ -169,10 +174,47 @@ export function compileRecipeProgram(
             join(directory, ts.getDefaultLibFileName(options));
     }
     const originalGetSource = host.getSourceFile.bind(host);
-    host.getSourceFile = (name, languageVersion, onError, shouldCreate) =>
-        name === "recipe.ts"
-            ? ts.createSourceFile(name, text, languageVersion, true)
-            : originalGetSource(name, languageVersion, onError, shouldCreate);
+    host.getSourceFile = (name, languageVersion, onError, shouldCreate) => {
+        if (name === "recipe.ts")
+            return ts.createSourceFile(name, text, languageVersion, true);
+        if (
+            shouldCreate ||
+            dirname(resolve(name)) !== resolve(host.getDefaultLibLocation!()) ||
+            !/^lib\..*\.d\.ts$/.test(basename(name))
+        )
+            return originalGetSource(
+                name,
+                languageVersion,
+                onError,
+                shouldCreate,
+            );
+        const libraryText = host.readFile(name);
+        const parserOptions = JSON.stringify(languageVersion);
+        const key = resolve(name);
+        const cached = librarySources.get(key);
+        if (
+            libraryText !== undefined &&
+            cached?.text === libraryText &&
+            cached.parserOptions === parserOptions
+        )
+            return cached.source;
+        const source = originalGetSource(
+            name,
+            languageVersion,
+            onError,
+            shouldCreate,
+        );
+        if (source && libraryText !== undefined) {
+            if (librarySources.size >= 128)
+                librarySources.delete(librarySources.keys().next().value!);
+            librarySources.set(key, {
+                text: libraryText,
+                parserOptions,
+                source,
+            });
+        }
+        return source;
+    };
     let javascript: string | undefined;
     host.writeFile = (name, content) => {
         if (name.endsWith(".js")) javascript = content;

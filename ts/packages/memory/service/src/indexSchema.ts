@@ -3,6 +3,7 @@
 
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { isSegmentedJson } from "@typeagent/knowpro";
 
 export type IndexKind = "documents" | "conversation-events" | "views";
 
@@ -22,6 +23,7 @@ export async function indexFingerprint(
     const files = [
         schemaFileName,
         semanticFileName,
+        "eligibility.json",
         "corpus_embeddings.bin",
         ...(indexKind === "documents"
             ? ["document-projection.json"]
@@ -68,6 +70,14 @@ async function hasSemanticData(directory: string): Promise<boolean> {
         throw new Error(
             `Malformed semantic index '${filePath}': ${String(error)}`,
         );
+    }
+    if (isSegmentedJson(value)) {
+        if (
+            !value.metadata.messages ||
+            value.metadata.semanticRefs === undefined
+        )
+            throw new Error(`Invalid semantic index '${filePath}'`);
+        return true;
     }
     if (
         typeof value !== "object" ||

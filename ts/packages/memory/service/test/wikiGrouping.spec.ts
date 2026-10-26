@@ -163,6 +163,8 @@ describe("conservative indexed grouping", () => {
             generate: async (input) => {
                 generated++;
                 return hydrateInformational(input, {
+                    summary: "Grounded reference summary.",
+                    status: "partial",
                     title: "Human-readable accountability",
                     prose: input.inputs
                         .map((source) => source.content)

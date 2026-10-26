@@ -200,6 +200,8 @@ function canonical(): ViewVersion {
         excerpt: oldFact,
     };
     const output = hydrateInformational(input, {
+        summary: "Grounded reference summary.",
+        status: "partial",
         title: "Connection lease",
         prose: oldFact,
         limits: "Selected indexed evidence",
@@ -247,6 +249,25 @@ test("same/subset contributing revisions nominate different locators; empty and 
         union: 1,
         subset: true,
     });
+    for (const change of [
+        { locator: input.inputs[0].passages![0].locator },
+        { excerpt: input.inputs[0].passages![0].excerpt },
+    ]) {
+        const changed = structuredClone(page);
+        Object.assign(changed.content.citations[0], change);
+        const context = nominateWikiPages(input, [changed], new Map())[0];
+        expect(context.sourceOverlap.shared).toBe(1);
+        expect(context.sharedFragmentIds).toEqual([]);
+        expect(() =>
+            parseWikiAssessment(
+                {
+                    ...assessment(input, context, "contribute"),
+                    sharedFragmentIds: ["f0"],
+                },
+                [context],
+            ),
+        ).toThrow("unsupported-shared-fragments");
+    }
     const broader = structuredClone(page);
     broader.content.citations.push({
         ...broader.content.citations[0],
@@ -341,6 +362,8 @@ test("canonical contribution preserves editorial title, taxonomy, note and exclu
         assessment(input, context, "contribute"),
     );
     const candidate = hydrateInformational(combined, {
+        summary: "Grounded reference summary.",
+        status: "partial",
         title: "Generated title",
         prose: `${oldFact}\n\n${contrast}`,
         limits: "Bounded",
@@ -363,8 +386,84 @@ test("canonical contribution preserves editorial title, taxonomy, note and exclu
         note: "Human personal note",
     });
     expect(edited.definition.wiki!.excludedSourceIds).toEqual(["not-cited"]);
+    expect(merged.output.content.sections[0].body).toContain(oldFact);
     expect(merged.output.content.sections[0].body).toContain(contrast);
 });
+
+test("synthetic host coverage rejects truncated prose even when every claimed witness is visible", () => {
+    const input = snapshot();
+    const page = canonical();
+    page.content.sections[0].body = `${contrast}\n${"Bounded context. ".repeat(400)}`;
+    const context = wikiPageContext(input, page);
+    expect(context.prose).toHaveLength(6000);
+    expect(context.proseTruncated).toBe(true);
+    expect(context.prose).toContain(contrast);
+    expect(() =>
+        parseWikiAssessment(assessment(input, context, "covered"), [context]),
+    ).toThrow("incomplete-prose-coverage");
+    const complete = wikiPageContext(input, page, undefined, false);
+    expect(complete.proseTruncated).toBe(false);
+    const accepted = parseWikiAssessment(
+        assessment(input, complete, "covered"),
+        [complete],
+    );
+    expect(accepted.disposition).toBe("covered");
+});
+
+test.each(["old", "incoming"])(
+    "synthetic merged-prose coverage rejects a missing %s explanation despite retained exact citations",
+    (missing) => {
+        const input = snapshot();
+        const page = canonical();
+        const initial = wikiPageContext(input, page);
+        const combined = wikiContributionInput(
+            input,
+            page,
+            assessment(input, initial, "contribute"),
+        );
+        const output = hydrateInformational(combined, {
+            summary: "Grounded reference summary.",
+            status: "partial",
+            title: "Connection lease",
+            prose: `${oldFact}\n\n${contrast}`,
+            limits: "Selected evidence",
+            citationIds: ["f0", "f1"],
+        });
+        const merged = mergeView(page, output, combined.inputs);
+        expect(merged.conflicts).toEqual([]);
+        const requirements = combined.wikiContribution!.essentialDistinctions;
+        const complete = wikiPageContext(
+            combined,
+            { ...page, content: merged.output.content },
+            undefined,
+            false,
+        );
+        const verified = assessment(combined, complete, "covered");
+        expect(
+            parseWikiAssessment(verified, [complete], requirements).disposition,
+        ).toBe("covered");
+        const omitted = structuredClone(merged.output.content);
+        omitted.sections[0].body = missing === "old" ? contrast : oldFact;
+        expect(omitted.citations).toEqual(merged.output.content.citations);
+        const incomplete = wikiPageContext(
+            combined,
+            { ...page, content: omitted },
+            undefined,
+            false,
+        );
+        expect(incomplete.sharedFragmentIds).toEqual(["f0", "f1"]);
+        expect(() =>
+            parseWikiAssessment(verified, [incomplete], requirements),
+        ).toThrow("invalid-distinction-evidence");
+        expect(() =>
+            parseWikiAssessment(
+                assessment(combined, incomplete, "covered"),
+                [incomplete],
+                requirements,
+            ),
+        ).toThrow("incomplete-prose-coverage");
+    },
+);
 
 test("multiple historical candidates remain an explicit typed ambiguity, never a canonical merge", () => {
     const input = snapshot();
@@ -423,6 +522,8 @@ test("contribution union retains original exact evidence, metadata, stable ID an
         "f1",
     );
     const output = hydrateInformational(combined, {
+        summary: "Grounded reference summary.",
+        status: "partial",
         title: "Connection lease",
         prose: `${oldFact}\n\n${contrast}`,
         limits: "Selected evidence",
@@ -559,6 +660,16 @@ async function rehearsal(
             input: ViewBuildSnapshot,
             pages: ReturnType<typeof nominateWikiPages>,
         ) => {
+            if (!pages.length)
+                return {
+                    disposition: "distinct" as const,
+                    purpose: "Useful reference explanation",
+                    reason: "Concrete facts explain the scoped connection lease",
+                    canonicalViewId: "",
+                    sharedFragmentIds: [],
+                    essentialDistinctions: [],
+                    ambiguousViewIds: [],
+                };
             assessed++;
             expect(pages).toHaveLength(1);
             return assessment(
@@ -630,6 +741,8 @@ async function rehearsal(
                 }
             }
             return hydrateInformational(input, {
+                summary: "Grounded reference summary.",
+                status: "partial",
                 title: "Connection lease",
                 prose,
                 limits: "Selected evidence; no universal default or leak proof",

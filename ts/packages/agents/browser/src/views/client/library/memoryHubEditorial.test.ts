@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { inventoryFixture } from "./memoryHubInventoryTestData";
+
 import type { ViewVersion } from "@typeagent/memory-service";
 import { mountMemoryHubViews } from "./memoryHubViews";
 import { invokeMemory } from "./viewClient";
@@ -107,27 +109,29 @@ test("explicit authenticated unit unlock and current related navigation use exis
         content: { ...content, title: "Related original-source article" },
         relatedArticles: [],
     };
-    invoke.mockImplementation(async (method) => {
-        if (method === "memoryViewCapabilities")
-            return {
-                derivedViews: {
-                    kinds: ["wiki"],
-                    builds: true,
-                    informationalWiki: true,
-                },
-            };
-        if (method === "memoryListCorpora")
-            return [{ corpusId: "c", name: "Offline" }];
-        if (method === "memoryListViews")
-            return { head: "c".repeat(40), views: [view, related] };
-        if (method === "memoryListViewBuilds") return [];
-        if (method === "memoryGetViewPublicationPolicy")
-            return { revision: 0, autoPublish: true, views: {} };
-        if (method === "memoryGetViewPublication")
-            return { indexState: "absent", reason: "Draft" };
-        if (method === "memorySaveViewDraft") return {};
-        throw new Error(`Unexpected editorial client call ${method}`);
-    });
+    invoke.mockImplementation(
+        inventoryFixture(async (method) => {
+            if (method === "memoryViewCapabilities")
+                return {
+                    derivedViews: {
+                        kinds: ["wiki"],
+                        builds: true,
+                        informationalWiki: true,
+                    },
+                };
+            if (method === "memoryListCorpora")
+                return [{ corpusId: "c", name: "Offline" }];
+            if (method === "memoryListViews")
+                return { head: "c".repeat(40), views: [view, related] };
+            if (method === "memoryListViewBuilds") return [];
+            if (method === "memoryGetViewPublicationPolicy")
+                return { revision: 0, autoPublish: true, views: {} };
+            if (method === "memoryGetViewPublication")
+                return { indexState: "absent", reason: "Draft" };
+            if (method === "memorySaveViewDraft") return {};
+            throw new Error(`Unexpected editorial client call ${method}`);
+        }),
+    );
     const host = document.createElement("div");
     document.body.replaceChildren(host);
     const onError = jest.fn();
@@ -141,6 +145,7 @@ test("explicit authenticated unit unlock and current related navigation use exis
         await mounted.refresh();
         await settle();
         click(host, "Deliberate human title");
+        await settle();
         expect(
             [...host.querySelectorAll("button")].some(
                 (entry) =>

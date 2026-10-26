@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { FileMemoryServiceOptions } from "../src/fileMemoryService.js";
@@ -73,6 +73,8 @@ describe("snapshot-safe indexed reads", () => {
           }
         | undefined;
     let rebuilds: number;
+    let rebuildBlock: ReturnType<typeof blockRebuild> | undefined;
+    let failRebuild: boolean;
     let searchedDirectories: Record<Kind, string[]>;
 
     beforeEach(async () => {
@@ -86,6 +88,8 @@ describe("snapshot-safe indexed reads", () => {
         blocks = {};
         releases = [];
         rebuilds = 0;
+        rebuildBlock = undefined;
+        failRebuild = false;
         searchedDirectories = { documents: [], procedures: [] };
         failInitialization = undefined;
         initializationBlock = undefined;
@@ -108,6 +112,16 @@ describe("snapshot-safe indexed reads", () => {
                 }
                 public override async rebuild(documents: IndexedDocument[]) {
                     rebuilds++;
+                    const gate = rebuildBlock;
+                    rebuildBlock = undefined;
+                    if (gate) {
+                        gate.entered.resolve();
+                        await gate.resume.promise;
+                    }
+                    if (failRebuild) {
+                        failRebuild = false;
+                        throw new Error("Expected rebuild failure");
+                    }
                     await super.rebuild(documents);
                 }
                 public override async search(
@@ -160,27 +174,214 @@ describe("snapshot-safe indexed reads", () => {
         return service.search({ corpusId, query: "Zephyr" });
     }
 
-    test("reindex publication waits for readers and later readers wait behind the writer", async () => {
+    function blockRebuild() {
+        const gate = { entered: deferred(), resume: deferred() };
+        rebuildBlock = gate;
+        releases.push(gate.resume.resolve);
+        return gate;
+    }
+
+    test("reindex prepares without blocking reads and publication waits for readers", async () => {
+        const preparation = blockRebuild();
+        const reindex = service.reindexCorpus(corpusId);
+        await within(preparation.entered.promise);
+        expect((await within(documentSearch())).matches).toHaveLength(1);
+        const oldDirectory = searchedDirectories.documents.at(-1);
         const reader = block("documents");
         const first = documentSearch();
         await within(reader.entered.promise);
-        const firstDirectory = searchedDirectories.documents.at(-1);
-        const beforeRebuilds = rebuilds;
-        const beforeSearches = counts.documents.searched;
-        const reindex = service.reindexCorpus(corpusId);
+        let published = false;
+        void reindex.then(() => {
+            published = true;
+        });
+        preparation.resume.resolve();
         await new Promise<void>((resolve) => setImmediate(resolve));
-        const later = documentSearch();
-        await new Promise<void>((resolve) => setImmediate(resolve));
-        expect(rebuilds).toBe(beforeRebuilds);
-        expect(counts.documents.searched).toBe(beforeSearches);
+        expect(published).toBe(false);
         reader.resume.resolve();
         const firstResult = await first;
         const publication = await reindex;
-        const laterResult = await later;
+        const laterResult = await documentSearch();
         expect(firstResult.indexVersion).toBe(publication.indexVersion);
-        expect(searchedDirectories.documents.at(-1)).not.toBe(firstDirectory);
+        expect(searchedDirectories.documents.at(-1)).not.toBe(oldDirectory);
         expect(laterResult.indexVersion).toBe(publication.indexVersion);
         expect(laterResult.matches).toHaveLength(1);
+    });
+
+    test("failed reindex preserves the healthy generation", async () => {
+        await documentSearch();
+        const directory = searchedDirectories.documents.at(-1);
+        failRebuild = true;
+        await expect(service.reindexCorpus(corpusId)).rejects.toThrow(
+            "Expected rebuild failure",
+        );
+        expect((await documentSearch()).matches).toHaveLength(1);
+        expect(searchedDirectories.documents.at(-1)).toBe(directory);
+        expect(await readdir(path.join(root, corpusId, "index"))).toHaveLength(
+            1,
+        );
+    });
+
+    test("concurrent ingestion prevents stale reindex publication", async () => {
+        const preparation = blockRebuild();
+        const reindex = service.reindexCorpus(corpusId);
+        const rejected = expect(reindex).rejects.toThrow(
+            "changed during reindex preparation",
+        );
+        await within(preparation.entered.promise);
+        const accepted = await service.ingestDocument({
+            corpusId,
+            source: {
+                sourceId: "second",
+                sourceType: "text",
+                title: "Second",
+                text: "Zephyr second",
+            },
+        });
+        await waitForJob(service, accepted.jobId);
+        preparation.resume.resolve();
+        await rejected;
+        expect((await documentSearch()).matches).toHaveLength(2);
+        expect(await readdir(path.join(root, corpusId, "index"))).toHaveLength(
+            1,
+        );
+    });
+
+    test("forget waits for detached provider writes and never republishes forgotten text", async () => {
+        const preview = await service.previewForgetSource(corpusId, "source");
+        const preparation = blockRebuild();
+        const reindex = service.reindexCorpus(corpusId);
+        const stopped = expect(reindex).rejects.toThrow();
+        await within(preparation.entered.promise);
+        const removalBuild = blockRebuild();
+        const forget = service.forgetSource({
+            corpusId,
+            sourceId: "source",
+            confirmationToken: preview.confirmationToken,
+        });
+        await within(removalBuild.entered.promise);
+        removalBuild.resume.resolve();
+        let finished = false;
+        void forget.then(() => {
+            finished = true;
+        });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(finished).toBe(false);
+        preparation.resume.resolve();
+        await stopped;
+        await forget;
+        expect((await documentSearch()).matches).toEqual([]);
+        expect(await readdir(path.join(root, corpusId, "index"))).toHaveLength(
+            1,
+        );
+        await service.close();
+        service = new FileMemoryService(root, options);
+        expect((await documentSearch()).matches).toEqual([]);
+    });
+
+    test("clear drains detached rebuilds without restoring cleared documents after restart", async () => {
+        const preparation = blockRebuild();
+        const reindex = service.reindexCorpus(corpusId);
+        const stopped = expect(reindex).rejects.toThrow();
+        await within(preparation.entered.promise);
+        const empty = blockRebuild();
+        const clear = service.clearCorpus(corpusId);
+        await within(empty.entered.promise);
+        empty.resume.resolve();
+        preparation.resume.resolve();
+        expect(await clear).toBe(1);
+        await stopped;
+        await service.close();
+        service = new FileMemoryService(root, options);
+        expect((await documentSearch()).matches).toHaveLength(0);
+        expect(await service.listSources(corpusId)).toHaveLength(0);
+    });
+
+    test("cancelled reindex waits for provider writes and preserves the active generation", async () => {
+        const preparation = blockRebuild();
+        const controller = new AbortController();
+        const reindex = service.reindexCorpus(corpusId, controller.signal);
+        const stopped = expect(reindex).rejects.toThrow();
+        await within(preparation.entered.promise);
+        controller.abort();
+        expect((await within(documentSearch())).matches).toHaveLength(1);
+        preparation.resume.resolve();
+        await stopped;
+        expect((await documentSearch()).matches).toHaveLength(1);
+    });
+
+    test("close cancels publication and waits for detached provider writes", async () => {
+        const preparation = blockRebuild();
+        const reindex = service.reindexCorpus(corpusId);
+        const stopped = expect(reindex).rejects.toThrow("closing");
+        await within(preparation.entered.promise);
+        let finished = false;
+        const closing = service.close().then(() => {
+            finished = true;
+        });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(finished).toBe(false);
+        preparation.resume.resolve();
+        await stopped;
+        await closing;
+        expect(await readdir(path.join(root, corpusId, "index"))).toHaveLength(
+            1,
+        );
+    });
+
+    test("concurrent read repair coalesces provider work without holding the write reservation", async () => {
+        await service.close();
+        const indexRoot = path.join(root, corpusId, "index");
+        const [generation] = await readdir(indexRoot);
+        await rm(path.join(indexRoot, generation, "index-schema.json"));
+        service = new FileMemoryService(root, options);
+        const preparation = blockRebuild();
+        const before = rebuilds;
+        const first = documentSearch();
+        await within(preparation.entered.promise);
+        const second = documentSearch();
+        try {
+            await within(
+                service.appendEvent({
+                    corpusId,
+                    idempotencyKey: "during-repair",
+                    producer: { producerId: "test", producerType: "test" },
+                    eventType: "turn.completed",
+                    sourceKind: "conversation",
+                    observedAt: "2026-10-19T00:00:00Z",
+                    content: "Metadata write during document repair",
+                }),
+            );
+            expect(rebuilds).toBe(before + 1);
+        } finally {
+            preparation.resume.resolve();
+            await Promise.allSettled([first, second]);
+        }
+        expect((await first).matches).toHaveLength(1);
+        expect((await second).matches).toHaveLength(1);
+        expect(rebuilds).toBe(before + 1);
+    });
+
+    test("failed shared repair is released so a later read can retry", async () => {
+        await service.close();
+        const indexRoot = path.join(root, corpusId, "index");
+        const [generation] = await readdir(indexRoot);
+        await rm(path.join(indexRoot, generation, "index-schema.json"));
+        service = new FileMemoryService(root, options);
+        failRebuild = true;
+        const preparation = blockRebuild();
+        const first = documentSearch();
+        const firstFailure = expect(first).rejects.toThrow(
+            "Expected rebuild failure",
+        );
+        await within(preparation.entered.promise);
+        const second = documentSearch();
+        const secondFailure = expect(second).rejects.toThrow(
+            "Expected rebuild failure",
+        );
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        preparation.resume.resolve();
+        await Promise.all([firstFailure, secondFailure]);
+        expect((await documentSearch()).matches).toHaveLength(1);
     });
 
     test("forget never changes an in-flight snapshot or resurrects removed evidence", async () => {

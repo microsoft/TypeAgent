@@ -922,6 +922,8 @@ export function createCopilotChatModel(
 ): ChatModelWithStreaming {
     // The SDK is used only to mint a provider endpoint; translation requests
     // are then issued as plain HTTP chat/completions calls.
+    if (settings.modelType !== "chat")
+        throw new Error("Native decisions cannot be used as chat models");
     const endpointProvider = createCopilotEndpointProvider(settings);
     return createCopilotTransportModel(
         settings,
@@ -1061,6 +1063,8 @@ export function createCopilotTransportModel(
     tags: string[] | undefined,
     endpointProvider: CopilotEndpointProvider,
 ): ChatModelWithStreaming {
+    if (settings.modelType !== "chat")
+        throw new Error("Native decisions cannot be used as chat models");
     const resolvedCompletionSettings = completionSettings ?? {};
     rejectCompletionLimits(resolvedCompletionSettings);
     resolvedCompletionSettings.n ??= 1;

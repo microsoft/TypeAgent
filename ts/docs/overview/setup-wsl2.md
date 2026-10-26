@@ -12,6 +12,8 @@ build, run, and develop the TypeAgent repo, with the repo in `~/src/TypeAgent`
   - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash`
   - `\. "$HOME/.nvm/nvm.sh"`
   - `nvm install --lts`
+  - `nvm use --lts`
+- Install pnpm: `npm install --global pnpm`
 - Install Node native module build tools:
   - `sudo apt install -y make build-essential`
 - Clone and build:

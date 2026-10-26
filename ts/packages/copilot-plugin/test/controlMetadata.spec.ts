@@ -8,9 +8,11 @@ import {
     rmSync,
     readFileSync,
     readdirSync,
+    watchFile,
     unwatchFile,
 } from "node:fs";
-import { join } from "node:path";
+import { once } from "node:events";
+import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
     publishControlMetadata,
@@ -18,7 +20,7 @@ import {
     monitorControlMetadata,
 } from "../src/shared/control-metadata.js";
 import { routePrompt } from "../src/hooks/hook-router.js";
-import { handleMcpRedirect } from "../src/hooks/hook-mcp-redirect.js";
+import { localRecipeEndpoint } from "../src/shared/recipe-local-paths.js";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createExtensionCommands } from "../src/extension/commands.js";
@@ -55,11 +57,26 @@ describe("owned control metadata", () => {
         process.env.CLAUDE_PLUGIN_DATA = join(root, "plugin-data");
         delete process.env.TYPEAGENT_PLUGIN_DATA;
         delete process.env.TYPEAGENT_MODE;
+        delete process.env.TYPEAGENT_RECIPE_OWNER;
     });
     afterEach(() => {
         unwatchFile(join(root, "plugin-data", "config.json"));
         process.env = saved;
         rmSync(root, { recursive: true, force: true });
+    });
+    it("rejects the retired WorkIQ backend recording admission", () => {
+        const file = join(root, "data", "native-control-admission.json");
+        const admission = JSON.parse(readFileSync(file, "utf8"));
+        writeFileSync(
+            file,
+            JSON.stringify({
+                ...admission,
+                workiqOriginals: { schemaVersion: 1 },
+            }),
+        );
+        expect(() => publishControlMetadata("test")).toThrow(
+            "Backend WorkIQ original-retention recording was removed",
+        );
     });
     it("observes complete original synthetic SDK events only through the public session subscription", () => {
         writeFileSync(
@@ -252,12 +269,7 @@ describe("owned control metadata", () => {
         };
         const dependencies = {
             claimRecording: jest.fn(async () => false),
-            direct: jest.fn(async () => ({
-                handled: true,
-                handledBy: "typeagent",
-            })),
-            mcp: handleMcpRedirect,
-            dev: jest.fn(async () => ({ handled: true })),
+            localRecipes: jest.fn(async () => ({})),
         };
         writeFileSync(file, JSON.stringify({ mode: "bypass" }));
         await expect(
@@ -268,8 +280,9 @@ describe("owned control metadata", () => {
                 dependencies,
             ),
         ).resolves.toEqual({});
-        expect(dependencies.claimRecording).not.toHaveBeenCalled();
-        expect(dependencies.direct).not.toHaveBeenCalled();
+        expect(dependencies.claimRecording).toHaveBeenCalledTimes(1);
+        expect(dependencies.claimRecording).toHaveBeenCalledWith(request);
+        expect(dependencies.localRecipes).not.toHaveBeenCalled();
         writeFileSync(
             file,
             JSON.stringify({
@@ -284,9 +297,9 @@ describe("owned control metadata", () => {
             new AbortController().signal,
             dependencies,
         );
-        expect(mixed.modifiedPrompt).toBe(request.prompt);
+        expect(mixed.modifiedPrompt).toBeUndefined();
         expect(mixed.handled).not.toBe(true);
-        expect(dependencies.direct).not.toHaveBeenCalled();
+        expect(dependencies.localRecipes).toHaveBeenCalledTimes(1);
         dependencies.claimRecording.mockResolvedValueOnce(true);
         await expect(
             routePrompt(
@@ -303,8 +316,11 @@ describe("owned control metadata", () => {
             new AbortController().signal,
             dependencies,
         );
-        expect(dependencies.direct).toHaveBeenCalledTimes(1);
-        expect(dependencies.direct).toHaveBeenCalledWith(request);
+        expect(dependencies.localRecipes).toHaveBeenCalledTimes(2);
+        expect(dependencies.localRecipes).toHaveBeenCalledWith(
+            request,
+            expect.any(AbortSignal),
+        );
     });
     it("actual compiled user-prompt router honors bypass and rejects mode/path mismatch before translation", () => {
         const admission = join(root, "data", "native-control-admission.json");
@@ -376,6 +392,31 @@ describe("owned control metadata", () => {
             "Native control config binding mismatch; no translation admitted",
         );
     });
+    it("reports malformed recording endpoints without handling bypass work", async () => {
+        const request = {
+            sessionId: "test-session",
+            timestamp: 1,
+            cwd: root,
+            prompt: "Read the synthetic document",
+        };
+        const endpoint = localRecipeEndpoint(root, request.sessionId);
+        mkdirSync(dirname(endpoint), { recursive: true });
+        writeFileSync(endpoint, "{}");
+        const diagnostic = jest
+            .spyOn(console, "error")
+            .mockImplementation(() => {});
+        try {
+            await expect(
+                routePrompt(request, "bypass", new AbortController().signal),
+            ).resolves.toEqual({});
+            expect(diagnostic).toHaveBeenCalledTimes(1);
+            expect(diagnostic).toHaveBeenCalledWith(
+                "[macro] Unable to claim recording: Invalid local recipe endpoint.",
+            );
+        } finally {
+            diagnostic.mockRestore();
+        }
+    });
     it("registered status control getter never calls sendTask", async () => {
         writeFileSync(
             join(root, "plugin-data", "config.json"),
@@ -427,15 +468,18 @@ describe("owned control metadata", () => {
                 diagnosticTransitions: true,
             }),
         );
-        writeFileSync(
-            join(root, "plugin-data", "config.json"),
-            JSON.stringify({ mode: "bypass" }),
+        const configPath = join(root, "plugin-data", "config.json");
+        // A missing-file notification confirms the poller's initial stat completed.
+        const watcher = watchFile(
+            configPath,
+            { interval: 200, persistent: false },
+            () => {},
         );
+        const watching = once(watcher, "change", {
+            signal: AbortSignal.timeout(5000),
+        });
         monitorControlMetadata("mcp-agent");
-        writeFileSync(
-            join(root, "plugin-data", "config.json"),
-            JSON.stringify({ mode: "mcp", mcpRouting: "mixed" }),
-        );
+        await watching;
         const receiptFile = join(
             root,
             "data",
@@ -443,15 +487,21 @@ describe("owned control metadata", () => {
             `mcp-agent-${process.pid}.json`,
         );
         const readReceipt = () => JSON.parse(readFileSync(receiptFile, "utf8"));
-        const deadline = Date.now() + 5000;
-        let receipt = readReceipt();
-        while (receipt.effectiveMode !== "mcp" && Date.now() < deadline) {
-            await delay(20);
-            receipt = readReceipt();
+        for (const mode of ["bypass", "mcp"]) {
+            writeFileSync(
+                configPath,
+                JSON.stringify({ mode, mcpRouting: "mixed" }),
+            );
+            const deadline = Date.now() + 5000;
+            let receipt = readReceipt();
+            while (receipt.effectiveMode !== mode && Date.now() < deadline) {
+                await delay(20);
+                receipt = readReceipt();
+            }
+            expect(receipt.effectiveMode).toBe(mode);
+            expect(receipt.source.routing).toBe("mixed");
+            expect(receipt.source.request).toBeNull();
         }
-        expect(receipt.effectiveMode).toBe("mcp");
-        expect(receipt.source.routing).toBe("mixed");
-        expect(receipt.source.request).toBeNull();
     });
     it.each([
         "exact-docs",

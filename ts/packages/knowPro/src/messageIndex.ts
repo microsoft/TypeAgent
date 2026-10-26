@@ -10,7 +10,6 @@ import {
     IMessage,
     MessageOrdinal,
     IndexingEventHandlers,
-    TextLocation,
     ListIndexingResult,
     ScoredMessageOrdinal,
     IConversation,
@@ -20,13 +19,17 @@ import {
     ITextToTextLocationIndexData,
     ScoredTextLocation,
     TextToTextLocationIndex,
+    TextEmbeddingChunk,
+    TextEmbeddingLocation,
 } from "./textLocationIndex.js";
 import { getMessageBatches } from "./message.js";
 import { embeddingModelForRole } from "@typeagent/aiclient";
+import { queryEmbedding } from "./queryEmbeddingCache.js";
 
 export type MessageTextIndexSettings = {
     embeddingIndexSettings: TextEmbeddingIndexSettings;
     batchSize?: number | number;
+    splitText?: (text: string) => TextEmbeddingChunk[];
 };
 
 export interface IMessageTextIndexData {
@@ -52,6 +55,27 @@ export interface IMessageTextEmbeddingIndex extends IMessageTextIndex {
         maxMatches?: number,
         thresholdScore?: number,
     ): ScoredMessageOrdinal[];
+}
+
+function validateEmbeddingChunks(
+    text: string,
+    chunks: TextEmbeddingChunk[],
+): void {
+    let end = 0;
+    for (const chunk of chunks) {
+        if (
+            chunk.start !== end ||
+            !Number.isSafeInteger(chunk.end) ||
+            chunk.end > text.length ||
+            chunk.end < chunk.start ||
+            (chunk.end === chunk.start && text.length > 0) ||
+            text.slice(chunk.start, chunk.end) !== chunk.text
+        )
+            throw new Error("Invalid message embedding window");
+        end = chunk.end;
+    }
+    if (chunks.length === 0 || end !== text.length)
+        throw new Error("Incomplete message embedding windows");
 }
 
 export class MessageTextIndex implements IMessageTextEmbeddingIndex {
@@ -86,7 +110,7 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         eventHandler?: IndexingEventHandlers,
     ): Promise<ListIndexingResult> {
         const baseMessageOrdinal: MessageOrdinal = this.size;
-        const allChunks: [string, TextLocation][] = [];
+        const allChunks: [string, TextEmbeddingLocation][] = [];
         // Collect everything so we can batch efficiently
         let i = 0;
         for (const message of messages) {
@@ -96,10 +120,31 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
                 chunkOrdinal < message.textChunks.length;
                 ++chunkOrdinal
             ) {
-                allChunks.push([
-                    message.textChunks[chunkOrdinal],
-                    { messageOrdinal, chunkOrdinal },
-                ]);
+                const text = message.textChunks[chunkOrdinal];
+                const chunks = this.isEmbeddingEnabled
+                    ? this.settings.splitText?.(text)
+                    : undefined;
+                if (chunks === undefined) {
+                    allChunks.push([text, { messageOrdinal, chunkOrdinal }]);
+                } else {
+                    validateEmbeddingChunks(text, chunks);
+                    for (const chunk of chunks)
+                        allChunks.push([
+                            chunk.text,
+                            {
+                                messageOrdinal,
+                                chunkOrdinal,
+                                ...(chunks.length > 1
+                                    ? {
+                                          textRange: {
+                                              start: chunk.start,
+                                              end: chunk.end,
+                                          },
+                                      }
+                                    : {}),
+                            },
+                        ]);
+                }
             }
             ++i;
         }
@@ -109,17 +154,25 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         if (!Number.isSafeInteger(messageCount)) {
             throw new Error("Message ordinal exceeds Number.MAX_SAFE_INTEGER");
         }
-        const result = await this.textLocationIndex.addTextLocations(
-            allChunks,
-            eventHandler,
-        );
-        if (
-            result.error === undefined &&
-            result.numberCompleted === allChunks.length
-        ) {
-            this.messageCount = messageCount;
+        const baseSize = this.textLocationIndex.size;
+        try {
+            const result = await this.textLocationIndex.addTextLocations(
+                allChunks,
+                eventHandler,
+            );
+            if (
+                result.error === undefined &&
+                result.numberCompleted === allChunks.length
+            ) {
+                this.messageCount = messageCount;
+                return result;
+            }
+            this.textLocationIndex.truncate(baseSize);
+            return { ...result, numberCompleted: 0 };
+        } catch (error) {
+            this.textLocationIndex.truncate(baseSize);
+            throw error;
         }
-        return result;
     }
 
     public async lookupMessages(
@@ -164,9 +217,11 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
                 "Message text embedding index is disabled (no embedding model configured)",
             );
         }
-        return generateEmbeddingWithRetry(
-            embeddingModelForRole(embeddingModel, "query"),
-            text,
+        return queryEmbedding(embeddingModel, text, () =>
+            generateEmbeddingWithRetry(
+                embeddingModelForRole(embeddingModel, "query"),
+                text,
+            ),
         );
     }
 
@@ -275,7 +330,7 @@ export async function buildMessageIndex(
     conversation: IConversation,
     settings: MessageTextIndexSettings,
     eventHandler?: IndexingEventHandlers,
-    batchSize: number = 8,
+    batchSize: number = settings.embeddingIndexSettings.batchSize,
 ): Promise<ListIndexingResult> {
     return addToMessageIndex(
         conversation,
@@ -291,7 +346,7 @@ export async function addToMessageIndex(
     settings: MessageTextIndexSettings,
     startAtOrdinal: MessageOrdinal,
     eventHandler?: IndexingEventHandlers,
-    batchSize: number = 8,
+    batchSize: number = settings.embeddingIndexSettings.batchSize,
 ): Promise<ListIndexingResult> {
     const result: ListIndexingResult = {
         numberCompleted: 0,

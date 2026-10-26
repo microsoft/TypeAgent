@@ -55,6 +55,13 @@ export type Action = {
 
 // Detailed and comprehensive knowledge response
 export type KnowledgeResponse = {
+    // Optional explicit ISO or YYYY/MM/DD dates found verbatim in a unique exact source quote.
+    // Do not emit inferred/current dates or replace a message date with an event date.
+    dateAnchors?: {
+        quote: string;
+        date: string;
+        role: "eventTime";
+    }[];
     entities: ConcreteEntity[];
     // The 'subjectEntityName' and 'objectEntityName' must correspond to the 'name' of an entity listed in the 'entities' array.
     actions: Action[];

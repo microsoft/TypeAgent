@@ -112,9 +112,10 @@ export function recognizeOnce(
     onRecognized: (text: string) => void,
     onError: (error: string) => void,
     useLocalWhisper?: boolean,
-) {
+): () => void {
     if (useLocalWhisper) {
         const reco = new WhisperRecognizer();
+        reco.onError((error) => onError(`[ERROR: ${error.message}]`));
 
         reco.onRecognizing((data) => {
             onRecognizing(data.text);
@@ -127,35 +128,58 @@ export function recognizeOnce(
                 data.text,
             );
             onRecognizedResult(result, onRecognized, onError);
+            reco.dispose();
         });
 
-        reco.initialize().then(() => {
-            reco.startRecording();
-        });
+        reco.initialize()
+            .then(() => {
+                reco.startRecording();
+            })
+            .catch((error: unknown) => {
+                reco.dispose();
+                onError(error instanceof Error ? error.message : String(error));
+            });
+        return () => reco.dispose();
     } else {
+        let cancel = () => {};
         try {
             const audioConfig = getAudioConfig();
             const speechConfig = getSpeechConfig(token);
+            if (!speechConfig) {
+                audioConfig.close();
+                throw new Error("Azure Speech authorization is unavailable.");
+            }
             const reco = new speechSDK.SpeechRecognizer(
-                speechConfig!,
+                speechConfig,
                 audioConfig,
             );
+            let canceled = false;
+            cancel = () => {
+                if (canceled) return;
+                canceled = true;
+                reco.close();
+                audioConfig.close();
+            };
             reco.recognizing = (_s, e) => {
-                onRecognizing(e.result.text);
+                if (!canceled) onRecognizing(e.result.text);
             };
             reco.recognizeOnceAsync(
                 (result) => {
-                    onRecognizedResult(result, onRecognized, onError);
+                    if (!canceled)
+                        onRecognizedResult(result, onRecognized, onError);
+                    cancel();
                 },
                 (err) => {
                     debugError(err);
-                    onError(`[ERROR: ${err}]`);
+                    if (!canceled) onError(`[ERROR: ${err}]`);
+                    cancel();
                 },
             );
         } catch (e: any) {
             debugError("Speech recognition setup failed", e);
             onError(`[ERROR: ${e.message}]`);
         }
+        return cancel;
     }
 }
 
@@ -169,6 +193,7 @@ export class ContinousSpeechRecognizer {
     private onRecognized: (text: string) => void;
     private onError: (error: string) => void;
     private started: boolean = false;
+    private ready = Promise.resolve();
 
     constructor(
         useWhisper: boolean = false,
@@ -183,6 +208,9 @@ export class ContinousSpeechRecognizer {
 
         if (useWhisper) {
             this.whisperRecognizer = new WhisperRecognizer();
+            this.whisperRecognizer.onError((error) =>
+                this.onError(`[ERROR: ${error.message}]`),
+            );
 
             this.whisperRecognizer.onRecognizing((data) => {
                 this.onRecognizing(data.text);
@@ -197,9 +225,7 @@ export class ContinousSpeechRecognizer {
                 onRecognizedResult(result, this.onRecognized, this.onError);
             });
 
-            this.whisperRecognizer.initialize().then(() => {
-                this.whisperRecognizer?.startRecording();
-            });
+            this.ready = this.whisperRecognizer.initialize();
         } else {
             this.token = token;
             this.audioConfig = getAudioConfig();
@@ -227,7 +253,15 @@ export class ContinousSpeechRecognizer {
         this.started = true;
 
         if (this.whisperRecognizer) {
-            this.whisperRecognizer.startRecording();
+            void this.ready
+                .then(() => {
+                    if (this.started) this.whisperRecognizer?.startRecording();
+                })
+                .catch((error: unknown) =>
+                    this.onError(
+                        error instanceof Error ? error.message : String(error),
+                    ),
+                );
         } else {
             console.log("[voice] startContinuousRecognitionAsync called");
             this.reco!.startContinuousRecognitionAsync(
@@ -235,16 +269,29 @@ export class ContinousSpeechRecognizer {
                     console.log("[voice] continuous recognition started OK");
                 },
                 (error) => {
-                    console.log(
-                        "[voice] continuous recognition start ERROR:",
-                        error,
-                    );
+                    this.onError(error);
                 },
             );
         }
     }
 
     public stop() {
-        if (!this.started) return;
+        this.started = false;
+        this.whisperRecognizer?.dispose();
+        const reco = this.reco;
+        this.reco = undefined;
+        if (reco) {
+            reco.stopContinuousRecognitionAsync(
+                () => {
+                    reco.close();
+                    this.audioConfig?.close();
+                },
+                (error) => {
+                    reco.close();
+                    this.audioConfig?.close();
+                    this.onError(error);
+                },
+            );
+        }
     }
 }

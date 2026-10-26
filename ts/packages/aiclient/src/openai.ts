@@ -30,6 +30,7 @@ import {
 import { discoverEndpointPoolFromConfig } from "./endpointPoolFromConfig.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
 import { identifyEmbeddingModel } from "./identifiedEmbedding.js";
+import { embeddingInputLimitError } from "./embeddingInput.js";
 import {
     PromptSection,
     Result,
@@ -500,6 +501,9 @@ export function createChatModel(
             ? makeSingleMemberPool(endpoint, `custom:${endpoint.provider}`)
             : getChatModelPool(endpoint);
     const settings = pool.members[0].settings;
+
+    if (settings.modelType === ModelType.Decision)
+        throw new Error("Native decisions cannot be used as chat models");
 
     for (const member of pool.members)
         applyChatModelRequestDefaults(member.settings);
@@ -1043,6 +1047,10 @@ export function createEmbeddingModel(
     }
 
     async function callApi(input: string | string[]): Promise<Result<unknown>> {
+        const inputError = embeddingInputLimitError(input);
+        if (inputError !== undefined) {
+            return error(inputError);
+        }
         const params = {
             ...defaultParams,
             input,

@@ -109,6 +109,7 @@ export async function writeMemoryDataToFile(
     settings: kp.ConversationSettings,
     dirPath: string,
     baseFileName: string,
+    segmented = false,
 ): Promise<void> {
     const identities = await prepareConversationEmbeddings(settings);
     await kp.writeConversationDataToFile(
@@ -117,6 +118,7 @@ export async function writeMemoryDataToFile(
         baseFileName,
         undefined,
         Object.keys(identities).length > 0 ? identities : undefined,
+        segmented,
     );
 }
 

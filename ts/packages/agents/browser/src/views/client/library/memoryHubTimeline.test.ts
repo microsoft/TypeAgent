@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { inventoryFixture } from "./memoryHubInventoryTestData";
+
 import type {
     TimelineContent,
     ViewRelationshipInput,
@@ -149,64 +151,68 @@ describe("Memory Hub timeline controls", () => {
         scope = "c";
         invoke.mockReset();
         evidence.mockReset();
-        invoke.mockImplementation(async (method) => {
-            switch (method) {
-                case "memoryViewCapabilities":
-                    return {
-                        derivedViews: { builds: true, kinds: ["timeline"] },
-                    };
-                case "memoryListCorpora":
-                    return [{ corpusId: "c", name: "Timeline collection" }];
-                case "memoryListViews":
-                    return { head, views: [view] };
-                case "memoryListViewBuilds":
-                    return [];
-                case "memoryGetViewPublicationPolicy":
-                    return { revision: 0, autoPublish: false, views: {} };
-                case "memoryGetViewPublication":
-                    return {
-                        viewId: "timeline",
-                        indexState: "absent",
-                        reason: "Not published",
-                    };
-                case "memoryListSources":
-                    return { items: [], total: 0 };
-                case "memoryListEvents":
-                    return {
-                        items: [
-                            {
-                                eventId: "event-1",
-                                eventType: "correction",
-                                eventTime: "2026-10-05T08:45:00Z",
-                                observedAt: "2026-10-06T08:05:00Z",
-                                createdAt: "2026-10-08T11:00:00Z",
-                            },
-                        ],
-                        total: 1,
-                    };
-                case "memoryBuildViews":
-                    return {
-                        jobId: "job",
-                        corpusId: "c",
-                        state: "complete",
-                        results: [
-                            {
-                                viewId: "timeline",
-                                state: "skipped",
-                                reason: "Empty eligible checkpoint",
-                                snapshot: {
-                                    inputs: [],
-                                    fingerprint: "b".repeat(64),
+        invoke.mockImplementation(
+            inventoryFixture(async (method) => {
+                switch (method) {
+                    case "memoryViewCapabilities":
+                        return {
+                            derivedViews: { builds: true, kinds: ["timeline"] },
+                        };
+                    case "memoryListCorpora":
+                        return [{ corpusId: "c", name: "Timeline collection" }];
+                    case "memoryListViews":
+                        return { head, views: [view] };
+                    case "memoryListViewBuilds":
+                        return [];
+                    case "memoryGetViewPublicationPolicy":
+                        return { revision: 0, autoPublish: false, views: {} };
+                    case "memoryGetViewPublication":
+                        return {
+                            viewId: "timeline",
+                            indexState: "absent",
+                            reason: "Not published",
+                        };
+                    case "memoryListSources":
+                        return { items: [], total: 0 };
+                    case "memoryListEvents":
+                        return {
+                            items: [
+                                {
+                                    eventId: "event-1",
+                                    eventType: "correction",
+                                    eventTime: "2026-10-05T08:45:00Z",
+                                    observedAt: "2026-10-06T08:05:00Z",
+                                    createdAt: "2026-10-08T11:00:00Z",
                                 },
-                            },
-                        ],
-                    };
-                case "memorySaveViewDraft":
-                    return { version: view };
-                default:
-                    throw new Error(`Unexpected timeline operation ${method}`);
-            }
-        });
+                            ],
+                            total: 1,
+                        };
+                    case "memoryBuildViews":
+                        return {
+                            jobId: "job",
+                            corpusId: "c",
+                            state: "complete",
+                            results: [
+                                {
+                                    viewId: "timeline",
+                                    state: "skipped",
+                                    reason: "Empty eligible checkpoint",
+                                    snapshot: {
+                                        inputs: [],
+                                        fingerprint: "b".repeat(64),
+                                    },
+                                },
+                            ],
+                        };
+                    case "memorySaveViewDraft":
+                        return { version: view };
+                    default:
+                        throw new Error(
+                            `Unexpected timeline operation ${method}`,
+                        );
+                }
+            }),
+        );
         evidence.mockResolvedValue({
             title: "Canonical correction",
             content: "exact canonical record",
@@ -268,6 +274,7 @@ describe("Memory Hub timeline controls", () => {
     test("fixed timeline editor saves attributed shape and reads event evidence without nonexistent source lookup", async () => {
         await panel.refresh();
         click(host, "Incident timeline");
+        await settle();
         click(host, "Edit");
         expect(
             host.querySelector(
@@ -317,6 +324,7 @@ describe("Memory Hub timeline controls", () => {
         );
         await panel.refresh();
         click(host, "Incident timeline");
+        await settle();
         click(host, "Edit");
         click(host, "Open exact event evidence event-1");
         await settle();

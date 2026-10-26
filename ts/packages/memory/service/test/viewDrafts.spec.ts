@@ -34,7 +34,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         await service.close();
         await rm(root, { recursive: true, force: true });
     });
-    test("Views and all four builders are enabled without configuration", async () => {
+    test("Views and all builders are enabled without configuration", async () => {
         expect(parseViewDraftCapability(undefined)).toBe(true);
         expect(parseViewDraftCapability("true")).toBe(true);
         expect(parseViewDraftCapability("false")).toBe(false);
@@ -45,7 +45,15 @@ describe("typed draft views: service, history, privacy and CLI", () => {
             drafts: true,
             builds: true,
             informationalWiki: true,
-            kinds: ["troubleshootingGuide", "projectBrief", "timeline", "wiki"],
+            knowledge: true,
+            integratedAnswering: true,
+            kinds: [
+                "troubleshootingGuide",
+                "projectBrief",
+                "timeline",
+                "wiki",
+                "schemaView",
+            ],
         });
     });
     async function fixture(): Promise<ViewSaveRequest> {
@@ -119,6 +127,24 @@ describe("typed draft views: service, history, privacy and CLI", () => {
             ],
         };
     }
+
+    test("layout-only reindex marks source-dependent drafts stale without changing revisions", async () => {
+        const request = await fixture();
+        await service.saveViewDraft(request);
+        const sourceId = request.definition.selector.sources[0].sourceId;
+        const before = await service.getSource(request.corpusId, sourceId);
+        await service.reindexCorpus(request.corpusId);
+        expect(
+            (await service.getSource(request.corpusId, sourceId))!
+                .activeRevisionId,
+        ).toBe(before!.activeRevisionId);
+        expect(
+            (await service.getView({
+                corpusId: request.corpusId,
+                viewId: request.viewId,
+            }))!.state,
+        ).toBe("stale");
+    });
 
     test("source Used by is current-only metadata, paginated and validates requests", async () => {
         const request = await fixture();
@@ -431,10 +457,25 @@ describe("typed draft views: service, history, privacy and CLI", () => {
             expect(await restarted.read()).toEqual({
                 head: initial,
                 state: { value: "Original" },
+                stateBytes: Buffer.byteLength(
+                    JSON.stringify({ value: "Original" }),
+                ),
             });
             expect(await restarted.history()).toHaveLength(1);
         },
     );
+
+    test("an absent history has zero committed bytes, including an undefined empty state", async () => {
+        const history = new ViewHistory<undefined>(
+            path.join(root, "empty-history"),
+            () => undefined,
+        );
+        expect(await history.read()).toEqual({
+            head: null,
+            state: undefined,
+            stateBytes: 0,
+        });
+    });
 
     test.each(["purge-prepared", "purge-swapped"] as ViewHistoryFaultPoint[])(
         "interrupted %s stays quarantined until restart completes full object database removal",

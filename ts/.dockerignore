@@ -1,5 +1,14 @@
-node_modules
+**/node_modules
 .git
 .gitignore
 *.md
-dist
+**/dist
+**/out
+**/*.tsbuildinfo
+**/*.done.build.log
+**/.npmrc
+**/.npmrc.*
+**/.env
+**/.env.*
+**/config.local.yaml
+**/config.local.yml

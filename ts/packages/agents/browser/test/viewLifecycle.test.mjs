@@ -43,6 +43,10 @@ test(
     "view host readiness shares startup and cleans up after restart",
     { timeout: 20_000 },
     async (t) => {
+        const output = [];
+        t.mock.method(console, "log", (message) => {
+            output.push(message);
+        });
         const folder = await mkdtemp(
             path.join(tmpdir(), "typeagent-view-lifecycle-"),
         );
@@ -72,6 +76,15 @@ test(
         assert.match(host, /^http:\/\/localhost:[1-9]\d*$/);
         assert.equal(context.registrations.length, 1);
         assert.equal(context.registrations[0].role, "view");
+        assert.deepEqual(output, [
+            `Browser views listening on port ${new URL(host).port}: ${host}\n` +
+                `Memory Hub: ${host}/library/memoryHub.html`,
+        ]);
+        assert.equal(await ensureBrowserViewHost(context, domain), host);
+        assert.equal(output.length, 1);
+        const hubResponse = await fetch(`${host}/library/memoryHub.html`);
+        assert.equal(hubResponse.status, 200);
+        assert.match(await hubResponse.text(), /<title>Memory<\/title>/);
         assert.equal(
             importProgressEvents.listenerCount("importProgress"),
             listenersBefore + 1,
@@ -96,13 +109,20 @@ test(
             importProgressEvents.listenerCount("importProgress"),
             listenersBefore,
         );
-        await ensureBrowserViewHost(context, domain);
+        const restartedHost = await ensureBrowserViewHost(context, domain);
         assert.notEqual(context.agentContext.viewProcess, firstChild);
         assert.equal(context.registrations.length, 2);
+        assert.equal(output.length, 2);
+        assert.equal(
+            output[1],
+            `Browser views listening on port ${new URL(restartedHost).port}: ${restartedHost}\n` +
+                `Memory Hub: ${restartedHost}/library/memoryHub.html`,
+        );
     },
 );
 
-test("disabling during storage lookup cancels a pending fork", async () => {
+test("disabling during storage lookup cancels a pending fork", async (t) => {
+    const output = t.mock.method(console, "log", () => {});
     let continueLookup;
     const context = createContext(tmpdir());
     context.sessionStorage.list = () =>
@@ -116,4 +136,5 @@ test("disabling during storage lookup cancels a pending fork", async () => {
     assert.equal(await started, undefined);
     assert.equal(context.agentContext.viewProcess, undefined);
     assert.equal(context.registrations.length, 0);
+    assert.equal(output.mock.callCount(), 0);
 });

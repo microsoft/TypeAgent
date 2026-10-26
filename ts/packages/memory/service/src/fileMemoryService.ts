@@ -2,28 +2,131 @@
 // Licensed under the MIT License.
 
 import {
+    boundGraphInventory,
+    graphIdentity,
+    graphInventory,
+    graphCoverageState,
+    graphSupportCounts,
+    graphSupportIdentity,
+    graphLimit,
+    type GraphInventory,
+    type GraphProjection,
+} from "./graphQuery.js";
+import {
+    GraphProjectionUnavailable,
+    graphProjectionLimits,
+    readGraphProjection,
+} from "./graphProjection.js";
+import type {
+    InventoryPageRequest,
+    ViewSummaryRequest,
+    ViewSummaryPage,
+    ViewBuildSummary,
+    ViewPublicationBatchRequest,
+} from "./inventoryTypes.js";
+import type { IndexedFragmentRequest } from "./types.js";
+import type {
+    GraphSupport,
+    GraphSupportPage,
+    GraphSupportRequest,
+    KnowledgeGraphRequest,
+    KnowledgeGraphResponse,
+    KnowledgeGraphCoverage,
+} from "./graphTypes.js";
+
+import {
     currentSearchTraceId,
     recordSearchTiming,
     runWithSearchTiming,
     timeSearchStage,
+    collectJsonSegments,
+    clearJsonSegmentCache,
+    jsonSegmentDirectory,
+    normalizeTemporalContext,
+    temporalContextFromHeaders,
+    temporalSegments,
+    parseTemporalValue,
 } from "@typeagent/knowpro";
 import { createHash, randomUUID } from "node:crypto";
-import {
-    access,
-    appendFile,
-    cp,
-    mkdir,
-    readFile,
-    readdir,
-    rename,
-    rm,
-    writeFile,
-} from "node:fs/promises";
+import * as filesystem from "node:fs/promises";
 import { userInfo } from "node:os";
+import {
+    questionSummary,
+    questionNeedsAttention,
+    validateInventoryPage,
+} from "./inventory.js";
+import type {
+    QuestionSummaryRequest,
+    QuestionReadRequest,
+    QuestionSummaryPage,
+} from "./inventoryTypes.js";
 import path from "node:path";
 import lockfile from "proper-lockfile";
+import { normalizeQueryTemporalContext } from "./temporalContext.js";
+import { indexedQueryTerms } from "./indexedFragments.js";
+import {
+    KnowledgeCoordinator,
+    type KnowledgeDocument,
+} from "./knowledgeCoordinator.js";
+import type {
+    CorpusQuestionInput,
+    CorpusQuestionProposal,
+    DiscoveryPolicy,
+    KnowledgeCheckpoint,
+    KnowledgeCheckpointRead,
+    KnowledgeCheckpointRequest,
+    KnowledgeCheckpointWait,
+    KnowledgeDiscoveryUpdate,
+    KnowledgeFamily,
+    KnowledgeStatus,
+} from "./knowledgeTypes.js";
+import { knowledgeLimits } from "./knowledgeTypes.js";
+import {
+    planDiscoveryWindows,
+    policyAdmittedSlot,
+    deriveDiscoveryRouteTerms,
+    questionContractIdentity,
+    corpusQuestionIdentity,
+} from "./knowledgeDiscovery.js";
+import type {
+    QuestionEditRequest,
+    QuestionInventory,
+    SchemaViewPage,
+    SchemaViewPageRequest,
+    SchemaViewProposalRequest,
+    SchemaQuestionDiscoveryRequest,
+} from "./schemaViewTypes.js";
+import type { ViewRetainedInput } from "./viewTypes.js";
+import { DeferredAcquisitionCoordinator } from "./deferredAcquisition.js";
+import type {
+    AcquisitionRequest,
+    AcquisitionRequestInput,
+    AcquisitionReadiness,
+    AcquisitionPeriodicOptions,
+    DeferredAcquisitionConfig,
+} from "./acquisitionTypes.js";
+import { maintenanceScopeMatches } from "./viewMaintenance.js";
+import {
+    emptySchemaView,
+    questionSection,
+    resolveQuestion,
+    schemaCitations,
+    schemaViewLimits,
+    validateQuestionSlot,
+    validateSchemaViewDefinition,
+    sourceAssertionLineage,
+    questionContractRevision,
+} from "./schemaView.js";
+import {
+    editSchemaQuestion,
+    questionInventory,
+    renderViewPage,
+} from "./schemaViewOperations.js";
+
 import {
     MemoryBatchStore,
+    resolveIngestionCommitPolicy,
+    type IngestionCommitPolicy,
     type MemoryBatchImport,
     type MemoryBatchImportLookup,
     type MemoryBatchImportRequest,
@@ -35,6 +138,27 @@ import {
     pruneChangeReceipts,
 } from "./changeReceipts.js";
 import { CorpusAccess } from "./corpusAccess.js";
+import { EventSegmentStore } from "./eventSegmentStore.js";
+import { BoundedIngestionGroup } from "./boundedIngestionGroup.js";
+import {
+    MaintenanceScheduler,
+    type MaintenanceStatus,
+} from "./maintenanceScheduler.js";
+import { AgentSessionStore } from "./agentSessionStore.js";
+import { configuredAgentSessionModel } from "./agentSessionDistillation.js";
+import type {
+    AgentMemorySearchRequest,
+    AgentMemorySearchResult,
+    AgentSessionDistillationModel,
+    AgentSessionImportReceipt,
+    AgentSessionImportRequest,
+    AgentSessionReadRequest,
+} from "./agentSessionTypes.js";
+import {
+    RevisionTextStore,
+    type RevisionTextFaultPoint,
+    type SerializedTextRevision,
+} from "./revisionTextStore.js";
 import {
     configuredSourceSynopsisModel,
     generateSourceSynopsis,
@@ -42,7 +166,8 @@ import {
     sourceSynopsisRecipe,
     type SourceSynopsisModel,
 } from "./sourceSynopsis.js";
-import { writeRunbookJson } from "./durableRunbookJson.js";
+import { writeRunbookJson as persistRunbookJson } from "./durableRunbookJson.js";
+
 import {
     classifyIndexSchema,
     indexFingerprint,
@@ -99,6 +224,7 @@ import type {
     MemoryPage,
     MemorySearchRequest,
     MemorySearchResult,
+    IndexedSelectionDiagnostics,
     MemoryService,
     MemoryServiceCapabilities,
     MemorySource,
@@ -137,7 +263,13 @@ import {
     assertMaintenanceMembership,
     validateMaintenanceRequest,
 } from "./viewMaintenanceValidation.js";
-import { mergeView, sameViewBuildEvidence, viewHash } from "./viewMerge.js";
+import {
+    mergeView,
+    sameViewBuildEvidence,
+    viewHash,
+    viewBuildEvidenceFingerprint,
+} from "./viewMerge.js";
+import type { ViewInventoryBuild } from "./viewReadProjection.js";
 import {
     captureEditorialContext,
     editorialArticle,
@@ -153,7 +285,12 @@ import {
     topicInputFingerprint,
     reconcileTopicFamily,
 } from "./topicCapture.js";
-import { createConfiguredTopicGenerator } from "./topicGeneration.js";
+import {
+    createConfiguredTopicGenerator,
+    createConfiguredTopicConceptSummarizer,
+    type TopicConceptSummarizer,
+} from "./topicGeneration.js";
+import { validateTopicQuery } from "./topicSnapshot.js";
 import {
     applyTopicFamilyOperation,
     checkpointTopicFamily,
@@ -175,7 +312,16 @@ import {
     type ChatModel,
     type RequestBudgetLimits,
 } from "@typeagent/aiclient";
-import { answerIndexedEvidence } from "./indexedAnswer.js";
+import {
+    answerIndexedEvidence,
+    mergeIndexedAnswerEvidence,
+} from "./indexedAnswer.js";
+import { answerIntegratedEvidence } from "./integratedAnswer.js";
+import type {
+    AnswerEvidence,
+    AnswerSourceReference,
+    AnswerViewEvidence,
+} from "./types.js";
 import {
     assertPublicationProof,
     effectiveViewPublicationPolicy,
@@ -204,7 +350,6 @@ import {
     type WikiConsolidationReceipt,
     ConsolidationTargetChanged,
 } from "./wikiConsolidation.js";
-import { assertEditorialAssessment } from "./viewEditorial.js";
 import { viewSourceKey } from "./viewContent.js";
 import type {
     WikiPagePurposeContext,
@@ -213,12 +358,15 @@ import type {
 } from "./viewTypes.js";
 import {
     discoverInformationalDescriptors,
+    rankWikiCandidates,
     retireWikiCandidate,
     usefulWikiSubject,
     usefulWikiSubjectLabel,
 } from "./wikiGrouping.js";
 import {
     createConfiguredViewSynthesisAdapter,
+    prepareWikiContribution,
+    verifyOrRepairWikiConsolidation,
     validateConstructedGuide,
     validateSupport,
 } from "./viewSynthesis.js";
@@ -261,11 +409,45 @@ import type {
 } from "./viewTypes.js";
 import { validateViewArchive, validateViewDraft } from "./viewValidation.js";
 
+// Awaited API wall time includes scheduling/cache/filesystem work, not OS I/O counters.
+const { access, cp, mkdir, readFile, readdir, rename, rm, writeFile } =
+    new Proxy(filesystem, {
+        get(target, property) {
+            const method = Reflect.get(target, property, target);
+            if (typeof method !== "function") return method;
+            const stages: Record<string, string> = {
+                access: "storage.io.access",
+                cp: "storage.io.copy",
+                mkdir: "storage.io.mkdir",
+                readFile: "storage.io.read",
+                readdir: "storage.io.readdir",
+                rename: "storage.io.rename",
+                rm: "storage.io.remove",
+                writeFile: "storage.io.write",
+            };
+            const stage = stages[String(property)];
+            if (!stage) return method;
+            return (...args: unknown[]) =>
+                timeSearchStage(stage, () =>
+                    Reflect.apply(method, target, args),
+                );
+        },
+    });
+
+function writeRunbookJson(
+    ...args: Parameters<typeof persistRunbookJson>
+): Promise<void> {
+    return timeSearchStage("storage.runbook.persist", () =>
+        persistRunbookJson(...args),
+    );
+}
+
 const manifestFileName = "manifest.json";
 const eventsFileName = "events.jsonl";
 const jobsDirectoryName = "jobs";
 const indexDirectoryName = "index";
-const pipelineVersion = "1";
+const pipelineVersion = "2";
+const deferredWikiAdmission = "Retained evidence-grounded utility deferral";
 const eventSourceKinds = new Set([
     "conversation",
     "document",
@@ -289,12 +471,37 @@ const eventAuthorities: ReadonlySet<string> = new Set<MemoryEventAuthority>([
     "producer-reported",
 ]);
 
+type KnowledgeMaintenanceResult = Pick<
+    KnowledgeCheckpoint,
+    "viewIds" | "jobIds" | "state" | "reasons" | "viewRevisions"
+>;
+
+function knowledgeMaintenanceResult(
+    results: KnowledgeMaintenanceResult[],
+): KnowledgeMaintenanceResult {
+    const severity = ["ready", "partial", "blocked", "failed"];
+    return {
+        state: results.reduce<KnowledgeCheckpoint["state"]>(
+            (state, result) =>
+                severity.indexOf(result.state) > severity.indexOf(state)
+                    ? result.state
+                    : state,
+            "ready",
+        ),
+        reasons: results.flatMap((result) => result.reasons),
+        viewIds: [...new Set(results.flatMap((result) => result.viewIds))],
+        jobIds: [...new Set(results.flatMap((result) => result.jobIds))],
+    };
+}
+
 interface StoredRevision extends SourceRevision {
     content: string;
     synopsis?: SourceSynopsis & { attempts: number };
 }
 
 interface EventIndexState {
+    sequence?: number;
+    eligibilityRevision?: number;
     generation: string;
     watermark: string;
 }
@@ -334,6 +541,17 @@ interface StoredSource extends SourceDocument {
     revisions: StoredRevision[];
 }
 
+interface AcceptedIngestion {
+    request: DocumentIngestRequest;
+    content: string;
+    contentHash: string;
+    sourceId: string;
+    revisionId: string;
+    job: IngestionJobStatus;
+    signal: AbortSignal;
+    execute: () => Promise<void>;
+}
+
 interface CorpusManifest {
     corpus: MemoryCorpus;
     sources: StoredSource[];
@@ -351,6 +569,19 @@ interface CorpusManifest {
         activeRevisionId: string;
         revisions: Array<{ revisionId: string; hasAssets: boolean }>;
     };
+    pendingCorpusClear?: Array<{
+        sourceId: string;
+        revisions: Array<{ revisionId: string; hasAssets: boolean }>;
+    }>;
+}
+
+interface SerializedCorpusManifest extends Omit<CorpusManifest, "sources"> {
+    storageVersion: 1;
+    sources: Array<
+        Omit<StoredSource, "revisions"> & {
+            revisions: SerializedTextRevision<StoredRevision>[];
+        }
+    >;
 }
 
 interface CorpusRuntime {
@@ -373,6 +604,24 @@ interface PreparedCorpusIndex {
 }
 
 export interface FileMemoryServiceOptions {
+    maintenanceMode?: "automatic" | "manual";
+    ingestionCommitPolicy?: Partial<IngestionCommitPolicy>;
+    maintenanceLimits?: {
+        maxTargetsPerPass?: number;
+        maxCandidatesPerPass?: number;
+        maxPassesPerGeneration?: number;
+        requestBudget?: RequestBudgetLimits;
+    };
+    discoveryPolicy?: DiscoveryPolicy;
+    acquisition?: DeferredAcquisitionConfig & {
+        principalId: string;
+        policyId: string;
+        authorize(request: AcquisitionRequestInput): boolean;
+        graceMs?: number;
+    };
+    agentSessionImports?: boolean;
+    agentSessionDistillationModel?: AgentSessionDistillationModel;
+    revisionTextCheckpoint?: (point: RevisionTextFaultPoint) => Promise<void>;
     sourceSynopses?: boolean;
     sourceSynopsisModel?: SourceSynopsisModel;
     indexedAnswerModel?: ChatModel;
@@ -383,6 +632,8 @@ export interface FileMemoryServiceOptions {
     viewPublicationCheckpoint?: (point: "intent" | "index") => Promise<void>;
     viewSynthesisAdapter?: ViewSynthesisAdapter;
     viewModelEndpoint?: string;
+    /** Disable to retain raw-topic summaries instead of lazy curated concepts. */
+    curatedTopics?: boolean;
     indexFactory?: CorpusIndexFactory;
     eventIndexFactory?: CorpusIndexFactory;
     capabilities?: MemoryServiceCapabilities;
@@ -458,33 +709,6 @@ function applyKnowledgeSuppressions(
     };
 }
 
-function raceWithAbort<T>(
-    operation: Promise<T>,
-    signal: AbortSignal,
-): Promise<T> {
-    if (signal.aborted) {
-        void operation.catch(() => undefined);
-        return Promise.reject(
-            signal.reason ?? new Error("Operation cancelled"),
-        );
-    }
-    return new Promise<T>((resolve, reject) => {
-        const abort = () =>
-            reject(signal.reason ?? new Error("Operation cancelled"));
-        signal.addEventListener("abort", abort, { once: true });
-        operation.then(
-            (value) => {
-                signal.removeEventListener("abort", abort);
-                resolve(value);
-            },
-            (error) => {
-                signal.removeEventListener("abort", abort);
-                reject(error);
-            },
-        );
-    });
-}
-
 function contentFor(request: DocumentIngestRequest): string {
     const { source } = request;
     const candidates = [source.markdown, source.text, source.html].filter(
@@ -515,10 +739,6 @@ function hashContent(content: string): string {
     return createHash("sha256").update(content).digest("hex");
 }
 
-function eventIndexWatermark(events: readonly MemoryEvent[]): string {
-    return hashContent(events.map((event) => event.eventId).join("\n"));
-}
-
 function contentPipeline(
     pipeline: SourceRevision["pipeline"],
 ): IndexedDocument["pipeline"] {
@@ -544,6 +764,12 @@ function createStoredSource(
         sourceId,
         contentHash,
         mimeType,
+        ...(request.source.authoredAt === undefined
+            ? {}
+            : { authoredAt: request.source.authoredAt }),
+        ...(request.source.temporalContext === undefined
+            ? {}
+            : { temporalContext: request.source.temporalContext }),
         ...(request.source.capturedAt === undefined
             ? {}
             : { capturedAt: request.source.capturedAt }),
@@ -636,6 +862,19 @@ function validateSearchDateRange(
     ) {
         throw new Error("Search dateFrom must not be later than dateTo");
     }
+}
+
+function matchesSearchSource(
+    source: MemorySource,
+    request: Pick<MemorySearchRequest, "sourceIds" | "sourceTypes" | "tags">,
+): boolean {
+    return (
+        (request.sourceIds === undefined ||
+            request.sourceIds.includes(source.sourceId)) &&
+        (request.sourceTypes === undefined ||
+            request.sourceTypes.includes(source.sourceType)) &&
+        (request.tags ?? []).every((tag) => source.tags?.includes(tag))
+    );
 }
 
 function matchesSearchDate(
@@ -756,8 +995,16 @@ function suppressedTurnKey(
     ]);
 }
 
+type EventSuppressionState = Pick<
+    CorpusRuntime,
+    | "eventSuppressions"
+    | "suppressedEventKeys"
+    | "suppressedConversations"
+    | "suppressedTurns"
+>;
+
 function isSuppressedEvent(
-    runtime: CorpusRuntime,
+    runtime: EventSuppressionState,
     event: MemoryEvent,
 ): boolean {
     return (
@@ -777,7 +1024,7 @@ function isSuppressedEvent(
 }
 
 function isSuppressedTurn(
-    runtime: CorpusRuntime,
+    runtime: Pick<EventSuppressionState, "suppressedTurns">,
     request: MemoryEventAppendRequest,
 ): boolean {
     if (request.turnId === undefined) {
@@ -880,42 +1127,16 @@ function pageItems<T>(
 
 async function readJson<T>(filePath: string): Promise<T | undefined> {
     try {
-        return JSON.parse(await readFile(filePath, "utf8")) as T;
+        const text = await readFile(filePath, "utf8");
+        return timeSearchStage("storage.json.parse", () =>
+            JSON.parse(text),
+        ) as T;
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
             return undefined;
         }
         throw error;
     }
-}
-
-async function readEventRecords(
-    filePath: string,
-): Promise<(MemoryEvent | EventSuppression)[]> {
-    let content: string;
-    try {
-        content = await readFile(filePath, "utf8");
-    } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-            return [];
-        }
-        throw error;
-    }
-    if (content.trim().length === 0) {
-        return [];
-    }
-    return content
-        .split(/\r?\n/)
-        .filter((line) => line.length > 0)
-        .map((line, index) => {
-            try {
-                return JSON.parse(line) as MemoryEvent | EventSuppression;
-            } catch (error) {
-                throw new Error(
-                    `Invalid event record at line ${index + 1}: ${String(error)}`,
-                );
-            }
-        });
 }
 
 async function writeJsonAtomic(
@@ -925,7 +1146,11 @@ async function writeJsonAtomic(
     await mkdir(path.dirname(filePath), { recursive: true });
     const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
     const backupPath = `${filePath}.${randomUUID()}.bak`;
-    await writeFile(temporaryPath, `${JSON.stringify(value, undefined, 2)}\n`);
+    const serialized = timeSearchStage(
+        "storage.json.serialize",
+        () => `${JSON.stringify(value, undefined, 2)}\n`,
+    );
+    await writeFile(temporaryPath, serialized);
     let hasBackup = false;
     try {
         await rename(filePath, backupPath);
@@ -971,22 +1196,89 @@ export class FileMemoryService
     private readonly viewDrafts: boolean;
     private readonly viewPublicationCheckpoint: FileMemoryServiceOptions["viewPublicationCheckpoint"];
     private readonly viewAdapter: ViewSynthesisAdapter;
+    private readonly curatedTopics: boolean;
+    private readonly summarizeTopicConcept: TopicConceptSummarizer;
+    private readonly topicSummaryWork = new Map<
+        string,
+        {
+            corpusId: string;
+            controller: AbortController;
+            promise: Promise<void>;
+        }
+    >();
     private readonly viewBuilds: ViewBuildRunner;
     private readonly indexFactory: CorpusIndexFactory;
     private readonly eventIndexFactory: CorpusIndexFactory;
     private readonly capabilities: MemoryServiceCapabilities;
     private readonly viewStore: TypedViewStore;
+    private readonly knowledge: KnowledgeCoordinator;
+    private readonly newCorpusDiscoveryPolicy: DiscoveryPolicy;
+    private readonly knowledgeMaintenance = new Set<string>();
+    private readonly acquisition: DeferredAcquisitionCoordinator;
+    private readonly acquisitionPolicy: FileMemoryServiceOptions["acquisition"];
     private readonly assetStore: RevisionAssetStore;
     private readonly batchStore: MemoryBatchStore;
     private readonly corpora = new Map<string, CorpusRuntime>();
+    private readonly corpusAccesses = new Map<string, CorpusAccess>();
+    private readonly eventStores = new Map<
+        string,
+        EventSegmentStore<EventSuppression>
+    >();
+
+    private corpusAccess(corpusId: string): CorpusAccess {
+        let access = this.corpusAccesses.get(corpusId);
+        if (!access) {
+            access = new CorpusAccess(() => {
+                const runtime = this.corpora.get(corpusId);
+                if (runtime) this.assertRemovalComplete(runtime);
+            });
+            this.corpusAccesses.set(corpusId, access);
+        }
+        return access;
+    }
+
+    private eventStore(corpusId: string): EventSegmentStore<EventSuppression> {
+        let store = this.eventStores.get(corpusId);
+        if (!store) {
+            store = new EventSegmentStore(this.eventsPath(corpusId), () =>
+                this.removeDerivedIndexRoot(
+                    this.eventIndexRoot(corpusId),
+                    "conversation-events",
+                ),
+            );
+            this.eventStores.set(corpusId, store);
+        }
+        return store;
+    }
     private readonly corpusLoads = new Map<string, Promise<CorpusRuntime>>();
     private readonly indexedReads = new Set<Promise<unknown>>();
+    private readonly reindexWork = new Set<Promise<ReindexResult>>();
+    private readonly documentRepairs = new Map<string, Promise<void>>();
+    private readonly detachedRebuilds = new Map<
+        string,
+        {
+            corpusId: string;
+            sourceIds: Set<string>;
+            baseSourceIds: Set<string>;
+            controller: AbortController;
+            prepared: Promise<void>;
+            jobIds?: string[];
+        }
+    >();
     private readonly ingestionTails = new Map<string, Promise<void>>();
+    private readonly ingestionGroups: BoundedIngestionGroup<AcceptedIngestion>;
+    private readonly maintenance: MaintenanceScheduler;
+    private readonly maintenanceLimits: FileMemoryServiceOptions["maintenanceLimits"];
+    private readonly admissionPolicy: string;
     private readonly preparingIndexes = new Map<
         string,
         { corpusId: string; jobId: string; sourceIds: Set<string> }
     >();
     private readonly jobs = new Map<string, IngestionJobStatus>();
+    private readonly pendingSourceScopes = new Map<
+        string,
+        DocumentIngestRequest["source"]
+    >();
     private readonly jobWrites = new Map<string, Promise<void>>();
     private readonly controllers = new Map<string, AbortController>();
     private initializePromise: Promise<void> | undefined;
@@ -994,11 +1286,15 @@ export class FileMemoryService
     private rootWriteTail: Promise<void> = Promise.resolve();
     private closed = false;
     private reconciliationTimer: ReturnType<typeof setInterval> | undefined;
-    private readonly wikiTimers = new Map<
+    private readonly reconciliationWork = new Set<string>();
+    private readonly wikiMaintenanceFailures = new Map<string, Error>();
+    private readonly schemaTimers = new Map<
         string,
         ReturnType<typeof setTimeout>
     >();
-    private readonly wikiMaintenanceFailures = new Map<string, Error>();
+    private readonly schemaWork = new Map<string, Promise<void>>();
+    private readonly schemaMaintenanceFailures = new Map<string, Error>();
+    private readonly schemaMaintenanceRetries = new Map<string, number>();
     private readonly informationalWikiEnabled: boolean;
     private readonly wikiBudget: RequestBudgetLimits | undefined;
     private readonly wikiModelEndpoint: string | undefined;
@@ -1006,15 +1302,76 @@ export class FileMemoryService
     private readonly sourceSynopsesEnabled: boolean;
     private synopsisModel: SourceSynopsisModel | undefined;
     private synopsisModelFailure: string | undefined;
-    private readonly synopsisWork = new Map<string, Promise<void>>();
+    private readonly textStores = new Map<string, RevisionTextStore>();
+    private readonly revisionTextCheckpoint: FileMemoryServiceOptions["revisionTextCheckpoint"];
+    private readonly agentSessionStore: AgentSessionStore;
+    private readonly agentSessionImportsEnabled: boolean;
 
     public constructor(
         private readonly rootDirectory: string,
         options: FileMemoryServiceOptions = {},
     ) {
+        const commitPolicy = resolveIngestionCommitPolicy(
+            options.ingestionCommitPolicy,
+        );
+        this.ingestionGroups = new BoundedIngestionGroup(
+            (entries) => this.dispatchIngestionGroup(entries),
+            commitPolicy.maxDocuments,
+            commitPolicy.admissionWaitMs,
+        );
+        this.maintenance = new MaintenanceScheduler(
+            (corpusId) => this.batchStore.hasActiveImports(corpusId),
+            options.maintenanceMode,
+            options.maintenanceLimits?.requestBudget,
+        );
+        this.maintenanceLimits = options.maintenanceLimits;
+        for (const limit of [
+            options.maintenanceLimits?.maxTargetsPerPass,
+            options.maintenanceLimits?.maxCandidatesPerPass,
+            options.maintenanceLimits?.maxPassesPerGeneration,
+        ])
+            if (
+                limit !== undefined &&
+                (!Number.isSafeInteger(limit) || limit < 1)
+            )
+                throw new Error(
+                    "Maintenance work limits must be positive integers",
+                );
+        if ((options.maintenanceLimits?.maxTargetsPerPass ?? 12) > 12)
+            throw new Error("Maintenance target limit cannot exceed 12");
+        this.acquisitionPolicy = options.acquisition;
+        this.acquisition = new DeferredAcquisitionCoordinator(
+            rootDirectory,
+            {
+                listQuestions: async (corpusId) => {
+                    await this.getCorpusRuntime(corpusId);
+                    const snapshot = await this.viewStore.listViews(corpusId);
+                    return {
+                        head: snapshot.head,
+                        items: questionInventory(snapshot),
+                    };
+                },
+                inspect: (request) => this.inspectAcquisition(request),
+                withAdmissionBarrier: (corpusId, operation) =>
+                    this.enqueueWrite(corpusId, operation),
+                admit: (request) => this.ingestDocument(request),
+                getSource: async (corpusId, sourceId) => {
+                    const runtime = await this.getCorpusRuntime(corpusId);
+                    return structuredClone(
+                        runtime.manifest.sources.find(
+                            (source) => source.sourceId === sourceId,
+                        ),
+                    );
+                },
+                getJob: (jobId) => this.getJob(jobId),
+            },
+            options.acquisition ?? {},
+        );
+        this.revisionTextCheckpoint = options.revisionTextCheckpoint;
         this.viewPublicationCheckpoint = options.viewPublicationCheckpoint;
         this.viewDrafts = options.viewDrafts !== false;
         this.wikiModelEndpoint = options.viewModelEndpoint;
+        this.curatedTopics = options.curatedTopics ?? true;
         this.indexedAnswerModel = options.indexedAnswerModel;
         this.sourceSynopsesEnabled =
             options.sourceSynopses ?? options.informationalViews !== false;
@@ -1029,6 +1386,18 @@ export class FileMemoryService
                 Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
             );
         this.viewAdapter = adapter;
+        this.summarizeTopicConcept = createConfiguredTopicConceptSummarizer(
+            options.viewModelEndpoint,
+            undefined,
+            adapter,
+        );
+        this.admissionPolicy = hashContent(
+            JSON.stringify([
+                "bounded-admission-v1",
+                options.maintenanceLimits,
+                adapter.identity,
+            ]),
+        );
         this.viewBuilds = new ViewBuildRunner(
             this.viewAdapter,
             {
@@ -1144,11 +1513,15 @@ export class FileMemoryService
                                     "Accepted informational page is missing",
                                 );
                             await this.viewStore.makeInformationalVisible(view);
-                            await this.indexViewLocked(view);
+                            await this.indexViewLocked(view, signal);
                         } else if (
                             !conflicts.length &&
                             saved.revisionId &&
-                            result.snapshot.publicationPolicy?.autoPublish
+                            (result.snapshot.publicationPolicy?.autoPublish ||
+                                (await this.isPolicyQuestion(
+                                    job.corpusId,
+                                    result.viewId,
+                                )))
                         ) {
                             const snapshot = await this.viewStore.listViews(
                                 job.corpusId,
@@ -1160,13 +1533,17 @@ export class FileMemoryService
                                 throw new Error(
                                     "Materialized build target is missing",
                                 );
-                            const publication = await this.publishViewLocked({
-                                corpusId: job.corpusId,
-                                viewId: view.viewId,
-                                revisionId: view.revisionId,
-                                expectedVersion: view.version,
-                                expectedHead: snapshot.head,
-                            });
+                            const publication = await this.publishViewLocked(
+                                {
+                                    corpusId: job.corpusId,
+                                    viewId: view.viewId,
+                                    revisionId: view.revisionId,
+                                    expectedVersion: view.version,
+                                    expectedHead: snapshot.head,
+                                },
+                                signal,
+                            );
+                            signal.throwIfAborted();
                             await this.viewStore.updateViewBuild(
                                 job.corpusId,
                                 job.jobId,
@@ -1174,9 +1551,13 @@ export class FileMemoryService
                                     const receipt = current.results.find(
                                         (entry) => entry.viewId === view.viewId,
                                     );
-                                    if (!receipt)
-                                        throw new Error(
-                                            "Publication receipt target is missing",
+                                    if (
+                                        !receipt ||
+                                        current.state !== "running" ||
+                                        receipt.revisionId !== view.revisionId
+                                    )
+                                        throw new ViewBuildStaleError(
+                                            "Publication receipt target changed during indexing",
                                         );
                                     receipt.publication = publication;
                                     receipt.state =
@@ -1190,7 +1571,11 @@ export class FileMemoryService
                     }),
             },
             this.wikiBudget,
-            createConfiguredTopicGenerator(options.viewModelEndpoint),
+            createConfiguredTopicGenerator(
+                options.viewModelEndpoint,
+                undefined,
+                this.curatedTopics,
+            ),
         );
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
         this.eventIndexFactory = options.eventIndexFactory ?? this.indexFactory;
@@ -1198,10 +1583,227 @@ export class FileMemoryService
         this.assetStore = new RevisionAssetStore(rootDirectory);
         this.batchStore = new MemoryBatchStore(
             rootDirectory,
-            this,
+            {
+                ingestDocument: (request, signal) =>
+                    this.ingestDocument(request, signal),
+                getJob: (jobId) => this.getJob(jobId),
+                cancelJob: (jobId) => this.cancelJob(jobId),
+                withIngestionGroup: (operation, expectedItems) =>
+                    this.withIngestionGroup(operation, expectedItems),
+                isCommitted: async (job) => {
+                    const manifest = await this.readManifest(job.corpusId);
+                    return (
+                        manifest?.sources.some(
+                            (source) =>
+                                source.sourceId === job.sourceId &&
+                                source.activeRevisionId === job.revisionId &&
+                                source.revisions.some(
+                                    (revision) =>
+                                        revision.revisionId ===
+                                            job.revisionId &&
+                                        revision.state === "ready",
+                                ),
+                        ) ?? false
+                    );
+                },
+            },
             (corpusId) => this.resumeBatchMaintenance(corpusId),
+            commitPolicy,
         );
         this.viewStore = new TypedViewStore(rootDirectory, userInfo().username);
+        this.newCorpusDiscoveryPolicy = this.viewDrafts
+            ? (options.discoveryPolicy ?? "sourceObserved")
+            : "off";
+        this.knowledge = new KnowledgeCoordinator({
+            begin: async (corpusId) => {
+                this.knowledgeMaintenance.add(corpusId);
+                const schemaTimer = this.schemaTimers.get(corpusId);
+                if (schemaTimer) clearTimeout(schemaTimer);
+                this.schemaTimers.delete(corpusId);
+                for (const family of ["wiki", "projects", "topics"]) {
+                    this.maintenance.cancel(corpusId, family);
+                }
+                await this.schemaWork.get(corpusId);
+            },
+            end: (corpusId) => {
+                this.knowledgeMaintenance.delete(corpusId);
+                this.scheduleSchemaMaintenance(corpusId);
+                const runtime = this.corpora.get(corpusId);
+                if (runtime) this.scheduleTopics(corpusId, runtime);
+                this.scheduleWikiMaintenance(corpusId, "wiki");
+                this.scheduleWikiMaintenance(corpusId, "projects");
+            },
+            reportFailure: async (corpusId, error) => {
+                await this.enqueueWrite(
+                    corpusId,
+                    async () => {
+                        const runtime = await this.getCorpusRuntime(
+                            corpusId,
+                            true,
+                        );
+                        if (
+                            runtime.manifest.authorizedSourceRemoval ||
+                            runtime.manifest.pendingCorpusClear ||
+                            this.closed
+                        )
+                            return;
+                        await this.viewStore.updateKnowledgeState(
+                            corpusId,
+                            (state) => {
+                                state.discovery.error = safeError(error);
+                            },
+                        );
+                    },
+                    true,
+                );
+            },
+            modelIdentity: this.viewAdapter.identity,
+            read: (corpusId) => this.viewStore.getKnowledgeState(corpusId),
+            write: (corpusId, update) =>
+                this.enqueueWrite(corpusId, () =>
+                    this.viewStore.updateKnowledgeState(corpusId, update),
+                ),
+            capture: (corpusId) => this.captureKnowledge(corpusId),
+            activeImport: (corpusId) =>
+                this.batchStore.hasActiveImports(corpusId) ||
+                this.ingestionTails.has(corpusId),
+            maintainedCurrent: async (checkpoint) => {
+                const views = await this.viewStore.listViews(
+                    checkpoint.corpusId,
+                );
+                return (checkpoint.viewRevisions ?? []).every((reference) =>
+                    views.views.some(
+                        (view) =>
+                            view.viewId === reference.viewId &&
+                            view.revisionId === reference.revisionId &&
+                            view.state !== "archived",
+                    ),
+                );
+            },
+            questions: async (corpusId) =>
+                (await this.viewStore.listViews(corpusId)).views.flatMap(
+                    (view) =>
+                        view.definition.schemaView?.slots.map(
+                            (slot) => slot.question,
+                        ) ?? [],
+                ),
+            plan: (corpusId, sources, questions, state, identity) =>
+                planDiscoveryWindows(
+                    corpusId,
+                    sources,
+                    questions,
+                    state,
+                    identity,
+                ),
+            discover: async (input, signal, reserveRepair) => {
+                if (!this.viewAdapter.discoverCorpusQuestions)
+                    throw new Error(
+                        "Corpus question discovery is unsupported by this host",
+                    );
+                const existingContracts = (
+                    await this.viewStore.listViews(input.corpusId)
+                ).views
+                    .filter((view) => view.state !== "archived")
+                    .flatMap((view) => view.definition.schemaView?.slots ?? []);
+                const text = input.passages
+                    .map((passage) => `${passage.title} ${passage.excerpt}`)
+                    .join("\n")
+                    .toLocaleLowerCase();
+                const nominated = existingContracts
+                    .map((slot) => ({
+                        slot,
+                        score: deriveDiscoveryRouteTerms(
+                            "",
+                            slot.question,
+                        ).filter((term) => text.includes(term)).length,
+                    }))
+                    .sort(
+                        (a, b) =>
+                            b.score - a.score ||
+                            a.slot.id.localeCompare(b.slot.id),
+                    )
+                    .slice(0, knowledgeLimits.liveSlots)
+                    .map(({ slot }) => slot);
+                return this.viewAdapter.discoverCorpusQuestions(
+                    {
+                        ...input,
+                        existingContracts: nominated,
+                        existingContractCount: existingContracts.length,
+                    },
+                    signal,
+                    reserveRepair,
+                );
+            },
+            admit: (corpusId, input, proposal, signal) =>
+                this.admitKnowledgeQuestion(corpusId, input, proposal, signal),
+            route: (corpusId, sources) =>
+                this.routeKnowledgeSources(corpusId, sources),
+            maintain: (checkpoint, signal) =>
+                this.maintainKnowledgeCheckpoint(checkpoint, signal),
+            enabledFamilies: () => [
+                ...(this.viewDrafts ? ["questions" as const] : []),
+                ...(this.informationalWikiEnabled
+                    ? ["wiki" as const, "projects" as const, "topics" as const]
+                    : []),
+            ],
+        });
+        this.agentSessionImportsEnabled = options.agentSessionImports !== false;
+        let sessionModel = options.agentSessionDistillationModel;
+        this.agentSessionStore = new AgentSessionStore(
+            rootDirectory,
+            {
+                ingestDocument: (request, signal) =>
+                    this.ingestDocument(request, signal),
+                getJob: (jobId) => this.getJob(jobId),
+                search: (request) => this.search(request),
+                withEligible: (corpusId, sources, operation) =>
+                    this.withEligibleAgentSessionSources(
+                        corpusId,
+                        sources,
+                        operation,
+                    ),
+                withIngestionGroup: (operation) =>
+                    this.withIngestionGroup(operation),
+            },
+            () =>
+                (sessionModel ??= configuredAgentSessionModel(
+                    options.viewModelEndpoint,
+                )),
+        );
+    }
+
+    private withEligibleAgentSessionSources(
+        corpusId: string,
+        sources: Array<{ sourceId: string; revisionId: string }>,
+        operation: () => Promise<void>,
+    ): Promise<void> {
+        return this.enqueueWrite(corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(corpusId);
+            if (runtime.manifest.pendingCorpusClear)
+                throw new Error("Agent session corpus removal is in progress");
+            for (const selected of sources) {
+                const source = runtime.manifest.sources.find(
+                    (entry) => entry.sourceId === selected.sourceId,
+                );
+                if (
+                    runtime.manifest.authorizedSourceRemoval?.sourceId ===
+                        selected.sourceId ||
+                    source?.activeRevisionId !== selected.revisionId ||
+                    !source.revisions.some(
+                        (revision) =>
+                            revision.revisionId === selected.revisionId &&
+                            revision.state === "ready",
+                    ) ||
+                    runtime.manifest.knowledgeSuppressions?.some(
+                        (entry) => entry.sourceId === selected.sourceId,
+                    )
+                )
+                    throw new Error(
+                        "Agent session evidence is unavailable, replaced or suppressed",
+                    );
+            }
+            await operation();
+        });
     }
 
     public initialize(): Promise<void> {
@@ -1218,13 +1820,38 @@ export class FileMemoryService
                     directory.isDirectory() &&
                     /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(directory.name)
                 ) {
+                    await this.cleanManifestStaging(directory.name);
+                    await rm(this.viewIndexStagingDirectory(directory.name), {
+                        recursive: true,
+                        force: true,
+                    });
                     await this.viewStore.recover(directory.name);
                     await this.cleanArchivedViewIndexes(directory.name);
                     await this.viewStore.recoverViewBuilds(directory.name);
-                    let manifest = await readJson<CorpusManifest>(
-                        this.manifestPath(directory.name),
+                    await this.viewStore.ensureReadProjection(directory.name);
+                    let manifest:
+                        | Pick<
+                              CorpusManifest,
+                              | "authorizedSourceRemoval"
+                              | "pendingCorpusClear"
+                              | "indexGeneration"
+                          >
+                        | undefined = await this.readSerializedManifest(
+                        directory.name,
                     );
                     if (manifest) {
+                        await this.agentSessionStore.recover(directory.name);
+                        if (manifest.pendingCorpusClear) {
+                            const runtime = await this.getCorpusRuntime(
+                                directory.name,
+                                true,
+                            );
+                            await this.completeCorpusClear(
+                                directory.name,
+                                runtime,
+                            );
+                            manifest = runtime.manifest;
+                        }
                         if (manifest.authorizedSourceRemoval) {
                             const runtime = await this.getCorpusRuntime(
                                 directory.name,
@@ -1240,7 +1867,16 @@ export class FileMemoryService
                         const runtime = await this.getCorpusRuntime(
                             directory.name,
                         );
+                        this.scheduleIndexCollection(
+                            directory.name,
+                            this.indexDirectory(directory.name),
+                        );
+                        await this.textStore(directory.name).purge(
+                            runtime.manifest.sources,
+                        );
                         await this.reconcileTopics(directory.name, runtime);
+                        await this.recoverKnowledge(directory.name);
+                        this.knowledge.schedule(directory.name);
                         if (!this.informationalWikiEnabled) continue;
                         await this.enqueueWrite(directory.name, () =>
                             this.recoverWikiConsolidationsLocked(
@@ -1274,38 +1910,41 @@ export class FileMemoryService
         return this.initializePromise;
     }
 
-    public async close(): Promise<void> {
-        if (this.closed) {
-            return;
-        }
-        this.closed = true;
-        if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
-        for (const timer of this.wikiTimers.values()) clearTimeout(timer);
-        this.wikiTimers.clear();
-        await this.initializePromise?.catch(() => undefined);
-        for (const controller of this.controllers.values()) {
-            controller.abort(new Error("Memory service is closing"));
-        }
-        await Promise.allSettled(this.synopsisWork.values());
-        await this.batchStore.close();
+    public close(): Promise<void> {
+        return (this.closePromise ??= this.closeService());
+    }
 
-        this.viewBuilds.cancelAll();
-        await Promise.allSettled([
-            this.rootWriteTail,
-            ...this.corpusLoads.values(),
-            ...this.indexedReads,
-        ]);
-        // Family maintenance may admit a new build while tracked reads drain.
-        const viewClosure = await Promise.allSettled([this.viewBuilds.close()]);
-        await Promise.allSettled(
-            [...this.corpora.values()].map((runtime) => runtime.access.idle()),
-        );
-        await this.releaseLock?.();
-        this.releaseLock = undefined;
-        const viewFailure = viewClosure[0];
-        if (viewFailure.status === "rejected") throw viewFailure.reason;
-        for (const failure of this.wikiMaintenanceFailures.values())
-            throw failure;
+    public deferMaintenance(): () => void {
+        return this.maintenance.defer();
+    }
+
+    public getMaintenanceStatus(): MaintenanceStatus {
+        const status = this.maintenance.status();
+        for (const [corpusId, runtime] of this.corpora)
+            for (const source of runtime.manifest.sources) {
+                const synopsis = source.revisions.find(
+                    (revision) =>
+                        revision.revisionId === source.activeRevisionId,
+                )?.synopsis;
+                if (synopsis?.status !== "failed") continue;
+                status.failures.push({
+                    key: `${corpusId}:synopsis:${source.sourceId}`,
+                    error: synopsis.reason ?? "Source synopsis failed",
+                });
+            }
+        status.settled &&= status.failures.length === 0;
+        return status;
+    }
+
+    public async drainMaintenance(
+        timeoutMs?: number,
+        signal?: AbortSignal,
+    ): Promise<MaintenanceStatus> {
+        await this.initialize();
+        for (const corpusId of this.corpora.keys())
+            this.resumeBatchMaintenance(corpusId);
+        const drained = await this.maintenance.drain(timeoutMs, signal);
+        return { ...drained, ...this.getMaintenanceStatus() };
     }
 
     public async createCorpus(
@@ -1336,7 +1975,7 @@ export class FileMemoryService
                 documentCount: 0,
             };
             const manifest: CorpusManifest = { corpus, sources: [] };
-            await writeJsonAtomic(this.manifestPath(corpusId), manifest);
+            await this.writeManifest(corpusId, manifest);
             if (this.viewDrafts)
                 await this.viewStore.initializeViewPublicationPolicy(corpusId);
             const index = this.createIndex(corpusId);
@@ -1354,6 +1993,10 @@ export class FileMemoryService
                 ),
             };
             this.corpora.set(corpusId, runtime);
+            if (this.viewDrafts)
+                await this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                    state.discovery.policy = this.newCorpusDiscoveryPolicy;
+                });
             return structuredClone(corpus);
         });
     }
@@ -1369,9 +2012,7 @@ export class FileMemoryService
             if (!entry.isDirectory()) {
                 continue;
             }
-            const manifest = await readJson<CorpusManifest>(
-                this.manifestPath(entry.name),
-            );
+            const manifest = await this.readSerializedManifest(entry.name);
             if (manifest !== undefined) {
                 corpora.push(manifest.corpus);
             }
@@ -1446,8 +2087,28 @@ export class FileMemoryService
         validateIdentifier("corpus ID", corpusId);
         await this.batchStore.purge(corpusId);
         this.viewBuilds.forget(corpusId);
-        return this.enqueueWrite(corpusId, async () => {
+        for (const work of this.topicSummaryWork.values())
+            if (work.corpusId === corpusId)
+                work.controller.abort(
+                    new ViewBuildStaleError("Corpus cleared"),
+                );
+        await Promise.allSettled(
+            [...this.topicSummaryWork.values()]
+                .filter((work) => work.corpusId === corpusId)
+                .map((work) => work.promise),
+        );
+        return this.enqueueViewIndexRemoval(corpusId, async () => {
             const runtime = await this.getCorpusRuntime(corpusId);
+            await this.acquisition.suppress(corpusId, {
+                viewIds: (await this.viewStore.listViews(corpusId)).views.map(
+                    (view) => view.viewId,
+                ),
+                sourceIds: runtime.manifest.sources.map(
+                    (source) => source.sourceId,
+                ),
+                uncertain: true,
+            });
+            await this.agentSessionStore.purge(corpusId);
             await this.viewStore.clearDerivedViews(corpusId);
             if (runtime.manifest.indexGeneration !== undefined) {
                 await classifyIndexSchema(
@@ -1468,7 +2129,7 @@ export class FileMemoryService
             const candidateIndex = this.createIndex(corpusId, indexGeneration);
             await candidateIndex.rebuild(
                 [],
-                new AbortController().signal,
+                this.maintenance.signal,
                 async () => {},
             );
             await stampIndexSchema(
@@ -1486,59 +2147,82 @@ export class FileMemoryService
                 },
                 sources: [],
                 indexGeneration,
+                pendingCorpusClear: removedSources.map((source) => ({
+                    sourceId: source.sourceId,
+                    revisions: source.revisions.map((revision) => ({
+                        revisionId: revision.revisionId,
+                        hasAssets: !!revision.assets?.length,
+                    })),
+                })),
             };
-            await writeJsonAtomic(
-                this.manifestPath(corpusId),
-                candidateManifest,
-            );
-            const suppressions = this.collectEventSuppressions(
-                runtime.eventSuppressions,
-                runtime.events,
-                {
-                    conversationIds: [
-                        ...new Set(
-                            runtime.events.flatMap((event) =>
-                                event.conversationId === undefined
-                                    ? []
-                                    : [event.conversationId],
-                            ),
-                        ),
-                    ],
-                },
-            );
-            await this.writeEvents(corpusId, [], suppressions);
+            await this.writeManifest(corpusId, candidateManifest);
             runtime.manifest = candidateManifest;
             runtime.index = candidateIndex;
-            await this.rememberDocumentIndex(corpusId, runtime);
-            runtime.events = [];
-            runtime.eventIdempotency.clear();
-            this.setEventSuppressions(runtime, suppressions);
-            for (const source of removedSources) {
-                for (const revision of source.revisions) {
-                    if (!revision.assets?.length) continue;
-                    await this.assetStore.removeRevision({
-                        corpusId,
-                        sourceId: source.sourceId,
-                        revisionId: revision.revisionId,
-                    });
-                }
-            }
-            for (const source of removedSources) {
-                await this.viewStore.markSourceRevisionStale(
-                    corpusId,
-                    source.sourceId,
-                );
-            }
-            await this.removeDerivedIndexRoot(
-                this.eventIndexRoot(corpusId),
-                "conversation-events",
-            );
-            await this.removeInactiveIndexGenerations(
-                corpusId,
-                indexGeneration,
-            );
+            await this.completeCorpusClear(corpusId, runtime);
             return clearedCount;
         });
+    }
+
+    private async completeCorpusClear(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<void> {
+        const removedSources = runtime.manifest.pendingCorpusClear;
+        await this.acquisition.suppress(corpusId, {
+            sourceIds: removedSources?.map((source) => source.sourceId) ?? [],
+            uncertain: true,
+        });
+        const indexGeneration = runtime.manifest.indexGeneration;
+        if (!removedSources || !indexGeneration)
+            throw new Error(
+                "Corpus clear lacks its durable purge intent or index generation",
+            );
+        const suppressions = this.collectEventSuppressions(
+            runtime.eventSuppressions,
+            runtime.events,
+            {
+                conversationIds: [
+                    ...new Set(
+                        runtime.events.flatMap((event) =>
+                            event.conversationId === undefined
+                                ? []
+                                : [event.conversationId],
+                        ),
+                    ),
+                ],
+            },
+        );
+        await this.writeEvents(corpusId, [], suppressions);
+        await this.rememberDocumentIndex(corpusId, runtime);
+        runtime.events = [];
+        runtime.eventIdempotency.clear();
+        this.setEventSuppressions(runtime, suppressions);
+        for (const source of removedSources) {
+            for (const revision of source.revisions) {
+                if (!revision.hasAssets) continue;
+                await this.assetStore.removeRevision({
+                    corpusId,
+                    sourceId: source.sourceId,
+                    revisionId: revision.revisionId,
+                });
+            }
+        }
+        for (const source of removedSources) {
+            await this.viewStore.markSourceRevisionStale(
+                corpusId,
+                source.sourceId,
+            );
+        }
+        await this.removeDerivedIndexRoot(
+            this.eventIndexRoot(corpusId),
+            "conversation-events",
+        );
+        await this.removeInactiveIndexGenerations(corpusId, indexGeneration);
+        await this.textStore(corpusId).purge(runtime.manifest.sources);
+        const complete = structuredClone(runtime.manifest);
+        delete complete.pendingCorpusClear;
+        await this.writeManifest(corpusId, complete);
+        runtime.manifest = complete;
     }
 
     public async listSources(corpusId: string): Promise<MemorySource[]> {
@@ -1589,6 +2273,46 @@ export class FileMemoryService
         validateIdentifier("corpus ID", request.corpusId);
         await this.getCorpusRuntime(request.corpusId);
         return this.enqueueRootWrite(() => this.batchStore.start(request));
+    }
+
+    private async requireAgentSessionImports(corpusId: string): Promise<void> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        if (!this.agentSessionImportsEnabled)
+            throw new Error(
+                "Agent session imports are explicitly disabled by this host",
+            );
+        await this.getCorpusRuntime(corpusId);
+    }
+
+    public async importAgentSession(
+        request: AgentSessionImportRequest,
+    ): Promise<AgentSessionImportReceipt> {
+        await this.requireAgentSessionImports(request.corpusId);
+        return this.enqueueWrite(request.corpusId, () =>
+            this.agentSessionStore.import(request),
+        );
+    }
+
+    public async getAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt | undefined> {
+        await this.requireAgentSessionImports(request.corpusId);
+        return this.agentSessionStore.get(request);
+    }
+
+    public async cancelAgentSessionImport(
+        request: AgentSessionReadRequest,
+    ): Promise<AgentSessionImportReceipt> {
+        await this.requireAgentSessionImports(request.corpusId);
+        return this.agentSessionStore.cancel(request);
+    }
+
+    public async searchAgentMemories(
+        request: AgentMemorySearchRequest,
+    ): Promise<AgentMemorySearchResult> {
+        await this.requireAgentSessionImports(request.corpusId);
+        return this.agentSessionStore.search(request);
     }
 
     public async getBatchImport(batchId: string): Promise<MemoryBatchImport> {
@@ -1892,6 +2616,23 @@ export class FileMemoryService
         request: DocumentIngestRequest,
         signal?: AbortSignal,
     ): Promise<DocumentIngestResult> {
+        const jobId = randomUUID();
+        return runWithSearchTiming(jobId, "memory.ingestion", () => {
+            const admittedAt = currentSearchTraceId()
+                ? performance.now()
+                : undefined;
+            return timeSearchStage("ingestion.admission", () =>
+                this.acceptDocument(request, signal, jobId, admittedAt),
+            );
+        });
+    }
+
+    private async acceptDocument(
+        request: DocumentIngestRequest,
+        signal: AbortSignal | undefined,
+        jobId: string,
+        admittedAt: number | undefined,
+    ): Promise<DocumentIngestResult> {
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
         if (
@@ -1910,8 +2651,46 @@ export class FileMemoryService
             );
         }
         const content = contentFor(request);
-        const contentHash = request.source.contentHash ?? hashContent(content);
-        if (contentHash !== hashContent(content)) {
+        if (
+            request.source.authoredAt !== undefined &&
+            request.source.temporalContext !== undefined
+        )
+            throw new Error(
+                "Supply authoredAt or explicit temporal scopes, not both",
+            );
+        if (request.source.authoredAt !== undefined) {
+            parseTemporalValue(request.source.authoredAt);
+        }
+        const suppliedTemporalContext =
+            request.source.temporalContext ??
+            (request.source.authoredAt === undefined
+                ? temporalContextFromHeaders(content)
+                : {
+                      version: 1 as const,
+                      scopes: [
+                          {
+                              ownerId: "document",
+                              start: 0,
+                              end: content.length,
+                              messageTime: request.source.authoredAt,
+                          },
+                      ],
+                  });
+        if (suppliedTemporalContext !== undefined) {
+            request = {
+                ...request,
+                source: {
+                    ...request.source,
+                    temporalContext: normalizeTemporalContext(
+                        suppliedTemporalContext,
+                        content.length,
+                    ),
+                },
+            };
+        }
+        const computedContentHash = hashContent(content);
+        const contentHash = request.source.contentHash ?? computedContentHash;
+        if (contentHash !== computedContentHash) {
             throw new Error("The supplied content hash does not match content");
         }
         const sourceId = request.source.sourceId ?? randomUUID();
@@ -1922,9 +2701,9 @@ export class FileMemoryService
         const revisionId = revisionDigest(
             contentHash,
             request.source.assets ?? [],
+            request.source.temporalContext,
         );
         request = structuredClone(request);
-        const jobId = randomUUID();
         const timestamp = now();
         const job: IngestionJobStatus = {
             jobId,
@@ -1938,6 +2717,14 @@ export class FileMemoryService
             warnings: [],
         };
         await this.saveJob(job);
+        const {
+            text: _text,
+            markdown: _markdown,
+            html: _html,
+            assets: _assets,
+            ...sourceScope
+        } = request.source;
+        this.pendingSourceScopes.set(jobId, { ...sourceScope, sourceId });
         const controller = new AbortController();
         this.controllers.set(jobId, controller);
         signal?.addEventListener(
@@ -1952,25 +2739,44 @@ export class FileMemoryService
             job.jobId,
             "memory.ingestion",
             () =>
-                this.enqueueIngestion(request.corpusId, async () => {
-                    const ingest = () =>
-                        timeSearchStage("ingestion.total", () =>
-                            this.processIngestion(
-                                request,
-                                content,
-                                contentHash,
-                                sourceId,
-                                revisionId,
-                                job,
-                                controller.signal,
-                            ),
-                        );
-                    await (this.wikiBudget
-                        ? runWithRequestBudget(
-                              new RequestBudget(this.wikiBudget),
-                              ingest,
-                          )
-                        : ingest());
+                this.ingestionGroups.submit({
+                    request,
+                    content,
+                    contentHash,
+                    sourceId,
+                    revisionId,
+                    job,
+                    signal: controller.signal,
+                    execute: async () => {
+                        const ingest = () =>
+                            runWithSearchTiming(
+                                job.jobId,
+                                "memory.ingestion",
+                                () =>
+                                    timeSearchStage("ingestion.total", () =>
+                                        this.processIngestion(
+                                            request,
+                                            content,
+                                            contentHash,
+                                            sourceId,
+                                            revisionId,
+                                            job,
+                                            controller.signal,
+                                        ),
+                                    ),
+                                {
+                                    corpusId: request.corpusId,
+                                    sourceId,
+                                    revisionId,
+                                },
+                            );
+                        await (this.wikiBudget
+                            ? runWithRequestBudget(
+                                  new RequestBudget(this.wikiBudget),
+                                  ingest,
+                              )
+                            : ingest());
+                    },
                 }),
             { corpusId: request.corpusId, sourceId, revisionId },
         )
@@ -1990,7 +2796,25 @@ export class FileMemoryService
                 );
                 if (forgotten) throw error;
             })
-            .finally(() => this.controllers.delete(jobId));
+            .finally(() => {
+                this.pendingSourceScopes.delete(jobId);
+                this.controllers.delete(jobId);
+                if (admittedAt !== undefined) {
+                    runWithSearchTiming(jobId, "memory.ingestion", () =>
+                        recordSearchTiming(
+                            "ingestion.admissionThroughCompletion",
+                            performance.now() - admittedAt,
+                            {
+                                complete: job.state === "complete",
+                                cancelled: job.state === "cancelled",
+                                failed: job.state === "failed",
+                                warningCount: job.warnings.length,
+                            },
+                            job.state === "complete" ? "success" : "error",
+                        ),
+                    );
+                }
+            });
         this.indexedReads.add(work);
         void work.then(
             () => this.indexedReads.delete(work),
@@ -2009,6 +2833,39 @@ export class FileMemoryService
             state: "accepted",
             statusUri: `typeagent-memory://jobs/${jobId}`,
         };
+    }
+
+    public withIngestionGroup(
+        operation: () => Promise<void>,
+        expectedItems?: number,
+    ): Promise<void> {
+        return this.ingestionGroups.run(operation, expectedItems);
+    }
+
+    private async dispatchIngestionGroup(
+        entries: AcceptedIngestion[],
+    ): Promise<void> {
+        const corpusId = entries[0]!.request.corpusId;
+        if (entries.some((entry) => entry.request.corpusId !== corpusId)) {
+            await Promise.all(
+                entries.map((entry) =>
+                    this.enqueueIngestion(
+                        entry.request.corpusId,
+                        entry.execute,
+                    ),
+                ),
+            );
+            return;
+        }
+        await this.enqueueIngestion(corpusId, async () => {
+            if (
+                entries.length > 1 &&
+                !this.wikiBudget &&
+                (await this.processIngestionGroup(corpusId, entries))
+            )
+                return;
+            for (const entry of entries) await entry.execute();
+        });
     }
 
     public async replaceSource(
@@ -2070,10 +2927,7 @@ export class FileMemoryService
                 confirmationToken,
                 expiresAt,
             };
-            await writeJsonAtomic(
-                this.manifestPath(corpusId),
-                candidateManifest,
-            );
+            await this.writeManifest(corpusId, candidateManifest);
             runtime.manifest = candidateManifest;
             preview = {
                 corpusId,
@@ -2140,12 +2994,14 @@ export class FileMemoryService
                 })),
             };
             delete candidateManifest.pendingSourceForget;
-            await writeJsonAtomic(
-                this.manifestPath(request.corpusId),
-                candidateManifest,
-            );
+            await this.writeManifest(request.corpusId, candidateManifest);
             runtime.manifest = candidateManifest;
             this.viewBuilds.forget(request.corpusId, request.sourceId);
+            for (const work of this.topicSummaryWork.values())
+                if (work.corpusId === request.corpusId)
+                    work.controller.abort(
+                        new ViewBuildStaleError("Source removal authorized"),
+                    );
             this.controllers
                 .get(`synopsis:${request.corpusId}:${request.sourceId}`)
                 ?.abort(new ViewBuildStaleError("Source removal authorized"));
@@ -2169,6 +3025,11 @@ export class FileMemoryService
             }
         });
         await this.batchStore.cancelSource(request.corpusId, request.sourceId);
+        await Promise.allSettled(
+            [...this.topicSummaryWork.values()]
+                .filter((work) => work.corpusId === request.corpusId)
+                .map((work) => work.promise),
+        );
         return this.enqueueWrite(
             request.corpusId,
             async () => {
@@ -2189,93 +3050,14 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<SourceForgetResult> {
-        const removal = runtime.manifest.authorizedSourceRemoval;
-        if (!removal)
-            throw new Error("No authorized source removal to recover");
-        const sourceId = removal.sourceId;
-        this.viewBuilds.forget(corpusId, sourceId);
-        const candidateManifest = structuredClone(runtime.manifest);
-        const retained = candidateManifest.sources.some(
-            (source) => source.sourceId === sourceId,
+        return this.withViewIndexRemoval(corpusId, runtime, () =>
+            this.completeAuthorizedSourceRemovalLocked(corpusId, runtime),
         );
-        candidateManifest.sources = candidateManifest.sources.filter(
-            (item) => item.sourceId !== sourceId,
-        );
-        if (candidateManifest.knowledgeSuppressions)
-            candidateManifest.knowledgeSuppressions =
-                candidateManifest.knowledgeSuppressions.filter(
-                    (item) => item.sourceId !== sourceId,
-                );
-        const forgottenReference = opaqueChangeReference(
-            corpusId,
-            "source",
-            sourceId,
-        );
-        candidateManifest.changes = pruneChangeReceipts(
-            candidateManifest.changes,
-        ).filter((receipt) => receipt.sourceId !== forgottenReference);
-        if (
-            !candidateManifest.changes.some(
-                (receipt) =>
-                    receipt.operation === "forget" &&
-                    receipt.sourceId === forgottenReference,
-            )
-        )
-            candidateManifest.changes.push(
-                createChangeReceipt(corpusId, "forget", sourceId, {
-                    sources: 1,
-                    revisions: removal.revisions.length,
-                    knowledge: 0,
-                }),
-            );
-        await this.viewStore.forgetSource(corpusId, sourceId);
-        if (retained) {
-            await this.rebuildAndActivate(
-                corpusId,
-                runtime,
-                candidateManifest,
-                new AbortController().signal,
-            );
-        } else if (runtime.manifest.indexGeneration) {
-            await this.removeInactiveIndexGenerations(
-                corpusId,
-                runtime.manifest.indexGeneration,
-            );
-        } else {
-            throw new Error(
-                "Authorized source removal lacks a committed source-index generation",
-            );
-        }
-        for (const revision of removal.revisions) {
-            if (!revision.hasAssets) continue;
-            await this.assetStore.removeRevision({
-                corpusId,
-                sourceId,
-                revisionId: revision.revisionId,
-            });
-        }
-        await this.viewStore.markSourceRevisionStale(corpusId, sourceId);
-        await this.batchStore.purge(corpusId, sourceId);
-        await this.purgeSourceJobDiagnostics(corpusId, sourceId);
-        for (const key of this.wikiMaintenanceFailures.keys())
-            if (key.startsWith(`${corpusId}:`))
-                this.wikiMaintenanceFailures.delete(key);
-        const complete = structuredClone(runtime.manifest);
-        delete complete.authorizedSourceRemoval;
-        await writeJsonAtomic(this.manifestPath(corpusId), complete);
-        runtime.manifest = complete;
-        this.resumeBatchMaintenance(corpusId);
-        return {
-            corpusId,
-            sourceId,
-            deletedRevisionCount: removal.revisions.length,
-            indexVersion: this.indexVersion(runtime.manifest),
-        };
     }
 
     public async reindexCorpus(
         corpusId: string,
-        signal: AbortSignal = new AbortController().signal,
+        signal: AbortSignal = this.maintenance.signal,
     ): Promise<ReindexResult> {
         return this.reindex(corpusId, undefined, signal);
     }
@@ -2283,7 +3065,7 @@ export class FileMemoryService
     public async reindexSource(
         corpusId: string,
         sourceId: string,
-        signal: AbortSignal = new AbortController().signal,
+        signal: AbortSignal = this.maintenance.signal,
     ): Promise<ReindexResult> {
         validateIdentifier("source ID", sourceId);
         return this.reindex(corpusId, sourceId, signal);
@@ -2506,14 +3288,7 @@ export class FileMemoryService
                     ? {}
                     : { metadata: structuredClone(request.metadata) }),
             };
-            await mkdir(path.dirname(this.eventsPath(request.corpusId)), {
-                recursive: true,
-            });
-            await appendFile(
-                this.eventsPath(request.corpusId),
-                `${JSON.stringify(event)}\n`,
-                "utf8",
-            );
+            await this.eventStore(request.corpusId).append(event);
             runtime.events.push(event);
             runtime.eventIdempotency.set(key, event);
             result = { event: structuredClone(event), replayed: false };
@@ -2528,14 +3303,33 @@ export class FileMemoryService
         await this.initialize();
         validateIdentifier("corpus ID", corpusId);
         validateIdentifier("event ID", eventId);
-        const runtime = await this.getCorpusRuntime(corpusId);
-        return runtime.access.read(async () => {
-            const event = runtime.events.find(
-                (item) => item.eventId === eventId,
-            );
-            if (event && isSuppressedEvent(runtime, event))
-                throw new Error("Canonical event evidence is suppressed");
-            return event === undefined ? undefined : structuredClone(event);
+        return this.corpusAccess(corpusId).read(async () => {
+            const manifest =
+                this.corpora.get(corpusId)?.manifest ??
+                (await this.readSerializedManifest(corpusId));
+            if (!manifest) throw new Error(`Unknown corpus '${corpusId}'`);
+            this.assertRemovalComplete({ manifest });
+            const store = this.eventStore(corpusId);
+            const event = await store.get(eventId);
+            if (!event) return undefined;
+            this.validateStoredEvent(event, corpusId);
+            let suppressionState: EventSuppressionState | undefined =
+                this.corpora.get(corpusId);
+            if (!suppressionState) {
+                const suppressions = await store.suppressions();
+                for (const record of suppressions)
+                    this.validateStoredEventSuppression(record);
+                suppressionState = {
+                    eventSuppressions: [],
+                    suppressedEventKeys: new Set(),
+                    suppressedConversations: new Set(),
+                    suppressedTurns: new Set(),
+                };
+                this.setEventSuppressions(suppressionState, suppressions);
+            }
+            return isSuppressedEvent(suppressionState, event)
+                ? undefined
+                : event;
         });
     }
 
@@ -2652,7 +3446,7 @@ export class FileMemoryService
             throw new Error("At least one event forget selector is required");
         }
         let result: MemoryEventForgetResult | undefined;
-        await this.enqueueWrite(request.corpusId, async () => {
+        await this.enqueueViewIndexRemoval(request.corpusId, async () => {
             const runtime = await this.getCorpusRuntime(request.corpusId);
             const deleted = runtime.events.filter(
                 (event) =>
@@ -2710,7 +3504,7 @@ export class FileMemoryService
                     request.corpusId,
                     runtime,
                     candidateManifest,
-                    new AbortController().signal,
+                    this.maintenance.signal,
                 );
             }
             if (
@@ -2760,6 +3554,9 @@ export class FileMemoryService
     private async searchDocuments(
         request: MemorySearchRequest,
     ): Promise<MemorySearchResult> {
+        const temporalContext = normalizeQueryTemporalContext(
+            request.temporalContext,
+        );
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
         validateSearchDateRange(request);
@@ -2771,88 +3568,42 @@ export class FileMemoryService
             const limit = Math.max(1, Math.min(request.limit ?? 10, 100));
             let candidates: CorpusIndexMatch[] = request.indexedFragments
                 ? []
-                : await runtime.index.search(query, limit * 4);
+                : await runtime.index.search(
+                      query,
+                      limit * 4,
+                      undefined,
+                      request.temporalContext,
+                  );
             let fragmentLimited = false;
+            let indexedSelection: IndexedSelectionDiagnostics | undefined;
             if (request.indexedFragments) {
                 if (!runtime.index.readFragments)
                     throw new Error(
                         "This index does not support bounded indexed fragments",
                     );
-                const nominated = runtime.manifest.sources
-                    .filter(
-                        (source) =>
-                            (!request.sourceIds ||
-                                request.sourceIds.includes(source.sourceId)) &&
-                            (!request.sourceTypes ||
-                                request.sourceTypes.includes(
-                                    source.sourceType,
-                                )) &&
-                            (request.tags ?? []).every((tag) =>
-                                source.tags?.includes(tag),
-                            ) &&
-                            source.revisions.some(
-                                (revision) =>
-                                    revision.revisionId ===
-                                        source.activeRevisionId &&
-                                    revision.state === "ready" &&
-                                    matchesSearchDate(revision, request),
-                            ),
-                    )
-                    .slice(-32);
+                const nominated = runtime.manifest.sources.filter(
+                    (source) =>
+                        matchesSearchSource(source, request) &&
+                        source.revisions.some(
+                            (revision) =>
+                                revision.revisionId ===
+                                    source.activeRevisionId &&
+                                revision.state === "ready" &&
+                                matchesSearchDate(revision, request),
+                        ),
+                );
                 const selection = await runtime.index.readFragments({
                     query,
-                    terms: [
-                        ...new Set(
-                            query
-                                .toLowerCase()
-                                .match(/[\p{L}\p{N}][\p{L}\p{N}-]*/gu) ?? [
-                                query.slice(0, 200),
-                            ],
-                        ),
-                    ]
-                        .filter(
-                            (term) =>
-                                term.length <= 200 &&
-                                !new Set([
-                                    "what",
-                                    "which",
-                                    "does",
-                                    "about",
-                                    "with",
-                                    "from",
-                                    "have",
-                                    "that",
-                                    "this",
-                                    "their",
-                                    "were",
-                                    "when",
-                                    "where",
-                                    "should",
-                                    "would",
-                                    "could",
-                                    "how",
-                                    "why",
-                                    "the",
-                                    "and",
-                                    "for",
-                                    "are",
-                                    "can",
-                                    "was",
-                                    "not",
-                                    "did",
-                                    "its",
-                                    "is",
-                                    "to",
-                                    "of",
-                                    "in",
-                                    "a",
-                                    "an",
-                                ]).has(term),
-                        )
-                        .slice(0, 8),
+                    ...(temporalContext ? { temporalContext } : {}),
+                    terms: indexedQueryTerms(query),
                     sourceIds: nominated.map((item) => item.sourceId),
+                    maxFragments: Math.min(limit, 12),
+                    ...(request.includeDiagnostics
+                        ? { includeDiagnostics: true }
+                        : {}),
                 });
                 candidates = selection.fragments;
+                indexedSelection = selection.diagnostics;
                 fragmentLimited = fragmentLimited || selection.limited;
             }
             const matches = this.toEvidence(
@@ -2862,7 +3613,15 @@ export class FileMemoryService
                 request,
                 limit,
             );
+            if (indexedSelection) {
+                indexedSelection.deliveredFragmentCount = matches.length;
+                indexedSelection.responseChars = matches.reduce(
+                    (total, item) => total + item.snippet.length,
+                    0,
+                );
+            }
             return {
+                ...(indexedSelection ? { indexedSelection } : {}),
                 query,
                 matches,
                 warnings: [
@@ -2900,15 +3659,6 @@ export class FileMemoryService
         >,
         limit: number,
     ): MemoryEvidence[] {
-        const sourceIds =
-            request.sourceIds === undefined
-                ? undefined
-                : new Set(request.sourceIds);
-        const sourceTypes =
-            request.sourceTypes === undefined
-                ? undefined
-                : new Set(request.sourceTypes);
-        const requestedTags = request.tags ?? [];
         let usedCharacters = 0;
         const maxCharacters = request.maxResponseChars ?? 50_000;
         const matches: MemoryEvidence[] = [];
@@ -2924,10 +3674,7 @@ export class FileMemoryService
                 revision === undefined ||
                 source.activeRevisionId !== revision.revisionId ||
                 !matchesSearchDate(revision, request) ||
-                (sourceIds !== undefined && !sourceIds.has(source.sourceId)) ||
-                (sourceTypes !== undefined &&
-                    !sourceTypes.has(source.sourceType)) ||
-                requestedTags.some((tag) => !source.tags?.includes(tag))
+                !matchesSearchSource(source, request)
             ) {
                 continue;
             }
@@ -2951,6 +3698,13 @@ export class FileMemoryService
                     ? {}
                     : { locator: candidate.locator }),
                 snippet: candidate.snippet,
+                ...(candidate.temporalContext
+                    ? {
+                          temporalContext: structuredClone(
+                              candidate.temporalContext,
+                          ),
+                      }
+                    : {}),
                 score: candidate.score,
                 sourceType: source.sourceType,
                 ...(revision.capturedAt === undefined
@@ -2974,11 +3728,17 @@ export class FileMemoryService
             ...capabilities,
             features: {
                 ...capabilities.features,
+                scopedKnowledgeGraphs: true,
                 sourceSynopses: this.sourceSynopsesEnabled,
+                agentSessionImportTypes: this.agentSessionImportsEnabled
+                    ? ["agent-session-jsonl", "copilot-session-jsonl"]
+                    : [],
             },
             ...(this.viewDrafts
                 ? {
                       derivedViews: {
+                          knowledge: true as const,
+                          integratedAnswering: true as const,
                           builds: true as const,
                           editMerging: true as const,
                           maintenance: true as const,
@@ -2993,11 +3753,13 @@ export class FileMemoryService
                               "projectBrief",
                               "timeline",
                               "wiki",
+                              "schemaView",
                           ] as Array<
                               | "troubleshootingGuide"
                               | "projectBrief"
                               | "timeline"
                               | "wiki"
+                              | "schemaView"
                           >,
                           drafts: true as const,
                           history: true as const,
@@ -3022,7 +3784,7 @@ export class FileMemoryService
     public async listViews(corpusId: string): Promise<ViewSnapshot> {
         const runtime = await this.requireViews(corpusId);
         return runtime.access.read(() =>
-            this.viewStore.withReadSnapshot(corpusId, () =>
+            this.viewStore.withInventorySnapshot(corpusId, () =>
                 this.listViewSnapshot(corpusId),
             ),
         );
@@ -3075,7 +3837,7 @@ export class FileMemoryService
     ): Promise<Array<[ViewVersion, ViewVersion]>> {
         const runtime = await this.requireViews(corpusId);
         return runtime.access.read(() =>
-            this.viewStore.withReadSnapshot(corpusId, () =>
+            this.viewStore.withInventorySnapshot(corpusId, () =>
                 this.consolidationPairs(corpusId, targetId),
             ),
         );
@@ -3087,7 +3849,7 @@ export class FileMemoryService
         currentViews: ViewVersion[],
     ): Promise<NonNullable<ViewSnapshot["wikiFamily"]>> {
         const family = await this.viewStore.getWikiFamily(corpusId, kind);
-        const jobs = await this.viewStore.listViewBuilds(corpusId);
+        const jobs = await this.viewStore.listViewInventoryBuilds(corpusId);
         const active = jobs.some(
             (job) =>
                 job.state === "running" &&
@@ -3099,7 +3861,7 @@ export class FileMemoryService
                             : "informational-project-summary-v1"),
                 ),
         );
-        const latest = new Map<string, ViewBuildTargetResult>();
+        const latest = new Map<string, ViewInventoryBuild["results"][number]>();
         for (const job of jobs.sort((a, b) =>
             b.updatedAt.localeCompare(a.updatedAt),
         ))
@@ -3161,7 +3923,7 @@ export class FileMemoryService
 
     private async familyConflictResolution(
         corpusId: string,
-        result: ViewBuildTargetResult,
+        result: ViewInventoryBuild["results"][number],
         jobId: string,
         currentViews: ViewVersion[],
     ): Promise<"unresolved" | "ready" | "indexPending"> {
@@ -3184,8 +3946,9 @@ export class FileMemoryService
             conflict.jobId !== jobId ||
             conflict.human.viewId !== result.viewId ||
             conflict.human.revisionId !== conflict.expectedRevisionId ||
-            conflict.input.fingerprint !== result.snapshot.fingerprint ||
-            !sameViewBuildEvidence(conflict.input, result.snapshot)
+            conflict.input.fingerprint !== result.inputFingerprint ||
+            viewBuildEvidenceFingerprint(conflict.input) !==
+                result.evidenceFingerprint
         )
             return "unresolved";
         const current = await this.familyResolutionVersion(
@@ -3277,6 +4040,1499 @@ export class FileMemoryService
         }
     }
 
+    public async listQuestions(corpusId: string): Promise<QuestionInventory> {
+        const runtime = await this.requireViews(corpusId);
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(corpusId, async () => {
+                const snapshot = await this.viewStore.listViews(corpusId);
+                const failure = this.schemaMaintenanceFailures.get(corpusId);
+                return {
+                    head: snapshot.head,
+                    items: questionInventory(snapshot),
+                    ...(failure ? { maintenanceError: failure.message } : {}),
+                };
+            }),
+        );
+    }
+
+    public async listQuestionSummaries(
+        request: QuestionSummaryRequest,
+    ): Promise<QuestionSummaryPage> {
+        validateInventoryPage(request);
+        if (
+            request.answerFilter !== undefined &&
+            !["open", "answered"].includes(request.answerFilter)
+        )
+            throw new Error("Question answerFilter must be open or answered");
+        if (
+            request.attentionOnly !== undefined &&
+            typeof request.attentionOnly !== "boolean"
+        )
+            throw new Error("Question attentionOnly must be a boolean");
+        const inventory = await this.listQuestions(request.corpusId);
+        const query = request.query?.toLowerCase() ?? "";
+        const items = inventory.items
+            .map(questionSummary)
+            .filter(
+                (question) =>
+                    (!request.viewId || question.viewId === request.viewId) &&
+                    (!request.answerFilter ||
+                        (question.details.answerState === "answered") ===
+                            (request.answerFilter === "answered")) &&
+                    (!request.attentionOnly ||
+                        questionNeedsAttention(question)) &&
+                    `${question.slot.question} ${question.viewTitle}`
+                        .toLowerCase()
+                        .includes(query),
+            )
+            .sort(
+                (a, b) =>
+                    b.attentionScore - a.attentionScore ||
+                    a.viewId.localeCompare(b.viewId) ||
+                    a.slot.id.localeCompare(b.slot.id),
+            );
+        return {
+            ...pageItems(
+                items,
+                request.pageSize ?? 25,
+                request.continuationToken,
+            ),
+            head: inventory.head,
+            ...(inventory.maintenanceError
+                ? { maintenanceError: inventory.maintenanceError }
+                : {}),
+        };
+    }
+
+    public async getQuestion(
+        request: QuestionReadRequest,
+    ): Promise<import("./schemaViewTypes.js").MemoryQuestion | undefined> {
+        const runtime = await this.requireViews(request.corpusId);
+        validateIdentifier("view ID", request.viewId);
+        validateIdentifier("slot ID", request.slotId);
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(request.corpusId, async () => {
+                const view = await this.viewStore.getView({
+                    corpusId: request.corpusId,
+                    viewId: request.viewId,
+                });
+                if (!view) return undefined;
+                return questionInventory({ head: null, views: [view] }).find(
+                    (question) => question.slot.id === request.slotId,
+                );
+            }),
+        );
+    }
+
+    public async requestAcquisition(
+        request: AcquisitionRequestInput,
+    ): Promise<AcquisitionRequest> {
+        await this.requireViews(request.corpusId);
+        const policy = this.acquisitionPolicy;
+        if (
+            !policy?.toolsEnabled ||
+            request.principalId !== policy.principalId ||
+            request.policyId !== policy.policyId
+        )
+            throw new Error(
+                "External acquisition requires explicit host authorization for this principal, policy and outbound arguments",
+            );
+        return this.enqueueWrite(request.corpusId, async () => {
+            const views = (await this.viewStore.listViews(request.corpusId))
+                .views;
+            const tags = new Set<string>();
+            const projects = new Set<string>();
+            for (const consumer of request.consumers) {
+                const view = views.find(
+                    (view) => view.viewId === consumer.viewId,
+                );
+                const scope = view?.definition.maintenance?.scope;
+                if (
+                    !scope ||
+                    scope.mode !== "scopedSources" ||
+                    (scope.sourceTypes && !scope.sourceTypes.includes("text"))
+                )
+                    throw new Error(
+                        "Acquisition consumers require an explicit dynamic source scope admitting text results; pinned/current-source scopes are not widened",
+                    );
+                for (const tag of scope.tags ?? []) tags.add(tag);
+                if (scope.project !== undefined) projects.add(scope.project);
+            }
+            if (projects.size > 1)
+                throw new Error(
+                    "Acquisition consumers have incompatible project scopes",
+                );
+            const {
+                sourceTags: _tags,
+                sourceProject: _project,
+                ...authorized
+            } = request;
+            const derived: AcquisitionRequestInput = {
+                ...authorized,
+                ...(tags.size ? { sourceTags: [...tags].sort() } : {}),
+                ...(projects.size ? { sourceProject: [...projects][0] } : {}),
+            };
+            if (!policy.authorize(derived))
+                throw new Error(
+                    "Host policy rejected outbound acquisition arguments",
+                );
+            const readiness = await this.inspectAcquisition(derived);
+            if (!readiness.authorityValid)
+                throw new Error(
+                    "Acquisition consumers or source scope are obsolete",
+                );
+            return this.acquisition.add(derived);
+        });
+    }
+
+    public async listAcquisitions(
+        corpusId: string,
+    ): Promise<AcquisitionRequest[]> {
+        const runtime = await this.requireViews(corpusId);
+        return runtime.access.read(() => this.acquisition.list(corpusId));
+    }
+
+    public async cancelAcquisition(request: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<AcquisitionRequest> {
+        await this.requireViews(request.corpusId);
+        await this.acquisition.cancel(request.corpusId, request.requestId);
+        const updated = (await this.acquisition.list(request.corpusId)).find(
+            (entry) => entry.requestId === request.requestId,
+        );
+        if (!updated) throw new Error("Acquisition request is unavailable");
+        return updated;
+    }
+
+    public async runAcquisitions(
+        corpusId: string,
+    ): Promise<AcquisitionRequest[]> {
+        await this.requireViews(corpusId);
+        await this.acquisition.runOnce(corpusId);
+        return this.listAcquisitions(corpusId);
+    }
+
+    public async startAcquisitionPeriodic(
+        options: AcquisitionPeriodicOptions,
+    ): Promise<void> {
+        for (const corpusId of options.corpusIds)
+            await this.requireViews(corpusId);
+        this.acquisition.startPeriodic(options);
+    }
+
+    private async inspectAcquisition(
+        request: AcquisitionRequestInput,
+    ): Promise<AcquisitionReadiness> {
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        this.assertRemovalComplete(runtime);
+        const policy = this.acquisitionPolicy;
+        let authorityValid =
+            !!policy?.toolsEnabled &&
+            request.principalId === policy.principalId &&
+            request.policyId === policy.policyId &&
+            policy.authorize(request);
+        const views = (await this.viewStore.listViews(request.corpusId)).views;
+        const relevant = new Map<
+            string,
+            { sourceId: string; revisionId: string }
+        >();
+        const pendingJobIds = new Set<string>();
+        let scopeEvaluated = true;
+        const consumers = request.consumers.map((consumer) => {
+            const view = views.find(
+                (view) =>
+                    view.viewId === consumer.viewId &&
+                    view.state !== "archived",
+            );
+            const slot = view?.definition.schemaView?.slots.find(
+                (slot) => slot.id === consumer.slotId,
+            );
+            const section =
+                view?.content.kind === "schemaView"
+                    ? view.content.sections.find(
+                          (section) => section.id === consumer.slotId,
+                      )
+                    : undefined;
+            if (
+                !view ||
+                !slot ||
+                !section ||
+                slot.approval !== "approved" ||
+                questionContractRevision(view.definition, slot) !==
+                    consumer.definitionRevision
+            ) {
+                authorityValid = false;
+                return { ...consumer, status: "obsolete" as const };
+            }
+            const definition = derivedDefinitionInput(view);
+            const maintenance = definition.maintenance;
+            const selected =
+                maintenance && maintenance.scope.mode !== "pinned"
+                    ? runtime.manifest.sources
+                          .filter((source) =>
+                              maintenanceScopeMatches(maintenance, source),
+                          )
+                          .map((source) => ({
+                              sourceId: source.sourceId,
+                              revisionId: source.activeRevisionId,
+                          }))
+                    : definition.selector.sources;
+            for (const source of selected)
+                relevant.set(`${source.sourceId}:${source.revisionId}`, source);
+            if (
+                view.state === "stale" ||
+                viewHash(
+                    [...selected].sort((a, b) =>
+                        a.sourceId.localeCompare(b.sourceId),
+                    ),
+                ) !==
+                    viewHash(
+                        [...section.details.evaluatedSources].sort((a, b) =>
+                            a.sourceId.localeCompare(b.sourceId),
+                        ),
+                    )
+            )
+                scopeEvaluated = false;
+            for (const jobId of this.pendingAcquisitionJobs(
+                request.corpusId,
+                view,
+                selected,
+                runtime,
+            ))
+                pendingJobIds.add(jobId);
+            const resolved = resolveQuestion(
+                slot,
+                section.details.candidates,
+                section.details.evaluatedSources,
+            );
+            return {
+                ...consumer,
+                status:
+                    resolved.answerState === "answered" &&
+                    resolved.freshness === "current"
+                        ? ("resolved" as const)
+                        : ("missing" as const),
+            };
+        });
+        const pendingBatchIds: string[] = [];
+        for (const pending of await this.batchStore.pendingSourceScopes(
+            request.corpusId,
+        )) {
+            if (
+                request.consumers.some((consumer) => {
+                    const view = views.find(
+                        (view) => view.viewId === consumer.viewId,
+                    );
+                    return (
+                        view &&
+                        this.matchesAcquisitionSource(
+                            view,
+                            pending.source,
+                            request.corpusId,
+                        )
+                    );
+                }) &&
+                !pendingBatchIds.includes(pending.batchId)
+            )
+                pendingBatchIds.push(pending.batchId);
+        }
+        const newest = Math.max(
+            0,
+            ...[...relevant.values()].map((selected) => {
+                const source = runtime.manifest.sources.find(
+                    (source) => source.sourceId === selected.sourceId,
+                );
+                const revision = source?.revisions.find(
+                    (revision) => revision.revisionId === selected.revisionId,
+                );
+                return (
+                    Date.parse(
+                        revision?.indexedAt ?? revision?.capturedAt ?? "",
+                    ) || 0
+                );
+            }),
+        );
+        if (Date.now() - newest < (policy?.graceMs ?? 1000))
+            scopeEvaluated = false;
+        return {
+            authorityValid,
+            scopeEvaluated,
+            pendingJobIds: [...pendingJobIds],
+            pendingBatchIds,
+            consumers,
+        };
+    }
+
+    private matchesAcquisitionSource(
+        view: ViewVersion,
+        source: DocumentIngestRequest["source"],
+        corpusId: string,
+    ): boolean {
+        const maintenance = view.definition.maintenance;
+        if (!maintenance || maintenance.scope.mode === "pinned")
+            return view.definition.selector.sources.some(
+                (entry) => entry.sourceId === source.sourceId,
+            );
+        return maintenanceScopeMatches(maintenance, {
+            corpusId,
+            sourceId: source.sourceId ?? "unassigned",
+            activeRevisionId: "pending",
+            sourceType: source.sourceType,
+            title: source.title,
+            ...(source.tags ? { tags: source.tags } : {}),
+            ...(source.metadata ? { metadata: source.metadata } : {}),
+        });
+    }
+
+    private pendingAcquisitionJobs(
+        corpusId: string,
+        view: ViewVersion,
+        selected: Array<{ sourceId: string; revisionId: string }>,
+        runtime: CorpusRuntime,
+    ): string[] {
+        const pending: string[] = [];
+        for (const job of this.jobs.values()) {
+            if (
+                job.corpusId !== corpusId ||
+                ["complete", "partial", "failed", "cancelled"].includes(
+                    job.state,
+                )
+            )
+                continue;
+            const source =
+                this.pendingSourceScopes.get(job.jobId) ??
+                runtime.manifest.sources.find(
+                    (source) => source.sourceId === job.sourceId,
+                );
+            if (
+                selected.some(
+                    (selected) => selected.sourceId === job.sourceId,
+                ) ||
+                (source &&
+                    this.matchesAcquisitionSource(view, source, corpusId))
+            )
+                pending.push(job.jobId);
+        }
+        return pending;
+    }
+
+    private async captureKnowledge(
+        corpusId: string,
+    ): Promise<{ sources: KnowledgeDocument[]; indexVersion: string }> {
+        const runtime = await this.getCorpusRuntime(corpusId);
+        return runtime.access.read(async () => ({
+            indexVersion: this.indexVersion(runtime.manifest),
+            sources: runtime.manifest.sources.flatMap((source) => {
+                const revision = source.revisions.find(
+                    (revision) =>
+                        revision.revisionId === source.activeRevisionId &&
+                        revision.state === "ready",
+                );
+                if (
+                    !revision ||
+                    runtime.manifest.knowledgeSuppressions?.some(
+                        (entry) => entry.sourceId === source.sourceId,
+                    )
+                )
+                    return [];
+                return [
+                    {
+                        sourceId: source.sourceId,
+                        revisionId: revision.revisionId,
+                        title: source.title,
+                        content: revision.content,
+                    },
+                ];
+            }),
+        }));
+    }
+
+    private async isPolicyQuestion(
+        corpusId: string,
+        viewId: string,
+    ): Promise<boolean> {
+        const { discovery } = await this.viewStore.getKnowledgeState(corpusId);
+        return (
+            discovery.policy === "sourceObserved" &&
+            discovery.routes.some(
+                (route) => route.viewId === viewId && !route.detached,
+            )
+        );
+    }
+
+    public async getKnowledgeStatus(
+        corpusId: string,
+    ): Promise<KnowledgeStatus> {
+        await this.requireViews(corpusId);
+        const status = await this.viewStore.getKnowledgeState(corpusId);
+        for (let index = 0; index < status.checkpoints.length; index++)
+            if (status.checkpoints[index].state === "ready")
+                status.checkpoints[index] = await this.knowledge.get({
+                    corpusId,
+                    checkpointId: status.checkpoints[index].checkpointId,
+                });
+        return status;
+    }
+
+    public async updateKnowledgeDiscovery(
+        request: KnowledgeDiscoveryUpdate,
+    ): Promise<KnowledgeStatus> {
+        await this.requireViews(request.corpusId);
+        return this.knowledge.update(request);
+    }
+
+    public async createKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRequest,
+    ): Promise<KnowledgeCheckpoint> {
+        await this.requireViews(request.corpusId);
+        return this.knowledge.create(request);
+    }
+
+    public async getKnowledgeCheckpoint(
+        request: KnowledgeCheckpointRead,
+    ): Promise<KnowledgeCheckpoint> {
+        await this.requireViews(request.corpusId);
+        return this.knowledge.get(request);
+    }
+
+    public async waitForKnowledgeCheckpoint(
+        request: KnowledgeCheckpointWait,
+    ): Promise<KnowledgeCheckpoint> {
+        await this.requireViews(request.corpusId);
+        return this.knowledge.wait(request);
+    }
+
+    private async admitKnowledgeQuestion(
+        corpusId: string,
+        input: CorpusQuestionInput,
+        proposal: CorpusQuestionProposal,
+        signal: AbortSignal,
+    ): Promise<string | undefined> {
+        signal.throwIfAborted();
+        validateQuestionSlot(proposal.slot);
+        return this.enqueueWrite(corpusId, async () => {
+            signal.throwIfAborted();
+            const status = await this.viewStore.getKnowledgeState(corpusId);
+            if (status.discovery.policy === "off") return undefined;
+            const snapshot = await this.viewStore.listViews(corpusId);
+            const slots = snapshot.views
+                .filter((view) => view.state !== "archived")
+                .flatMap((view) => view.definition.schemaView?.slots ?? []);
+            if (
+                slots.some(
+                    (slot) =>
+                        questionContractIdentity(slot) ===
+                        questionContractIdentity(proposal.slot),
+                )
+            )
+                return undefined;
+            const liveRoutes = status.discovery.routes.filter(
+                (route) =>
+                    !route.detached &&
+                    snapshot.views.some(
+                        (view) =>
+                            view.viewId === route.viewId &&
+                            view.state !== "archived",
+                    ),
+            );
+            if (proposal.utility) {
+                const dimensions = [
+                    "consumerValue",
+                    "substance",
+                    "novelty",
+                    "durability",
+                ];
+                if (
+                    Object.keys(proposal.utility).length !==
+                        dimensions.length ||
+                    dimensions.some(
+                        (dimension) =>
+                            !Object.prototype.hasOwnProperty.call(
+                                proposal.utility,
+                                dimension,
+                            ),
+                    ) ||
+                    Object.values(proposal.utility).some(
+                        (score) =>
+                            !Number.isInteger(score) || score < 0 || score > 2,
+                    )
+                )
+                    throw new Error("Invalid question utility assessment");
+            }
+            const noUtility =
+                proposal.utility &&
+                Object.values(proposal.utility).some((score) => score === 0);
+            if (noUtility) {
+                await this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                    const receipt = state.discovery.receipts.find(
+                        (entry) => entry.fingerprint === input.fingerprint,
+                    );
+                    if (!receipt)
+                        throw new Error(
+                            "Question admission receipt is missing",
+                        );
+                    receipt.reason = [
+                        receipt.reason,
+                        `${proposal.slot.question}: deferred for insufficient utility`,
+                    ]
+                        .filter(Boolean)
+                        .join("; ");
+                });
+                return undefined;
+            }
+            if (liveRoutes.length >= knowledgeLimits.liveSlots) {
+                const error = "Policy-admitted live question ceiling reached";
+                await this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                    state.discovery.error = error;
+                });
+                return undefined;
+            }
+            const runtime = await this.getCorpusRuntime(corpusId);
+            for (const citation of proposal.slot.discoveryCitations) {
+                const supplied = input.passages.some(
+                    (p) =>
+                        p.sourceId === citation.sourceId &&
+                        p.revisionId === citation.revisionId &&
+                        p.locator === citation.locator &&
+                        p.excerpt === citation.excerpt,
+                );
+                const source = runtime.manifest.sources.find(
+                    (source) => source.sourceId === citation.sourceId,
+                );
+                const revision = source?.revisions.find(
+                    (revision) =>
+                        revision.revisionId === source.activeRevisionId &&
+                        revision.state === "ready",
+                );
+                const match = /^chars:(\d+)-(\d+)$/.exec(citation.locator);
+                if (
+                    !supplied ||
+                    !revision ||
+                    revision.revisionId !== citation.revisionId ||
+                    !match ||
+                    revision.content.slice(
+                        Number(match[1]),
+                        Number(match[2]),
+                    ) !== citation.excerpt
+                )
+                    throw new ViewBuildStaleError(
+                        "Discovery evidence changed or is not an exact supplied original passage",
+                    );
+            }
+            if (!proposal.slot.discoveryCitations.length)
+                throw new Error(
+                    "Corpus discovery requires original-source citations",
+                );
+            const viewId = `observed-${corpusQuestionIdentity(proposal).slice(0, 32)}`;
+            if (snapshot.views.some((view) => view.viewId === viewId))
+                return undefined;
+            const slot = policyAdmittedSlot(
+                proposal,
+                input,
+                status.discovery.policy,
+                this.viewAdapter.identity,
+            );
+            const selected = [
+                ...new Map(
+                    slot.discoveryCitations.map((citation) => [
+                        citation.sourceId,
+                        {
+                            sourceId: citation.sourceId,
+                            revisionId: citation.revisionId,
+                        },
+                    ]),
+                ).values(),
+            ].sort((a, b) => a.sourceId.localeCompare(b.sourceId));
+            const schemaView = {
+                construction: "schema-defined-v1" as const,
+                title: proposal.subject,
+                template: "questions-v1" as const,
+                slots: [slot],
+                discovery: { enabled: false, maxProposals: 0 },
+            };
+            const definition: ViewDefinitionInput = {
+                viewId,
+                kind: "schemaView",
+                selector: { kind: "sources", sources: selected },
+                maintenance: {
+                    schemaVersion: 1,
+                    scope: {
+                        mode: "currentSources",
+                        sourceIds: selected.map((source) => source.sourceId),
+                    },
+                },
+                schemaView,
+            };
+            validateSchemaViewDefinition(definition);
+            status.discovery.routes.push({
+                viewId,
+                subject: proposal.subject,
+                terms: deriveDiscoveryRouteTerms(
+                    proposal.subject,
+                    proposal.slot.question,
+                ),
+                sourceIds: selected.map((source) => source.sourceId),
+            });
+            const receipt = status.discovery.receipts.find(
+                (receipt) => receipt.fingerprint === input.fingerprint,
+            );
+            if (!receipt)
+                throw new Error("Discovery admission receipt is missing");
+            receipt.viewIds.push(viewId);
+            await this.viewStore.saveViewDraft(
+                {
+                    corpusId,
+                    viewId,
+                    expectedHead: snapshot.head,
+                    expectedVersion: 0,
+                    definition,
+                    content: emptySchemaView(schemaView, selected),
+                    relationships: [],
+                },
+                undefined,
+                status.discovery,
+            );
+            this.scheduleSchemaMaintenance(corpusId);
+            return viewId;
+        });
+    }
+
+    private async routeKnowledgeSources(
+        corpusId: string,
+        sources: KnowledgeDocument[],
+    ): Promise<void> {
+        const status = await this.viewStore.getKnowledgeState(corpusId);
+        for (const route of status.discovery.routes) {
+            if (route.detached) continue;
+            const view = await this.viewStore.getView({
+                corpusId,
+                viewId: route.viewId,
+            });
+            if (!view || view.state === "archived") continue;
+            const scope = view.definition.maintenance?.scope;
+            if (
+                scope?.mode !== "currentSources" ||
+                viewHash([...scope.sourceIds].sort()) !==
+                    viewHash([...route.sourceIds].sort())
+            ) {
+                await this.enqueueWrite(corpusId, () =>
+                    this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                        const current = state.discovery.routes.find(
+                            (entry) => entry.viewId === route.viewId,
+                        );
+                        if (current) current.detached = true;
+                    }),
+                );
+                continue;
+            }
+            const questions = view.definition.schemaView?.slots
+                .map((slot) => slot.question)
+                .join(" ");
+            const effectiveTerms = questions
+                ? deriveDiscoveryRouteTerms(route.subject, questions)
+                : [];
+            if (viewHash(effectiveTerms) !== viewHash(route.terms))
+                await this.enqueueWrite(corpusId, () =>
+                    this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                        const current = state.discovery.routes.find(
+                            (entry) => entry.viewId === route.viewId,
+                        );
+                        if (current) current.terms = effectiveTerms;
+                    }),
+                );
+            if (!effectiveTerms.length) continue;
+            if (effectiveTerms.length === 1 && effectiveTerms[0].length < 4)
+                continue;
+            const additions = sources.filter((source) => {
+                if (route.sourceIds.includes(source.sourceId)) return false;
+                const normalizedSource = ` ${source.content
+                    .toLocaleLowerCase()
+                    .replace(/[^\p{L}\p{N}]+/gu, " ")
+                    .trim()} `;
+                return (
+                    effectiveTerms.filter((term) =>
+                        normalizedSource.includes(` ${term} `),
+                    ).length >= Math.min(2, effectiveTerms.length)
+                );
+            });
+            if (!additions.length) continue;
+            const ids = [
+                ...new Set([
+                    ...route.sourceIds,
+                    ...additions.map((source) => source.sourceId),
+                ]),
+            ].sort();
+            if (ids.length > 32) {
+                await this.enqueueWrite(corpusId, () =>
+                    this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                        state.discovery.error = `Question source membership overflow for ${route.viewId}; explicit partition required`;
+                    }),
+                );
+                continue;
+            }
+            await this.enqueueWrite(corpusId, async () => {
+                const snapshot = await this.viewStore.listViews(corpusId);
+                const current = snapshot.views.find(
+                    (entry) => entry.viewId === route.viewId,
+                );
+                if (!current || current.version !== view.version)
+                    throw new ViewBuildStaleError(
+                        "Question scope changed during routing",
+                    );
+                await this.viewStore.updateViewMaintenance({
+                    corpusId,
+                    viewId: route.viewId,
+                    expectedHead: snapshot.head,
+                    expectedVersion: current.version,
+                    maintenance: {
+                        schemaVersion: 1,
+                        scope: { mode: "currentSources", sourceIds: ids },
+                    },
+                });
+                await this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                    const current = state.discovery.routes.find(
+                        (entry) => entry.viewId === route.viewId,
+                    );
+                    if (current) current.sourceIds = ids;
+                });
+            });
+            this.scheduleSchemaMaintenance(corpusId);
+        }
+    }
+
+    private async waitKnowledgeBuild(
+        job: ViewBuildJob,
+        signal: AbortSignal,
+        checkpoint: KnowledgeCheckpoint,
+    ): Promise<ViewBuildJob> {
+        await this.enqueueWrite(checkpoint.corpusId, () =>
+            this.viewStore.updateKnowledgeState(
+                checkpoint.corpusId,
+                (state) => {
+                    const stored = state.checkpoints.find(
+                        (entry) =>
+                            entry.checkpointId === checkpoint.checkpointId,
+                    );
+                    if (!stored)
+                        throw new ViewBuildStaleError(
+                            "Knowledge checkpoint was removed",
+                        );
+                    if (stored.state === "superseded") return;
+                    stored.jobIds = [...new Set([...stored.jobIds, job.jobId])];
+                    stored.viewIds = [
+                        ...new Set([
+                            ...stored.viewIds,
+                            ...job.results.map((result) => result.viewId),
+                        ]),
+                    ];
+                    stored.updatedAt = now();
+                },
+            ),
+        );
+        if (job.state === "running") {
+            await this.viewBuilds.wait(job.jobId, signal);
+            const current = await this.getViewBuild(job);
+            if (!current)
+                throw new ViewBuildStaleError("Knowledge build was removed");
+            if (current.state === "running")
+                throw new ViewBuildStaleError(
+                    "Knowledge build has no active execution",
+                );
+            job = current;
+        }
+        return job;
+    }
+
+    private async maintainKnowledgeCheckpoint(
+        checkpoint: KnowledgeCheckpoint,
+        signal: AbortSignal,
+    ): Promise<KnowledgeMaintenanceResult> {
+        const { corpusId } = checkpoint;
+        const results: KnowledgeMaintenanceResult[] = [];
+        const pipelines = new Set(
+            checkpoint.families.map(
+                (family) =>
+                    ({
+                        questions: "schema-defined-v1",
+                        wiki: "informational-wiki-v1",
+                        projects: "informational-project-summary-v1",
+                        topics: "topics-v1",
+                    })[family],
+            ),
+        );
+        this.knowledgeMaintenance.add(corpusId);
+        try {
+            for (const job of await this.listViewBuilds(corpusId)) {
+                if (
+                    job.state === "running" &&
+                    (job.results.some(
+                        (result) =>
+                            pipelines.has(result.snapshot.pipeline) &&
+                            result.snapshot.inputs.some((input) =>
+                                checkpoint.sources.some(
+                                    (source) =>
+                                        source.sourceId === input.sourceId,
+                                ),
+                            ),
+                    ) ||
+                        (checkpoint.families.includes("topics") &&
+                            job.results.some(
+                                (result) => result.viewId === "topic-snapshot",
+                            )))
+                ) {
+                    const finished = await this.waitKnowledgeBuild(
+                        job,
+                        signal,
+                        checkpoint,
+                    );
+                    if (
+                        finished.results.every(
+                            (entry) =>
+                                entry.snapshot.pipeline === "topics-v1" &&
+                                entry.state === "stale",
+                        )
+                    )
+                        continue;
+                    results.push({
+                        state:
+                            finished.state === "complete" ? "ready" : "failed",
+                        jobIds: [job.jobId],
+                        viewIds: finished.results
+                            .filter((entry) => entry.revisionId)
+                            .map((entry) => entry.viewId),
+                        reasons:
+                            finished.state === "complete"
+                                ? []
+                                : finished.results.map((entry) => entry.reason),
+                    });
+                }
+            }
+            if (checkpoint.families.includes("questions")) {
+                const snapshot = await this.listViews(corpusId);
+                const questions = snapshot.views.filter(
+                    (view) =>
+                        view.content.kind === "schemaView" &&
+                        view.state !== "archived" &&
+                        view.definition.selector.sources.some((source) =>
+                            checkpoint.sources.some(
+                                (selected) =>
+                                    source.sourceId === selected.sourceId,
+                            ),
+                        ),
+                );
+                for (const view of questions) {
+                    results.push(
+                        await this.maintainKnowledgeQuestion(
+                            checkpoint,
+                            view,
+                            signal,
+                        ),
+                    );
+                }
+            }
+            for (const family of checkpoint.families)
+                if (family !== "questions")
+                    results.push(
+                        await this.maintainKnowledgeFamily(
+                            checkpoint,
+                            family,
+                            signal,
+                        ),
+                    );
+            const result = knowledgeMaintenanceResult(results);
+            const snapshot = await this.listViews(corpusId);
+            result.viewRevisions = snapshot.views
+                .filter((view) => result.viewIds.includes(view.viewId))
+                .map(({ viewId, revisionId }) => ({ viewId, revisionId }));
+            return result;
+        } finally {
+            this.knowledgeMaintenance.delete(corpusId);
+        }
+    }
+
+    private async maintainKnowledgeQuestion(
+        checkpoint: KnowledgeCheckpoint,
+        view: ViewVersion,
+        signal: AbortSignal,
+    ): Promise<KnowledgeMaintenanceResult> {
+        signal.throwIfAborted();
+        const result: KnowledgeMaintenanceResult = {
+            state: "ready",
+            viewIds: [],
+            jobIds: [],
+            reasons: [],
+        };
+        const { corpusId } = checkpoint;
+        if (
+            view.definition.selector.sources.some(
+                (source) =>
+                    !checkpoint.sources.some(
+                        (selected) =>
+                            selected.sourceId === source.sourceId &&
+                            selected.revisionId === source.revisionId,
+                    ),
+            )
+        ) {
+            return {
+                ...result,
+                state: "partial",
+                reasons: [
+                    `View ${view.viewId} depends on evidence outside the captured scope`,
+                ],
+            };
+        }
+        const plan = await this.planViewMaintenance({
+            corpusId,
+            viewIds: [view.viewId],
+        });
+        const target = plan.targets[0];
+        if (target.state === "blocked")
+            return { ...result, state: "blocked", reasons: [target.reason] };
+        if (target.state === "rebuild") {
+            const build = await this.maintainViews({
+                corpusId,
+                expectedHead: plan.expectedHead,
+                targets: [
+                    {
+                        viewId: view.viewId,
+                        expectedVersion: target.expectedVersion,
+                    },
+                ],
+            });
+            if (build.job) {
+                const finished = await this.waitKnowledgeBuild(
+                    build.job,
+                    signal,
+                    checkpoint,
+                );
+                result.jobIds.push(build.job.jobId);
+                if (finished.state !== "complete")
+                    return {
+                        ...result,
+                        state: "failed",
+                        reasons: finished.results.map((entry) => entry.reason),
+                    };
+            }
+        }
+        const latest = await this.listViews(corpusId);
+        const current = latest.views.find(
+            (entry) => entry.viewId === view.viewId,
+        );
+        if (!current)
+            throw new ViewBuildStaleError(
+                "Question was removed during maintenance",
+            );
+        if (await this.isPolicyQuestion(corpusId, current.viewId)) {
+            const publication = await this.publishView({
+                corpusId,
+                viewId: current.viewId,
+                revisionId: current.revisionId,
+                expectedHead: latest.head!,
+                expectedVersion: current.version,
+            });
+            if (publication.indexState !== "ready")
+                return {
+                    ...result,
+                    state: "failed",
+                    reasons: [publication.reason],
+                };
+        }
+        result.viewIds.push(view.viewId);
+        return result;
+    }
+
+    private async maintainKnowledgeFamily(
+        checkpoint: KnowledgeCheckpoint,
+        family: Exclude<KnowledgeFamily, "questions">,
+        signal: AbortSignal,
+    ): Promise<KnowledgeMaintenanceResult> {
+        signal.throwIfAborted();
+        const result: KnowledgeMaintenanceResult = {
+            state: "ready",
+            viewIds: [],
+            jobIds: [],
+            reasons: [],
+        };
+        const { corpusId } = checkpoint;
+        const capture = await this.captureKnowledge(corpusId);
+        if (
+            capture.sources.some(
+                (source) =>
+                    !checkpoint.sources.some(
+                        (selected) => selected.sourceId === source.sourceId,
+                    ),
+            )
+        ) {
+            return {
+                ...result,
+                state: "partial",
+                reasons: [
+                    `${family} corpus family includes sources outside checkpoint scope`,
+                ],
+            };
+        }
+        if (family !== "topics")
+            return this.maintainKnowledgePages(checkpoint, family, signal);
+        const topic = await this.viewStore.getTopicState(corpusId);
+        const runtime = await this.getCorpusRuntime(corpusId);
+        if (
+            !topic.building &&
+            !reconcileTopicFamily(
+                topic.family,
+                runtime.manifest.indexGeneration,
+                topic.snapshot?.inputFingerprint,
+                this.topicFingerprint(runtime),
+            ).dirty
+        )
+            return result;
+        const job = await this.rebuildTopics(corpusId);
+        result.jobIds.push(job.jobId);
+        if (
+            (await this.waitKnowledgeBuild(job, signal, checkpoint)).state !==
+            "complete"
+        )
+            return {
+                ...result,
+                state: "failed",
+                reasons: ["Topic maintenance did not complete"],
+            };
+        return result;
+    }
+
+    private async maintainKnowledgePages(
+        checkpoint: KnowledgeCheckpoint,
+        family: "wiki" | "projects",
+        signal: AbortSignal,
+    ): Promise<KnowledgeMaintenanceResult> {
+        const { corpusId } = checkpoint;
+        const result: KnowledgeMaintenanceResult = {
+            state: "ready",
+            viewIds: [],
+            jobIds: [],
+            reasons: [],
+        };
+        for (let page = 0; checkpoint.producerComplete || page < 3; page++) {
+            signal.throwIfAborted();
+            const familyState = await this.viewStore.getWikiFamily(
+                corpusId,
+                family,
+            );
+            if (familyState.error)
+                return {
+                    ...result,
+                    state: "blocked",
+                    reasons: [familyState.error],
+                };
+            if (!familyState.dirty) return result;
+            const snapshot = await this.listViews(corpusId);
+            const build = await this.maintainViews({
+                corpusId,
+                expectedHead: snapshot.head,
+                family,
+                operation: "update",
+            });
+            const progressed =
+                build.job && !result.jobIds.includes(build.job.jobId);
+            if (build.job) {
+                result.jobIds.push(build.job.jobId);
+                const finished = await this.waitKnowledgeBuild(
+                    build.job,
+                    signal,
+                    checkpoint,
+                );
+                result.viewIds.push(
+                    ...finished.results
+                        .filter((entry) => entry.revisionId)
+                        .map((entry) => entry.viewId),
+                );
+                if (finished.state !== "complete")
+                    return {
+                        ...result,
+                        state: "failed",
+                        reasons: finished.results.map((entry) => entry.reason),
+                    };
+            }
+            const next = await this.viewStore.getWikiFamily(corpusId, family);
+            if (
+                next.dirty &&
+                !progressed &&
+                next.cursor === familyState.cursor &&
+                next.indexVersion === familyState.indexVersion
+            )
+                return {
+                    ...result,
+                    state: "partial",
+                    reasons: [
+                        `${family} maintenance made no progress; pending content remains deferred`,
+                    ],
+                };
+        }
+        if ((await this.viewStore.getWikiFamily(corpusId, family)).dirty)
+            return {
+                ...result,
+                state: "partial",
+                reasons: [
+                    `${family} maintenance cursor remains after bounded checkpoint work`,
+                ],
+            };
+        return result;
+    }
+
+    private async recoverKnowledge(corpusId: string): Promise<void> {
+        const knowledge = await this.viewStore.getKnowledgeState(corpusId);
+        if (
+            !knowledge.checkpoints.some((checkpoint) =>
+                ["pending", "running"].includes(checkpoint.state),
+            ) &&
+            !knowledge.discovery.receipts.some(
+                (receipt) => receipt.state === "running",
+            )
+        )
+            return;
+        await this.enqueueWrite(corpusId, () =>
+            this.viewStore.updateKnowledgeState(corpusId, (state) => {
+                for (const checkpoint of state.checkpoints)
+                    if (["pending", "running"].includes(checkpoint.state)) {
+                        checkpoint.state = "cancelled";
+                        checkpoint.reasons = [
+                            "Knowledge work was interrupted by service restart",
+                        ];
+                    }
+                for (const receipt of state.discovery.receipts)
+                    if (receipt.state === "running") {
+                        receipt.state = "failed";
+                        receipt.reason =
+                            "Discovery was interrupted; explicit bounded retry required";
+                        state.discovery.error = receipt.reason;
+                    }
+            }),
+        );
+    }
+
+    public async getViewPage(
+        request: SchemaViewPageRequest,
+    ): Promise<SchemaViewPage> {
+        const runtime = await this.requireViews(request.corpusId);
+        return runtime.access.read(async () => {
+            const view = await this.viewStore.getView(request);
+            if (!view || view.state === "archived")
+                throw new Error("View page is unavailable");
+            return renderViewPage(view, request);
+        });
+    }
+
+    public async editQuestion(
+        request: QuestionEditRequest,
+    ): Promise<ViewHistoryEntry> {
+        const view = await this.getView(request);
+        if (!view) throw new Error("Question view is unavailable");
+        return this.saveViewDraft(editSchemaQuestion(view, request));
+    }
+
+    public async proposeSchemaView(
+        request: SchemaViewProposalRequest,
+    ): Promise<ViewHistoryEntry> {
+        await this.requireViews(request.corpusId);
+        validateIdentifier("view ID", request.viewId);
+        if (request.expectedVersion !== 0)
+            throw new Error(
+                "Assisted authoring creates a new proposal; edit existing questions explicitly",
+            );
+        if (
+            typeof request.specification !== "string" ||
+            !request.specification.trim() ||
+            request.specification.length > schemaViewLimits.specificationChars
+        )
+            throw new Error("Specification requires 1 to 16000 characters");
+        if (!request.maintenance)
+            throw new Error("Authoring requires an explicit source scope");
+        if (!this.viewAdapter.proposeSchema)
+            throw new Error("Schema authoring is unsupported by this host");
+        const schemaView = await this.viewAdapter.proposeSchema(
+            request.specification,
+            AbortSignal.timeout(120000),
+        );
+        for (const slot of schemaView.slots) {
+            slot.approval = "proposed";
+            slot.discoveryCitations = [];
+            slot.rubric.requireConfirmation = true;
+        }
+        schemaView.discovery = { enabled: false, maxProposals: 0 };
+        const definition: ViewDefinitionInput = {
+            viewId: request.viewId,
+            kind: "schemaView",
+            selector: { kind: "sources", sources: [] },
+            maintenance: request.maintenance,
+            schemaView,
+        };
+        validateSchemaViewDefinition(definition);
+        return this.saveViewDraft({
+            corpusId: request.corpusId,
+            viewId: request.viewId,
+            expectedHead: request.expectedHead,
+            expectedVersion: 0,
+            definition,
+            content: emptySchemaView(schemaView),
+            relationships: [],
+        });
+    }
+
+    public async discoverSchemaQuestions(
+        request: SchemaQuestionDiscoveryRequest,
+    ): Promise<ViewHistoryEntry> {
+        const runtime = await this.requireViews(request.corpusId);
+        const view = await this.getView(request);
+        if (
+            !view ||
+            view.version !== request.expectedVersion ||
+            view.content.kind !== "schemaView"
+        )
+            throw new Error(
+                "Discovery requires the current exact schema view version",
+            );
+        const definition = structuredClone(derivedDefinitionInput(view));
+        const schema = definition.schemaView!;
+        if (
+            !schema.discovery.enabled ||
+            !this.viewAdapter.discoverSchemaQuestions
+        )
+            throw new Error(
+                "Question discovery is disabled or unsupported by this host",
+            );
+        const remaining =
+            schema.discovery.maxProposals -
+            schema.slots.filter((slot) => slot.discoveryCitations.length)
+                .length;
+        if (remaining <= 0)
+            throw new Error("Question discovery allowance is exhausted");
+        const plan = this.resolveMaintenanceTarget(
+            definition,
+            runtime,
+            {},
+            view,
+        );
+        if (plan.state === "blocked")
+            throw new Error(
+                `Discovery source scope is unavailable: ${plan.reason}`,
+            );
+        if (plan.state === "rebuild")
+            throw new Error(
+                "Reconcile the current question source scope before discovering additional questions",
+            );
+        definition.selector = plan.selector ?? definition.selector;
+        const input = await runtime.access.read(() =>
+            this.snapshotViewTarget(
+                request.corpusId,
+                { definition, expectedVersion: view.version },
+                {},
+            ),
+        );
+        const proposals = await this.viewAdapter.discoverSchemaQuestions(
+            input,
+            AbortSignal.timeout(120000),
+        );
+        if (
+            proposals.length > remaining ||
+            schema.slots.length + proposals.length > schemaViewLimits.slots
+        )
+            throw new Error(
+                "Question discovery exceeded its cumulative allowance",
+            );
+        const known = new Set(
+            schema.slots.flatMap((slot) => [
+                slot.id,
+                slot.question.trim().toLowerCase(),
+            ]),
+        );
+        for (const proposed of proposals) {
+            validateQuestionSlot(proposed);
+            if (
+                known.has(proposed.id) ||
+                known.has(proposed.question.trim().toLowerCase())
+            )
+                continue;
+            if (!proposed.discoveryCitations.length)
+                throw new Error(
+                    "Discovered questions require original-source evidence",
+                );
+            const slot = { ...proposed, approval: "proposed" as const };
+            schema.slots.push(slot);
+            known.add(slot.id);
+            known.add(slot.question.trim().toLowerCase());
+        }
+        schema.discovery.lastEvaluatedScope = viewHash(
+            definition.selector.sources,
+        );
+        const content = emptySchemaView(schema, definition.selector.sources);
+        for (const section of content.sections) {
+            const prior = view.content.sections.find(
+                (entry) => entry.id === section.id,
+            );
+            if (prior)
+                Object.assign(
+                    section,
+                    questionSection(
+                        schema.slots.find((slot) => slot.id === section.id)!,
+                        resolveQuestion(
+                            schema.slots.find(
+                                (slot) => slot.id === section.id,
+                            )!,
+                            prior.details.candidates,
+                            definition.selector.sources,
+                        ),
+                    ),
+                );
+        }
+        content.citations = schemaCitations(schema, content.sections);
+        return this.saveViewDraft({
+            corpusId: request.corpusId,
+            viewId: request.viewId,
+            expectedHead: request.expectedHead,
+            expectedVersion: request.expectedVersion,
+            definition,
+            content,
+            relationships: authoredRelationships(view),
+        });
+    }
+
+    private scheduleSchemaMaintenance(corpusId: string): void {
+        if (
+            this.closed ||
+            !this.viewDrafts ||
+            this.schemaTimers.has(corpusId) ||
+            this.knowledgeMaintenance.has(corpusId)
+        )
+            return;
+        const timer = setTimeout(() => {
+            this.schemaTimers.delete(corpusId);
+            if (this.closed) return;
+            if (this.schemaWork.has(corpusId)) {
+                this.scheduleSchemaMaintenance(corpusId);
+                return;
+            }
+            const work = this.reconcileSchemaViews(corpusId)
+                .then(
+                    () => {
+                        this.schemaMaintenanceFailures.delete(corpusId);
+                        this.schemaMaintenanceRetries.delete(corpusId);
+                    },
+                    (error: unknown) => {
+                        this.recordSchemaMaintenanceFailure(corpusId, error);
+                    },
+                )
+                .finally(() => this.schemaWork.delete(corpusId));
+            this.schemaWork.set(corpusId, work);
+        }, 250);
+        timer.unref();
+        this.schemaTimers.set(corpusId, timer);
+    }
+
+    private recordSchemaMaintenanceFailure(
+        corpusId: string,
+        error: unknown,
+    ): void {
+        const failure =
+            error instanceof Error ? error : new Error(String(error));
+        if (this.closed && failure.message === "Memory service is closed")
+            return;
+        const manifest = this.corpora.get(corpusId)?.manifest;
+        if (
+            error instanceof ViewBuildStaleError &&
+            (manifest?.authorizedSourceRemoval || manifest?.pendingCorpusClear)
+        ) {
+            this.scheduleSchemaMaintenance(corpusId);
+            return;
+        }
+        const retries = this.schemaMaintenanceRetries.get(corpusId) ?? 0;
+        const stalePlan =
+            error instanceof ViewBuildStaleError &&
+            failure.message ===
+                "Maintenance head or target version changed; inspect a fresh plan";
+        if (
+            (stalePlan ||
+                /^View (history head|version) conflict/.test(
+                    failure.message,
+                )) &&
+            retries < 3
+        ) {
+            this.schemaMaintenanceRetries.set(corpusId, retries + 1);
+            this.scheduleSchemaMaintenance(corpusId);
+            return;
+        }
+        this.schemaMaintenanceFailures.set(corpusId, failure);
+    }
+
+    private async reconcileSchemaViews(corpusId: string): Promise<void> {
+        const snapshot = await this.listViews(corpusId);
+        const views = snapshot.views.filter(
+            (view) =>
+                view.state !== "archived" &&
+                view.definition.schemaView &&
+                view.definition.maintenance,
+        );
+        if (!views.length) return;
+        const jobs = await this.listViewBuilds(corpusId);
+        const active = jobs.some(
+            (job) =>
+                ["queued", "running"].includes(job.state) &&
+                job.results.some((result) =>
+                    views.some((view) => view.viewId === result.viewId),
+                ),
+        );
+        if (active) {
+            this.scheduleSchemaMaintenance(corpusId);
+            return;
+        }
+        const plan = await this.planViewMaintenance({
+            corpusId,
+            viewIds: views.map((view) => view.viewId),
+        });
+        const blocked = plan.targets.find(
+            (target) => target.state === "blocked",
+        );
+        const rebuild = plan.targets.filter(
+            (target) => target.state === "rebuild",
+        );
+        if (rebuild.length) {
+            const failure = rebuild.find((target) =>
+                jobs.some((job) =>
+                    job.results.some(
+                        (result) =>
+                            result.viewId === target.viewId &&
+                            [
+                                "failed",
+                                "blocked",
+                                "conflicted",
+                                "cancelled",
+                                "interrupted",
+                            ].includes(result.state) &&
+                            result.snapshot.maintenance?.fingerprint ===
+                                target.snapshot?.fingerprint,
+                    ),
+                ),
+            );
+            if (failure)
+                throw new Error(
+                    `Question reconciliation for ${failure.viewId} needs an explicit retry or changed evidence; automatic retries are stopped`,
+                );
+            await this.maintainViews({
+                corpusId,
+                expectedHead: plan.expectedHead,
+                targets: rebuild.map((target) => ({
+                    viewId: target.viewId,
+                    expectedVersion: target.expectedVersion,
+                })),
+            });
+            this.scheduleSchemaMaintenance(corpusId);
+            return;
+        }
+        if (blocked)
+            throw new Error(
+                `Question reconciliation blocked: ${blocked.reason}`,
+            );
+    }
+
     public async getSourceViewUsage(
         request: ViewSourceUsageRequest,
     ): Promise<ViewSourceUsagePage> {
@@ -3335,35 +5591,39 @@ export class FileMemoryService
         request: ViewReadRequest,
     ): Promise<ViewVersion | undefined> {
         const runtime = await this.requireViews(request.corpusId);
-        return runtime.access.read(async () => {
-            const view = await this.viewStore.getView(request);
-            if (view?.redirect)
-                return this.readWikiRedirect(
-                    view,
-                    request.revisionId !== undefined,
-                );
-            if (view && !(await this.informationalVersionEligible(view)))
-                return undefined;
-            if (view?.generation && editorialArticle(view.content)) {
-                const snapshot = await this.viewStore.listViews(
-                    request.corpusId,
-                );
-                const eligible = await Promise.all(
-                    snapshot.views.map((entry) =>
-                        this.informationalVersionEligible(entry, entry),
-                    ),
-                );
-                return {
-                    ...view,
-                    protectedTargets: editorialProtection(view),
-                    relatedArticles: relatedEditorialArticles(
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(request.corpusId, async () => {
+                const view = await this.viewStore.getView(request);
+                if (view?.redirect)
+                    return this.readWikiRedirect(
                         view,
-                        snapshot.views.filter((_, index) => eligible[index]),
-                    ),
-                };
-            }
-            return view;
-        });
+                        request.revisionId !== undefined,
+                    );
+                if (view && !(await this.informationalVersionEligible(view)))
+                    return undefined;
+                if (view?.generation && editorialArticle(view.content)) {
+                    const snapshot = await this.viewStore.listViews(
+                        request.corpusId,
+                    );
+                    const eligible = await Promise.all(
+                        snapshot.views.map((entry) =>
+                            this.informationalVersionEligible(entry, entry),
+                        ),
+                    );
+                    return {
+                        ...view,
+                        protectedTargets: editorialProtection(view),
+                        relatedArticles: relatedEditorialArticles(
+                            view,
+                            snapshot.views.filter(
+                                (_, index) => eligible[index],
+                            ),
+                        ),
+                    };
+                }
+                return view;
+            }),
+        );
     }
 
     public async saveViewDraft(
@@ -3396,6 +5656,7 @@ export class FileMemoryService
         }
         if (
             request.definition.maintenance !== undefined &&
+            !(request.content.kind === "schemaView" && !prior) &&
             viewHash(request.definition.maintenance) !==
                 viewHash(prior?.definition.maintenance)
         )
@@ -3410,42 +5671,8 @@ export class FileMemoryService
             throw new Error(
                 "Timeline and wiki drafts must begin with a grounded Build views result",
             );
-        let proof: ViewPublicationProof | undefined;
-        if (prior?.generation?.input) {
-            if (
-                viewHash(prior.definition.selector) !==
-                viewHash(request.definition.selector)
-            )
-                throw new Error(
-                    "Generated guide source selection must change through an explicit rebuild",
-                );
-            const output: ViewSynthesisOutput = {
-                content: request.content,
-                relationships: request.relationships,
-                outcome: prior.generation.outcome ?? "diagnosticOnly",
-                missingEvidence: prior.generation.missingEvidence ?? [
-                    "Human edit retains generation evidence limits",
-                ],
-                ...inventoryEvidence(prior.generation),
-            };
-            validateConstructedGuide(prior.generation.input, output);
-            const support = informationalWiki(output.content)
-                ? undefined
-                : await this.viewAdapter.validate(
-                      prior.generation.input,
-                      output,
-                      new AbortController().signal,
-                  );
-            if (support) {
-                validateSupport(output, support);
-                proof = publicationProof(
-                    prior.generation.input.fingerprint,
-                    output,
-                    support,
-                );
-            }
-        }
-        return this.enqueueWrite(request.corpusId, async () => {
+        const proof = await this.validateDraftGeneration(request, prior);
+        const result = await this.enqueueWrite(request.corpusId, async () => {
             const runtime = await this.getCorpusRuntime(request.corpusId);
             if (informationalWiki(request.content))
                 await this.ensureDocumentIndex(request.corpusId, runtime);
@@ -3518,6 +5745,50 @@ export class FileMemoryService
             await this.markWikiRetrievalChanged(request, prior);
             return saved;
         });
+        if (request.definition.schemaView)
+            this.scheduleSchemaMaintenance(request.corpusId);
+        return result;
+    }
+
+    private async validateDraftGeneration(
+        request: ViewSaveRequest,
+        prior: ViewVersion | undefined,
+    ): Promise<ViewPublicationProof | undefined> {
+        const frozen = prior?.generation?.input;
+        if (!frozen || !prior?.generation) return undefined;
+        if (
+            viewHash(prior.definition.selector) !==
+            viewHash(request.definition.selector)
+        )
+            throw new Error(
+                "Generated guide source selection must change through an explicit rebuild",
+            );
+        const output: ViewSynthesisOutput = {
+            content: request.content,
+            relationships: request.relationships,
+            outcome: prior.generation.outcome ?? "diagnosticOnly",
+            missingEvidence: prior.generation.missingEvidence ?? [
+                "Human edit retains generation evidence limits",
+            ],
+            ...inventoryEvidence(prior.generation),
+        };
+        const validationInput =
+            request.content.kind === "schemaView"
+                ? { ...frozen, definition: request.definition }
+                : frozen;
+        validateConstructedGuide(validationInput, output);
+        if (informationalWiki(output.content)) return undefined;
+        const support = await this.viewAdapter.validate(
+            validationInput,
+            output,
+            this.maintenance.signal,
+        );
+        validateSupport(output, support);
+        if (
+            viewHash(validationInput.definition) !== viewHash(frozen.definition)
+        )
+            return undefined;
+        return publicationProof(frozen.fingerprint, output, support);
     }
 
     private async markWikiRetrievalChanged(
@@ -3568,6 +5839,13 @@ export class FileMemoryService
 
     private async acceptInformationalVersion(view: ViewVersion): Promise<void> {
         if (!informationalWiki(view.content)) return;
+        const publication = await this.viewStore.getViewPublication(view);
+        if (publication.blockedReason) {
+            console.warn(
+                `Informational draft ${view.viewId} saved; publication withheld: ${publication.blockedReason}`,
+            );
+            return;
+        }
         await this.assertViewPublicationFresh(view);
         await this.viewStore.makeInformationalVisible(view);
         await this.indexViewLocked(view);
@@ -3793,6 +6071,7 @@ export class FileMemoryService
 
     private async publishViewLocked(
         request: ViewPublishRequest,
+        signal?: AbortSignal,
     ): Promise<ViewPublicationStatus> {
         const view = await this.viewStore.getView(request);
         if (!view) throw new Error("Publication revision is missing");
@@ -3800,7 +6079,7 @@ export class FileMemoryService
         const publication = await this.viewStore.publishView(request);
         if (publication.indexState === "ready") return publication;
         await this.viewPublicationCheckpoint?.("intent");
-        return this.indexViewLocked(view);
+        return this.indexViewLocked(view, signal);
     }
 
     public async retryViewIndex(
@@ -3850,59 +6129,99 @@ export class FileMemoryService
 
     private async indexViewLocked(
         view: ViewVersion,
+        signal?: AbortSignal,
     ): Promise<ViewPublicationStatus> {
-        const directory = this.viewIndexDirectory(view);
-        const content = viewContentToText(view.content);
+        signal?.throwIfAborted();
+        if (this.closed || this.viewIndexRemovalBarriers.has(view.corpusId))
+            throw new ViewBuildStaleError(
+                "View indexing is closing or being purged",
+            );
+        const runtime = await this.getCorpusRuntime(view.corpusId);
+        const target = await this.viewStore.getView({
+            corpusId: view.corpusId,
+            viewId: view.viewId,
+        });
+        if (!target)
+            throw new ViewBuildStaleError("Current view target is missing");
+        const key = this.viewIndexDirectory(view);
+        let preparation = this.viewIndexPreparations.get(key);
+        if (!preparation) {
+            const controller = new AbortController();
+            const directory = path.join(
+                this.viewIndexStagingDirectory(view.corpusId),
+                randomUUID(),
+            );
+            preparation = {
+                corpusId: view.corpusId,
+                directory,
+                controller,
+                work: Promise.resolve().then(() =>
+                    this.buildViewIndex(
+                        view,
+                        path.join(directory, "index"),
+                        controller.signal,
+                    ),
+                ),
+                installed: false,
+            };
+            this.viewIndexPreparations.set(key, preparation);
+        }
+        const pending = preparation;
+        const cancel = () =>
+            pending.controller.abort(
+                signal?.reason ??
+                    new ViewBuildStaleError("View indexing cancelled"),
+            );
+        signal?.addEventListener("abort", cancel, { once: true });
         try {
-            await mkdir(directory, { recursive: true });
-            const index = this.indexFactory(view.corpusId, directory);
-            await index.rebuild(
-                [
-                    {
-                        source: {
-                            corpusId: view.corpusId,
-                            sourceId: view.viewId,
-                            sourceType: "markdown",
-                            title: view.content.title,
-                            activeRevisionId: view.revisionId,
-                        },
-                        revision: {
-                            revisionId: view.revisionId,
-                            sourceId: view.viewId,
-                            contentHash: viewHash(content),
-                            mimeType: "text/markdown",
-                            pipelineVersion,
-                            state: "ready",
-                        },
-                        content,
-                        pipeline: { mode: "content" },
-                    },
-                ],
-                new AbortController().signal,
-                async () => {},
-            );
-            await stampIndexSchema(directory, "views", true);
-            await writeFile(
-                path.join(directory, "ready"),
-                view.revisionId,
-                "utf8",
-            );
-        } catch (error) {
-            await rm(directory, { recursive: true, force: true });
-            return this.viewStore.updateViewIndex(
+            let error = await runtime.access.outsideWrite(() => pending.work);
+            signal?.throwIfAborted();
+            pending.controller.signal.throwIfAborted();
+            if (this.closed || this.viewIndexRemovalBarriers.has(view.corpusId))
+                throw new ViewBuildStaleError(
+                    "View indexing was closed or purged",
+                );
+            this.assertRemovalComplete(runtime);
+            const current = await this.viewStore.listViews(view.corpusId);
+            if (
+                current.views.find((entry) => entry.viewId === view.viewId)
+                    ?.revisionId !== target.revisionId
+            )
+                throw new ViewBuildStaleError(
+                    "Corpus or view changed during derivative preparation; retry the current exact revision",
+                );
+            // Metadata-only synopsis updates may replace the manifest. Recheck
+            // exact evidence and influence eligibility, not object identity.
+            await this.assertViewPublicationFresh(view);
+            const publication = await this.viewStore.getViewPublication(view);
+            if (publication.blockedReason)
+                throw new Error(publication.blockedReason);
+            if (publication.publishedRevisionId !== view.revisionId)
+                throw new ViewBuildStaleError(
+                    "Publication changed during derivative preparation",
+                );
+            if (pending.installed) return publication;
+            if (!error) {
+                error = await this.installPreparedViewIndex(
+                    pending.directory,
+                    key,
+                );
+                if (!error) await this.viewPublicationCheckpoint?.("index");
+            }
+            const status = await this.viewStore.updateViewIndex(
                 view.corpusId,
                 view.viewId,
                 view.revisionId,
-                `Indexing failed: ${redactRunbookText(error instanceof Error ? error.message : String(error))}`,
+                error,
             );
+            pending.installed = true;
+            return status;
+        } finally {
+            signal?.removeEventListener("abort", cancel);
+            await this.removeViewIndexPreparation(pending.directory);
+            if (this.viewIndexPreparations.get(key) === pending)
+                this.viewIndexPreparations.delete(key);
         }
-
-        await this.viewPublicationCheckpoint?.("index");
-        return this.viewStore.updateViewIndex(
-            view.corpusId,
-            view.viewId,
-            view.revisionId,
-        );
     }
 
     private async informationalIndexReady(view: ViewVersion): Promise<boolean> {
@@ -3923,7 +6242,10 @@ export class FileMemoryService
         );
     }
 
-    private async recoverInformationalEffect(view: ViewVersion): Promise<void> {
+    private async recoverInformationalEffect(
+        view: ViewVersion,
+        signal?: AbortSignal,
+    ): Promise<ViewPublicationStatus> {
         await this.assertViewPublicationFresh(view);
         let publication = await this.viewStore.getViewPublication({
             corpusId: view.corpusId,
@@ -3935,7 +6257,8 @@ export class FileMemoryService
             publication.indexState !== "ready" ||
             !(await this.informationalIndexReady(view))
         )
-            await this.indexViewLocked(view);
+            publication = await this.indexViewLocked(view, signal);
+        return publication;
     }
 
     private async cleanArchivedViewIndexes(corpusId: string): Promise<void> {
@@ -3958,6 +6281,7 @@ export class FileMemoryService
 
     public async searchViews(
         request: ViewSearchRequest,
+        candidateViewIds?: ReadonlySet<string>,
     ): Promise<ViewSearchMatch[]> {
         const runtime = await this.requireViews(request.corpusId);
         if (
@@ -3975,7 +6299,7 @@ export class FileMemoryService
             request.freshness !== "current" ||
             (request.kinds !== undefined &&
                 (!Array.isArray(request.kinds) ||
-                    request.kinds.length > 4 ||
+                    request.kinds.length > 5 ||
                     request.kinds.some(
                         (kind) =>
                             ![
@@ -3983,6 +6307,7 @@ export class FileMemoryService
                                 "projectBrief",
                                 "timeline",
                                 "wiki",
+                                "schemaView",
                             ].includes(kind),
                     ))) ||
             (request.limit !== undefined &&
@@ -4000,6 +6325,8 @@ export class FileMemoryService
                 view,
                 publication,
             } of await this.viewStore.listPublishedViews(request.corpusId)) {
+                if (candidateViewIds && !candidateViewIds.has(current.viewId))
+                    continue;
                 if (current.state === "archived") continue;
                 if (
                     request.kinds &&
@@ -4085,6 +6412,7 @@ export class FileMemoryService
         target: ViewBuildTarget,
         current?: ViewVersion,
         retrieval?: ViewBuildSnapshot["informationalRetrieval"] | false,
+        detachedRetrieval = false,
     ): Promise<ViewBuildSnapshot> {
         if (!this.informationalWikiEnabled)
             throw new Error(
@@ -4138,7 +6466,7 @@ export class FileMemoryService
             wiki.excludedSourceIds,
             retrieval,
         );
-        const selection = await runtime.index.readFragments({
+        const request = {
             terms: [wiki.query, ...wiki.aliases],
             ...(followSources.length ? { followSources } : {}),
             sourceIds: (context?.sources ?? selected)
@@ -4146,7 +6474,10 @@ export class FileMemoryService
                 .filter(
                     (sourceId) => !wiki.excludedSourceIds.includes(sourceId),
                 ),
-        });
+        };
+        const selection = await (detachedRetrieval
+            ? this.detachedInformationalFragments(runtime, request)
+            : runtime.index.readFragments(request));
         if (!selection.fragments.length)
             throw new Error(
                 "No substantive indexed fragments matched this wiki selector",
@@ -4660,21 +6991,20 @@ export class FileMemoryService
             }));
         const { fingerprint: _priorFingerprint, ...checkedInput } = input;
         input.fingerprint = viewHash(checkedInput);
-        const { output, anchors } = preservedCanonicalOutput(
+        const { output: original, anchors } = preservedCanonicalOutput(
             survivor,
             retiring,
         );
-        validateConstructedGuide(input, output);
-        const verification = await abortable(
-            this.viewAdapter.checkWikiConsolidation(
+        const { output, verification } = await abortable(
+            verifyOrRepairWikiConsolidation(
+                this.viewAdapter,
                 input,
-                output,
+                original,
                 assessment,
                 signal,
             ),
             signal,
         );
-        assertEditorialAssessment(verification);
         signal.throwIfAborted();
         const receipt: WikiConsolidationReceipt = {
             identity: viewHash({
@@ -4780,20 +7110,44 @@ export class FileMemoryService
         await this.viewStore.activateWikiRedirect(corpusId, jobId, targetId);
         signal?.throwIfAborted();
         await this.cleanArchivedViewIndexes(corpusId);
-        await this.recoverInformationalEffect(canonical);
-        await this.acknowledgeWikiConsolidation(corpusId, jobId, targetId);
+        const publication = await this.recoverInformationalEffect(
+            canonical,
+            signal,
+        );
+        signal?.throwIfAborted();
+        if (
+            publication.indexState !== "ready" ||
+            publication.publishedRevisionId !== canonical.revisionId ||
+            publication.blockedReason
+        )
+            throw new Error(
+                `Consolidation cannot bind before the current derivative index is ready: ${publication.reason}`,
+            );
+        await this.acknowledgeWikiConsolidation(
+            corpusId,
+            jobId,
+            targetId,
+            canonical.revisionId,
+        );
     }
 
     private async acknowledgeWikiConsolidation(
         corpusId: string,
         jobId: string,
         targetId: string,
+        acceptedRevisionId?: string,
     ): Promise<void> {
         await this.viewStore.updateViewBuild(corpusId, jobId, (current) => {
             const target = current.results.find(
                 (entry) => entry.viewId === targetId,
             );
-            if (!target?.wikiConsolidation)
+            if (
+                !target?.wikiConsolidation ||
+                target.wikiConsolidation.stage === "stale" ||
+                (acceptedRevisionId !== undefined &&
+                    target.wikiConsolidation.acceptedRevisionId !==
+                        acceptedRevisionId)
+            )
                 throw new ViewBuildStaleError(
                     "Consolidation receipt was forgotten",
                 );
@@ -4894,51 +7248,29 @@ export class FileMemoryService
         this.viewBuilds.trackContribution(job.jobId, input);
         await this.checkWikiContributionInput(input);
         signal.throwIfAborted();
-        const candidate = await abortable(
+        let candidate = await abortable(
             this.viewAdapter.generate(input, signal),
             signal,
         );
         signal.throwIfAborted();
         validateConstructedGuide(input, candidate);
-        const { output, conflicts } = mergeView(
-            current,
-            candidate,
-            input.inputs,
-        );
-        let verification = assessment;
-        if (!conflicts.length) {
-            validateConstructedGuide(input, output);
-            const context = wikiPageContext(
+        const prepared = await abortable(
+            prepareWikiContribution(
+                this.viewAdapter,
                 input,
-                {
-                    ...current,
-                    definition: { ...current.definition, ...input.definition },
-                    content: output.content,
-                },
-                undefined,
-                false,
-            );
-            if (!this.viewAdapter.assessWikiSubject)
-                throw new Error(
-                    "Wiki contribution lacks actual-prose coverage checker",
-                );
-            verification = parseWikiAssessment(
-                await abortable(
-                    this.viewAdapter.assessWikiSubject(
-                        input,
-                        [context],
-                        signal,
-                    ),
-                    signal,
-                ),
-                [context],
-                input.wikiContribution?.essentialDistinctions,
-            );
-            if (verification.disposition !== "covered")
-                throw new Error(
-                    "Wiki canonical contribution did not cover all essential old/new distinctions in actual prose",
-                );
-        }
+                candidate,
+                (candidate) => mergeView(current, candidate, input.inputs),
+                signal,
+            ),
+            signal,
+        );
+        candidate = prepared.candidate;
+        const { output, conflicts } = prepared;
+        const verification = conflicts.length
+            ? assessment
+            : prepared.verification;
+        if (!verification)
+            throw new Error("Wiki contribution coverage verification missing");
         await this.enqueueWrite(job.corpusId, async () => {
             signal.throwIfAborted();
             await this.recheckViewInput(result.snapshot);
@@ -5010,8 +7342,19 @@ export class FileMemoryService
             publication.indexState !== "ready" ||
             !(await this.informationalIndexReady(canonical))
         )
-            publication = await this.indexViewLocked(canonical);
+            publication = await this.indexViewLocked(canonical, signal);
         signal.throwIfAborted();
+        await this.recheckViewInput(result.snapshot);
+        await this.checkWikiContributionInput(contribution.input, false);
+        const currentCanonical = await this.viewStore.getView({
+            corpusId: job.corpusId,
+            viewId: canonical.viewId,
+        });
+        if (currentCanonical?.revisionId !== canonical.revisionId)
+            throw new ViewBuildStaleError(
+                "Canonical Wiki contribution changed during derivative preparation",
+            );
+        await this.assertViewPublicationFresh(canonical);
         if (
             publication.indexState !== "ready" ||
             publication.blockedReason ||
@@ -5149,7 +7492,10 @@ export class FileMemoryService
                         target.snapshot.influenceSources = structuredClone(
                             result.snapshot.influenceSources,
                         );
-                    if (assessment.disposition === "covered") {
+                    if (assessment.disposition === "defer") {
+                        target.state = "skipped";
+                        target.reason = `Standalone page deferred for insufficient utility: ${assessment.reason}`;
+                    } else if (assessment.disposition === "covered") {
                         target.state = "skipped";
                         target.reason = `Standalone purpose already covered by ${assessment.canonicalViewId}: ${assessment.reason}`;
                     } else if (assessment.disposition === "ambiguous") {
@@ -5158,6 +7504,25 @@ export class FileMemoryService
                     }
                 },
             );
+            if (assessment.disposition === "defer") {
+                const family = await this.viewStore.getWikiFamily(job.corpusId);
+                const descriptor = family.descriptors.find(
+                    (entry) => entry.viewId === result.viewId,
+                );
+                if (descriptor) {
+                    descriptor.admission = {
+                        generation:
+                            result.snapshot.informationalRetrieval
+                                ?.indexGeneration,
+                        policy: this.wikiAdmissionContext(
+                            (await this.viewStore.listViews(job.corpusId))
+                                .views,
+                        ),
+                        reason: deferredWikiAdmission,
+                    };
+                    await this.viewStore.saveWikiFamily(job.corpusId, family);
+                }
+            }
         });
     }
 
@@ -5198,38 +7563,38 @@ export class FileMemoryService
         corpusId: string,
         kind: "wiki" | "projects" = "wiki",
     ): void {
-        const key = `${corpusId}:${kind}`;
         if (
             !this.informationalWikiEnabled ||
             this.closed ||
-            this.batchStore.hasActiveImports(corpusId) ||
-            this.wikiTimers.has(key)
+            this.ingestionTails.has(corpusId) ||
+            this.knowledgeMaintenance.has(corpusId)
         )
             return;
-        const timer = setTimeout(() => {
-            this.wikiTimers.delete(key);
-            if (this.closed || this.batchStore.hasActiveImports(corpusId))
-                return;
-            const work = this.enqueueWrite(
-                corpusId,
-                async () => {
-                    if (
-                        this.closed ||
-                        this.batchStore.hasActiveImports(corpusId)
-                    )
-                        return;
-                    const runtime = await this.getCorpusRuntime(corpusId, true);
-                    if (runtime.manifest.authorizedSourceRemoval) return;
-                    const family = await this.viewStore.getWikiFamily(
-                        corpusId,
-                        kind,
-                    );
-                    if (!family.enabled || !family.dirty || family.error)
-                        return;
-                    const snapshot = await this.viewStore.listViews(corpusId);
-                    if (this.batchStore.hasActiveImports(corpusId)) return;
-                    try {
-                        await this.maintainWikiFamily(
+        this.maintenance.request(
+            corpusId,
+            kind,
+            this.corpora.get(corpusId)?.manifest.indexGeneration,
+            async (signal) => {
+                const result = await this.enqueueWrite(
+                    corpusId,
+                    async () => {
+                        if (this.maintenance.isDeferred(corpusId)) return;
+                        signal.throwIfAborted();
+                        const runtime = await this.getCorpusRuntime(
+                            corpusId,
+                            true,
+                        );
+                        if (runtime.manifest.authorizedSourceRemoval) return;
+                        const family = await this.viewStore.getWikiFamily(
+                            corpusId,
+                            kind,
+                        );
+                        if (!family.enabled || !family.dirty || family.error)
+                            return;
+                        const snapshot =
+                            await this.viewStore.listViews(corpusId);
+                        if (this.maintenance.isDeferred(corpusId)) return;
+                        return this.maintainWikiFamily(
                             runtime,
                             {
                                 corpusId,
@@ -5239,48 +7604,58 @@ export class FileMemoryService
                             },
                             true,
                         );
-                    } catch (error) {
-                        const family = await this.viewStore.getWikiFamily(
-                            corpusId,
-                            kind,
-                        );
-                        family.dirty = true;
-                        family.error = safeError(error);
-                        await this.viewStore.saveWikiFamily(
-                            corpusId,
-                            family,
-                            kind,
-                        );
-                    }
-                },
-                true,
+                    },
+                    true,
+                );
+                await this.waitForMaintenanceBuild(result, kind, signal);
+            },
+        );
+    }
+
+    private async waitForMaintenanceBuild(
+        result: ViewMaintenanceResult | undefined,
+        family: "wiki" | "projects" | "topics",
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (!result?.job) return;
+        await this.viewBuilds.wait(result.job.jobId, signal);
+        const job = (
+            await this.viewStore.listViewBuilds(result.job.corpusId)
+        ).find((job) => job.jobId === result.job!.jobId);
+        if (!job) return;
+        // Target outcomes remain visible without blocking the family's bounded continuation.
+        for (const target of job.results)
+            this.maintenance.reportFailure(
+                job.corpusId,
+                family,
+                target.viewId,
+                [
+                    "failed",
+                    "cancelled",
+                    "interrupted",
+                    "blocked",
+                    "conflicted",
+                    "stale",
+                ].includes(target.state)
+                    ? `Autonomous maintenance build ${job.state}: ${job.jobId} (${target.state})`
+                    : undefined,
             );
-            this.indexedReads.add(work);
-            void work.then(
-                () => this.indexedReads.delete(work),
-                (error: unknown) => {
-                    this.indexedReads.delete(work);
-                    this.wikiMaintenanceFailures.set(
-                        key,
-                        new Error(safeError(error)),
-                    );
-                },
-            );
-        }, 250);
-        this.wikiTimers.set(key, timer);
     }
 
     private deferBatchMaintenance(
         corpusId: string,
         automatic: boolean,
     ): boolean {
-        return automatic && this.batchStore.hasActiveImports(corpusId);
+        return automatic && this.maintenance.isDeferred(corpusId);
     }
 
     private resumeBatchMaintenance(corpusId: string): void {
-        if (this.closed || this.batchStore.hasActiveImports(corpusId)) return;
+        if (this.closed) return;
+        this.maintenance.wake();
+        this.knowledge.schedule(corpusId);
         const runtime = this.corpora.get(corpusId);
         if (!runtime) return;
+        this.scheduleSourceSynopses(corpusId);
         this.scheduleTopics(corpusId, runtime);
         if (!runtime.index.listSubjects || !runtime.index.readFragments) return;
         for (const kind of ["projects", "wiki"] as const)
@@ -5292,11 +7667,18 @@ export class FileMemoryService
         this.reconciliationTimer = setInterval(() => {
             for (const [corpusId, runtime] of this.corpora) {
                 if (
+                    this.reconciliationWork.has(corpusId) ||
+                    (this.maintenance.isDeferred(corpusId) &&
+                        !runtime.manifest.authorizedSourceRemoval)
+                )
+                    continue;
+                if (
                     !this.informationalWikiEnabled &&
                     !this.sourceSynopsesEnabled &&
                     !runtime.manifest.authorizedSourceRemoval
                 )
                     continue;
+                this.reconciliationWork.add(corpusId);
                 const work = this.enqueueWrite(
                     corpusId,
                     async () => {
@@ -5305,6 +7687,7 @@ export class FileMemoryService
                                 corpusId,
                                 runtime,
                             );
+                        if (this.maintenance.isDeferred(corpusId)) return;
                         this.scheduleSourceSynopses(corpusId);
                         await this.reconcileTopics(corpusId, runtime);
                         if (!this.informationalWikiEnabled) return;
@@ -5328,12 +7711,14 @@ export class FileMemoryService
                 this.indexedReads.add(work);
                 void work.then(
                     () => {
+                        this.reconciliationWork.delete(corpusId);
                         this.indexedReads.delete(work);
                         this.wikiMaintenanceFailures.delete(
                             `${corpusId}:reconciliation`,
                         );
                     },
                     (error: unknown) => {
+                        this.reconciliationWork.delete(corpusId);
                         this.indexedReads.delete(work);
                         this.wikiMaintenanceFailures.set(
                             `${corpusId}:reconciliation`,
@@ -5433,11 +7818,31 @@ export class FileMemoryService
     }
 
     private async assertInfluenceEligible(
-        input?: Pick<ViewBuildSnapshot, "corpusId" | "influenceSources">,
+        input?: Pick<
+            ViewBuildSnapshot,
+            "corpusId" | "influenceSources" | "influenceEvents"
+        >,
     ): Promise<void> {
-        if (!input?.influenceSources?.length) return;
+        if (
+            !input ||
+            (!input.influenceSources?.length && !input.influenceEvents?.length)
+        )
+            return;
         const runtime = await this.getCorpusRuntime(input.corpusId);
-        for (const influence of input.influenceSources) {
+        for (const influence of input.influenceEvents ?? []) {
+            const event = runtime.events.find(
+                (entry) => entry.eventId === influence.eventId,
+            );
+            if (
+                !event ||
+                isSuppressedEvent(runtime, event) ||
+                viewHash(event) !== influence.fingerprint
+            )
+                throw new ViewBuildStaleError(
+                    "Topic event evidence changed or was forgotten",
+                );
+        }
+        for (const influence of input.influenceSources ?? []) {
             const source = runtime.manifest.sources.find(
                 (entry) => entry.sourceId === influence.sourceId,
             );
@@ -5485,7 +7890,7 @@ export class FileMemoryService
         };
         await this.applyInformationalFamilyOperation(request, family);
         if (!family.enabled) return this.viewStore.recordViewMaintenance(plan);
-        const active = await this.viewStore.listViewBuilds(corpusId);
+        const active = await this.viewStore.listViewInventoryBuilds(corpusId);
         if (active.some((job) => job.state === "running"))
             return this.viewStore.recordViewMaintenance(plan);
         if (
@@ -5511,6 +7916,15 @@ export class FileMemoryService
             await this.viewStore.saveWikiFamily(corpusId, family, kind);
             return this.viewStore.recordViewMaintenance(plan);
         }
+        if (
+            !(await this.admitMaintenancePass(
+                corpusId,
+                kind,
+                family,
+                automatic,
+            ))
+        )
+            return this.viewStore.recordViewMaintenance(plan);
         await this.ensureDocumentIndex(corpusId, runtime);
         const page = await runtime.index.listSubjects(
             family.cursor,
@@ -5546,6 +7960,9 @@ export class FileMemoryService
             snapshot.views,
             kind,
         );
+        const familyVersion = viewHash(
+            await this.viewStore.getWikiFamily(corpusId, kind),
+        );
         const { targets, snapshots } = await this.prepareWikiTargets(
             corpusId,
             family,
@@ -5554,6 +7971,13 @@ export class FileMemoryService
             request.operation === "rebuild",
             plan,
             kind,
+            automatic,
+        );
+        await this.assertWikiPlanCurrent(
+            corpusId,
+            kind,
+            familyVersion,
+            snapshot.views,
         );
         // Save discovered identities while leaving unadmitted work retryable.
         await this.viewStore.saveWikiFamily(corpusId, family, kind);
@@ -5575,8 +7999,12 @@ export class FileMemoryService
         if (runtime.manifest.indexGeneration)
             nextFamily.indexVersion = runtime.manifest.indexGeneration;
         else delete nextFamily.indexVersion;
-        nextFamily.dirty =
-            !!page.nextContinuationToken || targets.length === 12;
+        nextFamily.dirty = this.wikiPassNeedsContinuation(
+            plan,
+            targets.length,
+            automatic,
+            !!page.nextContinuationToken,
+        );
         if (!nextFamily.dirty) {
             const decisions = plan.targets.filter(
                 (target) =>
@@ -5642,6 +8070,33 @@ export class FileMemoryService
         );
     }
 
+    private wikiAdmissionContext(views: ViewVersion[]): string {
+        return hashContent(
+            JSON.stringify([
+                this.admissionPolicy,
+                views.map((view) => [
+                    view.viewId,
+                    view.version,
+                    view.revisionId,
+                ]),
+            ]),
+        );
+    }
+
+    private retainedWikiAdmission(
+        descriptor: WikiFamilyState["descriptors"][number],
+        automatic: boolean,
+        policy: string,
+        generation: string | undefined,
+    ): boolean {
+        return (
+            (automatic ||
+                descriptor.admission?.reason === deferredWikiAdmission) &&
+            descriptor.admission?.policy === policy &&
+            descriptor.admission.generation === generation
+        );
+    }
+
     private async prepareWikiTargets(
         corpusId: string,
         family: WikiFamilyState,
@@ -5650,14 +8105,47 @@ export class FileMemoryService
         rebuild: boolean,
         plan: ViewMaintenancePlan,
         kind: "wiki" | "projects",
+        automatic: boolean,
     ): Promise<{ targets: ViewBuildTarget[]; snapshots: ViewBuildSnapshot[] }> {
         const targets: ViewBuildTarget[] = [];
         const snapshots: ViewBuildSnapshot[] = [];
-        for (const descriptor of family.descriptors) {
-            if (targets.length === 12) break;
+        const generation = (await this.getCorpusRuntime(corpusId)).manifest
+            .indexGeneration;
+        const policy = this.wikiAdmissionContext(views);
+        const limits = automatic ? this.maintenanceLimits : undefined;
+        const targetLimit = limits?.maxTargetsPerPass ?? 12;
+        const candidateLimit = limits?.maxCandidatesPerPass ?? Infinity;
+        const descriptors = rankWikiCandidates(
+            family.descriptors,
+            views,
+            Boolean(limits),
+        );
+        let inspected = 0;
+        for (const descriptor of descriptors) {
+            if (targets.length === targetLimit) break;
             const current = views.find(
                 (view) => view.viewId === descriptor.viewId,
             );
+            if (
+                !rebuild &&
+                !current &&
+                this.retainedWikiAdmission(
+                    descriptor,
+                    automatic,
+                    policy,
+                    generation,
+                )
+            )
+                continue;
+            if (inspected >= candidateLimit) {
+                plan.targets.push({
+                    viewId: descriptor.viewId,
+                    expectedVersion: 0,
+                    state: "blocked",
+                    reason: "Automatic candidate-read budget exhausted",
+                });
+                break;
+            }
             if (
                 !current &&
                 kind === "wiki" &&
@@ -5674,63 +8162,26 @@ export class FileMemoryService
                 plan,
             );
             if (!target) continue;
+            inspected++;
             try {
-                const input = await this.snapshotInformationalTarget(
+                const input = await this.inspectWikiTarget(
                     corpusId,
+                    family,
                     target,
                     current,
+                    rebuild,
+                    plan,
+                    kind,
                 );
-                if (
-                    !current &&
-                    kind === "wiki" &&
-                    !usefulWikiSubject(
-                        descriptor.query,
-                        input.inputs
-                            .map((source) => source.content)
-                            .join("\n\n"),
-                    )
-                ) {
-                    retireWikiCandidate(family, descriptor.viewId, plan);
+                if (!input) {
+                    if (automatic)
+                        descriptor.admission = {
+                            generation,
+                            policy,
+                            reason: "Retained admission decision or unchanged indexed evidence",
+                        };
                     continue;
                 }
-                target.definition = input.definition;
-                const contributionConflict =
-                    kind === "wiki" && !current
-                        ? await this.viewStore.pendingWikiContributionConflict(
-                              input,
-                          )
-                        : undefined;
-                if (
-                    contributionConflict &&
-                    (await this.informationalVersionEligible(
-                        contributionConflict.human,
-                    ))
-                ) {
-                    plan.targets.push({
-                        viewId: descriptor.viewId,
-                        expectedVersion: 0,
-                        state: "blocked",
-                        reason: `User decision required: resolve canonical edit conflict ${contributionConflict.conflictId}`,
-                    });
-                    continue;
-                }
-                if (
-                    current &&
-                    sameViewBuildEvidence(current?.generation?.input, input) &&
-                    !rebuild
-                ) {
-                    await this.recoverInformationalEffect(current);
-                    continue;
-                }
-                if (
-                    !rebuild &&
-                    (await this.viewStore.hasPendingInformationalInput(
-                        corpusId,
-                        descriptor.viewId,
-                        input,
-                    ))
-                )
-                    continue;
                 targets.push(target);
                 snapshots.push(input);
                 plan.targets.push({
@@ -5741,16 +8192,142 @@ export class FileMemoryService
                     selector: target.definition.selector,
                 });
             } catch (error) {
-                if (!(error instanceof Error) || "code" in error) throw error;
+                if (!this.isTechnicalTargetRejection(error)) throw error;
                 plan.targets.push({
                     viewId: descriptor.viewId,
                     expectedVersion: target.expectedVersion,
                     state: "blocked",
                     reason: `Technical target rejection: ${safeError(error)}`,
                 });
+                if (automatic)
+                    descriptor.admission = {
+                        generation,
+                        policy,
+                        reason: `Technical target rejection: ${safeError(error)}`,
+                    };
             }
         }
         return { targets, snapshots };
+    }
+
+    private wikiPassNeedsContinuation(
+        plan: ViewMaintenancePlan,
+        targetCount: number,
+        automatic: boolean,
+        hasNextPage: boolean,
+    ): boolean {
+        const limit = automatic
+            ? (this.maintenanceLimits?.maxTargetsPerPass ?? 12)
+            : 12;
+        return (
+            hasNextPage ||
+            targetCount === limit ||
+            plan.targets.some(
+                (target) =>
+                    target.reason ===
+                    "Automatic candidate-read budget exhausted",
+            )
+        );
+    }
+
+    private async admitMaintenancePass(
+        corpusId: string,
+        kind: "wiki" | "projects",
+        family: WikiFamilyState,
+        automatic: boolean,
+    ): Promise<boolean> {
+        const maxPasses = this.maintenanceLimits?.maxPassesPerGeneration;
+        if (!automatic || maxPasses === undefined) return true;
+        const generation = this.corpora.get(corpusId)?.manifest.indexGeneration;
+        const prior = family.automaticPasses;
+        const count =
+            prior?.policy === this.admissionPolicy &&
+            prior.generation === generation
+                ? prior.count
+                : 0;
+        if (count >= maxPasses) {
+            this.maintenance.park(
+                corpusId,
+                kind,
+                "Automatic pass budget exhausted; changed evidence or explicit maintenance is required",
+            );
+            return false;
+        }
+        family.automaticPasses = {
+            generation,
+            policy: this.admissionPolicy,
+            count: count + 1,
+        };
+        await this.viewStore.saveWikiFamily(corpusId, family, kind);
+        return true;
+    }
+
+    private async inspectWikiTarget(
+        corpusId: string,
+        family: WikiFamilyState,
+        target: ViewBuildTarget,
+        current: ViewVersion | undefined,
+        rebuild: boolean,
+        plan: ViewMaintenancePlan,
+        kind: "wiki" | "projects",
+    ): Promise<ViewBuildSnapshot | undefined> {
+        const input = await this.snapshotInformationalTarget(
+            corpusId,
+            target,
+            current,
+            undefined,
+            true,
+        );
+        const query =
+            input.definition.wiki?.query ??
+            input.definition.projectSummary?.query;
+        if (!query) throw new Error("Informational target query is missing");
+        if (
+            !current &&
+            kind === "wiki" &&
+            !usefulWikiSubject(
+                query,
+                input.inputs.map((source) => source.content).join("\n\n"),
+            )
+        ) {
+            retireWikiCandidate(family, target.definition.viewId, plan);
+            return undefined;
+        }
+        target.definition = input.definition;
+        const conflict =
+            kind === "wiki" && !current
+                ? await this.viewStore.pendingWikiContributionConflict(input)
+                : undefined;
+        if (
+            conflict &&
+            (await this.informationalVersionEligible(conflict.human))
+        ) {
+            plan.targets.push({
+                viewId: target.definition.viewId,
+                expectedVersion: 0,
+                state: "blocked",
+                reason: `User decision required: resolve canonical edit conflict ${conflict.conflictId}`,
+            });
+            return undefined;
+        }
+        if (
+            current &&
+            sameViewBuildEvidence(current.generation?.input, input) &&
+            !rebuild
+        ) {
+            await this.recoverInformationalEffect(current);
+            return undefined;
+        }
+        if (
+            !rebuild &&
+            (await this.viewStore.hasPendingInformationalInput(
+                corpusId,
+                target.definition.viewId,
+                input,
+            ))
+        )
+            return undefined;
+        return input;
     }
 
     private informationalFamilyTarget(
@@ -5844,59 +8421,69 @@ export class FileMemoryService
             current,
         );
         assertMaintenanceMembership(target, current, maintenance);
-        const inputs = target.definition.selector.sources.map((selected) => {
-            const source = runtime.manifest.sources.find(
-                (entry) => entry.sourceId === selected.sourceId,
-            );
-            const revision = source?.revisions.find(
-                (entry) => entry.revisionId === selected.revisionId,
-            );
-            if (
-                !source ||
-                !revision ||
-                revision.state !== "ready" ||
-                source.activeRevisionId !== selected.revisionId
-            )
-                throw new ViewBuildStaleError(
-                    "Selected source is unavailable or no longer the current exact retained revision",
+        const inputs: ViewRetainedInput[] =
+            target.definition.selector.sources.map((selected) => {
+                const source = runtime.manifest.sources.find(
+                    (entry) => entry.sourceId === selected.sourceId,
                 );
-            if (target.definition.kind === "timeline")
-                return timelineDocumentInput(
-                    {
-                        ...selected,
-                        title: source.title,
-                        content: revision.content,
-                        capturedAt: revision.capturedAt,
-                    },
-                    bounds ?? {},
+                const revision = source?.revisions.find(
+                    (entry) => entry.revisionId === selected.revisionId,
                 );
-            const learnedAt = revision.capturedAt;
-            const occurredAt = revision.sourceModifiedAt;
-            if (
-                (bounds?.learnedBefore &&
-                    (!learnedAt ||
-                        Date.parse(learnedAt) >
-                            Date.parse(bounds.learnedBefore))) ||
-                (bounds?.occurredFrom &&
-                    (!occurredAt ||
-                        Date.parse(occurredAt) <
-                            Date.parse(bounds.occurredFrom))) ||
-                (bounds?.occurredTo &&
-                    (!occurredAt ||
-                        Date.parse(occurredAt) > Date.parse(bounds.occurredTo)))
-            )
-                throw new ViewBuildStaleError(
-                    "Selected complete source is outside the temporal bounds or lacks a required timestamp; no source truncation is applied",
-                );
-            return {
-                ...selected,
-                title: source.title,
-                content: revision.content,
-                contentHash: viewHash(revision.content),
-                ...(learnedAt === undefined ? {} : { learnedAt }),
-                ...(occurredAt === undefined ? {} : { occurredAt }),
-            };
-        });
+                if (
+                    !source ||
+                    !revision ||
+                    revision.state !== "ready" ||
+                    source.activeRevisionId !== selected.revisionId
+                )
+                    throw new ViewBuildStaleError(
+                        "Selected source is unavailable or no longer the current exact retained revision",
+                    );
+                if (target.definition.kind === "timeline")
+                    return timelineDocumentInput(
+                        {
+                            ...selected,
+                            title: source.title,
+                            content: revision.content,
+                            capturedAt: revision.capturedAt,
+                        },
+                        bounds ?? {},
+                    );
+                const learnedAt = revision.capturedAt;
+                const occurredAt = revision.sourceModifiedAt;
+                if (
+                    (bounds?.learnedBefore &&
+                        (!learnedAt ||
+                            Date.parse(learnedAt) >
+                                Date.parse(bounds.learnedBefore))) ||
+                    (bounds?.occurredFrom &&
+                        (!occurredAt ||
+                            Date.parse(occurredAt) <
+                                Date.parse(bounds.occurredFrom))) ||
+                    (bounds?.occurredTo &&
+                        (!occurredAt ||
+                            Date.parse(occurredAt) >
+                                Date.parse(bounds.occurredTo)))
+                )
+                    throw new ViewBuildStaleError(
+                        "Selected complete source is outside the temporal bounds or lacks a required timestamp; no source truncation is applied",
+                    );
+                return {
+                    ...selected,
+                    title: source.title,
+                    content: revision.content,
+                    contentHash: viewHash(revision.content),
+                    ...(learnedAt === undefined ? {} : { learnedAt }),
+                    ...(occurredAt === undefined ? {} : { occurredAt }),
+                    ...(target.definition.schemaView &&
+                    source.metadata?.assertionLineage !== undefined
+                        ? {
+                              assertionLineage: sourceAssertionLineage(
+                                  source.metadata,
+                              )!,
+                          }
+                        : {}),
+                };
+            });
         for (const selected of target.definition.selector.events ?? []) {
             const event = runtime.events.find(
                 (entry) => entry.eventId === selected.eventId,
@@ -5944,9 +8531,11 @@ export class FileMemoryService
                   }
                 : {}),
             pipeline:
-                target.definition.kind === "timeline"
-                    ? ("timeline-v1" as const)
-                    : ("troubleshooting-v1" as const),
+                target.definition.kind === "schemaView"
+                    ? ("schema-defined-v1" as const)
+                    : target.definition.kind === "timeline"
+                      ? ("timeline-v1" as const)
+                      : ("troubleshooting-v1" as const),
             model: this.viewAdapter.identity,
             publicationPolicy: effectiveViewPublicationPolicy(
                 await this.viewStore.getViewPublicationPolicy(corpusId),
@@ -5984,15 +8573,19 @@ export class FileMemoryService
             this.topicSources(runtime),
             runtime.manifest.indexGeneration,
             runtime.manifest.knowledgeSuppressions ?? [],
-            this.viewAdapter.identity,
+            `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-lazy-v6" : "raw-v1"}`,
+            this.topicEvents(runtime),
         );
     }
 
     public async queryTopics(
         request: TopicQueryRequest,
     ): Promise<TopicQueryPage> {
+        validateTopicQuery(request);
         const runtime = await this.requireViews(request.corpusId);
         requireTopicIndex(runtime.index);
+        if (request.summarize)
+            await this.ensureTopicConceptSummary(request, runtime);
         return runtime.access.read(async () => {
             const page = await this.viewStore.queryTopics(
                 request,
@@ -6004,6 +8597,76 @@ export class FileMemoryService
                 );
             return page;
         });
+    }
+
+    private async ensureTopicConceptSummary(
+        request: TopicQueryRequest,
+        runtime: CorpusRuntime,
+    ): Promise<void> {
+        const snapshot = await runtime.access.read(async () => {
+            const { snapshot } = await this.viewStore.getTopicState(
+                request.corpusId,
+            );
+            if (
+                !snapshot ||
+                snapshot.inputFingerprint !== this.topicFingerprint(runtime) ||
+                runtime.manifest.pendingCorpusClear ||
+                runtime.manifest.authorizedSourceRemoval
+            )
+                throw new ViewBuildStaleError("Topic concepts are not current");
+            return snapshot;
+        });
+        if (this.closed)
+            throw new ViewBuildStaleError("Memory service is closing");
+        const concept = snapshot.curation?.concepts.find(
+            (entry) => entry.id === request.topicId,
+        );
+        if (!concept)
+            throw new Error("Curated topic does not exist in this generation");
+        if (concept.summary && concept.summaryState !== "pending") return;
+        const key = `${request.corpusId}:${snapshot.generation}:${concept.id}`;
+        const existing = this.topicSummaryWork.get(key);
+        if (existing) return existing.promise;
+        const controller = new AbortController();
+        const signal = AbortSignal.any([
+            controller.signal,
+            AbortSignal.timeout(120000),
+        ]);
+        const promise = Promise.resolve()
+            .then(async () => {
+                const output = await abortable(
+                    this.summarizeTopicConcept(concept, signal),
+                    signal,
+                );
+                signal.throwIfAborted();
+                await this.enqueueWrite(request.corpusId, async () => {
+                    signal.throwIfAborted();
+                    if (
+                        runtime.manifest.pendingCorpusClear ||
+                        runtime.manifest.authorizedSourceRemoval ||
+                        this.topicFingerprint(runtime) !==
+                            snapshot.inputFingerprint
+                    )
+                        throw new ViewBuildStaleError(
+                            "Topic summary evidence changed",
+                        );
+                    await this.viewStore.saveTopicConceptSummary(
+                        request.corpusId,
+                        snapshot.generation,
+                        concept.id,
+                        output,
+                    );
+                });
+            })
+            .finally(() => {
+                this.topicSummaryWork.delete(key);
+            });
+        this.topicSummaryWork.set(key, {
+            corpusId: request.corpusId,
+            controller,
+            promise,
+        });
+        return promise;
     }
 
     public async rebuildTopics(corpusId: string): Promise<ViewBuildJob> {
@@ -6066,13 +8729,19 @@ export class FileMemoryService
         )
             return this.viewStore.recordViewMaintenance(plan);
         await this.ensureDocumentIndex(request.corpusId, runtime);
+        const eventOccurrences = await this.topicEventOccurrences(
+            request.corpusId,
+            runtime,
+        );
         const input = await captureTopicBuild({
             corpusId: request.corpusId,
             actor: userInfo().username,
             index: runtime.index,
             sources: this.topicSources(runtime),
             suppressions: runtime.manifest.knowledgeSuppressions ?? [],
-            model: this.viewAdapter.identity,
+            model: `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-lazy-v6" : "raw-v1"}`,
+            eventOccurrences,
+            influenceEvents: this.topicEvents(runtime),
             ...(runtime.manifest.indexGeneration
                 ? { indexGeneration: runtime.manifest.indexGeneration }
                 : {}),
@@ -6152,6 +8821,8 @@ export class FileMemoryService
         let family = reconcileTopicFamily(
             state.family,
             runtime.manifest.indexGeneration,
+            state.snapshot?.inputFingerprint,
+            this.topicFingerprint(runtime),
         );
         const jobs = await this.viewStore.listViewBuilds(corpusId);
         const latest = jobs.filter((job) =>
@@ -6159,7 +8830,14 @@ export class FileMemoryService
                 (result) => result.snapshot.pipeline === "topics-v1",
             ),
         )[0];
-        if (latest?.state === "interrupted")
+        if (
+            latest?.state === "interrupted" &&
+            latest.results.some(
+                (result) =>
+                    result.snapshot.fingerprint ===
+                    this.topicFingerprint(runtime),
+            )
+        )
             family = checkpointTopicFamily(family, latest, jobs);
         await this.viewStore.saveTopicFamily(corpusId, family);
         if (topicFamilyCanSchedule(family))
@@ -6167,38 +8845,40 @@ export class FileMemoryService
     }
 
     private scheduleTopics(corpusId: string, runtime: CorpusRuntime): void {
-        const key = `${corpusId}:topics`;
         if (
             !this.informationalWikiEnabled ||
             this.closed ||
-            this.batchStore.hasActiveImports(corpusId) ||
-            this.wikiTimers.has(key) ||
+            this.ingestionTails.has(corpusId) ||
+            this.knowledgeMaintenance.has(corpusId) ||
             !runtime.manifest.sources.length ||
             !supportsTopicIndex(runtime.index)
         )
             return;
-        const timer = setTimeout(() => {
-            this.wikiTimers.delete(key);
-            if (this.closed || this.batchStore.hasActiveImports(corpusId))
-                return;
-            const work = this.enqueueWrite(
-                corpusId,
-                async () => {
-                    if (
-                        this.closed ||
-                        this.batchStore.hasActiveImports(corpusId) ||
-                        runtime.manifest.authorizedSourceRemoval
-                    )
-                        return;
-                    const state = await this.viewStore.getTopicState(corpusId);
-                    const family = reconcileTopicFamily(
-                        state.family,
-                        runtime.manifest.indexGeneration,
-                    );
-                    if (!topicFamilyCanSchedule(family)) return;
-                    if (this.batchStore.hasActiveImports(corpusId)) return;
-                    try {
-                        await this.maintainTopics(
+        this.maintenance.request(
+            corpusId,
+            "topics",
+            runtime.manifest.indexGeneration,
+            async (signal) => {
+                const result = await this.enqueueWrite(
+                    corpusId,
+                    async () => {
+                        if (
+                            this.maintenance.isDeferred(corpusId) ||
+                            runtime.manifest.authorizedSourceRemoval
+                        )
+                            return;
+                        signal.throwIfAborted();
+                        const state =
+                            await this.viewStore.getTopicState(corpusId);
+                        const family = reconcileTopicFamily(
+                            state.family,
+                            runtime.manifest.indexGeneration,
+                            state.snapshot?.inputFingerprint,
+                            this.topicFingerprint(runtime),
+                        );
+                        if (!topicFamilyCanSchedule(family)) return;
+                        if (this.maintenance.isDeferred(corpusId)) return;
+                        return this.maintainTopics(
                             runtime,
                             {
                                 corpusId,
@@ -6208,29 +8888,13 @@ export class FileMemoryService
                             },
                             true,
                         );
-                    } catch (error) {
-                        await this.viewStore.saveTopicFamily(corpusId, {
-                            ...family,
-                            dirty: true,
-                            error: safeError(error),
-                        });
-                    }
-                },
-                true,
-            );
-            this.indexedReads.add(work);
-            void work.then(
-                () => this.indexedReads.delete(work),
-                (error: unknown) => {
-                    this.indexedReads.delete(work);
-                    this.wikiMaintenanceFailures.set(
-                        key,
-                        new Error(safeError(error)),
-                    );
-                },
-            );
-        }, 250);
-        this.wikiTimers.set(key, timer);
+                    },
+                    true,
+                );
+                await this.waitForMaintenanceBuild(result, "topics", signal);
+            },
+            1000,
+        );
     }
 
     private async recheckViewInput(input: ViewBuildSnapshot): Promise<void> {
@@ -6372,7 +9036,11 @@ export class FileMemoryService
                         state: "blocked",
                         reason: "View is missing or archived",
                     };
-                if (view.definition.maintenance && !view.generation?.input)
+                if (
+                    view.definition.maintenance &&
+                    !view.generation?.input &&
+                    !view.definition.schemaView
+                )
                     return {
                         viewId,
                         expectedVersion: view.version,
@@ -6405,10 +9073,7 @@ export class FileMemoryService
         validateMaintenanceRequest(request, true);
         const runtime = await this.requireViews(request.corpusId);
         if ("family" in request) {
-            const key = `${request.corpusId}:${request.family}`;
-            const timer = this.wikiTimers.get(key);
-            if (timer) clearTimeout(timer);
-            this.wikiTimers.delete(key);
+            this.maintenance.cancel(request.corpusId, request.family);
             return this.enqueueWrite(request.corpusId, () =>
                 request.family === "topics"
                     ? this.maintainTopics(runtime, request)
@@ -6452,6 +9117,9 @@ export class FileMemoryService
                         selector: target.selector,
                         ...(current.definition.maintenance
                             ? { maintenance: current.definition.maintenance }
+                            : {}),
+                        ...(current.definition.schemaView
+                            ? { schemaView: current.definition.schemaView }
                             : {}),
                     },
                 });
@@ -6498,9 +9166,17 @@ export class FileMemoryService
     }
 
     private async invalidateMaintainedViews(corpusId: string): Promise<void> {
+        this.knowledge.schedule(corpusId);
         this.scheduleSourceSynopses(corpusId);
         const runtime = await this.getCorpusRuntime(corpusId);
         const { views } = await this.viewStore.listViews(corpusId);
+        if (
+            views.some(
+                (view) =>
+                    view.definition.schemaView && view.state !== "archived",
+            )
+        )
+            this.scheduleSchemaMaintenance(corpusId);
         const invalid = views.filter((view) => {
             if (!view.definition.maintenance || view.state !== "draft")
                 return false;
@@ -6742,7 +9418,7 @@ export class FileMemoryService
         const support = await this.viewAdapter.validate(
             conflict.input,
             output,
-            new AbortController().signal,
+            this.maintenance.signal,
         );
         validateSupport(output, support);
         return this.enqueueWrite(request.corpusId, async () => {
@@ -6755,6 +9431,348 @@ export class FileMemoryService
         });
     }
 
+    private answerViewSources(view: ViewVersion): string[] {
+        return [
+            ...new Set([
+                ...view.content.citations.map((citation) => citation.sourceId),
+                ...(view.generation?.input?.inputs.map(
+                    (input) => input.sourceId,
+                ) ?? []),
+                ...(view.generation?.input?.influenceSources?.map(
+                    (source) => source.sourceId,
+                ) ?? []),
+            ]),
+        ];
+    }
+
+    private async eligibleAnswerViews(
+        request: MemoryAnswerRequest,
+    ): Promise<{ matches: AnswerViewEvidence[]; omittedCandidates: number }> {
+        const terms = indexedQueryTerms(request.question).map((term) =>
+            term.toLocaleLowerCase(),
+        );
+        const published = await this.viewStore.listPublishedViews(
+            request.corpusId,
+        );
+        const ranked = published
+            .filter(
+                ({ current, view }) =>
+                    current.state !== "archived" &&
+                    view &&
+                    (!request.sourceIds ||
+                        this.answerViewSources(view).every((id) =>
+                            request.sourceIds!.includes(id),
+                        )),
+            )
+            .map((entry) => {
+                const text =
+                    `${entry.view!.content.title} ${entry.view!.content.sections.map((section) => `${section.heading} ${section.body}`).join(" ")}`.toLocaleLowerCase();
+                return {
+                    ...entry,
+                    rank: terms.filter((term) => text.includes(term)).length,
+                };
+            })
+            .filter((entry) => entry.rank > 0)
+            .sort(
+                (a, b) =>
+                    b.rank - a.rank ||
+                    a.current.viewId.localeCompare(b.current.viewId),
+            );
+        const selected = ranked.slice(0, 32).slice(0, 8);
+        for (const entry of selected) {
+            if (entry.publication.blockedReason) continue;
+            if (entry.publication.indexState !== "ready")
+                throw new Error(
+                    `Maintained view index is not ready: ${entry.current.viewId}`,
+                );
+        }
+        const found = await this.searchViews(
+            {
+                corpusId: request.corpusId,
+                query: request.question,
+                freshness: "current",
+                limit: 8,
+            },
+            new Set(selected.map((entry) => entry.current.viewId)),
+        );
+        return {
+            matches: found.flatMap((match) => this.answerViewEvidence(match)),
+            omittedCandidates: Math.max(0, ranked.length - selected.length),
+        };
+    }
+
+    private answerViewEvidence(match: ViewSearchMatch): AnswerViewEvidence[] {
+        const matches: AnswerViewEvidence[] = [];
+        {
+            const view = match.view;
+            if (view.content.kind === "schemaView") {
+                const schema = view.definition.schemaView!;
+                for (const section of view.content.sections) {
+                    const slot = schema.slots.find(
+                        (slot) => slot.id === section.id,
+                    );
+                    if (
+                        !slot ||
+                        slot.approval !== "approved" ||
+                        section.details.freshness !== "current"
+                    )
+                        continue;
+                    const candidates = section.details.candidates.filter(
+                        (candidate) =>
+                            candidate.review !== "rejected" &&
+                            (section.details.selectedCandidateIds.includes(
+                                candidate.id,
+                            ) ||
+                                section.details.answerState === "conflicted"),
+                    );
+                    const state =
+                        section.details.answerState === "conflicted"
+                            ? ("conflicted" as const)
+                            : section.details.selectedCandidateIds.length
+                              ? ("selected" as const)
+                              : ("unknown" as const);
+                    const common = {
+                        influencingSourceIds: this.answerViewSources(view),
+                        supportingSources: candidates.flatMap(
+                            (candidate) => candidate.citations,
+                        ),
+                        opposingSources: candidates.flatMap(
+                            (candidate) => candidate.opposingCitations,
+                        ),
+                        review: section.details.reviewState,
+                        freshness: section.details.freshness,
+                        coverage: section.details.coverage,
+                    };
+                    const reference = {
+                        viewId: view.viewId,
+                        revisionId: view.revisionId,
+                        sectionId: section.id,
+                        state,
+                        contractVersion: questionContractRevision(
+                            view.definition,
+                            slot,
+                        ),
+                        rubricVersion: String(slot.rubric.version),
+                    };
+                    const observed = candidates.filter(
+                        (candidate) => candidate.origin === "source",
+                    );
+                    matches.push({
+                        ...common,
+                        kind: "derived",
+                        authorship: "informational",
+                        reference,
+                        text: `${slot.question}\nAnswer state: ${section.details.answerState}; review: ${section.details.reviewState}; coverage: ${section.details.coverage}.\n${JSON.stringify(observed.map((candidate) => ({ value: candidate.value, effectiveAt: candidate.effectiveAt, localChronology: candidate.localChronology })))}`,
+                        ...(state === "selected" && observed.length === 1
+                            ? { selectedValue: observed[0].value }
+                            : {}),
+                        ...(state === "conflicted"
+                            ? {
+                                  alternatives: observed.map(
+                                      (candidate) => candidate.value,
+                                  ),
+                              }
+                            : {}),
+                    });
+                    for (const candidate of candidates.filter(
+                        (candidate) =>
+                            candidate.origin === "user" &&
+                            section.details.selectedCandidateIds.includes(
+                                candidate.id,
+                            ),
+                    )) {
+                        matches.push({
+                            ...common,
+                            kind: "userAssertion",
+                            reference: {
+                                ...reference,
+                                candidateId: candidate.id,
+                                assertionOrigin: "user",
+                            },
+                            text: `${slot.question}\nUser assertion (not independent verification): ${JSON.stringify(candidate.value)}`,
+                            selectedValue: candidate.value,
+                        });
+                    }
+                }
+            } else {
+                matches.push({
+                    kind: "derived",
+                    authorship: "informational",
+                    reference: {
+                        viewId: view.viewId,
+                        revisionId: view.revisionId,
+                        state: "selected",
+                    },
+                    text: match.snippet,
+                    influencingSourceIds: this.answerViewSources(view),
+                    supportingSources: match.evidence,
+                    opposingSources: [],
+                    review: match.review,
+                    freshness: match.freshness,
+                    coverage: "partial",
+                });
+            }
+        }
+        return matches;
+    }
+
+    private async expandAnswerSource(
+        reference: AnswerSourceReference,
+        request: MemoryAnswerRequest,
+    ): Promise<MemoryEvidence | undefined> {
+        if (
+            request.sourceIds &&
+            !request.sourceIds.includes(reference.sourceId)
+        )
+            return undefined;
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        const source = runtime.manifest.sources.find(
+            (source) => source.sourceId === reference.sourceId,
+        );
+        const revision = source?.revisions.find(
+            (revision) =>
+                revision.revisionId === reference.revisionId &&
+                revision.state === "ready",
+        );
+        if (
+            !source ||
+            !revision ||
+            source.activeRevisionId !== revision.revisionId ||
+            runtime.manifest.knowledgeSuppressions?.some(
+                (suppression) => suppression.sourceId === source.sourceId,
+            )
+        )
+            throw new ViewBuildStaleError(
+                "Answer source is unavailable, replaced or suppressed",
+            );
+        if (!reference.locator)
+            throw new Error("Answer support requires an exact locator");
+        let snippet: string;
+        const chars = /^chars:(\d+)-(\d+)$/.exec(reference.locator);
+        if (chars) {
+            const start = Number(chars[1]),
+                end = Number(chars[2]);
+            if (
+                !Number.isSafeInteger(start) ||
+                !Number.isSafeInteger(end) ||
+                start < 0 ||
+                end <= start ||
+                end > revision.content.length
+            )
+                throw new Error(
+                    "Answer support character locator is out of range",
+                );
+            snippet = revision.content.slice(start, end);
+        } else if (reference.locator.startsWith("indexed:")) {
+            snippet = (
+                await this.getSourceContent({
+                    corpusId: request.corpusId,
+                    sourceId: source.sourceId,
+                    revisionId: revision.revisionId,
+                    indexedLocator: reference.locator,
+                })
+            ).content;
+        } else throw new Error("Unsupported answer support locator");
+        const context =
+            chars && revision.temporalContext
+                ? temporalSegments(
+                      revision.content,
+                      revision.temporalContext,
+                      revision.revisionId,
+                  ).find(
+                      (segment) =>
+                          segment.context &&
+                          segment.context.sourceSpan.start <=
+                              Number(chars[1]) &&
+                          segment.context.sourceSpan.end >= Number(chars[2]),
+                  )?.context
+                : undefined;
+        return {
+            evidenceId:
+                reference.evidenceId ??
+                `${source.sourceId}:${revision.revisionId}:${reference.locator}`,
+            corpusId: request.corpusId,
+            sourceId: source.sourceId,
+            revisionId: revision.revisionId,
+            title: source.title,
+            locator: reference.locator,
+            snippet,
+            sourceType: source.sourceType,
+            ...(source.canonicalUri
+                ? { canonicalUri: source.canonicalUri }
+                : {}),
+            ...(context ? { temporalContext: context } : {}),
+            score: 1,
+            indexedAt: revision.indexedAt ?? now(),
+        };
+    }
+
+    private async validateAnswerEvidence(
+        request: MemoryAnswerRequest,
+        evidence: AnswerEvidence[],
+    ): Promise<boolean> {
+        if (request.knowledgeCheckpointId) {
+            const checkpoint = await this.getKnowledgeCheckpoint({
+                corpusId: request.corpusId,
+                checkpointId: request.knowledgeCheckpointId,
+            });
+            const current = await this.captureKnowledge(request.corpusId);
+            if (
+                checkpoint.state !== "ready" ||
+                checkpoint.sources.some(
+                    (selected) =>
+                        !current.sources.some(
+                            (source) =>
+                                source.sourceId === selected.sourceId &&
+                                source.revisionId === selected.revisionId,
+                        ),
+                )
+            )
+                return false;
+        }
+        for (const item of evidence) {
+            if (item.kind === "source") {
+                const source = await this.expandAnswerSource(
+                    item.source,
+                    request,
+                );
+                if (!source || source.snippet !== item.source.snippet)
+                    return false;
+            } else {
+                const view = await this.viewStore.getView({
+                    corpusId: request.corpusId,
+                    viewId: item.reference.viewId,
+                });
+                if (!view || view.revisionId !== item.reference.revisionId)
+                    return false;
+                try {
+                    await this.assertViewPublicationFresh(view);
+                } catch (error) {
+                    if (error instanceof ViewBuildStaleError) return false;
+                    throw error;
+                }
+                const publication = await this.viewStore.getViewPublication({
+                    corpusId: request.corpusId,
+                    viewId: view.viewId,
+                });
+                if (
+                    publication.publishedRevisionId !== view.revisionId ||
+                    publication.blockedReason ||
+                    publication.indexState !== "ready"
+                )
+                    return false;
+                if (
+                    request.sourceIds &&
+                    this.answerViewSources(view).some(
+                        (sourceId) => !request.sourceIds!.includes(sourceId),
+                    )
+                )
+                    return false;
+            }
+        }
+        return true;
+    }
+
     public async answer(
         request: MemoryAnswerRequest,
     ): Promise<MemoryAnswerResult> {
@@ -6762,64 +9780,108 @@ export class FileMemoryService
         if (question.length === 0) {
             throw new Error("Memory question cannot be empty");
         }
+        if (request.knowledgeCheckpointId) {
+            const checkpoint = await this.getKnowledgeCheckpoint({
+                corpusId: request.corpusId,
+                checkpointId: request.knowledgeCheckpointId,
+            });
+            if (checkpoint.state !== "ready")
+                throw new Error(
+                    `Knowledge checkpoint is not ready: ${checkpoint.state}`,
+                );
+            if (
+                request.sourceIds?.some(
+                    (id) =>
+                        !checkpoint.sources.some(
+                            (source) => source.sourceId === id,
+                        ),
+                )
+            )
+                throw new Error(
+                    "Answer source scope exceeds its knowledge checkpoint",
+                );
+            request = {
+                ...request,
+                sourceIds:
+                    request.sourceIds ??
+                    checkpoint.sources.map((source) => source.sourceId),
+            };
+        }
+        await this.initialize();
+        const answerRuntime = await this.getCorpusRuntime(request.corpusId);
+        if (
+            request.answerMode !== "extractive" &&
+            answerRuntime.index.readFragments
+        ) {
+            const answer = () =>
+                answerIntegratedEvidence(
+                    request,
+                    {
+                        searchOriginal: (input) =>
+                            this.search({
+                                corpusId: input.corpusId,
+                                query: input.question,
+                                ...(input.sourceIds
+                                    ? { sourceIds: input.sourceIds }
+                                    : {}),
+                                ...(input.temporalContext
+                                    ? { temporalContext: input.temporalContext }
+                                    : {}),
+                                ...(input.includeDiagnostics
+                                    ? { includeDiagnostics: true }
+                                    : {}),
+                                indexedFragments: true,
+                                limit: Math.min(input.limit ?? 12, 12),
+                                maxResponseChars: Math.min(
+                                    input.maxResponseChars ?? 24000,
+                                    24000,
+                                ),
+                            }),
+                        ...(this.viewDrafts
+                            ? {
+                                  getEligibleViewMatches: (
+                                      input: MemoryAnswerRequest,
+                                  ) => this.eligibleAnswerViews(input),
+                              }
+                            : {}),
+                        expandSource: (reference, input) =>
+                            this.expandAnswerSource(reference, input),
+                        validateEvidence: ({ request: input, evidence }) =>
+                            this.validateAnswerEvidence(input, evidence),
+                    },
+                    {
+                        ...(this.wikiModelEndpoint
+                            ? { endpoint: this.wikiModelEndpoint }
+                            : {}),
+                        ...(this.indexedAnswerModel
+                            ? { model: this.indexedAnswerModel }
+                            : {}),
+                        outputTokens: Math.min(
+                            this.wikiBudget?.outputTokens ?? 4000,
+                            4000,
+                        ),
+                    },
+                );
+            return this.wikiBudget
+                ? runWithRequestBudget(
+                      new RequestBudget(this.wikiBudget),
+                      answer,
+                  )
+                : answer();
+        }
+        if (
+            request.retrievalPolicy === "sourcesAndViews" &&
+            request.answerMode !== "extractive"
+        )
+            throw new Error(
+                "Integrated answer retrieval is unsupported by this corpus index",
+            );
         if (
             request.answerMode !== "extractive" &&
             this.informationalWikiEnabled
         ) {
-            const answer = async (): Promise<MemoryAnswerResult> => {
-                const result = await this.search({
-                    corpusId: request.corpusId,
-                    query: question,
-                    ...(request.sourceIds
-                        ? { sourceIds: request.sourceIds }
-                        : {}),
-                    indexedFragments: true,
-                    limit: Math.min(request.limit ?? 12, 12),
-                    maxResponseChars: Math.min(
-                        request.maxResponseChars ?? 24000,
-                        24000,
-                    ),
-                });
-                const generated = await answerIndexedEvidence(
-                    question,
-                    result.matches,
-                    Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
-                    this.wikiModelEndpoint,
-                    this.indexedAnswerModel,
-                );
-                for (const citation of generated.citations) {
-                    if (!citation.locator?.startsWith("indexed:"))
-                        throw new Error(
-                            "Indexed answer requires an exact indexed locator",
-                        );
-                    const source = await this.getSource(
-                        request.corpusId,
-                        citation.sourceId,
-                    );
-                    if (source?.activeRevisionId !== citation.revisionId)
-                        throw new Error(
-                            "Indexed answer evidence changed before delivery",
-                        );
-                    const current = await this.getSourceContent({
-                        corpusId: request.corpusId,
-                        sourceId: citation.sourceId,
-                        revisionId: citation.revisionId,
-                        indexedLocator: citation.locator,
-                    });
-                    if (current.content !== citation.snippet)
-                        throw new Error(
-                            "Indexed answer evidence is unavailable or changed",
-                        );
-                }
-                return {
-                    question,
-                    ...generated,
-                    mode: "synthesized",
-                    grounded: true,
-                    indexVersion: result.indexVersion,
-                    warnings: result.warnings,
-                };
-            };
+            const answer = () =>
+                this.answerFromIndexedFragments(request, question);
             return this.wikiBudget
                 ? runWithRequestBudget(
                       new RequestBudget(this.wikiBudget),
@@ -6834,6 +9896,126 @@ export class FileMemoryService
             }
         }
         return this.extractiveAnswer(request, question);
+    }
+
+    private async answerFromIndexedFragments(
+        request: MemoryAnswerRequest,
+        question: string,
+    ): Promise<MemoryAnswerResult> {
+        const searchRequest = {
+            corpusId: request.corpusId,
+            query: question,
+            ...(request.sourceIds ? { sourceIds: request.sourceIds } : {}),
+            indexedFragments: true,
+            ...(request.includeDiagnostics ? { includeDiagnostics: true } : {}),
+            ...(request.temporalContext
+                ? { temporalContext: request.temporalContext }
+                : {}),
+            limit: Math.min(request.limit ?? 12, 12),
+            maxResponseChars: Math.min(
+                request.maxResponseChars ?? 24000,
+                24000,
+            ),
+        };
+        const result = await this.search(searchRequest);
+        let generated = await answerIndexedEvidence(
+            question,
+            result.matches,
+            Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
+            this.wikiModelEndpoint,
+            this.indexedAnswerModel,
+            request,
+        );
+        const queries = generated.retrievalQueries;
+        if (queries?.length) {
+            const initialContext = generated.readerContext;
+            const followup = await this.searchIndexedAnswerFollowups(
+                searchRequest,
+                queries,
+                result,
+            );
+            result.warnings = followup.warnings;
+            generated = await answerIndexedEvidence(
+                question,
+                followup.matches,
+                Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
+                this.wikiModelEndpoint,
+                this.indexedAnswerModel,
+                request,
+            );
+            if (generated.readerContext?.indexedAnswer)
+                generated.readerContext.indexedAnswer.refinement = {
+                    queries,
+                    ...(initialContext ? { initialContext } : {}),
+                    selections: followup.selections,
+                };
+        }
+        if (generated.readerContext?.indexedAnswer && result.indexedSelection)
+            generated.readerContext.indexedAnswer.selection =
+                result.indexedSelection;
+        for (const citation of generated.citations) {
+            if (!citation.locator?.startsWith("indexed:"))
+                throw new Error(
+                    "Indexed answer requires an exact indexed locator",
+                );
+            const source = await this.getSource(
+                request.corpusId,
+                citation.sourceId,
+            );
+            if (source?.activeRevisionId !== citation.revisionId)
+                throw new Error(
+                    "Indexed answer evidence changed before delivery",
+                );
+            const current = await this.getSourceContent({
+                corpusId: request.corpusId,
+                sourceId: citation.sourceId,
+                revisionId: citation.revisionId,
+                indexedLocator: citation.locator,
+            });
+            if (current.content !== citation.snippet)
+                throw new Error(
+                    "Indexed answer evidence is unavailable or changed",
+                );
+        }
+        return {
+            question,
+            answer: generated.answer,
+            citations: generated.citations,
+            ...(generated.readerContext
+                ? { readerContext: generated.readerContext }
+                : {}),
+            mode: "synthesized",
+            grounded: true,
+            indexVersion: result.indexVersion,
+            warnings: result.warnings,
+        };
+    }
+
+    private async searchIndexedAnswerFollowups(
+        request: MemorySearchRequest,
+        queries: string[],
+        initial: MemorySearchResult,
+    ) {
+        const groups: MemoryEvidence[][] = [];
+        const selections: IndexedSelectionDiagnostics[] = [];
+        const warnings = [...initial.warnings];
+        for (const query of queries) {
+            const followup = await this.search({ ...request, query });
+            groups.push(followup.matches);
+            warnings.push(...followup.warnings);
+            if (followup.indexedSelection)
+                selections.push(followup.indexedSelection);
+        }
+        groups.push(initial.matches);
+        return {
+            matches: mergeIndexedAnswerEvidence(
+                groups,
+                request.limit ?? 12,
+                request.maxResponseChars ?? 24000,
+            ),
+            warnings: [...new Set(warnings)],
+            selections,
+        };
     }
 
     private async synthesizeAnswer(
@@ -6857,7 +10039,13 @@ export class FileMemoryService
                 request.sourceIds === undefined
                     ? undefined
                     : new Set(request.sourceIds);
-            const result = await index.answer(question, limit * 4, scope);
+            const result = await index.answer(
+                question,
+                limit * 4,
+                scope,
+                request.temporalContext,
+                request.includeDiagnostics,
+            );
             const citations = this.toEvidence(
                 request.corpusId,
                 runtime,
@@ -6880,6 +10068,9 @@ export class FileMemoryService
                     grounded: true,
                     indexVersion,
                     warnings,
+                    ...(result.readerContext === undefined
+                        ? {}
+                        : { readerContext: result.readerContext }),
                 };
             }
             return {
@@ -6890,6 +10081,9 @@ export class FileMemoryService
                 grounded: true,
                 indexVersion,
                 warnings,
+                ...(result.readerContext === undefined
+                    ? {}
+                    : { readerContext: result.readerContext }),
             };
         });
     }
@@ -6901,6 +10095,9 @@ export class FileMemoryService
         const result = await this.search({
             corpusId: request.corpusId,
             query: question,
+            ...(request.temporalContext
+                ? { temporalContext: request.temporalContext }
+                : {}),
             limit: request.limit ?? 5,
             ...(request.maxResponseChars === undefined
                 ? {}
@@ -7005,11 +10202,13 @@ export class FileMemoryService
                     ),
                 );
             }
-            await writeJsonAtomic(
-                this.manifestPath(request.corpusId),
-                candidateManifest,
-            );
+            await this.writeManifest(request.corpusId, candidateManifest);
             runtime.manifest = candidateManifest;
+            if (suppress && changed)
+                await this.agentSessionStore.purge(
+                    request.corpusId,
+                    request.sourceId,
+                );
             await this.invalidateMaintainedViews(request.corpusId);
         });
         return this.listSourceKnowledgeSuppressions(
@@ -7018,40 +10217,163 @@ export class FileMemoryService
         );
     }
 
-    private async reindex(
+    private reindex(
+        corpusId: string,
+        sourceId: string | undefined,
+        signal: AbortSignal,
+    ): Promise<ReindexResult> {
+        const work = this.prepareReindex(corpusId, sourceId, signal);
+        this.reindexWork.add(work);
+        void work.then(
+            () => this.reindexWork.delete(work),
+            () => this.reindexWork.delete(work),
+        );
+        return work;
+    }
+
+    private async prepareReindex(
         corpusId: string,
         sourceId: string | undefined,
         signal: AbortSignal,
     ): Promise<ReindexResult> {
         await this.initialize();
         validateIdentifier("corpus ID", corpusId);
-        let result: ReindexResult | undefined;
-        await this.enqueueWrite(corpusId, async () => {
-            const runtime = await this.getCorpusRuntime(corpusId);
-            if (
-                sourceId !== undefined &&
-                !runtime.manifest.sources.some(
-                    (source) => source.sourceId === sourceId,
-                )
-            ) {
-                throw new Error(`Unknown source '${sourceId}'`);
-            }
-            const candidateManifest = structuredClone(runtime.manifest);
-            delete candidateManifest.pendingSourceForget;
-            await this.rebuildAndActivate(
-                corpusId,
-                runtime,
-                candidateManifest,
-                signal,
-            );
-            result = {
-                corpusId,
-                ...(sourceId === undefined ? {} : { sourceId }),
-                sourceCount: runtime.manifest.sources.length,
-                indexVersion: this.indexVersion(runtime.manifest),
-            };
+        const generation = randomUUID();
+        const directory = this.indexDirectory(corpusId, generation);
+        const controller = new AbortController();
+        const bounded = AbortSignal.any([signal, controller.signal]);
+        let finishPreparation!: () => void;
+        const prepared = new Promise<void>((resolve) => {
+            finishPreparation = resolve;
         });
-        return result!;
+        let published = false;
+        let runtimeForCleanup: CorpusRuntime | undefined;
+        try {
+            const capture = await this.enqueueWrite(corpusId, async () => {
+                if (this.closed) throw new Error("Memory service is closed");
+                this.throwIfAborted(bounded);
+                const runtime = await this.getCorpusRuntime(corpusId);
+                runtimeForCleanup = runtime;
+                if (
+                    sourceId !== undefined &&
+                    !runtime.manifest.sources.some(
+                        (source) => source.sourceId === sourceId,
+                    )
+                )
+                    throw new Error(`Unknown source '${sourceId}'`);
+                if (runtime.manifest.indexGeneration !== undefined)
+                    await classifyIndexSchema(
+                        this.indexDirectory(
+                            corpusId,
+                            runtime.manifest.indexGeneration,
+                        ),
+                        "documents",
+                        false,
+                    );
+                const manifest = structuredClone(runtime.manifest);
+                const sourceIds = new Set(
+                    manifest.sources.map((source) => source.sourceId),
+                );
+                this.controllers.set(generation, controller);
+                this.detachedRebuilds.set(directory, {
+                    corpusId,
+                    sourceIds,
+                    baseSourceIds: sourceIds,
+                    controller,
+                    prepared,
+                });
+                this.preparingIndexes.set(directory, {
+                    corpusId,
+                    sourceIds,
+                    jobId: generation,
+                });
+                return {
+                    runtime,
+                    documents: this.activeDocuments(manifest),
+                    baseGeneration: manifest.indexGeneration,
+                    baseVersion: this.indexVersion(manifest),
+                };
+            });
+            const index = this.indexFactory(corpusId, directory);
+            try {
+                await mkdir(directory, { recursive: true });
+                const rebuild = () =>
+                    index.rebuild(capture.documents, bounded, async () => {});
+                await timeSearchStage("reindex.prepare", () =>
+                    this.wikiBudget
+                        ? runWithRequestBudget(
+                              new RequestBudget(this.wikiBudget),
+                              rebuild,
+                          )
+                        : rebuild(),
+                );
+                this.throwIfAborted(bounded);
+                await stampIndexSchema(
+                    directory,
+                    "documents",
+                    capture.documents.length > 0,
+                );
+            } finally {
+                finishPreparation();
+            }
+            return await this.enqueueWrite(corpusId, () =>
+                timeSearchStage("reindex.commit", async () => {
+                    this.throwIfAborted(bounded);
+                    const runtime = capture.runtime;
+                    if (
+                        runtime.manifest.indexGeneration !==
+                            capture.baseGeneration ||
+                        this.indexVersion(runtime.manifest) !==
+                            capture.baseVersion
+                    )
+                        throw new ViewBuildStaleError(
+                            "Corpus source index changed during reindex preparation",
+                        );
+                    const manifest = structuredClone(runtime.manifest);
+                    manifest.indexGeneration = generation;
+                    manifest.corpus = {
+                        ...manifest.corpus,
+                        updatedAt: now(),
+                        status: "ready",
+                        documentCount: manifest.sources.length,
+                    };
+                    await this.writeManifest(corpusId, manifest);
+                    published = true;
+                    runtime.manifest = manifest;
+                    runtime.index = index;
+                    await this.rememberDocumentIndex(corpusId, runtime);
+                    for (const source of manifest.sources)
+                        await this.viewStore.markSourceRevisionStale(
+                            corpusId,
+                            source.sourceId,
+                        );
+                    await this.invalidateMaintainedViews(corpusId);
+                    await this.removeInactiveIndexGenerations(
+                        corpusId,
+                        generation,
+                    );
+                    return {
+                        corpusId,
+                        ...(sourceId === undefined ? {} : { sourceId }),
+                        sourceCount: manifest.sources.length,
+                        indexVersion: this.indexVersion(manifest),
+                    };
+                }),
+            );
+        } finally {
+            finishPreparation();
+            this.preparingIndexes.delete(directory);
+            this.detachedRebuilds.delete(directory);
+            this.controllers.delete(generation);
+            if (!published) {
+                const remove = () =>
+                    rm(directory, { recursive: true, force: true });
+                // Source removal also collects generations under this reservation.
+                if (runtimeForCleanup)
+                    await runtimeForCleanup.access.write(remove);
+                else await remove();
+            }
+        }
     }
 
     private async rebuildAndActivate(
@@ -7075,21 +10397,28 @@ export class FileMemoryService
         await mkdir(candidateDirectory, { recursive: true });
         const candidateIndex = this.indexFactory(corpusId, candidateDirectory);
         try {
-            const rebuild = () =>
-                candidateIndex.rebuild(
-                    this.activeDocuments(candidateManifest),
-                    signal,
-                    async () => {},
-                );
-            await raceWithAbort(
-                this.wikiBudget
-                    ? runWithRequestBudget(
-                          new RequestBudget(this.wikiBudget),
-                          rebuild,
-                      )
-                    : rebuild(),
-                signal,
-            );
+            const rebuild = async () => {
+                const documents = this.activeDocuments(candidateManifest);
+                if (
+                    candidateManifest.sources.length <
+                        runtime.manifest.sources.length &&
+                    candidateIndex.rebuildRetained &&
+                    (await candidateIndex.rebuildRetained(
+                        runtime.index,
+                        documents,
+                        signal,
+                        async () => {},
+                    ))
+                )
+                    return;
+                await candidateIndex.rebuild(documents, signal, async () => {});
+            };
+            await (this.wikiBudget
+                ? runWithRequestBudget(
+                      new RequestBudget(this.wikiBudget),
+                      rebuild,
+                  )
+                : rebuild());
             this.throwIfAborted(signal);
             await stampIndexSchema(
                 candidateDirectory,
@@ -7103,10 +10432,7 @@ export class FileMemoryService
                 status: "ready",
                 documentCount: candidateManifest.sources.length,
             };
-            await writeJsonAtomic(
-                this.manifestPath(corpusId),
-                candidateManifest,
-            );
+            await this.writeManifest(corpusId, candidateManifest);
             runtime.manifest = candidateManifest;
             runtime.index = candidateIndex;
             await this.rememberDocumentIndex(corpusId, runtime);
@@ -7120,11 +10446,43 @@ export class FileMemoryService
     private async removeInactiveIndexGenerations(
         corpusId: string,
         activeGeneration: string,
+        forceCollection = false,
     ): Promise<void> {
         validateIndexGeneration(activeGeneration);
         const root = this.indexDirectory(corpusId);
         const removal =
             this.corpora.get(corpusId)?.manifest.authorizedSourceRemoval;
+        const sources = new Set(
+            this.corpora
+                .get(corpusId)
+                ?.manifest.sources.map((source) => source.sourceId),
+        );
+        for (const [directory, preparation] of this.detachedRebuilds) {
+            if (
+                preparation.corpusId !== corpusId ||
+                directory === this.indexDirectory(corpusId, activeGeneration) ||
+                !(removal
+                    ? preparation.sourceIds.has(removal.sourceId)
+                    : this.corpora.get(corpusId)?.manifest.pendingCorpusClear ||
+                      [...preparation.baseSourceIds].some(
+                          (id) => !sources.has(id),
+                      ))
+            )
+                continue;
+            preparation.controller.abort(
+                new ViewBuildStaleError(
+                    "Source removal invalidated reindex preparation",
+                ),
+            );
+            if (this.corpora.get(corpusId)?.manifest.pendingCorpusClear)
+                for (const jobId of preparation.jobIds ?? [])
+                    this.controllers
+                        .get(jobId)
+                        ?.abort(new Error("Corpus cleared during ingestion"));
+            // Wait for provider writes, not publication (which needs this reservation).
+            await preparation.prepared;
+            this.preparingIndexes.delete(directory);
+        }
         // Detached generations still contain retained sources and must be
         // cancelled and purged when any of that evidence is forgotten.
         if (removal)
@@ -7155,6 +10513,7 @@ export class FileMemoryService
                 .filter(
                     (entry) =>
                         entry.isDirectory() &&
+                        entry.name !== jsonSegmentDirectory &&
                         entry.name !== activeGeneration &&
                         !this.preparingIndexes.has(path.join(root, entry.name)),
                 )
@@ -7166,6 +10525,79 @@ export class FileMemoryService
                         force: true,
                     });
                 }),
+        );
+        if (!this.hasUnpublishedIndex(corpusId, root))
+            await this.reclaimIndexSegments(corpusId, root, forceCollection);
+    }
+
+    private hasUnpublishedIndex(corpusId: string, root: string): boolean {
+        const generation = this.corpora.get(corpusId)?.manifest.indexGeneration;
+        const active = generation
+            ? this.indexDirectory(corpusId, generation)
+            : undefined;
+        return [
+            ...this.preparingIndexes.keys(),
+            ...this.detachedRebuilds.keys(),
+        ].some(
+            (directory) =>
+                path.dirname(directory) === root && directory !== active,
+        );
+    }
+
+    private async reclaimIndexSegments(
+        corpusId: string,
+        root: string,
+        forceCollection: boolean,
+    ): Promise<void> {
+        const manifest = this.corpora.get(corpusId)?.manifest;
+        if (
+            forceCollection ||
+            manifest?.authorizedSourceRemoval ||
+            manifest?.pendingCorpusClear
+        )
+            await this.collectIndexSegments(root);
+        else this.scheduleIndexCollection(corpusId, root);
+    }
+
+    private collectIndexSegments(root: string): Promise<void> {
+        return timeSearchStage("storage.segments.collect", () =>
+            collectJsonSegments(root),
+        );
+    }
+
+    private scheduleIndexCollection(corpusId: string, root: string): void {
+        const generation = this.corpora.get(corpusId)?.manifest.indexGeneration;
+        if (!generation) return;
+        const key = `${corpusId}:segment-collection`;
+        this.maintenance.request(
+            corpusId,
+            `segments:${hashContent(root)}`,
+            generation,
+            async (signal) => {
+                try {
+                    await this.enqueueWrite(
+                        corpusId,
+                        async () => {
+                            if (this.maintenance.isDeferred(corpusId)) return;
+                            signal.throwIfAborted();
+                            // Preparation can start after this collection was scheduled.
+                            if (this.hasUnpublishedIndex(corpusId, root)) {
+                                this.scheduleIndexCollection(corpusId, root);
+                                return;
+                            }
+                            await this.collectIndexSegments(root);
+                            this.wikiMaintenanceFailures.delete(key);
+                        },
+                        true,
+                    );
+                } catch (error) {
+                    this.wikiMaintenanceFailures.set(
+                        key,
+                        new Error(safeError(error)),
+                    );
+                    throw error;
+                }
+            },
         );
     }
 
@@ -7244,14 +10676,16 @@ export class FileMemoryService
             if (!entry.isDirectory()) {
                 continue;
             }
-            const manifestPath = this.manifestPath(entry.name);
-            const manifest = await readJson<CorpusManifest>(manifestPath);
+            const manifest = await this.readSerializedManifest(entry.name);
             if (manifest?.changes === undefined) {
                 continue;
             }
             const changes = pruneChangeReceipts(manifest.changes);
             if (changes.length !== manifest.changes.length) {
-                await writeJsonAtomic(manifestPath, { ...manifest, changes });
+                await writeRunbookJson(
+                    this.manifestPath(entry.name),
+                    `${JSON.stringify({ ...manifest, changes }, undefined, 2)}\n`,
+                );
             }
         }
     }
@@ -7275,6 +10709,312 @@ export class FileMemoryService
             );
     }
 
+    private async captureIngestionGroup(
+        corpusId: string,
+        entries: AcceptedIngestion[],
+        generation: string,
+        controller: AbortController,
+        prepared: Promise<void>,
+    ) {
+        return this.enqueueWrite(corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(corpusId);
+            const ids = new Set(entries.map((entry) => entry.sourceId));
+            if (
+                ids.size !== entries.length ||
+                entries.some(
+                    (entry) =>
+                        entry.signal.aborted ||
+                        entry.request.source.assets?.length ||
+                        entry.request.pipeline?.expectedActiveRevisionId !==
+                            undefined ||
+                        runtime.manifest.sources.some(
+                            (source) => source.sourceId === entry.sourceId,
+                        ),
+                )
+            )
+                return undefined;
+            const directory = this.indexDirectory(corpusId, generation);
+            const index = this.indexFactory(corpusId, directory);
+            const existingGeneration = runtime.manifest.indexGeneration;
+            const append = runtime.manifest.sources.length > 0;
+            if (
+                append &&
+                (!existingGeneration ||
+                    !index.append ||
+                    (await classifyIndexSchema(
+                        this.indexDirectory(corpusId, existingGeneration),
+                        "documents",
+                        true,
+                    )) !== "current")
+            )
+                return undefined;
+            const additions = entries.map((entry) => {
+                this.assertSourceIngestionAllowed(runtime, entry.sourceId);
+                const { source, revision } = createStoredSource(
+                    entry.request,
+                    entry.content,
+                    entry.contentHash,
+                    entry.sourceId,
+                    entry.revisionId,
+                    this.mimeType(entry.request.source.sourceType),
+                    undefined,
+                );
+                revision.assets = [];
+                return {
+                    source,
+                    revision,
+                    content: entry.content,
+                    pipeline: contentPipeline(revision.pipeline),
+                };
+            });
+            const candidateManifest = structuredClone(runtime.manifest);
+            candidateManifest.sources.push(
+                ...additions.map((document) => document.source),
+            );
+            const sourceIds = new Set(
+                candidateManifest.sources.map((source) => source.sourceId),
+            );
+            await mkdir(directory, { recursive: true });
+            this.preparingIndexes.set(directory, {
+                corpusId,
+                jobId: entries[0]!.job.jobId,
+                sourceIds,
+            });
+            this.detachedRebuilds.set(directory, {
+                corpusId,
+                sourceIds,
+                baseSourceIds: new Set(
+                    runtime.manifest.sources.map((source) => source.sourceId),
+                ),
+                controller,
+                prepared,
+                jobIds: entries.map((entry) => entry.job.jobId),
+            });
+            if (append)
+                await cp(
+                    this.indexDirectory(corpusId, existingGeneration!),
+                    directory,
+                    { recursive: true },
+                );
+            for (const entry of entries)
+                await this.updateJob(entry.job, "building-indexes", {
+                    completed: 0,
+                    total: 1,
+                    operation: append ? "append" : "rebuild",
+                    message: `Building shared ${entries.length}-source index`,
+                });
+            return {
+                runtime,
+                index,
+                additions,
+                append,
+                documents: this.activeDocuments(candidateManifest),
+                baseGeneration: existingGeneration,
+                baseVersion: this.indexVersion(runtime.manifest),
+            };
+        });
+    }
+
+    private async processIngestionGroup(
+        corpusId: string,
+        entries: AcceptedIngestion[],
+    ): Promise<boolean> {
+        const groupId = randomUUID();
+        for (const entry of entries) {
+            runWithSearchTiming(entry.job.jobId, "memory.ingestion", () =>
+                recordSearchTiming("ingestion.group.member", 0, {
+                    groupId,
+                    groupSize: entries.length,
+                    sharedPreparation: true,
+                }),
+            );
+        }
+        return runWithSearchTiming(
+            groupId,
+            "memory.ingestion.group",
+            () =>
+                timeSearchStage("ingestion.group.total", () =>
+                    this.prepareIngestionGroup(corpusId, entries),
+                ),
+            { corpusId, groupSize: entries.length, sharedPreparation: true },
+        );
+    }
+
+    private async prepareIngestionGroup(
+        corpusId: string,
+        entries: AcceptedIngestion[],
+    ): Promise<boolean> {
+        const generation = randomUUID();
+        const directory = this.indexDirectory(corpusId, generation);
+        const controller = new AbortController();
+        const signal = AbortSignal.any([
+            controller.signal,
+            ...entries.map((entry) => entry.signal),
+        ]);
+        let finishPreparation!: () => void;
+        const prepared = new Promise<void>((resolve) => {
+            finishPreparation = resolve;
+        });
+        let committed = false;
+        try {
+            const capture = await this.captureIngestionGroup(
+                corpusId,
+                entries,
+                generation,
+                controller,
+                prepared,
+            );
+            if (!capture) return false;
+            const progress = async (value: JobProgress) => {
+                for (const entry of entries) {
+                    if (signal.aborted) return;
+                    await this.updateJob(
+                        entry.job,
+                        value.stage ?? "building-indexes",
+                        {
+                            ...value,
+                            message: `Shared ${entries.length}-source index: ${value.message ?? "preparing"}`,
+                        },
+                    );
+                }
+            };
+            try {
+                signal.throwIfAborted();
+                // Drain the actual provider, even if it ignores abort. Privacy
+                // cleanup waits for this promise, never for publication.
+                await timeSearchStage("ingestion.prepare.group", () =>
+                    capture.append
+                        ? capture.index.append!(
+                              capture.additions,
+                              signal,
+                              progress,
+                          )
+                        : capture.index.rebuild(
+                              capture.documents,
+                              signal,
+                              progress,
+                          ),
+                );
+                signal.throwIfAborted();
+                await stampIndexSchema(directory, "documents", true);
+            } finally {
+                finishPreparation();
+            }
+            await this.enqueueWrite(
+                corpusId,
+                async () => {
+                    signal.throwIfAborted();
+                    if (
+                        capture.runtime.manifest.indexGeneration !==
+                            capture.baseGeneration ||
+                        this.indexVersion(capture.runtime.manifest) !==
+                            capture.baseVersion
+                    )
+                        throw new ViewBuildStaleError(
+                            "Corpus changed during grouped ingestion preparation",
+                        );
+                    const manifest = structuredClone(capture.runtime.manifest);
+                    delete manifest.pendingSourceForget;
+                    for (const addition of capture.additions) {
+                        addition.revision.state = "ready";
+                        addition.revision.indexedAt = now();
+                        manifest.sources.push(addition.source);
+                    }
+                    manifest.indexGeneration = generation;
+                    manifest.corpus.status = "ready";
+                    manifest.corpus.updatedAt = now();
+                    manifest.corpus.documentCount = manifest.sources.length;
+                    manifest.changes = pruneChangeReceipts(manifest.changes);
+                    for (const entry of entries)
+                        await this.updateJob(entry.job, "persisting", {
+                            completed: 1,
+                            total: 1,
+                            message: "Persisting shared corpus metadata",
+                        });
+                    await this.writeManifest(corpusId, manifest);
+                    capture.runtime.manifest = manifest;
+                    capture.runtime.index = capture.index;
+                    committed = true;
+                    await timeSearchStage(
+                        "ingestion.postIndex.fingerprint",
+                        () =>
+                            this.rememberDocumentIndex(
+                                corpusId,
+                                capture.runtime,
+                            ),
+                    );
+                    for (const entry of entries)
+                        await timeSearchStage(
+                            "ingestion.postIndex.markViewsStale",
+                            () =>
+                                this.viewStore.markSourceRevisionStale(
+                                    corpusId,
+                                    entry.sourceId,
+                                    entry.revisionId,
+                                ),
+                        );
+                    await timeSearchStage(
+                        "ingestion.postIndex.invalidateViews",
+                        () => this.invalidateMaintainedViews(corpusId),
+                    );
+                    await timeSearchStage("ingestion.postIndex.purgeText", () =>
+                        this.textStore(corpusId).purge(manifest.sources),
+                    );
+                    await timeSearchStage(
+                        "ingestion.postIndex.removeGenerations",
+                        () =>
+                            this.removeInactiveIndexGenerations(
+                                corpusId,
+                                generation,
+                            ),
+                    );
+                    for (const entry of entries)
+                        await this.updateJob(entry.job, "complete", {
+                            completed: 1,
+                            total: 1,
+                            message: "Ingestion complete",
+                        });
+                },
+                false,
+                "ingestion.commit.queue",
+            );
+            return true;
+        } catch (error) {
+            finishPreparation();
+            if (
+                !committed &&
+                (signal.aborted || error instanceof ViewBuildStaleError)
+            )
+                return false;
+            await this.enqueueWrite(
+                corpusId,
+                async () => {
+                    for (const entry of entries)
+                        await this.handleIngestionFailure(
+                            entry.job,
+                            entry.signal,
+                            error,
+                            committed,
+                            undefined,
+                            false,
+                        );
+                },
+                true,
+            );
+            return true;
+        } finally {
+            finishPreparation();
+            this.detachedRebuilds.delete(directory);
+            this.preparingIndexes.delete(directory);
+            if (!committed)
+                await this.enqueueWrite(
+                    corpusId,
+                    () => rm(directory, { recursive: true, force: true }),
+                    true,
+                );
+        }
+    }
+
     private async processIngestion(
         request: DocumentIngestRequest,
         content: string,
@@ -7284,6 +11024,12 @@ export class FileMemoryService
         job: IngestionJobStatus,
         signal: AbortSignal,
     ): Promise<void> {
+        const preparationController = new AbortController();
+        signal = AbortSignal.any([signal, preparationController.signal]);
+        let finishPreparation!: () => void;
+        const prepared = new Promise<void>((resolve) => {
+            finishPreparation = resolve;
+        });
         const indexGeneration = randomUUID();
         const candidateDirectory = this.indexDirectory(
             request.corpusId,
@@ -7377,6 +11123,22 @@ export class FileMemoryService
                         ),
                     });
                     await mkdir(candidateDirectory, { recursive: true });
+                    this.detachedRebuilds.set(candidateDirectory, {
+                        corpusId: request.corpusId,
+                        sourceIds: new Set(
+                            candidateManifest.sources.map(
+                                (item) => item.sourceId,
+                            ),
+                        ),
+                        baseSourceIds: new Set(
+                            runtime.manifest.sources.map(
+                                (item) => item.sourceId,
+                            ),
+                        ),
+                        controller: preparationController,
+                        prepared,
+                        jobIds: [job.jobId],
+                    });
                     const candidateIndex = this.indexFactory(
                         request.corpusId,
                         candidateDirectory,
@@ -7387,7 +11149,10 @@ export class FileMemoryService
                     });
                     const documents = this.activeDocuments(candidateManifest);
                     const canAppend =
-                        existing === undefined &&
+                        (existing === undefined ||
+                            (policy === "retainRevisionHistory" &&
+                                !request.source.assets?.length &&
+                                candidateIndex.replace !== undefined)) &&
                         runtime.manifest.sources.length > 0 &&
                         runtime.manifest.indexGeneration !== undefined &&
                         candidateIndex.append !== undefined &&
@@ -7461,35 +11226,32 @@ export class FileMemoryService
             await timeSearchStage("ingestion.prepare", async () => {
                 if (canAppend) {
                     this.throwIfAborted(signal);
-                    await raceWithAbort(
-                        timeSearchStage("ingestion.index.append", () =>
-                            candidateIndex.append!(
-                                [
-                                    {
-                                        source,
-                                        revision,
-                                        content,
-                                        pipeline: contentPipeline(
-                                            revision.pipeline,
-                                        ),
-                                    },
-                                ],
-                                signal,
-                                reportProgress,
-                            ),
-                        ),
-                        signal,
+                    const addition = {
+                        source,
+                        revision,
+                        content,
+                        pipeline: contentPipeline(revision.pipeline),
+                    };
+                    await timeSearchStage("ingestion.index.append", () =>
+                        existing && candidateIndex.replace
+                            ? candidateIndex.replace(
+                                  addition,
+                                  signal,
+                                  reportProgress,
+                              )
+                            : candidateIndex.append!(
+                                  [addition],
+                                  signal,
+                                  reportProgress,
+                              ),
                     );
                 } else {
-                    await raceWithAbort(
-                        timeSearchStage("ingestion.index.rebuild", () =>
-                            candidateIndex.rebuild(
-                                documents,
-                                signal,
-                                reportProgress,
-                            ),
+                    await timeSearchStage("ingestion.index.rebuild", () =>
+                        candidateIndex.rebuild(
+                            documents,
+                            signal,
+                            reportProgress,
                         ),
-                        signal,
                     );
                 }
                 this.throwIfAborted(signal);
@@ -7498,99 +11260,141 @@ export class FileMemoryService
                     "documents",
                     candidateManifest.sources.length > 0,
                 );
+                finishPreparation();
             });
-            await this.enqueueWrite(request.corpusId, () =>
-                timeSearchStage("ingestion.commit", async () => {
-                    this.throwIfAborted(signal);
-                    if (
-                        runtime.manifest.indexGeneration !==
-                            capture.baseGeneration ||
-                        this.indexVersion(runtime.manifest) !==
-                            capture.baseVersion
-                    )
-                        throw new ViewBuildStaleError(
-                            "Corpus source index changed during ingestion preparation",
+            await this.enqueueWrite(
+                request.corpusId,
+                () =>
+                    timeSearchStage("ingestion.commit", async () => {
+                        this.throwIfAborted(signal);
+                        if (
+                            runtime.manifest.indexGeneration !==
+                                capture.baseGeneration ||
+                            this.indexVersion(runtime.manifest) !==
+                                capture.baseVersion
+                        )
+                            throw new ViewBuildStaleError(
+                                "Corpus source index changed during ingestion preparation",
+                            );
+                        // Other stores and source synopses can advance while the detached
+                        // index is prepared. Publish only the source change into fresh metadata.
+                        const committedManifest = structuredClone(
+                            runtime.manifest,
                         );
-                    // Other stores and source synopses can advance while the detached
-                    // index is prepared. Publish only the source change into fresh metadata.
-                    const committedManifest = structuredClone(runtime.manifest);
-                    delete committedManifest.pendingSourceForget;
-                    const currentSource = committedManifest.sources.find(
-                        (item) => item.sourceId === sourceId,
-                    );
-                    source.revisions = source.revisions.map((item) =>
-                        item.revisionId === revisionId
-                            ? item
-                            : (currentSource?.revisions.find(
-                                  (current) =>
-                                      current.revisionId === item.revisionId,
-                              ) ?? item),
-                    );
-                    committedManifest.sources = [
-                        ...committedManifest.sources.filter(
-                            (item) => item.sourceId !== sourceId,
-                        ),
-                        source,
-                    ];
-                    committedManifest.indexGeneration = indexGeneration;
-                    revision.state = "ready";
-                    revision.indexedAt = now();
-                    committedManifest.corpus.status = "ready";
-                    committedManifest.corpus.updatedAt = now();
-                    committedManifest.corpus.documentCount =
-                        committedManifest.sources.length;
-                    committedManifest.changes = pruneChangeReceipts(
-                        committedManifest.changes,
-                    );
-                    if (existing !== undefined) {
-                        committedManifest.changes.push(
-                            createChangeReceipt(
-                                request.corpusId,
-                                "replace",
-                                sourceId,
-                                { sources: 1, revisions: 1, knowledge: 0 },
-                                existing.activeRevisionId,
-                                revisionId,
+                        delete committedManifest.pendingSourceForget;
+                        const currentSource = committedManifest.sources.find(
+                            (item) => item.sourceId === sourceId,
+                        );
+                        source.revisions = source.revisions.map((item) =>
+                            item.revisionId === revisionId
+                                ? item
+                                : (currentSource?.revisions.find(
+                                      (current) =>
+                                          current.revisionId ===
+                                          item.revisionId,
+                                  ) ?? item),
+                        );
+                        committedManifest.sources = [
+                            ...committedManifest.sources.filter(
+                                (item) => item.sourceId !== sourceId,
                             ),
+                            source,
+                        ];
+                        committedManifest.indexGeneration = indexGeneration;
+                        revision.state = "ready";
+                        revision.indexedAt = now();
+                        committedManifest.corpus.status = "ready";
+                        committedManifest.corpus.updatedAt = now();
+                        committedManifest.corpus.documentCount =
+                            committedManifest.sources.length;
+                        committedManifest.changes = pruneChangeReceipts(
+                            committedManifest.changes,
                         );
-                    }
-                    await this.updateJob(job, "persisting", {
-                        completed: 1,
-                        total: 1,
-                        message: "Persisting corpus metadata",
-                    });
-                    await writeJsonAtomic(
-                        this.manifestPath(request.corpusId),
-                        committedManifest,
-                    );
-                    runtime.manifest = committedManifest;
-                    runtime.index = candidateIndex;
-                    committed = true;
-                    await this.rememberDocumentIndex(request.corpusId, runtime);
-                    candidateIndexDirectory = undefined;
-                    await this.viewStore.markSourceRevisionStale(
-                        request.corpusId,
-                        sourceId,
-                        revisionId,
-                    );
-                    await this.invalidateMaintainedViews(request.corpusId);
-                    await this.cleanupReplacedAssets(
-                        request.corpusId,
-                        source,
-                        existing,
-                    );
-                    await this.removeInactiveIndexGenerations(
-                        request.corpusId,
-                        indexGeneration,
-                    );
-                    await this.updateJob(job, "complete", {
-                        completed: 1,
-                        total: 1,
-                        message: "Ingestion complete",
-                    });
-                }),
+                        if (existing !== undefined) {
+                            committedManifest.changes.push(
+                                createChangeReceipt(
+                                    request.corpusId,
+                                    "replace",
+                                    sourceId,
+                                    { sources: 1, revisions: 1, knowledge: 0 },
+                                    existing.activeRevisionId,
+                                    revisionId,
+                                ),
+                            );
+                        }
+                        await this.updateJob(job, "persisting", {
+                            completed: 1,
+                            total: 1,
+                            message: "Persisting corpus metadata",
+                        });
+                        await this.writeManifest(
+                            request.corpusId,
+                            committedManifest,
+                        );
+                        runtime.manifest = committedManifest;
+                        runtime.index = candidateIndex;
+                        committed = true;
+                        await timeSearchStage(
+                            "ingestion.postIndex.fingerprint",
+                            () =>
+                                this.rememberDocumentIndex(
+                                    request.corpusId,
+                                    runtime,
+                                ),
+                        );
+                        candidateIndexDirectory = undefined;
+                        await timeSearchStage(
+                            "ingestion.postIndex.markViewsStale",
+                            () =>
+                                this.viewStore.markSourceRevisionStale(
+                                    request.corpusId,
+                                    sourceId,
+                                    revisionId,
+                                ),
+                        );
+                        await timeSearchStage(
+                            "ingestion.postIndex.invalidateViews",
+                            () =>
+                                this.invalidateMaintainedViews(
+                                    request.corpusId,
+                                ),
+                        );
+                        await timeSearchStage(
+                            "ingestion.postIndex.cleanupAssets",
+                            () =>
+                                this.cleanupReplacedAssets(
+                                    request.corpusId,
+                                    source,
+                                    existing,
+                                ),
+                        );
+                        await timeSearchStage(
+                            "ingestion.postIndex.purgeText",
+                            () =>
+                                this.textStore(request.corpusId).purge(
+                                    runtime.manifest.sources,
+                                ),
+                        );
+                        await timeSearchStage(
+                            "ingestion.postIndex.removeGenerations",
+                            () =>
+                                this.removeInactiveIndexGenerations(
+                                    request.corpusId,
+                                    indexGeneration,
+                                    existing !== undefined,
+                                ),
+                        );
+                        await this.updateJob(job, "complete", {
+                            completed: 1,
+                            total: 1,
+                            message: "Ingestion complete",
+                        });
+                    }),
+                false,
+                "ingestion.commit.queue",
             );
         } catch (error) {
+            finishPreparation();
             await this.enqueueWrite(
                 request.corpusId,
                 () =>
@@ -7605,6 +11409,8 @@ export class FileMemoryService
                 true,
             );
         } finally {
+            finishPreparation();
+            this.detachedRebuilds.delete(candidateDirectory);
             this.preparingIndexes.delete(candidateDirectory);
             this.controllers.delete(job.jobId);
         }
@@ -7615,6 +11421,8 @@ export class FileMemoryService
         source: StoredSource,
         existing?: StoredSource,
     ): Promise<void> {
+        if (existing && existing.activeRevisionId !== source.activeRevisionId)
+            await this.agentSessionStore.purge(corpusId, source.sourceId);
         const retained = new Set(
             source.revisions.map((revision) => revision.revisionId),
         );
@@ -7712,7 +11520,7 @@ export class FileMemoryService
                     "ingestion.wait",
                     performance.now() - queuedAt,
                 );
-            return operation();
+            return timeSearchStage("ingestion.queue.work", operation);
         });
         const settled = work.then(
             () => undefined,
@@ -7722,8 +11530,10 @@ export class FileMemoryService
         try {
             await work;
         } finally {
-            if (this.ingestionTails.get(corpusId) === settled)
+            if (this.ingestionTails.get(corpusId) === settled) {
                 this.ingestionTails.delete(corpusId);
+                this.resumeBatchMaintenance(corpusId);
+            }
         }
     }
 
@@ -7731,28 +11541,37 @@ export class FileMemoryService
         corpusId: string,
         operation: () => Promise<T>,
         recoveringRemoval = false,
+        timingStage = "queue",
     ): Promise<T> {
-        const runtime = await this.getCorpusRuntime(
-            corpusId,
-            recoveringRemoval,
+        const runtime = await timeSearchStage("queue.runtime", () =>
+            this.getCorpusRuntime(corpusId, recoveringRemoval),
         );
         const queuedAt = currentSearchTraceId() ? performance.now() : undefined;
         const run = async () => {
             if (!recoveringRemoval) this.assertRemovalComplete(runtime);
             if (queuedAt !== undefined)
-                recordSearchTiming("queue.wait", performance.now() - queuedAt, {
-                    corpusId,
-                    access: "write",
-                });
+                recordSearchTiming(
+                    `${timingStage}.wait`,
+                    performance.now() - queuedAt,
+                    {
+                        corpusId,
+                        access: "write",
+                    },
+                );
             const changes = pruneChangeReceipts(runtime.manifest.changes);
             if (changes.length !== (runtime.manifest.changes ?? []).length) {
                 const candidate = { ...runtime.manifest, changes };
-                await writeJsonAtomic(this.manifestPath(corpusId), candidate);
+                await this.writeManifest(corpusId, candidate);
                 runtime.manifest = candidate;
             }
             return operation();
         };
-        return runtime.access.write(run);
+        return runtime.access.write(() =>
+            timeSearchStage(`${timingStage}.work`, run, {
+                corpusId,
+                access: "write",
+            }),
+        );
     }
 
     private enqueueRead<T>(
@@ -7760,12 +11579,14 @@ export class FileMemoryService
         ready: (runtime: CorpusRuntime) => Promise<boolean>,
         prepare: (runtime: CorpusRuntime) => Promise<void>,
         operation: (runtime: CorpusRuntime) => Promise<T>,
+        detachedPreparation = false,
     ): Promise<T> {
         const read = this.readPreparedIndex(
             corpusId,
             ready,
             prepare,
             operation,
+            detachedPreparation,
         );
         this.indexedReads.add(read);
         void read.then(
@@ -7780,9 +11601,10 @@ export class FileMemoryService
         ready: (runtime: CorpusRuntime) => Promise<boolean>,
         prepare: (runtime: CorpusRuntime) => Promise<void>,
         operation: (runtime: CorpusRuntime) => Promise<T>,
+        detachedPreparation: boolean,
     ): Promise<T> {
         const runtime = await this.getCorpusRuntime(corpusId);
-        while (true) {
+        for (let attempts = 0; ; attempts++) {
             const queuedAt = currentSearchTraceId()
                 ? performance.now()
                 : undefined;
@@ -7804,7 +11626,13 @@ export class FileMemoryService
                 };
             });
             if (result.ready) return result.value;
-            await this.enqueueWrite(corpusId, () => prepare(runtime));
+            if (detachedPreparation) {
+                if (attempts >= 3)
+                    throw new ViewBuildStaleError(
+                        "Corpus index repeatedly changed during read preparation",
+                    );
+                await prepare(runtime);
+            } else await this.enqueueWrite(corpusId, () => prepare(runtime));
         }
     }
 
@@ -7815,12 +11643,49 @@ export class FileMemoryService
         return this.enqueueRead(
             corpusId,
             (runtime) => this.documentIndexReady(corpusId, runtime),
-            (runtime) => this.ensureDocumentIndex(corpusId, runtime),
+            (runtime) => this.prepareDocumentReadIndex(corpusId, runtime),
             operation,
+            true,
         );
     }
 
-    private assertRemovalComplete(runtime: CorpusRuntime): void {
+    private async prepareDocumentReadIndex(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<void> {
+        let repair = this.documentRepairs.get(corpusId);
+        if (!repair) {
+            repair = (async () => {
+                const ready = await this.enqueueWrite(corpusId, () =>
+                    this.ensureDocumentIndex(corpusId, runtime, false),
+                );
+                if (!ready)
+                    await this.reindex(
+                        corpusId,
+                        undefined,
+                        this.maintenance.signal,
+                    );
+            })();
+            this.documentRepairs.set(corpusId, repair);
+        }
+        try {
+            await repair;
+        } finally {
+            if (this.documentRepairs.get(corpusId) === repair)
+                this.documentRepairs.delete(corpusId);
+        }
+    }
+
+    private assertRemovalComplete(runtime: {
+        manifest: Pick<
+            CorpusManifest,
+            "pendingCorpusClear" | "authorizedSourceRemoval"
+        >;
+    }): void {
+        if (runtime.manifest.pendingCorpusClear)
+            throw new ViewBuildStaleError(
+                "Corpus clear is pending purge recovery; corpus reads and writes are withheld",
+            );
         if (runtime.manifest.authorizedSourceRemoval)
             throw new ViewBuildStaleError(
                 "Authorized source removal is pending purge recovery; corpus reads and writes are withheld",
@@ -7833,6 +11698,7 @@ export class FileMemoryService
     ): Promise<CorpusRuntime> {
         const cached = this.corpora.get(corpusId);
         if (cached !== undefined) {
+            await this.eventStore(corpusId).recover();
             if (!recoveringRemoval) this.assertRemovalComplete(cached);
             return cached;
         }
@@ -7852,13 +11718,12 @@ export class FileMemoryService
     }
 
     private async loadCorpusRuntime(corpusId: string): Promise<CorpusRuntime> {
-        const manifest = await readJson<CorpusManifest>(
-            this.manifestPath(corpusId),
-        );
+        const manifest = await this.readManifest(corpusId);
         if (manifest === undefined) {
             throw new Error(`Unknown corpus '${corpusId}'`);
         }
-        const records = await readEventRecords(this.eventsPath(corpusId));
+        const persisted = await this.eventStore(corpusId).records();
+        const records = [...persisted.events, ...persisted.suppressions];
         const events: MemoryEvent[] = [];
         const eventSuppressions: EventSuppression[] = [];
         const eventIdempotency = new Map<string, MemoryEvent>();
@@ -7895,7 +11760,7 @@ export class FileMemoryService
             suppressedEventKeys: new Set(),
             suppressedConversations: new Set(),
             suppressedTurns: new Set(),
-            access: new CorpusAccess(() => this.assertRemovalComplete(runtime)),
+            access: this.corpusAccess(corpusId),
         };
         this.setEventSuppressions(runtime, eventSuppressions);
         for (const event of events) {
@@ -7922,8 +11787,9 @@ export class FileMemoryService
     private async ensureDocumentIndex(
         corpusId: string,
         runtime: CorpusRuntime,
-    ): Promise<void> {
-        if (await this.documentIndexReady(corpusId, runtime)) return;
+        allowRebuild = true,
+    ): Promise<boolean> {
+        if (await this.documentIndexReady(corpusId, runtime)) return true;
         const generation = runtime.manifest.indexGeneration;
         if (generation !== undefined) {
             validateIdentifier("index generation", generation);
@@ -7949,8 +11815,9 @@ export class FileMemoryService
                     },
                 );
                 await this.rememberDocumentIndex(corpusId, runtime);
-                return;
+                return true;
             }
+            if (!allowRebuild) return false;
             await rm(directory, { recursive: true, force: true });
         } else if (runtime.manifest.sources.length === 0) {
             await timeSearchStage(
@@ -7962,8 +11829,9 @@ export class FileMemoryService
                 },
             );
             await this.rememberDocumentIndex(corpusId, runtime);
-            return;
+            return true;
         }
+        if (!allowRebuild) return false;
         await timeSearchStage(
             "index.rebuild",
             () =>
@@ -7971,10 +11839,11 @@ export class FileMemoryService
                     corpusId,
                     runtime,
                     structuredClone(runtime.manifest),
-                    new AbortController().signal,
+                    this.maintenance.signal,
                 ),
             { corpusId, indexKind: "documents" },
         );
+        return true;
     }
 
     private async documentIndexReady(
@@ -8009,6 +11878,13 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<void> {
+        for (const work of this.topicSummaryWork.values())
+            if (work.corpusId === corpusId)
+                work.controller.abort(
+                    new ViewBuildStaleError(
+                        "Topic summary evidence was superseded",
+                    ),
+                );
         runtime.documentIndex = {
             generation: runtime.manifest.indexGeneration,
             index: runtime.index,
@@ -8017,6 +11893,27 @@ export class FileMemoryService
                 "documents",
             ),
         };
+        if (
+            this.informationalWikiEnabled &&
+            supportsTopicIndex(runtime.index)
+        ) {
+            const fingerprint = this.topicFingerprint(runtime);
+            for (const job of await this.viewStore.listViewBuilds(corpusId))
+                if (
+                    job.state === "running" &&
+                    job.results.some(
+                        (result) =>
+                            result.snapshot.pipeline === "topics-v1" &&
+                            result.snapshot.fingerprint !== fingerprint,
+                    )
+                )
+                    this.viewBuilds.cancel(
+                        job.jobId,
+                        new ViewBuildStaleError(
+                            "Topic index generation was superseded",
+                        ),
+                    );
+        }
         this.scheduleTopics(corpusId, runtime);
     }
 
@@ -8075,7 +11972,7 @@ export class FileMemoryService
             throw error;
         }
         for (const entry of entries) {
-            if (entry.isDirectory()) {
+            if (entry.isDirectory() && entry.name !== jsonSegmentDirectory) {
                 await classifyIndexSchema(
                     path.join(root, entry.name),
                     indexKind,
@@ -8084,13 +11981,15 @@ export class FileMemoryService
             }
         }
         await rm(root, { recursive: true, force: true });
+        clearJsonSegmentCache(root);
     }
 
     private async purgeObsoleteEventIndex(
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<EventIndexState | undefined> {
-        const watermark = eventIndexWatermark(runtime.events);
+        const version = await this.eventStore(corpusId).version();
+        const watermark = `${version.sequence}:${version.eligibilityRevision}`;
         const root = this.eventIndexRoot(corpusId);
         const state = await readJson<EventIndexState>(
             path.join(root, "state.json"),
@@ -8109,6 +12008,12 @@ export class FileMemoryService
             }
         }
         if (state?.watermark !== watermark) {
+            if (
+                state?.eligibilityRevision === version.eligibilityRevision &&
+                state.sequence !== undefined &&
+                state.sequence <= version.sequence
+            )
+                return state;
             await this.removeDerivedIndexRoot(root, "conversation-events");
             return undefined;
         }
@@ -8119,9 +12024,26 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<CorpusIndex> {
+        const pending = this.eventIndexPreparationWork.get(corpusId);
+        if (pending)
+            await runtime.access.outsideWrite(async () => {
+                await Promise.allSettled([pending]);
+            });
+        if (this.eventIndexControllers.has(corpusId))
+            throw new ViewBuildStaleError(
+                "Event index preparation is already running",
+            );
+        if (this.viewIndexRemovalBarriers.has(corpusId))
+            throw new ViewBuildStaleError(
+                "Event evidence removal is in progress",
+            );
         const root = this.eventIndexRoot(corpusId);
-        const state = await this.purgeObsoleteEventIndex(corpusId, runtime);
-        if (state !== undefined) {
+        const store = this.eventStore(corpusId);
+        const version = await store.version();
+        let state = await this.purgeObsoleteEventIndex(corpusId, runtime);
+        if (state !== undefined && state.sequence === version.sequence) {
+            const cached = this.graphEventIndexes.get(corpusId);
+            if (cached?.generation === state.generation) return cached.index;
             try {
                 await access(
                     path.join(
@@ -8133,7 +12055,20 @@ export class FileMemoryService
                     corpusId,
                     this.eventIndexDirectory(corpusId, state.generation),
                 );
-                await index.initialize();
+                await this.loadReadyEventIndex(corpusId, runtime, index);
+                const current = await store.version();
+                if (
+                    this.closed ||
+                    current.sequence !== version.sequence ||
+                    current.eligibilityRevision !== version.eligibilityRevision
+                )
+                    throw new ViewBuildStaleError(
+                        "Event eligibility changed while loading the projection",
+                    );
+                this.graphEventIndexes.set(corpusId, {
+                    generation: state.generation,
+                    index,
+                });
                 return index;
             } catch (error) {
                 if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -8141,18 +12076,64 @@ export class FileMemoryService
                 }
             }
             await this.removeDerivedIndexRoot(root, "conversation-events");
+            state = undefined;
         }
         await mkdir(root, { recursive: true });
+        if (this.closed)
+            throw new ViewBuildStaleError("Memory service is closing");
+        const controller = new AbortController();
+        this.eventIndexControllers.set(corpusId, controller);
+        const events = runtime.events
+            .filter((event) => !isSuppressedEvent(runtime, event))
+            .map((event) => structuredClone(event));
         const generation = randomUUID();
         const directory = this.eventIndexDirectory(corpusId, generation);
-        await mkdir(directory);
         try {
+            await mkdir(directory);
             const index = this.eventIndexFactory(corpusId, directory);
-            await index.rebuild(
-                runtime.events.map((event) => this.eventDocument(event)),
-                new AbortController().signal,
-                async () => {},
-            );
+            const preparation = Promise.resolve().then(async () => {
+                if (
+                    state &&
+                    index.append &&
+                    state.eligibilityRevision === version.eligibilityRevision
+                ) {
+                    await cp(
+                        this.eventIndexDirectory(corpusId, state.generation),
+                        directory,
+                        { recursive: true },
+                    );
+                    await index.append(
+                        events
+                            .filter(
+                                (event) =>
+                                    store.sequenceFor(event.eventId) >
+                                    (state.sequence ?? 0),
+                            )
+                            .map((event) => this.eventDocument(event)),
+                        controller.signal,
+                        async () => {},
+                    );
+                } else {
+                    await index.rebuild(
+                        events.map((event) => this.eventDocument(event)),
+                        controller.signal,
+                        async () => {},
+                    );
+                }
+            });
+            this.eventIndexPreparationWork.set(corpusId, preparation);
+            await runtime.access.outsideWrite(() => preparation);
+            controller.signal.throwIfAborted();
+            const currentVersion = await store.version();
+            if (
+                this.closed ||
+                currentVersion.sequence !== version.sequence ||
+                currentVersion.eligibilityRevision !==
+                    version.eligibilityRevision
+            )
+                throw new ViewBuildStaleError(
+                    "Event eligibility changed during index preparation",
+                );
             await stampIndexSchema(
                 directory,
                 "conversation-events",
@@ -8161,13 +12142,16 @@ export class FileMemoryService
             await writeFile(path.join(directory, "ready"), "");
             await writeJsonAtomic(path.join(root, "state.json"), {
                 generation,
-                watermark: eventIndexWatermark(runtime.events),
+                watermark: `${version.sequence}:${version.eligibilityRevision}`,
+                ...version,
             } satisfies EventIndexState);
             const obsolete = (
                 await readdir(root, { withFileTypes: true })
             ).filter(
                 (entry) =>
-                    entry.name !== generation && entry.name !== "state.json",
+                    entry.name !== generation &&
+                    entry.name !== "state.json" &&
+                    entry.name !== jsonSegmentDirectory,
             );
             for (const entry of obsolete) {
                 if (entry.isDirectory()) {
@@ -8184,10 +12168,17 @@ export class FileMemoryService
                     force: true,
                 });
             }
+            await collectJsonSegments(root);
+            this.graphEventIndexes.set(corpusId, { generation, index });
             return index;
         } catch (error) {
             await rm(directory, { recursive: true, force: true });
+            controller.signal.throwIfAborted();
             throw error;
+        } finally {
+            if (this.eventIndexControllers.get(corpusId) === controller)
+                this.eventIndexControllers.delete(corpusId);
+            this.eventIndexPreparationWork.delete(corpusId);
         }
     }
 
@@ -8403,34 +12394,18 @@ export class FileMemoryService
     }
 
     private scheduleSourceSynopses(corpusId: string): void {
-        const key = `${corpusId}:synopsis`;
         if (
             !this.sourceSynopsesEnabled ||
             this.closed ||
-            this.wikiTimers.has(key) ||
-            this.synopsisWork.has(corpusId)
+            this.ingestionTails.has(corpusId)
         )
             return;
-        const timer = setTimeout(() => {
-            this.wikiTimers.delete(key);
-            const work = this.maintainSourceSynopses(corpusId);
-            this.synopsisWork.set(corpusId, work);
-            void work.then(
-                () => {
-                    this.synopsisWork.delete(corpusId);
-                    this.wikiMaintenanceFailures.delete(key);
-                },
-                (error: unknown) => {
-                    this.synopsisWork.delete(corpusId);
-                    this.wikiMaintenanceFailures.set(
-                        key,
-                        new Error(safeError(error)),
-                    );
-                },
-            );
-        }, 250);
-        timer.unref();
-        this.wikiTimers.set(key, timer);
+        this.maintenance.request(
+            corpusId,
+            "synopsis",
+            this.corpora.get(corpusId)?.manifest.indexGeneration,
+            () => this.maintainSourceSynopses(corpusId),
+        );
     }
 
     private async maintainSourceSynopses(corpusId: string): Promise<void> {
@@ -8438,10 +12413,11 @@ export class FileMemoryService
         if (runtime.manifest.authorizedSourceRemoval) return;
         const ids = runtime.manifest.sources.map((source) => source.sourceId);
         for (const sourceId of ids) {
-            if (this.closed) return;
+            if (this.maintenance.isDeferred(corpusId)) return;
             const capture = await this.enqueueWrite(
                 corpusId,
                 async () => {
+                    if (this.maintenance.isDeferred(corpusId)) return undefined;
                     const current = await this.getCorpusRuntime(corpusId, true);
                     if (current.manifest.authorizedSourceRemoval)
                         return undefined;
@@ -8475,10 +12451,7 @@ export class FileMemoryService
                             status: "failed",
                             reason: "Interrupted synopsis exhausted its automatic retry; waiting for changed input",
                         };
-                        await writeJsonAtomic(
-                            this.manifestPath(corpusId),
-                            candidate,
-                        );
+                        await this.writeManifest(corpusId, candidate);
                         current.manifest = candidate;
                         return undefined;
                     }
@@ -8498,10 +12471,7 @@ export class FileMemoryService
                                 ? prior.attempts + 1
                                 : 1,
                     };
-                    await writeJsonAtomic(
-                        this.manifestPath(corpusId),
-                        candidate,
-                    );
+                    await this.writeManifest(corpusId, candidate);
                     current.manifest = candidate;
                     return {
                         source: structuredClone(source),
@@ -8518,6 +12488,7 @@ export class FileMemoryService
             this.controllers.set(key, controller);
             const signal = AbortSignal.any([
                 controller.signal,
+                this.maintenance.signal,
                 AbortSignal.timeout(90_000),
             ]);
             let generated:
@@ -8606,10 +12577,7 @@ export class FileMemoryService
                                 "Generation failed; scan counts describe submitted input, not accepted semantic coverage.",
                             ],
                         };
-                    await writeJsonAtomic(
-                        this.manifestPath(corpusId),
-                        candidate,
-                    );
+                    await this.writeManifest(corpusId, candidate);
                     current.manifest = candidate;
                 },
                 true,
@@ -8674,7 +12642,7 @@ export class FileMemoryService
     }
 
     private setEventSuppressions(
-        runtime: CorpusRuntime,
+        runtime: EventSuppressionState,
         suppressions: EventSuppression[],
     ): void {
         runtime.eventSuppressions = suppressions;
@@ -8949,41 +12917,10 @@ export class FileMemoryService
         events: MemoryEvent[],
         suppressions: EventSuppression[],
     ): Promise<void> {
-        await mkdir(path.dirname(this.eventsPath(corpusId)), {
-            recursive: true,
-        });
-        const records: (MemoryEvent | EventSuppression)[] = [
-            ...events,
-            ...suppressions,
-        ];
-        const value =
-            records.length === 0
-                ? ""
-                : `${records.map((record) => JSON.stringify(record)).join("\n")}\n`;
-        const filePath = this.eventsPath(corpusId);
-        const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
-        const backupPath = `${filePath}.${randomUUID()}.bak`;
-        await writeFile(temporaryPath, value, "utf8");
-        let hasBackup = false;
         try {
-            await rename(filePath, backupPath);
-            hasBackup = true;
+            await this.eventStore(corpusId).replace(events, suppressions);
         } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-                await rm(temporaryPath, { force: true });
-                throw error;
-            }
-        }
-        try {
-            await rename(temporaryPath, filePath);
-            if (hasBackup) {
-                await rm(backupPath, { force: true });
-            }
-        } catch (error) {
-            await rm(temporaryPath, { force: true });
-            if (hasBackup) {
-                await rename(backupPath, filePath);
-            }
+            this.corpora.delete(corpusId);
             throw error;
         }
     }
@@ -9003,7 +12940,16 @@ export class FileMemoryService
         operation: () => Promise<T>,
     ): Promise<T> {
         const previous = this.jobWrites.get(jobId) ?? Promise.resolve();
-        const task = previous.then(operation, operation);
+        const queuedAt = currentSearchTraceId() ? performance.now() : undefined;
+        const run = () => {
+            if (queuedAt !== undefined)
+                recordSearchTiming(
+                    "job.queue.wait",
+                    performance.now() - queuedAt,
+                );
+            return timeSearchStage("job.queue.work", operation);
+        };
+        const task = previous.then(run, run);
         const settled = task.then(
             () => undefined,
             () => undefined,
@@ -9062,6 +13008,100 @@ export class FileMemoryService
         });
     }
 
+    private textStore(corpusId: string): RevisionTextStore {
+        let store = this.textStores.get(corpusId);
+        if (!store) {
+            store = new RevisionTextStore(
+                path.join(this.rootDirectory, corpusId, "revision-text"),
+                this.revisionTextCheckpoint,
+            );
+            this.textStores.set(corpusId, store);
+        }
+        return store;
+    }
+
+    private async cleanManifestStaging(corpusId: string): Promise<void> {
+        const directory = path.join(this.rootDirectory, corpusId);
+        for (const entry of await readdir(directory, { withFileTypes: true })) {
+            if (!/^manifest\.json\.[a-f0-9-]{36}\.staging$/.test(entry.name))
+                continue;
+            if (!entry.isFile())
+                throw new Error("Unsafe staged corpus manifest");
+            await rm(path.join(directory, entry.name));
+        }
+    }
+
+    private async readSerializedManifest(
+        corpusId: string,
+    ): Promise<SerializedCorpusManifest | undefined> {
+        const stored = await readJson<SerializedCorpusManifest>(
+            this.manifestPath(corpusId),
+        );
+        if (!stored) return undefined;
+        if (stored.storageVersion !== 1)
+            throw new Error(
+                `Unsupported corpus manifest storage version '${stored.storageVersion}' for '${corpusId}'; reset/reimport this corpus using a compatible build. Canonical data was not deleted.`,
+            );
+        return stored;
+    }
+
+    private async readManifest(
+        corpusId: string,
+    ): Promise<CorpusManifest | undefined> {
+        const stored = await this.readSerializedManifest(corpusId);
+        if (!stored) return undefined;
+        const { storageVersion: _version, ...manifest } = stored;
+        const store = this.textStore(corpusId);
+        const sources: StoredSource[] = [];
+        for (const source of stored.sources) {
+            const revisions: StoredRevision[] = [];
+            for (const revision of source.revisions) {
+                const { text: _text, ...metadata } = revision;
+                revisions.push({
+                    ...metadata,
+                    content: await timeSearchStage("storage.text.read", () =>
+                        store.read(revision),
+                    ),
+                });
+            }
+            sources.push({ ...source, revisions });
+        }
+        return { ...manifest, sources };
+    }
+
+    private async writeManifest(
+        corpusId: string,
+        manifest: CorpusManifest,
+    ): Promise<void> {
+        const store = this.textStore(corpusId);
+        const sources = [];
+        // Publication is serialized by the corpus reservation. Stage new blobs
+        // first; a crash can leave only unreferenced blobs, never dangling refs.
+        for (const source of manifest.sources) {
+            const revisions = [];
+            for (const revision of source.revisions)
+                revisions.push(
+                    await timeSearchStage("storage.text.prepare", () =>
+                        store.prepare(revision),
+                    ),
+                );
+            sources.push({ ...source, revisions });
+        }
+        const stored: SerializedCorpusManifest = {
+            ...manifest,
+            storageVersion: 1,
+            sources,
+        };
+        await timeSearchStage("storage.text.flush", () => store.prepared());
+        const serialized = timeSearchStage(
+            "storage.json.serialize",
+            () => `${JSON.stringify(stored, undefined, 2)}\n`,
+        );
+        await timeSearchStage("storage.manifest.persist", () =>
+            writeRunbookJson(this.manifestPath(corpusId), serialized),
+        );
+    }
+
     private manifestPath(corpusId: string): string {
         return path.join(this.rootDirectory, corpusId, manifestFileName);
     }
@@ -9098,5 +13138,1449 @@ export class FileMemoryService
         if (signal.aborted) {
             throw signal.reason ?? new Error("Ingestion cancelled");
         }
+    }
+    private readonly graphEventWork = new Map<string, Promise<void>>();
+    private readonly graphEventErrors = new Map<string, string>();
+    private readonly graphEventIndexes = new Map<
+        string,
+        { generation: string; index: CorpusIndex }
+    >();
+    private readonly graphDocumentWork = new Map<string, Promise<void>>();
+    private readonly graphDocumentErrors = new Map<string, string>();
+    private readonly documentGraphCache = new Map<
+        string,
+        { fingerprint: string; projection: GraphProjection }
+    >();
+    private readonly graphSnapshots = new Map<
+        string,
+        {
+            corpusId: string;
+            kind: KnowledgeGraphRequest["kind"];
+            fingerprint: string;
+            binding: string;
+            inventory: GraphInventory;
+            coverage: KnowledgeGraphCoverage;
+        }
+    >();
+
+    private async graphDocumentFingerprint(
+        runtime: CorpusRuntime,
+    ): Promise<string> {
+        const corpusId = runtime.manifest.corpus.corpusId;
+        return viewHash({
+            indexGeneration: runtime.manifest.indexGeneration,
+            indexFiles: runtime.manifest.sources.length
+                ? await indexFingerprint(
+                      this.indexDirectory(
+                          corpusId,
+                          runtime.manifest.indexGeneration,
+                      ),
+                      "documents",
+                  )
+                : null,
+            sources: this.graphSources(runtime),
+            sourceCount: runtime.manifest.sources.length,
+            suppressions: runtime.manifest.knowledgeSuppressions ?? [],
+        });
+    }
+
+    private async graphFingerprint(
+        runtime: CorpusRuntime,
+        kind: KnowledgeGraphRequest["kind"],
+        documentFingerprint?: string,
+    ): Promise<string> {
+        const corpusId = runtime.manifest.corpus.corpusId;
+        const viewHead = await this.viewStore.getCommittedHead(corpusId);
+        return viewHash({
+            documents:
+                documentFingerprint ??
+                (await this.graphDocumentFingerprint(runtime)),
+            events: await this.eventStore(corpusId).version(),
+            eventIndex: runtime.events.length
+                ? await readJson<EventIndexState>(
+                      path.join(this.eventIndexRoot(corpusId), "state.json"),
+                  )
+                : null,
+            viewHead: kind === "hierarchy" ? viewHead : undefined,
+        });
+    }
+
+    private scheduleGraphEvents(corpusId: string): void {
+        if (
+            this.closed ||
+            this.graphEventWork.has(corpusId) ||
+            this.eventIndexControllers.has(corpusId)
+        )
+            return;
+        this.graphEventErrors.delete(corpusId);
+        const work = this.enqueueWrite(corpusId, async () => {
+            await this.getEventIndex(
+                corpusId,
+                await this.getCorpusRuntime(corpusId),
+            );
+        })
+            .then(
+                () => undefined,
+                (error: unknown) => {
+                    if (!this.closed && !(error instanceof ViewBuildStaleError))
+                        this.graphEventErrors.set(corpusId, safeError(error));
+                },
+            )
+            .finally(() => this.graphEventWork.delete(corpusId));
+        this.graphEventWork.set(corpusId, work);
+    }
+
+    private scheduleGraphDocuments(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): void {
+        if (
+            this.closed ||
+            this.graphDocumentWork.has(corpusId) ||
+            this.graphDocumentErrors.has(corpusId)
+        )
+            return;
+        const work = this.prepareDocumentReadIndex(corpusId, runtime)
+            .catch((error: unknown) => {
+                if (!this.closed && !(error instanceof ViewBuildStaleError))
+                    this.graphDocumentErrors.set(corpusId, safeError(error));
+            })
+            .finally(() => this.graphDocumentWork.delete(corpusId));
+        this.graphDocumentWork.set(corpusId, work);
+    }
+
+    private async preparedGraphEvents(
+        corpusId: string,
+    ): Promise<CorpusIndex | undefined> {
+        const state = await readJson<EventIndexState>(
+            path.join(this.eventIndexRoot(corpusId), "state.json"),
+        );
+        const version = await this.eventStore(corpusId).version();
+        if (
+            !state ||
+            state.sequence !== version.sequence ||
+            state.eligibilityRevision !== version.eligibilityRevision
+        )
+            return undefined;
+        const cached = this.graphEventIndexes.get(corpusId);
+        return cached?.generation === state.generation
+            ? cached.index
+            : undefined;
+    }
+
+    private graphEventSupport(event: MemoryEvent): GraphSupport {
+        const authority = eventAuthority(event);
+        return {
+            kind: "event",
+            corpusId: event.corpusId,
+            eventId: event.eventId,
+            eventTime: event.eventTime,
+            title: event.eventType,
+            ...(event.conversationId
+                ? { conversationId: event.conversationId }
+                : {}),
+            ...(event.turnId ? { turnId: event.turnId } : {}),
+            ...(event.sender ? { sender: event.sender } : {}),
+            ...(authority ? { authority } : {}),
+        };
+    }
+
+    private async documentGraphProjections(
+        runtime: CorpusRuntime,
+        kind: KnowledgeGraphRequest["kind"],
+        coverage: KnowledgeGraphCoverage,
+        fingerprint: string,
+    ): Promise<GraphProjection[]> {
+        if (kind === "hierarchy") return [];
+        const key = JSON.stringify([runtime.manifest.corpus.corpusId, kind]);
+        const cached = this.documentGraphCache.get(key);
+        if (cached?.fingerprint === fingerprint) return [cached.projection];
+        const sources = this.graphSources(runtime);
+        const supports = new Map<string, GraphSupport>(
+            sources.map((source) => [
+                source.sourceId,
+                {
+                    kind: "document",
+                    corpusId: runtime.manifest.corpus.corpusId,
+                    ...source,
+                    title: runtime.manifest.sources
+                        .find((entry) => entry.sourceId === source.sourceId)!
+                        .title.slice(0, 500),
+                },
+            ]),
+        );
+        const exclusions = new Map<string, Set<string>>();
+        for (const entry of runtime.manifest.knowledgeSuppressions ?? []) {
+            const key = `${entry.sourceId}\0${entry.kind}`;
+            const names = exclusions.get(key) ?? new Set<string>();
+            names.add(normalizedKnowledgeName(entry.name));
+            exclusions.set(key, names);
+        }
+        try {
+            const projection: GraphProjection = {
+                graph: await readGraphProjection(
+                    runtime.index,
+                    new Set(supports.keys()),
+                    kind === "entities" ? "entities" : "topics",
+                    exclusions,
+                ),
+                supports,
+            };
+            this.documentGraphCache.set(key, { fingerprint, projection });
+            while (this.documentGraphCache.size > 16)
+                this.documentGraphCache.delete(
+                    this.documentGraphCache.keys().next().value!,
+                );
+            return [projection];
+        } catch (error) {
+            coverage.documents.state =
+                error instanceof GraphProjectionUnavailable
+                    ? "unsupported"
+                    : "error";
+            coverage.documents.indexed = 0;
+            coverage.reasons.push(safeError(error));
+            return [];
+        }
+    }
+
+    private async hierarchyGraph(
+        request: KnowledgeGraphRequest,
+        runtime: CorpusRuntime,
+        events: MemoryEvent[],
+        coverage: KnowledgeGraphCoverage,
+    ): Promise<GraphInventory> {
+        const state = await this.viewStore.getTopicState(request.corpusId);
+        const snapshot = state.snapshot;
+        if (state.building) {
+            coverage.topics = {
+                state: "building",
+                ...(snapshot ? { generation: snapshot.generation } : {}),
+            };
+            coverage.reasons.push(
+                "Topic maintenance is still generating; raw evidence remains available through topic pages.",
+            );
+            return { nodes: [], edges: [], supports: new Map() };
+        }
+        if (
+            snapshot &&
+            (snapshot.nodes.length > graphProjectionLimits.nodes ||
+                snapshot.occurrences.length >
+                    graphProjectionLimits.semanticReferences ||
+                snapshot.parents.length + snapshot.related.length >
+                    graphProjectionLimits.edges)
+        ) {
+            coverage.topics = {
+                state: "unsupported",
+                generation: snapshot.generation,
+            };
+            coverage.reasons.push(
+                "Maintained topic projection exceeds bounded graph read budgets; the snapshot remains available through topic pages.",
+            );
+            return { nodes: [], edges: [], supports: new Map() };
+        }
+        const current =
+            snapshot?.inputFingerprint === this.topicFingerprint(runtime);
+        coverage.topics = {
+            state: current ? "ready" : snapshot ? "stale" : "building",
+            ...(snapshot ? { generation: snapshot.generation } : {}),
+        };
+        if (!current || !snapshot) {
+            coverage.reasons.push(
+                "Maintained topic incidence is not current; rebuild topics to populate the hierarchy.",
+            );
+            return { nodes: [], edges: [], supports: new Map() };
+        }
+        const eventById = new Map(
+            events.map((event) => [event.eventId, event]),
+        );
+        const documentIds = new Set(
+            this.topicSources(runtime).map((source) => source.sourceId),
+        );
+        const supports = new Map<string, GraphSupport[]>();
+        const maintained = snapshot.curation
+            ? snapshot.curation.concepts.map((concept) => ({
+                  ...concept,
+                  occurrenceIds: snapshot.nodes
+                      .filter((node) => concept.memberIds.includes(node.id))
+                      .flatMap((node) => node.occurrenceIds),
+                  summaryState: concept.summaryState ?? "ready",
+              }))
+            : snapshot.nodes;
+        const nodes = maintained.flatMap((node) => {
+            const occurrences = snapshot.occurrences.filter((entry) =>
+                node.occurrenceIds.includes(entry.id),
+            );
+            const selected: GraphSupport[] = [];
+            for (const occurrence of occurrences) {
+                const eventId = occurrence.citations[0]?.evidence?.eventId;
+                if (eventId) {
+                    const event = eventById.get(eventId);
+                    if (
+                        event &&
+                        request.evidenceKinds?.includes("event") !== false
+                    )
+                        selected.push(this.graphEventSupport(event));
+                } else if (
+                    documentIds.has(occurrence.sourceId) &&
+                    request.evidenceKinds?.includes("document") !== false
+                ) {
+                    selected.push({
+                        kind: "document",
+                        corpusId: request.corpusId,
+                        sourceId: occurrence.sourceId,
+                        revisionId: occurrence.revisionId,
+                        locator: occurrence.citations[0]?.locator,
+                    });
+                }
+            }
+            if (!selected.length) return [];
+            const id = graphIdentity(
+                request.corpusId,
+                "maintained-topic",
+                node.id,
+            );
+            const unique = [
+                ...new Map(
+                    selected.map((entry) => [
+                        graphSupportIdentity(entry),
+                        entry,
+                    ]),
+                ).values(),
+            ];
+            supports.set(id, unique);
+            return [
+                {
+                    id,
+                    kind: "topic" as const,
+                    label: node.label,
+                    scope: node.scope,
+                    topicId: node.id,
+                    summaryState: node.summaryState,
+                    types: [],
+                    mentionCount: selected.length,
+                    supportCount: unique.length,
+                    ...graphSupportCounts(unique),
+                },
+            ];
+        });
+        const ids = new Set(nodes.map((node) => node.id));
+        const rawEdges = [
+            ...snapshot.parents.map((edge) => ({
+                from: edge.parentId,
+                to: edge.childId,
+                type: "parent",
+            })),
+            ...snapshot.related.map((edge) => ({
+                from: edge.fromId,
+                to: edge.toId,
+                type: "related",
+            })),
+        ];
+        const edges = rawEdges.flatMap((edge) => {
+            const source = graphIdentity(
+                request.corpusId,
+                "maintained-topic",
+                edge.from,
+            );
+            const target = graphIdentity(
+                request.corpusId,
+                "maintained-topic",
+                edge.to,
+            );
+            if (!ids.has(source) || !ids.has(target)) return [];
+            const id = graphIdentity(request.corpusId, "edge", [
+                source,
+                target,
+                edge.type,
+            ]);
+            const evidence = [
+                ...new Map(
+                    [
+                        ...(supports.get(source) ?? []),
+                        ...(supports.get(target) ?? []),
+                    ].map((entry) => [graphSupportIdentity(entry), entry]),
+                ).values(),
+            ];
+            supports.set(id, evidence);
+            return [
+                {
+                    id,
+                    source,
+                    target,
+                    type: edge.type,
+                    count: 1,
+                    supportCount: evidence.length,
+                    ...graphSupportCounts(evidence),
+                },
+            ];
+        });
+        return { nodes, edges, supports };
+    }
+
+    public async queryKnowledgeGraph(
+        request: KnowledgeGraphRequest,
+    ): Promise<KnowledgeGraphResponse> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        if (!["entities", "topics", "hierarchy"].includes(request.kind))
+            throw new Error("Invalid graph kind");
+        graphLimit(request.maxNodes, 100, 250);
+        graphLimit(request.maxEdges, 200, 500);
+        if (
+            request.pageBy !== undefined &&
+            !["nodes", "edges"].includes(request.pageBy)
+        )
+            throw new Error("Invalid graph paging mode");
+        if (request.pageBy === "edges" && (request.maxNodes ?? 100) < 2)
+            throw new Error("Edge paging requires at least two endpoint nodes");
+        if (
+            request.evidenceKinds?.some(
+                (kind) => kind !== "document" && kind !== "event",
+            )
+        )
+            throw new Error("Invalid graph evidence kind");
+        this.validateEventFilterRequest({
+            corpusId: request.corpusId,
+            ...request.eventFilter,
+        });
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        let prepareEvents = false;
+        let prepareDocuments = false;
+        const result = await runtime.access.read(async () => {
+            const documentFingerprint =
+                await this.graphDocumentFingerprint(runtime);
+            const fingerprint = await this.graphFingerprint(
+                runtime,
+                request.kind,
+                documentFingerprint,
+            );
+            const binding = viewHash({
+                corpusId: request.corpusId,
+                kind: request.kind,
+                evidenceKinds: request.evidenceKinds ?? ["document", "event"],
+                eventFilter: request.eventFilter ?? {},
+            });
+            const cached = [...this.graphSnapshots.values()].find(
+                (snapshot) =>
+                    snapshot.fingerprint === fingerprint &&
+                    snapshot.binding === binding &&
+                    graphCoverageState(snapshot.coverage) === "ready",
+            );
+            if (cached)
+                return this.graphQueryResult(
+                    request,
+                    fingerprint,
+                    binding,
+                    cached.inventory,
+                    cached.coverage,
+                );
+            const documents =
+                request.evidenceKinds?.includes("document") !== false;
+            const includeEvents =
+                request.evidenceKinds?.includes("event") !== false;
+            const eligible = includeEvents
+                ? runtime.events.filter(
+                      (event) =>
+                          !isSuppressedEvent(runtime, event) &&
+                          !!event.content?.trim() &&
+                          matchesEventFilter(event, request.eventFilter ?? {}),
+                  )
+                : [];
+            const documentReady = await this.documentGraphReady(
+                runtime,
+                request,
+            );
+            const coverage: KnowledgeGraphCoverage = {
+                documents: {
+                    state: documentReady ? "ready" : "building",
+                    total: runtime.manifest.sources.length,
+                    eligible: documents ? this.graphSources(runtime).length : 0,
+                    indexed:
+                        documentReady && documents
+                            ? this.graphSources(runtime).length
+                            : 0,
+                },
+                events: {
+                    state: "ready",
+                    total: runtime.events.length,
+                    eligible: eligible.length,
+                    indexed: 0,
+                },
+                reasons: [],
+            };
+            if (runtime.events.some((event) => !event.content?.trim()))
+                coverage.reasons.push(
+                    "Events without content are excluded; activity and housekeeping metadata are not factual graph evidence.",
+                );
+            if (!documentReady) {
+                prepareDocuments = true;
+                coverage.documents.state = this.graphDocumentErrors.has(
+                    request.corpusId,
+                )
+                    ? "error"
+                    : "building";
+                coverage.reasons.push(
+                    this.graphDocumentErrors.get(request.corpusId) ??
+                        "Document projection preparation is running independently of graph reads.",
+                );
+            }
+            const projections =
+                documentReady && documents && this.graphSources(runtime).length
+                    ? await this.documentGraphProjections(
+                          runtime,
+                          request.kind,
+                          coverage,
+                          documentFingerprint,
+                      )
+                    : [];
+            if (runtime.manifest.knowledgeSuppressions?.length)
+                coverage.reasons.push(
+                    "Source knowledge suppressions are applied before graph aggregation.",
+                );
+            prepareEvents = await this.addEventGraphProjection(
+                request.corpusId,
+                eligible,
+                request.kind,
+                coverage,
+                projections,
+            );
+            const inventory =
+                request.kind === "hierarchy"
+                    ? await this.hierarchyGraph(
+                          request,
+                          runtime,
+                          eligible,
+                          coverage,
+                      )
+                    : this.readGraphInventory(request, projections, coverage);
+            return this.graphQueryResult(
+                request,
+                fingerprint,
+                binding,
+                inventory,
+                coverage,
+            );
+        });
+        if (prepareEvents) this.scheduleGraphEvents(request.corpusId);
+        if (prepareDocuments)
+            this.scheduleGraphDocuments(request.corpusId, runtime);
+        return result;
+    }
+
+    private graphQueryResult(
+        request: KnowledgeGraphRequest,
+        fingerprint: string,
+        binding: string,
+        inventory: GraphInventory,
+        coverage: KnowledgeGraphCoverage,
+    ): KnowledgeGraphResponse {
+        const generation = viewHash({
+            fingerprint,
+            request: {
+                ...request,
+                expectedGeneration: undefined,
+                continuationToken: undefined,
+            },
+            coverage,
+        });
+        if (
+            request.expectedGeneration &&
+            request.expectedGeneration !== generation
+        )
+            throw new ViewBuildStaleError(
+                "Graph generation changed; reload the graph",
+            );
+        const bounded = boundGraphInventory(request, inventory, generation);
+        this.graphSnapshots.set(generation, {
+            corpusId: request.corpusId,
+            kind: request.kind,
+            fingerprint,
+            binding,
+            inventory,
+            coverage: structuredClone(coverage),
+        });
+        while (this.graphSnapshots.size > 16)
+            this.graphSnapshots.delete(
+                this.graphSnapshots.keys().next().value!,
+            );
+        return {
+            corpusId: request.corpusId,
+            generation,
+            state: graphCoverageState(coverage),
+            ...bounded,
+            coverage: structuredClone(coverage),
+        };
+    }
+
+    private readGraphInventory(
+        request: KnowledgeGraphRequest,
+        projections: GraphProjection[],
+        coverage: KnowledgeGraphCoverage,
+    ): GraphInventory {
+        try {
+            return graphInventory(request, projections);
+        } catch (error) {
+            const state =
+                error instanceof GraphProjectionUnavailable
+                    ? "unsupported"
+                    : "error";
+            coverage.documents.state = state;
+            coverage.events.state = state;
+            coverage.reasons.push(safeError(error));
+            return { nodes: [], edges: [], supports: new Map() };
+        }
+    }
+
+    private async addEventGraphProjection(
+        corpusId: string,
+        eligible: MemoryEvent[],
+        kind: KnowledgeGraphRequest["kind"],
+        coverage: KnowledgeGraphCoverage,
+        projections: GraphProjection[],
+    ): Promise<boolean> {
+        if (kind === "hierarchy") {
+            coverage.events.indexed = eligible.length;
+            return false;
+        }
+
+        if (!eligible.length) return false;
+        const index = await this.preparedGraphEvents(corpusId);
+        if (index) {
+            try {
+                projections.push({
+                    graph: await readGraphProjection(
+                        index,
+                        new Set(eligible.map((event) => event.eventId)),
+                        kind === "entities" ? "entities" : "topics",
+                        new Map(
+                            eligible.map((event) => [
+                                event.eventId,
+                                this.eventHeaderGraphNames(event),
+                            ]),
+                        ),
+                    ),
+                    supports: new Map(
+                        eligible.map((event) => [
+                            event.eventId,
+                            this.graphEventSupport(event),
+                        ]),
+                    ),
+                });
+                coverage.events.indexed = eligible.length;
+            } catch (error) {
+                coverage.events.state =
+                    error instanceof GraphProjectionUnavailable
+                        ? "unsupported"
+                        : "error";
+                coverage.reasons.push(safeError(error));
+            }
+            return false;
+        }
+        coverage.events.state = this.graphEventErrors.has(corpusId)
+            ? "error"
+            : "building";
+        coverage.reasons.push(
+            this.graphEventErrors.get(corpusId) ??
+                "Event projection preparation is running independently of graph reads.",
+        );
+        return !this.graphEventErrors.has(corpusId);
+    }
+
+    private async documentGraphReady(
+        runtime: CorpusRuntime,
+        request: KnowledgeGraphRequest,
+    ): Promise<boolean> {
+        return (
+            request.kind === "hierarchy" ||
+            request.evidenceKinds?.includes("document") === false ||
+            this.graphSources(runtime).length === 0 ||
+            this.documentIndexReady(request.corpusId, runtime)
+        );
+    }
+
+    private graphSources(runtime: CorpusRuntime) {
+        return runtime.manifest.sources
+            .filter((source) =>
+                source.revisions.some(
+                    (revision) =>
+                        revision.revisionId === source.activeRevisionId &&
+                        revision.state === "ready",
+                ),
+            )
+            .map((source) => ({
+                sourceId: source.sourceId,
+                revisionId: source.activeRevisionId,
+            }));
+    }
+
+    private eventHeaderGraphNames(event: MemoryEvent): ReadonlySet<string> {
+        const content = event.content?.toLowerCase() ?? "";
+        return new Set(
+            [
+                event.eventId,
+                event.corpusId,
+                event.eventType,
+                event.sourceKind,
+                event.producer.producerId,
+                event.producer.producerType,
+                event.conversationId,
+                event.turnId,
+                event.runId,
+                event.sender,
+                event.actionName,
+                eventAuthority(event),
+                event.eventTime,
+                event.observedAt,
+                ...(event.linkedSourceIds ?? []),
+            ]
+                .filter(
+                    (name): name is string =>
+                        !!name && !content.includes(name.toLowerCase()),
+                )
+                .map((name) => name.trim().toLowerCase()),
+        );
+    }
+
+    public async queryGraphSupport(
+        request: GraphSupportRequest,
+    ): Promise<GraphSupportPage> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        const size = graphLimit(request.pageSize, 20, 50);
+        if (!!request.nodeId === !!request.edgeId)
+            throw new Error("Select exactly one graph node or edge");
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        return runtime.access.read(async () => {
+            const snapshot = this.graphSnapshots.get(request.generation);
+            if (
+                !snapshot ||
+                snapshot.corpusId !== request.corpusId ||
+                snapshot.fingerprint !==
+                    (await this.graphFingerprint(runtime, snapshot.kind))
+            )
+                throw new ViewBuildStaleError(
+                    "Graph generation changed or expired; reload the graph",
+                );
+            const id = request.nodeId ?? request.edgeId!;
+            const items = snapshot.inventory.supports.get(id);
+            if (!items)
+                throw new Error(
+                    "Unknown graph node or edge in this generation",
+                );
+            const binding = viewHash([
+                request.corpusId,
+                request.generation,
+                id,
+                size,
+            ]);
+            let offset = 0;
+            if (request.continuationToken) {
+                const token = JSON.parse(
+                    Buffer.from(
+                        request.continuationToken,
+                        "base64url",
+                    ).toString("utf8"),
+                ) as { binding: string; offset: number };
+                if (
+                    token.binding !== binding ||
+                    !Number.isSafeInteger(token.offset) ||
+                    token.offset < 0 ||
+                    token.offset >= items.length
+                )
+                    throw new Error("Invalid graph support continuation token");
+                offset = token.offset;
+            }
+            const end = offset + size;
+            return {
+                generation: request.generation,
+                items: structuredClone(items.slice(offset, end)),
+                total: items.length,
+                ...(end < items.length
+                    ? {
+                          nextContinuationToken: Buffer.from(
+                              JSON.stringify({ binding, offset: end }),
+                          ).toString("base64url"),
+                      }
+                    : {}),
+            };
+        });
+    }
+
+    private async loadReadyEventIndex(
+        corpusId: string,
+        runtime: CorpusRuntime,
+        index: CorpusIndex,
+    ): Promise<void> {
+        if (this.closed)
+            throw new ViewBuildStaleError("Memory service is closing");
+        const controller = new AbortController();
+        this.eventIndexControllers.set(corpusId, controller);
+        const preparation = Promise.resolve().then(() => index.initialize());
+        this.eventIndexPreparationWork.set(corpusId, preparation);
+        try {
+            await runtime.access.outsideWrite(() => preparation);
+            controller.signal.throwIfAborted();
+        } finally {
+            this.eventIndexControllers.delete(corpusId);
+            this.eventIndexPreparationWork.delete(corpusId);
+        }
+    }
+
+    private async topicEventOccurrences(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ) {
+        const events = this.topicEvents(runtime);
+        if (!events.length) return [];
+        const index = requireTopicIndex(
+            await this.getEventIndex(corpusId, runtime),
+        );
+        const byId = new Map(
+            runtime.events.map((event) => [event.eventId, event]),
+        );
+        return (
+            await index.getTopicOccurrences(
+                new Set(events.map((event) => event.eventId)),
+            )
+        )
+            .filter((occurrence) => byId.has(occurrence.sourceId))
+            .filter(
+                (occurrence) =>
+                    !this.eventHeaderGraphNames(
+                        byId.get(occurrence.sourceId)!,
+                    ).has(occurrence.label.trim().toLowerCase()),
+            )
+            .map((occurrence) => {
+                const event = byId.get(occurrence.sourceId)!;
+                const evidence = {
+                    kind: "event" as const,
+                    eventId: event.eventId,
+                };
+                return {
+                    ...occurrence,
+                    id: graphIdentity(
+                        corpusId,
+                        "event-occurrence",
+                        occurrence.id,
+                    ),
+                    evidence,
+                    scope: `event:${corpusId}:${event.conversationId ?? event.eventId}:${eventAuthority(event) ?? event.sender ?? event.sourceKind}`,
+                    citations: occurrence.citations.map((citation) => ({
+                        ...citation,
+                        evidence,
+                    })),
+                };
+            });
+    }
+
+    private topicEvents(runtime: CorpusRuntime) {
+        return runtime.events
+            .filter(
+                (event) =>
+                    !isSuppressedEvent(runtime, event) &&
+                    !!event.content?.trim(),
+            )
+            .map((event) => ({
+                eventId: event.eventId,
+                fingerprint: viewHash(event),
+            }))
+            .sort((a, b) => a.eventId.localeCompare(b.eventId));
+    }
+
+    private async detachedInformationalFragments(
+        runtime: CorpusRuntime,
+        request: IndexedFragmentRequest,
+    ) {
+        const index = runtime.index;
+        const read = index.readFragments;
+        if (!read)
+            throw new Error(
+                "Host does not support bounded informational wiki retrieval",
+            );
+        const fingerprint = await this.graphDocumentFingerprint(runtime);
+        const selection = await runtime.access.outsideWrite(() =>
+            read.call(index, request),
+        );
+        if (
+            runtime.index !== index ||
+            fingerprint !== (await this.graphDocumentFingerprint(runtime))
+        )
+            throw new ViewBuildStaleError(
+                "Indexed informational evidence changed during detached retrieval",
+            );
+        return selection;
+    }
+
+    private async withViewIndexRemoval<T>(
+        corpusId: string,
+        runtime: CorpusRuntime,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        this.eventIndexControllers
+            .get(corpusId)
+            ?.abort(
+                new ViewBuildStaleError("Event evidence is being forgotten"),
+            );
+        this.graphSnapshots.clear();
+        this.documentGraphCache.clear();
+        this.graphEventIndexes.delete(corpusId);
+        this.viewIndexRemovalBarriers.set(
+            corpusId,
+            (this.viewIndexRemovalBarriers.get(corpusId) ?? 0) + 1,
+        );
+        const preparations = [...this.viewIndexPreparations.values()].filter(
+            (entry) => entry.corpusId === corpusId,
+        );
+        for (const preparation of preparations)
+            preparation.controller.abort(
+                new ViewBuildStaleError("View evidence is being forgotten"),
+            );
+        try {
+            const eventPreparation =
+                this.eventIndexPreparationWork.get(corpusId);
+            if (eventPreparation)
+                await runtime.access.outsideWrite(async () => {
+                    await Promise.allSettled([eventPreparation]);
+                });
+            if (preparations.length)
+                await runtime.access.outsideWrite(() =>
+                    this.drainViewIndexPreparations(preparations),
+                );
+            return await operation();
+        } finally {
+            const count = this.viewIndexRemovalBarriers.get(corpusId)! - 1;
+            if (count) this.viewIndexRemovalBarriers.set(corpusId, count);
+            else this.viewIndexRemovalBarriers.delete(corpusId);
+        }
+    }
+
+    private enqueueViewIndexRemoval<T>(
+        corpusId: string,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        return this.enqueueWrite(corpusId, async () =>
+            this.withViewIndexRemoval(
+                corpusId,
+                await this.getCorpusRuntime(corpusId),
+                operation,
+            ),
+        );
+    }
+
+    private removeViewIndexPreparation(directory: string): Promise<void> {
+        const existing = this.viewIndexCleanup.get(directory);
+        if (existing) return existing;
+        clearJsonSegmentCache(directory);
+        const work = rm(directory, {
+            recursive: true,
+            force: true,
+            maxRetries: 5,
+            retryDelay: 25,
+        });
+        this.viewIndexCleanup.set(directory, work);
+        const remove = () => {
+            if (this.viewIndexCleanup.get(directory) === work)
+                this.viewIndexCleanup.delete(directory);
+        };
+        void work.then(remove, remove);
+        return work;
+    }
+
+    private async drainViewIndexPreparations(
+        preparations: Iterable<{
+            directory: string;
+            work: Promise<string | undefined>;
+        }>,
+    ): Promise<void> {
+        await Promise.all(
+            [...preparations].map(async (preparation) => {
+                try {
+                    await preparation.work;
+                } finally {
+                    await this.removeViewIndexPreparation(
+                        preparation.directory,
+                    );
+                }
+            }),
+        );
+    }
+
+    private async buildViewIndex(
+        view: ViewVersion,
+        directory: string,
+        signal: AbortSignal,
+    ): Promise<string | undefined> {
+        const content = viewContentToText(view.content);
+        try {
+            signal.throwIfAborted();
+            await mkdir(directory, { recursive: true });
+            const index = this.indexFactory(view.corpusId, directory);
+            await index.rebuild(
+                [
+                    {
+                        source: {
+                            corpusId: view.corpusId,
+                            sourceId: view.viewId,
+                            sourceType: "markdown",
+                            title: view.content.title,
+                            activeRevisionId: view.revisionId,
+                        },
+                        revision: {
+                            revisionId: view.revisionId,
+                            sourceId: view.viewId,
+                            contentHash: viewHash(content),
+                            mimeType: "text/markdown",
+                            pipelineVersion,
+                            state: "ready",
+                        },
+                        content,
+                        pipeline: { mode: "content" },
+                    },
+                ],
+                signal,
+                async () => {},
+            );
+            signal.throwIfAborted();
+            await stampIndexSchema(directory, "views", true);
+            await writeFile(
+                path.join(directory, "ready"),
+                view.revisionId,
+                "utf8",
+            );
+        } catch (error) {
+            await rm(directory, { recursive: true, force: true });
+            return `Indexing failed: ${redactRunbookText(error instanceof Error ? error.message : String(error))}`;
+        }
+        return undefined;
+    }
+
+    private async installViewIndexSegments(
+        preparation: string,
+        destination: string,
+    ): Promise<void> {
+        const segments = path.join(preparation, jsonSegmentDirectory);
+        try {
+            await access(segments);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+            throw error;
+        }
+        await cp(segments, path.join(destination, jsonSegmentDirectory), {
+            recursive: true,
+            force: false,
+        });
+    }
+
+    private async installPreparedViewIndex(
+        preparation: string,
+        destination: string,
+    ): Promise<string | undefined> {
+        try {
+            await rm(destination, { recursive: true, force: true });
+            await mkdir(path.dirname(destination), { recursive: true });
+            await this.installViewIndexSegments(
+                preparation,
+                path.dirname(destination),
+            );
+            await rename(path.join(preparation, "index"), destination);
+        } catch (error) {
+            await rm(destination, { recursive: true, force: true });
+            return `Indexing failed: ${redactRunbookText(error instanceof Error ? error.message : String(error))}`;
+        }
+        return undefined;
+    }
+
+    private viewIndexStagingDirectory(corpusId: string): string {
+        return path.join(
+            this.rootDirectory,
+            corpusId,
+            "views",
+            "view-search-index-staging",
+        );
+    }
+
+    public async listViewBuildSummaries(
+        request: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>> {
+        validateInventoryPage(request);
+        const runtime = await this.requireViews(request.corpusId);
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(request.corpusId, async () => {
+                const query = request.query?.toLowerCase() ?? "";
+                const allJobs = (
+                    await this.viewStore.listViewInventoryBuilds(
+                        request.corpusId,
+                    )
+                ).sort(
+                    (a, b) =>
+                        b.updatedAt.localeCompare(a.updatedAt) ||
+                        a.jobId.localeCompare(b.jobId),
+                );
+                const latest = new Map<string, string>();
+                for (const job of allJobs)
+                    for (const result of job.results)
+                        if (!latest.has(result.viewId))
+                            latest.set(result.viewId, job.jobId);
+                const jobs = allJobs.filter(
+                    (job) =>
+                        job.jobId.toLowerCase().includes(query) &&
+                        (!request.viewId ||
+                            job.results.some(
+                                (result) => result.viewId === request.viewId,
+                            )),
+                );
+                const page = pageItems(
+                    jobs,
+                    request.pageSize ?? 25,
+                    request.continuationToken,
+                );
+                return {
+                    ...page,
+                    items: page.items.map((job) => ({
+                        ...job,
+                        results: job.results.map(
+                            ({
+                                inputFingerprint: _input,
+                                evidenceFingerprint: _evidence,
+                                wikiAssessment: _assessment,
+                                ...result
+                            }) => ({
+                                ...result,
+                                current:
+                                    latest.get(result.viewId) === job.jobId,
+                            }),
+                        ),
+                    })),
+                };
+            }),
+        );
+    }
+
+    public async getViewPublications(
+        request: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]> {
+        const runtime = await this.requireViews(request.corpusId);
+        if (
+            !Array.isArray(request.viewIds) ||
+            request.viewIds.length > 100 ||
+            new Set(request.viewIds).size !== request.viewIds.length
+        )
+            throw new Error(
+                "Publication batches require at most 100 unique view IDs",
+            );
+        request.viewIds.forEach((id) => validateIdentifier("view ID", id));
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(request.corpusId, () =>
+                Promise.all(
+                    request.viewIds.map((viewId) =>
+                        this.viewStore.getViewPublication({
+                            corpusId: request.corpusId,
+                            viewId,
+                        }),
+                    ),
+                ),
+            ),
+        );
+    }
+
+    public async listViewSummaries(
+        request: ViewSummaryRequest,
+    ): Promise<ViewSummaryPage> {
+        validateInventoryPage(request);
+        const runtime = await this.requireViews(request.corpusId);
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(request.corpusId, async () => {
+                const snapshot = await this.viewStore.listViews(
+                    request.corpusId,
+                );
+                const eligible = await Promise.all(
+                    snapshot.views.map((view) =>
+                        this.informationalVersionEligible(view, view),
+                    ),
+                );
+                const views = snapshot.views.filter(
+                    (_, index) => eligible[index],
+                );
+                const query = request.query?.toLowerCase() ?? "";
+                const matching = views
+                    .filter(
+                        (view) =>
+                            (!request.viewId ||
+                                view.viewId === request.viewId) &&
+                            (!request.kind ||
+                                view.content.kind === request.kind) &&
+                            view.content.title.toLowerCase().includes(query),
+                    )
+                    .sort((a, b) => a.viewId.localeCompare(b.viewId));
+                const page = pageItems(
+                    matching,
+                    request.pageSize ?? 25,
+                    request.continuationToken,
+                );
+                const items = await Promise.all(
+                    page.items.map(async (view) => ({
+                        corpusId: view.corpusId,
+                        viewId: view.viewId,
+                        revisionId: view.revisionId,
+                        state: view.state,
+                        content: {
+                            kind: view.content.kind,
+                            title: view.content.title,
+                        },
+                        maintained: !!view.definition.maintenance,
+                        publication: await this.viewStore.getViewPublication({
+                            corpusId: request.corpusId,
+                            viewId: view.viewId,
+                        }),
+                    })),
+                );
+                const latestBuild = (
+                    await this.viewStore.listViewInventoryBuilds(
+                        request.corpusId,
+                    )
+                )
+                    .filter(
+                        (job) =>
+                            !request.viewId ||
+                            job.results.some(
+                                (result) => result.viewId === request.viewId,
+                            ),
+                    )
+                    .sort(
+                        (a, b) =>
+                            b.updatedAt.localeCompare(a.updatedAt) ||
+                            a.jobId.localeCompare(b.jobId),
+                    )[0];
+                return {
+                    ...page,
+                    items,
+                    head: snapshot.head,
+                    ...(latestBuild
+                        ? {
+                              latestBuild: {
+                                  jobId: latestBuild.jobId,
+                                  corpusId: latestBuild.corpusId,
+                                  state: latestBuild.state,
+                              },
+                          }
+                        : {}),
+                    ...(this.informationalWikiEnabled
+                        ? {
+                              wikiFamily: await this.wikiFamilyStatus(
+                                  request.corpusId,
+                                  "wiki",
+                                  views,
+                              ),
+                              projectFamily: await this.wikiFamilyStatus(
+                                  request.corpusId,
+                                  "projects",
+                                  views,
+                              ),
+                          }
+                        : {}),
+                };
+            }),
+        );
+    }
+
+    private async closeService(): Promise<void> {
+        this.closed = true;
+        for (const work of this.topicSummaryWork.values())
+            work.controller.abort(new Error("Memory service is closing"));
+        for (const controller of this.eventIndexControllers.values())
+            controller.abort(new Error("Memory service is closing"));
+        this.graphSnapshots.clear();
+        this.documentGraphCache.clear();
+        this.graphEventIndexes.clear();
+        this.viewBuilds.cancelAll();
+        for (const preparation of this.viewIndexPreparations.values())
+            preparation.controller.abort(
+                new ViewBuildStaleError("Memory service is closing"),
+            );
+        await this.knowledge.close();
+        await Promise.allSettled(
+            [...this.topicSummaryWork.values()].map((work) => work.promise),
+        );
+        await this.acquisition.close();
+        if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
+        for (const timer of this.schemaTimers.values()) clearTimeout(timer);
+        this.schemaTimers.clear();
+        const maintenanceClosure = this.maintenance.close();
+        await this.initializePromise?.catch(() => undefined);
+        for (const controller of this.controllers.values()) {
+            controller.abort(new Error("Memory service is closing"));
+        }
+        await this.agentSessionStore.close();
+        await Promise.allSettled(this.graphEventWork.values());
+        await Promise.allSettled(this.graphDocumentWork.values());
+        await this.batchStore.close();
+        await Promise.allSettled(this.schemaWork.values());
+
+        this.viewBuilds.cancelAll();
+        await Promise.allSettled([
+            this.rootWriteTail,
+            ...this.corpusLoads.values(),
+            ...this.indexedReads,
+            ...this.reindexWork,
+        ]);
+        // Family maintenance may admit a new build while tracked reads drain.
+        const viewClosure = await Promise.allSettled([this.viewBuilds.close()]);
+        await Promise.allSettled(
+            [...this.corpusAccesses.values()].map((access) => access.idle()),
+        );
+        await this.drainViewIndexPreparations([
+            ...this.viewIndexPreparations.values(),
+        ]);
+        await this.releaseLock?.();
+        this.releaseLock = undefined;
+        const viewFailure = viewClosure[0];
+        await maintenanceClosure;
+        if (viewFailure.status === "rejected") throw viewFailure.reason;
+        for (const failure of this.wikiMaintenanceFailures.values())
+            throw failure;
+        for (const failure of this.schemaMaintenanceFailures.values())
+            throw failure;
+    }
+    private closePromise: Promise<void> | undefined;
+    private readonly viewIndexCleanup = new Map<string, Promise<void>>();
+    private readonly viewIndexRemovalBarriers = new Map<string, number>();
+    private readonly viewIndexPreparations = new Map<
+        string,
+        {
+            corpusId: string;
+            directory: string;
+            controller: AbortController;
+            work: Promise<string | undefined>;
+            installed: boolean;
+        }
+    >();
+    private readonly eventIndexPreparationWork = new Map<
+        string,
+        Promise<void>
+    >();
+    private readonly eventIndexControllers = new Map<string, AbortController>();
+
+    private async completeAuthorizedSourceRemovalLocked(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<SourceForgetResult> {
+        const removal = runtime.manifest.authorizedSourceRemoval;
+        if (!removal)
+            throw new Error("No authorized source removal to recover");
+        const sourceId = removal.sourceId;
+        const affected = (await this.viewStore.listViews(corpusId)).views.map(
+            (view) => view.viewId,
+        );
+        await this.acquisition.suppress(corpusId, {
+            sourceIds: [sourceId],
+            viewIds: affected,
+            uncertain: true,
+        });
+        this.viewBuilds.forget(corpusId, sourceId);
+        const candidateManifest = structuredClone(runtime.manifest);
+        const retained = candidateManifest.sources.some(
+            (source) => source.sourceId === sourceId,
+        );
+        candidateManifest.sources = candidateManifest.sources.filter(
+            (item) => item.sourceId !== sourceId,
+        );
+        if (candidateManifest.knowledgeSuppressions)
+            candidateManifest.knowledgeSuppressions =
+                candidateManifest.knowledgeSuppressions.filter(
+                    (item) => item.sourceId !== sourceId,
+                );
+        const forgottenReference = opaqueChangeReference(
+            corpusId,
+            "source",
+            sourceId,
+        );
+        candidateManifest.changes = pruneChangeReceipts(
+            candidateManifest.changes,
+        ).filter((receipt) => receipt.sourceId !== forgottenReference);
+        if (
+            !candidateManifest.changes.some(
+                (receipt) =>
+                    receipt.operation === "forget" &&
+                    receipt.sourceId === forgottenReference,
+            )
+        )
+            candidateManifest.changes.push(
+                createChangeReceipt(corpusId, "forget", sourceId, {
+                    sources: 1,
+                    revisions: removal.revisions.length,
+                    knowledge: 0,
+                }),
+            );
+        await this.viewStore.forgetSource(corpusId, sourceId);
+        await this.agentSessionStore.purge(corpusId, sourceId);
+        if (retained) {
+            await this.rebuildAndActivate(
+                corpusId,
+                runtime,
+                candidateManifest,
+                this.maintenance.signal,
+            );
+        } else if (runtime.manifest.indexGeneration) {
+            await this.removeInactiveIndexGenerations(
+                corpusId,
+                runtime.manifest.indexGeneration,
+            );
+        } else {
+            throw new Error(
+                "Authorized source removal lacks a committed source-index generation",
+            );
+        }
+        for (const revision of removal.revisions) {
+            if (!revision.hasAssets) continue;
+            await this.assetStore.removeRevision({
+                corpusId,
+                sourceId,
+                revisionId: revision.revisionId,
+            });
+        }
+        await this.viewStore.markSourceRevisionStale(corpusId, sourceId);
+        await this.batchStore.purge(corpusId, sourceId);
+        await this.purgeSourceJobDiagnostics(corpusId, sourceId);
+        await this.textStore(corpusId).purge(runtime.manifest.sources);
+        for (const key of this.wikiMaintenanceFailures.keys())
+            if (key.startsWith(`${corpusId}:`))
+                this.wikiMaintenanceFailures.delete(key);
+        const complete = structuredClone(runtime.manifest);
+        delete complete.authorizedSourceRemoval;
+        await this.writeManifest(corpusId, complete);
+        runtime.manifest = complete;
+        this.resumeBatchMaintenance(corpusId);
+        return {
+            corpusId,
+            sourceId,
+            deletedRevisionCount: removal.revisions.length,
+            indexVersion: this.indexVersion(runtime.manifest),
+        };
+    }
+
+    private isTechnicalTargetRejection(error: unknown): error is Error {
+        return (
+            error instanceof Error &&
+            !(error instanceof ViewBuildStaleError) &&
+            !("code" in error)
+        );
+    }
+
+    private async assertWikiPlanCurrent(
+        corpusId: string,
+        kind: "wiki" | "projects",
+        familyVersion: string,
+        views: ViewVersion[],
+    ): Promise<void> {
+        const family = await this.viewStore.getWikiFamily(corpusId, kind);
+        const current = await this.viewStore.listViews(corpusId);
+        if (
+            viewHash(family) !== familyVersion ||
+            viewHash(current.views.map((view) => view.revisionId)) !==
+                viewHash(views.map((view) => view.revisionId))
+        )
+            throw new ViewBuildStaleError(
+                "Informational maintenance plan changed during derivative preparation",
+            );
     }
 }

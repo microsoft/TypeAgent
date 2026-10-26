@@ -95,6 +95,42 @@ function button(text: string): HTMLButtonElement {
 function field<T extends HTMLElement>(name: string): T {
     return host.querySelector<T>(`[name="${name}"]`)!;
 }
+test("Ask forwards explicit retrieval/checkpoint policy and shows exact derived and user assertion references", async () => {
+    const reference = {
+        corpusId: "a",
+        viewId: "knowledge",
+        revisionId: "view-revision",
+        sectionId: "slot",
+        state: "selected" as const,
+    };
+    const response = result([source]);
+    response.answer!.derivedReferences = [reference];
+    response.answer!.assertionReferences = [
+        { ...reference, candidateId: "candidate", assertionOrigin: "user" },
+    ];
+    invoke.mockResolvedValue(response);
+    host.querySelector<HTMLSelectElement>(
+        '[aria-label="Answer retrieval policy"]',
+    )!.value = "sourcesAndViews";
+    host.querySelector<HTMLInputElement>(
+        '[aria-label="Required knowledge checkpoint"]',
+    )!.value = "checkpoint";
+    await mounted.show("worker");
+    expect(invoke).toHaveBeenCalledWith(
+        "memoryHubSearch",
+        expect.objectContaining({
+            retrievalPolicy: "sourcesAndViews",
+            knowledgeCheckpointId: "checkpoint",
+        }),
+    );
+    button(
+        "Maintained knowledge · knowledge @ view-revision · slot · selected",
+    ).click();
+    expect(onView).toHaveBeenCalledWith("a", "knowledge", "view-revision");
+    expect(host.textContent).toContain(
+        "candidate candidate (not independent source evidence)",
+    );
+});
 test("empty search hides recent and result controls, and source-type disclosure preserves multiselect filters", async () => {
     expect(
         host.querySelector<HTMLElement>('[aria-label="Recent queries"]')!

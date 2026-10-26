@@ -23,7 +23,7 @@ import {
     type RecipeSpecification,
     type RuntimeJsonSchema,
 } from "./recipeCore.js";
-import { executeRecipeProgram } from "./recipeExecutor.js";
+import { RecipeExecutor } from "./recipeExecutor.js";
 import { assertRecipeSemanticRegistration } from "./recipeSemantic.js";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
@@ -238,6 +238,18 @@ function sameJson(left: unknown, right: unknown): boolean {
 
 function assertRecording(context: MacroProgramAuthoringContext): void {
     const { macro, trace } = context;
+    const identity = macro.learning?.authoring;
+    if (
+        !identity ||
+        identity.captureId !== macro.sourceTraceId ||
+        !identity.taskId ||
+        !identity.tokenId ||
+        identity.tokenId.startsWith("legacy:") ||
+        !/^[a-f0-9]{64}$/.test(identity.contextDigest)
+    )
+        throw new Error(
+            "Program authoring requires sealed child identity; re-record the successful task.",
+        );
     if (
         !macro.sourceTraceId ||
         !macro.macroId ||
@@ -552,28 +564,33 @@ async function validateFixtures(
     plan: MacroProgramFixturePlan,
     signal: AbortSignal,
 ): Promise<RecipeArtifact> {
-    for (const fixture of plan.fixtures) {
-        signal.throwIfAborted();
-        const stub = fixtureHost(context.capabilities, fixture);
-        const result = await executeRecipeProgram(
-            artifact,
-            JSON.parse(JSON.stringify(fixture.input)) as JsonValue,
-            {
-                ...fixtureContext(context, fixture, signal),
-                host: stub.host,
-            },
-        );
-        if (result.status !== "completed" || result.output === undefined)
-            throw new Error(
-                `Fixture ${fixture.id}: execution ${result.status}: ${result.message ?? ""}`,
+    const executor = new RecipeExecutor({ maxWorkers: 1 });
+    try {
+        for (const fixture of plan.fixtures) {
+            signal.throwIfAborted();
+            const stub = fixtureHost(context.capabilities, fixture);
+            const result = await executor.execute(
+                artifact,
+                JSON.parse(JSON.stringify(fixture.input)) as JsonValue,
+                {
+                    ...fixtureContext(context, fixture, signal),
+                    host: stub.host,
+                },
             );
-        const output = result.output;
-        stub.assertConsumed();
-        assertValue(plan.outputSchema, output);
-        if (!sameJson(output, fixture.expectedOutput))
-            throw new Error(
-                `Fixture ${fixture.id}: output did not meet the retained specification.`,
-            );
+            if (result.status !== "completed" || result.output === undefined)
+                throw new Error(
+                    `Fixture ${fixture.id}: execution ${result.status}: ${result.message ?? ""}`,
+                );
+            const output = result.output;
+            stub.assertConsumed();
+            assertValue(plan.outputSchema, output);
+            if (!sameJson(output, fixture.expectedOutput))
+                throw new Error(
+                    `Fixture ${fixture.id}: output did not meet the retained specification.`,
+                );
+        }
+    } finally {
+        await executor.close();
     }
     const { revision: _revision, ...content } = artifact;
     return sealRecipeArtifact({
@@ -600,7 +617,7 @@ function constructArtifact(
         `${macro.sourceTraceId}:response`,
         ...trace.toolCalls.map((call) => call.toolCallId),
         ...plan.fixtures.map((fixture) => fixture.id),
-        ...(authoring ? [authoring.contextDigest] : []),
+        authoring.contextDigest,
     ];
     const capabilities = [
         ...new Map(
@@ -668,9 +685,9 @@ function constructArtifact(
             collisionEvidenceIds: [],
         },
         provenance: {
-            captureId: authoring?.captureId ?? macro.sourceTraceId,
-            taskId: authoring?.taskId ?? macro.learning!.jobId,
-            tokenId: authoring?.tokenId ?? `legacy:${macro.sourceTraceId}`,
+            captureId: authoring.captureId,
+            taskId: authoring.taskId,
+            tokenId: authoring.tokenId,
             evidenceIds,
             legacySource: { macroId: macro.macroId, version: macro.version },
         },

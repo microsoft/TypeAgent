@@ -133,7 +133,7 @@ For installation, exact config and rollback, see the
 
 State lives under the plugin data root, in `recipes/<workspace-profile digest>/`.
 `TYPEAGENT_RECIPE_PROFILE_ID` defaults to `local-default`. A SQLite writer lock
-needs Node 22.13 or later. If a second process tries to mutate the same scope, it
+needs a [supported Node version](../../../README.md#setup). If a second process tries to mutate the same scope, it
 fails, so close the existing session before you move a scope to another process.
 The operating system releases the lock after a crash, and TypeAgent never steals
 a lock by checking PIDs. The old experimental SQLite catalog is left alone and not
@@ -168,6 +168,24 @@ provider flows use. CPU and time, guest memory, stack, JSON size and broker call
 all have limits. The guest reaches the outside world only through declared
 capability and semantic adapters, never through ambient process APIs.
 
+An owned `RecipeExecutor` keeps at most eight workers warm, with at most 64
+queued admissions. This preserves the eight-way concurrency measured by the
+offline runner; higher concurrency waits rather than creating unbounded workers.
+Admission time is included in the execution deadline, and excess queued work
+fails explicitly. `performance.workerQueueMs` and `performance.workerReused` in
+the run result report admitted worker waits and reuse. Idle workers are unrefed
+and retire after 30 seconds.
+
+Workers retain the initialized QuickJS WASM module, not a guest runtime or
+context. Every invocation allocates and disposes fresh guest state before
+reporting success. Failure, timeout, crash, invalid protocol or failed cleanup
+retires the worker. Asset reconfiguration retires idle workers immediately and
+active workers after their captured invocation. Closing an executor cancels
+active and queued work, waits for termination, and rejects new work. The native
+plugin owns an executor for its local service; fixture validation owns a
+single-worker executor for one private fixture batch and closes it even on
+failure. The standalone execution helper uses a shared, idle-expiring executor.
+
 - **Symbolic** programs make no model calls when they run again.
 - **Hybrid** programs make only the semantic calls they declare, with bounds,
   through the configured provider. Results are schema-validated, calls can be
@@ -184,6 +202,56 @@ the exact read-only MCP tools listed in `recipeReadOnlyMcpTools`. Unknown effect
 writes, unsupported schemas and changed contracts all fail with an error.
 Classifying a tool's effect **doesn't grant permission**. Native hooks, content
 exclusions and the usual host and backend authorization still apply.
+
+Capability preflight uses batches of at most four concurrent inspections and
+reports failures in declaration order. Each native execution host captures one
+immutable tool inventory and reuses its approved descriptors only within that
+binding. Live session/account/workspace/generation checks still run before
+inspection and dispatch; permission or tool-change events invalidate the binding.
+Failed inventory discovery is not cached. The inventory is not a permission
+cache, and each dispatch still goes through native authorization.
+
+Guest requests and replies are correlated by request ID, so independent
+explicitly read-only calls can complete out of order. At most four reads are
+active per invocation. Semantic and effectful calls are serialized barriers
+between read groups; this does not enable provider-flow concurrency. Denial or
+cancellation stops unsent work, aborts supported in-flight waits, and suppresses
+late replies. Already dispatched calls may still be running when a native tool
+has no exact cancellation API.
+
+Durable journal mutations remain serialized, including each pre-dispatch
+authorization/revision check and flush. Journals now append flushed checkpoints
+instead of renaming the full accumulated run on every phase. An exclusive run
+claim preserves identity; first-call order and latest-phase maps rebuild from
+the journal. A partial final append is ignored conservatively, malformed
+complete records fail, and uncertain dispatched work is never automatically
+retried. Failed append prevents later dispatch; pending mutations drain before
+a run returns.
+
+The active file-backed manager uses small per-macro catalog pointers and
+immutable version/run payloads. Learning and child-authoring jobs use immutable
+content-addressed records behind versioned pointer maps, lazy rollback
+snapshots and dirty tracking. Independent owners serialize mutations using
+SQLite OS-lock transactions plus revision checks; process death releases locks.
+Existing SQLite catalog transactions are unchanged. Immutable records publish
+from flushed staging files without overwrite. Missing payloads fail closed;
+startup resumes tombstone cleanup and collects abandoned staging/revisions.
+Older canonical catalogs, job maps and journals require explicit reset/reimport,
+not silent migration or reset. Pointer maps still scale with retained jobs;
+startup and journal reconstruction are not constant-time.
+
+Authoring workers use bounded IPC notification waits, not one-second polling.
+Notifications are hints: reconnect and wake reconcile durable status and claims.
+Observe-only/disconnected workers cannot acquire a lease. Cancellation registers
+the wait before reading status, avoiding missed completions; empty/already-leased
+scans do not self-notify. A failed connection uses a bounded backoff. None of
+these storage changes grants execution permission or bypasses live dispatch
+authorization.
+
+Learning loads and verifies the physical recorded trace in one evidence pass,
+including private result sidecars and before/after source integrity checks. It
+does not perform a redundant preliminary trace/evidence load or skip physical
+verification on a cache hit.
 
 The optional TypeAgent action adapter runs in the same host. It swaps the recorded
 protocol scopes and IDs for stable schema and action dependencies plus concrete

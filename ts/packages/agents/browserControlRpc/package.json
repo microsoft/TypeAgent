@@ -14,6 +14,8 @@
   "exports": {
     "./types": "./dist/browserControl.js",
     "./webAgentMessageTypes": "./dist/webAgentMessageTypes.js",
+    "./crosswordDecisionTypes": "./dist/crosswordDecisionTypes.js",
+    "./uiDecisionTypes": "./dist/uiDecisionTypes.js",
     "./serviceTypes": "./dist/serviceTypes.js",
     "./viewRpc": "./dist/viewRpc.js",
     "./runbookImportViewTypes": "./dist/runbookImportViewTypes.js",
@@ -42,7 +44,7 @@
   "dependencies": {
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/memory-service": "workspace:*",
-    "dompurify": "^3.4.13",
+    "dompurify": "^3.4.17",
     "jsdom": "^28.1.0",
     "pdfjs-dist": "5.3.31"
   },

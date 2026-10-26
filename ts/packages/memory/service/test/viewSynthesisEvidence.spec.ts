@@ -63,6 +63,7 @@ const { createKnowProCorpusIndex } = await import(
 const { createDocMemorySettings } = await import(
     "@typeagent/conversation-memory"
 );
+const { readConversationDataFromFile } = await import("@typeagent/knowpro");
 const { viewHash } = await import("../src/viewMerge.js");
 const { effectiveViewPublicationPolicy } = await import(
     "../src/viewPublication.js"
@@ -117,6 +118,7 @@ describe("actual configured evidence-first adapter and durable service", () => {
     }
     const open = () =>
         new FileMemoryService(root, {
+            discoveryPolicy: "off",
             informationalViews: false,
             indexFactory: (_id: string, directory: string) =>
                 new ControlledIndex(directory),
@@ -637,8 +639,17 @@ describe("actual configured evidence-first adapter and durable service", () => {
             viewHash("guide"),
             viewHash(revisionId),
         );
+        const persisted = await readConversationDataFromFile(
+            directory,
+            "corpus",
+            offlineEmbedding.embeddingIdentity?.dimensions,
+        );
         expect(
-            (await stat(path.join(directory, "corpus_embeddings.bin"))).size,
+            persisted?.messageIndexData?.indexData?.embeddings.length,
+        ).toBeGreaterThan(0);
+        expect(
+            persisted?.relatedTermsIndexData?.textEmbeddingData?.embeddings
+                .length,
         ).toBeGreaterThan(0);
         await service.close();
         service = create();

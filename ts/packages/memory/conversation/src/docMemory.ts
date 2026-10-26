@@ -104,6 +104,7 @@ export class DocMemory
     public semanticRefIndex: kp.TermToSemanticRefIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public indexingState: DocIndexingState;
+    private hasKnownIndexingState: boolean;
 
     constructor(
         nameTag: string = "",
@@ -132,6 +133,7 @@ export class DocMemory
             lastSemanticRefOrdinal: -1,
             lastIndexed: new Date(),
         };
+        this.hasKnownIndexingState = docParts.length === 0;
         // Customize the search query translator for scoped queries
         customizeScopeQueryProcessing(
             this.settings.queryTranslator!,
@@ -141,6 +143,16 @@ export class DocMemory
 
     public override get conversation(): kp.IConversation<DocPart> {
         return this;
+    }
+
+    public get hasCompleteIndex(): boolean {
+        return (
+            this.hasKnownIndexingState &&
+            this.indexingState.lastMessageOrdinal ===
+                this.messages.length - 1 &&
+            this.indexingState.lastSemanticRefOrdinal ===
+                this.semanticRefs.length - 1
+        );
     }
 
     /**
@@ -154,13 +166,16 @@ export class DocMemory
         await this.prepareEmbeddings();
         this.beginIndexing();
         try {
-            const result = await kp.buildConversationIndex(
-                this,
-                this.settings.conversationSettings,
+            return await this.indexAndTrackCompletion(
+                (handlers) =>
+                    kp.buildConversationIndex(
+                        this,
+                        this.settings.conversationSettings,
+                        handlers,
+                    ),
                 eventHandler,
+                true,
             );
-            if (!getIndexingErrors(result)) this.updateIndexingState();
-            return result;
         } finally {
             this.endIndexing();
         }
@@ -182,15 +197,17 @@ export class DocMemory
             const messageOrdinalStartAt =
                 this.indexingState.lastMessageOrdinal + 1;
             if (messageOrdinalStartAt < this.messages.length) {
-                const result = await kp.addToConversationIndex(
-                    this,
-                    this.settings.conversationSettings,
-                    messageOrdinalStartAt,
-                    this.semanticRefs.length,
+                return await this.indexAndTrackCompletion(
+                    (handlers) =>
+                        kp.addToConversationIndex(
+                            this,
+                            this.settings.conversationSettings,
+                            messageOrdinalStartAt,
+                            this.semanticRefs.length,
+                            handlers,
+                        ),
                     eventHandler,
                 );
-                if (!getIndexingErrors(result)) this.updateIndexingState();
-                return result;
             }
             return {};
         } finally {
@@ -222,15 +239,17 @@ export class DocMemory
             const messageOrdinal = this.messages.length - 1;
 
             const settings = overrideSettings || this.settings;
-            const result = await kp.addToConversationIndex(
-                this,
-                settings.conversationSettings,
-                messageOrdinal,
-                this.semanticRefs.length,
+            return await this.indexAndTrackCompletion(
+                (handlers) =>
+                    kp.addToConversationIndex(
+                        this,
+                        settings.conversationSettings,
+                        messageOrdinal,
+                        this.semanticRefs.length,
+                        handlers,
+                    ),
                 eventHandler,
             );
-            if (!getIndexingErrors(result)) this.updateIndexingState();
-            return result;
         } finally {
             this.endIndexing();
         }
@@ -312,6 +331,39 @@ export class DocMemory
         }
     }
 
+    private async indexAndTrackCompletion(
+        run: (
+            handlers: kp.IndexingEventHandlers,
+        ) => Promise<kp.IndexingResults>,
+        eventHandler?: kp.IndexingEventHandlers,
+        fullBuild = false,
+    ): Promise<kp.IndexingResults> {
+        const wasKnown = this.hasKnownIndexingState;
+        this.hasKnownIndexingState = false;
+        let completed = true;
+        const track = (proceed: boolean) => {
+            completed &&= proceed;
+            return proceed;
+        };
+        const handlers = { ...eventHandler };
+        const { onKnowledgeExtracted, onEmbeddingsCreated, onTextIndexed } =
+            eventHandler ?? {};
+        if (onKnowledgeExtracted)
+            handlers.onKnowledgeExtracted = (...args) =>
+                track(onKnowledgeExtracted(...args));
+        if (onEmbeddingsCreated)
+            handlers.onEmbeddingsCreated = (...args) =>
+                track(onEmbeddingsCreated(...args));
+        if (onTextIndexed)
+            handlers.onTextIndexed = (...args) => track(onTextIndexed(...args));
+        const result = await run(handlers);
+        if (completed && !getIndexingErrors(result)) {
+            this.updateIndexingState();
+            this.hasKnownIndexingState = fullBuild || wasKnown;
+        }
+        return result;
+    }
+
     private updateIndexingState(): void {
         this.indexingState.lastMessageOrdinal = this.messages.length - 1;
         this.indexingState.lastSemanticRefOrdinal =
@@ -337,6 +389,7 @@ export class DocMemory
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
             messageIndexData: this.secondaryIndexes.messageIndex?.serialize(),
             indexingState: this.indexingState,
+            indexingComplete: this.hasCompleteIndex,
         };
         return data;
     }
@@ -384,6 +437,9 @@ export class DocMemory
             );
         }
 
+        this.hasKnownIndexingState =
+            docMemoryData.indexingState !== undefined &&
+            docMemoryData.indexingComplete !== false;
         if (docMemoryData.indexingState) {
             this.indexingState = {
                 ...docMemoryData.indexingState,
@@ -412,6 +468,7 @@ export class DocMemory
     public async writeToFile(
         dirPath: string,
         baseFileName: string,
+        segmented = false,
     ): Promise<void> {
         await this.prepareEmbeddings();
         const data = await this.serialize();
@@ -420,6 +477,7 @@ export class DocMemory
             this.settings.conversationSettings,
             dirPath,
             baseFileName,
+            segmented,
         );
     }
 
@@ -558,6 +616,7 @@ export class DocMemory
 export interface DocMemoryData
     extends kp.EmbeddingIdentifiedConversationData<DocPart> {
     indexingState?: DocIndexingState;
+    indexingComplete?: boolean;
 }
 
 export class DocPartSerializer implements kp.JsonSerializer<DocPart> {
@@ -601,6 +660,7 @@ function customizeScopeQueryProcessing(
  */
 function docPartClassFromJsonObj(jMsg: DocPart): DocPart {
     const jMeta = new DocPartMeta(jMsg.metadata?.sourceUrl);
+    jMeta.temporalContext = jMsg.metadata?.temporalContext;
     const part = new DocPart(
         jMsg.textChunks,
         jMeta,

@@ -6,7 +6,6 @@ import {
     type ChannelProviderAdapter,
 } from "@typeagent/agent-rpc/channel";
 import { createAgentServerConnection } from "@typeagent/agent-server-client";
-import type { MacroManager } from "@typeagent/copilot-macros";
 import {
     LiveSkillCatalog,
     type ProcessRunner,
@@ -108,7 +107,6 @@ describe("skill catalog RPC", () => {
         const skillCatalog = await LiveSkillCatalog.create(new MemoryStorage());
         const { handler } = createAgentServerConnectionHandler({
             conversationManager: {} as ConversationManager,
-            macroManager: {} as MacroManager,
             skillCatalog,
             shutdown: () => {},
             getUserIdentity: () => ({
@@ -257,7 +255,6 @@ describe("skill catalog RPC", () => {
             );
             const { handler } = createAgentServerConnectionHandler({
                 conversationManager: {} as ConversationManager,
-                macroManager: {} as MacroManager,
                 skillCatalog,
                 skillAcquirer,
                 shutdown: () => {},

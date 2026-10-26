@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type {
+    MacroStep,
     ReplayToolDescriptor,
     ReplayToolHost,
 } from "@typeagent/copilot-macros";
@@ -13,6 +14,7 @@ import {
     type RecipeArtifact,
 } from "@typeagent/copilot-macros/recipeCore";
 import {
+    createRecipeCapabilityInspector,
     createTypeAgentRecipeHost,
     recipeCapabilityFromTool,
 } from "../src/recipeToolHost.js";
@@ -128,6 +130,46 @@ const call = {
 };
 
 describe("TypeAgent recipe tool adapter", () => {
+    it("inspects recorded capabilities in their workspace without executing tools", async () => {
+        const inspections: unknown[] = [];
+        let calls = 0;
+        let available = true;
+        const host: ReplayToolHost = {
+            inspectTool: async (server, tool, options) => {
+                inspections.push({ server, tool, options });
+                return available ? descriptor : undefined;
+            },
+            callTool: async () => {
+                calls++;
+                throw new Error("Inspection must not execute a tool.");
+            },
+        };
+        const step: MacroStep = {
+            id: "recorded-read",
+            mcpServerName: "documents",
+            toolName: descriptor.toolName,
+            arguments: { kind: "literal", value: { path: "recorded" } },
+            executionClass: "replayable",
+            sourceToolCallId: "call",
+        };
+        const inspect = createRecipeCapabilityInspector(host);
+        expect(await inspect(step, "C:\\workspace")).toEqual(
+            recipeCapabilityFromTool(descriptor),
+        );
+        expect(inspections).toEqual([
+            {
+                server: "documents",
+                tool: "read",
+                options: { cwd: "C:\\workspace" },
+            },
+        ]);
+        available = false;
+        await expect(inspect(step, "C:\\workspace")).rejects.toThrow(
+            "Recorded tool is unavailable",
+        );
+        expect(calls).toBe(0);
+    });
+
     it("binds actual schemas without inventing an output type or permission", () => {
         const capability = recipeCapabilityFromTool(descriptor);
         expect(capability.inputSchema).toEqual({

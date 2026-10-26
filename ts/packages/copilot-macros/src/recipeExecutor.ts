@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Worker } from "node:worker_threads";
+import type { Worker } from "node:worker_threads";
+import {
+    configureRecipeWorkerAssets,
+    RecipeWorkerPool,
+} from "./recipeWorkerPool.js";
 import { verifyRecipeExecutable } from "./recipeCompiler.js";
 import type {
     JsonValue,
@@ -18,17 +22,66 @@ import {
     validateRecipeValue,
 } from "./recipeValidation.js";
 
-let executorAssets: { workerUrl: URL; quickjsModulePath?: string } | undefined;
-
 /** Set relocatable worker assets when packaging without node_modules. */
 export function configureRecipeExecutorAssets(assets: {
     workerUrl: URL;
     quickjsModulePath?: string;
 }): void {
-    executorAssets = {
-        ...assets,
-        workerUrl: new URL(assets.workerUrl.href),
-    };
+    configureRecipeWorkerAssets(assets);
+}
+
+export class RecipeExecutor {
+    private readonly pool: RecipeWorkerPool;
+    private readonly controller = new AbortController();
+    private readonly executions = new Set<Promise<RecipeRunResult>>();
+    private closed = false;
+    private closing?: Promise<void>;
+
+    constructor(options: { maxWorkers?: number } = {}) {
+        this.pool = new RecipeWorkerPool(options.maxWorkers);
+    }
+
+    execute(
+        artifact: RecipeArtifact,
+        input: JsonValue,
+        context: RecipeExecutionContext,
+        options: RecipeExecutorOptions = {},
+    ): Promise<RecipeRunResult> {
+        if (this.closed)
+            return Promise.reject(new Error("Recipe executor is closed."));
+        const execution = executeWithPool(
+            artifact,
+            input,
+            {
+                ...context,
+                signal: AbortSignal.any([
+                    context.signal,
+                    this.controller.signal,
+                ]),
+            },
+            options,
+            this.pool,
+        );
+        this.executions.add(execution);
+        const finished = () => {
+            this.executions.delete(execution);
+        };
+        void execution.then(finished, finished);
+        return execution;
+    }
+
+    close(): Promise<void> {
+        this.closed = true;
+        this.closing ??= (async () => {
+            this.controller.abort();
+            try {
+                await this.pool.close();
+            } finally {
+                await Promise.allSettled([...this.executions]);
+            }
+        })();
+        return this.closing;
+    }
 }
 
 export interface RecipeExecutorOptions {
@@ -82,17 +135,39 @@ async function preflightCapabilities(
     context: RecipeExecutionContext,
     signal: AbortSignal,
 ) {
-    for (const capability of artifact.capabilities) {
-        const checked = await observe(
-            () => context.host.inspectCapability(capability, context.binding),
-            signal,
+    const concurrency = 4;
+    for (
+        let offset = 0;
+        offset < artifact.capabilities.length;
+        offset += concurrency
+    ) {
+        const capabilities = artifact.capabilities.slice(
+            offset,
+            offset + concurrency,
         );
-        if (checked.status !== "available") return checked;
-        if (checkRecipeCapability(capability, checked.capability).length)
-            return {
-                status: "unsupported" as const,
-                message: "Capability contract changed during preflight.",
-            };
+        const results = await Promise.all(
+            capabilities.map((capability) =>
+                observe(
+                    () =>
+                        context.host.inspectCapability(
+                            capability,
+                            context.binding,
+                        ),
+                    signal,
+                ),
+            ),
+        );
+        for (const [index, checked] of results.entries()) {
+            if (checked.status !== "available") return checked;
+            if (
+                checkRecipeCapability(capabilities[index], checked.capability)
+                    .length
+            )
+                return {
+                    status: "unsupported" as const,
+                    message: "Capability contract changed during preflight.",
+                };
+        }
     }
     return undefined;
 }
@@ -245,11 +320,24 @@ class Broker {
         private readonly bounds: Bounds,
         private readonly options: RecipeExecutorOptions,
         private readonly signal: AbortSignal,
+        private readonly cancel: () => void,
     ) {}
+
+    isConcurrentRead(request: Request): boolean {
+        return (
+            request.kind === "tools" &&
+            this.artifact.capabilities.some(
+                (capability) =>
+                    capability.id === request.id &&
+                    capability.effect === "read",
+            )
+        );
+    }
 
     private stop(status: RecipeRunResult["status"], message: string): never {
         this.result.status = status;
         this.result.message = message;
+        this.cancel();
         throw new Stopped(message);
     }
 
@@ -263,7 +351,14 @@ class Broker {
             );
     }
 
-    async dispatch(request: Request): Promise<JsonValue> {
+    dispatch(request: Request): Promise<JsonValue> {
+        return this.dispatchRequest(request).catch((error: unknown) => {
+            this.cancel();
+            throw error;
+        });
+    }
+
+    private async dispatchRequest(request: Request): Promise<JsonValue> {
         if (this.signal.aborted) throw new Stopped("Recipe execution stopped.");
         if (++this.calls > this.bounds.maxCalls)
             this.stop("limit_exceeded", "Broker call limit exceeded.");
@@ -442,21 +537,15 @@ async function runGuest(
     options: RecipeExecutorOptions,
     signal: AbortSignal,
     deadline: number,
+    pool: RecipeWorkerPool,
+    cancel: () => void,
 ): Promise<void> {
     if (signal.aborted) throw new Stopped("Runtime stopped.");
-    const worker = new Worker(
-        executorAssets?.workerUrl ??
-            new URL("./recipeExecutorWorker.js", import.meta.url),
-        {
-            workerData: {
-                source: guestSource(artifact, inputText, bounds.maxJsonBytes),
-                bounds,
-                deadline,
-                quickjsModulePath: executorAssets?.quickjsModulePath,
-            },
-            resourceLimits: { maxOldGenerationSizeMb: 64, stackSizeMb: 4 },
-        },
-    );
+    const lease = await pool.acquire(signal);
+    result.performance = {
+        workerQueueMs: lease.queueMs,
+        workerReused: lease.reused,
+    };
     const broker = new Broker(
         artifact,
         context,
@@ -464,15 +553,37 @@ async function runGuest(
         bounds,
         options,
         signal,
+        cancel,
     );
+    let healthy = false;
     try {
-        const value = await workerResult(worker, broker, bounds, signal);
+        const value = await workerResult(
+            lease.worker,
+            broker,
+            bounds,
+            signal,
+            cancel,
+            () =>
+                lease.worker.postMessage({
+                    kind: "execute",
+                    data: {
+                        source: guestSource(
+                            artifact,
+                            inputText,
+                            bounds.maxJsonBytes,
+                        ),
+                        bounds,
+                        deadline,
+                    },
+                }),
+        );
         if (validateRecipeValue(artifact.outputSchema, value).length)
             throw new Error("Recipe output does not satisfy its schema.");
         result.output = value;
         result.status = "completed";
+        healthy = true;
     } finally {
-        await worker.terminate();
+        await lease.release(healthy);
     }
 }
 
@@ -481,73 +592,117 @@ function workerResult(
     broker: Broker,
     bounds: Bounds,
     signal: AbortSignal,
+    cancel: () => void,
+    start: () => void,
 ): Promise<JsonValue> {
     return new Promise((resolve, reject) => {
         let settled = false;
-        let busy = false;
         let calls = 0;
+        let exclusive = false;
+        const queued: Request[] = [];
+        const active = new Set<number>();
+        const clean = () => {
+            signal.removeEventListener("abort", abort);
+            worker.off("error", stop);
+            worker.off("exit", exited);
+            worker.off("message", receive);
+        };
         const stop = (error: unknown) => {
             if (settled) return;
             settled = true;
-            signal.removeEventListener("abort", abort);
+            clean();
+            cancel();
             reject(error);
         };
         const abort = () => stop(new Stopped("Runtime stopped."));
-        signal.addEventListener("abort", abort, { once: true });
-        if (signal.aborted) return abort();
-        worker.on("error", stop);
-        worker.on("exit", () =>
-            stop(new Error("Guest worker exited unexpectedly.")),
-        );
-        worker.on("message", (message: { kind: string; text: string }) => {
+        const exited = () =>
+            stop(new Error("Guest worker exited unexpectedly."));
+        const pump = () => {
+            while (
+                !settled &&
+                !signal.aborted &&
+                queued.length &&
+                active.size < 4 &&
+                !exclusive
+            ) {
+                const request = queued[0];
+                const concurrent = broker.isConcurrentRead(request);
+                if (!concurrent && active.size) return;
+                queued.shift();
+                exclusive = !concurrent;
+                active.add(request.request);
+                void broker.dispatch(request).then((value) => {
+                    try {
+                        if (settled || signal.aborted) return;
+                        const text = jsonText(
+                            { request: request.request, value },
+                            bounds.maxJsonBytes,
+                        );
+                        active.delete(request.request);
+                        exclusive = false;
+                        worker.postMessage(text);
+                        pump();
+                    } catch (error) {
+                        stop(error);
+                    }
+                }, stop);
+            }
+        };
+        const receive = (message: { kind: string; text: string }) => {
             if (settled) return;
-            void (async () => {
-                if (Buffer.byteLength(message.text) > bounds.maxJsonBytes)
+            try {
+                if (
+                    !message ||
+                    typeof message.text !== "string" ||
+                    Buffer.byteLength(message.text) > bounds.maxJsonBytes
+                )
                     throw new Error("Guest JSON limit exceeded.");
                 if (message.kind === "failure") throw new Error(message.text);
                 if (message.kind === "result") {
-                    if (busy)
+                    if (active.size || queued.length)
                         throw new Error("Guest completed with pending calls.");
                     const value: JsonValue = JSON.parse(message.text);
                     jsonText(value, bounds.maxJsonBytes);
                     settled = true;
-                    signal.removeEventListener("abort", abort);
+                    clean();
                     resolve(value);
                     return;
                 }
-                if (
-                    message.kind !== "request" ||
-                    busy ||
-                    ++calls > bounds.maxCalls
-                )
+                if (message.kind !== "request" || ++calls > bounds.maxCalls)
                     throw new Error("Invalid or excessive broker requests.");
-                busy = true;
                 const request = JSON.parse(message.text) as Request;
                 if (
+                    !request ||
                     request.request !== calls ||
                     typeof request.id !== "string" ||
                     !["tools", "semantic"].includes(request.kind)
                 )
                     throw new Error("Invalid broker request.");
-                const value = await broker.dispatch(request);
-                if (settled || signal.aborted) return;
-                worker.postMessage(
-                    jsonText(
-                        { request: request.request, value },
-                        bounds.maxJsonBytes,
-                    ),
-                );
-                busy = false;
-            })().catch(stop);
-        });
+                queued.push(request);
+                pump();
+            } catch (error) {
+                stop(error);
+            }
+        };
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) return abort();
+        worker.on("error", stop);
+        worker.on("exit", exited);
+        worker.on("message", receive);
+        try {
+            start();
+        } catch (error) {
+            stop(error);
+        }
     });
 }
 
-export async function executeRecipeProgram(
+async function executeWithPool(
     artifact: RecipeArtifact,
     input: JsonValue,
     context: RecipeExecutionContext,
-    options: RecipeExecutorOptions = {},
+    options: RecipeExecutorOptions,
+    pool: RecipeWorkerPool,
 ): Promise<RecipeRunResult> {
     const result: RecipeRunResult = {
         recipeId: artifact.recipeId,
@@ -599,6 +754,8 @@ export async function executeRecipeProgram(
             options,
             controller.signal,
             deadline,
+            pool,
+            cancel,
         );
     } catch (error) {
         if (result.status === "failed") {
@@ -653,4 +810,15 @@ export async function executeRecipeProgram(
         context.signal.removeEventListener("abort", cancel);
     }
     return result;
+}
+
+const defaultExecutor = new RecipeExecutor();
+
+export function executeRecipeProgram(
+    artifact: RecipeArtifact,
+    input: JsonValue,
+    context: RecipeExecutionContext,
+    options: RecipeExecutorOptions = {},
+): Promise<RecipeRunResult> {
+    return defaultExecutor.execute(artifact, input, context, options);
 }

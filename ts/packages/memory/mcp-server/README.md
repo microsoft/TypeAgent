@@ -1,5 +1,12 @@
 # @typeagent/memory-mcp-server
 
+Supporting hosts expose `memory_graph_query` and `memory_graph_support` for
+bounded document/event graph projections and exact provenance pages. Tool
+registration follows the host's actual graph capability. Responses include
+coverage states, counts, budgets and generation-bound continuations; graph reads
+report separately scheduled index preparation and do not imply checkpoint readiness. Summary inventory
+tools provide paginated view/build metadata and batched publication status.
+
 MCP tools for importing content, searching sources, answering questions with
 citations, and managing memory. The server calls `MemoryService`; it does not
 implement a separate memory store or retrieval engine. Destructive tools use
@@ -23,6 +30,61 @@ host setup and [View maintenance](../../../docs/architecture/memory/view-mainten
 for refresh behavior.
 
 ## Tool details
+
+Knowledge preparation uses `memory_knowledge_status`,
+`memory_knowledge_discovery_update`, `memory_knowledge_checkpoint_create`,
+`memory_knowledge_checkpoint_get` and `memory_knowledge_checkpoint_wait`.
+Reads expose fixed-scope coverage, exclusions and explicit failure/limit reasons;
+source ingestion completion is not knowledge readiness. Waits are bounded to
+300,000 ms. Discovery updates accept `off`, `suggest` or `sourceObserved`, with
+optional `retryFailed` for an explicit bounded retry. These operations never
+authorize external tools. New-corpus defaults are determined by the service,
+not by the transport or browser.
+
+`memory_answer` accepts `retrievalPolicy` (`sourcesOnly` or strict
+`sourcesAndViews`) separately from synthesis/extraction, and optional
+`knowledgeCheckpointId` to require a ready captured scope. Returned exact
+derived and user-assertion references are distinct from original citations;
+degradation, missing support and bounded coverage remain explicit warnings.
+The browser's selected document-collection Ask uses this answer path on
+supporting hosts. Mixed collections, conversation scopes and filters retain
+the legacy bounded reader with an explicit coverage limitation; strict
+sources-and-views or required-checkpoint requests reject incompatible scopes.
+
+Schema-defined Views round-trip through generic View tools. The bounded tools
+`memory_questions_list`, `memory_question_edit`, `memory_view_page`,
+`memory_schema_view_propose` and `memory_schema_questions_discover` expose the
+question inventory, guarded review, deterministic pages and explicit authoring.
+Proposals are not facts: approve slots explicitly and configure finite discovery
+before requesting discovery.
+
+`memory_acquisitions_list`, `memory_acquisitions_run` and
+`memory_acquisition_cancel` expose sanitized acquisition progress and explicit
+run/cancel controls. They omit staged content, outbound arguments, host
+authority and raw request errors. No acquisition admission or periodic-scheduler
+tool is registered. Unsupported or disabled capabilities fail explicitly.
+
+The loopback HTTP host uses a fresh connection per stateless MCP request.
+Tool-catalog validation in SDK clients can synchronously outlast the HTTP
+keep-alive window; explicit connection closure prevents the next request from
+reusing an expired pooled socket. Tool schemas and output validation remain
+enabled.
+
+Agent-session import is opt-in and separate from ordinary ingestion:
+
+- `memory_agent_session_import`: explicit session ID, import type
+  (`agent-session-jsonl` or `copilot-session-jsonl`), idempotency key,
+  expected cursor, bounded JSONL content, optional scope, and final flag.
+- `memory_agent_session_get`: receipt or `null` for an unknown session.
+- `memory_agent_session_cancel`: explicit session cancellation receipt.
+- `memory_agent_memory_search`: scoped diagnostic memories with complete
+  evidence metadata and warnings.
+
+No tool opens local paths. Chunks are at most 512 KiB UTF-8 and 1,000 lines;
+send them sequentially, polling each running receipt before advancing
+`expectedCursor`. Retry lost responses with the identical request and key.
+Unsupported service capabilities return tool errors, not empty success.
+Native local file submission is available through `@memory import session`.
 
 `memory_view_source_usage` returns paginated metadata for current derived Views
 that depend on a document source. It never enumerates legacy procedures,

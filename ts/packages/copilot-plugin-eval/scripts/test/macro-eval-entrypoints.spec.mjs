@@ -48,6 +48,26 @@ test("macro entrypoint rejects unknown, duplicate and missing options", () => {
         ["report", "--input", "x"],
         ["report", "--input", "x", "--output", "y", "--output", "z"],
         ["report", "--input", "x", "--output", "y", "--seed", "1"],
+        [
+            "plan",
+            "--corpus",
+            "x",
+            "--output",
+            "y",
+            "--runner-model",
+            "gpt-6-luna",
+        ],
+        [
+            "native",
+            "--corpus",
+            "x",
+            "--input",
+            "y",
+            "--output",
+            "z",
+            "--console-helper-dir",
+            "old-launcher",
+        ],
     ])
         assert.throws(() => parseMacroArguments(args));
     assert.deepEqual(parseMacroArguments(["--help"]), { help: true });
@@ -75,8 +95,6 @@ test("offline planning works from a fresh external cwd and refuses output overwr
             "17",
             "--root-model",
             "gpt-5.6-sol",
-            "--runner-model",
-            "gpt-6-luna",
             "--max-target-model-turns",
             "100",
             "--max-duration-ms",

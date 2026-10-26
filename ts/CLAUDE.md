@@ -227,7 +227,7 @@ Agents implement `AppAgent` from `@typeagent/agent-sdk`:
 
 ### Environment
 
-- Requires **Node ≥22**, **pnpm ≥10**
+- Developer setup defaults to the **latest Node LTS**; CI and production containers pin **Node 24.22.1**. Supports **22.23.4+**, **24.22.1+**, and **26.12.1+** within those major lines. Node 20 is unsupported. Requires **pnpm ≥10**.
 - API keys go in `ts/config.local.yaml` (see `config.sample.yaml` for reference). Legacy `.env` is still supported but deprecated.
 - User data stored in `~/.typeagent/`
 - Tracing via the `debug` package — enable with `DEBUG=typeagent:*` env var

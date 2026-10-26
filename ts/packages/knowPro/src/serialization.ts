@@ -10,6 +10,11 @@ import {
 } from "@typeagent/agent-runtime";
 import { deserializeEmbeddings, serializeEmbeddings } from "./fuzzyIndex.js";
 import path from "path";
+import {
+    isSegmentedJson,
+    readSegmentedJson,
+    writeSegmentedJson,
+} from "./segmentedJson.js";
 import { IConversationDataWithIndexes } from "./secondaryIndexes.js";
 import {
     EmbeddingModelMetadata,
@@ -33,6 +38,7 @@ export async function writeConversationDataToFile(
     baseFileName: string,
     modelMeta?: EmbeddingModelMetadata,
     identities?: PersistedEmbeddingIdentities,
+    segmented = false,
 ): Promise<void> {
     identities ??= (conversationData as EmbeddingIdentifiedConversationData)
         .embeddingIdentities;
@@ -41,6 +47,26 @@ export async function writeConversationDataToFile(
         validateIdentities(identities);
         validateIdentityVectors(fileData, identities);
         fileData.jsonData.embeddingFileHeader!.identities = identities;
+    }
+    if (segmented) {
+        const relatedCount =
+            fileData.jsonData.embeddingFileHeader?.relatedCount ?? 0;
+        const embeddings = fileData.binaryData.embeddings ?? [];
+        await writeSegmentedJson(
+            path.join(dirPath, baseFileName + DataFileSuffix),
+            {
+                jsonData: fileData.jsonData,
+                binaryData: {
+                    relatedEmbeddings: embeddings.slice(0, relatedCount),
+                    messageEmbeddings: embeddings.slice(relatedCount),
+                },
+            },
+            {
+                messages: conversationData.messages.length,
+                semanticRefs: conversationData.semanticRefs?.length ?? 0,
+            },
+        );
+        return;
     }
     if (fileData.binaryData) {
         if (
@@ -75,13 +101,30 @@ export async function readConversationDataFromFile(
     if (!jsonData) {
         return undefined;
     }
-    const fileData: ConversationFileData = {
+    let fileData: ConversationFileData = {
         jsonData: jsonData,
         binaryData: {},
     };
+    if (isSegmentedJson(jsonData)) {
+        fileData = segmentedFileData(
+            await readSegmentedJson(
+                path.join(dirPath, baseFileName + DataFileSuffix),
+                jsonData,
+                {
+                    reuseVerified: true,
+                    skipRootProperties:
+                        options?.loadEmbeddings === false
+                            ? ["binaryData"]
+                            : undefined,
+                },
+            ),
+            options?.loadEmbeddings !== false,
+        );
+    }
     validateFileData(fileData, embeddingSize);
     if (options?.loadEmbeddings === false) {
         dropPersistedEmbeddings(fileData.jsonData);
+        fileData.binaryData = {};
         embeddingSize = undefined;
     }
     checkIdentities(fileData, expectedIdentities, embeddingSize);
@@ -99,20 +142,81 @@ export async function readConversationDataFromFile(
             `knowPro: persisted embeddings (size ${getStoredEmbeddingSize(fileData)}) are incompatible with the current embedding model (size ${embeddingSize ?? "none"}). Dropping stored vectors; affected indexes will rebuild.`,
         );
         dropPersistedEmbeddings(fileData.jsonData);
+        fileData.binaryData = {};
     }
     if (embeddingsCompatible && embeddingSize && embeddingSize > 0) {
-        const embeddingsBuffer = await readFile(
-            path.join(dirPath, baseFileName + EmbeddingFileSuffix),
-        );
-        if (embeddingsBuffer) {
-            embeddings = deserializeEmbeddings(embeddingsBuffer, embeddingSize);
-            fileData.binaryData.embeddings = embeddings;
+        if (!fileData.binaryData.embeddings) {
+            const embeddingsBuffer = await readFile(
+                path.join(dirPath, baseFileName + EmbeddingFileSuffix),
+            );
+            if (embeddingsBuffer) {
+                embeddings = deserializeEmbeddings(
+                    embeddingsBuffer,
+                    embeddingSize,
+                );
+                fileData.binaryData.embeddings = embeddings;
+            }
         }
     }
     fileData.jsonData.fileHeader ??= createFileHeader();
     if (expectedIdentities)
         validateIdentityVectors(fileData, expectedIdentities, true);
     return fromConversationFileData(fileData);
+}
+
+function readSegmentVectors(value: unknown): Float32Array[] {
+    if (!Array.isArray(value))
+        throw new Error("Invalid segmented conversation vectors");
+    return value.map((vector: unknown) => {
+        if (
+            !(vector instanceof Float32Array) &&
+            (!Array.isArray(vector) ||
+                vector.some(
+                    (number) =>
+                        typeof number !== "number" || !Number.isFinite(number),
+                ))
+        )
+            throw new Error("Invalid segmented conversation vectors");
+        const result =
+            vector instanceof Float32Array ? vector : new Float32Array(vector);
+        if (result.some((number) => !Number.isFinite(number)))
+            throw new Error("Invalid segmented conversation vectors");
+        return result;
+    });
+}
+
+function segmentedFileData(
+    value: unknown,
+    loadEmbeddings: boolean,
+): ConversationFileData {
+    if (
+        !value ||
+        typeof value !== "object" ||
+        !("jsonData" in value) ||
+        !value.jsonData ||
+        typeof value.jsonData !== "object" ||
+        !("messages" in value.jsonData) ||
+        !Array.isArray(value.jsonData.messages) ||
+        !("binaryData" in value) ||
+        !value.binaryData ||
+        typeof value.binaryData !== "object"
+    )
+        throw new Error("Invalid segmented conversation payload");
+    const data: ConversationFileData = {
+        jsonData: value.jsonData as ConversationJsonData,
+        binaryData: {},
+    };
+    if (!loadEmbeddings) return data;
+    if (
+        "relatedEmbeddings" in value.binaryData &&
+        "messageEmbeddings" in value.binaryData
+    ) {
+        data.binaryData.embeddings = [
+            ...readSegmentVectors(value.binaryData.relatedEmbeddings),
+            ...readSegmentVectors(value.binaryData.messageEmbeddings),
+        ];
+    } else throw new Error("Missing segmented binary vectors");
+    return data;
 }
 
 export async function readConversationDataFromBuffer(

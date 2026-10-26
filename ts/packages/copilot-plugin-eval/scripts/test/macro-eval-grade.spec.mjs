@@ -22,6 +22,8 @@ import {
     createTrustedNormalHookReader,
     isTrustedNormalHookCallback,
 } from "../macro-eval-native-callback.mjs";
+import { macroProtocolVersion } from "../macro-eval-plan.mjs";
+import { programFixture } from "./program-fixture.mjs";
 
 const document = {
     key: "vega",
@@ -79,12 +81,22 @@ function similarityContract(documents = [document]) {
 function similarityTrial(answer, documents = [document]) {
     const value = renderingTrial(answer);
     value.documents = documents;
+    bindProgramOutput(value, documents[0]);
     value.scenario.expectedDocument = documents[0].key;
     value.backendAudit[0].title = documents[0].title;
     value.backendAudit[0].returnedId = documents[0].expectedId;
     value.backendAudit[1].id = documents[0].expectedId;
     value.renderingContract = similarityContract(documents);
     return value;
+}
+
+function bindProgramOutput(value, source) {
+    const evidence = value.programEvidence;
+    evidence.response.run.program.output = source.content;
+    evidence.reconciledRun = structuredClone(evidence.response.run);
+    value.events.find(
+        (event) => event.id === evidence.eventId,
+    ).data.output.responseContent = JSON.stringify(evidence.response);
 }
 
 function renderingTrial(answer, optIn = true) {
@@ -322,6 +334,7 @@ test("rendering-v2 preserves meaningful interior spaces and does not excuse iden
     };
     const value = renderingTrial(spaced.content);
     value.documents = [spaced];
+    bindProgramOutput(value, spaced);
     assert.equal(gradeDocumentTrial(value).status, "passed");
     value.answer = document.content;
     value.events[0].data.content = value.answer;
@@ -360,7 +373,9 @@ test("rendering-v2 preserves meaningful interior spaces and does not excuse iden
 });
 
 function trial() {
+    const program = programFixture(document, timestamp);
     return {
+        protocolVersion: macroProtocolVersion,
         scenario: {
             id: "positive",
             kind: "positive",
@@ -369,8 +384,14 @@ function trial() {
         },
         documents: [document],
         events: [
-            { type: "assistant.message", data: { content: document.content } },
+            {
+                id: "root-answer",
+                parentId: program.event.id,
+                type: "assistant.message",
+                data: { content: document.content },
+            },
             { type: "session.idle", data: {} },
+            program.event,
         ],
         backendAudit: [
             {
@@ -382,8 +403,14 @@ function trial() {
             { timestamp, operation: "fetch_document", id: document.expectedId },
         ],
         answer: document.content,
-        routeEvidence: { route: "grammar" },
+        routeEvidence: {
+            route: "grammar",
+            macroId: program.run.macroId,
+            version: program.run.version,
+            runId: program.run.runId,
+        },
         executionEvidence: { wholeMacroInvocations: 1, effects: [] },
+        programEvidence: program.evidence,
     };
 }
 function negativeTrial() {
@@ -405,7 +432,7 @@ function nativeModelTrial() {
     value.events = [
         {
             id: "root-answer",
-            parentId: "prior-causal-event",
+            parentId: value.programEvidence.eventId,
             type: "assistant.message",
             data: { content: document.content, turnId: "2", toolRequests: [] },
         },
@@ -415,6 +442,7 @@ function nativeModelTrial() {
             type: "assistant.turn_end",
             data: { turnId: "2" },
         },
+        value.events.at(-1),
     ];
     return value;
 }
@@ -685,8 +713,8 @@ function ordinaryCandidate(
             type: "tool.execution_start",
             data: {
                 toolCallId: "unit-lookup",
-                toolName: "macro-eval-docs-lookup_document",
-                mcpServerName: "macro-eval-docs",
+                toolName: "eval-docs-lookup_document",
+                mcpServerName: "eval-docs",
                 arguments: { title: document.title },
             },
         },
@@ -704,8 +732,8 @@ function ordinaryCandidate(
             type: "tool.execution_start",
             data: {
                 toolCallId: "unit-fetch",
-                toolName: "macro-eval-docs-fetch_document",
-                mcpServerName: "macro-eval-docs",
+                toolName: "eval-docs-fetch_document",
+                mcpServerName: "eval-docs",
                 arguments: { id: document.expectedId },
             },
         },
@@ -917,10 +945,21 @@ function withFinalizedSource(
             receipt.expected.endedAt = new Date(clock + 15000).toISOString();
             const traceId = randomUUID();
             const storeRoot = path.join(
-                receipt.expected.dataRoot,
-                "profiles",
-                receipt.control.source.instance,
-                "copilot-macros",
+                path.dirname(receipt.expected.configPath),
+                "recipes",
+                createHash("sha256")
+                    .update(
+                        JSON.stringify({
+                            workspaceId:
+                                process.platform === "win32"
+                                    ? path
+                                          .resolve(receipt.expected.cwd)
+                                          .toLowerCase()
+                                    : path.resolve(receipt.expected.cwd),
+                            profileId: "local-default",
+                        }),
+                    )
+                    .digest("hex"),
             );
             const file = path.join(storeRoot, "traces", `${traceId}.json`);
             fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -1338,6 +1377,7 @@ test("future v4 admits prior prose/exact fence or a whole line-bounded consisten
             .join("\n"),
     );
     value.documents = [spaced];
+    bindProgramOutput(value, spaced);
     value.renderingContract = blockquoteRenderingContract;
     assert.equal(gradeDocumentTrial(value).status, "passed");
 });
@@ -3215,14 +3255,14 @@ test("native root classification rejects child agentId and wrong, missing, or un
     }
 });
 
-test("native Direct completion correlates completed host child, successful phases and equal root answer without idle", () => {
+test("obsolete completed host child and phase report cannot certify checked-program execution", () => {
     const value = nativeHostTrial();
-    assert.equal(gradeDocumentTrial(value).status, "passed");
+    assert.equal(gradeDocumentTrial(value).status, "failed");
     assert.ok(value.events.every((entry) => entry.type !== "session.idle"));
     assert.ok(value.events.at(-1).parentId);
 });
 
-test("host grading rejects mismatched child, stale phases, missing completion and failed/cancelled execution", () => {
+test("obsolete host evidence stays rejected even when identities, phases or completion are changed", () => {
     const mutations = [
         (value) => {
             value.events[2].data.content = "A different child answer.";

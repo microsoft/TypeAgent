@@ -95,12 +95,13 @@ export default {
 
     // Don't need to install
     npmRebuild: false,
+    asarUnpack: ["node_modules/**/foundry-local-sdk/**/*"],
     artifactName: name + "-${version}-${platform}-${arch}.${ext}",
     win: {
         signtoolOptions: {
             publisherName: windowsTrust.publisher,
             signingHashAlgorithms: ["sha256"],
-            rfc3161TimeStampServer: "https://timestamp.digicert.com",
+            rfc3161TimeStampServer: "http://timestamp.digicert.com",
         },
         verifyUpdateCodeSignature: true,
         appId: `Microsoft.TypeAgentShell`,

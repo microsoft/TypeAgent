@@ -2,4 +2,4 @@
 # Licensed under the MIT License.
 
 pdfplumber
-pymupdf
+pymupdf>=1.28.2

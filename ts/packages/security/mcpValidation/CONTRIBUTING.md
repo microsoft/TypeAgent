@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20+
+- The latest Node.js LTS release (recommended; see [supported versions](../../../README.md#setup))
 - pnpm 10+
 - An Anthropic API key (for integration tests only)
 

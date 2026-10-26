@@ -32,10 +32,10 @@ export function macroProgramArtifact(macro: CopilotToolMacro): RecipeArtifact {
             collisionEvidenceIds: [],
         },
         provenance: {
-            captureId: macro.sourceTraceId,
-            taskId: macro.sourceTraceId,
-            tokenId: macro.sourceTraceId,
-            evidenceIds: ["evidence"],
+            captureId: macro.learning!.authoring.captureId,
+            taskId: macro.learning!.authoring.taskId,
+            tokenId: macro.learning!.authoring.tokenId,
+            evidenceIds: ["evidence", macro.learning!.authoring.contextDigest],
             legacySource: { macroId: macro.macroId, version: macro.version },
         },
     });

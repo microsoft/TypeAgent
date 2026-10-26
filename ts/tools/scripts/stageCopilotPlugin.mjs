@@ -58,13 +58,19 @@ export function stageCopilotPlugin(
     if (!fs.existsSync(extension)) {
         throw new Error(`Copilot plugin runtime file is missing: ${extension}`);
     }
-    copyFile(extension, path.join(out, extensionTarget));
+    const extensionLoader = path.join(sourceRoot, extensionTarget);
+    copyFile(extensionLoader, path.join(out, extensionTarget));
     for (const directory of ["agents", "skills"]) {
         fs.cpSync(path.join(sourceRoot, directory), path.join(out, directory), {
             recursive: true,
         });
     }
     copyRuntimeTree(path.join(sourceRoot, "dist"), path.join(out, "dist"));
+    fs.cpSync(
+        path.join(sourceRoot, "dist", "recipe-runtime"),
+        path.join(out, "dist", "recipe-runtime"),
+        { recursive: true },
+    );
     const bundled = buildSync({
         absWorkingDir: sourceRoot,
         entryPoints: {
@@ -117,6 +123,9 @@ export function stageCopilotPlugin(
             outputs: bundled.metafile.outputs,
             extensionSha256: createHash("sha256")
                 .update(fs.readFileSync(extension))
+                .digest("hex"),
+            extensionLoaderSha256: createHash("sha256")
+                .update(fs.readFileSync(extensionLoader))
                 .digest("hex"),
         },
         metrics,

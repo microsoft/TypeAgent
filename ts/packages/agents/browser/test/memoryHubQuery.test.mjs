@@ -898,8 +898,18 @@ test("claim-level citation validation permits an honest no-answer and rejects un
     );
 });
 
-test("neutral graph counts are corpus-qualified, progressive and explicit about unsupported event graphs", async () => {
+test("legacy graph counts are corpus-qualified, progressive and explicit about provider failures", async () => {
     const { service } = fixture();
+    const legacyGraph = service.getKnowledgeGraph.bind(service);
+    const queried = [];
+    service.getKnowledgeGraph = async (corpusId) => {
+        queried.push(corpusId);
+        if (corpusId === "c")
+            throw new Error(
+                "This legacy provider does not expose event graphs.",
+            );
+        return legacyGraph(corpusId);
+    };
     const explore = createMemoryHubExploreFunctions(() => service);
     const first = await explore.memoryHubExplore({ maxNodes: 1 });
     assert.equal(first.counts.sources, 2);
@@ -911,6 +921,7 @@ test("neutral graph counts are corpus-qualified, progressive and explicit about 
             (error) => error.corpusId === "c" && error.operation === "graph",
         ),
     );
+    assert.ok(queried.includes("c"));
     const all = await explore.memoryHubExplore({ maxNodes: 10 });
     assert.equal(new Set(all.entities.map((e) => e.id)).size, 2);
     assert.deepEqual(

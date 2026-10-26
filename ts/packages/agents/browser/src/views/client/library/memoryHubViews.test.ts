@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { inventoryFixture } from "./memoryHubInventoryTestData";
+
 import { mountMemoryHubViews } from "./memoryHubViews";
 import { viewRevisionTime, viewTimestamp } from "./memoryHubViewUi";
 import { invokeMemory } from "./viewClient";
@@ -107,112 +109,119 @@ describe("Memory Center preview-first views", () => {
         buildStarted = jest.fn();
         jest.spyOn(window, "confirm").mockReturnValue(true);
         invoke.mockReset();
-        invoke.mockImplementation(async (method) => {
-            switch (method) {
-                case "memoryViewCapabilities":
-                    return {
-                        derivedViews: enabled
-                            ? {
-                                  builds: true,
-                                  kinds: [
-                                      "wiki",
-                                      "projectBrief",
-                                      "timeline",
-                                      "troubleshootingGuide",
-                                  ],
-                                  maintenance: true,
-                              }
-                            : undefined,
-                    };
-                case "memoryListCorpora":
-                    return [{ corpusId: "c", name: "My collection" }];
-                case "memoryListViews":
-                    return snapshot;
-                case "memoryListViewBuilds":
-                    return [];
-                case "memoryGetViewPublicationPolicy":
-                    return { revision: 7, autoPublish: true, views: {} };
-                case "memoryGetViewPublication":
-                    return {
-                        viewId: "guide",
-                        publishedRevisionId: "v1",
-                        indexState: "failed",
-                        reason: "Index failed",
-                    };
-                case "memoryListSources":
-                    return {
-                        items: [
-                            {
-                                sourceId: "s",
-                                title: "Evidence",
-                                activeRevisionId: "r",
-                                revisions: [
-                                    { revisionId: "r", state: "ready" },
-                                ],
+        invoke.mockImplementation(
+            inventoryFixture(async (method) => {
+                switch (method) {
+                    case "memoryViewCapabilities":
+                        return {
+                            derivedViews: enabled
+                                ? {
+                                      builds: true,
+                                      kinds: [
+                                          "wiki",
+                                          "projectBrief",
+                                          "timeline",
+                                          "troubleshootingGuide",
+                                      ],
+                                      maintenance: true,
+                                  }
+                                : undefined,
+                        };
+                    case "memoryListCorpora":
+                        return [{ corpusId: "c", name: "My collection" }];
+                    case "memoryListViews":
+                        return snapshot;
+                    case "memoryGetView":
+                        return view;
+                    case "memoryListViewBuilds":
+                        return [];
+                    case "memoryGetViewPublicationPolicy":
+                        return { revision: 7, autoPublish: true, views: {} };
+                    case "memoryGetViewPublication":
+                        return {
+                            viewId: "guide",
+                            publishedRevisionId: "v1",
+                            indexState: "failed",
+                            reason: "Index failed",
+                        };
+                    case "memoryListSources":
+                        return {
+                            items: [
+                                {
+                                    sourceId: "s",
+                                    title: "Evidence",
+                                    activeRevisionId: "r",
+                                    revisions: [
+                                        { revisionId: "r", state: "ready" },
+                                    ],
+                                },
+                                {
+                                    sourceId: "pending",
+                                    title: "Not ready",
+                                    activeRevisionId: "rp",
+                                    revisions: [
+                                        { revisionId: "rp", state: "pending" },
+                                    ],
+                                },
+                            ],
+                            total: 2,
+                        };
+                    case "memoryListEvents":
+                        return {
+                            items: [
+                                {
+                                    eventId: "event-1",
+                                    eventType: "decision",
+                                    eventTime: "2026-10-09T12:00:00Z",
+                                    observedAt: "2026-10-09T13:00:00Z",
+                                    createdAt: "2026-10-09T14:00:00Z",
+                                },
+                            ],
+                            total: 1,
+                        };
+                    case "memoryGetSourceContent":
+                        return {
+                            revisionId: "r",
+                            content:
+                                "## Record record-1\nOccurred at: 2026-10-09T12:00:00Z\nRecorded / known at: 2026-10-09T13:00:00Z\nState: confirmed\n",
+                            truncated: false,
+                        };
+                    case "memoryBuildViews":
+                        return job;
+                    case "memoryGetViewConflict":
+                        return {
+                            conflictId: job.results[0].conflictId,
+                            corpusId: "c",
+                            viewId: "guide",
+                            state: "pending",
+                            expectedRevisionId: "v1",
+                            targets: ["section:description"],
+                            input: { fingerprint },
+                            base: {
+                                content: {
+                                    ...content,
+                                    title: "Generated base",
+                                },
                             },
-                            {
-                                sourceId: "pending",
-                                title: "Not ready",
-                                activeRevisionId: "rp",
-                                revisions: [
-                                    { revisionId: "rp", state: "pending" },
-                                ],
+                            human: {
+                                ...view,
+                                content: { ...content, title: "Human draft" },
                             },
-                        ],
-                        total: 2,
-                    };
-                case "memoryListEvents":
-                    return {
-                        items: [
-                            {
-                                eventId: "event-1",
-                                eventType: "decision",
-                                eventTime: "2026-10-09T12:00:00Z",
-                                observedAt: "2026-10-09T13:00:00Z",
-                                createdAt: "2026-10-09T14:00:00Z",
+                            candidate: {
+                                content: { ...content, title: "New candidate" },
+                                relationships: [],
+                                outcome: "diagnosticOnly",
+                                missingEvidence: ["Recovery"],
                             },
-                        ],
-                        total: 1,
-                    };
-                case "memoryGetSourceContent":
-                    return {
-                        revisionId: "r",
-                        content:
-                            "## Record record-1\nOccurred at: 2026-10-09T12:00:00Z\nRecorded / known at: 2026-10-09T13:00:00Z\nState: confirmed\n",
-                        truncated: false,
-                    };
-                case "memoryBuildViews":
-                    return job;
-                case "memoryGetViewConflict":
-                    return {
-                        conflictId: job.results[0].conflictId,
-                        corpusId: "c",
-                        viewId: "guide",
-                        state: "pending",
-                        expectedRevisionId: "v1",
-                        targets: ["section:description"],
-                        input: { fingerprint },
-                        base: {
-                            content: { ...content, title: "Generated base" },
-                        },
-                        human: {
-                            ...view,
-                            content: { ...content, title: "Human draft" },
-                        },
-                        candidate: {
-                            content: { ...content, title: "New candidate" },
-                            relationships: [],
-                            outcome: "diagnosticOnly",
-                            missingEvidence: ["Recovery"],
-                        },
-                    };
-                case "memorySaveViewDraft":
-                case "memoryResolveViewConflict":
-                    return { commitId: head, version: view };
-                default:
-                    throw new Error(`Unexpected method ${method}`);
-            }
-        });
+                        };
+                    case "memorySaveViewDraft":
+                    case "memoryResolveViewConflict":
+                        return { commitId: head, version: view };
+                    default:
+                        throw new Error(`Unexpected method ${method}`);
+                }
+            }),
+        );
         panel = mountMemoryHubViews(host, {
             scope: () => scope,
             onError: (error) => errors.push(error),
@@ -259,6 +268,259 @@ describe("Memory Center preview-first views", () => {
         click(host, "Compare and resolve conflict");
         await settle();
     }
+    test("gallery shows an accessible spinner before capabilities or inventory finish", async () => {
+        const original = invoke.getMockImplementation()!;
+        let releaseCapabilities!: (value: unknown) => void;
+        let releaseInventory!: (value: unknown) => void;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryViewCapabilities"
+                ? new Promise((resolve) => {
+                      releaseCapabilities = resolve;
+                  })
+                : method === "memoryListViewSummaries"
+                  ? new Promise((resolve) => {
+                        releaseInventory = resolve;
+                    })
+                  : original(method, params),
+        );
+        const pending = panel.show();
+        const loading = host.querySelector<HTMLElement>(".hub-view-loading")!;
+        expect(loading.hidden).toBe(false);
+        expect(loading.getAttribute("role")).toBe("status");
+        expect(loading.textContent).toContain("Loading views...");
+        expect(loading.querySelector(".fa-spin")).not.toBeNull();
+        releaseCapabilities(await original("memoryViewCapabilities", {}));
+        await settle();
+        expect(loading.hidden).toBe(false);
+        releaseInventory(
+            await original("memoryListViewSummaries", { corpusId: "c" }),
+        );
+        await pending;
+        expect(loading.hidden).toBe(true);
+        expect(host.textContent).toContain("Guide");
+        expect(errors).toEqual([]);
+    });
+    test("a late inventory cannot hide loading for a newer scope", async () => {
+        const original = invoke.getMockImplementation()!;
+        const pendingInventories = new Map<string, (value: unknown) => void>();
+        invoke.mockImplementation((method, params) =>
+            method === "memoryListViewSummaries"
+                ? new Promise((resolve) => {
+                      pendingInventories.set(
+                          (params as { corpusId: string }).corpusId,
+                          resolve,
+                      );
+                  })
+                : original(method, params),
+        );
+        const first = panel.show();
+        await settle();
+        scope = "other";
+        panel.scopeChanged();
+        pendingInventories.get("c")!(
+            await original("memoryListViewSummaries", { corpusId: "c" }),
+        );
+        await first;
+        await settle();
+        const loading = host.querySelector<HTMLElement>(".hub-view-loading")!;
+        expect(loading.hidden).toBe(false);
+        expect(pendingInventories.has("other")).toBe(true);
+        pendingInventories.get("other")!(
+            await original("memoryListViewSummaries", { corpusId: "other" }),
+        );
+        await settle();
+        expect(loading.hidden).toBe(true);
+        expect(errors).toEqual([]);
+    });
+    test("gallery loading indicator clears on failure and preserves the error", async () => {
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryListViewSummaries"
+                ? Promise.reject(new Error("Inventory unavailable"))
+                : original(method, params),
+        );
+        await panel.show();
+        expect(
+            host.querySelector<HTMLElement>(".hub-view-loading")!.hidden,
+        ).toBe(true);
+        expect(host.textContent).toContain("Inventory unavailable");
+        expect(errors).toHaveLength(1);
+    });
+    test("card clicks navigate and show a loading reader before detail completes, with no duplicate route request", async () => {
+        await panel.refresh();
+        const original = invoke.getMockImplementation()!;
+        let resolve!: (value: unknown) => void;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryGetView"
+                ? new Promise((done) => {
+                      resolve = done;
+                  })
+                : original(method, params),
+        );
+        openView.mockImplementation((corpusId, viewId) => {
+            void panel.show({ corpusId, viewId });
+        });
+        click(host, "Guide");
+        expect(navigate).toHaveBeenLastCalledWith("#/views/c/guide");
+        expect(host.textContent).toContain("Loading view details...");
+        expect(
+            host.querySelector(".hub-view-loading:not([hidden]) .fa-spin"),
+        ).not.toBeNull();
+        await settle();
+        expect(
+            invoke.mock.calls.filter(([method]) => method === "memoryGetView"),
+        ).toHaveLength(1);
+        resolve(view);
+        await settle();
+        expect(host.querySelector(".hub-view-document")?.textContent).toContain(
+            "Original body",
+        );
+        expect(errors).toEqual([]);
+    });
+    test("document renders before conflict metadata and edit controls wait for that metadata", async () => {
+        await panel.refresh();
+        const original = invoke.getMockImplementation()!;
+        let resolve!: (value: unknown) => void;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryListViewBuildSummaries"
+                ? new Promise((done) => {
+                      resolve = done;
+                  })
+                : original(method, params),
+        );
+        const pending = panel.showView("c", "guide");
+        await settle();
+        const article = host.querySelector(".hub-view-document");
+        expect(article?.textContent).toContain("Original body");
+        expect(host.textContent).toContain(
+            "Checking publication and conflicts...",
+        );
+        expect(
+            [...host.querySelectorAll("button")].some(
+                (button) => button.textContent === "Edit",
+            ),
+        ).toBe(false);
+        resolve({ head, total: 0, items: [] });
+        await pending;
+        expect(host.querySelector(".hub-view-document")).toBe(article);
+        expect(
+            [...host.querySelectorAll("button")].some(
+                (button) => button.textContent === "Edit",
+            ),
+        ).toBe(true);
+        expect(errors).toEqual([]);
+    });
+    test("back navigation invalidates late metadata and never reopens the old reader", async () => {
+        await panel.refresh();
+        const original = invoke.getMockImplementation()!;
+        let resolve!: (value: unknown) => void;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryListViewBuildSummaries"
+                ? new Promise((done) => {
+                      resolve = done;
+                  })
+                : original(method, params),
+        );
+        const pending = panel.showView("c", "guide");
+        await settle();
+        click(host, "Back to views");
+        await settle();
+        resolve({ head, total: 0, items: [] });
+        await pending;
+        expect(host.querySelector(".hub-view-document")).toBeNull();
+        expect(navigate).toHaveBeenLastCalledWith("#/views");
+        expect(openView).toHaveBeenCalledTimes(1);
+        expect(errors).toEqual([]);
+    });
+    test("failed secondary metadata retains the document without enabling unsafe edits", async () => {
+        await panel.refresh();
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryListViewBuildSummaries"
+                ? Promise.reject(new Error("Conflict status unavailable"))
+                : original(method, params),
+        );
+        await panel.showView("c", "guide");
+        expect(host.querySelector(".hub-view-document")?.textContent).toContain(
+            "Original body",
+        );
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+            "Conflict status unavailable",
+        );
+        expect(
+            [...host.querySelectorAll("button")].some(
+                (button) => button.textContent === "Edit",
+            ),
+        ).toBe(false);
+        expect(errors).toHaveLength(1);
+    });
+    test("a late reader response cannot hijack a newer view route", async () => {
+        await panel.refresh();
+        const original = invoke.getMockImplementation()!;
+        let resolveOld!: (value: unknown) => void;
+        const other = {
+            ...view,
+            viewId: "other",
+            content: { ...content, title: "Other guide" },
+        };
+        invoke.mockImplementation((method, params) => {
+            const request = params as { viewId?: string };
+            if (method === "memoryGetView")
+                return request.viewId === "guide"
+                    ? new Promise((resolve) => {
+                          resolveOld = resolve;
+                      })
+                    : Promise.resolve(other);
+            if (
+                method === "memoryListViewSummaries" &&
+                request.viewId === "other"
+            )
+                return Promise.resolve({
+                    head,
+                    total: 1,
+                    items: [
+                        {
+                            ...other,
+                            publication: {
+                                viewId: "other",
+                                indexState: "absent",
+                                reason: "Draft",
+                            },
+                        },
+                    ],
+                });
+            return original(method, params);
+        });
+        const old = panel.showView("c", "guide");
+        await settle();
+        await panel.showView("c", "other");
+        resolveOld(view);
+        await old;
+        expect(host.querySelector(".hub-view-document h2")?.textContent).toBe(
+            "Other guide",
+        );
+        expect(navigate).toHaveBeenLastCalledWith("#/views/c/other");
+        expect(openView).toHaveBeenLastCalledWith("c", "other", undefined);
+        expect(errors).toEqual([]);
+    });
+    test("reader detail failures are visible and retain back navigation", async () => {
+        await panel.refresh();
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryGetView"
+                ? Promise.reject(new Error("View revision unavailable"))
+                : original(method, params),
+        );
+        await panel.showView("c", "guide");
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+            "View revision unavailable",
+        );
+        expect(host.querySelector(".hub-view-document")).toBeNull();
+        click(host, "Back to views");
+        await settle();
+        expect(navigate).toHaveBeenLastCalledWith("#/views");
+        expect(errors).toHaveLength(1);
+    });
     test("disabled capability is informative and visible, never an empty vanished destination", async () => {
         enabled = false;
         await panel.refresh();
@@ -272,12 +534,32 @@ describe("Memory Center preview-first views", () => {
     });
     test("list and detail are preview-first, sanitized and do not fetch remote assets", async () => {
         await panel.refresh();
+        expect(invoke).toHaveBeenCalledWith("memoryListViewSummaries", {
+            corpusId: "c",
+            pageSize: 25,
+        });
+        expect(
+            invoke.mock.calls.filter(([method]) =>
+                [
+                    "memoryListViews",
+                    "memoryListViewBuilds",
+                    "memoryGetViewPublication",
+                    "memoryGetView",
+                    "memoryGetViewBuild",
+                    "memoryListViewBuildSummaries",
+                    "memoryGetViewPublicationPolicy",
+                ].includes(method),
+            ),
+        ).toEqual([]);
         expect(host.querySelector("textarea")).toBeNull();
         expect(
             host.querySelector('[aria-label="View auto-publish after build"]'),
         ).toBeNull();
         click(host, "Guide");
         await settle();
+        expect(
+            invoke.mock.calls.filter(([method]) => method === "memoryGetView"),
+        ).toHaveLength(1);
         expect(
             host.querySelector(".hub-view-document strong")!.textContent,
         ).toBe("body");
@@ -295,19 +577,21 @@ describe("Memory Center preview-first views", () => {
     test("detail displays the selected revision timestamp outside unchanged summary", async () => {
         const original = invoke.getMockImplementation()!;
         const summary = "Substantive scope warning, not a host clock";
-        invoke.mockImplementation((method, params) =>
-            method === "memoryListViews"
-                ? Promise.resolve({
-                      ...snapshot,
-                      views: [
-                          {
-                              ...view,
-                              createdAt: "2026-10-13T16:00:00Z",
-                              content: { ...content, summary },
-                          },
-                      ],
-                  })
-                : original(method, params),
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryListViews"
+                    ? Promise.resolve({
+                          ...snapshot,
+                          views: [
+                              {
+                                  ...view,
+                                  createdAt: "2026-10-13T16:00:00Z",
+                                  content: { ...content, summary },
+                              },
+                          ],
+                      })
+                    : original(method, params),
+            ),
         );
         await panel.refresh();
         click(host, "Guide");
@@ -363,6 +647,7 @@ describe("Memory Center preview-first views", () => {
         summary.click();
         publication.focus();
         publication.click();
+        await settle();
         expect(document.activeElement?.tagName).toBe("DIALOG");
         click(host, "Close");
         expect(document.activeElement).toBe(publication);
@@ -371,28 +656,30 @@ describe("Memory Center preview-first views", () => {
     test("All memory browsing isolates identical IDs by collection and build collection choice stays in the flow", async () => {
         scope = undefined;
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation((method, params) => {
-            if (method === "memoryListCorpora")
-                return Promise.resolve([
-                    { corpusId: "c", name: "One" },
-                    { corpusId: "d", name: "Two" },
-                ]);
-            if (
-                method === "memoryListViews" &&
-                (params as { corpusId: string }).corpusId === "d"
-            )
-                return Promise.resolve({
-                    head,
-                    views: [
-                        {
-                            ...view,
-                            corpusId: "d",
-                            content: { ...content, title: "Other guide" },
-                        },
-                    ],
-                });
-            return original(method, params);
-        });
+        invoke.mockImplementation(
+            inventoryFixture((method, params) => {
+                if (method === "memoryListCorpora")
+                    return Promise.resolve([
+                        { corpusId: "c", name: "One" },
+                        { corpusId: "d", name: "Two" },
+                    ]);
+                if (
+                    method === "memoryListViews" &&
+                    (params as { corpusId: string }).corpusId === "d"
+                )
+                    return Promise.resolve({
+                        head,
+                        views: [
+                            {
+                                ...view,
+                                corpusId: "d",
+                                content: { ...content, title: "Other guide" },
+                            },
+                        ],
+                    });
+                return original(method, params);
+            }),
+        );
         await panel.refresh();
         expect(host.textContent).toContain("Other guide");
         const cards = [...host.querySelectorAll<HTMLElement>(".hub-view-card")];
@@ -402,11 +689,8 @@ describe("Memory Center preview-first views", () => {
         expect(
             cards[1].querySelector(":scope > p:last-of-type")!.textContent,
         ).toBe("Collection: Two");
-        expect(cards[1].querySelector("details")!.open).toBe(false);
-        expect(cards[1].querySelector("details")!.textContent).toContain(
-            "Corpus ID: d",
-        );
-        expect(cards[1].textContent).not.toContain("Collection: d");
+        expect(cards[1].querySelector("details")).toBeNull();
+        expect(cards[1].textContent).not.toContain("Corpus ID");
         click(host, "Other guide");
         await settle();
         expect(navigate).toHaveBeenCalledWith("#/views/d/guide");
@@ -424,58 +708,57 @@ describe("Memory Center preview-first views", () => {
         );
     });
     test.each([undefined, "old"])(
-        "direct reader revision %s loads corpus names before returning to the complete All-memory list",
+        "direct reader revision %s skips gallery loading and returns to the named complete All-memory list",
         async (revisionId) => {
             scope = undefined;
             const original = invoke.getMockImplementation()!;
-            invoke.mockImplementation((method, params) => {
-                if (method === "memoryListCorpora")
-                    return Promise.resolve([
-                        { corpusId: "c", name: "Engineering demo" },
-                        { corpusId: "d", name: "Research notes" },
-                    ]);
-                if (method === "memoryGetView")
-                    return Promise.resolve({
-                        ...view,
-                        revisionId: "old",
-                        content: { ...content, title: "Historical guide" },
-                    });
-                if (
-                    method === "memoryListViews" &&
-                    (params as { corpusId: string }).corpusId === "d"
-                )
-                    return Promise.resolve({
-                        head,
-                        views: [
-                            {
-                                ...view,
-                                corpusId: "d",
-                                content: {
-                                    ...content,
-                                    title: "Research guide",
+            invoke.mockImplementation(
+                inventoryFixture((method, params) => {
+                    if (method === "memoryListCorpora")
+                        return Promise.resolve([
+                            { corpusId: "c", name: "Engineering demo" },
+                            { corpusId: "d", name: "Research notes" },
+                        ]);
+                    if (method === "memoryGetView")
+                        return Promise.resolve({
+                            ...view,
+                            ...(revisionId
+                                ? {
+                                      revisionId,
+                                      content: {
+                                          ...content,
+                                          title: "Historical guide",
+                                      },
+                                  }
+                                : {}),
+                        });
+                    if (
+                        method === "memoryListViews" &&
+                        (params as { corpusId: string }).corpusId === "d"
+                    )
+                        return Promise.resolve({
+                            head,
+                            views: [
+                                {
+                                    ...view,
+                                    corpusId: "d",
+                                    content: {
+                                        ...content,
+                                        title: "Research guide",
+                                    },
                                 },
-                            },
-                        ],
-                    });
-                return original(method, params);
-            });
+                            ],
+                        });
+                    return original(method, params);
+                }),
+            );
             await panel.show({ corpusId: "c", viewId: "guide", revisionId });
-            const initialCard = host.querySelector(".hub-view-card")!;
-            expect(initialCard.textContent).toContain(
-                "Collection: Engineering demo",
-            );
-            expect(initialCard.textContent).not.toContain(
-                "Collection name unavailable",
-            );
+            expect(host.querySelector(".hub-view-card")).toBeNull();
             expect(
-                invoke.mock.calls.findIndex(
+                invoke.mock.calls.some(
                     ([method]) => method === "memoryListCorpora",
                 ),
-            ).toBeLessThan(
-                invoke.mock.calls.findIndex(
-                    ([method]) => method === "memoryListViews",
-                ),
-            );
+            ).toBe(false);
             click(host, "Back to views");
             await settle();
             const cards = [...host.querySelectorAll(".hub-view-card")];
@@ -537,19 +820,23 @@ describe("Memory Center preview-first views", () => {
     });
     test("Select all uses every ready source, remains visible while filtering and supports partial deselection", async () => {
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation((method, params) =>
-            method === "memoryListSources"
-                ? Promise.resolve({
-                      items: ["s", "s2"].map((sourceId) => ({
-                          sourceId,
-                          title:
-                              sourceId === "s" ? "Evidence" : "Other evidence",
-                          activeRevisionId: "r",
-                          revisions: [{ revisionId: "r", state: "ready" }],
-                      })),
-                      total: 2,
-                  })
-                : original(method, params),
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryListSources"
+                    ? Promise.resolve({
+                          items: ["s", "s2"].map((sourceId) => ({
+                              sourceId,
+                              title:
+                                  sourceId === "s"
+                                      ? "Evidence"
+                                      : "Other evidence",
+                              activeRevisionId: "r",
+                              revisions: [{ revisionId: "r", state: "ready" }],
+                          })),
+                          total: 2,
+                      })
+                    : original(method, params),
+            ),
         );
         await startBuild(["Project brief"]);
         const all = host.querySelector<HTMLInputElement>(
@@ -592,18 +879,20 @@ describe("Memory Center preview-first views", () => {
     });
     test("Select all never silently drops sources exceeding the 32-source target limit", async () => {
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation((method, params) =>
-            method === "memoryListSources"
-                ? Promise.resolve({
-                      items: Array.from({ length: 33 }, (_, index) => ({
-                          sourceId: index ? `s${index}` : "s",
-                          title: index ? `Evidence ${index}` : "Evidence",
-                          activeRevisionId: "r",
-                          revisions: [{ revisionId: "r", state: "ready" }],
-                      })),
-                      total: 33,
-                  })
-                : original(method, params),
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryListSources"
+                    ? Promise.resolve({
+                          items: Array.from({ length: 33 }, (_, index) => ({
+                              sourceId: index ? `s${index}` : "s",
+                              title: index ? `Evidence ${index}` : "Evidence",
+                              activeRevisionId: "r",
+                              revisions: [{ revisionId: "r", state: "ready" }],
+                          })),
+                          total: 33,
+                      })
+                    : original(method, params),
+            ),
         );
         await startBuild(["Project brief"]);
         check(host, "Select all sources");
@@ -639,14 +928,16 @@ describe("Memory Center preview-first views", () => {
     });
     test("rebuild keeps stable identity, exact version and effective per-view publication override", async () => {
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation((method, params) =>
-            method === "memoryGetViewPublicationPolicy"
-                ? Promise.resolve({
-                      revision: 7,
-                      autoPublish: true,
-                      views: { guide: { revision: 3, autoPublish: false } },
-                  })
-                : original(method, params),
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryGetViewPublicationPolicy"
+                    ? Promise.resolve({
+                          revision: 7,
+                          autoPublish: true,
+                          views: { guide: { revision: 3, autoPublish: false } },
+                      })
+                    : original(method, params),
+            ),
         );
         await panel.refresh();
         click(host, "Guide");
@@ -674,14 +965,16 @@ describe("Memory Center preview-first views", () => {
     });
     test("timeline excludes non-record documents and normalizes explicit timezone bounds", async () => {
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation((method, params) =>
-            method === "memoryGetSourceContent"
-                ? Promise.resolve({
-                      revisionId: "r",
-                      content: "A reference with no explicit records",
-                      truncated: false,
-                  })
-                : original(method, params),
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryGetSourceContent"
+                    ? Promise.resolve({
+                          revisionId: "r",
+                          content: "A reference with no explicit records",
+                          truncated: false,
+                      })
+                    : original(method, params),
+            ),
         );
         await startBuild(["Evidence-linked timeline", "Troubleshooting guide"]);
         const event = host.querySelector<HTMLInputElement>(
@@ -730,16 +1023,18 @@ describe("Memory Center preview-first views", () => {
         "timeline accepts one source plus %i events only within the combined32 bound",
         async (count) => {
             const original = invoke.getMockImplementation()!;
-            invoke.mockImplementation((method, params) =>
-                method === "memoryListEvents"
-                    ? Promise.resolve({
-                          items: Array.from({ length: count }, (_, i) => ({
-                              eventId: `event-${i}`,
-                              eventType: "decision",
-                              eventTime: "2026-10-09T12:00:00Z",
-                          })),
-                      })
-                    : original(method, params),
+            invoke.mockImplementation(
+                inventoryFixture((method, params) =>
+                    method === "memoryListEvents"
+                        ? Promise.resolve({
+                              items: Array.from({ length: count }, (_, i) => ({
+                                  eventId: `event-${i}`,
+                                  eventType: "decision",
+                                  eventTime: "2026-10-09T12:00:00Z",
+                              })),
+                          })
+                        : original(method, params),
+                ),
             );
             await startBuild(["Evidence-linked timeline"]);
             for (const control of host.querySelectorAll<HTMLInputElement>(
@@ -822,14 +1117,18 @@ describe("Memory Center preview-first views", () => {
         click(host, "Guide");
         await settle();
         click(host, "Publication and search");
+        await settle();
         expect(document.activeElement?.tagName).toBe("DIALOG");
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation((method, params) =>
-            method === "memoryPublishView" || method === "memoryRetryViewIndex"
-                ? Promise.reject(
-                      new Error("Exact artifact validation required"),
-                  )
-                : original(method, params),
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryPublishView" ||
+                method === "memoryRetryViewIndex"
+                    ? Promise.reject(
+                          new Error("Exact artifact validation required"),
+                      )
+                    : original(method, params),
+            ),
         );
         click(host, "Publish exact revision");
         await settle();
@@ -871,13 +1170,15 @@ describe("Memory Center preview-first views", () => {
     });
     test("changed conflict targets remain inspectable but cannot overwrite", async () => {
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation((method, params) =>
-            method === "memoryListViews"
-                ? Promise.resolve({
-                      head,
-                      views: [{ ...view, version: 2, revisionId: "v2" }],
-                  })
-                : original(method, params),
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryListViews"
+                    ? Promise.resolve({
+                          head,
+                          views: [{ ...view, version: 2, revisionId: "v2" }],
+                      })
+                    : original(method, params),
+            ),
         );
         await openConflict();
         expect(host.textContent).toContain("current draft changed");
@@ -887,25 +1188,27 @@ describe("Memory Center preview-first views", () => {
     });
     test("latest-view routes locate their pending conflict even when the newest receipt belongs to another view", async () => {
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation((method, params) =>
-            method === "memoryListViewBuilds"
-                ? Promise.resolve([
-                      {
-                          ...job,
-                          jobId: "unrelated",
-                          createdAt: "2026-10-09T14:00:00Z",
-                          results: [
-                              {
-                                  ...job.results[0],
-                                  viewId: "other",
-                                  conflictId: undefined,
-                                  state: "draft",
-                              },
-                          ],
-                      },
-                      { ...job, createdAt: "2026-10-09T13:00:00Z" },
-                  ])
-                : original(method, params),
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryListViewBuilds"
+                    ? Promise.resolve([
+                          {
+                              ...job,
+                              jobId: "unrelated",
+                              createdAt: "2026-10-09T14:00:00Z",
+                              results: [
+                                  {
+                                      ...job.results[0],
+                                      viewId: "other",
+                                      conflictId: undefined,
+                                      state: "draft",
+                                  },
+                              ],
+                          },
+                          { ...job, createdAt: "2026-10-09T13:00:00Z" },
+                      ])
+                    : original(method, params),
+            ),
         );
         await panel.show({ corpusId: "c", viewId: "guide" });
         expect(host.querySelector("textarea")).toBeNull();
@@ -923,19 +1226,52 @@ describe("Memory Center preview-first views", () => {
         ).not.toBeNull();
         expect(errors).toEqual([]);
     });
+    test("the latest build opens in a flyout from an icon in the list toolbar", async () => {
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation(
+            inventoryFixture(async (method, params) => {
+                if (method === "memoryListViewBuilds") return [job];
+                if (method === "memoryGetViewBuild") return job;
+                return original(method, params);
+            }),
+        );
+        await panel.show({ corpusId: "c" });
+        await settle();
+        const toolbar = host.querySelector(".hub-view-toolbar")!;
+        expect(
+            toolbar.querySelector('input[aria-label="Find views"]'),
+        ).not.toBeNull();
+        const latest = toolbar.querySelector<HTMLButtonElement>(
+            'button[aria-label^="Latest build"]',
+        )!;
+        expect(latest.textContent).toBe("");
+        expect(host.querySelector(".hub-view-build-receipt")).toBeNull();
+        expect(host.textContent).not.toContain(job.jobId);
+        latest.click();
+        await settle();
+        const flyout = host.querySelector<HTMLElement>(".hub-flyout")!;
+        expect(flyout.hidden).toBe(false);
+        expect(flyout.textContent).toContain(job.jobId);
+        flyout
+            .querySelector<HTMLButtonElement>('button[aria-label="Close"]')!
+            .click();
+        expect(flyout.hidden).toBe(true);
+    });
     test("a resolved historical build conflict is not exposed as pending on the latest reader", async () => {
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation(async (method, params) => {
-            if (method === "memoryListViewBuilds") return [job];
-            const result = await original(method, params);
-            return method === "memoryGetViewConflict"
-                ? {
-                      ...(result as Record<string, unknown>),
-                      state: "resolved",
-                      resolutionRevisionId: "resolved",
-                  }
-                : result;
-        });
+        invoke.mockImplementation(
+            inventoryFixture(async (method, params) => {
+                if (method === "memoryListViewBuilds") return [job];
+                const result = await original(method, params);
+                return method === "memoryGetViewConflict"
+                    ? {
+                          ...(result as Record<string, unknown>),
+                          state: "resolved",
+                          resolutionRevisionId: "resolved",
+                      }
+                    : result;
+            }),
+        );
         await panel.show({ corpusId: "c", viewId: "guide" });
         expect(
             [...host.querySelectorAll("button")].some(
@@ -949,12 +1285,14 @@ describe("Memory Center preview-first views", () => {
         await panel.refresh();
         const original = invoke.getMockImplementation()!;
         let finish!: (value: unknown) => void;
-        invoke.mockImplementation((method, params) =>
-            method === "memoryListSources"
-                ? new Promise((resolve) => {
-                      finish = resolve;
-                  })
-                : original(method, params),
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryListSources"
+                    ? new Promise((resolve) => {
+                          finish = resolve;
+                      })
+                    : original(method, params),
+            ),
         );
         click(host, "Build views");
         await settle();
@@ -987,15 +1325,17 @@ describe("Memory Center preview-first views", () => {
     });
     test("historical deep links read the exact revision and do not expose editable or publication controls", async () => {
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation((method, params) =>
-            method === "memoryGetView"
-                ? Promise.resolve({
-                      ...view,
-                      revisionId: "old",
-                      version: 0,
-                      content: { ...content, title: "Historical guide" },
-                  })
-                : original(method, params),
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryGetView"
+                    ? Promise.resolve({
+                          ...view,
+                          revisionId: "old",
+                          version: 0,
+                          content: { ...content, title: "Historical guide" },
+                      })
+                    : original(method, params),
+            ),
         );
         await panel.show({ corpusId: "c", viewId: "guide", revisionId: "old" });
         expect(invoke).toHaveBeenCalledWith("memoryGetView", {
@@ -1025,10 +1365,12 @@ describe("Memory Center preview-first views", () => {
     });
     test("even an exact link to the current revision is read-only until Open current view", async () => {
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation((method, params) =>
-            method === "memoryGetView"
-                ? Promise.resolve(view)
-                : original(method, params),
+        invoke.mockImplementation(
+            inventoryFixture((method, params) =>
+                method === "memoryGetView"
+                    ? Promise.resolve(view)
+                    : original(method, params),
+            ),
         );
         await panel.show({ corpusId: "c", viewId: "guide", revisionId: "v1" });
         expect(host.textContent).toContain("Exact revision (read-only)");
@@ -1060,29 +1402,31 @@ describe("Memory Center preview-first views", () => {
     test("cancellation is requested but only acknowledged target results establish cancellation", async () => {
         jest.useFakeTimers();
         const original = invoke.getMockImplementation()!;
-        invoke.mockImplementation((method, params) => {
-            if (method === "memoryBuildViews")
-                return Promise.resolve({ ...job, state: "running" });
-            if (method === "memoryCancelViewBuild")
-                return Promise.resolve({
-                    ...job,
-                    state: "partial",
-                    results: [
-                        {
-                            ...job.results[0],
-                            state: "cancelled",
-                            reason: "Cancellation acknowledged",
-                        },
-                        {
-                            ...job.results[0],
-                            viewId: "completed",
-                            state: "draft",
-                            reason: "Already materialized",
-                        },
-                    ],
-                });
-            return original(method, params);
-        });
+        invoke.mockImplementation(
+            inventoryFixture((method, params) => {
+                if (method === "memoryBuildViews")
+                    return Promise.resolve({ ...job, state: "running" });
+                if (method === "memoryCancelViewBuild")
+                    return Promise.resolve({
+                        ...job,
+                        state: "partial",
+                        results: [
+                            {
+                                ...job.results[0],
+                                state: "cancelled",
+                                reason: "Cancellation acknowledged",
+                            },
+                            {
+                                ...job.results[0],
+                                viewId: "completed",
+                                state: "draft",
+                                reason: "Already materialized",
+                            },
+                        ],
+                    });
+                return original(method, params);
+            }),
+        );
         await build();
         click(host, "Cancel pending materialization");
         await settle();

@@ -20,7 +20,6 @@ import {
     getDispatcherChannelName,
 } from "@typeagent/agent-server-protocol";
 import type { ConfigDrift } from "@typeagent/config";
-import type { MacroManager } from "@typeagent/copilot-macros";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
 import type {
@@ -30,6 +29,7 @@ import type {
 } from "@typeagent/skill-catalog";
 import type { Dispatcher, PortRegistrar } from "agent-dispatcher";
 import registerDebug from "debug";
+import { protectVisualStudioDiscoveryResponse } from "@typeagent/websocket-utils/visualStudioBridgeAuth";
 import type { ConversationManager } from "./conversationManager.js";
 import { createRunbookHostCapabilities } from "./runbookCapabilities.js";
 import { getSpeechToken } from "./speechToken.js";
@@ -114,7 +114,6 @@ function acquisitionResponse(
 export type ConnectionHandlerDeps = {
     /** The conversation manager backing this server. */
     conversationManager: ConversationManager;
-    macroManager: MacroManager;
     skillCatalog: LiveSkillCatalog;
     skillAcquirer?: SkillAcquirer;
     runbookCapabilities?: RunbookHostCapabilities;
@@ -252,7 +251,6 @@ export function createAgentServerConnectionHandler(
 } {
     const {
         conversationManager,
-        macroManager,
         skillCatalog,
         shutdown,
         restart,
@@ -350,8 +348,6 @@ export function createAgentServerConnectionHandler(
         let staleNotifier: (() => void) | undefined;
 
         const invokeFunctions: AgentServerInvokeFunctions = {
-            getMacroLearningPreference: (cwd) =>
-                macroManager.getMacroLearningPreference(cwd),
             getSkillLifecycle: (request) => runbooks.getSkillLifecycle(request),
             changeSkillLifecycle: (request) =>
                 runbooks.changeSkillLifecycle(request),
@@ -360,43 +356,6 @@ export function createAgentServerConnectionHandler(
             checkBindingTargets: (request) =>
                 runbooks.checkBindingTargets(request),
             suggestBindings: (request) => runbooks.suggestBindings(request),
-            setMacroLearningPreference: (request) =>
-                macroManager.setMacroLearningPreference(request),
-            prepareMacroLearning: (request) =>
-                macroManager.prepareMacroLearning(request),
-            getMacroLearningJob: (jobId) =>
-                macroManager.getMacroLearningJob(jobId),
-            claimMacroAuthoringRequest: (claim) =>
-                macroManager.claimMacroAuthoringRequest(claim),
-            submitMacroAuthoringResponse: (submission) =>
-                macroManager.submitMacroAuthoringResponse(submission),
-            cancelMacroLearningJob: (jobId) =>
-                macroManager.cancelMacroLearningJob(jobId),
-            armMacroRecording: async (request) =>
-                macroManager.armRecording(request),
-            getMacroRecordingState: async (sessionId) =>
-                macroManager.getRecordingState(sessionId),
-            claimMacroRecording: async (request) =>
-                macroManager.claimRecording(request),
-            cancelMacroRecording: async (sessionId) =>
-                macroManager.cancelRecording(sessionId),
-            failMacroRecording: async (sessionId, tokenId, error) =>
-                macroManager.failRecording(sessionId, tokenId, error),
-            finalizeMacroRecording: async (request) =>
-                macroManager.finalizeRecording(request),
-            listMacros: async (request) => macroManager.listMacros(request),
-            searchMacros: async (request) => macroManager.searchMacros(request),
-            inspectMacro: async (request) => macroManager.inspectMacro(request),
-            getMacroRequirements: async (request) =>
-                macroManager.getMacroRequirements(request),
-            validateMacro: async (request) =>
-                macroManager.validateMacro(request),
-            approveMacro: async (request) => macroManager.approveMacro(request),
-            disableMacro: async (request) => macroManager.disableMacro(request),
-            deleteMacro: async (request) => macroManager.deleteMacro(request),
-            runMacro: async (request) => macroManager.runMacro(request),
-            cancelMacroRun: async (runId) => macroManager.cancelMacroRun(runId),
-            getMacroRun: async (runId) => macroManager.getMacroRun(runId),
             listSkills: async (request) => {
                 const entries = await skillCatalog.list();
                 return entries.filter(
@@ -995,6 +954,7 @@ export function createAgentServerConnectionHandler(
                     // configured; local clients (and a down/absent tunnel) fall
                     // back to localhost. See tunnelResolver.ts.
                     resolveTunnelUrlForDiscovery,
+                    protectVisualStudioDiscoveryResponse,
                 ),
             );
         }

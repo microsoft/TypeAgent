@@ -15,6 +15,7 @@ import {
 import { createTopicSnapshot } from "../src/topicGeneration.js";
 import { indexedTopicOccurrence } from "../src/topicIncidence.js";
 import { TypedViewStore } from "../src/viewStore.js";
+import { ViewHistory } from "../src/viewHistory.js";
 import type { TopicOccurrence, TopicSnapshot } from "../src/topicTypes.js";
 import type { ViewBuildSnapshot } from "../src/viewTypes.js";
 
@@ -286,12 +287,128 @@ describe("complete scoped topic snapshots", () => {
 });
 
 describe("topic persistence in existing view history", () => {
+    test("Topic reads reuse commit byte sizes across queries, publication and restart", async () => {
+        const root = await mkdtemp(path.join(os.tmpdir(), "topic-byte-sizes-"));
+        try {
+            const history = new ViewHistory(
+                path.join(root, "test", "views"),
+                () => ({
+                    views: {},
+                    topics: undefined as TopicSnapshot | undefined,
+                }),
+            );
+            const state = {
+                views: {},
+                topics: createTopicSnapshot(
+                    input([occurrence("orders", "résumé review")]),
+                    "offline",
+                ),
+            };
+            const head = await history.commit(
+                null,
+                state,
+                {},
+                "fixture",
+                "Initial",
+            );
+            const expectedStateBytes = Buffer.byteLength(JSON.stringify(state));
+            const expectedSnapshotBytes = Buffer.byteLength(
+                JSON.stringify(state.topics),
+            );
+            for (const store of [
+                new TypedViewStore(root),
+                new TypedViewStore(root),
+            ]) {
+                const stringify = import.meta.jest.spyOn(JSON, "stringify");
+                try {
+                    for (let i = 0; i < 2; i++) {
+                        const page = await store.queryTopics({
+                            corpusId: "test",
+                        });
+                        expect(page.io.stateBytes).toBe(expectedStateBytes);
+                        expect(page.io.snapshotBytes).toBe(
+                            expectedSnapshotBytes,
+                        );
+                    }
+                    expect(
+                        stringify.mock.calls.filter(
+                            ([value]) =>
+                                value &&
+                                typeof value === "object" &&
+                                "views" in value,
+                        ),
+                    ).toHaveLength(0);
+                    expect(
+                        stringify.mock.calls.filter(
+                            ([value]) =>
+                                value &&
+                                typeof value === "object" &&
+                                "occurrences" in value,
+                        ),
+                    ).toHaveLength(1);
+                } finally {
+                    stringify.mockRestore();
+                }
+            }
+            const store = new TypedViewStore(root);
+            await store.queryTopics({ corpusId: "test" });
+            const changed = { ...state, topics: undefined };
+            await history.commit(head, changed, {}, "fixture", "Clear topics");
+            const page = await store.queryTopics({ corpusId: "test" });
+            expect(page.io.stateBytes).toBe(
+                Buffer.byteLength(JSON.stringify(changed)),
+            );
+            expect(page.io.snapshotBytes).toBe(4);
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+
     let directory: string;
     beforeEach(async () => {
         directory = await mkdtemp(path.join(os.tmpdir(), "memory-topics-"));
     });
     afterEach(async () => {
         await rm(directory, { recursive: true, force: true });
+    });
+    test("partial curation survives restart without becoming finished curated knowledge", async () => {
+        const store = new TypedViewStore(directory);
+        const captured = input([
+            occurrence("source", "review"),
+            occurrence("other", "routing"),
+        ]);
+        const { job } = await store.admitViewBuild(
+            {
+                corpusId: "test",
+                expectedHead: null,
+                targets: [
+                    { definition: captured.definition, expectedVersion: 0 },
+                ],
+            },
+            [captured],
+        );
+        const partial = createTopicSnapshot(captured, captured.model);
+        partial.curationProgress = {
+            concepts: [],
+            deferred: [
+                { nodeId: partial.nodes[0].id, reason: "Incidental mention" },
+            ],
+        };
+        await store.materializeTopicBuild("test", job.jobId, partial, false);
+        const restored = new TypedViewStore(directory);
+        const state = await restored.getTopicState("test");
+        expect(state.snapshot!.curationProgress).toEqual(
+            partial.curationProgress,
+        );
+        const page = await restored.queryTopics({
+            corpusId: "test",
+            curated: true,
+        });
+        expect(page.totalConcepts).toBe(0);
+        expect(page.concepts).toEqual([]);
+        await expect(
+            restored.materializeTopicBuild("test", job.jobId, partial, true),
+        ).rejects.toThrow("Incomplete topic curation cannot finish a build");
     });
     test("existing job result commits one snapshot; restart and no-op preserve history; privacy purges influence", async () => {
         const store = new TypedViewStore(directory);

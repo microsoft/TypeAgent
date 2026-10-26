@@ -134,6 +134,7 @@ it("provides body-free current recording facts only after physical verification"
             sizeMatchesRecordedMetadata: true,
         },
     });
+
     expect(JSON.stringify(evidence)).not.toMatch(
         /https:|base64Content|YWJj|example.invalid/,
     );
@@ -149,6 +150,26 @@ it("provides body-free current recording facts only after physical verification"
     expect(() => verifiedLearningEvidence(trace, "foreign")).toThrow();
     trace.sessionId = "foreign";
     expect(() => verifiedLearningEvidence(trace, "trace")).toThrow();
+});
+
+it("loads and verifies a learning trace without a preliminary evidence pass", async () => {
+    const { store, trace } = await persist();
+    const verify = import.meta.jest.spyOn(store, "verify");
+    const loaded = await store.verifyLearningTrace("trace");
+    expect(loaded).toEqual(trace);
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(verifiedLearningEvidence(loaded, "trace")).toBeDefined();
+});
+
+it("rejects unsupported trace capabilities on a learning-specific read", async () => {
+    const { store, trace } = await persist();
+    await writeFile(
+        path.join(root, "traces", "trace.json"),
+        JSON.stringify({ ...trace, capabilities: ["unrecognized"] }),
+    );
+    await expect(store.verifyLearningTrace("trace")).rejects.toThrow(
+        "Unsupported learning trace identity or capabilities.",
+    );
 });
 
 it.each([

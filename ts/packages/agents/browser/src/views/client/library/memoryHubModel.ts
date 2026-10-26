@@ -8,6 +8,7 @@ export const pages = [
     "search",
     "library",
     "views",
+    "questions",
     "explore",
     "activity",
     "settings",
@@ -19,6 +20,7 @@ export type HubRoute = {
     objectId?: string;
     viewRevisionId?: string;
     viewPageId?: string;
+    viewItemKey?: string;
     activityKind?: "view-build";
     webView?: "analytics" | "entities" | "topics";
     webEntity?: string;
@@ -28,6 +30,29 @@ export type HiddenItems = Record<
     string,
     { fingerprint: string; until?: number }
 >;
+
+function parseViewSelection(
+    parts: string[],
+): Pick<HubRoute, "viewRevisionId" | "viewPageId" | "viewItemKey"> {
+    return {
+        ...(parts[3] === "revision" && parts[4]
+            ? { viewRevisionId: parts[4] }
+            : {}),
+        ...(parts[3] === "page" && parts[4]
+            ? { viewPageId: parts[4] }
+            : parts[5] === "page" && parts[6]
+              ? { viewPageId: parts[6] }
+              : {}),
+        ...(parts[3] === "item" || parts[5] === "item" || parts[7] === "item"
+            ? {
+                  viewItemKey:
+                      parts[
+                          parts[3] === "item" ? 4 : parts[5] === "item" ? 6 : 8
+                      ],
+              }
+            : {}),
+    };
+}
 
 export function parseRoute(hash: string): HubRoute {
     const parts = hash
@@ -64,14 +89,7 @@ export function parseRoute(hash: string): HubRoute {
         page,
         corpusId: parts[1] || undefined,
         objectId: parts[2] || undefined,
-        ...(page === "views" && parts[3] === "revision" && parts[4]
-            ? { viewRevisionId: parts[4] }
-            : {}),
-        ...(page === "views" && parts[3] === "page" && parts[4]
-            ? { viewPageId: parts[4] }
-            : page === "views" && parts[5] === "page" && parts[6]
-              ? { viewPageId: parts[6] }
-              : {}),
+        ...(page === "views" ? parseViewSelection(parts) : {}),
         ...(page === "activity" && parts[3] === "view-build"
             ? { activityKind: "view-build" as const }
             : {}),
@@ -108,6 +126,9 @@ export function routeHash(route: HubRoute): string {
                           : []),
                       ...(route.page === "views" && route.viewPageId
                           ? ["page", route.viewPageId]
+                          : []),
+                      ...(route.page === "views" && route.viewItemKey
+                          ? ["item", route.viewItemKey]
                           : []),
                       ...(route.page === "activity" && route.activityKind
                           ? [route.activityKind]

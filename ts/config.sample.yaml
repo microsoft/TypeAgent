@@ -21,6 +21,16 @@
 # It is NOT a sandbox. Missing or rejected authorization prevents execution.
 # Remembered approvals last only for the current session and exact invocation.
 
+# Native decision provider, independent of chat. "inherit" follows the active
+# provider override, then modelProvider, then Azure; OpenAI/Ollama are unsupported.
+decision:
+  provider: inherit
+  azure:
+    deploymentKey: decision_1 # existing azureOpenAI.deployments pool key
+    deploymentName: decision-1 # exact wire model; not inferred from the key
+  copilot:
+    model: gpt-6-luna-decisions
+
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Azure OpenAI                                                    ║
 # ╚═══════════════════════════════════════════════════════════════════╝
@@ -42,6 +52,10 @@ azureOpenAI:
   # Named model deployments.  Each deployment has one or more regional
   # endpoints that form a routing pool.
   deployments:
+    decision_1:
+      endpoints:
+        - endpoint: https://my-resource-eastus.services.ai.azure.com/providers/microsoft/v1/systemone
+          region: eastus
     gpt_6_luna:
       # Per-deployment defaultCapacity overrides the section-level value.
       # defaultCapacity: 200

@@ -17,6 +17,7 @@ import type {
     RecordedInteractionTrace,
 } from "@typeagent/copilot-macros";
 import { induceMacroFromTrace } from "@typeagent/copilot-macros";
+import { childIdentity } from "./childLearningFixtures.js";
 import {
     recipeSchemaDigest,
     validateRecipeArtifact,
@@ -179,6 +180,7 @@ describe("portable authoring boundary", () => {
                 ],
                 warnings: [],
                 learning: {
+                    authoring: childIdentity("trace", trace),
                     jobId: "job",
                     cwd: trace.cwd,
                     mode: "prepare",
@@ -237,7 +239,7 @@ describe("portable authoring boundary", () => {
                 ],
             };
             const source =
-                'async function execute(api: RecipeApi, params: JsonValue): Promise<JsonValue> { return await api.tools.call("read", params); }';
+                'async function execute(api: RecipeApi, params: JsonValue): Promise<JsonValue> { if (Reflect.has(globalThis, "privateFixture")) throw Error("Leaked private fixture"); Reflect.set(globalThis, "privateFixture", params); return await api.tools.call("read", params); }';
             const sourceQuery = jest.fn(
                 async (_prompt: string, _signal: AbortSignal) =>
                     JSON.stringify({ source }),
@@ -269,7 +271,19 @@ describe("portable authoring boundary", () => {
                 undefined,
                 undefined,
                 author,
-            ).withAuthorQuery!(sourceQuery, cache);
+            ).withAuthorQuery(sourceQuery, cache);
+            const oldMacro = structuredClone(macro);
+            Reflect.deleteProperty(oldMacro.learning!, "authoring");
+            await expect(
+                runtime.buildProgram(oldMacro, trace, signal()),
+            ).rejects.toThrow("re-record");
+            const legacyMacro = structuredClone(macro);
+            legacyMacro.learning!.authoring.tokenId = "legacy:trace";
+            await expect(
+                runtime.buildProgram(legacyMacro, trace, signal()),
+            ).rejects.toThrow("re-record");
+            expect(sourceQuery).not.toHaveBeenCalled();
+            expect(verifierQuery).not.toHaveBeenCalled();
             const artifact = await runtime.buildProgram(macro, trace, signal());
             expect(validateRecipeArtifact(artifact)).toEqual([]);
             expect(artifact.fixtures).toHaveLength(2);
@@ -285,6 +299,12 @@ describe("portable authoring boundary", () => {
                 "fresh beta body",
             );
             const approved = { ...macro, version: 2, program: artifact };
+            expect(matchMacroGrammarInputs(approved, "read beta now")).toEqual([
+                { path: "beta" },
+            ]);
+            expect(matchMacroGrammarInputs(approved, "read gamma now")).toEqual(
+                [{ path: "gamma" }],
+            );
             expect(matchMacroGrammarInputs(approved, "read beta now")).toEqual([
                 { path: "beta" },
             ]);

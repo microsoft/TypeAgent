@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
+import { RevisionRecords } from "./revisionRecords.js";
 import type {
     MacroAuthoringClaim,
     MacroAuthoringRequest,
@@ -24,7 +24,7 @@ import {
     MacroChildAuthoring,
 } from "./macroChildAuthoring.js";
 import type { SealedRecipeAuthoringContext } from "./recipeAuthoring.js";
-import { induceMacroFromTrace } from "./macroDefinition.js";
+import { induceMacroFromTrace, validateMacro } from "./macroDefinition.js";
 import { getMacroFeatures } from "./macroFeatures.js";
 import {
     parseMacroExecutionRecipe,
@@ -38,6 +38,7 @@ import {
     learningValuesEqual,
 } from "./macroLearningValidation.js";
 import { validateRecipeArtifact } from "./recipeValidation.js";
+import type { RecipeArtifact } from "./recipeContracts.js";
 import { redactTraceValue } from "./redaction.js";
 import {
     cloneVerifiedLearningTrace,
@@ -136,6 +137,51 @@ function digest(value: unknown): string {
         .digest("hex");
 }
 
+function assertCaptureTrace(
+    envelope: SealedRecipeAuthoringContext,
+    traceId: string,
+    trace: RecordedInteractionTrace,
+    profileId: string,
+): void {
+    const { capture, outputs } = envelope.context;
+    if (
+        capture.captureId !== traceId ||
+        capture.scope.workspaceId !== normalizeCwd(trace.cwd) ||
+        capture.scope.profileId !== profileId ||
+        capture.sessionId !== trace.sessionId ||
+        capture.request !== trace.prompt ||
+        !learningValuesEqual(
+            capture.calls.map((call) => call.callId),
+            trace.toolCalls.map((call) => call.toolCallId),
+        ) ||
+        !outputs.some((output) =>
+            learningValuesEqual(output.evidence.modelVisible, trace.response),
+        )
+    )
+        throw new Error(
+            "Child capture does not match its recorded trace/workspace.",
+        );
+}
+
+function assertChildProgram(
+    program: RecipeArtifact,
+    job: MacroLearningJob,
+): void {
+    const invalid = validateRecipeArtifact(program);
+    if (
+        invalid.length ||
+        program.recipeId !== job.jobId ||
+        program.provenance.legacySource?.macroId !== job.jobId ||
+        program.provenance.captureId !== job.authoring.captureId ||
+        program.provenance.taskId !== job.authoring.taskId ||
+        program.provenance.tokenId !== job.authoring.tokenId ||
+        !program.provenance.evidenceIds.includes(job.authoring.contextDigest)
+    )
+        throw new Error(
+            `Recorded program validation failed: ${invalid.map((issue) => issue.message).join("; ") || "macro identity mismatch"}`,
+        );
+}
+
 export class MacroLearningEngine {
     private state?: LearningState;
     private loading?: Promise<void>;
@@ -148,17 +194,23 @@ export class MacroLearningEngine {
     private stopped = false;
     private readonly authoringWakeups = new Set<string>();
     private readonly childAuthoring: MacroChildAuthoring;
+    private readonly records: RevisionRecords;
+    private changedJobs: Set<string> | undefined;
+    private jobSnapshots: Map<string, StoredJob> | undefined;
+    private readonly changeWaiters = new Set<() => void>();
 
     constructor(
         private readonly rootDir: string,
         private readonly catalog: LearningCatalog,
         private readonly replayHost?: ReplayToolHost,
-        authoringProfileId = "typeagent",
+        private readonly authoringProfileId = "typeagent",
     ) {
         this.childAuthoring = new MacroChildAuthoring(
             rootDir,
             authoringProfileId,
+            () => this.notifyAuthoring(),
         );
+        this.records = new RevisionRecords(this.statePath());
     }
 
     async configure(runtime: MacroLearningRuntime): Promise<void> {
@@ -172,6 +224,7 @@ export class MacroLearningEngine {
             typeof runtime.buildProgram !== "function" ||
             typeof runtime.extract !== "function" ||
             typeof runtime.build !== "function" ||
+            typeof runtime.withAuthorQuery !== "function" ||
             typeof runtime.generateGrammar !== "function" ||
             typeof runtime.validateGrammar !== "function"
         ) {
@@ -187,6 +240,7 @@ export class MacroLearningEngine {
                         job.draft &&
                         job.error?.includes("catalog was saved"))
                 ) {
+                    this.markChanged(job);
                     job.status = "queued";
                 }
             }
@@ -196,6 +250,7 @@ export class MacroLearningEngine {
 
     async close(): Promise<void> {
         this.stopped = true;
+        this.notifyAuthoring();
         this.controller?.abort(new Error("The learning owner closed."));
         await this.worker;
         await this.mutation;
@@ -265,6 +320,7 @@ export class MacroLearningEngine {
                     activeStatuses.has(job.status) &&
                     job.macro?.state !== "approved"
                 ) {
+                    this.markChanged(job);
                     job.mode = preference.mode;
                     job.preferenceRevision = preference.revision;
                     if (preference.mode === "off") {
@@ -288,16 +344,16 @@ export class MacroLearningEngine {
         await this.load();
         const trace = await this.catalog.readTrace(traceId);
         const cwd = normalizeCwd(trace.cwd);
-        if (envelope) {
-            if (
-                envelope.context.capture.captureId !== traceId ||
-                envelope.context.capture.scope.workspaceId !== cwd
-            )
-                throw new Error(
-                    "Child capture does not match its recorded trace/workspace.",
-                );
-            await this.childAuthoring.contexts.put(envelope);
-        }
+        envelope ??= await this.childAuthoring.contexts.get(
+            { workspaceId: cwd, profileId: this.authoringProfileId },
+            traceId,
+        );
+        if (!envelope)
+            throw new Error(
+                "A sealed child authoring capture is required; re-record the successful task.",
+            );
+        assertCaptureTrace(envelope, traceId, trace, this.authoringProfileId);
+        await this.childAuthoring.contexts.put(envelope);
         let sourceError: string | undefined;
         try {
             assertLearningTrace(trace);
@@ -323,7 +379,8 @@ export class MacroLearningEngine {
         await this.update(() => {
             const existing = this.state!.jobs.find(
                 (item) =>
-                    item.fingerprint === fingerprint ||
+                    (item.fingerprint === fingerprint &&
+                        item.status !== "failed") ||
                     (item.traceId === traceId && item.cwd === cwd),
             );
             if (existing) {
@@ -356,16 +413,12 @@ export class MacroLearningEngine {
                 createdAt: now,
                 updatedAt: now,
                 ...(sourceError ? { error: sourceError.slice(0, 2_000) } : {}),
-                ...(envelope
-                    ? {
-                          authoring: {
-                              captureId: traceId,
-                              contextDigest: envelope.digest,
-                              taskId: envelope.context.capture.taskId,
-                              tokenId: envelope.context.capture.tokenId,
-                          },
-                      }
-                    : {}),
+                authoring: {
+                    captureId: traceId,
+                    contextDigest: envelope.digest,
+                    taskId: envelope.context.capture.taskId,
+                    tokenId: envelope.context.capture.tokenId,
+                },
             };
             this.state!.jobs.push(job);
             if (selectedRecording) {
@@ -395,7 +448,6 @@ export class MacroLearningEngine {
         return new Set(
             this.state!.jobs.filter(
                 (job) =>
-                    job.authoring &&
                     activeStatuses.has(job.status) &&
                     this.preference(job.cwd).mode !== "off" &&
                     !this.state!.suppressed.includes(job.fingerprint),
@@ -407,7 +459,41 @@ export class MacroLearningEngine {
         claim: MacroAuthoringClaim,
     ): Promise<MacroAuthoringRequest | undefined> {
         await this.load();
-        return this.childAuthoring.claim(claim, this.activeAuthorJobs());
+        if (this.stopped) return undefined;
+        if (claim.waitMs !== undefined && typeof claim.waitMs !== "number")
+            throw new Error("Invalid authoring notification wait.");
+        const waitMs = Math.min(Math.max(claim.waitMs ?? 0, 0), 30_000);
+        if (!Number.isFinite(waitMs))
+            throw new Error("Invalid authoring notification wait.");
+        if (this.changeWaiters.size >= 128)
+            throw new Error("Authoring notification wait capacity exceeded.");
+        let wake!: () => void;
+        const changed = new Promise<void>((resolve) => {
+            wake = resolve;
+        });
+        this.changeWaiters.add(wake);
+        const timer = setTimeout(wake, waitMs);
+        timer.unref();
+        try {
+            if (!claim.observeOnly) {
+                const request = await this.childAuthoring.claim(
+                    claim,
+                    this.activeAuthorJobs(),
+                );
+                if (request || !waitMs) return request;
+            }
+            if (!this.stopped) await changed;
+            // A disconnected waiter must not acquire a lease after it wakes.
+            // The connected host issues a fresh durable claim.
+            return undefined;
+        } finally {
+            clearTimeout(timer);
+            this.changeWaiters.delete(wake);
+        }
+    }
+
+    private notifyAuthoring(): void {
+        for (const wake of this.changeWaiters) wake();
     }
 
     async submitAuthoring(submission: MacroAuthoringSubmission): Promise<void> {
@@ -463,6 +549,7 @@ export class MacroLearningEngine {
             }
             for (const related of this.state!.jobs) {
                 if (related.jobId === macro.macroId) {
+                    this.markChanged(related);
                     if (!this.state!.suppressed.includes(related.fingerprint)) {
                         this.state!.suppressed.push(related.fingerprint);
                     }
@@ -492,6 +579,11 @@ export class MacroLearningEngine {
         if (!macro.learning) return undefined;
         await this.load();
         const job = this.findJob(macro.learning.jobId);
+        await this.childAuthoring.assertContext(job);
+        if (!learningValuesEqual(macro.learning.authoring, job.authoring))
+            throw new Error(
+                "Learning approval does not match its sealed child identity; re-record the successful task.",
+            );
         this.check(job);
         if (!job.draft || !learningValuesEqual(macro, job.draft)) {
             throw new Error(
@@ -552,8 +644,7 @@ export class MacroLearningEngine {
             job.updatedAt = new Date().toISOString();
             delete job.error;
         });
-        if (this.findJob(macro.learning.jobId).authoring)
-            await this.childAuthoring.forget(macro.learning.jobId);
+        await this.childAuthoring.forget(macro.learning.jobId);
     }
 
     async approvalSaved(macro: CopilotToolMacro): Promise<void> {
@@ -699,14 +790,19 @@ export class MacroLearningEngine {
     }
 
     private async process(job: StoredJob): Promise<void> {
-        const runtime = job.authoring
-            ? this.runtime!.withAuthorQuery?.(
-                  (prompt, signal) =>
-                      this.childAuthoring.query(job, prompt, signal),
-                  (prompt, execute) =>
-                      this.cacheVerifierQuery(job, prompt, execute),
-              )
-            : this.runtime;
+        const envelope = await this.childAuthoring.assertContext(job);
+        const trace = await this.catalog.readTrace(job.traceId);
+        assertCaptureTrace(
+            envelope,
+            job.traceId,
+            trace,
+            this.authoringProfileId,
+        );
+        assertLearningTrace(trace);
+        const runtime = this.runtime!.withAuthorQuery(
+            (prompt, signal) => this.childAuthoring.query(job, prompt, signal),
+            (prompt, execute) => this.cacheVerifierQuery(job, prompt, execute),
+        );
         if (!runtime)
             throw new Error(
                 "The configured runtime cannot use a Copilot authoring child.",
@@ -721,7 +817,12 @@ export class MacroLearningEngine {
             if (
                 !existing.learning ||
                 existing.learning.jobId !== job.jobId ||
-                existing.state !== "approved"
+                existing.state !== "approved" ||
+                !learningValuesEqual(
+                    existing.learning.authoring,
+                    job.authoring,
+                ) ||
+                !validateMacro(existing).valid
             ) {
                 throw new Error(
                     "Learning publication conflicts with an existing immutable version.",
@@ -738,8 +839,6 @@ export class MacroLearningEngine {
             return;
         }
         this.check(job);
-        const trace = await this.catalog.readTrace(job.traceId);
-        assertLearningTrace(trace);
         if (!job.recipe) {
             await this.update(() => {
                 job.status = "extracting";
@@ -863,9 +962,7 @@ export class MacroLearningEngine {
                 grammarRules: rules,
                 exampleInputs: baseline.build.exampleInputs,
                 requests: baseline.build.requests,
-                ...(job.authoring
-                    ? { authoring: structuredClone(job.authoring) }
-                    : {}),
+                authoring: structuredClone(job.authoring),
             };
             {
                 const program = await this.stage(job, "program", (signal) =>
@@ -875,15 +972,7 @@ export class MacroLearningEngine {
                         signal,
                     ),
                 );
-                const invalid = validateRecipeArtifact(program);
-                if (
-                    invalid.length ||
-                    program.recipeId !== macroId ||
-                    program.provenance.legacySource?.macroId !== macroId
-                )
-                    throw new Error(
-                        `Recorded program validation failed: ${invalid.map((issue) => issue.message).join("; ") || "macro identity mismatch"}`,
-                    );
+                assertChildProgram(program, job);
                 baseline.draft.executionKind = "program";
                 baseline.draft.program = program;
             }
@@ -895,6 +984,10 @@ export class MacroLearningEngine {
             });
         }
         this.check(job);
+        if (!learningValuesEqual(job.draft!.learning?.authoring, job.authoring))
+            throw new Error(
+                "Learning draft does not match its sealed child identity.",
+            );
         const ref = await this.catalog.saveDraft(structuredClone(job.draft!));
         await this.update(() => {
             job.macro = ref;
@@ -1004,7 +1097,15 @@ export class MacroLearningEngine {
     private findJob(jobId: string): StoredJob {
         const job = this.state!.jobs.find((item) => item.jobId === jobId);
         if (!job) throw new Error(`Macro learning job not found: ${jobId}`);
+        this.markChanged(job);
         return job;
+    }
+
+    private markChanged(job: StoredJob): void {
+        if (!this.changedJobs || !this.jobSnapshots) return;
+        this.changedJobs.add(job.jobId);
+        if (!this.jobSnapshots.has(job.jobId))
+            this.jobSnapshots.set(job.jobId, structuredClone(job));
     }
 
     private publicJob(job: StoredJob): MacroLearningJob {
@@ -1024,83 +1125,104 @@ export class MacroLearningEngine {
 
     private async load(): Promise<void> {
         this.loading ??= (async () => {
-            try {
-                if ((await stat(this.statePath())).size > 16 * 1024 * 1024) {
-                    throw new Error(
-                        "Durable learning storage exceeds its 16 MiB limit.",
-                    );
+            const records = await this.records.load();
+            await this.records.purgeUnreferenced();
+            const metadata = records.get("$state") as
+                | Omit<LearningState, "jobs">
+                | undefined;
+            if (records.size && !metadata)
+                throw new Error(
+                    "Invalid durable learning publication: metadata is missing.",
+                );
+            this.state = metadata
+                ? {
+                      ...metadata,
+                      jobs: [...records.entries()]
+                          .filter(([id]) => id !== "$state")
+                          .map(([, job]) => job as StoredJob),
+                  }
+                : {
+                      schemaVersion: 1,
+                      preferences: [],
+                      jobs: [],
+                      suppressed: [],
+                      suppressedMacroIds: [],
+                  };
+            this.state.suppressedMacroIds ??= [];
+            if (
+                this.state.schemaVersion !== 1 ||
+                !Array.isArray(this.state.jobs) ||
+                !Array.isArray(this.state.preferences) ||
+                !Array.isArray(this.state.suppressed) ||
+                !Array.isArray(this.state.suppressedMacroIds) ||
+                this.state.jobs.length > 1_000 ||
+                this.state.preferences.length > 1_000 ||
+                this.state.preferences.some(
+                    (item) =>
+                        !modes.includes(item.mode) ||
+                        !Number.isSafeInteger(item.revision) ||
+                        item.revision < 0 ||
+                        typeof item.cwd !== "string",
+                ) ||
+                this.state.jobs.some(
+                    (job) =>
+                        typeof job.jobId !== "string" ||
+                        !/^[a-f0-9]{64}$/.test(job.jobId) ||
+                        !modes.includes(job.mode) ||
+                        ![
+                            "queued",
+                            "extracting",
+                            "building",
+                            "awaitingAuthor",
+                            "needsReview",
+                            "ready",
+                            "failed",
+                            "cancelled",
+                        ].includes(job.status) ||
+                        typeof job.traceId !== "string" ||
+                        typeof job.cwd !== "string" ||
+                        typeof job.fingerprint !== "string" ||
+                        (job.verifierAnswers !== undefined &&
+                            !validVerifierCache(job.verifierAnswers)) ||
+                        !job.attempts,
+                )
+            ) {
+                throw new Error("Invalid durable learning state.");
+            }
+            const rejected: StoredJob[] = [];
+            for (const job of this.state.jobs) {
+                try {
+                    if (!validAuthoringIdentity(job))
+                        throw new Error("Missing child identity.");
+                    await this.childAuthoring.assertContext(job);
+                } catch {
+                    rejected.push(job);
                 }
-                this.state = JSON.parse(
-                    await readFile(this.statePath(), "utf8"),
-                ) as LearningState;
-                this.state.suppressedMacroIds ??= [];
-                if (
-                    this.state.schemaVersion !== 1 ||
-                    !Array.isArray(this.state.jobs) ||
-                    !Array.isArray(this.state.preferences) ||
-                    !Array.isArray(this.state.suppressed) ||
-                    !Array.isArray(this.state.suppressedMacroIds) ||
-                    this.state.jobs.length > 1_000 ||
-                    this.state.preferences.length > 1_000 ||
-                    this.state.preferences.some(
-                        (item) =>
-                            !modes.includes(item.mode) ||
-                            !Number.isSafeInteger(item.revision) ||
-                            item.revision < 0 ||
-                            typeof item.cwd !== "string",
-                    ) ||
-                    this.state.jobs.some(
-                        (job) =>
-                            typeof job.jobId !== "string" ||
-                            !/^[a-f0-9]{64}$/.test(job.jobId) ||
-                            !modes.includes(job.mode) ||
-                            ![
-                                "queued",
-                                "extracting",
-                                "building",
-                                "awaitingAuthor",
-                                "needsReview",
-                                "ready",
-                                "failed",
-                                "cancelled",
-                            ].includes(job.status) ||
-                            typeof job.traceId !== "string" ||
-                            typeof job.cwd !== "string" ||
-                            typeof job.fingerprint !== "string" ||
-                            (job.authoring !== undefined &&
-                                !validAuthoringIdentity(job)) ||
-                            (job.verifierAnswers !== undefined &&
-                                !validVerifierCache(job.verifierAnswers)) ||
-                            !job.attempts,
-                    )
-                ) {
-                    throw new Error("Invalid durable learning state.");
-                }
+            }
+            if (rejected.length)
+                await this.update(() => {
+                    for (const job of rejected) {
+                        this.markChanged(job);
+                        job.status = "failed";
+                        job.error =
+                            "Unsupported learning job: sealed child context is missing or changed; re-record the successful task.";
+                        job.updatedAt = new Date().toISOString();
+                    }
+                });
 
-                function validAuthoringIdentity(job: StoredJob): boolean {
-                    const identity = job.authoring;
-                    return (
-                        !!identity &&
-                        identity.captureId === job.traceId &&
-                        /^[a-f0-9]{64}$/.test(identity.contextDigest) &&
-                        [identity.taskId, identity.tokenId].every(
-                            (value) =>
-                                typeof value === "string" &&
-                                value.length > 0 &&
-                                value.length <= 4096,
-                        )
-                    );
-                }
-            } catch (error) {
-                if ((error as NodeJS.ErrnoException).code !== "ENOENT")
-                    throw error;
-                this.state = {
-                    schemaVersion: 1,
-                    preferences: [],
-                    jobs: [],
-                    suppressed: [],
-                    suppressedMacroIds: [],
-                };
+            function validAuthoringIdentity(job: StoredJob): boolean {
+                const identity = job.authoring;
+                return (
+                    !!identity &&
+                    identity.captureId === job.traceId &&
+                    /^[a-f0-9]{64}$/.test(identity.contextDigest) &&
+                    [identity.taskId, identity.tokenId].every(
+                        (value) =>
+                            typeof value === "string" &&
+                            value.length > 0 &&
+                            value.length <= 4096,
+                    )
+                );
             }
         })();
         await this.loading;
@@ -1108,30 +1230,35 @@ export class MacroLearningEngine {
 
     private update(operation: () => void): Promise<void> {
         const result = this.mutation.then(async () => {
-            const before = structuredClone(this.state!);
+            const { jobs, ...metadataBefore } = this.state!;
+            const before: LearningState = {
+                ...structuredClone(metadataBefore),
+                jobs: jobs.slice(),
+            };
             const references = new Map(
                 this.state!.jobs.map((job) => [job.jobId, job]),
             );
             try {
+                this.changedJobs = new Set();
+                this.jobSnapshots = new Map();
+                if (this.activeJobId) this.findJob(this.activeJobId);
                 operation();
-                const destination = this.statePath();
-                await mkdir(path.dirname(destination), { recursive: true });
-                const temporary = `${destination}.${randomUUID()}.tmp`;
-                const serialized = JSON.stringify(this.state);
-                if (Buffer.byteLength(serialized) > 16 * 1024 * 1024) {
-                    throw new Error(
-                        "Durable learning storage exceeds its 16 MiB limit.",
-                    );
-                }
-                await writeFile(temporary, serialized, {
-                    encoding: "utf8",
-                    flag: "wx",
-                });
-                await rename(temporary, destination);
+                const { jobs, ...metadata } = this.state!;
+                const changes = new Map<string, unknown>([
+                    ["$state", metadata],
+                ]);
+                for (const job of jobs)
+                    if (
+                        this.changedJobs.has(job.jobId) ||
+                        !references.has(job.jobId)
+                    )
+                        changes.set(job.jobId, job);
+                await this.records.commit(changes);
+                this.notifyAuthoring();
             } catch (error) {
-                before.jobs = before.jobs.map((snapshot) => {
-                    const original = references.get(snapshot.jobId);
-                    if (!original) return snapshot;
+                before.jobs = before.jobs.map((original) => {
+                    const snapshot = this.jobSnapshots!.get(original.jobId);
+                    if (!snapshot) return original;
                     for (const key of Object.keys(original)) {
                         Reflect.deleteProperty(original, key);
                     }
@@ -1139,6 +1266,9 @@ export class MacroLearningEngine {
                 });
                 this.state = before;
                 throw error;
+            } finally {
+                this.changedJobs = undefined;
+                this.jobSnapshots = undefined;
             }
         });
         this.mutation = result.then(

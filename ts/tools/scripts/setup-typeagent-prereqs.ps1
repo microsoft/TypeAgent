@@ -9,7 +9,7 @@
   Installs/verifies the prerequisites expected by install-typeagent.ps1:
 
     1. winget (required installer backend)
-    2. Node.js >= 22 (OpenJS.NodeJS.LTS via winget when needed)
+    2. Node.js 22.23.4+, 24.22.1+, or 26.12.1+ (LTS via winget when needed)
     3. Azure CLI (Microsoft.AzureCLI via winget when missing)
     4. Azure DevOps az extension
     5. Optional: az login
@@ -68,8 +68,8 @@ function Test-IsAdministrator {
 
 function Get-NodeNeedsInstall {
     if (-not (Test-Command node)) { return $true }
-    $major = (& node -e "process.stdout.write(String(process.versions.node.split('.')[0]))")
-    return ([int]$major -lt 22)
+    & node -e "const [major, minor, patch] = process.versions.node.split('.').map(Number); const minimum = {22: [23, 4], 24: [22, 1], 26: [12, 1]}[major]; process.exit(/^\d+\.\d+\.\d+$/.test(process.versions.node) && minimum && (minor > minimum[0] || (minor === minimum[0] && patch >= minimum[1])) ? 0 : 1);"
+    return ($LASTEXITCODE -ne 0)
 }
 
 function Get-AzureCliNeedsInstall {
@@ -189,20 +189,12 @@ function Install-WingetPackage {
 }
 
 function Ensure-Node {
-    Write-Step "Ensuring Node.js >= 22"
+    Write-Step "Ensuring Node.js 22.23.4+, 24.22.1+, or 26.12.1+"
 
-    $needsInstall = $false
-    if (-not (Test-Command node)) {
-        $needsInstall = $true
-    } else {
-        $major = (& node -e "process.stdout.write(String(process.versions.node.split('.')[0]))")
-        if ([int]$major -lt 22) {
-            Write-WarnMsg "Found Node $(& node --version), but Node >= 22 is required."
-            $needsInstall = $true
+    if (Get-NodeNeedsInstall) {
+        if (Test-Command node) {
+            Write-WarnMsg "Found unsupported Node $(& node --version). Installing Node.js LTS."
         }
-    }
-
-    if ($needsInstall) {
         Install-WingetPackage -Id "OpenJS.NodeJS.LTS" -DisplayName "Node.js LTS"
     }
 
@@ -210,9 +202,8 @@ function Ensure-Node {
         Fail "Node was not found on PATH after install. Open a new PowerShell session and re-run."
     }
 
-    $majorAfter = (& node -e "process.stdout.write(String(process.versions.node.split('.')[0]))")
-    if ([int]$majorAfter -lt 22) {
-        Fail "Node >= 22 required; found v$(& node --version)."
+    if (Get-NodeNeedsInstall) {
+        Fail "Node.js 22.23.4+, 24.22.1+, or 26.12.1+ required; found $(& node --version)."
     }
 
     if (-not (Test-Command npm)) {

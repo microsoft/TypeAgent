@@ -21,8 +21,11 @@ import {
     loadLiveContract,
     observeProvider,
     runLiveStages,
+    livePhases,
+    liveAllowances,
 } from "./live-stages.mjs";
 import { reviewPacket } from "./evaluate.mjs";
+import { prepareLiveResume, withLiveRunLock } from "./live-resume.mjs";
 
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 
@@ -33,9 +36,32 @@ export function validateLiveSpec(spec) {
         ),
     );
     assert.equal(spec.startupAllowanceMs, 120000);
-    assert.equal(spec.workAllowanceMs, 1200000);
+    assert.equal(spec.workAllowanceMs, liveAllowances(spec).workAllowanceMs);
     assert.equal(spec.nativeProfile, false);
-    assert.equal(spec.resume, false);
+    assert.equal(typeof spec.resume, "boolean");
+    if (spec.resume) {
+        assert.equal(spec.mode, "live-configured-timeline");
+        assert.equal(spec.sourceScope, "baseline19");
+        assert.ok(path.isAbsolute(spec.previousReceiptPath));
+        assert.ok(
+            path
+                .relative(spec.runDirectory, spec.previousReceiptPath)
+                .startsWith("attempt-before-resume-"),
+            "Resume receipt must be archived inside the owned run",
+        );
+    }
+    assert.ok(
+        spec.captureSynopsis === undefined ||
+            typeof spec.captureSynopsis === "boolean",
+        "Synopsis capture must be explicitly boolean",
+    );
+    livePhases(spec);
+    if (spec.sourceScope !== undefined)
+        assert.equal(
+            spec.mode,
+            "live-configured-timeline",
+            "A source scope requires actual maintenance qualification",
+        );
     assert.equal(spec.authorization?.verifiedP6, true);
     assert.equal(spec.authorization?.verifiedOfflinePreflight, true);
     assert.equal(spec.authorization?.coordinatorHandoff, true);
@@ -114,22 +140,35 @@ export function safeFailure(error) {
         "Source synopsis requires configured model request constraints",
         "Configured informational view capability is disabled",
         "Configured roles require a separate verified coordinator handoff",
+        "Invalid synopsis output object",
+        "Invalid synopsis output fields or bounds",
+        "Invalid synopsis evidence",
+        "Synopsis evidence is not an exact supplied retained UTF-16 range",
+        "Synopsis evidence is ambiguous without an exact supplied range",
+        "Synopsis requires original retained evidence",
+        "Synopsis composition dropped a supplied governing qualification or contrast",
+        "Source synopsis requires configured provider output capacity for uncapped requests",
+        "Configured synopsis request capacity cannot fit bounded structural input",
+        "Configured synopsis capacity cannot compose adjacent summaries without truncation",
     ];
     return {
         name: error?.name ?? "Error",
-        category: allowed.includes(message)
-            ? message
-            : /401|403|credential|authentication/i.test(message)
-              ? "CONFIGURED_AUTHENTICATION_FAILURE"
-              : /429|throttl/i.test(message)
-                ? "CONFIGURED_PROVIDER_THROTTLE"
-                : /endpoint|deployment|settings|configuration|config|provider/i.test(
-                        message,
-                    )
-                  ? "CONFIGURED_ROLE_OR_TRANSPORT_UNAVAILABLE"
-                  : /timeout|abort/i.test(message)
-                    ? "BOUNDED_OPERATION_CANCELLED"
-                    : "UNEXPECTED_FAILURE",
+        category:
+            error?.code === "EKNOWLEDGENOTREADY"
+                ? "KNOWLEDGE_NOT_READY"
+                : allowed.includes(message)
+                  ? message
+                  : /401|403|credential|authentication/i.test(message)
+                    ? "CONFIGURED_AUTHENTICATION_FAILURE"
+                    : /429|throttl/i.test(message)
+                      ? "CONFIGURED_PROVIDER_THROTTLE"
+                      : /endpoint|deployment|settings|configuration|config|provider/i.test(
+                              message,
+                          )
+                        ? "CONFIGURED_ROLE_OR_TRANSPORT_UNAVAILABLE"
+                        : /timeout|abort/i.test(message)
+                          ? "BOUNDED_OPERATION_CANCELLED"
+                          : "UNEXPECTED_FAILURE",
         rawProviderMessageSuppressed: true,
         ownedHarnessFrames: [
             ...(error?.stack ?? "").matchAll(
@@ -139,18 +178,46 @@ export function safeFailure(error) {
     };
 }
 
+export async function captureSynopsisAttempt(runDirectory, prompt, complete) {
+    await writeJson(path.join(runDirectory, "baseline19-synopsis-input.json"), {
+        prompt,
+    });
+    const output = await complete();
+    await writeJson(
+        path.join(runDirectory, "baseline19-synopsis-output.json"),
+        { output },
+    );
+    return output;
+}
+
 export async function preflight(spec) {
+    const previous = spec.resume
+        ? JSON.parse(await readFile(spec.previousReceiptPath, "utf8"))
+        : undefined;
     const receipt = {
+        ...previous,
         mode: "LIVE_CONFIGURED_PREFLIGHT",
         startedEpochMs: Date.now(),
         outcome: "IN_PROGRESS",
         productFrozen: true,
-        roleCalls: [],
+        roleCalls: previous?.roleCalls ?? [],
         schemaOutputs:
             "Actual production source-synopsis parser, never fabricated",
         secretsRecorded: false,
-        providerRequests: [],
+        providerRequests: previous?.providerRequests ?? [],
     };
+    delete receipt.error;
+    delete receipt.finishedEpochMs;
+    delete receipt.elapsedMs;
+    if (previous) {
+        receipt.resumes = [
+            ...(previous.resumes ?? []),
+            {
+                startedEpochMs: receipt.startedEpochMs,
+                previousReceiptPath: spec.previousReceiptPath,
+            },
+        ];
+    }
     receipt.pid = process.pid;
     receipt.receiptId = spec.receiptId;
     const persist = () =>
@@ -187,6 +254,13 @@ export async function preflight(spec) {
         receipt.compiledLiveContract =
             "All concrete imports/exports/public APIs verified before expensive role calls";
         configured = await configuredLiveOptions(load, spec.authorization);
+        if (previous)
+            for (const [key, value] of Object.entries(configured.identity))
+                assert.deepEqual(
+                    previous.providerIdentity[key],
+                    value,
+                    "Configured provider identity changed",
+                );
         receipt.providerIdentity = configured.identity;
         assert.equal(
             configured.identity.provider,
@@ -210,7 +284,10 @@ export async function preflight(spec) {
             synopsis: "production configuredSourceSynopsisModel complete/fits",
         };
         const plan = await loadPlan(spec.fixtureRoot);
-        receipt.planHash = sha(JSON.stringify(plan));
+        const planHash = sha(JSON.stringify(plan));
+        if (previous)
+            assert.equal(previous.planHash, planHash, "Fixture plan changed");
+        receipt.planHash = planHash;
         const entry = plan[0];
         const original = await readFile(entry.file, "utf8");
         assert.equal(sha(original), entry.sha256);
@@ -234,7 +311,15 @@ export async function preflight(spec) {
                 providerStarted = true;
                 const started = performance.now();
                 try {
-                    const value = await model.complete(prompt, signal);
+                    const value =
+                        spec.captureSynopsis ||
+                        spec.sourceScope === "baseline19"
+                            ? await captureSynopsisAttempt(
+                                  spec.runDirectory,
+                                  prompt,
+                                  () => model.complete(prompt, signal),
+                              )
+                            : await model.complete(prompt, signal);
                     receipt.roleCalls.push({
                         role: "sourceSynopsis",
                         milliseconds: performance.now() - started,
@@ -357,6 +442,9 @@ if (
             checkpoint: { type: "string" },
             "authorized-live-preflight": { type: "boolean" },
             "authorized-live-timeline": { type: "boolean" },
+            baseline19: { type: "boolean" },
+            "capture-synopsis": { type: "boolean" },
+            resume: { type: "string" },
             spec: { type: "string" },
         },
     });
@@ -385,7 +473,8 @@ if (
         );
         process.exitCode =
             result.outcome.startsWith("PASS_") ||
-            result.outcome.startsWith("LIVE_TIMELINE_")
+            result.outcome.startsWith("LIVE_TIMELINE_") ||
+            result.outcome.startsWith("LIVE_BASELINE19_")
                 ? 0
                 : 1;
     } else {
@@ -397,19 +486,24 @@ if (
         );
         for (const key of ["product", "fixtures", "output", "checkpoint"])
             assert.ok(values[key] && path.isAbsolute(values[key]));
-        const runDirectory = await mkdtemp(
-            path.join(await realpath(values.output), "memory-live-luna-"),
-        );
-        const receiptId = randomUUID();
-        await writeJson(path.join(runDirectory, "ownership.json"), {
-            receiptId,
-            runDirectory,
-        });
+        const runDirectory = values.resume
+            ? await realpath(values.resume)
+            : await mkdtemp(
+                  path.join(await realpath(values.output), "memory-live-luna-"),
+              );
+        let receiptId = randomUUID();
+        if (!values.resume)
+            await writeJson(path.join(runDirectory, "ownership.json"), {
+                receiptId,
+                runDirectory,
+            });
         const spec = {
             receiptId,
             mode: values["authorized-live-timeline"]
                 ? "live-configured-timeline"
                 : "live-configured-preflight",
+            ...(values.baseline19 ? { sourceScope: "baseline19" } : {}),
+            ...(values["capture-synopsis"] ? { captureSynopsis: true } : {}),
             productRoot: values.product,
             fixtureRoot: values.fixtures,
             runDirectory,
@@ -425,15 +519,24 @@ if (
                 coordinatorHandoff: true,
             },
             startupAllowanceMs: 120000,
-            workAllowanceMs: 1200000,
+            workAllowanceMs: liveAllowances({
+                sourceScope: values.baseline19 ? "baseline19" : undefined,
+            }).workAllowanceMs,
             nativeProfile: false,
-            resume: false,
+            resume: !!values.resume,
         };
-        const termination = await supervise(
-            spec,
-            path.join(import.meta.dirname, "live-qualification.mjs"),
-            validateLiveSpec,
-        );
+        const termination = await withLiveRunLock(runDirectory, async () => {
+            if (spec.resume) {
+                const recovered = await prepareLiveResume(spec);
+                receiptId = recovered.receiptId;
+                Object.assign(spec, recovered);
+            }
+            return supervise(
+                spec,
+                path.join(import.meta.dirname, "live-qualification.mjs"),
+                validateLiveSpec,
+            );
+        });
         process.stdout.write(
             JSON.stringify({ runDirectory, ...termination }) + "\n",
         );

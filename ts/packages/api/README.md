@@ -46,7 +46,74 @@ browser, or drop GET support locally if you need to close this off entirely.
 
 ### Docker Image
 
-It is possible to use the [docker image](../../Dockerfile) to host TypeAgent either locally or in a cloud hosted environment such as [Azure App Service](https://learn.microsoft.com/en-us/azure/app-service/quickstart-custom-container?tabs=dotnet&pivots=container-linux-vscode). The image sets `TYPEAGENT_API_HOST=0.0.0.0` because the published port is the point there and the container is the isolation boundary. Set `TYPEAGENT_API_ALLOWED_ORIGINS` to the public origin the chat view is served from so browser clients pass the Origin gate.
+It is possible to use the [docker image](../../Dockerfile) to host TypeAgent
+in a cloud environment such as
+[Azure App Service](https://learn.microsoft.com/en-us/azure/app-service/quickstart-custom-container?tabs=dotnet&pivots=container-linux-vscode).
+The production image runs as the non-root `typeagent` account, contains no
+Azure CLI, and fetches one dedicated routing secret directly with Azure SDK
+managed identity. It does not run `getKeys`, load the shared
+`typeagent-config` secret, or create `config.local.yaml`.
+
+Set `TYPEAGENT_API_CONFIG_VAULT` to the vault containing the dedicated
+`typeagent-api-hosted-config` secret. The secret must contain only the hosted
+profile below; static API keys and unrelated agent credentials are rejected.
+Vault names must be Azure Key Vault resource names, and model endpoints must
+use the default HTTPS port on an Azure OpenAI or Azure AI Services hostname
+(`*.openai.azure.com`, `*.cognitiveservices.azure.com`, or
+`*.services.ai.azure.com`). `embedding` is optional, but `gpt_6_luna` is
+required:
+
+```yaml
+profile: hosted-azure-managed-identity-v1
+modelProvider: azure
+azureOpenAI:
+  defaultAuth: identity
+  maxConcurrency: 4
+  maxTimeoutMs: 120000
+  maxRetryAttempts: 3
+  responseFormat: true
+  deployments:
+    gpt_6_luna:
+      endpoints:
+        - endpoint: https://example-eastus.openai.azure.com/openai/deployments/gpt-6-luna/chat/completions?api-version=2025-01-01-preview
+          region: eastus
+          mode: PAYG
+    embedding:
+      endpoints:
+        - endpoint: https://example-eastus.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2024-02-01
+          region: eastus
+          mode: PAYG
+```
+
+The container identity needs read access to that one secret and data-plane
+access to the configured Azure OpenAI deployments. Use a dedicated vault when
+possible; otherwise scope the role assignment to the secret resource rather
+than granting access to the broad shared configuration vault. For a
+user-assigned identity, set `TYPEAGENT_API_MANAGED_IDENTITY_CLIENT_ID`; do not
+inject an Azure client secret or an Azure CLI cache.
+
+The hosted API registers only `chat`, `greeting`, `list`, `settings`, and
+`timer`. It does not advertise the broader desktop, browser, media, external
+service, installed-agent, or MCP capabilities that require credentials or
+models outside this least-privilege profile. This list is enforced separately
+as a security policy ratchet, so editing the bundled hosted config alone cannot
+broaden the production agent surface.
+
+The image sets `TYPEAGENT_API_HOST=0.0.0.0` because the published port is the
+point there and the container is the isolation boundary. Set
+`TYPEAGENT_API_ALLOWED_ORIGINS` to the public origin the chat view is served
+from so browser clients pass the Origin gate.
+
+Run the offline container smoke harness with:
+
+```bash
+node tools/scripts/testApiContainer.mjs
+```
+
+It builds the production and smoke targets, uses only local mock
+configuration and model responses, verifies the runtime account and
+permissions, and checks that missing required configuration exits before the
+server listens.
 
 ### Trademarks
 

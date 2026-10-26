@@ -124,15 +124,22 @@ describe("automation catalog service", () => {
         ]);
     });
 
-    test("reports missing macro manager without failing the list", async () => {
+    test("lists TypeAgent flows without requiring or advertising a macro owner", async () => {
+        writeFlowStore("powershell");
+        writeFlowStore("taskflow");
         const catalog = await createAutomationCatalogService({
             instanceDir: dir,
         }).list();
-        expect(catalog.items).toEqual([]);
-        expect(catalog.providers.at(-1)).toMatchObject({
-            kind: "toolMacro",
-            available: false,
-        });
+        expect(catalog.items.map((item) => item.id).sort()).toEqual([
+            "powershell:a",
+            "powershell:b",
+            "taskflow:a",
+            "taskflow:b",
+        ]);
+        expect(catalog.providers).toEqual([
+            { kind: "powershell", available: true },
+            { kind: "taskflow", available: true },
+        ]);
     });
 
     test("isolates a provider failure", async () => {
