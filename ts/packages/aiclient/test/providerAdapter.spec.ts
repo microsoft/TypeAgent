@@ -150,6 +150,42 @@ describe("ChatCompletionsWireApiProvider (default path is byte-identical)", () =
         expect(r.success).toBe(false);
     });
 
+    test.each([
+        { mode: "plain", request: makeRequest() },
+        {
+            mode: "structured",
+            request: makeRequest({
+                jsonSchema: { name: "Result", schema: { type: "object" } },
+            }),
+        },
+        {
+            mode: "function",
+            request: makeRequest({
+                jsonSchema: [{ type: "function", function: { name: "do_it" } }],
+            }),
+        },
+    ])("rejects content-filtered $mode responses", ({ request }) => {
+        for (const content of ["", "partial response"]) {
+            expect(
+                adapter.parseResponse(
+                    {
+                        id: "filtered",
+                        choices: [
+                            {
+                                finish_reason: "content_filter",
+                                message: { role: "assistant", content },
+                            },
+                        ],
+                    },
+                    request,
+                ),
+            ).toEqual({
+                success: false,
+                message: "Model response blocked by content filter",
+            });
+        }
+    });
+
     test("parseResponse unwraps a single tool call for function calling", () => {
         const req = makeRequest({
             jsonSchema: [{ type: "function", function: { name: "do_it" } }],

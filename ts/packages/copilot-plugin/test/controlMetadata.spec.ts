@@ -12,7 +12,7 @@ import {
     unwatchFile,
 } from "node:fs";
 import { once } from "node:events";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
     publishControlMetadata,
@@ -20,6 +20,7 @@ import {
     monitorControlMetadata,
 } from "../src/shared/control-metadata.js";
 import { routePrompt } from "../src/hooks/hook-router.js";
+import { localRecipeEndpoint } from "../src/shared/recipe-local-paths.js";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createExtensionCommands } from "../src/extension/commands.js";
@@ -279,7 +280,8 @@ describe("owned control metadata", () => {
                 dependencies,
             ),
         ).resolves.toEqual({});
-        expect(dependencies.claimRecording).not.toHaveBeenCalled();
+        expect(dependencies.claimRecording).toHaveBeenCalledTimes(1);
+        expect(dependencies.claimRecording).toHaveBeenCalledWith(request);
         expect(dependencies.localRecipes).not.toHaveBeenCalled();
         writeFileSync(
             file,
@@ -389,6 +391,31 @@ describe("owned control metadata", () => {
         expect(wrongPath.stderr).toContain(
             "Native control config binding mismatch; no translation admitted",
         );
+    });
+    it("reports malformed recording endpoints without handling bypass work", async () => {
+        const request = {
+            sessionId: "test-session",
+            timestamp: 1,
+            cwd: root,
+            prompt: "Read the synthetic document",
+        };
+        const endpoint = localRecipeEndpoint(root, request.sessionId);
+        mkdirSync(dirname(endpoint), { recursive: true });
+        writeFileSync(endpoint, "{}");
+        const diagnostic = jest
+            .spyOn(console, "error")
+            .mockImplementation(() => {});
+        try {
+            await expect(
+                routePrompt(request, "bypass", new AbortController().signal),
+            ).resolves.toEqual({});
+            expect(diagnostic).toHaveBeenCalledTimes(1);
+            expect(diagnostic).toHaveBeenCalledWith(
+                "[macro] Unable to claim recording: Invalid local recipe endpoint.",
+            );
+        } finally {
+            diagnostic.mockRestore();
+        }
     });
     it("registered status control getter never calls sendTask", async () => {
         writeFileSync(

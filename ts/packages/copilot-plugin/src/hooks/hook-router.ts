@@ -46,6 +46,7 @@ import {
 } from "../shared/plugin-config.js";
 import { handleRecipeCommand } from "../shared/recipe-commands.js";
 import { connectToMacroOwner } from "../shared/macro-owner.js";
+import { localRecipeEndpoint } from "../shared/recipe-local-paths.js";
 import { handleLocalRecipes } from "./hook-local-recipes.js";
 import { makeTurnId, writeDemoState } from "./demo-state.js";
 import { handleDirect, type DirectHandlingOptions } from "./hook-direct.js";
@@ -320,7 +321,6 @@ export async function routePrompt(
     signal: AbortSignal,
     dependencies: RoutePromptDependencies = routePromptDefaults,
 ): Promise<UserPromptSubmittedOutput> {
-    if (mode === "bypass") return {};
     const owner = (dependencies.recipeOwner ?? getRecipeOwner)();
     if (owner === "off") return {};
     const recording = await dependencies.claimRecording(input);
@@ -330,6 +330,7 @@ export async function routePrompt(
                 "This turn is explicitly selected for TypeAgent macro learning. Perform the user's task normally. Only after it actually succeeds, call typeagent_recorded_task_succeeded once with a concise factual summary, before delivering your final answer. Do not call it after failed, denied, incomplete or aborted work. It records success metadata only; do not rerun the task, launch authoring agents yourself, or wait for background learning. If the receipt tool is unavailable, deliver the answer and report that child authoring is unavailable; do not invent success.",
         };
     if (recording) return {};
+    if (mode === "bypass") return {};
     return (dependencies.localRecipes ?? handleLocalRecipes)(input, signal);
 }
 
@@ -349,6 +350,14 @@ async function claimMacroRecording(
         });
         return token?.learning ? "child" : token !== undefined;
     } catch (error) {
+        if (
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT" &&
+            "path" in error &&
+            error.path === localRecipeEndpoint(input.cwd, input.sessionId)
+        )
+            return false;
         console.error(
             `[macro] Unable to claim recording: ${error instanceof Error ? error.message : String(error)}`,
         );

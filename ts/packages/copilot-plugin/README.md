@@ -53,6 +53,11 @@ it. Without admission, existing routing and permission behavior are unchanged.
 The plugin's `hooks.json` registers the compiled `userPromptSubmitted` router.
 It reads mode per request, claims selected recordings, then uses only the local
 recipe matcher. A miss stays with Copilot; bypass disables recipe admission.
+Explicitly armed recordings are still claimed in bypass mode, without matching
+or executing a recipe or delegating the task to TypeAgent. Recording feature
+flags and `recipeOwner: off` still disable recording.
+An absent session recording endpoint is normal and silent; invalid endpoints
+and other recording failures still produce diagnostics.
 There is no PowerShell pre-tool redirect or alternate MCP/dev macro owner.
 Actual native per-invocation receipts are still required.
 
@@ -646,7 +651,9 @@ No owner setting is required: the default and only enabled owner is `plugin`.
 `TYPEAGENT_RECIPE_OWNER` overrides config `recipeOwner`; supported values are
 `plugin` and `off`. Close and restart the native session after changing it.
 An obsolete explicit `typeagent` value is an actionable error, not a different
-catalog selection. `off` disables recipes; `bypass` disables hook/MCP routing.
+catalog selection. `off` disables recipes, including recording; `bypass` disables
+recipe matching and MCP calls by default, but permits explicitly armed recordings.
+The macro-tool opt-in permits discovery and execution without prompt matching.
 Unmatched ordinary prompts go to native Copilot, not the
 TypeAgent planner. Explicit TypeAgent commands/tools remain optional backend
 operations; they are not required by the local recipe path.
@@ -803,8 +810,15 @@ set a workspace learning preference, then arm the next interaction:
 /typeagent-macro-record
 ```
 
-Send this as the next ordinary message, rather than using the natural-language
-file-reading shortcut:
+To record Copilot-native or third-party MCP tools without recipe routing, use
+`/typeagent-mode bypass` instead. The selected task stays with Copilot, including
+the success receipt required for learning. TypeAgent workspace MCP calls remain
+disabled, and macro MCP calls are disabled by default; use the extension
+recording/status commands. The macro-tool opt-in described below is not required
+for recording.
+
+For the MCP-mode example, send this as the next ordinary message, rather than
+using the natural-language file-reading shortcut:
 
 ```text
 Use the typeagent-workspace read tool with {"path":"package.json"}. Do not use typeagent-processCommand.
@@ -1117,8 +1131,9 @@ that mode selection requires natural-language dispatch.
 
 Ordinary prompts use local checked-program matching followed by Copilot on a
 miss, in `direct`, `mcp` and `dev`. None of these modes selects a backend macro
-owner or author. `bypass` disables recipe hook/MCP routing by default; the explicit
-macro-tool opt-in above permits discovery and execution without prompt matching.
+owner or author. `bypass` disables recipe matching and MCP calls by default,
+while still allowing explicitly armed recordings. The explicit macro-tool opt-in
+above permits discovery and execution without prompt matching.
 
 The settings remain for explicit TypeAgent commands and MCP availability.
 `@typeagent run <request>` intentionally delegates to the TypeAgent dispatcher;

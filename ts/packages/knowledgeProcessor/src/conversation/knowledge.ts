@@ -15,6 +15,7 @@ import {
 } from "./knowledgeSchema.js";
 import {
     Result,
+    PromptSection,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
     createJsonTranslator,
@@ -30,6 +31,7 @@ export interface KnowledgeExtractor {
     extractWithRetry(
         message: string,
         maxRetries: number,
+        context?: PromptSection[],
     ): Promise<Result<KnowledgeResponse>>;
     /**
      * Custom translator to use
@@ -78,18 +80,21 @@ export function createKnowledgeExtractor(
     function extractWithRetry(
         message: string,
         maxRetries: number,
+        context?: PromptSection[],
     ): Promise<Result<KnowledgeResponse>> {
         return async.getResultWithRetry(
-            () => extractKnowledge(message),
+            () => extractKnowledge(message, context),
             maxRetries,
         );
     }
 
     async function extractKnowledge(
         message: string,
+        context?: PromptSection[],
     ): Promise<Result<KnowledgeResponse>> {
         const result = await (extractor.translator ?? translator).translate(
             message,
+            context,
         );
         if (result.success) {
             if (settings.mergeActionKnowledge || settings.mergeEntityFacets) {
@@ -131,6 +136,27 @@ export function createKnowledgeExtractor(
             }
         }
     }
+}
+
+export function dateAnchorQuoteRejection(
+    text: string,
+    anchor: NonNullable<KnowledgeResponse["dateAnchors"]>[number],
+):
+    | "empty-quote"
+    | "quote-not-found"
+    | "ambiguous-quote"
+    | "date-not-in-quote"
+    | undefined {
+    const start = text.indexOf(anchor.quote);
+    return !anchor.quote
+        ? "empty-quote"
+        : start < 0
+          ? "quote-not-found"
+          : text.indexOf(anchor.quote, start + 1) >= 0
+            ? "ambiguous-quote"
+            : !anchor.date || !anchor.quote.includes(anchor.date)
+              ? "date-not-in-quote"
+              : undefined;
 }
 
 export function createKnowledgeTranslator(

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { createHash } from "node:crypto";
+import type { SourceTemporalContext } from "@typeagent/knowpro";
 import {
     lstat,
     mkdir,
@@ -134,8 +135,9 @@ function validateAssetMetadata(asset: RevisionAssetInput): void {
 export function revisionDigest(
     contentHash: string,
     assets: readonly RevisionAssetInput[],
+    temporalContext?: SourceTemporalContext,
 ): string {
-    if (!assets.length) return contentHash;
+    if (!assets.length && temporalContext === undefined) return contentHash;
     return assetDigest(
         Buffer.from(
             JSON.stringify([
@@ -145,6 +147,7 @@ export function revisionDigest(
                     asset.mimeType,
                     assetDigest(asset.bytes),
                 ]),
+                ...(temporalContext === undefined ? [] : [temporalContext]),
             ]),
         ),
     );

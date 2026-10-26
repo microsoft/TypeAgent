@@ -9,10 +9,15 @@
   <body>
     <button id="record">Start Capture</button>
     <div id="transcriptionResult"></div>
-    <script src="index.js"></script>
+    <script src="bundle.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", (event) => {
         const whisperClient = new WhisperRecognizer();
+
+        whisperClient.onError((error) => {
+          transcriptionResult.innerText = error.message;
+          record.disabled = false;
+        });
 
         whisperClient.onRecognizing((data) => {
           transcriptionResult.innerText = data.text;

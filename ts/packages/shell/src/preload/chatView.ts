@@ -11,6 +11,7 @@ import {
 import { QueueSnapshot } from "agent-dispatcher";
 import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
 import type { ConnectionStatus } from "@typeagent/chat-ui";
+import type { LocalAsrEvent } from "./localAsrTypes.js";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import {
     createDispatcherRpcClient,
@@ -189,6 +190,27 @@ const api: ClientAPI = {
     getLocalWhisperStatus: () => {
         return ipcRenderer.invoke("get-localWhisper-status");
     },
+    getSpeechProvider: () => ipcRenderer.invoke("get-speech-provider"),
+    startLocalAsr: () => ipcRenderer.invoke("local-asr-start"),
+    appendLocalAsr: (id, pcm) =>
+        ipcRenderer.invoke("local-asr-append", id, pcm),
+    endLocalAsr: (id, cancel) =>
+        ipcRenderer.invoke("local-asr-end", id, cancel),
+    onLocalAsrEvent: (callback) => {
+        const listener = (
+            _event: Electron.IpcRendererEvent,
+            data: LocalAsrEvent,
+        ) => callback(data);
+        ipcRenderer.on("local-asr-event", listener);
+        return () => ipcRenderer.removeListener("local-asr-event", listener);
+    },
+    onSpeechProviderChanged: (callback) => {
+        const listener = () => callback();
+        ipcRenderer.on("speech-provider-changed", listener);
+        return () =>
+            ipcRenderer.removeListener("speech-provider-changed", listener);
+    },
+    reportSpeechError: (message) => ipcRenderer.invoke("speech-error", message),
     openImageFile: () => {
         ipcRenderer.send("open-image-file");
     },

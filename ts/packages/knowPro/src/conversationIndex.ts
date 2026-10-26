@@ -22,7 +22,7 @@ import {
 import { IndexingEventHandlers } from "./interfaces.js";
 import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { openai } from "@typeagent/aiclient";
-import { extractKnowledgeFromTextBatch } from "./knowledge.js";
+import { extractKnowledgeWithTemporalContext } from "./temporalKnowledge.js";
 import { facetValueToString } from "./knowledgeLib.js";
 import { createKnowledgeExtractor } from "./knowledge.js";
 import {
@@ -39,6 +39,12 @@ function addTermToIndex(
     semanticRefOrdinal: SemanticRefOrdinal,
     termsAdded?: Set<string>,
 ) {
+    if (!term.trim()) {
+        console.warn(
+            "knowPro: skipping an empty extracted semantic term during indexing",
+        );
+        return;
+    }
     term = index.addTerm(term, semanticRefOrdinal);
     if (termsAdded) {
         termsAdded.add(term);
@@ -351,16 +357,10 @@ async function addBatchToSemanticRefIndex(
     const messages = conversation.messages;
     const indexingResult: TextIndexingResult = {};
 
-    const textBatch = batch.map((tl) => {
-        const text = messages.get(tl.messageOrdinal).textChunks[
-            tl.chunkOrdinal ?? 0
-        ];
-        return text.trim();
-    });
-    const knowledgeResults = await extractKnowledgeFromTextBatch(
+    const knowledgeResults = await extractKnowledgeWithTemporalContext(
+        messages,
+        batch,
         knowledgeExtractor,
-        textBatch,
-        textBatch.length,
     );
     for (let i = 0; i < knowledgeResults.length; ++i) {
         const knowledgeResult = knowledgeResults[i];

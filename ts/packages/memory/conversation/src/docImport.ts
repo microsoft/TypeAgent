@@ -8,20 +8,25 @@ import {
     DocPart,
     DocPartMeta,
 } from "./docMemory.js";
-import { splitLargeTextIntoChunks } from "@typeagent/knowledge-processor";
 import * as tp from "@typeagent/textpro";
 import { parseVttTranscript } from "./transcript.js";
 import { filePathToUrlString } from "@typeagent/memory-storage";
 import path from "path";
-import { getHtml } from "@typeagent/aiclient";
+import {
+    countEmbeddingTokens,
+    getHtml,
+    maxEmbeddingInputTokens,
+} from "@typeagent/aiclient";
 import { Result, success } from "typechat";
 import * as kp from "@typeagent/knowpro";
 import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
-import { countTokens as countEmbeddingTokens } from "gpt-tokenizer/encoding/cl100k_base";
+
+export const defaultDocPartTokenLimit = 7_500;
 
 export interface DocPartOptions {
     collectLinkKnowledge?: boolean;
     collectStructuralKnowledge?: boolean;
+    /** Extraction budget; budgets above the embedding ceiling require separate embedding windows. */
     maxTokensPerPart?: number;
 }
 
@@ -38,8 +43,7 @@ export function splitDocPartTextForEmbedding(
     text: string,
 ): kp.TextEmbeddingChunk[] {
     const fits = (value: string) =>
-        countDocTokens(value) <= 7_500 &&
-        countEmbeddingTokens(value, literalTokenOptions) <= 7_500;
+        countDocTokens(value) <= 7_500 && countEmbeddingTokens(value) <= 7_500;
     if (fits(text)) return [{ text, start: 0, end: text.length }];
 
     // Search UTF-16 offsets only at code-point boundaries; token decoding can
@@ -161,13 +165,6 @@ export async function importDocMemoryFromText(
             break;
         case "vtt":
             parts = docPartsFromVtt(docText, sourceUrl);
-            if (parts.length > 0) {
-                parts = mergeDocParts(
-                    parts,
-                    parts[0].metadata,
-                    maxCharsPerChunk,
-                );
-            }
             break;
         case "md":
             parts = docPartsFromMarkdown(docText, maxCharsPerChunk, sourceUrl);
@@ -213,17 +210,15 @@ export function docPartsFromText(
     documentText: string,
     maxCharsPerChunk: number,
     sourceUrl?: string,
+    options?: DocPartOptions,
 ): DocPart[] {
-    const blocks: DocPart[] = [];
-    for (const chunk of splitLargeTextIntoChunks(
-        documentText,
+    return chunkDocParts(
+        documentText.length === 0
+            ? []
+            : [new DocPart(documentText, new DocPartMeta(sourceUrl))],
+        options,
         maxCharsPerChunk,
-        false,
-    )) {
-        const block = new DocPart(chunk, new DocPartMeta(sourceUrl));
-        blocks.push(block);
-    }
-    return blocks;
+    );
 }
 
 /**
@@ -251,7 +246,7 @@ export function docPartsFromHtml(
 ): DocPart[] {
     if (textOnly) {
         const htmlText = tp.htmlToText(html);
-        return docPartsFromText(htmlText, maxCharsPerChunk, sourceUrl);
+        return docPartsFromText(htmlText, maxCharsPerChunk, sourceUrl, options);
     } else {
         const markdown = tp.htmlToMarkdown(html, rootTag);
         return docPartsFromMarkdown(
@@ -288,10 +283,14 @@ export function docPartsFromMarkdown(
     knowledgeOptions.collectLinks = options?.collectLinkKnowledge ?? true;
     knowledgeOptions.collectStructuralKnowledge =
         options?.collectStructuralKnowledge ?? true;
-    const [textBlocks, knowledgeBlocks] = tp.markdownToTextAndKnowledgeBlocks(
-        markdown,
-        maxCharsPerChunk,
-        knowledgeOptions,
+    const [textBlocks, knowledgeBlocks] = kp.timeSearchStage(
+        "ingestion.document.parse",
+        () =>
+            tp.markdownToTextAndKnowledgeBlocks(
+                markdown,
+                maxCharsPerChunk,
+                knowledgeOptions,
+            ),
     );
     if (textBlocks.length !== knowledgeBlocks.length) {
         throw new Error(
@@ -322,48 +321,71 @@ export function docPartsFromMarkdown(
         );
         parts.push(part);
     }
-    return options?.maxTokensPerPart === undefined
-        ? parts
-        : aggregateDocParts(parts, options.maxTokensPerPart);
+    return kp.timeSearchStage("ingestion.document.chunk", () =>
+        chunkDocParts(parts, options),
+    );
 }
 
 export function aggregateDocParts(
     parts: DocPart[],
     maxTokensPerPart: number,
 ): DocPart[] {
-    if (maxTokensPerPart < 1) {
-        throw new Error("maxTokensPerPart must be greater than zero");
+    return chunkDocParts(parts, { maxTokensPerPart });
+}
+
+/**
+ * Apply extraction and default embedding budgets after format parsing.
+ * An explicit extraction budget also packs adjacent, compatible source parts.
+ * Larger extraction targets use separately bounded message embedding windows.
+ */
+export function chunkDocParts(
+    parts: DocPart[],
+    options?: DocPartOptions,
+    maxCharacters = Number.MAX_SAFE_INTEGER,
+): DocPart[] {
+    const maxTokens = options?.maxTokensPerPart ?? defaultDocPartTokenLimit;
+    if (!Number.isSafeInteger(maxTokens) || maxTokens < 1) {
+        throw new Error("maxTokensPerPart must be a positive safe integer");
+    }
+    if (!Number.isSafeInteger(maxCharacters) || maxCharacters < 1) {
+        throw new Error("maxCharacters must be a positive safe integer");
+    }
+    const bounded = parts.flatMap((part) =>
+        splitDocText(
+            part.textChunks.join("\n\n"),
+            maxTokens,
+            maxCharacters,
+        ).map((text, index) => ({
+            part: copyDocPart(part, text, index === 0),
+            separator: index === 0 ? "\n\n" : "",
+        })),
+    );
+    if (options?.maxTokensPerPart === undefined) {
+        return bounded.map(({ part }) => part);
     }
     const aggregated: DocPart[] = [];
     let current: DocPart | undefined;
-    for (const part of parts) {
-        const text = part.textChunks.join("\n\n");
+    for (const { part, separator } of bounded) {
+        const text = part.textChunks[0];
         const combinedText =
             current === undefined
                 ? text
-                : `${current.textChunks[0]}\n\n${text}`;
+                : current.textChunks[0] + separator + text;
         if (
             current !== undefined &&
-            countDocTokens(combinedText) > maxTokensPerPart
+            (!canMergeDocParts(current, part) ||
+                !fitsDocTokenBudget(combinedText, maxTokens))
         ) {
             aggregated.push(current);
             current = undefined;
         }
         if (current === undefined) {
-            current = new DocPart(
-                text,
-                part.metadata,
-                [...part.tags],
-                part.timestamp,
-                part.knowledge === undefined
-                    ? undefined
-                    : structuredClone(part.knowledge),
-            );
+            current = part;
         } else {
             current.textChunks[0] = combinedText;
             current.tags.push(...part.tags);
             if (part.knowledge !== undefined) {
-                current.addKnowledge(structuredClone(part.knowledge));
+                current.addKnowledge(part.knowledge);
             }
         }
     }
@@ -371,6 +393,97 @@ export function aggregateDocParts(
         aggregated.push(current);
     }
     return aggregated;
+}
+
+function fitsDocTokenBudget(text: string, maxTokens: number): boolean {
+    return (
+        countDocTokens(text) <= maxTokens &&
+        (maxTokens > maxEmbeddingInputTokens ||
+            countEmbeddingTokens(text) <= maxEmbeddingInputTokens)
+    );
+}
+
+function splitDocText(
+    text: string,
+    maxTokens: number,
+    maxCharacters: number,
+): string[] {
+    if (text.length <= maxCharacters && fitsDocTokenBudget(text, maxTokens)) {
+        return [text];
+    }
+    // Slice original Unicode code points, not decoded token bytes or UTF-16 halves.
+    const characters = Array.from(text);
+    const chunks: string[] = [];
+    for (let start = 0; start < characters.length; ) {
+        let low = 0;
+        let high = Math.min(characters.length - start, maxCharacters);
+        while (low < high) {
+            const middle = Math.ceil((low + high) / 2);
+            if (
+                fitsDocTokenBudget(
+                    characters.slice(start, start + middle).join(""),
+                    maxTokens,
+                )
+            ) {
+                low = middle;
+            } else {
+                high = middle - 1;
+            }
+        }
+        let chunk = characters.slice(start, start + low).join("");
+        if (low === 0 || !fitsDocTokenBudget(chunk, maxTokens)) {
+            throw new Error(
+                "Cannot fit a Unicode code point within the document token budget",
+            );
+        }
+        for (let boundary = low - 1; boundary > low * 0.75; boundary--) {
+            if (/\s/u.test(characters[start + boundary])) {
+                const prefix = characters
+                    .slice(start, start + boundary + 1)
+                    .join("");
+                if (fitsDocTokenBudget(prefix, maxTokens)) {
+                    chunk = prefix;
+                    low = boundary + 1;
+                    break;
+                }
+            }
+        }
+        chunks.push(chunk);
+        start += low;
+    }
+    return chunks;
+}
+
+function copyDocPart(
+    part: DocPart,
+    text: string,
+    includeKnowledge: boolean,
+): DocPart {
+    return new DocPart(
+        text,
+        part.metadata,
+        [...part.tags],
+        part.timestamp,
+        includeKnowledge && part.knowledge !== undefined
+            ? structuredClone(part.knowledge)
+            : undefined,
+        part.deletionInfo === undefined
+            ? undefined
+            : structuredClone(part.deletionInfo),
+    );
+}
+
+function canMergeDocParts(left: DocPart, right: DocPart): boolean {
+    return (
+        left.timestamp === undefined &&
+        right.timestamp === undefined &&
+        left.deletionInfo === undefined &&
+        right.deletionInfo === undefined &&
+        (left.metadata === right.metadata ||
+            (left.metadata.constructor === DocPartMeta &&
+                right.metadata.constructor === DocPartMeta &&
+                left.metadata.sourceUrl === right.metadata.sourceUrl))
+    );
 }
 
 /**
@@ -381,13 +494,14 @@ export function aggregateDocParts(
 export function docPartsFromVtt(
     transcriptText: string,
     sourceUrl?: string,
+    options?: DocPartOptions,
 ): DocPart[] {
     const [parts, _] = parseVttTranscript<DocPart>(
         transcriptText,
         new Date(),
         (speaker: string) => new DocPart([], new DocPartMeta(sourceUrl)),
     );
-    return parts;
+    return chunkDocParts(parts, options);
 }
 
 /**
@@ -396,22 +510,16 @@ export function docPartsFromVtt(
  * @param metadata
  * @param maxCharsPerChunk
  * @returns
+ * @deprecated Use aggregateDocParts. Per-part metadata is retained instead of replaced.
  */
 export function mergeDocParts(
     parts: DocPart[],
-    metadata: DocPartMeta,
+    _metadata: DocPartMeta,
     maxCharsPerChunk: number,
 ): DocPart[] {
-    const allChunks = parts.flatMap((p) => p.textChunks);
-    const mergedChunks: DocPart[] = [];
-    // This will merge all small chunks into larger chunks as needed.. but not exceed
-    // maxCharsPerChunk
-    for (const chunk of splitLargeTextIntoChunks(
-        allChunks,
+    return chunkDocParts(
+        aggregateDocParts(parts, defaultDocPartTokenLimit),
+        undefined,
         maxCharsPerChunk,
-        true,
-    )) {
-        mergedChunks.push(new DocPart(chunk, metadata));
-    }
-    return mergedChunks;
+    );
 }

@@ -109,6 +109,21 @@ test("compatibility selection is explicit, unique, and references existing sourc
     }
 });
 
+test("root script phase retains memory-quality checks for direct and summarized CI runs", () => {
+    const { scripts } = JSON.parse(
+        fs.readFileSync(path.join(root, "package.json"), "utf8"),
+    );
+    assert.equal(
+        scripts["test:local"],
+        "pnpm run test:local:packages && pnpm run test:local:scripts",
+    );
+    assert.equal(
+        scripts["test:local:scripts"],
+        "node --test tools/scripts/test/*.spec.mjs && pnpm run test:memory-quality",
+    );
+    assert.match(scripts["test:memory-quality"], /longmemeval-\*\.test\.mjs/);
+});
+
 test("unknown profiles fail instead of silently selecting a different suite", () => {
     assert.throws(() => localTestCommands("macos-typo", root), /Unknown/);
 });

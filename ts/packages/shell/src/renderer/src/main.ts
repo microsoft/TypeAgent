@@ -309,7 +309,10 @@ document.addEventListener("DOMContentLoaded", async function () {
     window.__clientIO__ = client.clientIO;
 
     // get the user's name to show in the chat view
-    const token: SpeechToken | undefined = await getSpeechToken();
+    const token: SpeechToken | undefined =
+        (await clientAPI.getSpeechProvider()) === "azure"
+            ? await getSpeechToken()
+            : undefined;
     const actualToken = token?.token.substring(token?.token.indexOf("#"));
     if (actualToken) {
         const decoded = jose.decodeJwt(actualToken);

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=66fd8ef12fe26a3de13619dd803d0f156a0bdafeee98f8a38e83d8c7b2c5e791 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=20e6508ac26b47ad3c97ff2797ca79a0a1779cd83be53e5cd17940faf03c5e31 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/memory-service — AI-generated documentation
@@ -22,6 +22,7 @@ Transport-independent memory corpus service
 
 - default → [./dist/index.js](./dist/index.js)
 - `./rpc` → [./dist/rpcFacade.js](./dist/rpcFacade.js)
+- `./benchmark` → [./dist/benchmarkBridge.js](./dist/benchmarkBridge.js)
 - `./agent-edition-validation` → [./dist/agentEditionValidation.js](./dist/agentEditionValidation.js)
 - `./procedure-markdown` → [./dist/procedureMarkdown.js](./dist/procedureMarkdown.js)
 - `./procedureMarkdown` → [./dist/procedureMarkdown.js](./dist/procedureMarkdown.js)
@@ -34,6 +35,7 @@ Workspace:
 - [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [@typeagent/config](../../../packages/config/README.md)
 - [@typeagent/conversation-memory](../../../packages/memory/conversation/README.md)
+- [@typeagent/knowledge-processor](../../../packages/knowledgeProcessor/README.md)
 - [@typeagent/knowpro](../../../packages/knowPro/README.md)
 - [@typeagent/textpro](../../../packages/textPro/README.md)
 
@@ -41,6 +43,7 @@ External: `isomorphic-git`, `node-diff3`, `proper-lockfile`, `typechat`
 
 ### Used by
 
+- [@typeagent/benchmarks](../../../packages/benchmarks/README.md)
 - [@typeagent/browser](../../../packages/agents/browser/README.md)
 - [@typeagent/browser-control-rpc](../../../packages/agents/browserControlRpc/README.md)
 - [@typeagent/memory-agent](../../../packages/agents/memory/README.md)
@@ -56,22 +59,28 @@ External: `isomorphic-git`, `node-diff3`, `proper-lockfile`, `typechat`
 - [./src/index.ts](./src/index.ts)
 - [./src/agentEdition.ts](./src/agentEdition.ts)
 - [./src/agentEditionValidation.ts](./src/agentEditionValidation.ts)
+- [./src/agentSessionDistillation.ts](./src/agentSessionDistillation.ts)
+- [./src/agentSessionParsing.ts](./src/agentSessionParsing.ts)
+- [./src/agentSessionStore.ts](./src/agentSessionStore.ts)
+- [./src/agentSessionTypes.ts](./src/agentSessionTypes.ts)
 - [./src/batchImport.ts](./src/batchImport.ts)
-- [./src/boundedIngestionGroup.ts](./src/boundedIngestionGroup.ts)
-- [./src/changeReceipts.ts](./src/changeReceipts.ts)
-- [./src/corpusAccess.ts](./src/corpusAccess.ts)
-- [./src/durableRunbookJson.ts](./src/durableRunbookJson.ts)
-- [./src/eventSegmentStore.ts](./src/eventSegmentStore.ts)
-- _…and 60 more under `./src/`._
+- [./src/benchmarkBridge.ts](./src/benchmarkBridge.ts)
+- _…and 68 more under `./src/`._
 
 ### Environment variables
 
-_1 environment variable referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_7 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
+- `TYPEAGENT_BENCHMARK_COMMIT_DOCUMENTS`
+- `TYPEAGENT_BENCHMARK_MAINTENANCE_MODE`
+- `TYPEAGENT_BENCHMARK_MODEL`
+- `TYPEAGENT_EMBEDDING_MODEL`
+- `TYPEAGENT_EMBEDDING_PROVIDER`
+- `TYPEAGENT_EMBEDDING_SIZE`
 - `TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT`
 
 ---
 
-_Auto-generated against commit `78429ec5b77de3febc4f6d2ac9b640a83796a087` on `2026-10-19T22:57:12.751Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-service docs:verify-links` to spot-check._
+_Auto-generated against commit `73fbbd085b9f687f05f7b8036f0e2c66ac7f0355` on `2026-10-24T18:29:20.864Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-service docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

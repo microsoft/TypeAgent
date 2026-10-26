@@ -8,6 +8,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
     checkpointExpectationHash,
+    guardHeadRequest,
     initialReadiness,
     installSnapshotQualification,
     loadPlan,
@@ -17,6 +18,10 @@ import {
     writeJson,
 } from "./harness.mjs";
 import { measureProgress } from "./evaluate.mjs";
+import {
+    reconcileLiveSource,
+    validateLiveResumeSources,
+} from "./live-resume.mjs";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -29,6 +34,31 @@ const phases = [
     "t2",
 ];
 const roles = new AsyncLocalStorage();
+
+export function liveAllowances(spec) {
+    return spec.sourceScope === "baseline19"
+        ? { workAllowanceMs: 2100000, cleanupReserveMs: 300000 }
+        : { workAllowanceMs: 1200000, cleanupReserveMs: 120000 };
+}
+
+export function livePhases(spec) {
+    assert.ok(
+        spec.sourceScope === undefined || spec.sourceScope === "baseline19",
+        "Unsupported live source scope",
+    );
+    return spec.sourceScope === "baseline19" ? phases.slice(0, 3) : [...phases];
+}
+
+export async function maintainLiveFamily(service, request, hooks) {
+    return guardHeadRequest(
+        async () =>
+            service.maintainViews({
+                ...request,
+                expectedHead: (await service.listViews(request.corpusId)).head,
+            }),
+        hooks,
+    );
+}
 
 export function observedRoles(model, prefix, receipt) {
     return Object.fromEntries(
@@ -174,6 +204,7 @@ export async function loadLiveContract(load) {
     const imports = {
         "fileMemoryService.js": ["FileMemoryService"],
         "viewStore.js": ["TypedViewStore"],
+        "viewBuilds.js": ["ViewBuildStaleError"],
         "viewHistory.js": ["ViewHistory"],
         "rpcFacade.js": ["waitForMemoryJob"],
         "viewRelationships.js": [
@@ -276,8 +307,12 @@ export async function runLiveStages(
         authoredRelationships,
         editorialProtection,
         viewHash,
+        ViewBuildStaleError,
     } = await loadLiveContract(load);
     const plan = await loadPlan(spec.fixtureRoot);
+    const baselineOnly = spec.sourceScope === "baseline19";
+    const { cleanupReserveMs } = liveAllowances(spec);
+    receipt.sourceScope = baselineOnly ? "baseline19" : "full-timeline";
     const store = path.join(spec.runDirectory, "isolated-store");
     const indexes = new Map();
     const options = { ...configured.options };
@@ -331,22 +366,29 @@ export async function runLiveStages(
         () => phase,
     );
     receipt.store = store;
-    receipt.operations = [];
-    receipt.mappings = {};
-    receipt.stages = {};
-    receipt.actions = {};
-    receipt.checks = [];
-    receipt.pending = [
-        "Independent live C1-C11 semantic review pending",
-        "Offline canonical crash recovery is not live semantic proof",
-    ];
+    if (!spec.resume) {
+        receipt.operations = [];
+        receipt.mappings = {};
+        receipt.stages = {};
+        receipt.actions = {};
+        receipt.checks = [];
+    }
+    receipt.pending = baselineOnly
+        ? [
+              "Independent baseline19 semantic review pending",
+              "Temporal extension, protected-edit and forget live cases not exercised",
+          ]
+        : [
+              "Independent live C1-C11 semantic review pending",
+              "Offline canonical crash recovery is not live semantic proof",
+          ];
     const check = () => {
         assert.equal(
             snapshots.summary.violations.length,
             0,
             "Operation read hydration exceeded exactmax1",
         );
-        if (Date.now() >= deadline - 120000)
+        if (Date.now() >= deadline - cleanupReserveMs)
             throw Object.assign(
                 new Error(
                     "Live work budget exhausted; reserving supported close",
@@ -355,13 +397,18 @@ export async function runLiveStages(
             );
     };
     const control = async (family, operation) => {
-        check();
-        return service.maintainViews({
-            corpusId: receipt.corpusId,
-            family,
-            operation,
-            expectedHead: (await service.listViews(receipt.corpusId)).head,
-        });
+        return maintainLiveFamily(
+            service,
+            { corpusId: receipt.corpusId, family, operation },
+            {
+                checkDeadline: check,
+                isStale: (error) => error instanceof ViewBuildStaleError,
+                onDiagnostic: (diagnostic) =>
+                    (receipt.handledHeadRetries ??= []).push(diagnostic),
+                onSuccessfulReturn: (proof) =>
+                    (receipt.successfulRequestReturns ??= []).push(proof),
+            },
+        );
     };
     const inspect = async () => {
         const corpusId = receipt.corpusId;
@@ -420,6 +467,14 @@ export async function runLiveStages(
                 receipt.actions.conflictResolution?.jobId,
             );
             if (failures.length) {
+                if (baselineOnly)
+                    await writeJson(
+                        path.join(
+                            spec.runDirectory,
+                            "baseline19-terminal-jobs.json",
+                        ),
+                        current.jobs,
+                    );
                 receipt.failedTargets = failures.map(
                     ({ reason, ...result }) => ({
                         ...result,
@@ -614,21 +669,165 @@ export async function runLiveStages(
             content,
             ...extra,
         });
+    const applyPhaseActions = async (snapshot) => {
+        if (phase === "initial") {
+            const lease = snapshot.views.find(
+                (view) =>
+                    view.definition.wiki?.query?.toLowerCase() === "lease",
+            );
+            if (lease?.content.sections?.length) {
+                const content = structuredClone(lease.content);
+                content.title = "My deliberate isolated lease review";
+                content.sections[0].details.note =
+                    "Personal synthetic review annotation";
+                const accepted = await save(lease, content);
+                receipt.actions.protection = recordOwnedFixtureProtection(
+                    accepted.version,
+                    content.sections[0].id,
+                    editorialProtection,
+                );
+            } else
+                receipt.pending.push(
+                    "C7 fixture page not naturally discovered; no topic/page injection",
+                );
+        }
+        if (phase === "t1") {
+            receipt.actions.naturalCanonical = await readCanonicalQualification(
+                service,
+                receipt.corpusId,
+            );
+            if (receipt.actions.protection) {
+                const current = await service.getView({
+                    corpusId: receipt.corpusId,
+                    viewId: receipt.actions.protection.viewId,
+                });
+                assert.equal(
+                    current.content.title,
+                    receipt.actions.protection.title,
+                );
+                assert.equal(
+                    current.content.sections.find(
+                        (section) =>
+                            section.id ===
+                            receipt.actions.protection.noteSectionId,
+                    )?.details.note,
+                    receipt.actions.protection.note,
+                );
+                const unlocked = (
+                    await save(current, current.content, {
+                        unlockProtection: ["title"],
+                    })
+                ).version;
+                assert.ok(!editorialProtection(unlocked).includes("title"));
+                assert.ok(
+                    editorialProtection(unlocked).includes(
+                        `section:${receipt.actions.protection.noteSectionId}:note`,
+                    ),
+                );
+                receipt.actions.postUnlockStatus = await service.listViews(
+                    receipt.corpusId,
+                );
+            }
+        }
+    };
+    const applyPhaseSources = async (selectedPlan, applied) => {
+        for (const entry of selectedPlan.filter(
+            (entry) => entry.phase === phase,
+        )) {
+            if (selectedPlan.indexOf(entry) < applied) continue;
+            check();
+            const text = await readFile(entry.file, "utf8");
+            assert.equal(hash(text), entry.sha256, "Original fixture changed");
+            const source = {
+                sourceType: "markdown",
+                title: path.basename(entry.file, ".md"),
+                canonicalUri: entry.canonicalUri,
+                text,
+            };
+            const admitted = await reconcileLiveSource(
+                service,
+                receipt.corpusId,
+                entry,
+                receipt.mappings[entry.sourceKey],
+                source,
+                spec.resume,
+            );
+            receipt.inFlight = {
+                phase,
+                sourceKey: entry.sourceKey,
+                fixtureSha256: entry.sha256,
+                ...admitted,
+            };
+            await persist();
+            const job = admitted.jobId
+                ? await waitForMemoryJob(service, admitted.jobId, {
+                      signal: AbortSignal.timeout(
+                          Math.max(1, deadline - Date.now() - cleanupReserveMs),
+                      ),
+                      pollIntervalMs: 100,
+                  })
+                : admitted;
+            if (job.state !== "complete") {
+                receipt.ingestionFailure = {
+                    state: job.state,
+                    error: safeFailure(
+                        new Error(job.error ?? "Unknown ingestion failure"),
+                    ),
+                };
+                throw new Error("Actual production ingestion failed");
+            }
+            receipt.operations.push({
+                phase,
+                sourceKey: entry.sourceKey,
+                fixtureSha256: entry.sha256,
+                ...admitted,
+                state: job.state,
+            });
+            receipt.mappings[entry.sourceKey] = {
+                sourceId: admitted.sourceId,
+                revisionId: admitted.revisionId,
+            };
+            delete receipt.inFlight;
+            delete receipt.ingestionFailure;
+            applied++;
+            await persist();
+        }
+        return applied;
+    };
     try {
         service = open();
         await service.initialize();
-        receipt.corpusId = (
-            await service.createCorpus(
-                "Isolated actual Luna maintenance qualification",
-            )
-        ).corpusId;
+        if (!spec.resume) {
+            receipt.corpusId = (
+                await service.createCorpus(
+                    "Isolated actual Luna maintenance qualification",
+                )
+            ).corpusId;
+            await persist();
+        }
+        const selectedPlan = plan.filter((entry) =>
+            livePhases(spec).includes(entry.phase),
+        );
+        let applied = spec.resume
+            ? await validateLiveResumeSources(
+                  service,
+                  receipt.corpusId,
+                  selectedPlan,
+                  receipt,
+              )
+            : 0;
         const admittedEpochMs = Date.now();
-        deadline = admittedEpochMs + spec.workAllowanceMs;
+        deadline = baselineOnly
+            ? Math.min(
+                  admittedEpochMs + spec.workAllowanceMs,
+                  spec.spawnedEpochMs + spec.workAllowanceMs,
+              )
+            : admittedEpochMs + spec.workAllowanceMs;
         await writeJson(path.join(spec.runDirectory, "admitted.json"), {
             receiptId: spec.receiptId,
             workerPid: process.pid,
             admittedEpochMs,
-            workDeadlineEpochMs: deadline,
+            workDeadlineEpochMs: admittedEpochMs + spec.workAllowanceMs,
             checkpointExpectationHash: checkpointExpectationHash(
                 spec.expectedCheckpoint,
             ),
@@ -636,148 +835,53 @@ export async function runLiveStages(
                 JSON.stringify(spec.expectedCheckpoint.hashes),
             ),
         });
-        for (phase of phases) {
+        for (phase of livePhases(spec)) {
+            if (receipt.stages[phase]) continue;
             receipt.phase = phase;
             for (const family of ["wiki", "projects", "topics"])
                 await control(family, "pause");
-            for (const entry of plan.filter((entry) => entry.phase === phase)) {
-                check();
-                const text = await readFile(entry.file, "utf8");
+            applied = await applyPhaseSources(selectedPlan, applied);
+            if (baselineOnly && phase !== "correction") continue;
+            if (baselineOnly)
                 assert.equal(
-                    hash(text),
-                    entry.sha256,
-                    "Original fixture changed",
+                    (await service.listSources(receipt.corpusId)).length,
+                    19,
+                    "Baseline qualification requires all 19 active sources",
                 );
-                const source = {
-                    sourceType: "markdown",
-                    title: path.basename(entry.file, ".md"),
-                    canonicalUri: entry.canonicalUri,
-                    text,
-                };
-                const prior = receipt.mappings[entry.sourceKey];
-                const admitted = prior
-                    ? await service.replaceSource({
-                          corpusId: receipt.corpusId,
-                          sourceId: prior.sourceId,
-                          expectedActiveRevisionId: prior.revisionId,
-                          source,
-                      })
-                    : await service.ingestDocument({
-                          corpusId: receipt.corpusId,
-                          source,
-                      });
-                const job = await waitForMemoryJob(service, admitted.jobId, {
-                    signal: AbortSignal.timeout(
-                        Math.max(1, deadline - Date.now() - 120000),
-                    ),
-                    pollIntervalMs: 100,
-                });
-                receipt.operations.push({
-                    phase,
-                    sourceKey: entry.sourceKey,
-                    fixtureSha256: entry.sha256,
-                    ...admitted,
-                    state: job.state,
-                });
-                receipt.mappings[entry.sourceKey] = {
-                    sourceId: admitted.sourceId,
-                    revisionId: admitted.revisionId,
-                };
-                if (job.state !== "complete") {
-                    receipt.ingestionFailure = {
-                        state: job.state,
-                        error: safeFailure(
-                            new Error(job.error ?? "Unknown ingestion failure"),
-                        ),
-                    };
-                    throw new Error("Actual production ingestion failed");
-                }
-                await persist();
-            }
             for (const family of ["wiki", "projects", "topics"])
                 await control(family, "resume");
             await settled();
             const snapshot = await capture(phase);
-            if (phase === "initial") {
-                const lease = snapshot.views.find(
-                    (view) =>
-                        view.definition.wiki?.query?.toLowerCase() === "lease",
-                );
-                if (lease?.content.sections?.length) {
-                    const content = structuredClone(lease.content);
-                    content.title = "My deliberate isolated lease review";
-                    content.sections[0].details.note =
-                        "Personal synthetic review annotation";
-                    const accepted = await save(lease, content);
-                    receipt.actions.protection = recordOwnedFixtureProtection(
-                        accepted.version,
-                        content.sections[0].id,
-                        editorialProtection,
-                    );
-                } else
-                    receipt.pending.push(
-                        "C7 fixture page not naturally discovered; no topic/page injection",
-                    );
-            }
-            if (phase === "t1") {
-                receipt.actions.naturalCanonical =
-                    await readCanonicalQualification(service, receipt.corpusId);
-                if (receipt.actions.protection) {
-                    const current = await service.getView({
-                        corpusId: receipt.corpusId,
-                        viewId: receipt.actions.protection.viewId,
-                    });
-                    assert.equal(
-                        current.content.title,
-                        receipt.actions.protection.title,
-                    );
-                    assert.equal(
-                        current.content.sections.find(
-                            (section) =>
-                                section.id ===
-                                receipt.actions.protection.noteSectionId,
-                        )?.details.note,
-                        receipt.actions.protection.note,
-                    );
-                    const unlocked = (
-                        await save(current, current.content, {
-                            unlockProtection: ["title"],
-                        })
-                    ).version;
-                    assert.ok(!editorialProtection(unlocked).includes("title"));
-                    assert.ok(
-                        editorialProtection(unlocked).includes(
-                            `section:${receipt.actions.protection.noteSectionId}:note`,
-                        ),
-                    );
-                    receipt.actions.postUnlockStatus = await service.listViews(
-                        receipt.corpusId,
-                    );
-                }
-            }
+            await applyPhaseActions(snapshot);
             await persist();
         }
-        phase = "t2-forgotten";
-        const temporary = receipt.mappings["sb-temporary-handoff"];
-        const preview = await service.previewForgetSource(
-            receipt.corpusId,
-            temporary.sourceId,
-        );
-        receipt.actions.forget = await service.forgetSource({
-            corpusId: receipt.corpusId,
-            sourceId: temporary.sourceId,
-            confirmationToken: preview.confirmationToken,
-        });
-        await assert.rejects(
-            service.getSourceContent({
+        if (!baselineOnly) {
+            phase = "t2-forgotten";
+            const temporary = receipt.mappings["sb-temporary-handoff"];
+            const preview = await service.previewForgetSource(
+                receipt.corpusId,
+                temporary.sourceId,
+            );
+            receipt.actions.forget = await service.forgetSource({
                 corpusId: receipt.corpusId,
                 sourceId: temporary.sourceId,
-            }),
-        );
-        await settled();
-        await capture(phase);
-        receipt.actions.restarts = [];
-        for (let attempt = 0; attempt < 2; attempt++) {
+                confirmationToken: preview.confirmationToken,
+            });
+            await assert.rejects(
+                service.getSourceContent({
+                    corpusId: receipt.corpusId,
+                    sourceId: temporary.sourceId,
+                }),
+            );
+            await settled();
+            await capture(phase);
+        }
+        receipt.actions.restarts ??= [];
+        for (
+            let attempt = receipt.actions.restarts.length;
+            attempt < 2;
+            attempt++
+        ) {
             const before = (
                 await service.listViews(receipt.corpusId)
             ).views.map(({ viewId, revisionId }) => ({ viewId, revisionId }));
@@ -806,9 +910,11 @@ export async function runLiveStages(
                 unchangedViewRevisions: true,
                 extraProviderCalls: 0,
             });
+            await persist();
         }
-        receipt.outcome =
-            "LIVE_TIMELINE_MECHANISMS_COMPLETED_INDEPENDENT_SEMANTIC_REVIEW_PENDING";
+        receipt.outcome = baselineOnly
+            ? "LIVE_BASELINE19_MECHANISMS_COMPLETED_INDEPENDENT_SEMANTIC_REVIEW_PENDING"
+            : "LIVE_TIMELINE_MECHANISMS_COMPLETED_INDEPENDENT_SEMANTIC_REVIEW_PENDING";
     } catch (error) {
         receipt.outcome = classifyStoppedRun(error, receipt.providerRequests);
         receipt.error = safeFailure(error);

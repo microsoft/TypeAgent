@@ -35,6 +35,15 @@ export default defineConfig({
         ],
         build: {
             sourcemap: true,
+            rollupOptions: {
+                input: {
+                    index: resolve(__dirname, "src/main/index.ts"),
+                    localAsrWorker: resolve(
+                        __dirname,
+                        "src/main/localAsrWorker.ts",
+                    ),
+                },
+            },
         },
     },
     preload: {
