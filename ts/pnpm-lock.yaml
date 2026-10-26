@@ -564,8 +564,8 @@ importers:
         specifier: ^11.3.0
         version: 11.3.0
       puppeteer:
-        specifier: ^24.15.0
-        version: 24.37.5(typescript@5.4.5)
+        specifier: ^25.14.0
+        version: 25.14.0(yauzl@2.10.0)
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@22.20.1)(typescript@5.4.5)
@@ -887,8 +887,8 @@ importers:
         specifier: ^11.3.0
         version: 11.3.0
       puppeteer:
-        specifier: ^24.15.0
-        version: 24.37.5(typescript@5.4.5)
+        specifier: ^25.14.0
+        version: 25.14.0(yauzl@2.10.0)
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -1638,17 +1638,17 @@ importers:
         specifier: 1.21.0
         version: 1.21.0
       puppeteer:
-        specifier: ^24.15.0
-        version: 24.37.5(typescript@5.9.3)
+        specifier: ^25.14.0
+        version: 25.14.0(yauzl@2.10.0)
       puppeteer-extra:
         specifier: ^3.3.6
-        version: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
+        version: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
       puppeteer-extra-plugin-adblocker:
         specifier: ^2.13.6
-        version: 2.13.6(encoding@0.1.13)(puppeteer-core@24.37.5)(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
+        version: 2.13.6(encoding@0.1.13)(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))(puppeteer@25.14.0(yauzl@2.10.0))
       puppeteer-extra-plugin-stealth:
         specifier: ^2.11.2
-        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
+        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))
       sharp:
         specifier: ^0.33.5
         version: 0.33.5
@@ -2128,17 +2128,17 @@ importers:
         specifier: ^1.30.0
         version: 1.30.0
       puppeteer:
-        specifier: ^24.15.0
-        version: 24.37.5(typescript@5.4.5)
+        specifier: ^25.14.0
+        version: 25.14.0(yauzl@2.10.0)
       puppeteer-extra:
         specifier: ^3.3.6
-        version: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
+        version: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
       puppeteer-extra-plugin-adblocker:
         specifier: ^2.13.6
-        version: 2.13.6(encoding@0.1.13)(puppeteer-core@24.37.5)(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))(puppeteer@24.37.5(typescript@5.4.5))
+        version: 2.13.6(encoding@0.1.13)(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
       puppeteer-extra-plugin-stealth:
         specifier: ^2.11.2
-        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
+        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(supports-color@8.1.1)
       readline:
         specifier: ^1.3.0
         version: 1.3.0
@@ -3791,14 +3791,14 @@ importers:
         specifier: ^9.0.5
         version: 9.0.5
       puppeteer:
-        specifier: ^24.15.0
-        version: 24.37.5(typescript@5.4.5)
+        specifier: ^25.14.0
+        version: 25.14.0(yauzl@2.10.0)
       puppeteer-extra:
         specifier: ^3.3.6
-        version: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
+        version: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
       puppeteer-extra-plugin-stealth:
         specifier: ^2.11.2
-        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
+        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
@@ -10636,15 +10636,23 @@ packages:
   '@protobufjs/utf8@1.1.1':
     resolution: {integrity: sha1-6u5ZABIsEQo9vLcowFlwFKJiF3Q=}
 
-  '@puppeteer/browsers@2.13.0':
-    resolution: {integrity: sha1-EPmAxtZe/v93+KPKxuGnrBBgRQA=}
-    engines: {node: '>=18'}
-    hasBin: true
-
   '@puppeteer/browsers@2.6.1':
     resolution: {integrity: sha1-11rsUBDK43fF5HQr9eT2KnnCExU=}
     engines: {node: '>=18'}
     hasBin: true
+
+  '@puppeteer/browsers@3.2.5':
+    resolution: {integrity: sha512-UoCo3Pynbm37aLEEoydSiG+t24ui7sLD40+07CKxzxNy4PpSowJMkvlLIiV67XjP1lMVynhQVnuwlTABqBH8LQ==}
+    engines: {node: '>=22.12.0'}
+    hasBin: true
+    peerDependencies:
+      proxy-agent: '>=8.0.1'
+      yauzl: ^2.10.0 || ^3.4.0
+    peerDependenciesMeta:
+      proxy-agent:
+        optional: true
+      yauzl:
+        optional: true
 
   '@remusao/guess-url-type@1.3.0':
     resolution: {integrity: sha1-TRtz8T2R9ed3XEYb54IFmrXag60=}
@@ -12985,8 +12993,9 @@ packages:
     peerDependencies:
       devtools-protocol: '*'
 
-  chromium-bidi@14.0.0:
-    resolution: {integrity: sha1-FaEqsIOuUZpJpyTpSZTKCpztnI4=}
+  chromium-bidi@157.0.8090-0:
+    resolution: {integrity: sha512-KJw7IQgqXwxpJgJlEIPg5mr2ZoqA+jkTRtc5EABI7sUJ3bu3cpI7NuEBoj4Gn1AsF78CaT9So5WQWspK3/wYag==}
+    engines: {node: '>=20.19.0 <22.0.0 || >=22.12.0'}
     peerDependencies:
       devtools-protocol: '*'
 
@@ -13066,6 +13075,10 @@ packages:
   cliui@8.0.1:
     resolution: {integrity: sha1-DASwddsCy/5g3I5s8vVIaxo2CKo=}
     engines: {node: '>=12'}
+
+  cliui@9.0.1:
+    resolution: {integrity: sha1-b3iQ84b28feZU63B943sRvzC0pE=}
+    engines: {node: '>=20'}
 
   clone-deep@0.2.4:
     resolution: {integrity: sha1-TnPdCen7lxzDhnDF3O2cGJZIHMY=}
@@ -13297,15 +13310,6 @@ packages:
 
   cosmiconfig@8.3.6:
     resolution: {integrity: sha1-Bgorhx1m26bIU46hEYuhrBb1+uM=}
-    engines: {node: '>=14'}
-    peerDependencies:
-      typescript: '>=4.9.5'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
-
-  cosmiconfig@9.0.0:
-    resolution: {integrity: sha1-NMP8WCh7kV866QWrbcPeJYtVrZ0=}
     engines: {node: '>=14'}
     peerDependencies:
       typescript: '>=4.9.5'
@@ -13847,8 +13851,8 @@ packages:
   devtools-protocol@0.0.1367902:
     resolution: {integrity: sha1-czO/xEZsWlSkxt5Iqd+8tLgRZgw=}
 
-  devtools-protocol@0.0.1566079:
-    resolution: {integrity: sha1-KASe7QJaJc866pZPbGvVF3lsRKw=}
+  devtools-protocol@0.0.1696802:
+    resolution: {integrity: sha512-FO5/SENfvc2K8wRnWQflKcwuoTH4dBkXCWTQ9ebIWtuX8JM5+ZvCotaEmkfh21pO7TvIKGTM3hG4xFiq9WTwmg==}
 
   diff-sequences@29.6.3:
     resolution: {integrity: sha1-Ter4lNEUB8Ue/IQYAS+ecLhOqSE=}
@@ -14640,6 +14644,10 @@ packages:
 
   get-east-asian-width@1.6.0:
     resolution: {integrity: sha1-IWkA+R3xGossGYw+HZPWwDWndrk=}
+    engines: {node: '>=18'}
+
+  get-east-asian-width@1.7.0:
+    resolution: {integrity: sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==}
     engines: {node: '>=18'}
 
   get-folder-size@5.0.0:
@@ -15979,6 +15987,10 @@ packages:
     resolution: {integrity: sha1-obz9Ylf5WFv1rhTO7rt7VZAl5MQ=}
     engines: {node: '>=14'}
 
+  lilconfig@3.1.4:
+    resolution: {integrity: sha512-zJZyBmQhArDRefuWTypZxwDpFDIYmrj8ypSBvwGD5P13Y95s6DjzKgu4DVdGbeQa5PDEsAOCAPNk4X+QOR006w==}
+    engines: {node: '>=14'}
+
   lines-and-columns@1.2.4:
     resolution: {integrity: sha1-7KKE910pZQeTCdwK2SVauy68FjI=}
 
@@ -16557,6 +16569,10 @@ packages:
     resolution: {integrity: sha1-kWPMWWAOwmRw9rBA4wqlGsyXPtI=}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     hasBin: true
+
+  modern-tar@0.8.6:
+    resolution: {integrity: sha512-LYSks0tNVqbtez/9OB0YFP6qLRSqkdAxJWOQpVaR67lNTbj2zNLyYpowkRMia5lXLCZKzxwoxkxH2MbbBR2aEg==}
+    engines: {node: '>=18.0.0'}
 
   module-definition@6.0.2:
     resolution: {integrity: sha1-1yo2E9v2/nJH6+9k8R/dws0YuDs=}
@@ -17455,9 +17471,9 @@ packages:
     resolution: {integrity: sha1-PgZN4Rs8s6LfGoBg/y0FtBvlg9s=}
     engines: {node: '>=18'}
 
-  puppeteer-core@24.37.5:
-    resolution: {integrity: sha1-uVf0JHF8E/8VdlvGZKm5eAjly7Q=}
-    engines: {node: '>=18'}
+  puppeteer-core@25.14.0:
+    resolution: {integrity: sha512-LQitnes3tBeVbdZ7V/4iwJPLZGgkl9uBVK0W7YYMh68j/3Y9eNuvj4yl+Fdo7zN0SuajOMrhd7aPj3DifK8k6A==}
+    engines: {node: '>=22.12.0'}
 
   puppeteer-extra-plugin-adblocker@2.13.6:
     resolution: {integrity: sha1-mYKCQ1ebWe2B6LHaI9FqOg265Vc=}
@@ -17537,9 +17553,9 @@ packages:
       puppeteer-core:
         optional: true
 
-  puppeteer@24.37.5:
-    resolution: {integrity: sha1-xhkyzbK8U9GJcGcb4Y1UchbSlfA=}
-    engines: {node: '>=18'}
+  puppeteer@25.14.0:
+    resolution: {integrity: sha512-+s1Iqbl9DsGLOaQdgCQyhtgHZsF9hi4Iu8iuBqxzraxUXoRG1QkYQI0CA1/VsNK1gZWJfs50BL/oOb1L+Yz8Yg==}
+    engines: {node: '>=22.12.0'}
     hasBin: true
 
   pure-rand@6.1.0:
@@ -18345,6 +18361,10 @@ packages:
     resolution: {integrity: sha1-tbuOIWXOJ11NQ0dt0nAK2Qkdttw=}
     engines: {node: '>=18'}
 
+  string-width@8.3.0:
+    resolution: {integrity: sha512-ZbmZM0JCihQN91dWnxoipT2KOEyHqEyfRXUyjuRhW8b/xnqPDoq4gWEVApTVa9db2wN8mmoikgFBbjh71+cGeQ==}
+    engines: {node: '>=20'}
+
   string.prototype.trim@1.2.10:
     resolution: {integrity: sha1-QLLdXulMlZtNz7HWXOcukNpIDIE=}
     engines: {node: '>= 0.4'}
@@ -18923,11 +18943,11 @@ packages:
     resolution: {integrity: sha1-7k3v+YS2S+HhGLDejJyHfVznPT0=}
     engines: {node: '>= 0.4'}
 
-  typed-query-selector@2.12.0:
-    resolution: {integrity: sha1-krZdvApCZV/M9K6xoIsd3c6K9fI=}
-
   typed-query-selector@2.12.2:
     resolution: {integrity: sha1-ZeJGKsawrs+uG/rBpPMCcHDbq6o=}
+
+  typed-query-selector@2.12.3:
+    resolution: {integrity: sha512-/dtuMZyutHLlrxWhhC1uib00ELUr2dZ8C9B8YzZYsJmeE3V56OxRblrSM2UaF142pcMtak7ehZ6+poWGeehNIg==}
 
   typed-rest-client@1.8.11:
     resolution: {integrity: sha1-aQbwLjyR6NhRV58lWr8P1ggAoE0=}
@@ -19268,8 +19288,8 @@ packages:
     resolution: {integrity: sha1-KJhIa3T1FWCV5HPv6Ync8YUEejg=}
     engines: {node: '>= 14'}
 
-  webdriver-bidi-protocol@0.4.1:
-    resolution: {integrity: sha1-1BHnuOFYQI2DuxZrC08QVPo/B34=}
+  webdriver-bidi-protocol@1.0.1:
+    resolution: {integrity: sha512-WXWs/aXF2a6Al1Z2/V/7Gp2oPZOAAmHjJOTmv4KCXRJ122IMj3tSSMc6a4q3K4QOmhQbse/Ahr+oTVJOU2dUiw==}
 
   webidl-conversions@3.0.1:
     resolution: {integrity: sha1-JFNCdeKnvGvnvIZhHMFq4KVlSHE=}
@@ -19508,6 +19528,18 @@ packages:
       utf-8-validate:
         optional: true
 
+  ws@8.22.0:
+    resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   wsl-utils@0.1.0:
     resolution: {integrity: sha1-h4PU32cdTVA2W+LuTHGRegVXuqs=}
     engines: {node: '>=18'}
@@ -19618,6 +19650,10 @@ packages:
     resolution: {integrity: sha1-kJa87r+ZDSG7MfqVFuDt4pSnfTU=}
     engines: {node: '>=12'}
 
+  yargs-parser@22.0.0:
+    resolution: {integrity: sha1-h7gglAUbBWdxc0bs0A/RSASzV8g=}
+    engines: {node: ^20.19.0 || ^22.12.0 || >=23}
+
   yargs-unparser@2.0.0:
     resolution: {integrity: sha1-8TH5ImkRrl2a04xDL+gJNmwjJes=}
     engines: {node: '>=10'}
@@ -19637,6 +19673,10 @@ packages:
   yargs@17.7.3:
     resolution: {integrity: sha1-d53/5ryv7FlqcXLpgyiaWIZH+qo=}
     engines: {node: '>=12'}
+
+  yargs@18.2.0:
+    resolution: {integrity: sha512-9OpKOLeaoNFecEp7P6iYbzze/5CqWoH7N3SMs/6y1XF4nMvFMspEGZzJ6uFi9MmQwXhyzqYoSEKO3tvA3Z/o2w==}
+    engines: {node: ^20.19.0 || ^22.12.0 || >=23}
 
   yauzl@2.10.0:
     resolution: {integrity: sha1-x+sXyT4RLLEIb6bY5R+wZnt5pfk=}
@@ -19698,6 +19738,9 @@ packages:
 
   zod@4.4.3:
     resolution: {integrity: sha1-toDxcohdGLvr8hqDTqJeVaG781Y=}
+
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
   zwitch@2.0.4:
     resolution: {integrity: sha1-yCfUsKy3b8PmhaTG7CkC1RBw6dc=}
@@ -21031,18 +21074,11 @@ snapshots:
 
   '@cliqz/adblocker-extended-selectors@1.34.0': {}
 
-  '@cliqz/adblocker-puppeteer@1.23.8(puppeteer@24.37.5(typescript@5.4.5))':
+  '@cliqz/adblocker-puppeteer@1.23.8(puppeteer@25.14.0(yauzl@2.10.0))':
     dependencies:
       '@cliqz/adblocker': 1.34.0
       '@cliqz/adblocker-content': 1.34.0
-      puppeteer: 24.37.5(typescript@5.4.5)
-      tldts-experimental: 5.7.112
-
-  '@cliqz/adblocker-puppeteer@1.23.8(puppeteer@24.37.5(typescript@5.9.3))':
-    dependencies:
-      '@cliqz/adblocker': 1.34.0
-      '@cliqz/adblocker-content': 1.34.0
-      puppeteer: 24.37.5(typescript@5.9.3)
+      puppeteer: 25.14.0(yauzl@2.10.0)
       tldts-experimental: 5.7.112
 
   '@cliqz/adblocker@1.34.0':
@@ -24382,21 +24418,6 @@ snapshots:
   '@protobufjs/utf8@1.1.1':
     optional: true
 
-  '@puppeteer/browsers@2.13.0':
-    dependencies:
-      debug: 4.4.3(supports-color@8.1.1)
-      extract-zip: 2.0.1
-      progress: 2.0.3
-      proxy-agent: 6.5.0
-      semver: 7.8.5
-      tar-fs: 3.1.3
-      yargs: 17.7.3
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - bare-buffer
-      - react-native-b4a
-      - supports-color
-
   '@puppeteer/browsers@2.6.1(supports-color@8.1.1)':
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
@@ -24412,6 +24433,13 @@ snapshots:
       - bare-buffer
       - react-native-b4a
       - supports-color
+
+  '@puppeteer/browsers@3.2.5(yauzl@2.10.0)':
+    dependencies:
+      modern-tar: 0.8.6
+      yargs: 18.2.0
+    optionalDependencies:
+      yauzl: 2.10.0
 
   '@remusao/guess-url-type@1.3.0': {}
 
@@ -27324,11 +27352,11 @@ snapshots:
       mitt: 3.0.1
       zod: 3.23.8
 
-  chromium-bidi@14.0.0(devtools-protocol@0.0.1566079):
+  chromium-bidi@157.0.8090-0(devtools-protocol@0.0.1696802):
     dependencies:
-      devtools-protocol: 0.0.1566079
+      devtools-protocol: 0.0.1696802
       mitt: 3.0.1
-      zod: 3.25.76
+      zod: 4.6.7
 
   chromium-pickle-js@0.2.0: {}
 
@@ -27405,6 +27433,12 @@ snapshots:
       string-width: 4.2.3
       strip-ansi: 6.0.1
       wrap-ansi: 7.0.0
+
+  cliui@9.0.1:
+    dependencies:
+      string-width: 7.2.0
+      strip-ansi: 7.2.0
+      wrap-ansi: 9.0.2
 
   clone-deep@0.2.4:
     dependencies:
@@ -27654,24 +27688,6 @@ snapshots:
       path-type: 4.0.0
     optionalDependencies:
       typescript: 5.4.5
-
-  cosmiconfig@9.0.0(typescript@5.4.5):
-    dependencies:
-      env-paths: 2.2.1
-      import-fresh: 3.3.0
-      js-yaml: 4.3.2
-      parse-json: 5.2.0
-    optionalDependencies:
-      typescript: 5.4.5
-
-  cosmiconfig@9.0.0(typescript@5.9.3):
-    dependencies:
-      env-paths: 2.2.1
-      import-fresh: 3.3.0
-      js-yaml: 4.3.2
-      parse-json: 5.2.0
-    optionalDependencies:
-      typescript: 5.9.3
 
   crc-32@1.2.2: {}
 
@@ -28313,7 +28329,7 @@ snapshots:
 
   devtools-protocol@0.0.1367902: {}
 
-  devtools-protocol@0.0.1566079: {}
+  devtools-protocol@0.0.1696802: {}
 
   diff-sequences@29.6.3: {}
 
@@ -29529,6 +29545,8 @@ snapshots:
   get-east-asian-width@1.3.0: {}
 
   get-east-asian-width@1.6.0: {}
+
+  get-east-asian-width@1.7.0: {}
 
   get-folder-size@5.0.0: {}
 
@@ -31740,6 +31758,8 @@ snapshots:
 
   lilconfig@3.1.3: {}
 
+  lilconfig@3.1.4: {}
+
   lines-and-columns@1.2.4: {}
 
   lines-and-columns@2.0.4: {}
@@ -32582,6 +32602,8 @@ snapshots:
       yargs: 17.7.3
       yargs-parser: 21.1.1
       yargs-unparser: 2.0.0
+
+  modern-tar@0.8.6: {}
 
   module-definition@6.0.2:
     dependencies:
@@ -33619,192 +33641,158 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  puppeteer-core@24.37.5:
+  puppeteer-core@25.14.0(yauzl@2.10.0):
     dependencies:
-      '@puppeteer/browsers': 2.13.0
-      chromium-bidi: 14.0.0(devtools-protocol@0.0.1566079)
-      debug: 4.4.3(supports-color@8.1.1)
-      devtools-protocol: 0.0.1566079
-      typed-query-selector: 2.12.2
-      webdriver-bidi-protocol: 0.4.1
-      ws: 8.21.3
+      '@puppeteer/browsers': 3.2.5(yauzl@2.10.0)
+      chromium-bidi: 157.0.8090-0(devtools-protocol@0.0.1696802)
+      devtools-protocol: 0.0.1696802
+      typed-query-selector: 2.12.3
+      webdriver-bidi-protocol: 1.0.1
+      ws: 8.22.0
     transitivePeerDependencies:
-      - bare-abort-controller
-      - bare-buffer
       - bufferutil
-      - react-native-b4a
-      - supports-color
+      - proxy-agent
       - utf-8-validate
+      - yauzl
 
-  puppeteer-extra-plugin-adblocker@2.13.6(encoding@0.1.13)(puppeteer-core@24.37.5)(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))(puppeteer@24.37.5(typescript@5.4.5)):
+  puppeteer-extra-plugin-adblocker@2.13.6(encoding@0.1.13)(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1):
     dependencies:
-      '@cliqz/adblocker-puppeteer': 1.23.8(puppeteer@24.37.5(typescript@5.4.5))
+      '@cliqz/adblocker-puppeteer': 1.23.8(puppeteer@25.14.0(yauzl@2.10.0))
       debug: 4.4.3(supports-color@8.1.1)
       node-fetch: 2.7.0(encoding@0.1.13)
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
+      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(supports-color@8.1.1)
     optionalDependencies:
-      puppeteer: 24.37.5(typescript@5.4.5)
-      puppeteer-core: 24.37.5
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
+      puppeteer: 25.14.0(yauzl@2.10.0)
+      puppeteer-core: 25.14.0(yauzl@2.10.0)
+      puppeteer-extra: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
     transitivePeerDependencies:
       - encoding
       - playwright-extra
       - supports-color
 
-  puppeteer-extra-plugin-adblocker@2.13.6(encoding@0.1.13)(puppeteer-core@24.37.5)(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1):
+  puppeteer-extra-plugin-adblocker@2.13.6(encoding@0.1.13)(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))(puppeteer@25.14.0(yauzl@2.10.0)):
     dependencies:
-      '@cliqz/adblocker-puppeteer': 1.23.8(puppeteer@24.37.5(typescript@5.9.3))
+      '@cliqz/adblocker-puppeteer': 1.23.8(puppeteer@25.14.0(yauzl@2.10.0))
       debug: 4.4.3(supports-color@8.1.1)
       node-fetch: 2.7.0(encoding@0.1.13)
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
+      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))
     optionalDependencies:
-      puppeteer: 24.37.5(typescript@5.9.3)
-      puppeteer-core: 24.37.5
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
+      puppeteer: 25.14.0(yauzl@2.10.0)
+      puppeteer-core: 25.14.0(yauzl@2.10.0)
+      puppeteer-extra: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
     transitivePeerDependencies:
       - encoding
       - playwright-extra
       - supports-color
 
-  puppeteer-extra-plugin-stealth@2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))):
+  puppeteer-extra-plugin-stealth@2.11.2(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
-      puppeteer-extra-plugin-user-preferences: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
+      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(supports-color@8.1.1)
+      puppeteer-extra-plugin-user-preferences: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(supports-color@8.1.1)
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
+      puppeteer-extra: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra-plugin-stealth@2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1):
+  puppeteer-extra-plugin-stealth@2.11.2(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
-      puppeteer-extra-plugin-user-preferences: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
+      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))
+      puppeteer-extra-plugin-user-preferences: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
+      puppeteer-extra: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra-plugin-user-data-dir@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))):
-    dependencies:
-      debug: 4.4.3(supports-color@8.1.1)
-      fs-extra: 10.1.0
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
-      rimraf: 3.0.2
-    optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
-    transitivePeerDependencies:
-      - supports-color
-
-  puppeteer-extra-plugin-user-data-dir@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1):
+  puppeteer-extra-plugin-user-data-dir@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       fs-extra: 10.1.0
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
+      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(supports-color@8.1.1)
       rimraf: 3.0.2
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
+      puppeteer-extra: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra-plugin-user-preferences@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))):
+  puppeteer-extra-plugin-user-data-dir@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))):
+    dependencies:
+      debug: 4.4.3(supports-color@8.1.1)
+      fs-extra: 10.1.0
+      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))
+      rimraf: 3.0.2
+    optionalDependencies:
+      puppeteer-extra: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
+    transitivePeerDependencies:
+      - supports-color
+
+  puppeteer-extra-plugin-user-preferences@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       deepmerge: 4.3.1
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
-      puppeteer-extra-plugin-user-data-dir: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
+      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(supports-color@8.1.1)
+      puppeteer-extra-plugin-user-data-dir: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(supports-color@8.1.1)
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
+      puppeteer-extra: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra-plugin-user-preferences@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1):
+  puppeteer-extra-plugin-user-preferences@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       deepmerge: 4.3.1
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
-      puppeteer-extra-plugin-user-data-dir: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
+      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))
+      puppeteer-extra-plugin-user-data-dir: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0)))
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
+      puppeteer-extra: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra-plugin@3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))):
+  puppeteer-extra-plugin@3.2.3(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
       '@types/debug': 4.1.13
       debug: 4.4.3(supports-color@8.1.1)
       merge-deep: 3.0.3
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
+      puppeteer-extra: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra-plugin@3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1):
+  puppeteer-extra-plugin@3.2.3(puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))):
     dependencies:
       '@types/debug': 4.1.13
       debug: 4.4.3(supports-color@8.1.1)
       merge-deep: 3.0.3
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
+      puppeteer-extra: 3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)):
+  puppeteer-extra@3.3.6(puppeteer-core@25.14.0(yauzl@2.10.0))(puppeteer@25.14.0(yauzl@2.10.0))(supports-color@8.1.1):
     dependencies:
       '@types/debug': 4.1.13
       debug: 4.4.3(supports-color@8.1.1)
       deepmerge: 4.3.1
     optionalDependencies:
-      puppeteer: 24.37.5(typescript@5.4.5)
-      puppeteer-core: 24.37.5
+      puppeteer: 25.14.0(yauzl@2.10.0)
+      puppeteer-core: 25.14.0(yauzl@2.10.0)
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1):
+  puppeteer@25.14.0(yauzl@2.10.0):
     dependencies:
-      '@types/debug': 4.1.13
-      debug: 4.4.3(supports-color@8.1.1)
-      deepmerge: 4.3.1
-    optionalDependencies:
-      puppeteer: 24.37.5(typescript@5.9.3)
-      puppeteer-core: 24.37.5
+      '@puppeteer/browsers': 3.2.5(yauzl@2.10.0)
+      chromium-bidi: 157.0.8090-0(devtools-protocol@0.0.1696802)
+      devtools-protocol: 0.0.1696802
+      lilconfig: 3.1.4
+      puppeteer-core: 25.14.0(yauzl@2.10.0)
+      typed-query-selector: 2.12.3
     transitivePeerDependencies:
-      - supports-color
-
-  puppeteer@24.37.5(typescript@5.4.5):
-    dependencies:
-      '@puppeteer/browsers': 2.13.0
-      chromium-bidi: 14.0.0(devtools-protocol@0.0.1566079)
-      cosmiconfig: 9.0.0(typescript@5.4.5)
-      devtools-protocol: 0.0.1566079
-      puppeteer-core: 24.37.5
-      typed-query-selector: 2.12.0
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - bare-buffer
       - bufferutil
-      - react-native-b4a
-      - supports-color
-      - typescript
+      - proxy-agent
       - utf-8-validate
-
-  puppeteer@24.37.5(typescript@5.9.3):
-    dependencies:
-      '@puppeteer/browsers': 2.13.0
-      chromium-bidi: 14.0.0(devtools-protocol@0.0.1566079)
-      cosmiconfig: 9.0.0(typescript@5.9.3)
-      devtools-protocol: 0.0.1566079
-      puppeteer-core: 24.37.5
-      typed-query-selector: 2.12.0
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - bare-buffer
-      - bufferutil
-      - react-native-b4a
-      - supports-color
-      - typescript
-      - utf-8-validate
+      - yauzl
 
   pure-rand@6.1.0: {}
 
@@ -34913,6 +34901,11 @@ snapshots:
       get-east-asian-width: 1.3.0
       strip-ansi: 7.1.0
 
+  string-width@8.3.0:
+    dependencies:
+      get-east-asian-width: 1.7.0
+      strip-ansi: 7.2.0
+
   string.prototype.trim@1.2.10:
     dependencies:
       call-bind: 1.0.8
@@ -35648,9 +35641,9 @@ snapshots:
       possible-typed-array-names: 1.1.0
       reflect.getprototypeof: 1.0.10
 
-  typed-query-selector@2.12.0: {}
-
   typed-query-selector@2.12.2: {}
+
+  typed-query-selector@2.12.3: {}
 
   typed-rest-client@1.8.11:
     dependencies:
@@ -35997,7 +35990,7 @@ snapshots:
 
   web-streams-polyfill@4.0.0-beta.3: {}
 
-  webdriver-bidi-protocol@0.4.1: {}
+  webdriver-bidi-protocol@1.0.1: {}
 
   webidl-conversions@3.0.1: {}
 
@@ -36342,6 +36335,8 @@ snapshots:
 
   ws@8.21.3: {}
 
+  ws@8.22.0: {}
+
   wsl-utils@0.1.0:
     dependencies:
       is-wsl: 3.1.1
@@ -36425,6 +36420,8 @@ snapshots:
 
   yargs-parser@21.1.1: {}
 
+  yargs-parser@22.0.0: {}
+
   yargs-unparser@2.0.0:
     dependencies:
       camelcase: 6.3.0
@@ -36471,6 +36468,15 @@ snapshots:
       string-width: 4.2.3
       y18n: 5.0.8
       yargs-parser: 21.1.1
+
+  yargs@18.2.0:
+    dependencies:
+      cliui: 9.0.1
+      escalade: 3.2.0
+      get-caller-file: 2.0.5
+      string-width: 8.3.0
+      y18n: 5.0.8
+      yargs-parser: 22.0.0
 
   yauzl@2.10.0:
     dependencies:
@@ -36534,5 +36540,7 @@ snapshots:
   zod@4.3.6: {}
 
   zod@4.4.3: {}
+
+  zod@4.6.7: {}
 
   zwitch@2.0.4: {}

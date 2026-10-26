@@ -20,6 +20,20 @@ Related packages:
 Run `pnpm run build` in this folder (builds the agent, PDF views, and
 puppeteer helpers).
 
+### Puppeteer browser
+
+The Puppeteer helpers require Node.js 22.12.0 or later. Puppeteer's install
+scripts are disabled by workspace policy, so `pnpm install` does not download
+its browser. After updating Puppeteer, install the matching Chrome binary
+from `ts/`:
+
+```powershell
+pnpm --filter @typeagent/browser exec puppeteer browsers install chrome
+```
+
+When using an existing system Chrome installation instead, update that browser
+separately. Updating Puppeteer does not patch system Chrome.
+
 ## Architecture
 
 ### PDF Understanding Worktree

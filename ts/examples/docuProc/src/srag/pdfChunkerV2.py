@@ -7,7 +7,7 @@ import sys
 import json
 
 import pdfplumber # type: ignore
-import fitz # type: ignore
+import pymupdf as fitz # type: ignore
 from PIL import Image # type: ignore
 
 import datetime
