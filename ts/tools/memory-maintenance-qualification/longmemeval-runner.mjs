@@ -87,6 +87,62 @@ export function sessionSource(caseId, session) {
     };
 }
 
+async function prepareKnowledge(service, construction, record, controls) {
+    if (!service.createKnowledgeCheckpoint) return;
+    assert.equal(typeof service.waitForKnowledgeCheckpoint, "function");
+    controls.signal.throwIfAborted();
+    controls.role(`knowledge:${construction.id}`);
+    const timeoutMs = controls.knowledgeTimeoutMs ?? 600000;
+    if (!record.knowledgeCheckpoint) {
+        record.knowledgeCheckpoint = await service.createKnowledgeCheckpoint({
+            corpusId: record.corpusId,
+            sourceIds: [
+                ...new Set(
+                    Object.values(record.mappings).map(
+                        (entry) => entry.sourceId,
+                    ),
+                ),
+            ],
+            producerComplete: true,
+            timeoutMs,
+        });
+        await controls.persist();
+    }
+    try {
+        record.knowledgeCheckpoint = await service.waitForKnowledgeCheckpoint({
+            corpusId: record.corpusId,
+            checkpointId: record.knowledgeCheckpoint.checkpointId,
+            timeoutMs,
+        });
+    } catch (error) {
+        if (service.getKnowledgeCheckpoint) {
+            try {
+                const checkpoint = await service.getKnowledgeCheckpoint({
+                    corpusId: record.corpusId,
+                    checkpointId: record.knowledgeCheckpoint.checkpointId,
+                });
+                if (checkpoint) record.knowledgeCheckpoint = checkpoint;
+                await controls.persist();
+            } catch (statusError) {
+                throw new AggregateError(
+                    [error, statusError],
+                    "Knowledge wait failed and checkpoint status could not be retained",
+                );
+            }
+        }
+        throw error;
+    }
+    await controls.persist();
+    if (record.knowledgeCheckpoint.state !== "ready") {
+        const error = new Error(
+            `Knowledge is not ready: ${record.knowledgeCheckpoint.state}; ${record.knowledgeCheckpoint.reasons.join("; ")}`,
+        );
+        error.name = "KnowledgeNotReadyError";
+        error.code = "EKNOWLEDGENOTREADY";
+        throw error;
+    }
+}
+
 export async function executeMemoryCase(
     service,
     construction,
@@ -141,6 +197,8 @@ export async function executeMemoryCase(
         delete record.inFlight;
         await persist();
     }
+    if (!record.hypothesis)
+        await prepareKnowledge(service, construction, record, controls);
     const question = reader.question;
     const temporalContext = {
         referenceTime: reader.question_date,
@@ -157,6 +215,13 @@ export async function executeMemoryCase(
             question,
             temporalContext,
             includeDiagnostics: true,
+            ...(record.knowledgeCheckpoint
+                ? {
+                      knowledgeCheckpointId:
+                          record.knowledgeCheckpoint.checkpointId,
+                      retrievalPolicy: "sourcesAndViews",
+                  }
+                : {}),
         });
         assert.equal(
             answer.mode,
@@ -171,6 +236,8 @@ export async function executeMemoryCase(
         record.answerPath = answer.readerContext?.answerPath ?? "knowpro";
         record.indexVersion = answer.indexVersion;
         record.warnings = answer.warnings;
+        record.derivedReferences = answer.derivedReferences;
+        record.assertionReferences = answer.assertionReferences;
         const sourceToSession = new Map(
             plan.map((entry) => [
                 record.mappings[entry.sourceKey].sourceId,

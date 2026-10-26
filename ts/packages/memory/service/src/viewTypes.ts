@@ -3,6 +3,12 @@
 
 import type { AgentEdition } from "./agentEdition.js";
 import type { MemoryAcquisitionService } from "./acquisitionTypes.js";
+import type {
+    MemoryKnowledgeService,
+    CorpusQuestionInput,
+    CorpusQuestionProposal,
+} from "./knowledgeTypes.js";
+export type * from "./knowledgeTypes.js";
 export type * from "./acquisitionTypes.js";
 import type {
     MemorySchemaViewService,
@@ -395,6 +401,7 @@ export interface ViewHistoryEntry {
 export interface MemoryViewService
     extends Partial<MemoryTopicService>,
         Partial<MemorySchemaViewService>,
+        Partial<MemoryKnowledgeService>,
         Partial<MemoryAcquisitionService> {
     updateViewMaintenance(
         request: ViewMaintenanceUpdate,
@@ -636,6 +643,11 @@ export interface ViewSynthesisAdapter {
         report: ViewSupportReport,
         signal: AbortSignal,
     ): Promise<ViewSynthesisOutput>;
+    discoverCorpusQuestions?(
+        input: CorpusQuestionInput,
+        signal: AbortSignal,
+        reserveRepair?: () => Promise<void>,
+    ): Promise<CorpusQuestionProposal[]>;
     proposeSchema?(
         specification: string,
         signal: AbortSignal,

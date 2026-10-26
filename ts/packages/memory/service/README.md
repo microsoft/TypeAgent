@@ -112,8 +112,39 @@ eagerly summarize every concept.
 `curatedTopics` defaults to `true`; setting it to `false` retains the raw-topic
 summary pipeline. No model-backed quality or latency qualification is implied:
 native curation latency and source-synopsis model failures remain follow-up work.
-This pipeline does not add schema question acquisition, corpus-wide question
-discovery, integrated source-plus-view answering, or a new graph explorer.
+The quality pipeline is separate from the discovery and answering lifecycle
+below. This change does not add a new graph explorer.
+
+## Automatic knowledge preparation and integrated answering
+
+New corpora default to `sourceObserved` question discovery; existing corpora with
+no persisted discovery policy remain off. Hosts and clients can explicitly choose
+`off`, `suggest`, or `sourceObserved`. Discovery uses bounded original-source
+windows, existing contracts, evidence-grounded utility assessment and durable
+fingerprints, receipts and hourly call budgets. Repairs reserve call allowance.
+Policy-admitted informational contracts are not human-confirmed answers and do
+not authorize external tools. Failed discovery requires an explicit bounded
+retry; source changes invalidate affected work.
+
+Knowledge checkpoints capture exact source revisions, index identity, enabled
+families and exclusions. A producer-complete checkpoint continues bounded
+maintenance until its captured work finishes or it reaches an explicit nonready
+outcome. Ingestion completion alone is not readiness. Inspect `state`, `coverage`
+and `reasons`, including partial, blocked, failed, superseded and cancelled work.
+Complete curated-topic coverage does not require eagerly generated concept prose.
+Ingestion deferral, family coordination, source eligibility changes, privacy
+removal and shutdown apply to this work.
+
+Answers default to integrated original-source and eligible published-View
+retrieval. `sourcesOnly` bypasses Views; `sourcesAndViews` requests the integrated
+path explicitly. Optional `knowledgeCheckpointId` binds readiness to a captured
+scope. View evidence is revalidated for source scope, review, freshness,
+conflicts, authority, publication and access eligibility. Supporting citations
+expand exact retained source passages rather than trusting cached View excerpts.
+Derived references and user assertions remain distinct from original-source
+citations. Reconstruction and follow-up retrieval have finite evidence/request
+bounds and expose opt-in reader diagnostics. No live model or benchmark
+qualification is implied by deterministic tests.
 
 ## Test suites
 
@@ -451,6 +482,15 @@ and one reader call, so aggregate retrieval and provider cost can increase;
 per-search indexed reads remain bounded at 32,000 characters. Diagnostics retain
 both reader contexts and the refinement queries and selection receipts. The
 product and qualification harness use this same answer path.
+
+The bounded refinement also applies to integrated source-plus-view answers,
+including `sourcesOnly`. Follow-up searches retain the original access scope
+and temporal constraints; views are still evaluated against the original
+question. Delivery validation rechecks evidence from both reader calls, even
+when the final bounded pool omits an initial passage. A delivery-race
+reconstruction remains limited to one retry and may repeat that bounded
+refinement. Integrated diagnostics expose the initial typed evidence and the
+follow-up selection receipts under `integratedAnswer.refinement`.
 
 All memory synthesis, topic, indexed-answer and hub-answer calls now omit
 optional OpenAI completion limits. Their prompts express approximate final-JSON

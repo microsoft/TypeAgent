@@ -9,6 +9,13 @@ import type {
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import type { MemoryAcquisitionProgressService } from "@typeagent/memory-client";
 import {
+    knowledgeCorpusRequestSchema,
+    knowledgeDiscoveryUpdateSchema,
+    knowledgeCheckpointRequestSchema,
+    knowledgeCheckpointReadSchema,
+    knowledgeCheckpointWaitSchema,
+} from "@typeagent/memory-client";
+import {
     acquisitionProgress,
     acquisitionOperation,
 } from "./memoryAcquisitionProgress.mjs";
@@ -22,6 +29,11 @@ type ViewMethods = Pick<
     | "memoryListQuestions"
     | "memoryListQuestionSummaries"
     | "memoryGetQuestion"
+    | "memoryGetKnowledgeStatus"
+    | "memoryUpdateKnowledgeDiscovery"
+    | "memoryCreateKnowledgeCheckpoint"
+    | "memoryGetKnowledgeCheckpoint"
+    | "memoryWaitForKnowledgeCheckpoint"
     | "memoryListAcquisitions"
     | "memoryRunAcquisitions"
     | "memoryCancelAcquisition"
@@ -71,6 +83,48 @@ export function createMemoryViewFunctions(
         return method.bind(value) as NonNullable<MemoryViewService[K]>;
     }
     return {
+        memoryGetKnowledgeStatus: (request) =>
+            views().getKnowledgeStatus(
+                knowledgeCorpusRequestSchema.parse(request).corpusId,
+            ),
+        memoryUpdateKnowledgeDiscovery: (request) => {
+            const { corpusId, policy, retryFailed } =
+                knowledgeDiscoveryUpdateSchema.parse(request);
+            return views().updateKnowledgeDiscovery({
+                corpusId,
+                policy,
+                ...(retryFailed === undefined ? {} : { retryFailed }),
+            });
+        },
+        memoryCreateKnowledgeCheckpoint: (request) => {
+            const {
+                corpusId,
+                sourceIds,
+                families,
+                producerComplete,
+                timeoutMs,
+            } = knowledgeCheckpointRequestSchema.parse(request);
+            return views().createKnowledgeCheckpoint({
+                corpusId,
+                ...(sourceIds === undefined ? {} : { sourceIds }),
+                ...(families === undefined ? {} : { families }),
+                ...(producerComplete === undefined ? {} : { producerComplete }),
+                ...(timeoutMs === undefined ? {} : { timeoutMs }),
+            });
+        },
+        memoryGetKnowledgeCheckpoint: (request) =>
+            views().getKnowledgeCheckpoint(
+                knowledgeCheckpointReadSchema.parse(request),
+            ),
+        memoryWaitForKnowledgeCheckpoint: (request) => {
+            const { corpusId, checkpointId, timeoutMs } =
+                knowledgeCheckpointWaitSchema.parse(request);
+            return views().waitForKnowledgeCheckpoint({
+                corpusId,
+                checkpointId,
+                ...(timeoutMs === undefined ? {} : { timeoutMs }),
+            });
+        },
         memoryViewCapabilities: () => service().getCapabilities(),
         memoryQueryTopics: (request) => views().queryTopics(request),
         memoryRebuildTopics: ({ corpusId }) => views().rebuildTopics(corpusId),

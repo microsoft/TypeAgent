@@ -131,6 +131,7 @@ describe("human-added edge merge regressions", () => {
         added = undefined;
         service = new FileMemoryService(root, {
             informationalViews: false,
+            discoveryPolicy: "off",
             indexFactory: (_id, directory) =>
                 new FakeSemanticCorpusIndex(directory),
             viewSynthesisAdapter: {

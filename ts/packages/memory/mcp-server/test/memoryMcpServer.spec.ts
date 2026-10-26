@@ -15,6 +15,7 @@ import {
     schemaViewToolNames,
     acquisitionToolNames,
     inventoryToolNames,
+    knowledgeToolNames,
 } from "@typeagent/memory-client";
 import type {
     DocumentIngestRequest,
@@ -420,6 +421,7 @@ describe("MemoryMcpServer", () => {
                 ...Object.values(schemaViewToolNames),
                 ...Object.values(acquisitionToolNames),
                 ...Object.values(inventoryToolNames),
+                ...Object.values(knowledgeToolNames),
             ].sort(),
         );
     });

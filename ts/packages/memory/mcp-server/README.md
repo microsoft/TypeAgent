@@ -24,6 +24,26 @@ for refresh behavior.
 
 ## Tool details
 
+Knowledge preparation uses `memory_knowledge_status`,
+`memory_knowledge_discovery_update`, `memory_knowledge_checkpoint_create`,
+`memory_knowledge_checkpoint_get` and `memory_knowledge_checkpoint_wait`.
+Reads expose fixed-scope coverage, exclusions and explicit failure/limit reasons;
+source ingestion completion is not knowledge readiness. Waits are bounded to
+300,000 ms. Discovery updates accept `off`, `suggest` or `sourceObserved`, with
+optional `retryFailed` for an explicit bounded retry. These operations never
+authorize external tools. New-corpus defaults are determined by the service,
+not by the transport or browser.
+
+`memory_answer` accepts `retrievalPolicy` (`sourcesOnly` or strict
+`sourcesAndViews`) separately from synthesis/extraction, and optional
+`knowledgeCheckpointId` to require a ready captured scope. Returned exact
+derived and user-assertion references are distinct from original citations;
+degradation, missing support and bounded coverage remain explicit warnings.
+The browser's selected document-collection Ask uses this answer path on
+supporting hosts. Mixed collections, conversation scopes and filters retain
+the legacy bounded reader with an explicit coverage limitation; strict
+sources-and-views or required-checkpoint requests reject incompatible scopes.
+
 Schema-defined Views round-trip through generic View tools. The bounded tools
 `memory_questions_list`, `memory_question_edit`, `memory_view_page`,
 `memory_schema_view_propose` and `memory_schema_questions_discover` expose the

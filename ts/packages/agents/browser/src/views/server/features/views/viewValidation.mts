@@ -21,6 +21,11 @@ import {
     viewMaintenanceReadSchema,
     sourceSynopsisRequestSchema,
     topicQueryRequestSchema,
+    knowledgeCorpusRequestSchema,
+    knowledgeDiscoveryUpdateSchema,
+    knowledgeCheckpointRequestSchema,
+    knowledgeCheckpointReadSchema,
+    knowledgeCheckpointWaitSchema,
 } from "@typeagent/memory-client";
 import type {
     ViewMethod,
@@ -84,6 +89,17 @@ function protocolInput(schema: {
 
 // Each entry is an explicitly exposed domain operation, never a browser-control method.
 const schemas: Record<ViewMethod, z.ZodType> = {
+    memoryGetKnowledgeStatus: protocolInput(knowledgeCorpusRequestSchema),
+    memoryUpdateKnowledgeDiscovery: protocolInput(
+        knowledgeDiscoveryUpdateSchema,
+    ),
+    memoryCreateKnowledgeCheckpoint: protocolInput(
+        knowledgeCheckpointRequestSchema,
+    ),
+    memoryGetKnowledgeCheckpoint: protocolInput(knowledgeCheckpointReadSchema),
+    memoryWaitForKnowledgeCheckpoint: protocolInput(
+        knowledgeCheckpointWaitSchema,
+    ),
     memoryViewCapabilities: empty,
     memoryQueryTopics: protocolInput(topicQueryRequestSchema),
     memoryRebuildTopics: z.strictObject({
@@ -132,6 +148,11 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         corpusId: optionalText,
         limit: z.number().int().min(1).max(100).optional(),
         generateAnswer: boolean,
+        retrievalPolicy: z.enum(["sourcesOnly", "sourcesAndViews"]).optional(),
+        knowledgeCheckpointId: z
+            .string()
+            .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/)
+            .optional(),
         sourceTypes: z
             .array(z.enum(["web", "markdown", "text", "html", "vtt"]))
             .max(5)
