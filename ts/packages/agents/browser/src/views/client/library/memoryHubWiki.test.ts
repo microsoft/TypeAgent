@@ -24,6 +24,8 @@ const citation = {
 const content: WikiContent = {
     kind: "wiki",
     construction: "informational-wiki-v1",
+    status: "partial",
+    coverageNote: "Only selected indexed evidence",
     title: "Payments wiki",
     summary:
         "Limited summary: selected indexed fragments only; unresolved explanations",
@@ -82,6 +84,10 @@ test("indexed reader/editor retains identity, title, category, note, citations a
         retrieval,
     );
     document.body.replaceChildren(editor.element);
+    expect(editor.element.textContent).toContain("Completeness: partial");
+    expect(editor.element.textContent).toContain(
+        "Coverage: Only selected indexed evidence",
+    );
     expect(editor.element.querySelector("fieldset")!.hidden).toBe(true);
     expect(editor.element.textContent).toContain("contradictions unresolved");
     expect(editor.element.querySelectorAll("a")).toHaveLength(0);

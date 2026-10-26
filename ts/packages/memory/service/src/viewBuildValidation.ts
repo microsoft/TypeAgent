@@ -73,9 +73,9 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
                 ? {
                       kind: "wiki",
                       construction: "informational-wiki-v1",
+                      status: "partial",
                       title: "Selection validation",
-                      summary:
-                          "Limited summary: selected indexed fragments only; validation",
+                      summary: "Selection validation summary",
                       sections: [
                           {
                               id: target.definition.viewId,

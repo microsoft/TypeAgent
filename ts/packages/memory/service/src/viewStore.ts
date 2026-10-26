@@ -8,6 +8,7 @@ import type {
     TopicQueryPage,
     TopicQueryRequest,
     TopicSnapshot,
+    TopicConcept,
 } from "./topicTypes.js";
 
 import { randomUUID } from "node:crypto";
@@ -110,6 +111,8 @@ export interface WikiFamilyState {
         viewId: string;
         query: string;
         sourceIds: string[];
+        postingCount?: number;
+        salience?: number;
         identity?: import("./types.js").IndexedSubjectIdentity;
         admission?: {
             generation: string | undefined;
@@ -338,6 +341,41 @@ export class TypedViewStore {
         );
     }
 
+    public async saveTopicConceptSummary(
+        corpusId: string,
+        generation: string,
+        conceptId: string,
+        output: Pick<TopicConcept, "summary" | "citations">,
+    ): Promise<void> {
+        const { head, state } = await this.history(corpusId).read();
+        const snapshot = state.topics;
+        const concept = snapshot?.curation?.concepts.find(
+            (entry) => entry.id === conceptId,
+        );
+        if (!snapshot || snapshot.generation !== generation || !concept)
+            throw new Error(
+                "Topic generation changed during lazy summarization",
+            );
+        const supplied = new Set(concept.citations.map(viewHash));
+        if (
+            !output.citations.length ||
+            output.citations.some(
+                (citation) => !supplied.has(viewHash(citation)),
+            )
+        )
+            throw new Error("Topic summary changed supplied concept evidence");
+        concept.summary = output.summary;
+        concept.summaryState = "ready";
+        concept.citations = structuredClone(output.citations);
+        validateTopicSnapshot(snapshot);
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            `Summarize selected topic concept ${conceptId}`,
+        );
+    }
+
     public async materializeTopicBuild(
         corpusId: string,
         jobId: string,
@@ -345,6 +383,8 @@ export class TypedViewStore {
         complete = true,
     ): Promise<void> {
         validateTopicSnapshot(snapshot);
+        if (complete && snapshot.curationProgress)
+            throw new Error("Incomplete topic curation cannot finish a build");
         const { head, state } = await this.history(corpusId).read();
         const job = state.builds?.[jobId];
         const result = job?.results.find(
@@ -381,10 +421,10 @@ export class TypedViewStore {
         };
         result.state = complete ? "draft" : "generating";
         result.topicGeneration = snapshot.generation;
-        result.reason = `Complete topic snapshot ${snapshot.generation} committed and available for browsing; ${snapshot.nodes.filter((node) => node.summaryState === "ready").length}/${snapshot.nodes.length} summaries ready; ${complete ? "generation finished" : "generation pending"}; not a Wiki article revision`;
+        result.reason = `Complete topic snapshot ${snapshot.generation} committed and available for browsing; ${snapshot.curation ? `${snapshot.curation.concepts.length} admitted concepts; summaries generated on explicit detail requests` : `${snapshot.nodes.filter((node) => node.summaryState === "ready").length}/${snapshot.nodes.length} summaries ready`}; ${complete ? "generation finished" : "generation pending"}; not a Wiki article revision`;
         if (complete)
             result.missingEvidence = [
-                ...snapshot.nodes
+                ...(snapshot.curation ? [] : snapshot.nodes)
                     .filter((node) => node.summaryState !== "ready")
                     .map(
                         (node) =>

@@ -96,6 +96,7 @@ test("Overview mounts production topic browsing with the selected corpus RPC sco
     await settle();
     expect(invoke).toHaveBeenCalledWith("memoryQueryTopics", {
         corpusId: "a",
+        curated: true,
         search: "",
         pageSize: 24,
     });

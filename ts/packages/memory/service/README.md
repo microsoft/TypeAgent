@@ -85,6 +85,36 @@ Project status rendering keeps capacity review pending distinct from a supported
 blocked condition. A `pendingOwnerReview` enum alone does not establish blockage;
 any actual blocker and its scope must remain in evidence-backed section prose.
 
+## Maintained knowledge quality
+
+Wiki and Project Views generate substantive source-grounded summaries and
+separate article completeness (`partial` or `sufficient`) from evidence freshness,
+human review, incident closure and project approval. Project briefs retain typed
+assignments, milestones, decisions, risks and open questions without inventing
+missing owners, dates or outcomes. Wiki admission binds the exact queried subject
+and may defer a thin or redundant candidate. Canonical contributions and
+consolidations independently check actual prose, with bounded evidence-grounded
+repairs that preserve stable anchors, citations, protected structures and human
+edits.
+
+Topic maintenance retains complete raw incidence while admitting scoped,
+purposeful concepts through semantic assessment. Candidate reconciliation and
+source-local packing preserve membership and provenance; partial curation and
+completed concept organization are durable checkpoints. Plain topic browsing
+exposes concepts, members and original evidence without another graph API.
+Concept summaries remain pending until an explicit curated-topic detail request
+uses `summarize: true`; generation and independent support auditing share
+concurrent requests and cache successful results in the current generation.
+Evidence/fingerprint changes invalidate that cache. Shutdown, corpus clearing
+and source removal cancel outstanding summary work. Maintenance drain does not
+eagerly summarize every concept.
+
+`curatedTopics` defaults to `true`; setting it to `false` retains the raw-topic
+summary pipeline. No model-backed quality or latency qualification is implied:
+native curation latency and source-synopsis model failures remain follow-up work.
+This pipeline does not add schema question acquisition, corpus-wide question
+discovery, integrated source-plus-view answering, or a new graph explorer.
+
 ## Test suites
 
 Build from the TypeScript workspace root before running compiled tests:

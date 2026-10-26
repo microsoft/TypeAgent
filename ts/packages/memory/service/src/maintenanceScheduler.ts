@@ -31,6 +31,7 @@ interface Work {
     generation: string | undefined;
     execute: (signal: AbortSignal) => Promise<void>;
     queuedAt: number;
+    readyAt: number;
 }
 
 export class MaintenanceScheduler {
@@ -86,16 +87,31 @@ export class MaintenanceScheduler {
         family: string,
         generation: string | undefined,
         execute: Work["execute"],
+        quietMs = 0,
     ): void {
         if (this.shutdown.signal.aborted) return;
+        if (!Number.isFinite(quietMs) || quietMs < 0 || quietMs > 60000)
+            throw new Error(
+                "Maintenance quiet period must be 0 to 60000 milliseconds",
+            );
         const key = `${corpusId}:${family}`;
         if (this.pending.has(key) || this.running.has(key)) this.coalesced++;
         const prior = this.pending.get(key);
         const queuedAt = prior?.queuedAt ?? performance.now();
-        this.pending.set(key, { corpusId, generation, execute, queuedAt });
+        this.pending.set(key, {
+            corpusId,
+            generation,
+            execute,
+            queuedAt,
+            readyAt: performance.now() + quietMs,
+        });
         if (!prior || prior.generation !== generation) {
             this.failures.delete(key);
             this.parked.delete(key);
+        }
+        if (this.timer) {
+            clearTimeout(this.timer);
+            this.timer = undefined;
         }
         this.wake();
     }
@@ -112,10 +128,23 @@ export class MaintenanceScheduler {
             )
         )
             return;
-        this.timer = setTimeout(() => {
-            this.timer = undefined;
-            this.dispatch();
-        }, 250);
+        const earliest = Math.min(
+            ...[...this.pending]
+                .filter(
+                    ([key, work]) =>
+                        !this.parked.has(key) &&
+                        !this.failures.has(key) &&
+                        !this.isDeferred(work.corpusId),
+                )
+                .map(([, work]) => work.readyAt),
+        );
+        this.timer = setTimeout(
+            () => {
+                this.timer = undefined;
+                this.dispatch();
+            },
+            this.draining ? 250 : Math.max(250, earliest - performance.now()),
+        );
         this.timer.unref();
     }
 
@@ -149,9 +178,13 @@ export class MaintenanceScheduler {
             ([key, work]) =>
                 !this.failures.has(key) &&
                 !this.parked.has(key) &&
+                (this.draining || work.readyAt <= performance.now()) &&
                 !this.isDeferred(work.corpusId),
         );
-        if (!next) return;
+        if (!next) {
+            this.wake();
+            return;
+        }
         const [key, work] = next;
         const signal = this.drainSignal
             ? AbortSignal.any([this.shutdown.signal, this.drainSignal])
@@ -245,6 +278,10 @@ export class MaintenanceScheduler {
         if (this.draining) throw new Error("Maintenance drain already active");
         if (this.holds) return { ...this.status(), reason: "paused" };
         this.draining = true;
+        if (this.timer) {
+            clearTimeout(this.timer);
+            this.timer = undefined;
+        }
         const deadline = AbortSignal.timeout(timeoutMs);
         this.drainSignal = signal
             ? AbortSignal.any([deadline, signal])

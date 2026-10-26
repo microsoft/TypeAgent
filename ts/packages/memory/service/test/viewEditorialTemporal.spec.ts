@@ -180,7 +180,17 @@ async function settled(service: FileMemoryService, corpusId: string) {
         await new Promise((resolve) => setTimeout(resolve, 20));
     }
 
-    throw new Error("Offline editorial maintenance did not settle");
+    throw new Error(
+        `Offline editorial maintenance did not settle: ${JSON.stringify(
+            (await service.listViewBuilds(corpusId)).slice(0, 3).map((job) => ({
+                state: job.state,
+                results: job.results.map((result) => ({
+                    state: result.state,
+                    reason: result.reason,
+                })),
+            })),
+        )}`,
+    );
 }
 
 async function maintainFamily(
@@ -268,6 +278,13 @@ test("actual P0 revisions automate correction/withdrawal around human edits and 
             );
             if (input.definition.projectSummary)
                 return hydrateProjectSummary(input, {
+                    summary: "Grounded project summary.",
+                    completeness: "partial",
+                    assignments: [],
+                    milestoneItems: [],
+                    decisionItems: [],
+                    openQuestions: [],
+                    riskItems: [],
                     title,
                     goalsScope: body,
                     owners: "Accountable service owner unknown; review owners are scoped in the evidence.",
@@ -284,6 +301,8 @@ test("actual P0 revisions automate correction/withdrawal around human edits and 
                     citationIds,
                 });
             return hydrateInformational(input, {
+                summary: "Grounded reference summary.",
+                status: "partial",
                 title,
                 prose:
                     unsafe && input.definition.wiki?.query === "command"
@@ -588,6 +607,14 @@ test("actual P0 revisions automate correction/withdrawal around human edits and 
         const unlocked = await service.saveViewDraft(unlock);
         expect(unlocked.version.provenance).toBe("human");
         expect(unlocked.version.content.title).toBe(edited.title);
+        expect(
+            (
+                await service.getViewPublication({
+                    corpusId,
+                    viewId: protectedLease.viewId,
+                })
+            ).blockedReason,
+        ).toContain("pending merge conflict");
         const followingUnlock = page(
             (await settled(service, corpusId)).views,
             "lease",

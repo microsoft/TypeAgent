@@ -177,7 +177,12 @@ import {
     topicInputFingerprint,
     reconcileTopicFamily,
 } from "./topicCapture.js";
-import { createConfiguredTopicGenerator } from "./topicGeneration.js";
+import {
+    createConfiguredTopicGenerator,
+    createConfiguredTopicConceptSummarizer,
+    type TopicConceptSummarizer,
+} from "./topicGeneration.js";
+import { validateTopicQuery } from "./topicSnapshot.js";
 import {
     applyTopicFamilyOperation,
     checkpointTopicFamily,
@@ -231,7 +236,6 @@ import {
     type WikiConsolidationReceipt,
     ConsolidationTargetChanged,
 } from "./wikiConsolidation.js";
-import { assertEditorialAssessment } from "./viewEditorial.js";
 import { viewSourceKey } from "./viewContent.js";
 import type {
     WikiPagePurposeContext,
@@ -247,6 +251,8 @@ import {
 } from "./wikiGrouping.js";
 import {
     createConfiguredViewSynthesisAdapter,
+    prepareWikiContribution,
+    verifyOrRepairWikiConsolidation,
     validateConstructedGuide,
     validateSupport,
 } from "./viewSynthesis.js";
@@ -327,6 +333,7 @@ const eventsFileName = "events.jsonl";
 const jobsDirectoryName = "jobs";
 const indexDirectoryName = "index";
 const pipelineVersion = "2";
+const deferredWikiAdmission = "Retained evidence-grounded utility deferral";
 const eventSourceKinds = new Set([
     "conversation",
     "document",
@@ -481,6 +488,8 @@ export interface FileMemoryServiceOptions {
     viewPublicationCheckpoint?: (point: "intent" | "index") => Promise<void>;
     viewSynthesisAdapter?: ViewSynthesisAdapter;
     viewModelEndpoint?: string;
+    /** Disable to retain raw-topic summaries instead of lazy curated concepts. */
+    curatedTopics?: boolean;
     indexFactory?: CorpusIndexFactory;
     eventIndexFactory?: CorpusIndexFactory;
     capabilities?: MemoryServiceCapabilities;
@@ -1043,6 +1052,16 @@ export class FileMemoryService
     private readonly viewDrafts: boolean;
     private readonly viewPublicationCheckpoint: FileMemoryServiceOptions["viewPublicationCheckpoint"];
     private readonly viewAdapter: ViewSynthesisAdapter;
+    private readonly curatedTopics: boolean;
+    private readonly summarizeTopicConcept: TopicConceptSummarizer;
+    private readonly topicSummaryWork = new Map<
+        string,
+        {
+            corpusId: string;
+            controller: AbortController;
+            promise: Promise<void>;
+        }
+    >();
     private readonly viewBuilds: ViewBuildRunner;
     private readonly indexFactory: CorpusIndexFactory;
     private readonly eventIndexFactory: CorpusIndexFactory;
@@ -1164,6 +1183,7 @@ export class FileMemoryService
         this.viewPublicationCheckpoint = options.viewPublicationCheckpoint;
         this.viewDrafts = options.viewDrafts !== false;
         this.wikiModelEndpoint = options.viewModelEndpoint;
+        this.curatedTopics = options.curatedTopics ?? true;
         this.indexedAnswerModel = options.indexedAnswerModel;
         this.sourceSynopsesEnabled =
             options.sourceSynopses ?? options.informationalViews !== false;
@@ -1178,6 +1198,11 @@ export class FileMemoryService
                 Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
             );
         this.viewAdapter = adapter;
+        this.summarizeTopicConcept = createConfiguredTopicConceptSummarizer(
+            options.viewModelEndpoint,
+            undefined,
+            adapter,
+        );
         this.admissionPolicy = hashContent(
             JSON.stringify([
                 "bounded-admission-v1",
@@ -1346,7 +1371,11 @@ export class FileMemoryService
                     }),
             },
             this.wikiBudget,
-            createConfiguredTopicGenerator(options.viewModelEndpoint),
+            createConfiguredTopicGenerator(
+                options.viewModelEndpoint,
+                undefined,
+                this.curatedTopics,
+            ),
         );
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
         this.eventIndexFactory = options.eventIndexFactory ?? this.indexFactory;
@@ -1543,6 +1572,8 @@ export class FileMemoryService
             return;
         }
         this.closed = true;
+        for (const work of this.topicSummaryWork.values())
+            work.controller.abort(new Error("Memory service is closing"));
         if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
         const maintenanceClosure = this.maintenance.close();
         await this.initializePromise?.catch(() => undefined);
@@ -1558,6 +1589,7 @@ export class FileMemoryService
             ...this.corpusLoads.values(),
             ...this.indexedReads,
             ...this.reindexWork,
+            ...[...this.topicSummaryWork.values()].map((work) => work.promise),
         ]);
         // Family maintenance may admit a new build while tracked reads drain.
         const viewClosure = await Promise.allSettled([this.viewBuilds.close()]);
@@ -1742,6 +1774,16 @@ export class FileMemoryService
         validateIdentifier("corpus ID", corpusId);
         await this.batchStore.purge(corpusId);
         this.viewBuilds.forget(corpusId);
+        for (const work of this.topicSummaryWork.values())
+            if (work.corpusId === corpusId)
+                work.controller.abort(
+                    new ViewBuildStaleError("Corpus cleared"),
+                );
+        await Promise.allSettled(
+            [...this.topicSummaryWork.values()]
+                .filter((work) => work.corpusId === corpusId)
+                .map((work) => work.promise),
+        );
         return this.enqueueWrite(corpusId, async () => {
             const runtime = await this.getCorpusRuntime(corpusId);
             await this.agentSessionStore.purge(corpusId);
@@ -2620,6 +2662,11 @@ export class FileMemoryService
             await this.writeManifest(request.corpusId, candidateManifest);
             runtime.manifest = candidateManifest;
             this.viewBuilds.forget(request.corpusId, request.sourceId);
+            for (const work of this.topicSummaryWork.values())
+                if (work.corpusId === request.corpusId)
+                    work.controller.abort(
+                        new ViewBuildStaleError("Source removal authorized"),
+                    );
             this.controllers
                 .get(`synopsis:${request.corpusId}:${request.sourceId}`)
                 ?.abort(new ViewBuildStaleError("Source removal authorized"));
@@ -2643,6 +2690,11 @@ export class FileMemoryService
             }
         });
         await this.batchStore.cancelSource(request.corpusId, request.sourceId);
+        await Promise.allSettled(
+            [...this.topicSummaryWork.values()]
+                .filter((work) => work.corpusId === request.corpusId)
+                .map((work) => work.promise),
+        );
         return this.enqueueWrite(
             request.corpusId,
             async () => {
@@ -4019,6 +4071,13 @@ export class FileMemoryService
 
     private async acceptInformationalVersion(view: ViewVersion): Promise<void> {
         if (!informationalWiki(view.content)) return;
+        const publication = await this.viewStore.getViewPublication(view);
+        if (publication.blockedReason) {
+            console.warn(
+                `Informational draft ${view.viewId} saved; publication withheld: ${publication.blockedReason}`,
+            );
+            return;
+        }
         await this.assertViewPublicationFresh(view);
         await this.viewStore.makeInformationalVisible(view);
         await this.indexViewLocked(view);
@@ -5111,21 +5170,20 @@ export class FileMemoryService
             }));
         const { fingerprint: _priorFingerprint, ...checkedInput } = input;
         input.fingerprint = viewHash(checkedInput);
-        const { output, anchors } = preservedCanonicalOutput(
+        const { output: original, anchors } = preservedCanonicalOutput(
             survivor,
             retiring,
         );
-        validateConstructedGuide(input, output);
-        const verification = await abortable(
-            this.viewAdapter.checkWikiConsolidation(
+        const { output, verification } = await abortable(
+            verifyOrRepairWikiConsolidation(
+                this.viewAdapter,
                 input,
-                output,
+                original,
                 assessment,
                 signal,
             ),
             signal,
         );
-        assertEditorialAssessment(verification);
         signal.throwIfAborted();
         const receipt: WikiConsolidationReceipt = {
             identity: viewHash({
@@ -5345,51 +5403,29 @@ export class FileMemoryService
         this.viewBuilds.trackContribution(job.jobId, input);
         await this.checkWikiContributionInput(input);
         signal.throwIfAborted();
-        const candidate = await abortable(
+        let candidate = await abortable(
             this.viewAdapter.generate(input, signal),
             signal,
         );
         signal.throwIfAborted();
         validateConstructedGuide(input, candidate);
-        const { output, conflicts } = mergeView(
-            current,
-            candidate,
-            input.inputs,
-        );
-        let verification = assessment;
-        if (!conflicts.length) {
-            validateConstructedGuide(input, output);
-            const context = wikiPageContext(
+        const prepared = await abortable(
+            prepareWikiContribution(
+                this.viewAdapter,
                 input,
-                {
-                    ...current,
-                    definition: { ...current.definition, ...input.definition },
-                    content: output.content,
-                },
-                undefined,
-                false,
-            );
-            if (!this.viewAdapter.assessWikiSubject)
-                throw new Error(
-                    "Wiki contribution lacks actual-prose coverage checker",
-                );
-            verification = parseWikiAssessment(
-                await abortable(
-                    this.viewAdapter.assessWikiSubject(
-                        input,
-                        [context],
-                        signal,
-                    ),
-                    signal,
-                ),
-                [context],
-                input.wikiContribution?.essentialDistinctions,
-            );
-            if (verification.disposition !== "covered")
-                throw new Error(
-                    "Wiki canonical contribution did not cover all essential old/new distinctions in actual prose",
-                );
-        }
+                candidate,
+                (candidate) => mergeView(current, candidate, input.inputs),
+                signal,
+            ),
+            signal,
+        );
+        candidate = prepared.candidate;
+        const { output, conflicts } = prepared;
+        const verification = conflicts.length
+            ? assessment
+            : prepared.verification;
+        if (!verification)
+            throw new Error("Wiki contribution coverage verification missing");
         await this.enqueueWrite(job.corpusId, async () => {
             signal.throwIfAborted();
             await this.recheckViewInput(result.snapshot);
@@ -5600,7 +5636,10 @@ export class FileMemoryService
                         target.snapshot.influenceSources = structuredClone(
                             result.snapshot.influenceSources,
                         );
-                    if (assessment.disposition === "covered") {
+                    if (assessment.disposition === "defer") {
+                        target.state = "skipped";
+                        target.reason = `Standalone page deferred for insufficient utility: ${assessment.reason}`;
+                    } else if (assessment.disposition === "covered") {
                         target.state = "skipped";
                         target.reason = `Standalone purpose already covered by ${assessment.canonicalViewId}: ${assessment.reason}`;
                     } else if (assessment.disposition === "ambiguous") {
@@ -5609,6 +5648,25 @@ export class FileMemoryService
                     }
                 },
             );
+            if (assessment.disposition === "defer") {
+                const family = await this.viewStore.getWikiFamily(job.corpusId);
+                const descriptor = family.descriptors.find(
+                    (entry) => entry.viewId === result.viewId,
+                );
+                if (descriptor) {
+                    descriptor.admission = {
+                        generation:
+                            result.snapshot.informationalRetrieval
+                                ?.indexGeneration,
+                        policy: this.wikiAdmissionContext(
+                            (await this.viewStore.listViews(job.corpusId))
+                                .views,
+                        ),
+                        reason: deferredWikiAdmission,
+                    };
+                    await this.viewStore.saveWikiFamily(job.corpusId, family);
+                }
+            }
         });
     }
 
@@ -5649,7 +5707,12 @@ export class FileMemoryService
         corpusId: string,
         kind: "wiki" | "projects" = "wiki",
     ): void {
-        if (!this.informationalWikiEnabled || this.closed) return;
+        if (
+            !this.informationalWikiEnabled ||
+            this.closed ||
+            this.ingestionTails.has(corpusId)
+        )
+            return;
         this.maintenance.request(
             corpusId,
             kind,
@@ -6120,6 +6183,33 @@ export class FileMemoryService
         );
     }
 
+    private wikiAdmissionContext(views: ViewVersion[]): string {
+        return hashContent(
+            JSON.stringify([
+                this.admissionPolicy,
+                views.map((view) => [
+                    view.viewId,
+                    view.version,
+                    view.revisionId,
+                ]),
+            ]),
+        );
+    }
+
+    private retainedWikiAdmission(
+        descriptor: WikiFamilyState["descriptors"][number],
+        automatic: boolean,
+        policy: string,
+        generation: string | undefined,
+    ): boolean {
+        return (
+            (automatic ||
+                descriptor.admission?.reason === deferredWikiAdmission) &&
+            descriptor.admission?.policy === policy &&
+            descriptor.admission.generation === generation
+        );
+    }
+
     private async prepareWikiTargets(
         corpusId: string,
         family: WikiFamilyState,
@@ -6134,16 +6224,7 @@ export class FileMemoryService
         const snapshots: ViewBuildSnapshot[] = [];
         const generation = (await this.getCorpusRuntime(corpusId)).manifest
             .indexGeneration;
-        const policy = hashContent(
-            JSON.stringify([
-                this.admissionPolicy,
-                views.map((view) => [
-                    view.viewId,
-                    view.version,
-                    view.revisionId,
-                ]),
-            ]),
-        );
+        const policy = this.wikiAdmissionContext(views);
         const limits = automatic ? this.maintenanceLimits : undefined;
         const targetLimit = limits?.maxTargetsPerPass ?? 12;
         const candidateLimit = limits?.maxCandidatesPerPass ?? Infinity;
@@ -6159,11 +6240,14 @@ export class FileMemoryService
                 (view) => view.viewId === descriptor.viewId,
             );
             if (
-                automatic &&
                 !rebuild &&
                 !current &&
-                descriptor.admission?.policy === policy &&
-                descriptor.admission.generation === generation
+                this.retainedWikiAdmission(
+                    descriptor,
+                    automatic,
+                    policy,
+                    generation,
+                )
             )
                 continue;
             if (inspected >= candidateLimit) {
@@ -6588,15 +6672,18 @@ export class FileMemoryService
             this.topicSources(runtime),
             runtime.manifest.indexGeneration,
             runtime.manifest.knowledgeSuppressions ?? [],
-            this.viewAdapter.identity,
+            `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-lazy-v6" : "raw-v1"}`,
         );
     }
 
     public async queryTopics(
         request: TopicQueryRequest,
     ): Promise<TopicQueryPage> {
+        validateTopicQuery(request);
         const runtime = await this.requireViews(request.corpusId);
         requireTopicIndex(runtime.index);
+        if (request.summarize)
+            await this.ensureTopicConceptSummary(request, runtime);
         return runtime.access.read(async () => {
             const page = await this.viewStore.queryTopics(
                 request,
@@ -6608,6 +6695,76 @@ export class FileMemoryService
                 );
             return page;
         });
+    }
+
+    private async ensureTopicConceptSummary(
+        request: TopicQueryRequest,
+        runtime: CorpusRuntime,
+    ): Promise<void> {
+        const snapshot = await runtime.access.read(async () => {
+            const { snapshot } = await this.viewStore.getTopicState(
+                request.corpusId,
+            );
+            if (
+                !snapshot ||
+                snapshot.inputFingerprint !== this.topicFingerprint(runtime) ||
+                runtime.manifest.pendingCorpusClear ||
+                runtime.manifest.authorizedSourceRemoval
+            )
+                throw new ViewBuildStaleError("Topic concepts are not current");
+            return snapshot;
+        });
+        if (this.closed)
+            throw new ViewBuildStaleError("Memory service is closing");
+        const concept = snapshot.curation?.concepts.find(
+            (entry) => entry.id === request.topicId,
+        );
+        if (!concept)
+            throw new Error("Curated topic does not exist in this generation");
+        if (concept.summary && concept.summaryState !== "pending") return;
+        const key = `${request.corpusId}:${snapshot.generation}:${concept.id}`;
+        const existing = this.topicSummaryWork.get(key);
+        if (existing) return existing.promise;
+        const controller = new AbortController();
+        const signal = AbortSignal.any([
+            controller.signal,
+            AbortSignal.timeout(120000),
+        ]);
+        const promise = Promise.resolve()
+            .then(async () => {
+                const output = await abortable(
+                    this.summarizeTopicConcept(concept, signal),
+                    signal,
+                );
+                signal.throwIfAborted();
+                await this.enqueueWrite(request.corpusId, async () => {
+                    signal.throwIfAborted();
+                    if (
+                        runtime.manifest.pendingCorpusClear ||
+                        runtime.manifest.authorizedSourceRemoval ||
+                        this.topicFingerprint(runtime) !==
+                            snapshot.inputFingerprint
+                    )
+                        throw new ViewBuildStaleError(
+                            "Topic summary evidence changed",
+                        );
+                    await this.viewStore.saveTopicConceptSummary(
+                        request.corpusId,
+                        snapshot.generation,
+                        concept.id,
+                        output,
+                    );
+                });
+            })
+            .finally(() => {
+                this.topicSummaryWork.delete(key);
+            });
+        this.topicSummaryWork.set(key, {
+            corpusId: request.corpusId,
+            controller,
+            promise,
+        });
+        return promise;
     }
 
     public async rebuildTopics(corpusId: string): Promise<ViewBuildJob> {
@@ -6676,7 +6833,7 @@ export class FileMemoryService
             index: runtime.index,
             sources: this.topicSources(runtime),
             suppressions: runtime.manifest.knowledgeSuppressions ?? [],
-            model: this.viewAdapter.identity,
+            model: `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-lazy-v6" : "raw-v1"}`,
             ...(runtime.manifest.indexGeneration
                 ? { indexGeneration: runtime.manifest.indexGeneration }
                 : {}),
@@ -6756,6 +6913,8 @@ export class FileMemoryService
         let family = reconcileTopicFamily(
             state.family,
             runtime.manifest.indexGeneration,
+            state.snapshot?.inputFingerprint,
+            this.topicFingerprint(runtime),
         );
         const jobs = await this.viewStore.listViewBuilds(corpusId);
         const latest = jobs.filter((job) =>
@@ -6763,7 +6922,14 @@ export class FileMemoryService
                 (result) => result.snapshot.pipeline === "topics-v1",
             ),
         )[0];
-        if (latest?.state === "interrupted")
+        if (
+            latest?.state === "interrupted" &&
+            latest.results.some(
+                (result) =>
+                    result.snapshot.fingerprint ===
+                    this.topicFingerprint(runtime),
+            )
+        )
             family = checkpointTopicFamily(family, latest, jobs);
         await this.viewStore.saveTopicFamily(corpusId, family);
         if (topicFamilyCanSchedule(family))
@@ -6774,6 +6940,7 @@ export class FileMemoryService
         if (
             !this.informationalWikiEnabled ||
             this.closed ||
+            this.ingestionTails.has(corpusId) ||
             !runtime.manifest.sources.length ||
             !supportsTopicIndex(runtime.index)
         )
@@ -6797,6 +6964,8 @@ export class FileMemoryService
                         const family = reconcileTopicFamily(
                             state.family,
                             runtime.manifest.indexGeneration,
+                            state.snapshot?.inputFingerprint,
+                            this.topicFingerprint(runtime),
                         );
                         if (!topicFamilyCanSchedule(family)) return;
                         if (this.maintenance.isDeferred(corpusId)) return;
@@ -6815,6 +6984,7 @@ export class FileMemoryService
                 );
                 await this.waitForMaintenanceBuild(result, "topics", signal);
             },
+            1000,
         );
     }
 
@@ -8998,8 +9168,10 @@ export class FileMemoryService
         try {
             await work;
         } finally {
-            if (this.ingestionTails.get(corpusId) === settled)
+            if (this.ingestionTails.get(corpusId) === settled) {
                 this.ingestionTails.delete(corpusId);
+                this.resumeBatchMaintenance(corpusId);
+            }
         }
     }
 
@@ -9344,6 +9516,13 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<void> {
+        for (const work of this.topicSummaryWork.values())
+            if (work.corpusId === corpusId)
+                work.controller.abort(
+                    new ViewBuildStaleError(
+                        "Topic summary evidence was superseded",
+                    ),
+                );
         runtime.documentIndex = {
             generation: runtime.manifest.indexGeneration,
             index: runtime.index,
@@ -9352,6 +9531,27 @@ export class FileMemoryService
                 "documents",
             ),
         };
+        if (
+            this.informationalWikiEnabled &&
+            supportsTopicIndex(runtime.index)
+        ) {
+            const fingerprint = this.topicFingerprint(runtime);
+            for (const job of await this.viewStore.listViewBuilds(corpusId))
+                if (
+                    job.state === "running" &&
+                    job.results.some(
+                        (result) =>
+                            result.snapshot.pipeline === "topics-v1" &&
+                            result.snapshot.fingerprint !== fingerprint,
+                    )
+                )
+                    this.viewBuilds.cancel(
+                        job.jobId,
+                        new ViewBuildStaleError(
+                            "Topic index generation was superseded",
+                        ),
+                    );
+        }
         this.scheduleTopics(corpusId, runtime);
     }
 
@@ -9776,7 +9976,12 @@ export class FileMemoryService
     }
 
     private scheduleSourceSynopses(corpusId: string): void {
-        if (!this.sourceSynopsesEnabled || this.closed) return;
+        if (
+            !this.sourceSynopsesEnabled ||
+            this.closed ||
+            this.ingestionTails.has(corpusId)
+        )
+            return;
         this.maintenance.request(
             corpusId,
             "synopsis",

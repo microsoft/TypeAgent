@@ -8,8 +8,13 @@ import {
 } from "./informationalWiki.js";
 import { projectBriefRoles, parseProjectBriefDetails } from "./projectBrief.js";
 import { parseIndexedLocator } from "./indexedFragments.js";
-import { viewSourceKey } from "./viewContent.js";
-import { evidenceRecord, evidenceText } from "./viewSynthesisEvidence.js";
+import { assertViewIdentifier, viewSourceKey } from "./viewContent.js";
+import { factStatuses } from "./viewInventory.js";
+import {
+    evidenceArray,
+    evidenceRecord,
+    evidenceText,
+} from "./viewSynthesisEvidence.js";
 import type {
     ProjectBriefContent,
     ProjectBriefDetails,
@@ -78,6 +83,11 @@ export function projectSummarySchema(
     const common = informationalSchema(ids);
     const properties = {
         title: { type: "string" },
+        summary: { type: "string" },
+        completeness: {
+            type: "string",
+            enum: ["partial", "sufficient"],
+        },
         ...Object.fromEntries(
             projectBriefRoles.map((role) => [role, { type: "string" }]),
         ),
@@ -100,6 +110,83 @@ export function projectSummarySchema(
                 "notApplicable",
             ],
         },
+        assignments: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    id: { type: "string" },
+                    responsibility: { type: "string" },
+                    state: {
+                        type: "string",
+                        enum: ["known", "unknown", "unassigned"],
+                    },
+                    owner: {
+                        anyOf: [{ type: "string" }, { type: "null" }],
+                    },
+                },
+                required: ["id", "responsibility", "state", "owner"],
+            },
+        },
+        milestoneItems: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    id: { type: "string" },
+                    status: {
+                        type: "string",
+                        enum: [
+                            "proposed",
+                            "confirmed",
+                            "blocked",
+                            "deferred",
+                            "unknown",
+                        ],
+                    },
+                    date: {
+                        anyOf: [{ type: "string" }, { type: "null" }],
+                    },
+                },
+                required: ["id", "status", "date"],
+            },
+        },
+        decisionItems: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    id: { type: "string" },
+                    status: {
+                        type: "string",
+                        enum: [...factStatuses],
+                    },
+                },
+                required: ["id", "status"],
+            },
+        },
+        openQuestions: {
+            type: "array",
+            items: { type: "string" },
+        },
+        riskItems: {
+            type: "array",
+            items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                    id: { type: "string" },
+                    status: {
+                        type: "string",
+                        enum: ["open", "blocked", "resolved", "unknown"],
+                    },
+                },
+                required: ["id", "status"],
+            },
+        },
     };
     return {
         ...common,
@@ -113,37 +200,72 @@ export function projectSummarySchema(
     };
 }
 
+function parseStructuredItems(items: unknown): Array<Record<string, unknown>> {
+    const seen = new Set<string>();
+    return evidenceArray(items, 128).map((item) => {
+        const entry = { ...evidenceRecord(item) };
+        if (typeof entry.id !== "string")
+            throw new Error("Invalid informational project item id");
+        assertViewIdentifier("project item", entry.id);
+        if (seen.has(entry.id))
+            throw new Error("Duplicate informational project item id");
+        seen.add(entry.id);
+        return entry;
+    });
+}
+
 export function hydrateProjectSummary(
     input: ViewBuildSnapshot,
     value: unknown,
-): ViewSynthesisOutput {
+): ViewSynthesisOutput & { content: ProjectBriefContent } {
     if (!value || typeof value !== "object" || Array.isArray(value))
         throw new Error("Invalid informational project-summary response");
     const raw = evidenceRecord(value);
-    const keys = [
+    const requiredStringKeys = [
         "title",
+        "summary",
+        "completeness",
         ...projectBriefRoles,
         "limits",
-        "citationIds",
         "projectState",
         "incidentState",
         "capacityState",
     ];
+    const allowedKeys = [
+        ...requiredStringKeys,
+        "citationIds",
+        "assignments",
+        "milestoneItems",
+        "decisionItems",
+        "openQuestions",
+        "riskItems",
+    ];
     if (
-        Object.keys(raw).some((key) => !keys.includes(key)) ||
-        keys
-            .filter((key) => key !== "citationIds")
-            .some((key) => {
-                const field = raw[key];
-                return typeof field !== "string" || !field.trim();
-            })
+        Object.keys(raw).some((key) => !allowedKeys.includes(key)) ||
+        requiredStringKeys.some((key) => {
+            const field = raw[key];
+            return typeof field !== "string" || !field.trim();
+        }) ||
+        (raw.summary !== undefined &&
+            (typeof raw.summary !== "string" ||
+                !raw.summary.trim() ||
+                raw.summary.length > 4000)) ||
+        (raw.completeness !== undefined &&
+            raw.completeness !== "partial" &&
+            raw.completeness !== "sufficient")
     )
         throw new Error("Invalid informational project-summary fields");
     const base = hydrateInformational(input, {
         title: raw.title,
+        summary: raw.summary,
+        status: raw.completeness,
         prose: raw.goalsScope,
         limits: raw.limits,
         citationIds: raw.citationIds,
+    });
+    const owners = parseProjectBriefDetails({
+        kind: "owners",
+        assignments: parseStructuredItems(raw.assignments),
     });
     const status = parseProjectBriefDetails({
         kind: "status",
@@ -151,16 +273,32 @@ export function hydrateProjectSummary(
         incident: raw.incidentState,
         capacity: raw.capacityState,
     });
+    const milestones = parseProjectBriefDetails({
+        kind: "milestones",
+        items: parseStructuredItems(raw.milestoneItems),
+    });
+    const decisions = parseProjectBriefDetails({
+        kind: "decisions",
+        items: parseStructuredItems(raw.decisionItems),
+    });
+    const openQuestions = evidenceArray(raw.openQuestions, 128).map((entry) =>
+        evidenceText(entry),
+    );
+    const risks = parseProjectBriefDetails({
+        kind: "risks",
+        items: parseStructuredItems(raw.riskItems),
+        ...(openQuestions !== undefined ? { openQuestions } : {}),
+    });
     const details: Record<
         (typeof projectBriefRoles)[number],
         ProjectBriefDetails
     > = {
         goalsScope: { kind: "goalsScope" },
-        owners: { kind: "owners", assignments: [] },
+        owners,
         status,
-        milestones: { kind: "milestones", items: [] },
-        decisions: { kind: "decisions", items: [] },
-        risks: { kind: "risks", items: [] },
+        milestones,
+        decisions,
+        risks,
         context: {
             kind: "context",
             asOf: null,
@@ -170,6 +308,8 @@ export function hydrateProjectSummary(
     const content: ProjectBriefContent = {
         kind: "projectBrief",
         construction: "informational-project-summary-v1",
+        status: base.content.status,
+        coverageNote: base.content.coverageNote,
         title: base.content.title,
         summary: base.content.summary!,
         sections: projectBriefRoles.map((role) => ({
@@ -199,6 +339,12 @@ export function validateInformationalProjectContent(
     content: ProjectBriefContent,
 ): void {
     if (
+        content.coverageNote !== undefined &&
+        (typeof content.coverageNote !== "string" ||
+            content.coverageNote.length > 4000)
+    )
+        throw new Error("Invalid informational coverage note");
+    if (
         !informationalProject(content) ||
         content.sections.length !== 7 ||
         new Set(content.sections.map((section) => section.role)).size !== 7 ||
@@ -206,9 +352,12 @@ export function validateInformationalProjectContent(
             (role) =>
                 !content.sections.some((section) => section.role === role),
         ) ||
-        !content.summary?.startsWith(
-            "Limited summary: selected indexed fragments only;",
-        )
+        typeof content.summary !== "string" ||
+        !content.summary.trim() ||
+        content.summary.length > 4000 ||
+        (content.status !== undefined &&
+            content.status !== "partial" &&
+            content.status !== "sufficient")
     )
         throw new Error("Invalid informational project-summary content");
     for (const section of content.sections) {

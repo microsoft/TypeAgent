@@ -254,6 +254,8 @@ export function offlineConsolidationAdapter() {
                 (source) => source.passages ?? [],
             );
             return hydrateInformational(input, {
+                summary: "Grounded reference summary.",
+                status: "partial",
                 title:
                     input.editorial?.generatedBase.content.title ??
                     input.definition.wiki!.query,

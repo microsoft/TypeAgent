@@ -68,6 +68,21 @@ class DeterministicModel implements SourceSynopsisModel {
     }
     async complete(prompt: string): Promise<string> {
         this.calls.push(prompt);
+        if (prompt.includes('"distinctions":')) {
+            const input = JSON.parse(
+                prompt.slice(prompt.lastIndexOf("\n") + 1),
+            ) as {
+                distinctions: string[];
+                overview: string;
+            };
+            const safe = input.distinctions.every((text) =>
+                input.overview.includes(text),
+            );
+            return JSON.stringify({
+                safe,
+                failures: safe ? [] : ["scope-state"],
+            });
+        }
         const input = readPrompt(prompt);
         if (input.summaries) {
             const selected =
@@ -597,7 +612,7 @@ describe("source synopsis orchestration", () => {
                 model.complete = async (prompt) => {
                     const input = readPrompt(prompt);
                     const output = JSON.parse(await complete(prompt));
-                    if (!input.summaries && input.text.includes(detail)) {
+                    if (!input.summaries && input.text?.includes(detail)) {
                         output[key] = [detail];
                         output.overview = detail;
                     } else if (input.summaries) {
@@ -623,7 +638,9 @@ describe("source synopsis orchestration", () => {
                         new AbortController().signal,
                     ),
                 ).rejects.toThrow(
-                    "dropped a supplied governing qualification or contrast",
+                    drop === "array"
+                        ? "dropped a supplied governing qualification or contrast"
+                        : "Editorial rejection",
                 );
             }
         },
@@ -688,9 +705,53 @@ describe("source synopsis orchestration", () => {
                 model,
                 new AbortController().signal,
             ),
-        ).rejects.toThrow(
-            "dropped a supplied governing qualification or contrast",
+        ).rejects.toThrow("Editorial rejection");
+    });
+
+    test("composition delegates paraphrase fidelity to a semantic editorial verdict rather than word overlap", async () => {
+        const detail =
+            "Only the amber cohort is approved; the violet cohort is excluded.";
+        const paraphrase =
+            "Clearance applies exclusively to the first group. The second group remains outside the authorization.";
+        const content =
+            "# Scope\n" + "Neutral observation.\n".repeat(900) + "\n" + detail;
+        const model = new DeterministicModel(7000);
+        const complete = model.complete.bind(model);
+        let checked = 0;
+        model.complete = async (prompt) => {
+            if (prompt.includes('"distinctions":')) {
+                checked++;
+                expect(prompt).toContain(detail);
+                expect(prompt).toContain(paraphrase);
+                return JSON.stringify({ safe: true, failures: [] });
+            }
+            const input = readPrompt(prompt);
+            const output = JSON.parse(await complete(prompt));
+            if (input.text?.includes(detail)) {
+                output.qualifications = [detail];
+                output.overview = detail;
+            }
+            if (input.summaries) {
+                output.qualifications = [
+                    ...new Set(
+                        input.summaries.flatMap(
+                            (summary) => summary.qualifications,
+                        ),
+                    ),
+                ];
+                if (output.qualifications.length) output.overview = paraphrase;
+            }
+            return JSON.stringify(output);
+        };
+        const output = await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
         );
+        expect(output.overview).toBe(paraphrase);
+        expect(checked).toBeGreaterThan(0);
     });
 
     test("rejects fabricated indexed locators, out-of-section evidence and uncomposable output", async () => {
@@ -726,7 +787,7 @@ describe("source synopsis orchestration", () => {
     });
 
     test("one semantic fingerprint ignores index timestamps/generations but includes recipe, role, title and eligibility", () => {
-        expect(sourceSynopsisRecipe).toBe("source-synopsis-v4");
+        expect(sourceSynopsisRecipe).toBe("source-synopsis-v6");
         const hash = synopsisInputHash(source, revision, "model", true);
         const legacyV3Hash = createHash("sha256")
             .update(
