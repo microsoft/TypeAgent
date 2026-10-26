@@ -15,6 +15,10 @@ import {
 import * as kp from "@typeagent/knowpro";
 import { isInitiativeSubject } from "./initiativeDiscovery.js";
 import { indexedTopicOccurrence } from "./topicIncidence.js";
+import {
+    admitGraphReference,
+    excludedGraphKnowledge,
+} from "./graphProjection.js";
 import type { TopicOccurrence } from "./topicTypes.js";
 import { symbolicIdentity, usefulWikiSubject } from "./wikiGrouping.js";
 import { access, readFile, rm } from "node:fs/promises";
@@ -1822,8 +1826,28 @@ export class KnowProCorpusIndex implements CorpusIndex {
         return occurrences;
     }
 
+    public async readKnowledgeGraph(
+        sourceIds: ReadonlySet<string>,
+        kind: "entities" | "topics",
+        excludedNamesBySource?: ReadonlyMap<string, ReadonlySet<string>>,
+    ): Promise<MemoryKnowledgeGraph> {
+        return this.collectKnowledgeGraph(
+            sourceIds,
+            kind,
+            excludedNamesBySource,
+        );
+    }
+
     public async getKnowledgeGraph(
         sourceIds?: ReadonlySet<string>,
+    ): Promise<MemoryKnowledgeGraph> {
+        return this.collectKnowledgeGraph(sourceIds);
+    }
+
+    private async collectKnowledgeGraph(
+        sourceIds?: ReadonlySet<string>,
+        boundedKind?: "entities" | "topics",
+        excludedNamesBySource?: ReadonlyMap<string, ReadonlySet<string>>,
     ): Promise<MemoryKnowledgeGraph> {
         if (this.memory === undefined) {
             return { entities: [], topics: [], relationships: [] };
@@ -1856,23 +1880,29 @@ export class KnowProCorpusIndex implements CorpusIndex {
             }
         >();
 
-        const countedEntityOrdinals = new Map<string, Set<number>>();
-        const countedTopicOrdinals = new Map<string, Set<number>>();
+        let examined = 0;
+        const countedTopicUserOrdinals = new Map<string, Set<number>>();
+        const countedEntityUserOrdinals = new Map<string, Set<number>>();
         for (const semanticRef of this.memory.semanticRefs ?? []) {
-            if (!this.eligible(semanticRef.range.start.messageOrdinal))
-                continue;
-            const message = this.memory.messages.get(
-                semanticRef.range.start.messageOrdinal,
-            );
-            const sourceId = parseSourceUri(
-                message?.metadata.sourceUrl,
-            )?.sourceId;
             if (
-                sourceIds !== undefined &&
-                (sourceId === undefined || !sourceIds.has(sourceId))
-            ) {
+                !admitGraphReference(
+                    boundedKind,
+                    ++examined,
+                    semanticRef.knowledgeType,
+                    entities.size + topics.size,
+                    relationships.size,
+                )
+            )
                 continue;
-            }
+            const messageOrdinal = semanticRef.range.start.messageOrdinal;
+            const sourceId = this.graphReferenceSource(
+                messageOrdinal,
+                semanticRef.knowledgeType,
+                semanticRef.knowledge,
+                sourceIds,
+                excludedNamesBySource,
+            );
+            if (sourceId === undefined) continue;
             if (semanticRef.knowledgeType === "entity") {
                 const entity = semanticRef.knowledge as EntityKnowledge;
                 const key = entity.name.trim().toLocaleLowerCase();
@@ -1886,18 +1916,16 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     sourceIds: new Set<string>(),
                 };
                 const counted =
-                    countedEntityOrdinals.get(key) ?? new Set<number>();
-                countedEntityOrdinals.set(key, counted);
+                    countedEntityUserOrdinals.get(key) ?? new Set<number>();
+                countedEntityUserOrdinals.set(key, counted);
                 aggregate.mentionCount += countIndependentMention(
                     this.memory,
-                    semanticRef.range.start.messageOrdinal,
+                    messageOrdinal,
                     entity.name,
                     counted,
                 );
                 entity.type.forEach((type) => aggregate.types.add(type));
-                if (sourceId !== undefined) {
-                    aggregate.sourceIds.add(sourceId);
-                }
+                aggregate.sourceIds.add(sourceId);
                 entities.set(key, aggregate);
             } else if (semanticRef.knowledgeType === "topic") {
                 const name = (
@@ -1913,17 +1941,15 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     sourceIds: new Set<string>(),
                 };
                 const counted =
-                    countedTopicOrdinals.get(key) ?? new Set<number>();
-                countedTopicOrdinals.set(key, counted);
+                    countedTopicUserOrdinals.get(key) ?? new Set<number>();
+                countedTopicUserOrdinals.set(key, counted);
                 aggregate.mentionCount += countIndependentMention(
                     this.memory,
-                    semanticRef.range.start.messageOrdinal,
+                    messageOrdinal,
                     name,
                     counted,
                 );
-                if (sourceId !== undefined) {
-                    aggregate.sourceIds.add(sourceId);
-                }
+                aggregate.sourceIds.add(sourceId);
                 topics.set(key, aggregate);
             } else if (semanticRef.knowledgeType === "action") {
                 const action = semanticRef.knowledge as ActionKnowledge;
@@ -1945,13 +1971,17 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     sourceIds: new Set<string>(),
                 };
                 aggregate.count++;
-                if (sourceId !== undefined) {
-                    aggregate.sourceIds.add(sourceId);
-                }
+                aggregate.sourceIds.add(sourceId);
                 relationships.set(key, aggregate);
             }
         }
-
+        admitGraphReference(
+            boundedKind,
+            examined,
+            "",
+            entities.size + topics.size,
+            relationships.size,
+        );
         return {
             entities: [...entities.values()].map((entity) => ({
                 ...entity,
@@ -1967,6 +1997,36 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 sourceIds: [...relationship.sourceIds],
             })),
         };
+    }
+    private graphReferenceSource(
+        ordinal: number,
+        knowledgeType: string,
+        knowledge: unknown,
+        sourceIds: ReadonlySet<string> | undefined,
+        excludedNamesBySource:
+            | ReadonlyMap<string, ReadonlySet<string>>
+            | undefined,
+    ): string | undefined {
+        const source = parseSourceUri(
+            this.memory?.messages.get(ordinal)?.metadata.sourceUrl,
+        );
+        if (
+            !source ||
+            this.activeRevisions.get(source.sourceId) !== source.revisionId ||
+            (sourceIds && !sourceIds.has(source.sourceId)) ||
+            excludedGraphKnowledge(
+                knowledge,
+                excludedNamesBySource?.get(source.sourceId),
+            ) ||
+            excludedGraphKnowledge(
+                knowledge,
+                excludedNamesBySource?.get(
+                    `${source.sourceId}\0${knowledgeType === "topic" ? "topic" : "entity"}`,
+                ),
+            )
+        )
+            return undefined;
+        return source.sourceId;
     }
 }
 

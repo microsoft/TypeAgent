@@ -9,6 +9,9 @@ import type {
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import type { MemoryAcquisitionProgressService } from "@typeagent/memory-client";
 import {
+    inventoryPageRequestSchema,
+    viewSummaryRequestSchema,
+    viewPublicationBatchRequestSchema,
     knowledgeCorpusRequestSchema,
     knowledgeDiscoveryUpdateSchema,
     knowledgeCheckpointRequestSchema,
@@ -26,6 +29,9 @@ type ViewMethods = Pick<
     | "memoryQueryTopics"
     | "memoryRebuildTopics"
     | "memoryListViews"
+    | "memoryListViewSummaries"
+    | "memoryListViewBuildSummaries"
+    | "memoryGetViewPublications"
     | "memoryListQuestions"
     | "memoryListQuestionSummaries"
     | "memoryGetQuestion"
@@ -129,6 +135,18 @@ export function createMemoryViewFunctions(
         memoryQueryTopics: (request) => views().queryTopics(request),
         memoryRebuildTopics: ({ corpusId }) => views().rebuildTopics(corpusId),
         memoryListViews: ({ corpusId }) => views().listViews(corpusId),
+        memoryListViewSummaries: (request) => {
+            viewSummaryRequestSchema.parse(request);
+            return required("listViewSummaries")(request);
+        },
+        memoryListViewBuildSummaries: (request) => {
+            inventoryPageRequestSchema.parse(request);
+            return required("listViewBuildSummaries")(request);
+        },
+        memoryGetViewPublications: (request) => {
+            viewPublicationBatchRequestSchema.parse(request);
+            return required("getViewPublications")(request);
+        },
         memoryListQuestions: ({ corpusId }) =>
             required("listQuestions")(corpusId),
         memoryListQuestionSummaries: (request) =>

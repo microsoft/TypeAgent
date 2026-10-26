@@ -14,146 +14,6 @@ body[data-memory-hub] {
   --accent-soft-hover: color-mix(in srgb, var(--primary) 16%, var(--surface));
 }
 
-#page-questions .hub-qhead,
-#page-questions .hub-qfilters,
-#page-questions .hub-row-actions,
-#page-questions .hub-qmeta,
-#page-questions .hub-qdetail-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-#page-questions .hub-qfilters {
-  margin-bottom: 12px;
-}
-#page-questions .hub-qfilters input[type="search"] {
-  flex: 1 1 180px;
-  max-width: 320px;
-  min-height: 30px;
-}
-#page-questions .hub-rows {
-  display: grid;
-  gap: 2px;
-  margin-top: 6px;
-}
-#page-questions .hub-grow {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-#page-questions .hub-muted,
-#page-questions .hub-qmeta {
-  color: var(--muted);
-  font-size: 13px;
-}
-#page-questions .hub-notice {
-  margin-bottom: 12px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-alt);
-}
-#page-questions .hub-split {
-  display: grid;
-  grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr);
-  gap: 16px;
-  align-items: start;
-}
-#page-questions .hub-qlist {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-#page-questions .hub-qrow {
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  cursor: pointer;
-}
-#page-questions .hub-qrow:hover {
-  background: var(--surface-alt);
-}
-#page-questions .hub-qrow.selected {
-  border-color: var(--primary);
-  background: var(--accent-soft-hover);
-}
-#page-questions .hub-qrow > button {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-}
-#page-questions .hub-qmeta {
-  margin-top: 4px;
-}
-#page-questions .hub-qmeta small {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-#page-questions .hub-qdetail {
-  position: sticky;
-  top: 8px;
-  max-height: calc(100vh - 24px);
-  min-width: 0;
-  overflow: auto;
-  padding: 0 4px 16px;
-}
-#page-questions .hub-qdetail:empty::before {
-  content: "Select a question to see its answers.";
-  color: var(--muted);
-}
-#page-questions .hub-qdetail-head h3 {
-  flex: 1 1 100%;
-  margin: 0;
-  font-size: 16px;
-}
-#page-questions .hub-qdetail details {
-  margin: 10px 0;
-}
-#page-questions summary {
-  cursor: pointer;
-  font-weight: 600;
-}
-#page-questions .hub-fields {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 2px 12px;
-  margin: 0 0 6px;
-}
-#page-questions .hub-fields dt {
-  color: var(--muted);
-  font-size: 13px;
-}
-#page-questions .hub-fields dd {
-  margin: 0;
-}
-#page-questions .hub-panel {
-  margin-top: 20px;
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-@media (max-width: 900px) {
-  #page-questions .hub-split {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  #page-questions .hub-qdetail {
-    position: static;
-    max-height: none;
-  }
-}
-
 [hidden] {
   display: none !important;
 }
@@ -224,6 +84,103 @@ body[data-memory-hub] {
 }
 .hub-view-section {
   margin: 20px 0;
+}
+.hub-view-document .markdown-preview {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.hub-view-document h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+.hub-view-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.hub-view-section > h3 {
+  margin: 20px 0 8px;
+  font-size: 15px;
+}
+.hub-view-document > details {
+  margin: 12px 0;
+}
+.hub-view-document summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.hub-view-document details > .hub-row-actions {
+  padding: 2px 0;
+}
+.hub-related {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.hub-related h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.hub-related ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hub-related button {
+  padding: 3px 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.hub-related button:hover {
+  text-decoration: underline;
+}
+.hub-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.hub-view-more-actions > summary {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  list-style: none;
+  cursor: pointer;
+}
+.hub-view-more-actions > summary::-webkit-details-marker {
+  display: none;
+}
+.hub-view-more-actions > summary:hover {
+  background: var(--surface-alt);
+}
+.hub-draft-views:has(.hub-view-document) > h3,
+.hub-draft-views:has(.hub-view-document) > p,
+.hub-draft-views:has(.hub-view-document) > .hub-view-build-receipt {
+  display: none;
+}
+.hub-draft-views:has(.hub-view-document) .hub-view-actions {
+  max-width: 900px;
+  margin: 0 auto 8px;
+}
+.hub-view-lead {
+  font-size: 1.05em;
+  line-height: 1.5;
+  margin: 12px 0 20px;
 }
 .hub-view-section > details {
   margin-top: 12px;
@@ -511,6 +468,16 @@ body[data-memory-hub] {
 }
 .hub-chip:empty {
   display: none;
+}
+.hub-chip.bad {
+  border-color: transparent;
+  background: var(--danger-soft, #fdf1ec);
+  color: var(--danger-text, #a4380d);
+}
+.hub-chip.good {
+  border-color: transparent;
+  background: var(--ok-soft, #eef8f1);
+  color: var(--ok-text, #1b6b3a);
 }
 .hub-chip.warn {
   border-color: transparent;
@@ -1253,4 +1220,259 @@ textarea:focus-visible {
 }
 .phase2-search-insights .knowledge-cards {
   max-height: none;
+}
+
+/* Questions: list on the left, selected question beside it */
+.hub-qhead {
+  flex-wrap: wrap;
+}
+.hub-qfilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.hub-qfilters input[type="search"] {
+  flex: 1 1 180px;
+  max-width: 320px;
+  min-height: 30px;
+}
+.hub-rows {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+}
+.hub-rows .hub-row-actions {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+}
+.hub-grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.hub-muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+.hub-notice {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--warn-soft);
+  color: var(--warn-text);
+}
+.hub-notice p {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 2px 0;
+  font-size: 13px;
+}
+.hub-notice i {
+  margin-right: 8px;
+}
+.hub-split {
+  display: grid;
+  grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr);
+  gap: 16px;
+  align-items: start;
+}
+.hub-qlist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.hub-qrow {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.hub-qrow:hover {
+  background: var(--surface-alt);
+}
+.hub-qrow.selected {
+  border-color: var(--primary);
+  background: var(--accent-soft-hover);
+}
+.hub-qrow > button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.hub-qmeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--muted);
+}
+.hub-qmeta small {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hub-qdetail {
+  position: sticky;
+  top: 8px;
+  max-height: calc(100vh - 24px);
+  min-width: 0;
+  overflow: auto;
+  padding: 0 4px 16px;
+}
+.hub-qdetail:empty::before {
+  content: "Select a question to see its answers.";
+  color: var(--muted);
+}
+.hub-qdetail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.hub-qdetail-head h3 {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 16px;
+}
+.hub-qdetail-head .hub-row-actions {
+  margin-left: auto;
+}
+.hub-qdetail details {
+  margin: 10px 0;
+}
+.hub-qdetail summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.hub-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0 0 6px;
+}
+.hub-fields dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+.hub-fields dd {
+  margin: 0;
+}
+.hub-panel {
+  margin-top: 20px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.hub-panel > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+@media (max-width: 900px) {
+  .hub-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hub-qdetail {
+    position: static;
+    max-height: none;
+  }
+}
+.hub-qdetail .card .hub-row-actions {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.hub-view-document h2:focus {
+  outline: none;
+}
+.hub-related button {
+  min-height: 0;
+  padding: 2px 0;
+  line-height: 1.4;
+}
+.hub-related li {
+  margin: 0;
+}
+.hub-view-card {
+  cursor: pointer;
+}
+.hub-view-card:hover {
+  background: var(--surface-alt);
+}
+.hub-view-card-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.hub-view-card-title button {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.hub-view-card .hub-muted {
+  margin: 6px 0 0;
+}
+.hub-view-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.hub-view-toolbar input[type="search"] {
+  flex: 1 1 180px;
+  max-width: 320px;
+  min-height: 32px;
+}
+.hub-view-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hub-flyout .hub-view-build-receipt {
+  margin: 0;
+}
+.hub-flyout pre {
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.hub-result {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.hub-result > p {
+  margin: 6px 0;
+}
+.hub-result .hub-grow {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

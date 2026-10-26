@@ -1,5 +1,15 @@
 # @typeagent/memory-client
 
+Scoped graphs are available through `queryKnowledgeGraph` and
+`queryGraphSupport` on supporting hosts. The same bounded request/response
+schemas validate in-process, RPC and MCP graph operations. Graph responses expose
+coverage and generation-bound continuation tokens; clients must not treat
+`building`, `stale`, `error` or `unsupported` coverage as complete evidence.
+`features.scopedKnowledgeGraphs` reports support for these operations, not that
+every requested projection is already prepared.
+View/build summary pages and batched publication status support lazy navigation
+without loading full view bodies.
+
 ## Knowledge readiness and answering
 
 Both clients expose `getKnowledgeStatus`, `updateKnowledgeDiscovery`,

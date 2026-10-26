@@ -4,8 +4,10 @@
 import type { MemoryQuestion } from "./schemaViewTypes.js";
 import type {
     MemoryQuestionSummary,
+    ViewBuildSummary,
     InventoryPageRequest,
 } from "./inventoryTypes.js";
+import type { ViewBuildJob } from "./viewTypes.js";
 
 export function validateInventoryPage(request: InventoryPageRequest): void {
     if (
@@ -67,4 +69,30 @@ export function questionNeedsAttention(
         (question.slot.rubric.requireConfirmation &&
             question.details.hasUnreviewedCandidates)
     );
+}
+
+export function buildSummary(
+    job: ViewBuildJob,
+    latest?: ReadonlyMap<string, string>,
+): ViewBuildSummary {
+    return {
+        jobId: job.jobId,
+        corpusId: job.corpusId,
+        state: job.state,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        maintenance: !!job.maintenancePlan,
+        results: job.results.map((result) => ({
+            viewId: result.viewId,
+            state: result.state,
+            reason: result.reason,
+            current: !latest || latest.get(result.viewId) === job.jobId,
+            ...(result.revisionId ? { revisionId: result.revisionId } : {}),
+            ...(result.conflictId ? { conflictId: result.conflictId } : {}),
+            snapshot: {
+                pipeline: result.snapshot.pipeline,
+                definition: { kind: result.snapshot.definition.kind },
+            },
+        })),
+    };
 }

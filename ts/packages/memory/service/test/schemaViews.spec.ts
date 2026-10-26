@@ -984,7 +984,11 @@ describe("ordinary-source schema lifecycle", () => {
                 corpusId: corpus.corpusId,
                 viewIds: ["assisted"],
             });
-            if (plan.targets.every((target) => target.state === "unchanged"))
+            const builds = await service.listViewBuilds(corpus.corpusId);
+            if (
+                plan.targets.every((target) => target.state === "unchanged") &&
+                builds.every((build) => build.state !== "running")
+            )
                 break;
             await new Promise((resolve) => setTimeout(resolve, 10));
         }

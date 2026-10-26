@@ -115,6 +115,7 @@
           </div>
           <div id="hubInbox"></div>
           <div id="hubViewAttention"></div>
+          <div id="hubQuestionAttention"></div>
           <div class="pager">
             <button
               id="inboxPrevious"
@@ -136,6 +137,9 @@
               <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
             </button>
           </div>
+        </section>
+        <section id="page-questions" class="hub-page hidden">
+          <div id="hubQuestions"></div>
         </section>
         <section id="page-search" class="hub-page hidden">
           <div class="hub-page-head">
@@ -161,10 +165,6 @@
           <div class="hub-page-head"><h2>Views</h2></div>
           <div id="hubDraftViews"></div>
         </section>
-        <section id="page-questions" class="hub-page hidden">
-          <div id="hubQuestions"></div>
-          <div id="hubQuestionAttention"></div>
-        </section>
         <section id="page-explore" class="hub-page hidden">
           <div class="hub-page-head">
             <h2>Explore</h2>
@@ -185,10 +185,6 @@
             >
             <a href="#/explore/web/topics" data-explore-view="topics"
               ><i class="fa-solid fa-tags" aria-hidden="true"></i>Topic graph</a
-            >
-            <a href="#/explore/web/analytics" data-explore-view="analytics"
-              ><i class="fa-solid fa-chart-column" aria-hidden="true"></i
-              >Reading analytics</a
             >
           </nav>
           <div id="hubExplore"></div>
@@ -275,8 +271,7 @@
         </select>
       </label>
       <p id="addTargetHint" class="hub-hint">
-        Used for Markdown, PDF and runbook sources. Page capture and browser
-        imports always go to TypeAgent Browser Memory.
+        Page capture and browser imports always use TypeAgent Browser Memory.
       </p>
       <h3 class="hub-group-title">Pages and browsing</h3>
       <div class="hub-tiles">

@@ -10,6 +10,7 @@ import {
 import { invokeMemory, invokeView } from "./viewClient";
 import { hubAction, mountMemoryHub } from "./memoryHub";
 import * as webExplore from "./memoryHubWebExplore";
+import * as graphExplore from "./memoryHubGraph";
 
 jest.mock("./viewClient", () => ({
     invokeMemory: jest.fn(),
@@ -21,6 +22,7 @@ jest.mock("./memoryHubImports.css", () => ({}));
 jest.mock("./memoryHubRunbookImports.css", () => ({}));
 jest.mock("./memoryHubViewPreferences.css", () => ({}));
 jest.mock("./memoryHubWebExplore.css", () => ({}));
+jest.mock("./memoryHubGraph.css", () => ({}));
 jest.mock(
     "./memoryHubWebExploreAnalytics.html?raw",
     () =>
@@ -184,7 +186,7 @@ test("ready source selection passes exact revisions to a scoped multi-view build
     expect(select.disabled).toBe(false);
     select.click();
     const build = Array.from(document.querySelectorAll("button")).find(
-        (button) => button.textContent === "Build views from selection",
+        (button) => button.textContent === "Build views",
     )!;
     build.click();
     await settle();
@@ -554,7 +556,20 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
             ...mountWeb(host, options),
             show: showWeb,
         }));
-    history.replaceState({}, "", "#/inbox");
+    const mountGraph = graphExplore.mountMemoryHubGraph;
+    const showGraph = jest.fn(
+        async (_request: {
+            view: "entities" | "topics";
+            selection?: string;
+        }) => {},
+    );
+    const mountedGraph = jest
+        .spyOn(graphExplore, "mountMemoryHubGraph")
+        .mockImplementation((host, options) => ({
+            ...mountGraph(host, options),
+            show: showGraph,
+        }));
+    history.replaceState({}, "", "#/library/a/source");
     const hubHtml = readFileSync(
         resolve(process.cwd(), "src/views/client/library/memoryHub.html"),
         "utf8",
@@ -601,14 +616,24 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         score: 1,
         rank: 1,
     };
+    let resolveInitialSnapshot!: (value: unknown) => void;
+    const initialSnapshot = new Promise((resolve) => {
+        resolveInitialSnapshot = resolve;
+    });
+    let initialSnapshotPending = true;
     viewInvoke.mockImplementation(
         async (method: string, params: { query?: string } = {}) => {
-            if (method === "memoryHubSnapshot")
+            if (method === "memoryHubSnapshot") {
+                if (initialSnapshotPending) {
+                    initialSnapshotPending = false;
+                    return initialSnapshot;
+                }
                 return {
                     corpora: [corpus],
                     inbox: [inboxItem],
                     errors: [],
                 };
+            }
             if (method === "memoryHubSearch")
                 return {
                     query: params.query,
@@ -641,7 +666,36 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
             return { items: [source], total: 1, errors: [] };
         },
     );
-    await mountMemoryHub();
+    const initialImplementation = invoke.getMockImplementation()!;
+    let resolveInitialSource!: (item: unknown) => void;
+    invoke.mockImplementation((method: string, params: unknown) =>
+        method === "memoryGetSource"
+            ? new Promise((resolve) => {
+                  resolveInitialSource = resolve;
+              })
+            : initialImplementation(method, params),
+    );
+    const mounting = mountMemoryHub();
+    await settle();
+    expect(value("hubDrawer").classList.contains("hidden")).toBe(false);
+    expect(value("contentPreview").textContent).toContain(
+        "Loading source details...",
+    );
+    history.replaceState({}, "", "#/library");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
+    expect(value("page-library").classList.contains("hidden")).toBe(false);
+    expect(value("hubDrawer").classList.contains("hidden")).toBe(true);
+    resolveInitialSource(source);
+    invoke.mockImplementation(initialImplementation);
+    history.replaceState({}, "", "#/inbox");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    resolveInitialSnapshot({
+        corpora: [corpus],
+        inbox: [inboxItem],
+        errors: [],
+    });
+    await mounting;
     expect(value<HTMLSelectElement>("hubCorpus").value).toBe("");
     expect(value("inboxBadge").textContent).toBe("1");
     expect(value("hubSources").querySelector("#sourceList")).not.toBeNull();
@@ -651,29 +705,6 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     );
     expect(value("hubSettings").querySelector("#saveHowToSettings")).toBeNull();
     expect(value("createCorpusDialog").parentElement).toBe(document.body);
-    const originalInvoke = invoke.getMockImplementation()!;
-    invoke.mockImplementation((method, params) => {
-        if (method === "memoryViewCapabilities")
-            return Promise.resolve({
-                derivedViews: { kinds: ["schemaView"], builds: true },
-            });
-        if (method === "memoryListQuestionSummaries")
-            return Promise.resolve({ head: null, items: [], total: 0 });
-        return originalInvoke(method, params);
-    });
-    history.replaceState({}, "", "#/questions/a");
-    window.dispatchEvent(new HashChangeEvent("hashchange"));
-    await settle();
-    expect(value("page-questions").classList.contains("hidden")).toBe(false);
-    expect(invoke).toHaveBeenCalledWith("memoryListQuestionSummaries", {
-        corpusId: "a",
-        pageSize: 25,
-    });
-    expect(value("hubError").textContent).toBe("");
-    invoke.mockImplementation(originalInvoke);
-    history.replaceState({}, "", "#/inbox");
-    window.dispatchEvent(new HashChangeEvent("hashchange"));
-    await settle();
     value("hubInbox")
         .querySelector<HTMLButtonElement>('[aria-label="Dismiss"]')!
         .click();
@@ -684,9 +715,39 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         .querySelector<HTMLButtonElement>('[aria-label="Restore"]')!
         .click();
     expect(value("inboxBadge").textContent).toBe("1");
+    const detailImplementation = invoke.getMockImplementation()!;
+    let resolveSource!: (item: unknown) => void;
+    invoke.mockImplementation((method: string, params: unknown) =>
+        method === "memoryGetSource"
+            ? new Promise((resolve) => {
+                  resolveSource = resolve;
+              })
+            : detailImplementation(method, params),
+    );
+    const jobsBeforeDetail = invoke.mock.calls.filter(
+        ([method]) => method === "memoryListJobs",
+    ).length;
+    const inventoriesBeforeDetail = viewInvoke.mock.calls.filter(
+        ([method]) => method === "memoryHubSources",
+    ).length;
     history.replaceState({}, "", "#/library/a/source");
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     await settle();
+    expect(value("hubDrawer").classList.contains("hidden")).toBe(false);
+    expect(value("contentPreview").textContent).toContain(
+        "Loading source details...",
+    );
+    expect(
+        invoke.mock.calls.filter(([method]) => method === "memoryListJobs"),
+    ).toHaveLength(jobsBeforeDetail);
+    expect(
+        viewInvoke.mock.calls.filter(
+            ([method]) => method === "memoryHubSources",
+        ),
+    ).toHaveLength(inventoriesBeforeDetail);
+    resolveSource(source);
+    await settle();
+    invoke.mockImplementation(detailImplementation);
     expect({
         visible: !value("hubDrawer").classList.contains("hidden"),
         error: value("hubError").textContent,
@@ -856,6 +917,11 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     await settle();
     const webCalls = showWeb.mock.calls.length;
     expect(value("hubExplore").hidden).toBe(false);
+    expect(
+        document.querySelector(
+            '#hubExploreNavigation [data-explore-view="analytics"]',
+        ),
+    ).toBeNull();
     expect(value("hubExplore").querySelector("svg")).toBeNull();
     expect(
         document.querySelector('#hubExploreNavigation a[aria-current="page"]')
@@ -883,10 +949,9 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         );
         window.dispatchEvent(new HashChangeEvent("hashchange"));
         await settle();
-        expect(showWeb).toHaveBeenLastCalledWith(
-            view === "entities"
-                ? { view, entity: selection }
-                : { view, topic: selection },
+        expect(showGraph).toHaveBeenLastCalledWith({ view, selection });
+        expect(value("exploreScopeBadge").textContent).toBe(
+            "Scope: All memory",
         );
         expect(value("hubExplore").hidden).toBe(true);
         expect(
@@ -900,7 +965,12 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         invoke.mock.calls.filter(([method]) => method === "memoryGetCorpus"),
     ).toHaveLength(overviewCorpusReads);
     expect(overviewCorpusReads).toBeGreaterThanOrEqual(corpusReads);
-    expect(showWeb.mock.calls.length).toBe(webCalls + 2);
+    expect(showWeb.mock.calls.length).toBe(webCalls);
+    history.replaceState({}, "", "#/explore/web/analytics");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
+    expect(showWeb).toHaveBeenLastCalledWith({ view: "analytics" });
+    expect(value("exploreScopeBadge").textContent).toBe("Browser memory only");
     expect(
         viewInvoke.mock.calls.filter(
             ([method]) => method === "memoryHubExplore",
@@ -959,6 +1029,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     confirm.mockRestore();
     window.dispatchEvent(new Event("pagehide"));
     mountedWeb.mockRestore();
+    mountedGraph.mockRestore();
     jest.clearAllTimers();
     jest.useRealTimers();
 });

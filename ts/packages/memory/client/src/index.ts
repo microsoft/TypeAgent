@@ -9,4 +9,5 @@ export * from "./agentSessionProtocol.js";
 export * from "./schemaViewProtocol.js";
 export * from "./acquisitionProtocol.js";
 export * from "./inventoryProtocol.js";
+export * from "./graphProtocol.js";
 export * from "./knowledgeProtocol.js";

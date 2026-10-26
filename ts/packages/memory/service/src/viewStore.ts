@@ -28,6 +28,12 @@ import {
 } from "./viewInventoryCoverage.js";
 import { maintenanceManifest } from "./viewMaintenance.js";
 import {
+    viewReadProjection,
+    viewReadProjectionEntry,
+    type ViewInventoryBuild,
+    type ViewReadProjection,
+} from "./viewReadProjection.js";
+import {
     rebaseViewEdits,
     reconcileResolutionEdits,
     recordViewEdits,
@@ -250,6 +256,103 @@ export class TypedViewStore {
         string,
         { head: string | null; bytes: number }
     >();
+    private readonly inventoryRead = new AsyncLocalStorage<{
+        corpusId: string;
+        head: string | null;
+        projection: ViewReadProjection;
+        active: boolean;
+    }>();
+
+    public async withInventorySnapshot<T>(
+        corpusId: string,
+        operation: () => Promise<T>,
+        validateHead = true,
+    ): Promise<T> {
+        const existing = this.inventoryRead.getStore();
+        if (existing?.active && existing.corpusId === corpusId)
+            return operation();
+        const history = this.history(corpusId);
+        const { head, value } = await history.readEntry<ViewReadProjection>(
+            viewReadProjectionEntry,
+        );
+        let projection = value;
+        if (!projection) {
+            const state: ViewStoreState = head
+                ? (await history.read(head)).state
+                : { views: {} };
+            projection = {
+                ...viewReadProjection(state),
+                versions: state.views,
+                ...(state.conflicts ? { conflicts: state.conflicts } : {}),
+            };
+        }
+        freezeSnapshot(projection);
+        const scope = { corpusId, head, projection, active: true };
+        return this.inventoryRead.run(scope, async () => {
+            try {
+                const result = await operation();
+                if (validateHead) await history.assertHead(head);
+                else await history.assertReadable();
+                return result;
+            } finally {
+                scope.active = false;
+            }
+        });
+    }
+
+    private inventory(corpusId: string): ViewReadProjection | undefined {
+        const scope = this.inventoryRead.getStore();
+        return scope?.active && scope.corpusId === corpusId
+            ? scope.projection
+            : undefined;
+    }
+
+    private needsInventorySnapshot(corpusId: string): boolean {
+        const full = this.readOperation.getStore();
+        return (
+            !this.inventory(corpusId) &&
+            !(full?.active && full.corpusId === corpusId)
+        );
+    }
+
+    private withInventoryRead<T>(
+        corpusId: string,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        // Standalone store reads retain point-in-time semantics; service read
+        // operations use head-checked scopes inside the corpus access boundary.
+        return this.withInventorySnapshot(corpusId, operation, false);
+    }
+
+    public async ensureReadProjection(corpusId: string): Promise<void> {
+        const history = this.history(corpusId);
+        const { head, value } = await history.readEntry<ViewReadProjection>(
+            viewReadProjectionEntry,
+        );
+        if (!head || value) return;
+        const { state } = await history.read(head);
+        await history.commit(
+            head,
+            state,
+            this.entries(state),
+            this.actor,
+            "Index current view detail and inventory reads",
+        );
+    }
+
+    public async listViewInventoryBuilds(
+        corpusId: string,
+    ): Promise<ViewInventoryBuild[]> {
+        if (this.needsInventorySnapshot(corpusId))
+            return this.withInventoryRead(corpusId, () =>
+                this.listViewInventoryBuilds(corpusId),
+            );
+        return structuredClone(
+            this.inventory(corpusId)?.builds ??
+                viewReadProjection((await this.readSnapshot(corpusId)).state)
+                    .builds,
+        );
+    }
 
     private history(corpusId: string): ViewHistory<ViewStoreState> {
         validateIdentifier("corpus ID", corpusId);
@@ -301,14 +404,34 @@ export class TypedViewStore {
     private expireReadSnapshot(): void {
         const scope = this.readOperation.getStore();
         if (scope) scope.active = false;
+        const inventory = this.inventoryRead.getStore();
+        if (inventory) inventory.active = false;
     }
 
     public async getViewVersions(
         request: ViewReadRequest,
     ): Promise<ViewVersion[]> {
         assertViewIdentifier("view ID", request.viewId);
+        if (this.needsInventorySnapshot(request.corpusId))
+            return this.withInventoryRead(request.corpusId, () =>
+                this.getViewVersions(request),
+            );
+        const scope = this.inventoryRead.getStore();
+        if (scope?.active && scope.corpusId === request.corpusId) {
+            const legacy = scope.projection.versions?.[request.viewId];
+            if (legacy) return structuredClone(legacy).reverse();
+            if (!scope.head) return [];
+            const { value } = await this.history(request.corpusId).readEntry<
+                ViewVersion[]
+            >(`view-${encodeURIComponent(request.viewId)}.json`, scope.head);
+            return (value ?? []).reverse();
+        }
         const { state } = await this.readSnapshot(request.corpusId);
         return structuredClone(viewVersions(state, request.viewId)).reverse();
+    }
+
+    public getCommittedHead(corpusId: string): Promise<string | null> {
+        return this.history(corpusId).readHead();
     }
 
     public async getTopicState(corpusId: string): Promise<{
@@ -507,10 +630,14 @@ export class TypedViewStore {
         corpusId: string,
         family: "wiki" | "projects" = "wiki",
     ): Promise<WikiFamilyState> {
+        if (this.needsInventorySnapshot(corpusId))
+            return this.withInventoryRead(corpusId, () =>
+                this.getWikiFamily(corpusId, family),
+            );
+        const projection = this.inventory(corpusId);
+        const state = projection ?? (await this.readSnapshot(corpusId)).state;
         return structuredClone(
-            (await this.readSnapshot(corpusId)).state[
-                family === "wiki" ? "wikiFamily" : "projectFamily"
-            ] ?? {
+            state[family === "wiki" ? "wikiFamily" : "projectFamily"] ?? {
                 enabled: true,
                 dirty: true,
                 cursor: 0,
@@ -567,15 +694,33 @@ export class TypedViewStore {
     }
 
     private entries(state: ViewStoreState): Record<string, string> {
-        return Object.fromEntries(
-            Object.entries(state.views).map(([id, versions]) => [
+        return Object.fromEntries([
+            [
+                viewReadProjectionEntry,
+                JSON.stringify(viewReadProjection(state)),
+            ],
+            ...Object.entries(state.conflicts ?? {}).map(([id, conflict]) => [
+                `conflict-${encodeURIComponent(id)}.json`,
+                JSON.stringify(conflict),
+            ]),
+            ...Object.entries(state.views).map(([id, versions]) => [
                 `view-${encodeURIComponent(id)}.json`,
                 canonicalize(versions),
             ]),
-        );
+        ]);
     }
 
     public async listViews(corpusId: string): Promise<ViewSnapshot> {
+        if (this.needsInventorySnapshot(corpusId))
+            return this.withInventoryRead(corpusId, () =>
+                this.listViews(corpusId),
+            );
+        const scope = this.inventoryRead.getStore();
+        if (scope?.active && scope.corpusId === corpusId)
+            return {
+                head: scope.head,
+                views: structuredClone(scope.projection.views),
+            };
         const snapshot = await this.readSnapshot(corpusId);
         return {
             head: snapshot.head,
@@ -591,6 +736,24 @@ export class TypedViewStore {
         request: ViewReadRequest,
     ): Promise<ViewVersion | undefined> {
         assertViewIdentifier("view ID", request.viewId);
+        if (this.needsInventorySnapshot(request.corpusId))
+            return this.withInventoryRead(request.corpusId, () =>
+                this.getView(request),
+            );
+        const projection = this.inventory(request.corpusId);
+        if (projection) {
+            const current = projection.views.find(
+                (view) => view.viewId === request.viewId,
+            );
+            if (
+                !request.revisionId ||
+                current?.revisionId === request.revisionId
+            )
+                return structuredClone(current);
+            return (await this.getViewVersions(request)).find(
+                (view) => view.revisionId === request.revisionId,
+            );
+        }
         const state = (await this.readSnapshot(request.corpusId)).state;
         const versions = viewVersions(state, request.viewId);
         return structuredClone(
@@ -1057,6 +1220,21 @@ export class TypedViewStore {
         conflictId: string,
     ): Promise<ViewMergeConflict | undefined> {
         assertViewIdentifier("conflict ID", conflictId);
+        if (this.needsInventorySnapshot(corpusId))
+            return this.withInventoryRead(corpusId, () =>
+                this.getViewConflict(corpusId, conflictId),
+            );
+        const scope = this.inventoryRead.getStore();
+        if (scope?.active && scope.corpusId === corpusId) {
+            const legacy = scope.projection.conflicts?.[conflictId];
+            if (legacy) return structuredClone(legacy);
+            return (
+                await this.history(corpusId).readEntry<ViewMergeConflict>(
+                    `conflict-${encodeURIComponent(conflictId)}.json`,
+                    scope.head ?? undefined,
+                )
+            ).value;
+        }
         return structuredClone(
             (await this.readSnapshot(corpusId)).state.conflicts?.[conflictId],
         );
@@ -1693,6 +1871,10 @@ export class TypedViewStore {
         }
         if (
             clearingDerived ||
+            (forgottenEvents &&
+                state.topics?.influenceEvents?.some((event) =>
+                    forgottenEvents.has(event.eventId),
+                )) ||
             (!forgottenEvents &&
                 state.topics?.influenceSources.some(
                     (source) => source.sourceId === sourceId,
@@ -1765,10 +1947,11 @@ export class TypedViewStore {
                     !job.results.some(
                         (result) =>
                             result.snapshot.inputs.some(matches) ||
-                            (!forgottenEvents &&
-                                result.snapshot.influenceSources?.some(
-                                    matches,
-                                )) ||
+                            this.forgottenTopicInfluence(
+                                result.snapshot,
+                                sourceId,
+                                forgottenEvents,
+                            ) ||
                             result.wikiContribution?.input.inputs.some(
                                 matches,
                             ) ||
@@ -1863,6 +2046,20 @@ export class TypedViewStore {
 
     public async forgetEvent(corpusId: string, eventId: string): Promise<void> {
         await this.forgetEvents(corpusId, [eventId]);
+    }
+
+    private forgottenTopicInfluence(
+        input: ViewBuildSnapshot,
+        sourceId: string,
+        forgottenEvents: Set<string> | undefined,
+    ): boolean {
+        return forgottenEvents
+            ? (input.influenceEvents?.some((event) =>
+                  forgottenEvents.has(event.eventId),
+              ) ?? false)
+            : (input.influenceSources?.some(
+                  (source) => source.sourceId === sourceId,
+              ) ?? false);
     }
 
     public async forgetEvents(
@@ -2038,6 +2235,19 @@ export class TypedViewStore {
     public async getViewPublication(
         request: ViewReadRequest,
     ): Promise<ViewPublicationStatus> {
+        if (this.needsInventorySnapshot(request.corpusId))
+            return this.withInventoryRead(request.corpusId, () =>
+                this.getViewPublication(request),
+            );
+        const projection = this.inventory(request.corpusId);
+        if (projection)
+            return structuredClone(
+                projection.publications[request.viewId] ?? {
+                    viewId: request.viewId,
+                    indexState: "absent",
+                    reason: "No published revision",
+                },
+            );
         const { state } = await this.readSnapshot(request.corpusId);
         return structuredClone(this.publicationStatus(state, request.viewId));
     }

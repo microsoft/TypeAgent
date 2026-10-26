@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { AgentEdition } from "./agentEdition.js";
+import type { MemoryGraphService } from "./graphTypes.js";
 import type {
     AgentMemorySearchRequest,
     AgentMemorySearchResult,
@@ -665,6 +666,7 @@ export interface MemoryServiceCapabilities {
         exactSearch: boolean;
         management: boolean;
         groundedAnswer: boolean;
+        scopedKnowledgeGraphs?: boolean;
         sourceSynopses?: boolean;
         agentSessionImportTypes?: AgentSessionImportRequest["importType"][];
     };
@@ -707,7 +709,7 @@ export interface ProcedureVersion {
     previousVersion?: number;
 }
 
-export interface MemoryService {
+export interface MemoryService extends MemoryGraphService {
     initialize?(): Promise<void>;
     close?(): Promise<void>;
     deferMaintenance?(): () => void;
@@ -953,6 +955,11 @@ export interface IndexedSelectionDiagnostics {
 }
 
 export interface CorpusIndex {
+    readKnowledgeGraph?(
+        sourceIds: ReadonlySet<string>,
+        kind: "entities" | "topics",
+        excludedNamesBySource?: ReadonlyMap<string, ReadonlySet<string>>,
+    ): Promise<MemoryKnowledgeGraph>;
     rebuildRetained?(
         previous: CorpusIndex,
         documents: IndexedDocument[],

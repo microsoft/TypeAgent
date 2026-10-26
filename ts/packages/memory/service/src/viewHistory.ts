@@ -103,6 +103,13 @@ export class ViewHistory<T> {
         return git.resolveRef({ ...this.options(), ref });
     }
 
+    public async readHead(): Promise<string | null> {
+        await this.assertReadable();
+        const head = await this.head();
+        await this.assertReadable();
+        return head;
+    }
+
     public async read(
         oid?: string,
         bypassGate = false,
@@ -135,6 +142,24 @@ export class ViewHistory<T> {
             throw new Error(
                 "View history is quarantined pending privacy purge",
             );
+    }
+
+    public async readEntry<R>(
+        name: string,
+        oid?: string,
+    ): Promise<{ head: string | null; value: R | undefined }> {
+        await this.assertReadable();
+        const head = oid ?? (await this.head());
+        if (!head) return { head, value: undefined };
+        const { tree } = await git.readTree({ ...this.options(), oid: head });
+        const entry = tree.find((entry) => entry.path === name);
+        if (!entry) return { head, value: undefined };
+        const blob = await git.readBlob({ ...this.options(), oid: entry.oid });
+        await this.assertReadable();
+        return {
+            head,
+            value: JSON.parse(Buffer.from(blob.blob).toString("utf8")) as R,
+        };
     }
 
     public async assertHead(expected: string | null): Promise<void> {

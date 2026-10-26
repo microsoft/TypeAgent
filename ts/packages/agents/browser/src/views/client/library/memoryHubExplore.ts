@@ -16,6 +16,7 @@ import {
 import { mountFlyout, type FlyoutView } from "./memoryHubFlyout";
 import "./memoryHubPhase2.css";
 import { mountTopicBrowser } from "./memoryHubTopics";
+import { mountGraphDetails } from "./memoryHubGraphDetails";
 
 export type MemoryHubExploreOptions = {
     scope: () => string | undefined;
@@ -51,6 +52,7 @@ export function mountMemoryHubExplore(
     const counts = text("div", undefined, "phase2-counts");
     const note = text("div");
     const flyout = mountFlyout(host, "Knowledge detail");
+    const graphDetails = mountGraphDetails(host, options);
     const lists = text("div", undefined, "phase2-lists");
     root.append(controls, status, warning, counts, note, lists);
     host.append(root);
@@ -97,6 +99,11 @@ export function mountMemoryHubExplore(
         options.onOpenSource(source.corpusId, source.sourceId);
     }
     function selectKnowledgeItem(value: MemoryHubKnowledgeItem) {
+        if (value.graphSupport) {
+            flyout.close();
+            graphDetails.open(value.title, value.graphSupport);
+            return;
+        }
         flyout.push(itemView(value));
     }
     function itemView(value: MemoryHubKnowledgeItem): FlyoutView {
@@ -180,6 +187,7 @@ export function mountMemoryHubExplore(
     }
     function clearCollections() {
         flyout.close();
+        graphDetails.close();
         collections.forEach((value) => value.dispose());
         collections = [];
     }
@@ -215,6 +223,9 @@ export function mountMemoryHubExplore(
                 subtitle: value.types.join(" · "),
                 mentions: value.mentionCount,
                 sources: value.sources,
+                ...(value.graphSupport
+                    ? { graphSupport: value.graphSupport }
+                    : {}),
             })),
             data.counts.entities,
             "entities",
@@ -226,6 +237,9 @@ export function mountMemoryHubExplore(
                 title: value.name,
                 mentions: value.mentionCount,
                 sources: value.sources,
+                ...(value.graphSupport
+                    ? { graphSupport: value.graphSupport }
+                    : {}),
             })),
             data.counts.topics,
             "topics",
@@ -240,6 +254,9 @@ export function mountMemoryHubExplore(
                 title: `${value.fromName ?? names.get(value.fromId) ?? "Entity outside preview"} → ${value.type} → ${value.toName ?? names.get(value.toId) ?? "Entity outside preview"}`,
                 mentions: value.count,
                 sources: value.sources,
+                ...(value.graphSupport
+                    ? { graphSupport: value.graphSupport }
+                    : {}),
             })),
             data.counts.relationships,
             "relationships",
@@ -252,12 +269,19 @@ export function mountMemoryHubExplore(
             ],
         );
         collection(
-            "Contributing sources",
+            data.sourceInventory ? "Document sources" : "Contributing sources",
             contributors,
             data.contributingSourceCount ?? contributors.length,
             "sources",
         );
         note.replaceChildren();
+        if (data.sourceInventory)
+            note.append(
+                text(
+                    "p",
+                    "Document sources are listed separately. Conversation and event evidence opens from the derived knowledge cards or graphs.",
+                ),
+            );
         if (!data.entities.length && !data.topics.length)
             note.append(
                 text(
@@ -334,6 +358,8 @@ export function mountMemoryHubExplore(
         },
         hide() {
             flyout.close();
+            graphDetails.close();
+            topics.hide();
         },
         dispose() {
             topics.dispose();
@@ -341,6 +367,7 @@ export function mountMemoryHubExplore(
             version++;
             clearCollections();
             flyout.dispose();
+            graphDetails.dispose();
             root.remove();
         },
     };

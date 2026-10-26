@@ -2,6 +2,14 @@
 // Licensed under the MIT License.
 
 import {
+    graphQueryRequestSchema,
+    graphQueryResultSchema,
+    graphSupportRequestSchema,
+    graphSupportPageSchema,
+    graphToolNames,
+} from "./graphProtocol.js";
+
+import {
     Client,
     StreamableHTTPClientTransport,
     type CallToolResult,
@@ -12,6 +20,15 @@ import {
     type StdioServerParameters,
 } from "@modelcontextprotocol/client/stdio";
 import type {
+    InventoryPageRequest,
+    ViewSummaryRequest,
+    ViewSummaryPage,
+    ViewBuildSummary,
+    ViewPublicationBatchRequest,
+    MemoryGraphQueryRequest,
+    MemoryGraphQueryResult,
+    MemoryGraphSupportRequest,
+    MemoryGraphSupportPage,
     QuestionSummaryRequest,
     QuestionSummaryPage,
     QuestionReadRequest,
@@ -170,12 +187,19 @@ import {
     schemaViewToolNames,
 } from "./schemaViewProtocol.js";
 import {
+    inventoryToolNames,
+    inventoryPageRequestSchema,
+    viewSummaryRequestSchema,
     questionSummaryRequestSchema,
     questionReadRequestSchema,
+    viewPublicationBatchRequestSchema,
+    viewSummaryPageSchema,
     questionSummaryPageSchema,
     questionDetailSchema,
-    inventoryToolNames,
+    viewBuildSummaryPageSchema,
+    viewPublicationBatchSchema,
 } from "./inventoryProtocol.js";
+
 import {
     type AcquisitionProgress,
     type MemoryAcquisitionProgressService,
@@ -256,6 +280,19 @@ export interface MemoryServiceClient
         options?: MemoryClientCallOptions & { pollIntervalMs?: number },
     ): Promise<IngestionJobStatus>;
     close(): Promise<void>;
+    queryGraphSupport(
+        request: MemoryGraphSupportRequest,
+    ): Promise<MemoryGraphSupportPage>;
+    queryKnowledgeGraph(
+        request: MemoryGraphQueryRequest,
+    ): Promise<MemoryGraphQueryResult>;
+    getViewPublications(
+        request: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]>;
+    listViewBuildSummaries(
+        request: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>>;
+    listViewSummaries(request: ViewSummaryRequest): Promise<ViewSummaryPage>;
 }
 
 export class InProcessMemoryServiceClient implements MemoryServiceClient {
@@ -775,6 +812,54 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
     }
 
     public async close(): Promise<void> {}
+    public queryGraphSupport(
+        request: MemoryGraphSupportRequest,
+    ): Promise<MemoryGraphSupportPage> {
+        return (
+            this.service.queryGraphSupport?.(
+                graphSupportRequestSchema.parse(
+                    request,
+                ) as MemoryGraphSupportRequest,
+            ) ??
+            Promise.reject(new Error("Memory graph support is not supported"))
+        );
+    }
+    public queryKnowledgeGraph(
+        request: MemoryGraphQueryRequest,
+    ): Promise<MemoryGraphQueryResult> {
+        return (
+            this.service.queryKnowledgeGraph?.(
+                graphQueryRequestSchema.parse(
+                    request,
+                ) as MemoryGraphQueryRequest,
+            ) ??
+            Promise.reject(new Error("Memory graph queries are not supported"))
+        );
+    }
+    public getViewPublications(
+        request: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]> {
+        return (
+            this.service.getViewPublications?.(request) ??
+            unsupportedCapability("publication batches")
+        );
+    }
+    public listViewBuildSummaries(
+        request: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>> {
+        return (
+            this.service.listViewBuildSummaries?.(request) ??
+            unsupportedCapability("build summaries")
+        );
+    }
+    public listViewSummaries(
+        request: ViewSummaryRequest,
+    ): Promise<ViewSummaryPage> {
+        return (
+            this.service.listViewSummaries?.(request) ??
+            unsupportedCapability("view summaries")
+        );
+    }
 }
 
 export type MemoryMcpTransportConfig =
@@ -1535,6 +1620,51 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             },
         );
         return parseToolResult(name, result, schema);
+    }
+    public queryGraphSupport(
+        request: MemoryGraphSupportRequest,
+    ): Promise<MemoryGraphSupportPage> {
+        return this.invoke(
+            graphToolNames.queryGraphSupport,
+            graphSupportRequestSchema.parse(request),
+            graphSupportPageSchema,
+        );
+    }
+    public queryKnowledgeGraph(
+        request: MemoryGraphQueryRequest,
+    ): Promise<MemoryGraphQueryResult> {
+        return this.invoke(
+            graphToolNames.queryKnowledgeGraph,
+            graphQueryRequestSchema.parse(request),
+            graphQueryResultSchema,
+        );
+    }
+    public getViewPublications(
+        request: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]> {
+        return this.invoke(
+            inventoryToolNames.getViewPublications,
+            viewPublicationBatchRequestSchema.parse(request),
+            viewPublicationBatchSchema,
+        );
+    }
+    public listViewBuildSummaries(
+        request: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>> {
+        return this.invoke(
+            inventoryToolNames.listViewBuildSummaries,
+            inventoryPageRequestSchema.parse(request),
+            viewBuildSummaryPageSchema,
+        );
+    }
+    public listViewSummaries(
+        request: ViewSummaryRequest,
+    ): Promise<ViewSummaryPage> {
+        return this.invoke(
+            inventoryToolNames.listViewSummaries,
+            viewSummaryRequestSchema.parse(request),
+            viewSummaryPageSchema,
+        );
     }
 }
 

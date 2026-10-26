@@ -36,6 +36,19 @@ separately. Updating Puppeteer does not patch system Chrome.
 
 ## Architecture
 
+### Scoped graphs and Memory Hub navigation
+
+Memory Hub Explore supports entity, topic and maintained hierarchy graphs with
+document/event filters, bounded generation-aware paging, coverage diagnostics and
+exact evidence drilldown. Graph preparation happens separately from reads; hosts
+without the scoped capability report it explicitly. Retained originals and event
+bodies remain subject to current eligibility and suppression checks.
+
+Views use paginated cards and a separate detail reader, with build receipts in a
+flyout. Grouped activity, Inbox navigation and responsive detail panels reuse
+summary inventories rather than fetching every view's full evidence. These
+navigation features do not depend on checkpoint or integrated-answer APIs.
+
 ### Schema-defined questions
 
 The Memory hub's Questions workspace is a complete projection of versioned

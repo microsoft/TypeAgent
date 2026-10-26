@@ -2,6 +2,39 @@
 // Licensed under the MIT License.
 
 import {
+    boundGraphInventory,
+    graphIdentity,
+    graphInventory,
+    graphCoverageState,
+    graphSupportCounts,
+    graphSupportIdentity,
+    graphLimit,
+    type GraphInventory,
+    type GraphProjection,
+} from "./graphQuery.js";
+import {
+    GraphProjectionUnavailable,
+    graphProjectionLimits,
+    readGraphProjection,
+} from "./graphProjection.js";
+import type {
+    InventoryPageRequest,
+    ViewSummaryRequest,
+    ViewSummaryPage,
+    ViewBuildSummary,
+    ViewPublicationBatchRequest,
+} from "./inventoryTypes.js";
+import type { IndexedFragmentRequest } from "./types.js";
+import type {
+    GraphSupport,
+    GraphSupportPage,
+    GraphSupportRequest,
+    KnowledgeGraphRequest,
+    KnowledgeGraphResponse,
+    KnowledgeGraphCoverage,
+} from "./graphTypes.js";
+
+import {
     currentSearchTraceId,
     recordSearchTiming,
     runWithSearchTiming,
@@ -230,7 +263,13 @@ import {
     assertMaintenanceMembership,
     validateMaintenanceRequest,
 } from "./viewMaintenanceValidation.js";
-import { mergeView, sameViewBuildEvidence, viewHash } from "./viewMerge.js";
+import {
+    mergeView,
+    sameViewBuildEvidence,
+    viewHash,
+    viewBuildEvidenceFingerprint,
+} from "./viewMerge.js";
+import type { ViewInventoryBuild } from "./viewReadProjection.js";
 import {
     captureEditorialContext,
     editorialArticle,
@@ -1474,7 +1513,7 @@ export class FileMemoryService
                                     "Accepted informational page is missing",
                                 );
                             await this.viewStore.makeInformationalVisible(view);
-                            await this.indexViewLocked(view);
+                            await this.indexViewLocked(view, signal);
                         } else if (
                             !conflicts.length &&
                             saved.revisionId &&
@@ -1494,13 +1533,17 @@ export class FileMemoryService
                                 throw new Error(
                                     "Materialized build target is missing",
                                 );
-                            const publication = await this.publishViewLocked({
-                                corpusId: job.corpusId,
-                                viewId: view.viewId,
-                                revisionId: view.revisionId,
-                                expectedVersion: view.version,
-                                expectedHead: snapshot.head,
-                            });
+                            const publication = await this.publishViewLocked(
+                                {
+                                    corpusId: job.corpusId,
+                                    viewId: view.viewId,
+                                    revisionId: view.revisionId,
+                                    expectedVersion: view.version,
+                                    expectedHead: snapshot.head,
+                                },
+                                signal,
+                            );
+                            signal.throwIfAborted();
                             await this.viewStore.updateViewBuild(
                                 job.corpusId,
                                 job.jobId,
@@ -1508,9 +1551,13 @@ export class FileMemoryService
                                     const receipt = current.results.find(
                                         (entry) => entry.viewId === view.viewId,
                                     );
-                                    if (!receipt)
-                                        throw new Error(
-                                            "Publication receipt target is missing",
+                                    if (
+                                        !receipt ||
+                                        current.state !== "running" ||
+                                        receipt.revisionId !== view.revisionId
+                                    )
+                                        throw new ViewBuildStaleError(
+                                            "Publication receipt target changed during indexing",
                                         );
                                     receipt.publication = publication;
                                     receipt.state =
@@ -1774,9 +1821,14 @@ export class FileMemoryService
                     /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(directory.name)
                 ) {
                     await this.cleanManifestStaging(directory.name);
+                    await rm(this.viewIndexStagingDirectory(directory.name), {
+                        recursive: true,
+                        force: true,
+                    });
                     await this.viewStore.recover(directory.name);
                     await this.cleanArchivedViewIndexes(directory.name);
                     await this.viewStore.recoverViewBuilds(directory.name);
+                    await this.viewStore.ensureReadProjection(directory.name);
                     let manifest:
                         | Pick<
                               CorpusManifest,
@@ -1858,49 +1910,8 @@ export class FileMemoryService
         return this.initializePromise;
     }
 
-    public async close(): Promise<void> {
-        if (this.closed) {
-            return;
-        }
-        this.closed = true;
-        for (const work of this.topicSummaryWork.values())
-            work.controller.abort(new Error("Memory service is closing"));
-        await this.knowledge.close();
-        await this.acquisition.close();
-        if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
-        const maintenanceClosure = this.maintenance.close();
-        for (const timer of this.schemaTimers.values()) clearTimeout(timer);
-        this.schemaTimers.clear();
-        await this.initializePromise?.catch(() => undefined);
-        for (const controller of this.controllers.values()) {
-            controller.abort(new Error("Memory service is closing"));
-        }
-        await this.agentSessionStore.close();
-        await this.batchStore.close();
-        await Promise.allSettled(this.schemaWork.values());
-
-        this.viewBuilds.cancelAll();
-        await Promise.allSettled([
-            this.rootWriteTail,
-            ...this.corpusLoads.values(),
-            ...this.indexedReads,
-            ...this.reindexWork,
-            ...[...this.topicSummaryWork.values()].map((work) => work.promise),
-        ]);
-        // Family maintenance may admit a new build while tracked reads drain.
-        const viewClosure = await Promise.allSettled([this.viewBuilds.close()]);
-        await Promise.allSettled(
-            [...this.corpusAccesses.values()].map((access) => access.idle()),
-        );
-        await this.releaseLock?.();
-        this.releaseLock = undefined;
-        const viewFailure = viewClosure[0];
-        await maintenanceClosure;
-        if (viewFailure.status === "rejected") throw viewFailure.reason;
-        for (const failure of this.wikiMaintenanceFailures.values())
-            throw failure;
-        for (const failure of this.schemaMaintenanceFailures.values())
-            throw failure;
+    public close(): Promise<void> {
+        return (this.closePromise ??= this.closeService());
     }
 
     public deferMaintenance(): () => void {
@@ -2086,7 +2097,7 @@ export class FileMemoryService
                 .filter((work) => work.corpusId === corpusId)
                 .map((work) => work.promise),
         );
-        return this.enqueueWrite(corpusId, async () => {
+        return this.enqueueViewIndexRemoval(corpusId, async () => {
             const runtime = await this.getCorpusRuntime(corpusId);
             await this.acquisition.suppress(corpusId, {
                 viewIds: (await this.viewStore.listViews(corpusId)).views.map(
@@ -3039,98 +3050,9 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<SourceForgetResult> {
-        const removal = runtime.manifest.authorizedSourceRemoval;
-        if (!removal)
-            throw new Error("No authorized source removal to recover");
-        const sourceId = removal.sourceId;
-        const affected = (await this.viewStore.listViews(corpusId)).views.map(
-            (view) => view.viewId,
+        return this.withViewIndexRemoval(corpusId, runtime, () =>
+            this.completeAuthorizedSourceRemovalLocked(corpusId, runtime),
         );
-        await this.acquisition.suppress(corpusId, {
-            sourceIds: [sourceId],
-            viewIds: affected,
-            uncertain: true,
-        });
-        this.viewBuilds.forget(corpusId, sourceId);
-        const candidateManifest = structuredClone(runtime.manifest);
-        const retained = candidateManifest.sources.some(
-            (source) => source.sourceId === sourceId,
-        );
-        candidateManifest.sources = candidateManifest.sources.filter(
-            (item) => item.sourceId !== sourceId,
-        );
-        if (candidateManifest.knowledgeSuppressions)
-            candidateManifest.knowledgeSuppressions =
-                candidateManifest.knowledgeSuppressions.filter(
-                    (item) => item.sourceId !== sourceId,
-                );
-        const forgottenReference = opaqueChangeReference(
-            corpusId,
-            "source",
-            sourceId,
-        );
-        candidateManifest.changes = pruneChangeReceipts(
-            candidateManifest.changes,
-        ).filter((receipt) => receipt.sourceId !== forgottenReference);
-        if (
-            !candidateManifest.changes.some(
-                (receipt) =>
-                    receipt.operation === "forget" &&
-                    receipt.sourceId === forgottenReference,
-            )
-        )
-            candidateManifest.changes.push(
-                createChangeReceipt(corpusId, "forget", sourceId, {
-                    sources: 1,
-                    revisions: removal.revisions.length,
-                    knowledge: 0,
-                }),
-            );
-        await this.viewStore.forgetSource(corpusId, sourceId);
-        await this.agentSessionStore.purge(corpusId, sourceId);
-        if (retained) {
-            await this.rebuildAndActivate(
-                corpusId,
-                runtime,
-                candidateManifest,
-                this.maintenance.signal,
-            );
-        } else if (runtime.manifest.indexGeneration) {
-            await this.removeInactiveIndexGenerations(
-                corpusId,
-                runtime.manifest.indexGeneration,
-            );
-        } else {
-            throw new Error(
-                "Authorized source removal lacks a committed source-index generation",
-            );
-        }
-        for (const revision of removal.revisions) {
-            if (!revision.hasAssets) continue;
-            await this.assetStore.removeRevision({
-                corpusId,
-                sourceId,
-                revisionId: revision.revisionId,
-            });
-        }
-        await this.viewStore.markSourceRevisionStale(corpusId, sourceId);
-        await this.batchStore.purge(corpusId, sourceId);
-        await this.purgeSourceJobDiagnostics(corpusId, sourceId);
-        await this.textStore(corpusId).purge(runtime.manifest.sources);
-        for (const key of this.wikiMaintenanceFailures.keys())
-            if (key.startsWith(`${corpusId}:`))
-                this.wikiMaintenanceFailures.delete(key);
-        const complete = structuredClone(runtime.manifest);
-        delete complete.authorizedSourceRemoval;
-        await this.writeManifest(corpusId, complete);
-        runtime.manifest = complete;
-        this.resumeBatchMaintenance(corpusId);
-        return {
-            corpusId,
-            sourceId,
-            deletedRevisionCount: removal.revisions.length,
-            indexVersion: this.indexVersion(runtime.manifest),
-        };
     }
 
     public async reindexCorpus(
@@ -3524,7 +3446,7 @@ export class FileMemoryService
             throw new Error("At least one event forget selector is required");
         }
         let result: MemoryEventForgetResult | undefined;
-        await this.enqueueWrite(request.corpusId, async () => {
+        await this.enqueueViewIndexRemoval(request.corpusId, async () => {
             const runtime = await this.getCorpusRuntime(request.corpusId);
             const deleted = runtime.events.filter(
                 (event) =>
@@ -3806,6 +3728,7 @@ export class FileMemoryService
             ...capabilities,
             features: {
                 ...capabilities.features,
+                scopedKnowledgeGraphs: true,
                 sourceSynopses: this.sourceSynopsesEnabled,
                 agentSessionImportTypes: this.agentSessionImportsEnabled
                     ? ["agent-session-jsonl", "copilot-session-jsonl"]
@@ -3861,7 +3784,7 @@ export class FileMemoryService
     public async listViews(corpusId: string): Promise<ViewSnapshot> {
         const runtime = await this.requireViews(corpusId);
         return runtime.access.read(() =>
-            this.viewStore.withReadSnapshot(corpusId, () =>
+            this.viewStore.withInventorySnapshot(corpusId, () =>
                 this.listViewSnapshot(corpusId),
             ),
         );
@@ -3914,7 +3837,7 @@ export class FileMemoryService
     ): Promise<Array<[ViewVersion, ViewVersion]>> {
         const runtime = await this.requireViews(corpusId);
         return runtime.access.read(() =>
-            this.viewStore.withReadSnapshot(corpusId, () =>
+            this.viewStore.withInventorySnapshot(corpusId, () =>
                 this.consolidationPairs(corpusId, targetId),
             ),
         );
@@ -3926,7 +3849,7 @@ export class FileMemoryService
         currentViews: ViewVersion[],
     ): Promise<NonNullable<ViewSnapshot["wikiFamily"]>> {
         const family = await this.viewStore.getWikiFamily(corpusId, kind);
-        const jobs = await this.viewStore.listViewBuilds(corpusId);
+        const jobs = await this.viewStore.listViewInventoryBuilds(corpusId);
         const active = jobs.some(
             (job) =>
                 job.state === "running" &&
@@ -3938,7 +3861,7 @@ export class FileMemoryService
                             : "informational-project-summary-v1"),
                 ),
         );
-        const latest = new Map<string, ViewBuildTargetResult>();
+        const latest = new Map<string, ViewInventoryBuild["results"][number]>();
         for (const job of jobs.sort((a, b) =>
             b.updatedAt.localeCompare(a.updatedAt),
         ))
@@ -4000,7 +3923,7 @@ export class FileMemoryService
 
     private async familyConflictResolution(
         corpusId: string,
-        result: ViewBuildTargetResult,
+        result: ViewInventoryBuild["results"][number],
         jobId: string,
         currentViews: ViewVersion[],
     ): Promise<"unresolved" | "ready" | "indexPending"> {
@@ -4023,8 +3946,9 @@ export class FileMemoryService
             conflict.jobId !== jobId ||
             conflict.human.viewId !== result.viewId ||
             conflict.human.revisionId !== conflict.expectedRevisionId ||
-            conflict.input.fingerprint !== result.snapshot.fingerprint ||
-            !sameViewBuildEvidence(conflict.input, result.snapshot)
+            conflict.input.fingerprint !== result.inputFingerprint ||
+            viewBuildEvidenceFingerprint(conflict.input) !==
+                result.evidenceFingerprint
         )
             return "unresolved";
         const current = await this.familyResolutionVersion(
@@ -4118,15 +4042,17 @@ export class FileMemoryService
 
     public async listQuestions(corpusId: string): Promise<QuestionInventory> {
         const runtime = await this.requireViews(corpusId);
-        return runtime.access.read(async () => {
-            const snapshot = await this.viewStore.listViews(corpusId);
-            const failure = this.schemaMaintenanceFailures.get(corpusId);
-            return {
-                head: snapshot.head,
-                items: questionInventory(snapshot),
-                ...(failure ? { maintenanceError: failure.message } : {}),
-            };
-        });
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(corpusId, async () => {
+                const snapshot = await this.viewStore.listViews(corpusId);
+                const failure = this.schemaMaintenanceFailures.get(corpusId);
+                return {
+                    head: snapshot.head,
+                    items: questionInventory(snapshot),
+                    ...(failure ? { maintenanceError: failure.message } : {}),
+                };
+            }),
+        );
     }
 
     public async listQuestionSummaries(
@@ -4185,7 +4111,7 @@ export class FileMemoryService
         validateIdentifier("view ID", request.viewId);
         validateIdentifier("slot ID", request.slotId);
         return runtime.access.read(() =>
-            this.viewStore.withReadSnapshot(request.corpusId, async () => {
+            this.viewStore.withInventorySnapshot(request.corpusId, async () => {
                 const view = await this.viewStore.getView({
                     corpusId: request.corpusId,
                     viewId: request.viewId,
@@ -5665,35 +5591,39 @@ export class FileMemoryService
         request: ViewReadRequest,
     ): Promise<ViewVersion | undefined> {
         const runtime = await this.requireViews(request.corpusId);
-        return runtime.access.read(async () => {
-            const view = await this.viewStore.getView(request);
-            if (view?.redirect)
-                return this.readWikiRedirect(
-                    view,
-                    request.revisionId !== undefined,
-                );
-            if (view && !(await this.informationalVersionEligible(view)))
-                return undefined;
-            if (view?.generation && editorialArticle(view.content)) {
-                const snapshot = await this.viewStore.listViews(
-                    request.corpusId,
-                );
-                const eligible = await Promise.all(
-                    snapshot.views.map((entry) =>
-                        this.informationalVersionEligible(entry, entry),
-                    ),
-                );
-                return {
-                    ...view,
-                    protectedTargets: editorialProtection(view),
-                    relatedArticles: relatedEditorialArticles(
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(request.corpusId, async () => {
+                const view = await this.viewStore.getView(request);
+                if (view?.redirect)
+                    return this.readWikiRedirect(
                         view,
-                        snapshot.views.filter((_, index) => eligible[index]),
-                    ),
-                };
-            }
-            return view;
-        });
+                        request.revisionId !== undefined,
+                    );
+                if (view && !(await this.informationalVersionEligible(view)))
+                    return undefined;
+                if (view?.generation && editorialArticle(view.content)) {
+                    const snapshot = await this.viewStore.listViews(
+                        request.corpusId,
+                    );
+                    const eligible = await Promise.all(
+                        snapshot.views.map((entry) =>
+                            this.informationalVersionEligible(entry, entry),
+                        ),
+                    );
+                    return {
+                        ...view,
+                        protectedTargets: editorialProtection(view),
+                        relatedArticles: relatedEditorialArticles(
+                            view,
+                            snapshot.views.filter(
+                                (_, index) => eligible[index],
+                            ),
+                        ),
+                    };
+                }
+                return view;
+            }),
+        );
     }
 
     public async saveViewDraft(
@@ -6141,6 +6071,7 @@ export class FileMemoryService
 
     private async publishViewLocked(
         request: ViewPublishRequest,
+        signal?: AbortSignal,
     ): Promise<ViewPublicationStatus> {
         const view = await this.viewStore.getView(request);
         if (!view) throw new Error("Publication revision is missing");
@@ -6148,7 +6079,7 @@ export class FileMemoryService
         const publication = await this.viewStore.publishView(request);
         if (publication.indexState === "ready") return publication;
         await this.viewPublicationCheckpoint?.("intent");
-        return this.indexViewLocked(view);
+        return this.indexViewLocked(view, signal);
     }
 
     public async retryViewIndex(
@@ -6198,59 +6129,99 @@ export class FileMemoryService
 
     private async indexViewLocked(
         view: ViewVersion,
+        signal?: AbortSignal,
     ): Promise<ViewPublicationStatus> {
-        const directory = this.viewIndexDirectory(view);
-        const content = viewContentToText(view.content);
+        signal?.throwIfAborted();
+        if (this.closed || this.viewIndexRemovalBarriers.has(view.corpusId))
+            throw new ViewBuildStaleError(
+                "View indexing is closing or being purged",
+            );
+        const runtime = await this.getCorpusRuntime(view.corpusId);
+        const target = await this.viewStore.getView({
+            corpusId: view.corpusId,
+            viewId: view.viewId,
+        });
+        if (!target)
+            throw new ViewBuildStaleError("Current view target is missing");
+        const key = this.viewIndexDirectory(view);
+        let preparation = this.viewIndexPreparations.get(key);
+        if (!preparation) {
+            const controller = new AbortController();
+            const directory = path.join(
+                this.viewIndexStagingDirectory(view.corpusId),
+                randomUUID(),
+            );
+            preparation = {
+                corpusId: view.corpusId,
+                directory,
+                controller,
+                work: Promise.resolve().then(() =>
+                    this.buildViewIndex(
+                        view,
+                        path.join(directory, "index"),
+                        controller.signal,
+                    ),
+                ),
+                installed: false,
+            };
+            this.viewIndexPreparations.set(key, preparation);
+        }
+        const pending = preparation;
+        const cancel = () =>
+            pending.controller.abort(
+                signal?.reason ??
+                    new ViewBuildStaleError("View indexing cancelled"),
+            );
+        signal?.addEventListener("abort", cancel, { once: true });
         try {
-            await mkdir(directory, { recursive: true });
-            const index = this.indexFactory(view.corpusId, directory);
-            await index.rebuild(
-                [
-                    {
-                        source: {
-                            corpusId: view.corpusId,
-                            sourceId: view.viewId,
-                            sourceType: "markdown",
-                            title: view.content.title,
-                            activeRevisionId: view.revisionId,
-                        },
-                        revision: {
-                            revisionId: view.revisionId,
-                            sourceId: view.viewId,
-                            contentHash: viewHash(content),
-                            mimeType: "text/markdown",
-                            pipelineVersion,
-                            state: "ready",
-                        },
-                        content,
-                        pipeline: { mode: "content" },
-                    },
-                ],
-                this.maintenance.signal,
-                async () => {},
-            );
-            await stampIndexSchema(directory, "views", true);
-            await writeFile(
-                path.join(directory, "ready"),
-                view.revisionId,
-                "utf8",
-            );
-        } catch (error) {
-            await rm(directory, { recursive: true, force: true });
-            return this.viewStore.updateViewIndex(
+            let error = await runtime.access.outsideWrite(() => pending.work);
+            signal?.throwIfAborted();
+            pending.controller.signal.throwIfAborted();
+            if (this.closed || this.viewIndexRemovalBarriers.has(view.corpusId))
+                throw new ViewBuildStaleError(
+                    "View indexing was closed or purged",
+                );
+            this.assertRemovalComplete(runtime);
+            const current = await this.viewStore.listViews(view.corpusId);
+            if (
+                current.views.find((entry) => entry.viewId === view.viewId)
+                    ?.revisionId !== target.revisionId
+            )
+                throw new ViewBuildStaleError(
+                    "Corpus or view changed during derivative preparation; retry the current exact revision",
+                );
+            // Metadata-only synopsis updates may replace the manifest. Recheck
+            // exact evidence and influence eligibility, not object identity.
+            await this.assertViewPublicationFresh(view);
+            const publication = await this.viewStore.getViewPublication(view);
+            if (publication.blockedReason)
+                throw new Error(publication.blockedReason);
+            if (publication.publishedRevisionId !== view.revisionId)
+                throw new ViewBuildStaleError(
+                    "Publication changed during derivative preparation",
+                );
+            if (pending.installed) return publication;
+            if (!error) {
+                error = await this.installPreparedViewIndex(
+                    pending.directory,
+                    key,
+                );
+                if (!error) await this.viewPublicationCheckpoint?.("index");
+            }
+            const status = await this.viewStore.updateViewIndex(
                 view.corpusId,
                 view.viewId,
                 view.revisionId,
-                `Indexing failed: ${redactRunbookText(error instanceof Error ? error.message : String(error))}`,
+                error,
             );
+            pending.installed = true;
+            return status;
+        } finally {
+            signal?.removeEventListener("abort", cancel);
+            await this.removeViewIndexPreparation(pending.directory);
+            if (this.viewIndexPreparations.get(key) === pending)
+                this.viewIndexPreparations.delete(key);
         }
-
-        await this.viewPublicationCheckpoint?.("index");
-        return this.viewStore.updateViewIndex(
-            view.corpusId,
-            view.viewId,
-            view.revisionId,
-        );
     }
 
     private async informationalIndexReady(view: ViewVersion): Promise<boolean> {
@@ -6271,7 +6242,10 @@ export class FileMemoryService
         );
     }
 
-    private async recoverInformationalEffect(view: ViewVersion): Promise<void> {
+    private async recoverInformationalEffect(
+        view: ViewVersion,
+        signal?: AbortSignal,
+    ): Promise<ViewPublicationStatus> {
         await this.assertViewPublicationFresh(view);
         let publication = await this.viewStore.getViewPublication({
             corpusId: view.corpusId,
@@ -6283,7 +6257,8 @@ export class FileMemoryService
             publication.indexState !== "ready" ||
             !(await this.informationalIndexReady(view))
         )
-            await this.indexViewLocked(view);
+            publication = await this.indexViewLocked(view, signal);
+        return publication;
     }
 
     private async cleanArchivedViewIndexes(corpusId: string): Promise<void> {
@@ -6437,6 +6412,7 @@ export class FileMemoryService
         target: ViewBuildTarget,
         current?: ViewVersion,
         retrieval?: ViewBuildSnapshot["informationalRetrieval"] | false,
+        detachedRetrieval = false,
     ): Promise<ViewBuildSnapshot> {
         if (!this.informationalWikiEnabled)
             throw new Error(
@@ -6490,7 +6466,7 @@ export class FileMemoryService
             wiki.excludedSourceIds,
             retrieval,
         );
-        const selection = await runtime.index.readFragments({
+        const request = {
             terms: [wiki.query, ...wiki.aliases],
             ...(followSources.length ? { followSources } : {}),
             sourceIds: (context?.sources ?? selected)
@@ -6498,7 +6474,10 @@ export class FileMemoryService
                 .filter(
                     (sourceId) => !wiki.excludedSourceIds.includes(sourceId),
                 ),
-        });
+        };
+        const selection = await (detachedRetrieval
+            ? this.detachedInformationalFragments(runtime, request)
+            : runtime.index.readFragments(request));
         if (!selection.fragments.length)
             throw new Error(
                 "No substantive indexed fragments matched this wiki selector",
@@ -7131,20 +7110,44 @@ export class FileMemoryService
         await this.viewStore.activateWikiRedirect(corpusId, jobId, targetId);
         signal?.throwIfAborted();
         await this.cleanArchivedViewIndexes(corpusId);
-        await this.recoverInformationalEffect(canonical);
-        await this.acknowledgeWikiConsolidation(corpusId, jobId, targetId);
+        const publication = await this.recoverInformationalEffect(
+            canonical,
+            signal,
+        );
+        signal?.throwIfAborted();
+        if (
+            publication.indexState !== "ready" ||
+            publication.publishedRevisionId !== canonical.revisionId ||
+            publication.blockedReason
+        )
+            throw new Error(
+                `Consolidation cannot bind before the current derivative index is ready: ${publication.reason}`,
+            );
+        await this.acknowledgeWikiConsolidation(
+            corpusId,
+            jobId,
+            targetId,
+            canonical.revisionId,
+        );
     }
 
     private async acknowledgeWikiConsolidation(
         corpusId: string,
         jobId: string,
         targetId: string,
+        acceptedRevisionId?: string,
     ): Promise<void> {
         await this.viewStore.updateViewBuild(corpusId, jobId, (current) => {
             const target = current.results.find(
                 (entry) => entry.viewId === targetId,
             );
-            if (!target?.wikiConsolidation)
+            if (
+                !target?.wikiConsolidation ||
+                target.wikiConsolidation.stage === "stale" ||
+                (acceptedRevisionId !== undefined &&
+                    target.wikiConsolidation.acceptedRevisionId !==
+                        acceptedRevisionId)
+            )
                 throw new ViewBuildStaleError(
                     "Consolidation receipt was forgotten",
                 );
@@ -7339,8 +7342,19 @@ export class FileMemoryService
             publication.indexState !== "ready" ||
             !(await this.informationalIndexReady(canonical))
         )
-            publication = await this.indexViewLocked(canonical);
+            publication = await this.indexViewLocked(canonical, signal);
         signal.throwIfAborted();
+        await this.recheckViewInput(result.snapshot);
+        await this.checkWikiContributionInput(contribution.input, false);
+        const currentCanonical = await this.viewStore.getView({
+            corpusId: job.corpusId,
+            viewId: canonical.viewId,
+        });
+        if (currentCanonical?.revisionId !== canonical.revisionId)
+            throw new ViewBuildStaleError(
+                "Canonical Wiki contribution changed during derivative preparation",
+            );
+        await this.assertViewPublicationFresh(canonical);
         if (
             publication.indexState !== "ready" ||
             publication.blockedReason ||
@@ -7804,11 +7818,31 @@ export class FileMemoryService
     }
 
     private async assertInfluenceEligible(
-        input?: Pick<ViewBuildSnapshot, "corpusId" | "influenceSources">,
+        input?: Pick<
+            ViewBuildSnapshot,
+            "corpusId" | "influenceSources" | "influenceEvents"
+        >,
     ): Promise<void> {
-        if (!input?.influenceSources?.length) return;
+        if (
+            !input ||
+            (!input.influenceSources?.length && !input.influenceEvents?.length)
+        )
+            return;
         const runtime = await this.getCorpusRuntime(input.corpusId);
-        for (const influence of input.influenceSources) {
+        for (const influence of input.influenceEvents ?? []) {
+            const event = runtime.events.find(
+                (entry) => entry.eventId === influence.eventId,
+            );
+            if (
+                !event ||
+                isSuppressedEvent(runtime, event) ||
+                viewHash(event) !== influence.fingerprint
+            )
+                throw new ViewBuildStaleError(
+                    "Topic event evidence changed or was forgotten",
+                );
+        }
+        for (const influence of input.influenceSources ?? []) {
             const source = runtime.manifest.sources.find(
                 (entry) => entry.sourceId === influence.sourceId,
             );
@@ -7856,7 +7890,7 @@ export class FileMemoryService
         };
         await this.applyInformationalFamilyOperation(request, family);
         if (!family.enabled) return this.viewStore.recordViewMaintenance(plan);
-        const active = await this.viewStore.listViewBuilds(corpusId);
+        const active = await this.viewStore.listViewInventoryBuilds(corpusId);
         if (active.some((job) => job.state === "running"))
             return this.viewStore.recordViewMaintenance(plan);
         if (
@@ -7926,6 +7960,9 @@ export class FileMemoryService
             snapshot.views,
             kind,
         );
+        const familyVersion = viewHash(
+            await this.viewStore.getWikiFamily(corpusId, kind),
+        );
         const { targets, snapshots } = await this.prepareWikiTargets(
             corpusId,
             family,
@@ -7935,6 +7972,12 @@ export class FileMemoryService
             plan,
             kind,
             automatic,
+        );
+        await this.assertWikiPlanCurrent(
+            corpusId,
+            kind,
+            familyVersion,
+            snapshot.views,
         );
         // Save discovered identities while leaving unadmitted work retryable.
         await this.viewStore.saveWikiFamily(corpusId, family, kind);
@@ -8149,7 +8192,7 @@ export class FileMemoryService
                     selector: target.definition.selector,
                 });
             } catch (error) {
-                if (!(error instanceof Error) || "code" in error) throw error;
+                if (!this.isTechnicalTargetRejection(error)) throw error;
                 plan.targets.push({
                     viewId: descriptor.viewId,
                     expectedVersion: target.expectedVersion,
@@ -8232,6 +8275,8 @@ export class FileMemoryService
             corpusId,
             target,
             current,
+            undefined,
+            true,
         );
         const query =
             input.definition.wiki?.query ??
@@ -8529,6 +8574,7 @@ export class FileMemoryService
             runtime.manifest.indexGeneration,
             runtime.manifest.knowledgeSuppressions ?? [],
             `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-lazy-v6" : "raw-v1"}`,
+            this.topicEvents(runtime),
         );
     }
 
@@ -8683,6 +8729,10 @@ export class FileMemoryService
         )
             return this.viewStore.recordViewMaintenance(plan);
         await this.ensureDocumentIndex(request.corpusId, runtime);
+        const eventOccurrences = await this.topicEventOccurrences(
+            request.corpusId,
+            runtime,
+        );
         const input = await captureTopicBuild({
             corpusId: request.corpusId,
             actor: userInfo().username,
@@ -8690,6 +8740,8 @@ export class FileMemoryService
             sources: this.topicSources(runtime),
             suppressions: runtime.manifest.knowledgeSuppressions ?? [],
             model: `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-lazy-v6" : "raw-v1"}`,
+            eventOccurrences,
+            influenceEvents: this.topicEvents(runtime),
             ...(runtime.manifest.indexGeneration
                 ? { indexGeneration: runtime.manifest.indexGeneration }
                 : {}),
@@ -11972,11 +12024,26 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<CorpusIndex> {
+        const pending = this.eventIndexPreparationWork.get(corpusId);
+        if (pending)
+            await runtime.access.outsideWrite(async () => {
+                await Promise.allSettled([pending]);
+            });
+        if (this.eventIndexControllers.has(corpusId))
+            throw new ViewBuildStaleError(
+                "Event index preparation is already running",
+            );
+        if (this.viewIndexRemovalBarriers.has(corpusId))
+            throw new ViewBuildStaleError(
+                "Event evidence removal is in progress",
+            );
         const root = this.eventIndexRoot(corpusId);
         const store = this.eventStore(corpusId);
         const version = await store.version();
         let state = await this.purgeObsoleteEventIndex(corpusId, runtime);
         if (state !== undefined && state.sequence === version.sequence) {
+            const cached = this.graphEventIndexes.get(corpusId);
+            if (cached?.generation === state.generation) return cached.index;
             try {
                 await access(
                     path.join(
@@ -11988,7 +12055,20 @@ export class FileMemoryService
                     corpusId,
                     this.eventIndexDirectory(corpusId, state.generation),
                 );
-                await index.initialize();
+                await this.loadReadyEventIndex(corpusId, runtime, index);
+                const current = await store.version();
+                if (
+                    this.closed ||
+                    current.sequence !== version.sequence ||
+                    current.eligibilityRevision !== version.eligibilityRevision
+                )
+                    throw new ViewBuildStaleError(
+                        "Event eligibility changed while loading the projection",
+                    );
+                this.graphEventIndexes.set(corpusId, {
+                    generation: state.generation,
+                    index,
+                });
                 return index;
             } catch (error) {
                 if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -11999,39 +12079,61 @@ export class FileMemoryService
             state = undefined;
         }
         await mkdir(root, { recursive: true });
+        if (this.closed)
+            throw new ViewBuildStaleError("Memory service is closing");
+        const controller = new AbortController();
+        this.eventIndexControllers.set(corpusId, controller);
+        const events = runtime.events
+            .filter((event) => !isSuppressedEvent(runtime, event))
+            .map((event) => structuredClone(event));
         const generation = randomUUID();
         const directory = this.eventIndexDirectory(corpusId, generation);
-        await mkdir(directory);
         try {
+            await mkdir(directory);
             const index = this.eventIndexFactory(corpusId, directory);
+            const preparation = Promise.resolve().then(async () => {
+                if (
+                    state &&
+                    index.append &&
+                    state.eligibilityRevision === version.eligibilityRevision
+                ) {
+                    await cp(
+                        this.eventIndexDirectory(corpusId, state.generation),
+                        directory,
+                        { recursive: true },
+                    );
+                    await index.append(
+                        events
+                            .filter(
+                                (event) =>
+                                    store.sequenceFor(event.eventId) >
+                                    (state.sequence ?? 0),
+                            )
+                            .map((event) => this.eventDocument(event)),
+                        controller.signal,
+                        async () => {},
+                    );
+                } else {
+                    await index.rebuild(
+                        events.map((event) => this.eventDocument(event)),
+                        controller.signal,
+                        async () => {},
+                    );
+                }
+            });
+            this.eventIndexPreparationWork.set(corpusId, preparation);
+            await runtime.access.outsideWrite(() => preparation);
+            controller.signal.throwIfAborted();
+            const currentVersion = await store.version();
             if (
-                state &&
-                index.append &&
-                state.eligibilityRevision === version.eligibilityRevision
-            ) {
-                await cp(
-                    this.eventIndexDirectory(corpusId, state.generation),
-                    directory,
-                    { recursive: true },
+                this.closed ||
+                currentVersion.sequence !== version.sequence ||
+                currentVersion.eligibilityRevision !==
+                    version.eligibilityRevision
+            )
+                throw new ViewBuildStaleError(
+                    "Event eligibility changed during index preparation",
                 );
-                await index.append(
-                    runtime.events
-                        .filter(
-                            (event) =>
-                                store.sequenceFor(event.eventId) >
-                                (state.sequence ?? 0),
-                        )
-                        .map((event) => this.eventDocument(event)),
-                    this.maintenance.signal,
-                    async () => {},
-                );
-            } else {
-                await index.rebuild(
-                    runtime.events.map((event) => this.eventDocument(event)),
-                    this.maintenance.signal,
-                    async () => {},
-                );
-            }
             await stampIndexSchema(
                 directory,
                 "conversation-events",
@@ -12067,10 +12169,16 @@ export class FileMemoryService
                 });
             }
             await collectJsonSegments(root);
+            this.graphEventIndexes.set(corpusId, { generation, index });
             return index;
         } catch (error) {
             await rm(directory, { recursive: true, force: true });
+            controller.signal.throwIfAborted();
             throw error;
+        } finally {
+            if (this.eventIndexControllers.get(corpusId) === controller)
+                this.eventIndexControllers.delete(corpusId);
+            this.eventIndexPreparationWork.delete(corpusId);
         }
     }
 
@@ -13030,5 +13138,1449 @@ export class FileMemoryService
         if (signal.aborted) {
             throw signal.reason ?? new Error("Ingestion cancelled");
         }
+    }
+    private readonly graphEventWork = new Map<string, Promise<void>>();
+    private readonly graphEventErrors = new Map<string, string>();
+    private readonly graphEventIndexes = new Map<
+        string,
+        { generation: string; index: CorpusIndex }
+    >();
+    private readonly graphDocumentWork = new Map<string, Promise<void>>();
+    private readonly graphDocumentErrors = new Map<string, string>();
+    private readonly documentGraphCache = new Map<
+        string,
+        { fingerprint: string; projection: GraphProjection }
+    >();
+    private readonly graphSnapshots = new Map<
+        string,
+        {
+            corpusId: string;
+            kind: KnowledgeGraphRequest["kind"];
+            fingerprint: string;
+            binding: string;
+            inventory: GraphInventory;
+            coverage: KnowledgeGraphCoverage;
+        }
+    >();
+
+    private async graphDocumentFingerprint(
+        runtime: CorpusRuntime,
+    ): Promise<string> {
+        const corpusId = runtime.manifest.corpus.corpusId;
+        return viewHash({
+            indexGeneration: runtime.manifest.indexGeneration,
+            indexFiles: runtime.manifest.sources.length
+                ? await indexFingerprint(
+                      this.indexDirectory(
+                          corpusId,
+                          runtime.manifest.indexGeneration,
+                      ),
+                      "documents",
+                  )
+                : null,
+            sources: this.graphSources(runtime),
+            sourceCount: runtime.manifest.sources.length,
+            suppressions: runtime.manifest.knowledgeSuppressions ?? [],
+        });
+    }
+
+    private async graphFingerprint(
+        runtime: CorpusRuntime,
+        kind: KnowledgeGraphRequest["kind"],
+        documentFingerprint?: string,
+    ): Promise<string> {
+        const corpusId = runtime.manifest.corpus.corpusId;
+        const viewHead = await this.viewStore.getCommittedHead(corpusId);
+        return viewHash({
+            documents:
+                documentFingerprint ??
+                (await this.graphDocumentFingerprint(runtime)),
+            events: await this.eventStore(corpusId).version(),
+            eventIndex: runtime.events.length
+                ? await readJson<EventIndexState>(
+                      path.join(this.eventIndexRoot(corpusId), "state.json"),
+                  )
+                : null,
+            viewHead: kind === "hierarchy" ? viewHead : undefined,
+        });
+    }
+
+    private scheduleGraphEvents(corpusId: string): void {
+        if (
+            this.closed ||
+            this.graphEventWork.has(corpusId) ||
+            this.eventIndexControllers.has(corpusId)
+        )
+            return;
+        this.graphEventErrors.delete(corpusId);
+        const work = this.enqueueWrite(corpusId, async () => {
+            await this.getEventIndex(
+                corpusId,
+                await this.getCorpusRuntime(corpusId),
+            );
+        })
+            .then(
+                () => undefined,
+                (error: unknown) => {
+                    if (!this.closed && !(error instanceof ViewBuildStaleError))
+                        this.graphEventErrors.set(corpusId, safeError(error));
+                },
+            )
+            .finally(() => this.graphEventWork.delete(corpusId));
+        this.graphEventWork.set(corpusId, work);
+    }
+
+    private scheduleGraphDocuments(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): void {
+        if (
+            this.closed ||
+            this.graphDocumentWork.has(corpusId) ||
+            this.graphDocumentErrors.has(corpusId)
+        )
+            return;
+        const work = this.prepareDocumentReadIndex(corpusId, runtime)
+            .catch((error: unknown) => {
+                if (!this.closed && !(error instanceof ViewBuildStaleError))
+                    this.graphDocumentErrors.set(corpusId, safeError(error));
+            })
+            .finally(() => this.graphDocumentWork.delete(corpusId));
+        this.graphDocumentWork.set(corpusId, work);
+    }
+
+    private async preparedGraphEvents(
+        corpusId: string,
+    ): Promise<CorpusIndex | undefined> {
+        const state = await readJson<EventIndexState>(
+            path.join(this.eventIndexRoot(corpusId), "state.json"),
+        );
+        const version = await this.eventStore(corpusId).version();
+        if (
+            !state ||
+            state.sequence !== version.sequence ||
+            state.eligibilityRevision !== version.eligibilityRevision
+        )
+            return undefined;
+        const cached = this.graphEventIndexes.get(corpusId);
+        return cached?.generation === state.generation
+            ? cached.index
+            : undefined;
+    }
+
+    private graphEventSupport(event: MemoryEvent): GraphSupport {
+        const authority = eventAuthority(event);
+        return {
+            kind: "event",
+            corpusId: event.corpusId,
+            eventId: event.eventId,
+            eventTime: event.eventTime,
+            title: event.eventType,
+            ...(event.conversationId
+                ? { conversationId: event.conversationId }
+                : {}),
+            ...(event.turnId ? { turnId: event.turnId } : {}),
+            ...(event.sender ? { sender: event.sender } : {}),
+            ...(authority ? { authority } : {}),
+        };
+    }
+
+    private async documentGraphProjections(
+        runtime: CorpusRuntime,
+        kind: KnowledgeGraphRequest["kind"],
+        coverage: KnowledgeGraphCoverage,
+        fingerprint: string,
+    ): Promise<GraphProjection[]> {
+        if (kind === "hierarchy") return [];
+        const key = JSON.stringify([runtime.manifest.corpus.corpusId, kind]);
+        const cached = this.documentGraphCache.get(key);
+        if (cached?.fingerprint === fingerprint) return [cached.projection];
+        const sources = this.graphSources(runtime);
+        const supports = new Map<string, GraphSupport>(
+            sources.map((source) => [
+                source.sourceId,
+                {
+                    kind: "document",
+                    corpusId: runtime.manifest.corpus.corpusId,
+                    ...source,
+                    title: runtime.manifest.sources
+                        .find((entry) => entry.sourceId === source.sourceId)!
+                        .title.slice(0, 500),
+                },
+            ]),
+        );
+        const exclusions = new Map<string, Set<string>>();
+        for (const entry of runtime.manifest.knowledgeSuppressions ?? []) {
+            const key = `${entry.sourceId}\0${entry.kind}`;
+            const names = exclusions.get(key) ?? new Set<string>();
+            names.add(normalizedKnowledgeName(entry.name));
+            exclusions.set(key, names);
+        }
+        try {
+            const projection: GraphProjection = {
+                graph: await readGraphProjection(
+                    runtime.index,
+                    new Set(supports.keys()),
+                    kind === "entities" ? "entities" : "topics",
+                    exclusions,
+                ),
+                supports,
+            };
+            this.documentGraphCache.set(key, { fingerprint, projection });
+            while (this.documentGraphCache.size > 16)
+                this.documentGraphCache.delete(
+                    this.documentGraphCache.keys().next().value!,
+                );
+            return [projection];
+        } catch (error) {
+            coverage.documents.state =
+                error instanceof GraphProjectionUnavailable
+                    ? "unsupported"
+                    : "error";
+            coverage.documents.indexed = 0;
+            coverage.reasons.push(safeError(error));
+            return [];
+        }
+    }
+
+    private async hierarchyGraph(
+        request: KnowledgeGraphRequest,
+        runtime: CorpusRuntime,
+        events: MemoryEvent[],
+        coverage: KnowledgeGraphCoverage,
+    ): Promise<GraphInventory> {
+        const state = await this.viewStore.getTopicState(request.corpusId);
+        const snapshot = state.snapshot;
+        if (state.building) {
+            coverage.topics = {
+                state: "building",
+                ...(snapshot ? { generation: snapshot.generation } : {}),
+            };
+            coverage.reasons.push(
+                "Topic maintenance is still generating; raw evidence remains available through topic pages.",
+            );
+            return { nodes: [], edges: [], supports: new Map() };
+        }
+        if (
+            snapshot &&
+            (snapshot.nodes.length > graphProjectionLimits.nodes ||
+                snapshot.occurrences.length >
+                    graphProjectionLimits.semanticReferences ||
+                snapshot.parents.length + snapshot.related.length >
+                    graphProjectionLimits.edges)
+        ) {
+            coverage.topics = {
+                state: "unsupported",
+                generation: snapshot.generation,
+            };
+            coverage.reasons.push(
+                "Maintained topic projection exceeds bounded graph read budgets; the snapshot remains available through topic pages.",
+            );
+            return { nodes: [], edges: [], supports: new Map() };
+        }
+        const current =
+            snapshot?.inputFingerprint === this.topicFingerprint(runtime);
+        coverage.topics = {
+            state: current ? "ready" : snapshot ? "stale" : "building",
+            ...(snapshot ? { generation: snapshot.generation } : {}),
+        };
+        if (!current || !snapshot) {
+            coverage.reasons.push(
+                "Maintained topic incidence is not current; rebuild topics to populate the hierarchy.",
+            );
+            return { nodes: [], edges: [], supports: new Map() };
+        }
+        const eventById = new Map(
+            events.map((event) => [event.eventId, event]),
+        );
+        const documentIds = new Set(
+            this.topicSources(runtime).map((source) => source.sourceId),
+        );
+        const supports = new Map<string, GraphSupport[]>();
+        const maintained = snapshot.curation
+            ? snapshot.curation.concepts.map((concept) => ({
+                  ...concept,
+                  occurrenceIds: snapshot.nodes
+                      .filter((node) => concept.memberIds.includes(node.id))
+                      .flatMap((node) => node.occurrenceIds),
+                  summaryState: concept.summaryState ?? "ready",
+              }))
+            : snapshot.nodes;
+        const nodes = maintained.flatMap((node) => {
+            const occurrences = snapshot.occurrences.filter((entry) =>
+                node.occurrenceIds.includes(entry.id),
+            );
+            const selected: GraphSupport[] = [];
+            for (const occurrence of occurrences) {
+                const eventId = occurrence.citations[0]?.evidence?.eventId;
+                if (eventId) {
+                    const event = eventById.get(eventId);
+                    if (
+                        event &&
+                        request.evidenceKinds?.includes("event") !== false
+                    )
+                        selected.push(this.graphEventSupport(event));
+                } else if (
+                    documentIds.has(occurrence.sourceId) &&
+                    request.evidenceKinds?.includes("document") !== false
+                ) {
+                    selected.push({
+                        kind: "document",
+                        corpusId: request.corpusId,
+                        sourceId: occurrence.sourceId,
+                        revisionId: occurrence.revisionId,
+                        locator: occurrence.citations[0]?.locator,
+                    });
+                }
+            }
+            if (!selected.length) return [];
+            const id = graphIdentity(
+                request.corpusId,
+                "maintained-topic",
+                node.id,
+            );
+            const unique = [
+                ...new Map(
+                    selected.map((entry) => [
+                        graphSupportIdentity(entry),
+                        entry,
+                    ]),
+                ).values(),
+            ];
+            supports.set(id, unique);
+            return [
+                {
+                    id,
+                    kind: "topic" as const,
+                    label: node.label,
+                    scope: node.scope,
+                    topicId: node.id,
+                    summaryState: node.summaryState,
+                    types: [],
+                    mentionCount: selected.length,
+                    supportCount: unique.length,
+                    ...graphSupportCounts(unique),
+                },
+            ];
+        });
+        const ids = new Set(nodes.map((node) => node.id));
+        const rawEdges = [
+            ...snapshot.parents.map((edge) => ({
+                from: edge.parentId,
+                to: edge.childId,
+                type: "parent",
+            })),
+            ...snapshot.related.map((edge) => ({
+                from: edge.fromId,
+                to: edge.toId,
+                type: "related",
+            })),
+        ];
+        const edges = rawEdges.flatMap((edge) => {
+            const source = graphIdentity(
+                request.corpusId,
+                "maintained-topic",
+                edge.from,
+            );
+            const target = graphIdentity(
+                request.corpusId,
+                "maintained-topic",
+                edge.to,
+            );
+            if (!ids.has(source) || !ids.has(target)) return [];
+            const id = graphIdentity(request.corpusId, "edge", [
+                source,
+                target,
+                edge.type,
+            ]);
+            const evidence = [
+                ...new Map(
+                    [
+                        ...(supports.get(source) ?? []),
+                        ...(supports.get(target) ?? []),
+                    ].map((entry) => [graphSupportIdentity(entry), entry]),
+                ).values(),
+            ];
+            supports.set(id, evidence);
+            return [
+                {
+                    id,
+                    source,
+                    target,
+                    type: edge.type,
+                    count: 1,
+                    supportCount: evidence.length,
+                    ...graphSupportCounts(evidence),
+                },
+            ];
+        });
+        return { nodes, edges, supports };
+    }
+
+    public async queryKnowledgeGraph(
+        request: KnowledgeGraphRequest,
+    ): Promise<KnowledgeGraphResponse> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        if (!["entities", "topics", "hierarchy"].includes(request.kind))
+            throw new Error("Invalid graph kind");
+        graphLimit(request.maxNodes, 100, 250);
+        graphLimit(request.maxEdges, 200, 500);
+        if (
+            request.pageBy !== undefined &&
+            !["nodes", "edges"].includes(request.pageBy)
+        )
+            throw new Error("Invalid graph paging mode");
+        if (request.pageBy === "edges" && (request.maxNodes ?? 100) < 2)
+            throw new Error("Edge paging requires at least two endpoint nodes");
+        if (
+            request.evidenceKinds?.some(
+                (kind) => kind !== "document" && kind !== "event",
+            )
+        )
+            throw new Error("Invalid graph evidence kind");
+        this.validateEventFilterRequest({
+            corpusId: request.corpusId,
+            ...request.eventFilter,
+        });
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        let prepareEvents = false;
+        let prepareDocuments = false;
+        const result = await runtime.access.read(async () => {
+            const documentFingerprint =
+                await this.graphDocumentFingerprint(runtime);
+            const fingerprint = await this.graphFingerprint(
+                runtime,
+                request.kind,
+                documentFingerprint,
+            );
+            const binding = viewHash({
+                corpusId: request.corpusId,
+                kind: request.kind,
+                evidenceKinds: request.evidenceKinds ?? ["document", "event"],
+                eventFilter: request.eventFilter ?? {},
+            });
+            const cached = [...this.graphSnapshots.values()].find(
+                (snapshot) =>
+                    snapshot.fingerprint === fingerprint &&
+                    snapshot.binding === binding &&
+                    graphCoverageState(snapshot.coverage) === "ready",
+            );
+            if (cached)
+                return this.graphQueryResult(
+                    request,
+                    fingerprint,
+                    binding,
+                    cached.inventory,
+                    cached.coverage,
+                );
+            const documents =
+                request.evidenceKinds?.includes("document") !== false;
+            const includeEvents =
+                request.evidenceKinds?.includes("event") !== false;
+            const eligible = includeEvents
+                ? runtime.events.filter(
+                      (event) =>
+                          !isSuppressedEvent(runtime, event) &&
+                          !!event.content?.trim() &&
+                          matchesEventFilter(event, request.eventFilter ?? {}),
+                  )
+                : [];
+            const documentReady = await this.documentGraphReady(
+                runtime,
+                request,
+            );
+            const coverage: KnowledgeGraphCoverage = {
+                documents: {
+                    state: documentReady ? "ready" : "building",
+                    total: runtime.manifest.sources.length,
+                    eligible: documents ? this.graphSources(runtime).length : 0,
+                    indexed:
+                        documentReady && documents
+                            ? this.graphSources(runtime).length
+                            : 0,
+                },
+                events: {
+                    state: "ready",
+                    total: runtime.events.length,
+                    eligible: eligible.length,
+                    indexed: 0,
+                },
+                reasons: [],
+            };
+            if (runtime.events.some((event) => !event.content?.trim()))
+                coverage.reasons.push(
+                    "Events without content are excluded; activity and housekeeping metadata are not factual graph evidence.",
+                );
+            if (!documentReady) {
+                prepareDocuments = true;
+                coverage.documents.state = this.graphDocumentErrors.has(
+                    request.corpusId,
+                )
+                    ? "error"
+                    : "building";
+                coverage.reasons.push(
+                    this.graphDocumentErrors.get(request.corpusId) ??
+                        "Document projection preparation is running independently of graph reads.",
+                );
+            }
+            const projections =
+                documentReady && documents && this.graphSources(runtime).length
+                    ? await this.documentGraphProjections(
+                          runtime,
+                          request.kind,
+                          coverage,
+                          documentFingerprint,
+                      )
+                    : [];
+            if (runtime.manifest.knowledgeSuppressions?.length)
+                coverage.reasons.push(
+                    "Source knowledge suppressions are applied before graph aggregation.",
+                );
+            prepareEvents = await this.addEventGraphProjection(
+                request.corpusId,
+                eligible,
+                request.kind,
+                coverage,
+                projections,
+            );
+            const inventory =
+                request.kind === "hierarchy"
+                    ? await this.hierarchyGraph(
+                          request,
+                          runtime,
+                          eligible,
+                          coverage,
+                      )
+                    : this.readGraphInventory(request, projections, coverage);
+            return this.graphQueryResult(
+                request,
+                fingerprint,
+                binding,
+                inventory,
+                coverage,
+            );
+        });
+        if (prepareEvents) this.scheduleGraphEvents(request.corpusId);
+        if (prepareDocuments)
+            this.scheduleGraphDocuments(request.corpusId, runtime);
+        return result;
+    }
+
+    private graphQueryResult(
+        request: KnowledgeGraphRequest,
+        fingerprint: string,
+        binding: string,
+        inventory: GraphInventory,
+        coverage: KnowledgeGraphCoverage,
+    ): KnowledgeGraphResponse {
+        const generation = viewHash({
+            fingerprint,
+            request: {
+                ...request,
+                expectedGeneration: undefined,
+                continuationToken: undefined,
+            },
+            coverage,
+        });
+        if (
+            request.expectedGeneration &&
+            request.expectedGeneration !== generation
+        )
+            throw new ViewBuildStaleError(
+                "Graph generation changed; reload the graph",
+            );
+        const bounded = boundGraphInventory(request, inventory, generation);
+        this.graphSnapshots.set(generation, {
+            corpusId: request.corpusId,
+            kind: request.kind,
+            fingerprint,
+            binding,
+            inventory,
+            coverage: structuredClone(coverage),
+        });
+        while (this.graphSnapshots.size > 16)
+            this.graphSnapshots.delete(
+                this.graphSnapshots.keys().next().value!,
+            );
+        return {
+            corpusId: request.corpusId,
+            generation,
+            state: graphCoverageState(coverage),
+            ...bounded,
+            coverage: structuredClone(coverage),
+        };
+    }
+
+    private readGraphInventory(
+        request: KnowledgeGraphRequest,
+        projections: GraphProjection[],
+        coverage: KnowledgeGraphCoverage,
+    ): GraphInventory {
+        try {
+            return graphInventory(request, projections);
+        } catch (error) {
+            const state =
+                error instanceof GraphProjectionUnavailable
+                    ? "unsupported"
+                    : "error";
+            coverage.documents.state = state;
+            coverage.events.state = state;
+            coverage.reasons.push(safeError(error));
+            return { nodes: [], edges: [], supports: new Map() };
+        }
+    }
+
+    private async addEventGraphProjection(
+        corpusId: string,
+        eligible: MemoryEvent[],
+        kind: KnowledgeGraphRequest["kind"],
+        coverage: KnowledgeGraphCoverage,
+        projections: GraphProjection[],
+    ): Promise<boolean> {
+        if (kind === "hierarchy") {
+            coverage.events.indexed = eligible.length;
+            return false;
+        }
+
+        if (!eligible.length) return false;
+        const index = await this.preparedGraphEvents(corpusId);
+        if (index) {
+            try {
+                projections.push({
+                    graph: await readGraphProjection(
+                        index,
+                        new Set(eligible.map((event) => event.eventId)),
+                        kind === "entities" ? "entities" : "topics",
+                        new Map(
+                            eligible.map((event) => [
+                                event.eventId,
+                                this.eventHeaderGraphNames(event),
+                            ]),
+                        ),
+                    ),
+                    supports: new Map(
+                        eligible.map((event) => [
+                            event.eventId,
+                            this.graphEventSupport(event),
+                        ]),
+                    ),
+                });
+                coverage.events.indexed = eligible.length;
+            } catch (error) {
+                coverage.events.state =
+                    error instanceof GraphProjectionUnavailable
+                        ? "unsupported"
+                        : "error";
+                coverage.reasons.push(safeError(error));
+            }
+            return false;
+        }
+        coverage.events.state = this.graphEventErrors.has(corpusId)
+            ? "error"
+            : "building";
+        coverage.reasons.push(
+            this.graphEventErrors.get(corpusId) ??
+                "Event projection preparation is running independently of graph reads.",
+        );
+        return !this.graphEventErrors.has(corpusId);
+    }
+
+    private async documentGraphReady(
+        runtime: CorpusRuntime,
+        request: KnowledgeGraphRequest,
+    ): Promise<boolean> {
+        return (
+            request.kind === "hierarchy" ||
+            request.evidenceKinds?.includes("document") === false ||
+            this.graphSources(runtime).length === 0 ||
+            this.documentIndexReady(request.corpusId, runtime)
+        );
+    }
+
+    private graphSources(runtime: CorpusRuntime) {
+        return runtime.manifest.sources
+            .filter((source) =>
+                source.revisions.some(
+                    (revision) =>
+                        revision.revisionId === source.activeRevisionId &&
+                        revision.state === "ready",
+                ),
+            )
+            .map((source) => ({
+                sourceId: source.sourceId,
+                revisionId: source.activeRevisionId,
+            }));
+    }
+
+    private eventHeaderGraphNames(event: MemoryEvent): ReadonlySet<string> {
+        const content = event.content?.toLowerCase() ?? "";
+        return new Set(
+            [
+                event.eventId,
+                event.corpusId,
+                event.eventType,
+                event.sourceKind,
+                event.producer.producerId,
+                event.producer.producerType,
+                event.conversationId,
+                event.turnId,
+                event.runId,
+                event.sender,
+                event.actionName,
+                eventAuthority(event),
+                event.eventTime,
+                event.observedAt,
+                ...(event.linkedSourceIds ?? []),
+            ]
+                .filter(
+                    (name): name is string =>
+                        !!name && !content.includes(name.toLowerCase()),
+                )
+                .map((name) => name.trim().toLowerCase()),
+        );
+    }
+
+    public async queryGraphSupport(
+        request: GraphSupportRequest,
+    ): Promise<GraphSupportPage> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        const size = graphLimit(request.pageSize, 20, 50);
+        if (!!request.nodeId === !!request.edgeId)
+            throw new Error("Select exactly one graph node or edge");
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        return runtime.access.read(async () => {
+            const snapshot = this.graphSnapshots.get(request.generation);
+            if (
+                !snapshot ||
+                snapshot.corpusId !== request.corpusId ||
+                snapshot.fingerprint !==
+                    (await this.graphFingerprint(runtime, snapshot.kind))
+            )
+                throw new ViewBuildStaleError(
+                    "Graph generation changed or expired; reload the graph",
+                );
+            const id = request.nodeId ?? request.edgeId!;
+            const items = snapshot.inventory.supports.get(id);
+            if (!items)
+                throw new Error(
+                    "Unknown graph node or edge in this generation",
+                );
+            const binding = viewHash([
+                request.corpusId,
+                request.generation,
+                id,
+                size,
+            ]);
+            let offset = 0;
+            if (request.continuationToken) {
+                const token = JSON.parse(
+                    Buffer.from(
+                        request.continuationToken,
+                        "base64url",
+                    ).toString("utf8"),
+                ) as { binding: string; offset: number };
+                if (
+                    token.binding !== binding ||
+                    !Number.isSafeInteger(token.offset) ||
+                    token.offset < 0 ||
+                    token.offset >= items.length
+                )
+                    throw new Error("Invalid graph support continuation token");
+                offset = token.offset;
+            }
+            const end = offset + size;
+            return {
+                generation: request.generation,
+                items: structuredClone(items.slice(offset, end)),
+                total: items.length,
+                ...(end < items.length
+                    ? {
+                          nextContinuationToken: Buffer.from(
+                              JSON.stringify({ binding, offset: end }),
+                          ).toString("base64url"),
+                      }
+                    : {}),
+            };
+        });
+    }
+
+    private async loadReadyEventIndex(
+        corpusId: string,
+        runtime: CorpusRuntime,
+        index: CorpusIndex,
+    ): Promise<void> {
+        if (this.closed)
+            throw new ViewBuildStaleError("Memory service is closing");
+        const controller = new AbortController();
+        this.eventIndexControllers.set(corpusId, controller);
+        const preparation = Promise.resolve().then(() => index.initialize());
+        this.eventIndexPreparationWork.set(corpusId, preparation);
+        try {
+            await runtime.access.outsideWrite(() => preparation);
+            controller.signal.throwIfAborted();
+        } finally {
+            this.eventIndexControllers.delete(corpusId);
+            this.eventIndexPreparationWork.delete(corpusId);
+        }
+    }
+
+    private async topicEventOccurrences(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ) {
+        const events = this.topicEvents(runtime);
+        if (!events.length) return [];
+        const index = requireTopicIndex(
+            await this.getEventIndex(corpusId, runtime),
+        );
+        const byId = new Map(
+            runtime.events.map((event) => [event.eventId, event]),
+        );
+        return (
+            await index.getTopicOccurrences(
+                new Set(events.map((event) => event.eventId)),
+            )
+        )
+            .filter((occurrence) => byId.has(occurrence.sourceId))
+            .filter(
+                (occurrence) =>
+                    !this.eventHeaderGraphNames(
+                        byId.get(occurrence.sourceId)!,
+                    ).has(occurrence.label.trim().toLowerCase()),
+            )
+            .map((occurrence) => {
+                const event = byId.get(occurrence.sourceId)!;
+                const evidence = {
+                    kind: "event" as const,
+                    eventId: event.eventId,
+                };
+                return {
+                    ...occurrence,
+                    id: graphIdentity(
+                        corpusId,
+                        "event-occurrence",
+                        occurrence.id,
+                    ),
+                    evidence,
+                    scope: `event:${corpusId}:${event.conversationId ?? event.eventId}:${eventAuthority(event) ?? event.sender ?? event.sourceKind}`,
+                    citations: occurrence.citations.map((citation) => ({
+                        ...citation,
+                        evidence,
+                    })),
+                };
+            });
+    }
+
+    private topicEvents(runtime: CorpusRuntime) {
+        return runtime.events
+            .filter(
+                (event) =>
+                    !isSuppressedEvent(runtime, event) &&
+                    !!event.content?.trim(),
+            )
+            .map((event) => ({
+                eventId: event.eventId,
+                fingerprint: viewHash(event),
+            }))
+            .sort((a, b) => a.eventId.localeCompare(b.eventId));
+    }
+
+    private async detachedInformationalFragments(
+        runtime: CorpusRuntime,
+        request: IndexedFragmentRequest,
+    ) {
+        const index = runtime.index;
+        const read = index.readFragments;
+        if (!read)
+            throw new Error(
+                "Host does not support bounded informational wiki retrieval",
+            );
+        const fingerprint = await this.graphDocumentFingerprint(runtime);
+        const selection = await runtime.access.outsideWrite(() =>
+            read.call(index, request),
+        );
+        if (
+            runtime.index !== index ||
+            fingerprint !== (await this.graphDocumentFingerprint(runtime))
+        )
+            throw new ViewBuildStaleError(
+                "Indexed informational evidence changed during detached retrieval",
+            );
+        return selection;
+    }
+
+    private async withViewIndexRemoval<T>(
+        corpusId: string,
+        runtime: CorpusRuntime,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        this.eventIndexControllers
+            .get(corpusId)
+            ?.abort(
+                new ViewBuildStaleError("Event evidence is being forgotten"),
+            );
+        this.graphSnapshots.clear();
+        this.documentGraphCache.clear();
+        this.graphEventIndexes.delete(corpusId);
+        this.viewIndexRemovalBarriers.set(
+            corpusId,
+            (this.viewIndexRemovalBarriers.get(corpusId) ?? 0) + 1,
+        );
+        const preparations = [...this.viewIndexPreparations.values()].filter(
+            (entry) => entry.corpusId === corpusId,
+        );
+        for (const preparation of preparations)
+            preparation.controller.abort(
+                new ViewBuildStaleError("View evidence is being forgotten"),
+            );
+        try {
+            const eventPreparation =
+                this.eventIndexPreparationWork.get(corpusId);
+            if (eventPreparation)
+                await runtime.access.outsideWrite(async () => {
+                    await Promise.allSettled([eventPreparation]);
+                });
+            if (preparations.length)
+                await runtime.access.outsideWrite(() =>
+                    this.drainViewIndexPreparations(preparations),
+                );
+            return await operation();
+        } finally {
+            const count = this.viewIndexRemovalBarriers.get(corpusId)! - 1;
+            if (count) this.viewIndexRemovalBarriers.set(corpusId, count);
+            else this.viewIndexRemovalBarriers.delete(corpusId);
+        }
+    }
+
+    private enqueueViewIndexRemoval<T>(
+        corpusId: string,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        return this.enqueueWrite(corpusId, async () =>
+            this.withViewIndexRemoval(
+                corpusId,
+                await this.getCorpusRuntime(corpusId),
+                operation,
+            ),
+        );
+    }
+
+    private removeViewIndexPreparation(directory: string): Promise<void> {
+        const existing = this.viewIndexCleanup.get(directory);
+        if (existing) return existing;
+        clearJsonSegmentCache(directory);
+        const work = rm(directory, {
+            recursive: true,
+            force: true,
+            maxRetries: 5,
+            retryDelay: 25,
+        });
+        this.viewIndexCleanup.set(directory, work);
+        const remove = () => {
+            if (this.viewIndexCleanup.get(directory) === work)
+                this.viewIndexCleanup.delete(directory);
+        };
+        void work.then(remove, remove);
+        return work;
+    }
+
+    private async drainViewIndexPreparations(
+        preparations: Iterable<{
+            directory: string;
+            work: Promise<string | undefined>;
+        }>,
+    ): Promise<void> {
+        await Promise.all(
+            [...preparations].map(async (preparation) => {
+                try {
+                    await preparation.work;
+                } finally {
+                    await this.removeViewIndexPreparation(
+                        preparation.directory,
+                    );
+                }
+            }),
+        );
+    }
+
+    private async buildViewIndex(
+        view: ViewVersion,
+        directory: string,
+        signal: AbortSignal,
+    ): Promise<string | undefined> {
+        const content = viewContentToText(view.content);
+        try {
+            signal.throwIfAborted();
+            await mkdir(directory, { recursive: true });
+            const index = this.indexFactory(view.corpusId, directory);
+            await index.rebuild(
+                [
+                    {
+                        source: {
+                            corpusId: view.corpusId,
+                            sourceId: view.viewId,
+                            sourceType: "markdown",
+                            title: view.content.title,
+                            activeRevisionId: view.revisionId,
+                        },
+                        revision: {
+                            revisionId: view.revisionId,
+                            sourceId: view.viewId,
+                            contentHash: viewHash(content),
+                            mimeType: "text/markdown",
+                            pipelineVersion,
+                            state: "ready",
+                        },
+                        content,
+                        pipeline: { mode: "content" },
+                    },
+                ],
+                signal,
+                async () => {},
+            );
+            signal.throwIfAborted();
+            await stampIndexSchema(directory, "views", true);
+            await writeFile(
+                path.join(directory, "ready"),
+                view.revisionId,
+                "utf8",
+            );
+        } catch (error) {
+            await rm(directory, { recursive: true, force: true });
+            return `Indexing failed: ${redactRunbookText(error instanceof Error ? error.message : String(error))}`;
+        }
+        return undefined;
+    }
+
+    private async installViewIndexSegments(
+        preparation: string,
+        destination: string,
+    ): Promise<void> {
+        const segments = path.join(preparation, jsonSegmentDirectory);
+        try {
+            await access(segments);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+            throw error;
+        }
+        await cp(segments, path.join(destination, jsonSegmentDirectory), {
+            recursive: true,
+            force: false,
+        });
+    }
+
+    private async installPreparedViewIndex(
+        preparation: string,
+        destination: string,
+    ): Promise<string | undefined> {
+        try {
+            await rm(destination, { recursive: true, force: true });
+            await mkdir(path.dirname(destination), { recursive: true });
+            await this.installViewIndexSegments(
+                preparation,
+                path.dirname(destination),
+            );
+            await rename(path.join(preparation, "index"), destination);
+        } catch (error) {
+            await rm(destination, { recursive: true, force: true });
+            return `Indexing failed: ${redactRunbookText(error instanceof Error ? error.message : String(error))}`;
+        }
+        return undefined;
+    }
+
+    private viewIndexStagingDirectory(corpusId: string): string {
+        return path.join(
+            this.rootDirectory,
+            corpusId,
+            "views",
+            "view-search-index-staging",
+        );
+    }
+
+    public async listViewBuildSummaries(
+        request: InventoryPageRequest,
+    ): Promise<MemoryPage<ViewBuildSummary>> {
+        validateInventoryPage(request);
+        const runtime = await this.requireViews(request.corpusId);
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(request.corpusId, async () => {
+                const query = request.query?.toLowerCase() ?? "";
+                const allJobs = (
+                    await this.viewStore.listViewInventoryBuilds(
+                        request.corpusId,
+                    )
+                ).sort(
+                    (a, b) =>
+                        b.updatedAt.localeCompare(a.updatedAt) ||
+                        a.jobId.localeCompare(b.jobId),
+                );
+                const latest = new Map<string, string>();
+                for (const job of allJobs)
+                    for (const result of job.results)
+                        if (!latest.has(result.viewId))
+                            latest.set(result.viewId, job.jobId);
+                const jobs = allJobs.filter(
+                    (job) =>
+                        job.jobId.toLowerCase().includes(query) &&
+                        (!request.viewId ||
+                            job.results.some(
+                                (result) => result.viewId === request.viewId,
+                            )),
+                );
+                const page = pageItems(
+                    jobs,
+                    request.pageSize ?? 25,
+                    request.continuationToken,
+                );
+                return {
+                    ...page,
+                    items: page.items.map((job) => ({
+                        ...job,
+                        results: job.results.map(
+                            ({
+                                inputFingerprint: _input,
+                                evidenceFingerprint: _evidence,
+                                wikiAssessment: _assessment,
+                                ...result
+                            }) => ({
+                                ...result,
+                                current:
+                                    latest.get(result.viewId) === job.jobId,
+                            }),
+                        ),
+                    })),
+                };
+            }),
+        );
+    }
+
+    public async getViewPublications(
+        request: ViewPublicationBatchRequest,
+    ): Promise<ViewPublicationStatus[]> {
+        const runtime = await this.requireViews(request.corpusId);
+        if (
+            !Array.isArray(request.viewIds) ||
+            request.viewIds.length > 100 ||
+            new Set(request.viewIds).size !== request.viewIds.length
+        )
+            throw new Error(
+                "Publication batches require at most 100 unique view IDs",
+            );
+        request.viewIds.forEach((id) => validateIdentifier("view ID", id));
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(request.corpusId, () =>
+                Promise.all(
+                    request.viewIds.map((viewId) =>
+                        this.viewStore.getViewPublication({
+                            corpusId: request.corpusId,
+                            viewId,
+                        }),
+                    ),
+                ),
+            ),
+        );
+    }
+
+    public async listViewSummaries(
+        request: ViewSummaryRequest,
+    ): Promise<ViewSummaryPage> {
+        validateInventoryPage(request);
+        const runtime = await this.requireViews(request.corpusId);
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(request.corpusId, async () => {
+                const snapshot = await this.viewStore.listViews(
+                    request.corpusId,
+                );
+                const eligible = await Promise.all(
+                    snapshot.views.map((view) =>
+                        this.informationalVersionEligible(view, view),
+                    ),
+                );
+                const views = snapshot.views.filter(
+                    (_, index) => eligible[index],
+                );
+                const query = request.query?.toLowerCase() ?? "";
+                const matching = views
+                    .filter(
+                        (view) =>
+                            (!request.viewId ||
+                                view.viewId === request.viewId) &&
+                            (!request.kind ||
+                                view.content.kind === request.kind) &&
+                            view.content.title.toLowerCase().includes(query),
+                    )
+                    .sort((a, b) => a.viewId.localeCompare(b.viewId));
+                const page = pageItems(
+                    matching,
+                    request.pageSize ?? 25,
+                    request.continuationToken,
+                );
+                const items = await Promise.all(
+                    page.items.map(async (view) => ({
+                        corpusId: view.corpusId,
+                        viewId: view.viewId,
+                        revisionId: view.revisionId,
+                        state: view.state,
+                        content: {
+                            kind: view.content.kind,
+                            title: view.content.title,
+                        },
+                        maintained: !!view.definition.maintenance,
+                        publication: await this.viewStore.getViewPublication({
+                            corpusId: request.corpusId,
+                            viewId: view.viewId,
+                        }),
+                    })),
+                );
+                const latestBuild = (
+                    await this.viewStore.listViewInventoryBuilds(
+                        request.corpusId,
+                    )
+                )
+                    .filter(
+                        (job) =>
+                            !request.viewId ||
+                            job.results.some(
+                                (result) => result.viewId === request.viewId,
+                            ),
+                    )
+                    .sort(
+                        (a, b) =>
+                            b.updatedAt.localeCompare(a.updatedAt) ||
+                            a.jobId.localeCompare(b.jobId),
+                    )[0];
+                return {
+                    ...page,
+                    items,
+                    head: snapshot.head,
+                    ...(latestBuild
+                        ? {
+                              latestBuild: {
+                                  jobId: latestBuild.jobId,
+                                  corpusId: latestBuild.corpusId,
+                                  state: latestBuild.state,
+                              },
+                          }
+                        : {}),
+                    ...(this.informationalWikiEnabled
+                        ? {
+                              wikiFamily: await this.wikiFamilyStatus(
+                                  request.corpusId,
+                                  "wiki",
+                                  views,
+                              ),
+                              projectFamily: await this.wikiFamilyStatus(
+                                  request.corpusId,
+                                  "projects",
+                                  views,
+                              ),
+                          }
+                        : {}),
+                };
+            }),
+        );
+    }
+
+    private async closeService(): Promise<void> {
+        this.closed = true;
+        for (const work of this.topicSummaryWork.values())
+            work.controller.abort(new Error("Memory service is closing"));
+        for (const controller of this.eventIndexControllers.values())
+            controller.abort(new Error("Memory service is closing"));
+        this.graphSnapshots.clear();
+        this.documentGraphCache.clear();
+        this.graphEventIndexes.clear();
+        this.viewBuilds.cancelAll();
+        for (const preparation of this.viewIndexPreparations.values())
+            preparation.controller.abort(
+                new ViewBuildStaleError("Memory service is closing"),
+            );
+        await this.knowledge.close();
+        await Promise.allSettled(
+            [...this.topicSummaryWork.values()].map((work) => work.promise),
+        );
+        await this.acquisition.close();
+        if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
+        for (const timer of this.schemaTimers.values()) clearTimeout(timer);
+        this.schemaTimers.clear();
+        const maintenanceClosure = this.maintenance.close();
+        await this.initializePromise?.catch(() => undefined);
+        for (const controller of this.controllers.values()) {
+            controller.abort(new Error("Memory service is closing"));
+        }
+        await this.agentSessionStore.close();
+        await Promise.allSettled(this.graphEventWork.values());
+        await Promise.allSettled(this.graphDocumentWork.values());
+        await this.batchStore.close();
+        await Promise.allSettled(this.schemaWork.values());
+
+        this.viewBuilds.cancelAll();
+        await Promise.allSettled([
+            this.rootWriteTail,
+            ...this.corpusLoads.values(),
+            ...this.indexedReads,
+            ...this.reindexWork,
+        ]);
+        // Family maintenance may admit a new build while tracked reads drain.
+        const viewClosure = await Promise.allSettled([this.viewBuilds.close()]);
+        await Promise.allSettled(
+            [...this.corpusAccesses.values()].map((access) => access.idle()),
+        );
+        await this.drainViewIndexPreparations([
+            ...this.viewIndexPreparations.values(),
+        ]);
+        await this.releaseLock?.();
+        this.releaseLock = undefined;
+        const viewFailure = viewClosure[0];
+        await maintenanceClosure;
+        if (viewFailure.status === "rejected") throw viewFailure.reason;
+        for (const failure of this.wikiMaintenanceFailures.values())
+            throw failure;
+        for (const failure of this.schemaMaintenanceFailures.values())
+            throw failure;
+    }
+    private closePromise: Promise<void> | undefined;
+    private readonly viewIndexCleanup = new Map<string, Promise<void>>();
+    private readonly viewIndexRemovalBarriers = new Map<string, number>();
+    private readonly viewIndexPreparations = new Map<
+        string,
+        {
+            corpusId: string;
+            directory: string;
+            controller: AbortController;
+            work: Promise<string | undefined>;
+            installed: boolean;
+        }
+    >();
+    private readonly eventIndexPreparationWork = new Map<
+        string,
+        Promise<void>
+    >();
+    private readonly eventIndexControllers = new Map<string, AbortController>();
+
+    private async completeAuthorizedSourceRemovalLocked(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<SourceForgetResult> {
+        const removal = runtime.manifest.authorizedSourceRemoval;
+        if (!removal)
+            throw new Error("No authorized source removal to recover");
+        const sourceId = removal.sourceId;
+        const affected = (await this.viewStore.listViews(corpusId)).views.map(
+            (view) => view.viewId,
+        );
+        await this.acquisition.suppress(corpusId, {
+            sourceIds: [sourceId],
+            viewIds: affected,
+            uncertain: true,
+        });
+        this.viewBuilds.forget(corpusId, sourceId);
+        const candidateManifest = structuredClone(runtime.manifest);
+        const retained = candidateManifest.sources.some(
+            (source) => source.sourceId === sourceId,
+        );
+        candidateManifest.sources = candidateManifest.sources.filter(
+            (item) => item.sourceId !== sourceId,
+        );
+        if (candidateManifest.knowledgeSuppressions)
+            candidateManifest.knowledgeSuppressions =
+                candidateManifest.knowledgeSuppressions.filter(
+                    (item) => item.sourceId !== sourceId,
+                );
+        const forgottenReference = opaqueChangeReference(
+            corpusId,
+            "source",
+            sourceId,
+        );
+        candidateManifest.changes = pruneChangeReceipts(
+            candidateManifest.changes,
+        ).filter((receipt) => receipt.sourceId !== forgottenReference);
+        if (
+            !candidateManifest.changes.some(
+                (receipt) =>
+                    receipt.operation === "forget" &&
+                    receipt.sourceId === forgottenReference,
+            )
+        )
+            candidateManifest.changes.push(
+                createChangeReceipt(corpusId, "forget", sourceId, {
+                    sources: 1,
+                    revisions: removal.revisions.length,
+                    knowledge: 0,
+                }),
+            );
+        await this.viewStore.forgetSource(corpusId, sourceId);
+        await this.agentSessionStore.purge(corpusId, sourceId);
+        if (retained) {
+            await this.rebuildAndActivate(
+                corpusId,
+                runtime,
+                candidateManifest,
+                this.maintenance.signal,
+            );
+        } else if (runtime.manifest.indexGeneration) {
+            await this.removeInactiveIndexGenerations(
+                corpusId,
+                runtime.manifest.indexGeneration,
+            );
+        } else {
+            throw new Error(
+                "Authorized source removal lacks a committed source-index generation",
+            );
+        }
+        for (const revision of removal.revisions) {
+            if (!revision.hasAssets) continue;
+            await this.assetStore.removeRevision({
+                corpusId,
+                sourceId,
+                revisionId: revision.revisionId,
+            });
+        }
+        await this.viewStore.markSourceRevisionStale(corpusId, sourceId);
+        await this.batchStore.purge(corpusId, sourceId);
+        await this.purgeSourceJobDiagnostics(corpusId, sourceId);
+        await this.textStore(corpusId).purge(runtime.manifest.sources);
+        for (const key of this.wikiMaintenanceFailures.keys())
+            if (key.startsWith(`${corpusId}:`))
+                this.wikiMaintenanceFailures.delete(key);
+        const complete = structuredClone(runtime.manifest);
+        delete complete.authorizedSourceRemoval;
+        await this.writeManifest(corpusId, complete);
+        runtime.manifest = complete;
+        this.resumeBatchMaintenance(corpusId);
+        return {
+            corpusId,
+            sourceId,
+            deletedRevisionCount: removal.revisions.length,
+            indexVersion: this.indexVersion(runtime.manifest),
+        };
+    }
+
+    private isTechnicalTargetRejection(error: unknown): error is Error {
+        return (
+            error instanceof Error &&
+            !(error instanceof ViewBuildStaleError) &&
+            !("code" in error)
+        );
+    }
+
+    private async assertWikiPlanCurrent(
+        corpusId: string,
+        kind: "wiki" | "projects",
+        familyVersion: string,
+        views: ViewVersion[],
+    ): Promise<void> {
+        const family = await this.viewStore.getWikiFamily(corpusId, kind);
+        const current = await this.viewStore.listViews(corpusId);
+        if (
+            viewHash(family) !== familyVersion ||
+            viewHash(current.views.map((view) => view.revisionId)) !==
+                viewHash(views.map((view) => view.revisionId))
+        )
+            throw new ViewBuildStaleError(
+                "Informational maintenance plan changed during derivative preparation",
+            );
     }
 }

@@ -4,6 +4,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { registerInventoryTools } from "./inventoryTools.js";
 import { registerKnowledgeTools } from "./knowledgeTools.js";
 import {
     questionCorpusRequestSchema,
@@ -22,11 +23,6 @@ import {
     acquisitionToolNames,
     projectAcquisitionProgress,
     safeAcquisitionOperation,
-    questionSummaryRequestSchema,
-    questionReadRequestSchema,
-    questionSummaryPageSchema,
-    questionDetailSchema,
-    inventoryToolNames,
 } from "@typeagent/memory-client";
 import type {
     MemoryViewService,
@@ -34,8 +30,6 @@ import type {
     SchemaViewPageRequest,
     SchemaViewProposalRequest,
     SchemaQuestionDiscoveryRequest,
-    QuestionSummaryRequest,
-    QuestionReadRequest,
 } from "@typeagent/memory-service";
 
 export function registerSchemaViewTools(
@@ -43,6 +37,7 @@ export function registerSchemaViewTools(
     service: Partial<MemoryViewService>,
     run: (operation: () => Promise<unknown>) => Promise<CallToolResult>,
 ) {
+    registerInventoryTools(server, service, run);
     registerKnowledgeTools(server, service, run);
     function required<K extends keyof MemoryViewService>(
         name: K,
@@ -52,32 +47,6 @@ export function registerSchemaViewTools(
             throw new Error(`Memory ${String(name)} capability is unavailable`);
         return method.bind(service) as NonNullable<MemoryViewService[K]>;
     }
-    server.registerTool(
-        inventoryToolNames.listQuestionSummaries,
-        {
-            description:
-                "Read a filtered, paginated question inventory without candidate evidence bodies or model calls.",
-            inputSchema: questionSummaryRequestSchema,
-            outputSchema: z.object({ result: questionSummaryPageSchema }),
-        },
-        (request) =>
-            run(() =>
-                required("listQuestionSummaries")(
-                    request as QuestionSummaryRequest,
-                ),
-            ),
-    );
-    server.registerTool(
-        inventoryToolNames.getQuestion,
-        {
-            description:
-                "Read one question with its exact candidates, citations, contract and review state. No model calls.",
-            inputSchema: questionReadRequestSchema,
-            outputSchema: z.object({ result: questionDetailSchema }),
-        },
-        (request) =>
-            run(() => required("getQuestion")(request as QuestionReadRequest)),
-    );
     server.registerTool(
         schemaViewToolNames.listQuestions,
         {

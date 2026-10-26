@@ -25,6 +25,8 @@ export function rbButton(text: string, handler: () => void, name?: string) {
     return value;
 }
 
+// Icon-only control. The label becomes the accessible name and tooltip, so it
+// should name the verb ("Confirm candidate"), not repeat the row's title.
 export function rbIconButton(
     glyph: string,
     label: string,
@@ -33,6 +35,7 @@ export function rbIconButton(
     return iconButton(glyph, label, handler);
 }
 
+// Compact status label; tone is one of "good", "warn", "bad" or omitted.
 export function rbChip(text: string, tone?: string): HTMLSpanElement {
     return rbNode("span", text, `hub-chip${tone ? ` ${tone}` : ""}`);
 }
