@@ -79,6 +79,9 @@ import {
     parseQuestionDiscovery,
     schemaAnswerResponse,
     hydrateSchemaAnswers,
+    corpusDiscoveryRules,
+    parseCorpusQuestionDiscovery,
+    CorpusDiscoveryRejection,
     parseSynthesisJson,
 } from "./schemaViewSynthesis.js";
 import { validateSchemaOutput } from "./schemaView.js";
@@ -166,6 +169,43 @@ export function createConfiguredViewSynthesisAdapter(
     }
     return {
         identity: `configured:${endpoint ?? "default"}:evidence-first-v11`,
+        async discoverCorpusQuestions(input, signal, reserveRepair) {
+            const instructions = `${corpusDiscoveryRules}\nAt most ${input.maxProposals} proposals.`;
+            const raw = await complete(
+                instructions,
+                input,
+                signal,
+                authoringResponse(true),
+            );
+            let proposals: ReturnType<typeof parseCorpusQuestionDiscovery>;
+            try {
+                proposals = parseCorpusQuestionDiscovery(input, raw);
+            } catch (error) {
+                if (!(error instanceof CorpusDiscoveryRejection)) throw error;
+                console.warn(
+                    "Corpus discovery requires cited-subject grounding repair",
+                );
+                await reserveRepair?.();
+                proposals = parseCorpusQuestionDiscovery(
+                    input,
+                    await complete(
+                        `${instructions}\nRepair the rejected subject grounding against the SAME supplied passages. The subject must occur as one whole normalized contiguous phrase within a passage cited by that proposal. Preserve supported contracts and their exact citations. Do not fabricate names, splice phrases, or silently discard invalid proposals. Return the same outer JSON contract.`,
+                        {
+                            ...input,
+                            rejectedResponse: raw,
+                            rejectedProposalIndex: error.proposalIndex,
+                        },
+                        signal,
+                        authoringResponse(true),
+                    ),
+                );
+            }
+            if (proposals.some((proposal) => !proposal.utility))
+                throw new Error(
+                    "Configured discovery requires explicit question utility dimensions",
+                );
+            return proposals;
+        },
         async proposeSchema(specification, signal) {
             return parseSchemaProposal(
                 await complete(

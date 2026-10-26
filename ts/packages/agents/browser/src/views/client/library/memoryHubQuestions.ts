@@ -29,6 +29,7 @@ import {
 import { routeHash, type HiddenItems } from "./memoryHubModel";
 import { schemaViewPageBrowserLink } from "./memoryHubViewPages";
 import { mountMemoryHubAcquisitions } from "./memoryHubAcquisitions";
+import { mountMemoryHubKnowledgeStatus } from "./memoryHubKnowledgeStatus";
 
 export function mountMemoryHubQuestions(
     host: HTMLElement,
@@ -71,6 +72,8 @@ export function mountMemoryHubQuestions(
     const author = rbNode("section");
     const acquisitionHost = rbNode("section");
     const acquisitions = mountMemoryHubAcquisitions(acquisitionHost);
+    const knowledgeHost = rbNode("section");
+    const knowledge = mountMemoryHubKnowledgeStatus(knowledgeHost);
     const panel = rbNode("details", undefined, "hub-panel");
     panel.append(
         rbNode("summary", "Deferred evidence acquisition"),
@@ -149,7 +152,16 @@ export function mountMemoryHubQuestions(
     filters.append(chips, searchBox);
     const split = rbNode("div", undefined, "hub-split");
     split.append(list, inspector);
-    host.append(head, notice, author, filters, split, pagination, panel);
+    host.append(
+        head,
+        notice,
+        knowledgeHost,
+        author,
+        filters,
+        split,
+        pagination,
+        panel,
+    );
 
     function action(work: () => Promise<void>) {
         if (busy) return;
@@ -434,6 +446,21 @@ export function mountMemoryHubQuestions(
         // Decision first: the question, its status and the candidates.
         // Schemas, revisions and raw support stay under Advanced.
         inspector.replaceChildren();
+        if (question.slot.admission) {
+            const admission = question.slot.admission;
+            inspector.append(
+                rbChip(
+                    admission.actor === "policy"
+                        ? "Policy-discovered"
+                        : "User-defined",
+                ),
+                rbNode("p", `Discovery reason: ${admission.reason}`),
+                rbNode(
+                    "p",
+                    `Admission: ${admission.actor} · policy v${admission.policyVersion}. Policy admission is not human confirmation of an answer.`,
+                ),
+            );
+        }
         const advanced = rbNode("details");
         advanced.append(
             rbNode("summary", "Advanced"),
@@ -445,6 +472,10 @@ export function mountMemoryHubQuestions(
             rbNode("h4", "Answer schema"),
             rbNode("pre", JSON.stringify(question.slot.schema, null, 2)),
         );
+        if (question.slot.admission)
+            advanced.append(
+                rbNode("pre", JSON.stringify(question.slot.admission, null, 2)),
+            );
         const menuItems = [
             ...(["approved", "rejected"] as const).map((approval) => ({
                 label:
@@ -1041,6 +1072,7 @@ export function mountMemoryHubQuestions(
             inventories = new Map();
             notice.hidden = true;
             acquisitions.clear();
+            knowledge.clear();
             list.replaceChildren();
             attentionHost.replaceChildren(
                 rbNode(
@@ -1058,6 +1090,7 @@ export function mountMemoryHubQuestions(
             inventories = new Map();
             notice.hidden = true;
             acquisitions.clear();
+            knowledge.clear();
             list.replaceChildren();
             author.replaceChildren();
             inspector.replaceChildren();
@@ -1082,6 +1115,7 @@ export function mountMemoryHubQuestions(
             (corpus) => !selectedCorpus || corpus.corpusId === selectedCorpus,
         );
         panelLoaded = false;
+        await knowledge.refresh(panelCorpora);
         if (panel.open) await loadPanel();
     }
     return {

@@ -19,13 +19,38 @@ import {
     observedJudgeModel,
     benchmarkFailure,
     benchmarkInvocationAllowance,
+    benchmarkKnowledgeTimeout,
     closeBenchmarkService,
     acknowledgeStopAfterQuestion,
     selectConstructionCases,
     createBenchmarkMemoryService,
     recordBenchmarkArm,
+    recordKnowledgeAllowance,
     main,
 } from "./longmemeval-live.mjs";
+
+test("explicit readiness allowances remain within the product API bound", () => {
+    assert.equal(benchmarkKnowledgeTimeout("10"), 600000);
+    assert.equal(benchmarkKnowledgeTimeout("60"), 3600000);
+    for (const value of ["0", "61", "1.5", "unlimited", "not-a-number"])
+        assert.throws(() => benchmarkKnowledgeTimeout(value));
+});
+
+test("readiness allowance identity defaults legacy state and rejects changed resumes", () => {
+    const legacy = {};
+    recordKnowledgeAllowance(legacy);
+    assert.equal(legacy.knowledgeTimeoutMs, 600000);
+    assert.throws(
+        () => recordKnowledgeAllowance(legacy, 3600000),
+        /Knowledge readiness allowance changed/,
+    );
+    const extended = { knowledgeTimeoutMs: 3600000 };
+    recordKnowledgeAllowance(extended, 3600000);
+    assert.throws(
+        () => recordKnowledgeAllowance(extended),
+        /Knowledge readiness allowance changed/,
+    );
+});
 
 test("the live benchmark uses the product durable-memory factory without feature overrides", async () => {
     const service = {};
@@ -473,6 +498,164 @@ test("product reader coverage uses actual answer diagnostics without an extra re
         scorecard.evidenceCoverage.evidenceSessionRecallAt20Matches,
         { measuredQuestions: 0, mean: null },
     );
+});
+
+test("knowledge readiness is frozen before the reader query is accessed", async () => {
+    const f = fixture();
+    const events = [];
+    const checkpoint = {
+        checkpointId: "knowledge",
+        state: "pending",
+        reasons: [],
+    };
+    f.service.createKnowledgeCheckpoint = async (request) => {
+        events.push("create");
+        assert.equal(request.producerComplete, true);
+        assert.equal(request.timeoutMs, 600000);
+        assert.equal(request.sourceIds.length, 2);
+        assert.ok(!JSON.stringify(request).includes("SENTINEL"));
+        return checkpoint;
+    };
+    f.service.waitForKnowledgeCheckpoint = async (request) => {
+        events.push("wait");
+        assert.equal(request.checkpointId, "knowledge");
+        assert.equal(request.timeoutMs, 600000);
+        return { ...checkpoint, state: "ready" };
+    };
+    const isolatedReader = {
+        question_date: reader.question_date,
+        get question() {
+            events.push("query");
+            assert.equal(f.record.knowledgeCheckpoint.state, "ready");
+            return reader.question;
+        },
+    };
+    await executeMemoryCase(
+        f.service,
+        construction,
+        isolatedReader,
+        reference,
+        f.record,
+        f.controls,
+    );
+    assert.deepEqual(events, ["create", "wait", "query"]);
+    assert.equal(f.calls.answer[0].knowledgeCheckpointId, "knowledge");
+    assert.equal(f.calls.answer[0].retrievalPolicy, "sourcesAndViews");
+});
+
+test("an explicit benchmark readiness allowance applies to execution and waiting", async () => {
+    const f = fixture();
+    f.controls.knowledgeTimeoutMs = 3600000;
+    f.service.createKnowledgeCheckpoint = async (request) => {
+        assert.equal(request.timeoutMs, 3600000);
+        return { checkpointId: "knowledge", state: "pending", reasons: [] };
+    };
+    f.service.waitForKnowledgeCheckpoint = async (request) => {
+        assert.equal(request.timeoutMs, 3600000);
+        return { checkpointId: "knowledge", state: "ready", reasons: [] };
+    };
+    await executeMemoryCase(
+        f.service,
+        construction,
+        reader,
+        reference,
+        f.record,
+        f.controls,
+    );
+    assert.equal(f.record.knowledgeCheckpoint.state, "ready");
+});
+
+test("a thrown readiness wait retains durable failure status without answering", async () => {
+    const f = fixture();
+    f.service.createKnowledgeCheckpoint = async () => ({
+        checkpointId: "knowledge",
+        state: "pending",
+        reasons: [],
+    });
+    f.service.waitForKnowledgeCheckpoint = async () => {
+        throw new Error("controlled readiness wait timeout");
+    };
+    f.service.getKnowledgeCheckpoint = async () => ({
+        checkpointId: "knowledge",
+        state: "cancelled",
+        reasons: ["Knowledge checkpoint deadline exceeded"],
+    });
+    await assert.rejects(
+        executeMemoryCase(
+            f.service,
+            construction,
+            reader,
+            reference,
+            f.record,
+            f.controls,
+        ),
+        /controlled readiness wait timeout/,
+    );
+    assert.equal(f.record.knowledgeCheckpoint.state, "cancelled");
+    assert.equal(f.calls.answer.length, 0);
+});
+
+test("partial derived knowledge is retained but cannot qualify as a ready benchmark arm", async () => {
+    const f = fixture();
+    f.service.createKnowledgeCheckpoint = async () => ({
+        checkpointId: "knowledge",
+        state: "pending",
+        reasons: [],
+    });
+    f.service.waitForKnowledgeCheckpoint = async () => ({
+        checkpointId: "knowledge",
+        state: "partial",
+        reasons: ["Discovery window limit"],
+    });
+    await assert.rejects(
+        executeMemoryCase(
+            f.service,
+            construction,
+            reader,
+            reference,
+            f.record,
+            f.controls,
+        ),
+        /Knowledge is not ready: partial; Discovery window limit/,
+    );
+    assert.equal(f.record.knowledgeCheckpoint.state, "partial");
+    assert.equal(f.calls.answer.length, 0);
+    assert.equal(f.calls.judge.length, 0);
+});
+
+test("failed knowledge is not mislabeled as an unavailable model endpoint", async () => {
+    const f = fixture();
+    f.service.createKnowledgeCheckpoint = async () => ({
+        checkpointId: "knowledge",
+        state: "pending",
+        reasons: [],
+    });
+    f.service.waitForKnowledgeCheckpoint = async () => ({
+        checkpointId: "knowledge",
+        state: "failed",
+        reasons: ["The configured selection rubric rejected PRIVATE_EVIDENCE"],
+    });
+    await assert.rejects(
+        executeMemoryCase(
+            f.service,
+            construction,
+            reader,
+            reference,
+            f.record,
+            f.controls,
+        ),
+        (error) => {
+            const failure = benchmarkFailure(error);
+            assert.equal(failure.category, "KNOWLEDGE_NOT_READY");
+            assert.equal(failure.code, "EKNOWLEDGENOTREADY");
+            assert.equal(failure.rawProviderMessageSuppressed, true);
+            assert.ok(!JSON.stringify(failure).includes("PRIVATE_EVIDENCE"));
+            return true;
+        },
+    );
+    assert.equal(f.record.knowledgeCheckpoint.state, "failed");
+    assert.equal(f.calls.answer.length, 0);
+    assert.equal(f.calls.judge.length, 0);
 });
 
 test("resume after a saved hypothesis neither re-ingests histories nor regenerates the answer", async () => {

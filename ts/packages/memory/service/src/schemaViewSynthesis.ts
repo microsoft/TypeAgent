@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
+import { createTypeScriptJsonValidator } from "typechat/ts";
 import type {
     ViewBuildSnapshot,
     ViewCitation,
@@ -33,6 +34,12 @@ import {
 } from "./viewSynthesisEvidence.js";
 import { viewSourceKey } from "./viewContent.js";
 import { viewHash } from "./viewMerge.js";
+import type {
+    CorpusQuestionInput,
+    CorpusQuestionProposal,
+} from "./knowledgeTypes.js";
+import { knowledgeLimits } from "./knowledgeTypes.js";
+import { corpusQuestionIdentity } from "./knowledgeDiscovery.js";
 
 export function parseSynthesisJson(text: string, context: string): unknown {
     try {
@@ -47,6 +54,41 @@ export function parseSynthesisJson(text: string, context: string): unknown {
         );
     }
 }
+
+const corpusDiscoveryPayloadSchema = `
+export interface CorpusDiscoveryPayload { proposals: Proposal[]; }
+interface Proposal {
+    subject: string;
+    reason: string;
+    slot: QuestionSlot;
+    passageIds: string[];
+    utility?: { consumerValue: number; substance: number; novelty: number; durability: number; };
+}
+interface QuestionSlot {
+    id: string;
+    question: string;
+    cardinality: "singleton" | "record" | "collection";
+    schema: AnswerSchema;
+    itemKey?: string;
+    rubric: {
+        version: number;
+        selection: "mostRecent" | "independentSupport" | "manual";
+        requireConfirmation: boolean;
+        authoritySourceIds: string[];
+        freshnessDays?: number;
+    };
+    approval: "proposed" | "approved" | "rejected";
+    discoveryCitations: [];
+}
+type AnswerSchema =
+    | { type: "string"; enum?: string[] }
+    | { type: "number" }
+    | { type: "boolean" }
+    | { type: "object"; properties: { [key: string]: AnswerSchema }; required: string[] };
+`;
+let corpusDiscoveryValidator:
+    | ReturnType<typeof createTypeScriptJsonValidator<{ proposals: unknown[] }>>
+    | undefined;
 
 export function schemaAnswerResponse(): StructuredOutputJsonSchema {
     const refs = { type: "array", items: { type: "string" }, maxItems: 32 };
@@ -379,6 +421,8 @@ export function parseSchemaProposal(raw: unknown): SchemaViewDefinition {
     validateSchemaViewDefinition(wrapper);
     const result = structuredClone(wrapper.schemaView);
     for (const slot of result.slots) {
+        if (slot.admission !== undefined)
+            throw new Error("Model cannot assign admission provenance");
         slot.approval = "proposed";
         slot.discoveryCitations = [];
         slot.rubric.requireConfirmation = true;
@@ -411,6 +455,8 @@ function parseDiscoveredSlot(
 ): QuestionSlot {
     const slot = entry.slot;
     validateQuestionSlot(slot);
+    if (slot.admission !== undefined)
+        throw new Error("Model cannot assign admission provenance");
     const resolved = resolvePassages(entry.passageIds, passages);
     if (!resolved.length || resolved.some((passage) => passage.evidence))
         throw new Error("Discovered question requires original evidence");
@@ -427,4 +473,149 @@ function parseDiscoveredSlot(
         approval: "proposed",
         discoveryCitations: dedup(citations),
     };
+}
+
+export class CorpusDiscoveryRejection extends Error {
+    constructor(public readonly proposalIndex: number) {
+        super("Discovered subject is not resolvable in original evidence");
+    }
+}
+
+export const corpusDiscoveryRules = `${schemaAuthoringRules}
+Discover reusable information worth maintaining from ORIGINAL passages, without an existing view or future query.
+Return exactly one outer JSON object {json:string}. Its json string must encode exactly one complete JSON array of {subject:string,reason:string,slot:QuestionSlot,passageIds:string[],utility:{consumerValue:number,substance:number,novelty:number,durability:number}}, NOT a view definition.
+Do not append a second JSON value, prose, Markdown fences or explanations to either JSON layer.
+Return zero proposals for greetings, unintelligible content or no eligible information; this is a valid result.
+Rate each utility dimension 0 (absent), 1 (plausible) or 2 (clear). Assess reusable consumer value,
+substantive supported information, marginal novelty over existingContracts and other proposals,
+and durable reference/decision value. Do not propose a question with any zero dimension.
+Use existingContracts' schema, cardinality, item key and temporal rubric to suppress semantically
+equivalent requirements even when wording differs. Different facets and historical events remain separate.
+existingContractCount reports the full inventory; existingContracts is a bounded relevant nomination.
+If an existingQuestions entry could be equivalent but its structured contract is absent, defer that
+candidate rather than inventing a difference in schema or temporal policy.
+Subject must be a verbatim contiguous phrase in the title or excerpt of at least one of THAT proposal's cited passages. Case and punctuation may differ, but do not paraphrase, add possessives, expand names or combine words from different passages. Prefer a concrete domain entity, project, or topic phrase over bare conversational speaker labels such as "User" or "Assistant" whenever a specific phrase appears in the passage or title. Keep question text concise (at most 240 characters).
+Distribute proposals across distinct sources and subjects in the window rather than emitting multiple redundant slots from a single transcript.
+Identify stated properties, persistent projects/decisions, source-explicit unresolved decisions or defensibly keyed collections.
+Do not invent generic profile questions or unknown fields merely because the source does not mention them.
+Use original passage IDs only. Do not supply answers, candidate values, citations, invented offsets or admission metadata.
+Existing contracts and rejected identities suppress equivalent proposals. Subject identity, property/event, cardinality and temporal intent matter more than wording.
+Use raw strings rather than invented enumerations, date-only strings rather than fabricated instants, and retain historical occurrences separately.
+Use mostRecent for mutable states, counters, streaks, locations, or project statuses that evolve across dated passages; use independentSupport for time-invariant facts unless source-supported effective times/corrections justify mostRecent. No fabricated authority IDs.
+Policy decides contract admission; neither discovery nor admission confirms candidate answers or authorizes external tools.`;
+
+export function parseCorpusQuestionDiscovery(
+    input: CorpusQuestionInput,
+    raw: unknown,
+): CorpusQuestionProposal[] {
+    if (
+        !Number.isSafeInteger(input.maxProposals) ||
+        input.maxProposals < 0 ||
+        input.maxProposals > knowledgeLimits.proposals
+    )
+        throw new Error("Invalid corpus proposal bound");
+    const wrapper = evidenceRecord(raw);
+    if (Object.keys(wrapper).some((key) => key !== "json"))
+        throw new Error("Unexpected corpus discovery response fields");
+    const parsed = parseSynthesisJson(
+        evidenceText(wrapper.json),
+        "Corpus question discovery nested json",
+    );
+    const proposals = evidenceArray(parsed, input.maxProposals);
+    corpusDiscoveryValidator ??= createTypeScriptJsonValidator(
+        corpusDiscoveryPayloadSchema,
+        "CorpusDiscoveryPayload",
+    );
+    const typed = corpusDiscoveryValidator.validate({ proposals });
+    if (!typed.success)
+        throw new Error(
+            "Corpus question discovery nested json: typed proposal validation failed",
+        );
+    const identities = new Set(input.existingQuestions);
+    const normalize = (text: string) =>
+        text
+            .normalize("NFKC")
+            .toLowerCase()
+            .replace(/[^\p{L}\p{N}]+/gu, " ")
+            .trim();
+    const existingQuestions = new Set(input.existingQuestions.map(normalize));
+    return proposals.map((value, proposalIndex) => {
+        const entry = evidenceRecord(value);
+        if (
+            Object.keys(entry).some(
+                (key) =>
+                    ![
+                        "subject",
+                        "reason",
+                        "slot",
+                        "passageIds",
+                        "utility",
+                    ].includes(key),
+            )
+        )
+            throw new Error("Unexpected corpus question proposal fields");
+        const subject = evidenceText(entry.subject);
+        const reason = evidenceText(entry.reason);
+        if (subject.length > 240 || reason.length > 2000)
+            throw new Error("Unbounded corpus question subject or utility");
+        const slot = parseDiscoveredSlot(entry, input.passages);
+        if (slot.question.length > 240 || slot.rubric.authoritySourceIds.length)
+            throw new Error(
+                "Discovery requires concise questions without fabricated authority",
+            );
+        if (
+            !input.passages.some(
+                (passage) =>
+                    slot.discoveryCitations.some(
+                        (citation) =>
+                            citation.sourceId === passage.sourceId &&
+                            citation.revisionId === passage.revisionId &&
+                            citation.locator === passage.locator &&
+                            citation.excerpt === passage.excerpt,
+                    ) &&
+                    ` ${normalize(`${passage.title} ${passage.excerpt}`)} `.includes(
+                        ` ${normalize(subject)} `,
+                    ),
+            )
+        )
+            throw new CorpusDiscoveryRejection(proposalIndex);
+        const utility =
+            entry.utility === undefined
+                ? undefined
+                : evidenceRecord(entry.utility);
+        if (
+            utility &&
+            (Object.keys(utility).length !== 4 ||
+                ["consumerValue", "substance", "novelty", "durability"].some(
+                    (key) =>
+                        !Number.isInteger(utility[key]) ||
+                        Number(utility[key]) < 0 ||
+                        Number(utility[key]) > 2,
+                ))
+        )
+            throw new Error("Invalid question utility dimensions");
+        const proposal: CorpusQuestionProposal = {
+            subject,
+            reason,
+            slot,
+            ...(utility
+                ? {
+                      utility: {
+                          consumerValue: Number(utility.consumerValue),
+                          substance: Number(utility.substance),
+                          novelty: Number(utility.novelty),
+                          durability: Number(utility.durability),
+                      },
+                  }
+                : {}),
+        };
+        const identity = corpusQuestionIdentity(proposal);
+        if (
+            identities.has(identity) ||
+            existingQuestions.has(normalize(slot.question))
+        )
+            throw new Error("Duplicate corpus question proposal");
+        identities.add(identity);
+        return proposal;
+    });
 }

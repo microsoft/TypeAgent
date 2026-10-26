@@ -546,6 +546,7 @@ describe("ordinary-source schema lifecycle", () => {
         service = new FileMemoryService(root, {
             informationalViews: false,
             sourceSynopses: false,
+            discoveryPolicy: "off",
             viewSynthesisAdapter: adapter,
             indexFactory: (_id, directory) =>
                 new FakeSemanticCorpusIndex(directory),

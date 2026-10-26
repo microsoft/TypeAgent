@@ -6,6 +6,12 @@ import type {
     QuestionSummaryPage,
     QuestionReadRequest,
     MemoryQuestion,
+    KnowledgeStatus,
+    KnowledgeDiscoveryUpdate,
+    KnowledgeCheckpoint,
+    KnowledgeCheckpointRequest,
+    KnowledgeCheckpointRead,
+    KnowledgeCheckpointWait,
     AcquisitionRequest,
     QuestionInventory,
     QuestionEditRequest,
@@ -253,6 +259,21 @@ export type MemoryCenterActivityFilter = {
 };
 
 export type MemoryCenterInvokeFunctions = {
+    memoryGetKnowledgeStatus(params: {
+        corpusId: string;
+    }): Promise<KnowledgeStatus>;
+    memoryUpdateKnowledgeDiscovery(
+        params: KnowledgeDiscoveryUpdate,
+    ): Promise<KnowledgeStatus>;
+    memoryCreateKnowledgeCheckpoint(
+        params: KnowledgeCheckpointRequest,
+    ): Promise<KnowledgeCheckpoint>;
+    memoryGetKnowledgeCheckpoint(
+        params: KnowledgeCheckpointRead,
+    ): Promise<KnowledgeCheckpoint>;
+    memoryWaitForKnowledgeCheckpoint(
+        params: KnowledgeCheckpointWait,
+    ): Promise<KnowledgeCheckpoint>;
     memoryGetViewPublicationPolicy(params: {
         corpusId: string;
     }): Promise<ViewPublicationPolicy>;

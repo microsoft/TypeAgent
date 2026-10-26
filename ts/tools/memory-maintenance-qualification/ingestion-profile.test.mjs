@@ -9,7 +9,6 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { createRequire } from "node:module";
-import { pathToFileURL } from "node:url";
 import { workerArguments } from "./watchdog.mjs";
 import {
     analyzeRun,
@@ -676,17 +675,38 @@ test("reports preserve repeated calls and failures, count items by layer and dis
 });
 
 test("actual source embedding logical hook counts retries and marks validation failures without changing Result semantics", async () => {
+    const loadSourceModule = async (relativePath) => {
+        const url = new URL(relativePath, import.meta.url);
+        const source = await readFile(url, "utf8");
+        const code = ts.transpileModule(source, {
+            compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+            },
+        }).outputText;
+        const exports = {};
+        new Function("require", "exports", code)(createRequire(url), exports);
+        return exports;
+    };
+    const {
+        embeddingInputLimitError,
+        countEmbeddingTokens,
+        maxEmbeddingInputTokens,
+    } = await loadSourceModule("../../packages/aiclient/src/embeddingInput.ts");
+    const { validateEmbeddingVector } = await loadSourceModule(
+        "../../packages/aiclient/src/embeddingIdentity.ts",
+    );
     const fuzzy = await readFile(
         new URL("../../packages/knowPro/src/fuzzyIndex.ts", import.meta.url),
         "utf8",
     );
-    const fuzzyAst = ts.createSourceFile(
+    const ast = ts.createSourceFile(
         "fuzzyIndex.ts",
         fuzzy,
         ts.ScriptTarget.Latest,
         true,
     );
-    const functions = fuzzyAst.statements.filter(
+    const functions = ast.statements.filter(
         (statement) =>
             ts.isFunctionDeclaration(statement) &&
             [
@@ -695,42 +715,10 @@ test("actual source embedding logical hook counts retries and marks validation f
                 "getIndexingBatches",
             ].includes(statement.name?.text),
     );
-    assert.equal(functions.length, 3, "Missing production embedding functions");
+    assert.equal(functions.length, 3, "Missing production embedding helper");
     const definition = functions
-        .map((statement) => statement.getText(fuzzyAst))
+        .map((statement) => statement.getText(ast))
         .join("\n");
-    const inputSource = await readFile(
-        new URL(
-            "../../packages/aiclient/src/embeddingInput.ts",
-            import.meta.url,
-        ),
-        "utf8",
-    );
-    const aiRequire = createRequire(
-        new URL("../../packages/aiclient/package.json", import.meta.url),
-    );
-    const inputCode = ts
-        .transpileModule(inputSource, {
-            compilerOptions: {
-                target: ts.ScriptTarget.ES2022,
-                module: ts.ModuleKind.ESNext,
-            },
-        })
-        .outputText.replace(
-            '"gpt-tokenizer/encoding/cl100k_base"',
-            JSON.stringify(
-                pathToFileURL(
-                    aiRequire.resolve("gpt-tokenizer/encoding/cl100k_base"),
-                ).href,
-            ),
-        );
-    const {
-        embeddingInputLimitError,
-        countEmbeddingTokens,
-        maxEmbeddingInputTokens,
-    } = await import(
-        `data:text/javascript;base64,${Buffer.from(inputCode).toString("base64")}`
-    );
     const code = ts
         .transpileModule(definition, {
             compilerOptions: {
@@ -739,7 +727,7 @@ test("actual source embedding logical hook counts retries and marks validation f
             },
         })
         .outputText.replace(/^export /gm, "");
-    let invalid = false;
+    let expectedBatchSize = 2;
     const run = new Function(
         "instrumentEmbeddingModel",
         "timeSearchStage",
@@ -760,15 +748,13 @@ test("actual source embedding logical hook counts retries and marks validation f
             return model;
         },
         async (model, inputs) => {
-            assert.equal(inputs.length, 2);
+            assert.equal(inputs.length, expectedBatchSize);
             const first = await model.generateEmbeddingBatch(inputs);
             assert.equal(first.success, false);
             const second = await model.generateEmbeddingBatch(inputs);
             return second.data;
         },
-        () => {
-            if (invalid) throw new Error("controlled invalid vector");
-        },
+        validateEmbeddingVector,
         embeddingInputLimitError,
         countEmbeddingTokens,
         maxEmbeddingInputTokens,
@@ -786,7 +772,6 @@ test("actual source embedding logical hook counts retries and marks validation f
         process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
         console.warn = (line) => lines.push(line);
         for (const validationFailure of [false, true]) {
-            invalid = validationFailure;
             let attempt = 0;
             const result = await runWithSearchTiming(
                 String(validationFailure),
@@ -801,13 +786,22 @@ test("actual source embedding logical hook counts retries and marks validation f
                                           success: false,
                                           message: "PRIVATE_RETRY",
                                       }
-                                    : { success: true, data: embeddings },
+                                    : {
+                                          success: true,
+                                          data: validationFailure
+                                              ? [
+                                                    [2, 0],
+                                                    [0, 1],
+                                                ]
+                                              : embeddings,
+                                      },
                         },
                         ["PRIVATE_ONE", "PRIVATE_TWO"],
                     ),
             );
             assert.equal(result.success, !validationFailure);
             if (result.success) assert.deepEqual(result.data, embeddings);
+            else assert.match(result.message, /normalized 2-dimensional/);
             const trace = summarizeTimings(parseTimingLog(lines.join("\n")))
                 .byJob[String(validationFailure)].byCategory.embedding;
             assert.equal(trace.logicalCalls, 1);
@@ -816,16 +810,62 @@ test("actual source embedding logical hook counts retries and marks validation f
             assert.equal(trace.attemptedItems, 4);
             assert.equal(trace.errors, validationFailure ? 2 : 1);
         }
+        const linesBeforePreflight = lines.length;
+        const oversized = " token".repeat(maxEmbeddingInputTokens + 1);
+        assert.ok(countEmbeddingTokens(oversized) > maxEmbeddingInputTokens);
         const rejected = await run(
             {
                 generateEmbeddingBatch: async () => {
-                    assert.fail("Oversized inputs must not reach the model");
+                    assert.fail("Oversized input must fail before inference");
                 },
             },
-            ["word ".repeat(maxEmbeddingInputTokens + 1)],
+            [oversized],
         );
-        assert.equal(rejected.success, false);
-        assert.match(rejected.message, /Embedding input\[0\].*maximum is 8000/);
+        assert.deepEqual(rejected, {
+            success: false,
+            message: embeddingInputLimitError([oversized]),
+        });
+        assert.equal(lines.length, linesBeforePreflight);
+        expectedBatchSize = 1;
+        const inputs = [" token".repeat(5000), " another".repeat(5000)];
+        assert.equal(embeddingInputLimitError(inputs), undefined);
+        assert.ok(
+            inputs.reduce((sum, text) => sum + countEmbeddingTokens(text), 0) >
+                maxEmbeddingInputTokens,
+        );
+        let attempts = 0;
+        const batched = await runWithSearchTiming(
+            "aggregate-token-limit",
+            "memory.ingestion",
+            () =>
+                run(
+                    {
+                        embeddingIdentity: {
+                            provider: "azure",
+                            dimensions: 2,
+                        },
+                        generateEmbeddingBatch: async () =>
+                            ++attempts % 2
+                                ? { success: false, message: "PRIVATE_RETRY" }
+                                : { success: true, data: [[1, 0]] },
+                    },
+                    inputs,
+                ),
+        );
+        assert.deepEqual(batched, {
+            success: true,
+            data: [
+                [1, 0],
+                [1, 0],
+            ],
+        });
+        const batchTrace = summarizeTimings(parseTimingLog(lines.join("\n")))
+            .byJob["aggregate-token-limit"].byCategory.embedding;
+        assert.equal(batchTrace.logicalCalls, 1);
+        assert.equal(batchTrace.modelAttempts, 4);
+        assert.equal(batchTrace.requestedItems, 2);
+        assert.equal(batchTrace.attemptedItems, 4);
+        assert.equal(batchTrace.errors, 2);
         assert.equal(lines.join("\n").includes("PRIVATE_"), false);
     } finally {
         console.warn = warn;
