@@ -184,19 +184,27 @@ test("legacy hosts retain absent RPC capabilities and explicit unsupported SDK e
 
 test("graph tool inventory advertises only implemented host operations", async () => {
     const server = new McpServer({ name: "graph-inventory", version: "1" });
-    const register = jest.spyOn(server, "registerTool");
+    const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+    const register = clock.spyOn(server, "registerTool");
     const run = async () => ({ content: [] });
     try {
         registerGraphTools(server, {} as MemoryService, run);
         expect(register).not.toHaveBeenCalled();
         registerGraphTools(
             server,
-            { queryKnowledgeGraph: async () => graph } as MemoryService,
+            {
+                queryKnowledgeGraph: async () => graph,
+            } as unknown as MemoryService,
             run,
         );
-        expect(register.mock.calls.map(([name]) => name)).toEqual([
+        expect(register).toHaveBeenCalledTimes(1);
+        expect(register).toHaveBeenCalledWith(
             "memory_graph_query",
-        ]);
+            expect.objectContaining({
+                description: expect.stringContaining("bounded"),
+            }),
+            expect.any(Function),
+        );
     } finally {
         await server.close();
     }

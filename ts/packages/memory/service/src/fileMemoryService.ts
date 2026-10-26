@@ -238,7 +238,13 @@ import {
     assertMaintenanceMembership,
     validateMaintenanceRequest,
 } from "./viewMaintenanceValidation.js";
-import { mergeView, sameViewBuildEvidence, viewHash } from "./viewMerge.js";
+import {
+    mergeView,
+    sameViewBuildEvidence,
+    viewHash,
+    viewBuildEvidenceFingerprint,
+} from "./viewMerge.js";
+import type { ViewInventoryBuild } from "./viewReadProjection.js";
 import {
     captureEditorialContext,
     editorialArticle,
@@ -3625,7 +3631,7 @@ export class FileMemoryService
     ): Promise<Array<[ViewVersion, ViewVersion]>> {
         const runtime = await this.requireViews(corpusId);
         return runtime.access.read(() =>
-            this.viewStore.withReadSnapshot(corpusId, () =>
+            this.viewStore.withInventorySnapshot(corpusId, () =>
                 this.consolidationPairs(corpusId, targetId),
             ),
         );
@@ -3637,7 +3643,7 @@ export class FileMemoryService
         currentViews: ViewVersion[],
     ): Promise<NonNullable<ViewSnapshot["wikiFamily"]>> {
         const family = await this.viewStore.getWikiFamily(corpusId, kind);
-        const jobs = await this.viewStore.listViewBuilds(corpusId);
+        const jobs = await this.viewStore.listViewInventoryBuilds(corpusId);
         const active = jobs.some(
             (job) =>
                 job.state === "running" &&
@@ -3649,7 +3655,7 @@ export class FileMemoryService
                             : "informational-project-summary-v1"),
                 ),
         );
-        const latest = new Map<string, ViewBuildTargetResult>();
+        const latest = new Map<string, ViewInventoryBuild["results"][number]>();
         for (const job of jobs.sort((a, b) =>
             b.updatedAt.localeCompare(a.updatedAt),
         ))
@@ -3711,7 +3717,7 @@ export class FileMemoryService
 
     private async familyConflictResolution(
         corpusId: string,
-        result: ViewBuildTargetResult,
+        result: ViewInventoryBuild["results"][number],
         jobId: string,
         currentViews: ViewVersion[],
     ): Promise<"unresolved" | "ready" | "indexPending"> {
@@ -3734,8 +3740,9 @@ export class FileMemoryService
             conflict.jobId !== jobId ||
             conflict.human.viewId !== result.viewId ||
             conflict.human.revisionId !== conflict.expectedRevisionId ||
-            conflict.input.fingerprint !== result.snapshot.fingerprint ||
-            !sameViewBuildEvidence(conflict.input, result.snapshot)
+            conflict.input.fingerprint !== result.inputFingerprint ||
+            viewBuildEvidenceFingerprint(conflict.input) !==
+                result.evidenceFingerprint
         )
             return "unresolved";
         const current = await this.familyResolutionVersion(
@@ -5231,7 +5238,10 @@ export class FileMemoryService
         );
     }
 
-    private async recoverInformationalEffect(view: ViewVersion): Promise<void> {
+    private async recoverInformationalEffect(
+        view: ViewVersion,
+        signal?: AbortSignal,
+    ): Promise<ViewPublicationStatus> {
         await this.assertViewPublicationFresh(view);
         let publication = await this.viewStore.getViewPublication({
             corpusId: view.corpusId,
@@ -5243,7 +5253,8 @@ export class FileMemoryService
             publication.indexState !== "ready" ||
             !(await this.informationalIndexReady(view))
         )
-            await this.indexViewLocked(view);
+            publication = await this.indexViewLocked(view, signal);
+        return publication;
     }
 
     private async cleanArchivedViewIndexes(corpusId: string): Promise<void> {
@@ -6092,20 +6103,44 @@ export class FileMemoryService
         await this.viewStore.activateWikiRedirect(corpusId, jobId, targetId);
         signal?.throwIfAborted();
         await this.cleanArchivedViewIndexes(corpusId);
-        await this.recoverInformationalEffect(canonical);
-        await this.acknowledgeWikiConsolidation(corpusId, jobId, targetId);
+        const publication = await this.recoverInformationalEffect(
+            canonical,
+            signal,
+        );
+        signal?.throwIfAborted();
+        if (
+            publication.indexState !== "ready" ||
+            publication.publishedRevisionId !== canonical.revisionId ||
+            publication.blockedReason
+        )
+            throw new Error(
+                `Consolidation cannot bind before the current derivative index is ready: ${publication.reason}`,
+            );
+        await this.acknowledgeWikiConsolidation(
+            corpusId,
+            jobId,
+            targetId,
+            canonical.revisionId,
+        );
     }
 
     private async acknowledgeWikiConsolidation(
         corpusId: string,
         jobId: string,
         targetId: string,
+        acceptedRevisionId?: string,
     ): Promise<void> {
         await this.viewStore.updateViewBuild(corpusId, jobId, (current) => {
             const target = current.results.find(
                 (entry) => entry.viewId === targetId,
             );
-            if (!target?.wikiConsolidation)
+            if (
+                !target?.wikiConsolidation ||
+                target.wikiConsolidation.stage === "stale" ||
+                (acceptedRevisionId !== undefined &&
+                    target.wikiConsolidation.acceptedRevisionId !==
+                        acceptedRevisionId)
+            )
                 throw new ViewBuildStaleError(
                     "Consolidation receipt was forgotten",
                 );
@@ -6300,8 +6335,19 @@ export class FileMemoryService
             publication.indexState !== "ready" ||
             !(await this.informationalIndexReady(canonical))
         )
-            publication = await this.indexViewLocked(canonical);
+            publication = await this.indexViewLocked(canonical, signal);
         signal.throwIfAborted();
+        await this.recheckViewInput(result.snapshot);
+        await this.checkWikiContributionInput(contribution.input, false);
+        const currentCanonical = await this.viewStore.getView({
+            corpusId: job.corpusId,
+            viewId: canonical.viewId,
+        });
+        if (currentCanonical?.revisionId !== canonical.revisionId)
+            throw new ViewBuildStaleError(
+                "Canonical Wiki contribution changed during derivative preparation",
+            );
+        await this.assertViewPublicationFresh(canonical);
         if (
             publication.indexState !== "ready" ||
             publication.blockedReason ||
@@ -6763,11 +6809,31 @@ export class FileMemoryService
     }
 
     private async assertInfluenceEligible(
-        input?: Pick<ViewBuildSnapshot, "corpusId" | "influenceSources">,
+        input?: Pick<
+            ViewBuildSnapshot,
+            "corpusId" | "influenceSources" | "influenceEvents"
+        >,
     ): Promise<void> {
-        if (!input?.influenceSources?.length) return;
+        if (
+            !input ||
+            (!input.influenceSources?.length && !input.influenceEvents?.length)
+        )
+            return;
         const runtime = await this.getCorpusRuntime(input.corpusId);
-        for (const influence of input.influenceSources) {
+        for (const influence of input.influenceEvents ?? []) {
+            const event = runtime.events.find(
+                (entry) => entry.eventId === influence.eventId,
+            );
+            if (
+                !event ||
+                isSuppressedEvent(runtime, event) ||
+                viewHash(event) !== influence.fingerprint
+            )
+                throw new ViewBuildStaleError(
+                    "Topic event evidence changed or was forgotten",
+                );
+        }
+        for (const influence of input.influenceSources ?? []) {
             const source = runtime.manifest.sources.find(
                 (entry) => entry.sourceId === influence.sourceId,
             );
@@ -6815,7 +6881,7 @@ export class FileMemoryService
         };
         await this.applyInformationalFamilyOperation(request, family);
         if (!family.enabled) return this.viewStore.recordViewMaintenance(plan);
-        const active = await this.viewStore.listViewBuilds(corpusId);
+        const active = await this.viewStore.listViewInventoryBuilds(corpusId);
         if (active.some((job) => job.state === "running"))
             return this.viewStore.recordViewMaintenance(plan);
         if (
@@ -6885,6 +6951,9 @@ export class FileMemoryService
             snapshot.views,
             kind,
         );
+        const familyVersion = viewHash(
+            await this.viewStore.getWikiFamily(corpusId, kind),
+        );
         const { targets, snapshots } = await this.prepareWikiTargets(
             corpusId,
             family,
@@ -6894,6 +6963,12 @@ export class FileMemoryService
             plan,
             kind,
             automatic,
+        );
+        await this.assertWikiPlanCurrent(
+            corpusId,
+            kind,
+            familyVersion,
+            snapshot.views,
         );
         // Save discovered identities while leaving unadmitted work retryable.
         await this.viewStore.saveWikiFamily(corpusId, family, kind);
@@ -7108,7 +7183,7 @@ export class FileMemoryService
                     selector: target.definition.selector,
                 });
             } catch (error) {
-                if (!(error instanceof Error) || "code" in error) throw error;
+                if (!this.isTechnicalTargetRejection(error)) throw error;
                 plan.targets.push({
                     viewId: descriptor.viewId,
                     expectedVersion: target.expectedVersion,
@@ -7191,6 +7266,8 @@ export class FileMemoryService
             corpusId,
             target,
             current,
+            undefined,
+            true,
         );
         const query =
             input.definition.wiki?.query ??
@@ -13029,5 +13106,31 @@ export class FileMemoryService
             deletedRevisionCount: removal.revisions.length,
             indexVersion: this.indexVersion(runtime.manifest),
         };
+    }
+
+    private isTechnicalTargetRejection(error: unknown): error is Error {
+        return (
+            error instanceof Error &&
+            !(error instanceof ViewBuildStaleError) &&
+            !("code" in error)
+        );
+    }
+
+    private async assertWikiPlanCurrent(
+        corpusId: string,
+        kind: "wiki" | "projects",
+        familyVersion: string,
+        views: ViewVersion[],
+    ): Promise<void> {
+        const family = await this.viewStore.getWikiFamily(corpusId, kind);
+        const current = await this.viewStore.listViews(corpusId);
+        if (
+            viewHash(family) !== familyVersion ||
+            viewHash(current.views.map((view) => view.revisionId)) !==
+                viewHash(views.map((view) => view.revisionId))
+        )
+            throw new ViewBuildStaleError(
+                "Informational maintenance plan changed during derivative preparation",
+            );
     }
 }
