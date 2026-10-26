@@ -198,8 +198,8 @@ export async function settleConsolidation(
     allowDecision = false,
 ) {
     for (let attempt = 0; attempt < 1000; attempt++) {
-        const snapshot = await service.listViews(corpusId);
         const jobs = await service.listViewBuilds(corpusId);
+        const snapshot = await service.listViews(corpusId);
         const decision =
             allowDecision &&
             jobs.some((job) =>
