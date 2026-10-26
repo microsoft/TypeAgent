@@ -22,6 +22,36 @@ interface ContentQueryResult {
     confidence?: number;
 }
 
+type UiFrameScope = "all-frames" | "main-document";
+
+interface UiSelectionRequest {
+    condition: string;
+    capability: "activate" | "fill" | "select";
+    frameScope?: UiFrameScope;
+}
+
+interface UiTarget {
+    targetId: string;
+    name: string;
+    role: string;
+    options?: { id: string; text: string; disabled: boolean }[];
+}
+
+type UiAction =
+    | { type: "activate" }
+    | { type: "fill"; text: string; submit?: boolean }
+    | { type: "select"; optionId: string };
+
+interface UiActionResult {
+    dispatched: true;
+    valueVerified?: true;
+}
+
+interface UiConditionResult {
+    status: "matched" | "not_matched" | "insufficient_evidence";
+    explanation: string;
+}
+
 interface WebFlowBrowserAPI {
     navigateTo(url: string): Promise<void>;
     goBack(): Promise<void>;
@@ -52,6 +82,16 @@ interface WebFlowBrowserAPI {
     checkPageState(expectedStateDescription: string): Promise<PageStateResult>;
 
     queryContent(question: string): Promise<ContentQueryResult>;
+
+    selectElement(request: UiSelectionRequest): Promise<UiTarget>;
+    evaluatePageCondition(
+        condition: string,
+        frameScope?: UiFrameScope,
+    ): Promise<UiConditionResult>;
+    executeUiAction(
+        targetId: string,
+        action: UiAction,
+    ): Promise<UiActionResult>;
 }
 
 interface WebFlowResult {

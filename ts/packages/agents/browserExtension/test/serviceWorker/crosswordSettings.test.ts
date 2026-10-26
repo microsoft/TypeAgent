@@ -4,6 +4,7 @@
 import {
     DEFAULT_EXTENSION_SETTINGS,
     getCrosswordMode,
+    getShoppingMode,
     getCrosswordDecisionStrategy,
     notifyCrosswordModeChanged,
 } from "../../src/extension/serviceWorker/storage";
@@ -12,6 +13,65 @@ describe("Crossword settings", () => {
     beforeEach(() => {
         jest.clearAllMocks();
         (chrome.storage.sync.set as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    describe("Shopping settings", () => {
+        beforeEach(() => {
+            jest.clearAllMocks();
+            (chrome.storage.sync.set as jest.Mock).mockResolvedValue(undefined);
+        });
+
+        test("defaults legacy settings to Generative without writing", async () => {
+            (chrome.storage.sync.get as jest.Mock).mockResolvedValue({});
+            expect(await getShoppingMode()).toBe("generative");
+            expect(DEFAULT_EXTENSION_SETTINGS.shoppingMode).toBe("generative");
+            expect(chrome.storage.sync.set).not.toHaveBeenCalled();
+        });
+
+        test.each(["generative", "decision"])(
+            "reads saved %s mode independently",
+            async (shoppingMode) => {
+                (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
+                    shoppingMode,
+                    crosswordMode:
+                        shoppingMode === "decision" ? "generative" : "decision",
+                });
+                expect(await getShoppingMode()).toBe(shoppingMode);
+                expect(chrome.storage.sync.set).not.toHaveBeenCalled();
+            },
+        );
+
+        test.each(["Decision", "", null, false, 1, {}])(
+            "repairs an invalid shopping enum %# with a warning",
+            async (shoppingMode) => {
+                const warning = jest
+                    .spyOn(console, "warn")
+                    .mockImplementation(() => {});
+                try {
+                    (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
+                        shoppingMode,
+                    });
+                    expect(await getShoppingMode()).toBe("generative");
+                    expect(chrome.storage.sync.set).toHaveBeenCalledWith({
+                        shoppingMode: "generative",
+                    });
+                    expect(warning).toHaveBeenCalledWith(
+                        "Invalid shopping mode; resetting to Generative.",
+                    );
+                } finally {
+                    warning.mockRestore();
+                }
+            },
+        );
+
+        test("propagates storage failures instead of choosing Generative", async () => {
+            (chrome.storage.sync.get as jest.Mock).mockRejectedValue(
+                new Error("Storage unavailable"),
+            );
+            await expect(getShoppingMode()).rejects.toThrow(
+                "Storage unavailable",
+            );
+        });
     });
 
     test("legacy settings default to Generative without changing extraction mode", async () => {

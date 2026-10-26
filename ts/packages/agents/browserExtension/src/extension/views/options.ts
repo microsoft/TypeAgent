@@ -11,6 +11,7 @@ import {
     isCrosswordDecisionStrategy,
     type CrosswordDecisionCapabilities,
 } from "@typeagent/browser-control-rpc/crosswordDecisionTypes";
+import { isShoppingMode } from "@typeagent/browser-control-rpc/uiDecisionTypes";
 
 let chromeRpcSingleton: ReturnType<typeof createChromeRpcClient> | undefined;
 function getChromeRpc() {
@@ -88,6 +89,7 @@ export class EnhancedOptionsPage {
     private async loadSavedSettings() {
         try {
             const saved = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+            await this.repairShoppingMode(saved);
             if (!isCrosswordMode(saved.crosswordMode)) {
                 console.warn(
                     "Invalid crossword mode; resetting to Generative.",
@@ -112,6 +114,9 @@ export class EnhancedOptionsPage {
                 );
             }
             this.settings = { ...DEFAULT_SETTINGS, ...saved };
+            document.querySelector<HTMLInputElement>(
+                `input[name="shoppingMode"][value="${this.settings.shoppingMode}"]`,
+            )!.checked = true;
             document.querySelector<HTMLInputElement>(
                 `input[name="crosswordMode"][value="${this.settings.crosswordMode}"]`,
             )!.checked = true;
@@ -221,6 +226,24 @@ export class EnhancedOptionsPage {
         )?.value;
     }
 
+    private getSelectedShoppingMode() {
+        return document.querySelector<HTMLInputElement>(
+            'input[name="shoppingMode"]:checked',
+        )?.value;
+    }
+
+    private async repairShoppingMode(saved: Record<string, unknown>) {
+        if (isShoppingMode(saved.shoppingMode)) return;
+        console.warn("Invalid shopping mode; resetting to Generative.");
+        saved.shoppingMode = DEFAULT_SETTINGS.shoppingMode;
+        await chrome.storage.sync.set({ shoppingMode: saved.shoppingMode });
+        this.showStatus(
+            "Invalid Shopping Mode was reset to Generative.",
+            "warning",
+        );
+        await this.notifySettingsUpdated({ ...DEFAULT_SETTINGS, ...saved });
+    }
+
     private async repairCrosswordStrategy(saved: Record<string, unknown>) {
         if (isCrosswordDecisionStrategy(saved.crosswordDecisionStrategy))
             return;
@@ -303,6 +326,11 @@ export class EnhancedOptionsPage {
 
     private async saveOptions(e: Event) {
         e.preventDefault();
+        const shoppingMode = this.getSelectedShoppingMode();
+        if (!isShoppingMode(shoppingMode)) {
+            this.showStatus("Please select a valid Shopping Mode.", "warning");
+            return;
+        }
         const crosswordMode = this.getSelectedCrosswordMode();
         if (!isCrosswordMode(crosswordMode)) {
             this.showStatus("Please select a valid Crossword Mode.", "warning");
@@ -339,6 +367,7 @@ export class EnhancedOptionsPage {
 
         // Update settings
         this.settings.agentServerHost = agentServerHost;
+        this.settings.shoppingMode = shoppingMode;
         this.settings.crosswordMode = crosswordMode;
         this.settings.crosswordDecisionStrategy = strategy;
 
@@ -407,6 +436,13 @@ export class EnhancedOptionsPage {
     }
 
     private exportSettings() {
+        if (!isShoppingMode(this.settings.shoppingMode)) {
+            this.showStatus(
+                "Invalid Shopping Mode. Reload settings before exporting.",
+                "warning",
+            );
+            return;
+        }
         if (
             !isCrosswordDecisionStrategy(
                 this.settings.crosswordDecisionStrategy,
