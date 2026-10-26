@@ -808,6 +808,7 @@ export interface AnswerContextDiagnostics {
 export interface IndexedSubject {
     term: string;
     postingCount: number;
+    salience?: number;
     sourceIds: string[];
     initiative?: boolean;
     identity?: IndexedSubjectIdentity;

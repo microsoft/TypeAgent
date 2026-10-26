@@ -11,6 +11,11 @@ export interface MemoryTopicService {
 export interface TopicSourceReference {
     sourceId: string;
     revisionId: string;
+    evidence?: { kind: "event"; eventId: string };
+}
+export interface TopicEventReference {
+    eventId: string;
+    fingerprint: string;
 }
 export interface TopicOccurrence extends TopicSourceReference {
     id: string;
@@ -43,10 +48,28 @@ export interface TopicSnapshot {
     generatedAt: string;
     occurrences: TopicOccurrence[];
     influenceSources: TopicSourceReference[];
+    influenceEvents?: TopicEventReference[];
     nodes: TopicNode[];
     parents: Array<{ parentId: string; childId: string }>;
     related: Array<{ fromId: string; toId: string; kind: "related" }>;
     limits: string[];
+    curation?: TopicCuration;
+    curationProgress?: TopicCuration;
+}
+export interface TopicConcept {
+    id: string;
+    label: string;
+    scope: string;
+    purpose: string;
+    memberIds: string[];
+    summary: string;
+    summaryState?: "pending" | "ready";
+    citations: ViewCitation[];
+    salience: number;
+}
+export interface TopicCuration {
+    concepts: TopicConcept[];
+    deferred: Array<{ nodeId: string; reason: string }>;
 }
 export interface TopicBuildInput {
     occurrences: TopicOccurrence[];
@@ -54,6 +77,7 @@ export interface TopicBuildInput {
     reusableSummaries?: Array<
         Pick<TopicNode, "id" | "summary" | "citations" | "limits">
     >;
+    reusableCuration?: TopicCuration;
     indexGeneration?: string;
 }
 export interface TopicQueryRequest {
@@ -63,6 +87,8 @@ export interface TopicQueryRequest {
     depth?: number;
     pageSize?: number;
     continuationToken?: string;
+    curated?: boolean;
+    summarize?: boolean;
 }
 export interface TopicQueryPage {
     generation: string | null;
@@ -85,6 +111,15 @@ export interface TopicQueryPage {
     nextContinuationToken?: string;
     limits: string[];
     io: { stateBytes: number; snapshotBytes: number; elapsedMs: number };
+    concepts?: Array<
+        TopicConcept & {
+            memberCount: number;
+            omittedMembers: number;
+            citationCount: number;
+            omittedCitations: number;
+        }
+    >;
+    totalConcepts?: number;
 }
 export interface TopicQueryNode extends TopicNode {
     occurrenceCount: number;

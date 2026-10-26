@@ -8,9 +8,20 @@ import type { WikiFamilyState } from "./viewStore.js";
 import type { ViewVersion } from "./viewTypes.js";
 import type { ViewMaintenancePlan } from "./viewMaintenanceTypes.js";
 
+const conversationalQuestionPrefix =
+    /^(?:what|how|why|when|where|who|which|can|could|would|should|please|tell\s+me|show\s+me)\s+(?:is|are|was|were|do|does|did|can|could|would|should|to|the|a|an|we|you|i)\b/i;
+
 export function usefulWikiSubjectLabel(term: string): boolean {
-    const name = normalizeInitiativeSelector(term);
+    const trimmed = term.trim();
+    const name = normalizeInitiativeSelector(trimmed);
     if (!name || name.length > 200 || !/\p{L}/u.test(name)) return false;
+    const words = name.split(/\s+/).filter(Boolean);
+    if (
+        words.length > 8 ||
+        /[?!]$/.test(trimmed) ||
+        conversationalQuestionPrefix.test(name)
+    )
+        return false;
     return !(
         /^\d{4}-\d{2}-\d{2}(?:[t ][\d:.+-]+z?)?$/i.test(name) ||
         /^[+-]?\d[\d.,]*\s*(?:%|[\p{L}/]+)$/u.test(name)
@@ -43,7 +54,7 @@ export function usefulWikiSubject(term: string, indexedText: string): boolean {
     );
     if (!substantive) return false;
     if (
-        /^(status|owner|date|time|quantity|value|property|metadata|context|goals?|scope)$/i.test(
+        /^(status|owner|date|time|quantity|value|property|metadata|context|goals?|scope|user|assistant|human|agent|prompt|response|question|answer|conversation|chat|transcript|speaker)$/i.test(
             name,
         )
     )
@@ -119,7 +130,10 @@ export function rankWikiCandidates(
         (left, right) =>
             Number(existing.has(right.viewId)) -
                 Number(existing.has(left.viewId)) ||
+            (right.salience ?? right.postingCount ?? 1) -
+                (left.salience ?? left.postingCount ?? 1) ||
             right.sourceIds.length - left.sourceIds.length ||
+            (right.postingCount ?? 1) - (left.postingCount ?? 1) ||
             left.query.localeCompare(right.query),
     );
 }
@@ -272,11 +286,23 @@ function applySubject(
                 viewId: randomUUID(),
                 query,
                 sourceIds: subject.sourceIds,
+                ...(subject.postingCount !== undefined &&
+                subject.postingCount > 1
+                    ? { postingCount: subject.postingCount }
+                    : {}),
+                ...(subject.salience !== undefined &&
+                subject.salience !== (subject.postingCount ?? 1)
+                    ? { salience: subject.salience }
+                    : {}),
                 ...(subject.identity ? { identity: subject.identity } : {}),
             });
         return;
     }
     prior.sourceIds = [...new Set([...prior.sourceIds, ...subject.sourceIds])];
+    if (subject.postingCount !== undefined)
+        prior.postingCount = subject.postingCount;
+    if (subject.salience !== undefined) prior.salience = subject.salience;
+    else delete prior.salience;
     if (subject.identity) mergeSubjectIdentity(prior, subject.identity);
     // Only unmaterialized nominations can be retired; saved records and their edits remain intact.
     family.descriptors = family.descriptors.filter(

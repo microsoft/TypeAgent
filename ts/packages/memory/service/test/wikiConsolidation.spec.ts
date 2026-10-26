@@ -16,7 +16,9 @@ import {
     parseConsolidationScope,
     preservedCanonicalOutput,
     readConsolidationScope,
+    applyConsolidationRepair,
     type WikiConsolidationReceipt,
+    type WikiConsolidationScope,
 } from "../src/wikiConsolidation.js";
 import { TypedViewStore } from "../src/viewStore.js";
 import {
@@ -26,7 +28,16 @@ import {
 import { ViewBuildRunner } from "../src/viewBuilds.js";
 import { EditorialRejection } from "../src/viewEditorial.js";
 import { viewHash } from "../src/viewMerge.js";
-import type { ViewBuildJob, ViewBuildSnapshot } from "../src/viewTypes.js";
+import type {
+    ViewBuildJob,
+    ViewBuildSnapshot,
+    ViewSynthesisAdapter,
+} from "../src/viewTypes.js";
+import {
+    createConfiguredViewSynthesisAdapter,
+    verifyOrRepairWikiConsolidation,
+} from "../src/viewSynthesis.js";
+import type { ChatModel } from "@typeagent/aiclient";
 
 function input(
     viewId: string,
@@ -84,6 +95,8 @@ function input(
 }
 function output(snapshot: ViewBuildSnapshot) {
     return hydrateInformational(snapshot, {
+        summary: "Grounded reference summary.",
+        status: "partial",
         title: snapshot.definition.viewId,
         prose: snapshot.inputs[0].content,
         limits: "Selected original indexed evidence",
@@ -148,6 +161,311 @@ async function preparedStore(root: string) {
     });
     return { store, jobId: admitted.job.jobId, survivor, retiring, receipt };
 }
+
+function repairFixture() {
+    const snapshot = input(
+        "calls",
+        "The call series records 17 on 25 August 2021 and 34 on 26 January 2022. These are keyword calls, not verified errors.",
+    );
+    const original = output(snapshot);
+    original.content.sections[0].body =
+        "The overall peak was 17 on 25 August 2021. These are keyword calls, not verified errors.";
+    const repair = {
+        summary:
+            "Keyword calls include 17 in August 2021 and 34 in January 2022.",
+        sections: original.content.sections.map((section) => ({
+            id: section.id,
+            body: snapshot.inputs[0].content,
+        })),
+    };
+    const assessment: WikiConsolidationScope = {
+        relation: "samePurpose",
+        reason: "same-scoped-purpose",
+        scope: {
+            system: "Call centre",
+            initiative: "",
+            purpose: "Call counts over time",
+        },
+        criticalDistinctions: [
+            {
+                fragmentId: "f0",
+                statement: "Keyword calls are not verified errors.",
+            },
+        ],
+    };
+    return { snapshot, original, repair, assessment };
+}
+
+test("consolidation corrects a quantity once and independently rechecks actual prose without changing anchors", async () => {
+    const { snapshot, original, repair, assessment } = repairFixture();
+    const retained = structuredClone(original);
+    let checks = 0;
+    let repairs = 0;
+    const adapter: ViewSynthesisAdapter = {
+        identity: "offline",
+        generate: async () => original,
+        validate: async () => {
+            throw new Error("Unused support checker");
+        },
+        async checkWikiConsolidation(
+            _input,
+            candidate,
+            _assessment,
+            _signal,
+            before,
+        ) {
+            expect(this.identity).toBe("offline");
+            checks++;
+            expect(before).toBe(original);
+            return candidate.content.sections[0].body.includes("overall peak")
+                ? { safe: false, failures: ["quantity"] }
+                : { safe: true, failures: [] };
+        },
+        repairWikiConsolidation: async (
+            _input,
+            candidate,
+            _assessment,
+            verification,
+        ) => {
+            repairs++;
+            expect(candidate).toBe(original);
+            expect(verification.failures).toEqual(["quantity"]);
+            return applyConsolidationRepair(candidate, repair);
+        },
+    };
+    const result = await verifyOrRepairWikiConsolidation(
+        adapter,
+        snapshot,
+        original,
+        assessment,
+        new AbortController().signal,
+    );
+    expect(result.verification).toEqual({ safe: true, failures: [] });
+    expect(checks).toBe(2);
+    expect(repairs).toBe(1);
+    expect(result.output.content.sections[0].id).toBe(
+        original.content.sections[0].id,
+    );
+    expect(result.output.content.citations).toEqual(original.content.citations);
+    expect(result.output.relationships).toEqual(original.relationships);
+    expect(original).toEqual(retained);
+});
+
+test.each([
+    ["repeat", "critical-distinction", 2, 1],
+    ["check-provider", "Provider unavailable", 1, 0],
+    ["repair-provider", "Provider unavailable", 1, 1],
+    ["check-abort", "Cancelled", 1, 0],
+    ["repair-abort", "Cancelled", 1, 1],
+    ["invalid", "invalid-assessment", 1, 0],
+    ["metadata", "changed-article-structure", 1, 1],
+    ["missing", "invalid-article-repair", 1, 1],
+] as const)(
+    "consolidation propagates %s without accepting an unchecked output",
+    async (mode, message, expectedChecks, expectedRepairs) => {
+        const { snapshot, original, repair, assessment } = repairFixture();
+        const controller = new AbortController();
+        let checks = 0;
+        let repairs = 0;
+        const adapter: ViewSynthesisAdapter = {
+            identity: "offline",
+            generate: async () => original,
+            validate: async () => {
+                throw new Error("Unused support checker");
+            },
+            checkWikiConsolidation: async () => {
+                checks++;
+                if (mode === "check-provider")
+                    throw new Error("Provider unavailable");
+                if (mode === "check-abort")
+                    controller.abort(new Error("Cancelled"));
+                return { safe: mode === "invalid", failures: ["quantity"] };
+            },
+            repairWikiConsolidation: async () => {
+                repairs++;
+                if (mode === "repair-provider")
+                    throw new Error("Provider unavailable");
+                if (mode === "repair-abort")
+                    controller.abort(new Error("Cancelled"));
+                const repaired = applyConsolidationRepair(original, repair);
+                if (mode === "metadata")
+                    repaired.content.title = "Changed protected title";
+                if (mode === "missing") repaired.content.sections = [];
+                return repaired;
+            },
+        };
+        await expect(
+            verifyOrRepairWikiConsolidation(
+                adapter,
+                snapshot,
+                original,
+                assessment,
+                controller.signal,
+            ),
+        ).rejects.toThrow(message);
+        expect(checks).toBe(expectedChecks);
+        expect(repairs).toBe(expectedRepairs);
+    },
+);
+
+test("configured consolidation repair uses unchanged originals and checks preservation against unrepaired prose", async () => {
+    const { snapshot, original, repair, assessment } = repairFixture();
+    const model: ChatModel = {
+        completionSettings: {},
+        complete: async (messages, _options, schema) => {
+            if (
+                typeof messages === "string" ||
+                !schema ||
+                Array.isArray(schema)
+            )
+                throw new Error("Expected structured messages");
+            const payload = JSON.parse(String(messages[1].content));
+            expect(payload.fragments).toEqual(
+                snapshot.inputs
+                    .flatMap((source) => source.passages ?? [])
+                    .map((fragment, index) => ({
+                        ...fragment,
+                        id: `f${index}`,
+                    })),
+            );
+            if (schema.name === "wiki_consolidation_repair") {
+                expect(payload.content).toEqual(original.content);
+                expect(String(messages[0].content)).toContain(
+                    "Preserve EVERY supported unique claim",
+                );
+                return { success: true, data: JSON.stringify(repair) };
+            }
+            expect(payload.originalContent).toEqual(original.content);
+            expect(String(messages[0].content)).toContain(
+                "compare every supported unique claim",
+            );
+            return {
+                success: true,
+                data: JSON.stringify({ safe: true, failures: [] }),
+            };
+        },
+    };
+    const adapter = createConfiguredViewSynthesisAdapter(
+        undefined,
+        4000,
+        model,
+    );
+    const signal = new AbortController().signal;
+    const repaired = await adapter.repairWikiConsolidation!(
+        snapshot,
+        original,
+        assessment,
+        { safe: false, failures: ["quantity"] },
+        signal,
+    );
+    expect(repaired.content.sections[0].body).toBe(snapshot.inputs[0].content);
+    expect(
+        await adapter.checkWikiConsolidation!(
+            snapshot,
+            repaired,
+            assessment,
+            signal,
+            original,
+        ),
+    ).toEqual({ safe: true, failures: [] });
+});
+
+test("verified prose repair persists across canonical acceptance, redirect activation and reopen", async () => {
+    const root = await mkdtemp(
+        path.join(os.tmpdir(), "memory-consolidation-repair-"),
+    );
+    try {
+        const { store, jobId, receipt, retiring } = await preparedStore(root);
+        let checks = 0;
+        const adapter: ViewSynthesisAdapter = {
+            identity: "offline",
+            generate: async () => receipt.output,
+            validate: async () => {
+                throw new Error("Unused support checker");
+            },
+            checkWikiConsolidation: async () =>
+                ++checks === 1
+                    ? { safe: false, failures: ["quantity"] }
+                    : { safe: true, failures: [] },
+            repairWikiConsolidation: async (_input, original) =>
+                applyConsolidationRepair(original, {
+                    summary:
+                        "Command and lease measurements concern different timing scopes.",
+                    sections: original.content.sections.map((section) => ({
+                        id: section.id,
+                        body: section.body.replace(
+                            "Command median 38 ms",
+                            "Command median is 38 ms",
+                        ),
+                    })),
+                }),
+        };
+        const prepared = await verifyOrRepairWikiConsolidation(
+            adapter,
+            receipt.input,
+            receipt.output,
+            receipt.assessment,
+            new AbortController().signal,
+        );
+        await store.updateViewBuild("corpus", jobId, (job) => {
+            job.results[1].wikiConsolidation = {
+                ...receipt,
+                ...prepared,
+                identity: viewHash(prepared),
+            };
+        });
+        const accepted = await store.acceptWikiConsolidation(
+            "corpus",
+            jobId,
+            retiring.viewId,
+        );
+        await store.activateWikiRedirect("corpus", jobId, retiring.viewId);
+        const reopened = new TypedViewStore(root, "authenticated-test-owner");
+        const canonical = await reopened.getView({
+            corpusId: "corpus",
+            viewId: receipt.survivorViewId,
+        });
+        expect(canonical?.revisionId).toBe(accepted.revisionId);
+        expect(canonical?.content.sections[0].body).toContain(
+            "Command median is 38 ms",
+        );
+        const redirected = await reopened.getView({
+            corpusId: "corpus",
+            viewId: retiring.viewId,
+        });
+        expect(redirected?.redirect?.anchors).toEqual(receipt.anchors);
+        expect(checks).toBe(2);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("consolidation repair rejects unknown, missing, duplicate or malformed sections", () => {
+    const { original, repair } = repairFixture();
+    for (const invalid of [
+        { ...repair, sections: [] },
+        { ...repair, sections: [{ ...repair.sections[0], id: "invented" }] },
+        { ...repair, sections: [{ ...repair.sections[0], body: "" }] },
+        {
+            ...repair,
+            sections: [{ ...repair.sections[0], heading: "Injected" }],
+        },
+        { ...repair, title: "Injected" },
+    ])
+        expect(() => applyConsolidationRepair(original, invalid)).toThrow(
+            "Wiki consolidation rejected",
+        );
+    original.content.sections.push({
+        ...structuredClone(original.content.sections[0]),
+        id: "other",
+    });
+    expect(() =>
+        applyConsolidationRepair(original, {
+            ...repair,
+            sections: [repair.sections[0], repair.sections[0]],
+        }),
+    ).toThrow("invalid-section-repair");
+});
 
 test("bounded typed scope assessment rejects unsupported IDs, extra fields, contradictory scope and raw JSON diagnostics", async () => {
     const snapshot = input("subject");

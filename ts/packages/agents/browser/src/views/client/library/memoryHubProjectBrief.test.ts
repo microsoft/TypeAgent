@@ -15,6 +15,8 @@ const evidence = invokeView as jest.Mock<Promise<unknown>, [string, unknown]>;
 const content: ProjectBriefContent = {
     kind: "projectBrief",
     construction: "informational-project-summary-v1",
+    status: "partial",
+    coverageNote: "Owner approval remains unverified",
     title: "Payments reliability",
     summary: "Project active; incident closed",
     citations: [
@@ -166,6 +168,10 @@ test("fixed project template uses human-readable fields, honest unknowns and exa
         "Project knowledge as-of: Unknown",
     );
     expect(editor.element.textContent).toContain("not executable guides");
+    expect(editor.element.textContent).toContain("Completeness: partial");
+    expect(editor.element.textContent).toContain(
+        "Coverage: Owner approval remains unverified",
+    );
     expect(editor.element.textContent).not.toContain('"inventoryIds"');
     expect(editor.element.textContent).not.toContain("Activate skill");
     change(editor.element, "Project brief title", "Edited project brief");

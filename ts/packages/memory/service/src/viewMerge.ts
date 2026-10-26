@@ -28,16 +28,22 @@ export function sameViewBuildEvidence(
     prior: ViewBuildSnapshot | undefined,
     next: ViewBuildSnapshot,
 ): boolean {
-    const semanticInput = (input: ViewBuildSnapshot) =>
-        viewHash({
-            inputs: input.inputs,
-            definition: input.definition,
-            pipeline: input.pipeline,
-            model: input.model,
-            wikiContribution: input.wikiContribution,
-            editorialUnlocks: input.editorial?.unlockedTargets ?? [],
-        });
-    return prior !== undefined && semanticInput(prior) === semanticInput(next);
+    return (
+        prior !== undefined &&
+        viewBuildEvidenceFingerprint(prior) ===
+            viewBuildEvidenceFingerprint(next)
+    );
+}
+
+export function viewBuildEvidenceFingerprint(input: ViewBuildSnapshot): string {
+    return viewHash({
+        inputs: input.inputs,
+        definition: input.definition,
+        pipeline: input.pipeline,
+        model: input.model,
+        wikiContribution: input.wikiContribution,
+        editorialUnlocks: input.editorial?.unlockedTargets ?? [],
+    });
 }
 
 export function mergeProse(

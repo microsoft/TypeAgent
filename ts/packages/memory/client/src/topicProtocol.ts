@@ -7,12 +7,19 @@ const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/);
 const text = z.string().max(120000);
 const count = z.number().int().nonnegative();
 const source = z.strictObject({ sourceId: id, revisionId: id });
+const eventEvidence = z.strictObject({ kind: z.literal("event"), eventId: id });
+export const topicEventReferenceSchema = z.strictObject({
+    eventId: id,
+    fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+});
 const citation = source.extend({
     locator: z.string().regex(/^indexed:\d+:[0-9a-f]{64}:\d+-\d+$/),
     excerpt: z.string().min(1).max(2000),
+    evidence: eventEvidence.optional(),
 });
 const alias = z.strictObject({ label: text, scope: text });
 export const topicOccurrenceSchema = source.extend({
+    evidence: eventEvidence.optional(),
     id,
     ordinal: count,
     label: text,
@@ -39,14 +46,51 @@ const related = z.strictObject({
     toId: id,
     kind: z.literal("related"),
 });
-export const topicQueryRequestSchema = z.strictObject({
-    corpusId: id,
-    topicId: id.optional(),
-    search: z.string().max(1000).optional(),
-    depth: z.number().int().min(0).max(10).optional(),
-    pageSize: z.number().int().min(1).max(200).optional(),
-    continuationToken: z.string().min(1).max(2000).optional(),
+const topicConceptSchema = z
+    .strictObject({
+        id,
+        label: z.string().min(1).max(200),
+        scope: z.string().min(1).max(200),
+        purpose: z.string().min(1).max(2000),
+        memberIds: id.array().min(1),
+        summary: z.string().max(1600),
+        summaryState: z.enum(["pending", "ready"]).optional(),
+        citations: citation.array().min(1),
+        salience: z.number().int().min(1).max(8),
+    })
+    .refine(
+        (concept) =>
+            concept.summaryState === "pending"
+                ? concept.summary === ""
+                : concept.summary.trim().length > 0,
+        "Concept summary must be empty only while explicitly pending",
+    );
+const topicCurationSchema = z.strictObject({
+    concepts: topicConceptSchema.array(),
+    deferred: z
+        .strictObject({ nodeId: id, reason: z.string().min(1).max(2000) })
+        .array(),
 });
+export const topicQueryRequestSchema = z
+    .strictObject({
+        corpusId: id,
+        topicId: id.optional(),
+        search: z.string().max(1000).optional(),
+        depth: z.number().int().min(0).max(10).optional(),
+        pageSize: z.number().int().min(1).max(200).optional(),
+        continuationToken: z.string().min(1).max(2000).optional(),
+        curated: z.boolean().optional(),
+        summarize: z.boolean().optional(),
+    })
+    .refine(
+        (request) =>
+            !request.summarize ||
+            (request.curated === true &&
+                !!request.topicId &&
+                !request.search &&
+                !request.continuationToken),
+        "Summary generation requires one explicit curated topic",
+    );
 export const topicQueryPageSchema = z.strictObject({
     generation: id.nullable(),
     nodes: topicNodeSchema
@@ -85,6 +129,19 @@ export const topicQueryPageSchema = z.strictObject({
         snapshotBytes: count,
         elapsedMs: z.number().nonnegative(),
     }),
+    concepts: topicConceptSchema
+        .safeExtend({
+            memberIds: id.array().max(20),
+            citations: citation.array().max(8),
+            memberCount: count,
+            omittedMembers: count,
+            citationCount: count,
+            omittedCitations: count,
+        })
+        .array()
+        .max(200)
+        .optional(),
+    totalConcepts: count.optional(),
 });
 export const topicBuildInputSchema = z.strictObject({
     occurrences: topicOccurrenceSchema.array(),
@@ -112,10 +169,12 @@ export const topicSnapshotSchema = z.strictObject({
     generatedAt: text,
     occurrences: topicOccurrenceSchema.array(),
     influenceSources: source.array(),
+    influenceEvents: topicEventReferenceSchema.array().optional(),
     nodes: topicNodeSchema.array(),
     parents: parent.array(),
     related: related.array(),
     limits: text.array(),
+    curation: topicCurationSchema.optional(),
 });
 export const topicToolNames = {
     queryTopics: "memory_topics_query",

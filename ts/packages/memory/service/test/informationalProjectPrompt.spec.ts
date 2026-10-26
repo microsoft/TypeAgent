@@ -144,7 +144,7 @@ test("project prompt preserves qualified dimensions and initiative roles; provid
     );
 });
 
-test("wiki prompt keeps retrieval identity independent of labels and requires prose coverage limits", async () => {
+test("wiki prompt keeps retrieval identity independent of labels and separates prose from retrieval coverage limits", async () => {
     const input: ViewBuildSnapshot = {
         corpusId: "corpus",
         actor: "test",
@@ -175,9 +175,7 @@ test("wiki prompt keeps retrieval identity independent of labels and requires pr
     expect(instructions).toContain(
         "a readable title does not expand its scope",
     );
-    expect(instructions).toContain(
-        "coverage limits in the prose as well as limits",
-    );
+    expect(instructions).toContain("retrieval coverage limits only in limits");
     expect(instructions).toContain("corrections, counterexamples");
     expect(instructions).toContain("independently useful explanatory purpose");
     expect(instructions).toContain("sentence-shaped state");
@@ -206,7 +204,7 @@ test("wiki prompt keeps retrieval identity independent of labels and requires pr
         ),
     ).rejects.toThrow("Controlled provider failure");
     expect(instructions).toContain(
-        "before generating a new automatic Wiki page",
+        "Assess standalone admission even when no current pages exist",
     );
     expect(instructions).toContain("exact shared fragment IDs");
     expect(instructions).toContain("actual page prose");
