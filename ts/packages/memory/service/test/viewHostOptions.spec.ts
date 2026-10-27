@@ -13,6 +13,57 @@ import { waitForMemoryJob } from "../src/rpcFacade.js";
 import type { IndexedFragmentRequest } from "../src/types.js";
 import type { ViewSynthesisOutput } from "../src/viewTypes.js";
 
+test("topic experiments are opt-in and reject invalid host settings", () => {
+    expect(getConfiguredMemoryViewOptions({})).not.toHaveProperty(
+        "topicCuration",
+    );
+    expect(
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "32000",
+            TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "2",
+            TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION: "0.25",
+        }).topicCuration,
+    ).toEqual({
+        inputTokenTarget: 32000,
+        concurrency: 2,
+        priorContextFraction: 0.25,
+    });
+    for (const environment of [
+        { TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "" },
+        { TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "NaN" },
+        { TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "3" },
+        { TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION: "0.2" },
+        { TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "-1" },
+    ])
+        expect(() => getConfiguredMemoryViewOptions(environment)).toThrow();
+});
+
+test("generative and native execution families retain distinct capacities and reject conflicting activation", () => {
+    expect(
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_CONCURRENCY: "24",
+            TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "2",
+        }),
+    ).toMatchObject({
+        decisionTopicExecution: { concurrency: 24 },
+        topicCuration: { concurrency: 2 },
+    });
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_TOPICS: "true",
+            TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "2",
+        }),
+    ).toThrow("cannot configure Decision");
+    for (const options of [{ decisionTopics: true }, { curatedTopics: false }])
+        expect(
+            () =>
+                new FileMemoryService("unused", {
+                    ...options,
+                    topicCuration: { concurrency: 2 },
+                }),
+        ).toThrow("Generative topic settings require");
+});
+
 class DeadlineCorpusIndex extends FakeSemanticCorpusIndex {
     public async readFragments(request: IndexedFragmentRequest) {
         return selectIndexedFragments(

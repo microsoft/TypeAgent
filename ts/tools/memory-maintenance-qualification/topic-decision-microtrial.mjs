@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import { open, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -11,9 +10,8 @@ import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import { assertCheckpoint, writeJson } from "./harness.mjs";
 import { compiledIdentity } from "./topic-decision-study.mjs";
+import { atomicWriteJson, hashValue as hash } from "./replay-artifacts.mjs";
 
-const hash = (value) =>
-    createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const assigned = (curation) => [
     ...(curation?.concepts.flatMap((concept) => concept.memberIds) ?? []),
     ...(curation?.deferred.map((entry) => entry.nodeId) ?? []),
@@ -381,7 +379,7 @@ export async function main(args = process.argv.slice(2)) {
                             ...working,
                             curationProgress: curation,
                         });
-                        await writeJson(`${output}.progress.json`, {
+                        await atomicWriteJson(`${output}.progress.json`, {
                             state: "diagnostic-prefix-progress",
                             identity,
                             rawSnapshotHash: fixture.rawSnapshotHash,

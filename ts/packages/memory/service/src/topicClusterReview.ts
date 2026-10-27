@@ -3,6 +3,7 @@
 
 import {
     countO200kTokens,
+    RequestAdmissionError,
     type StructuredOutputJsonSchema,
 } from "@typeagent/aiclient";
 import type { TopicCurationCompletion } from "./topicCuration.js";
@@ -144,6 +145,15 @@ export async function reviewTopicCluster(
     });
     if (countO200kTokens(serialized) > 24576) {
         console.warn("Local collection review exceeds the context budget");
+        return undefined;
+    }
+    try {
+        complete.inspectRequest?.(instructions, payload, outputSchema);
+    } catch (error) {
+        if (!(error instanceof RequestAdmissionError)) throw error;
+        console.warn(
+            `Local collection review exceeds provider capacity: ${error.message}`,
+        );
         return undefined;
     }
     signal.throwIfAborted();

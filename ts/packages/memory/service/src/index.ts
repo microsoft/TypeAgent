@@ -26,7 +26,8 @@ export type {
 export * from "./topicGeneration.js";
 export * from "./topicDecision.js";
 export * from "./topicDecisionCuration.js";
-export * from "./topicIndexes.js";
+export * from "./topicLookup.js";
+export type { TopicCurationSettings } from "./topicCuration.js";
 export * from "./topicDecisionWave.js";
 export * from "./topicIncidence.js";
 export * from "./topicSnapshot.js";

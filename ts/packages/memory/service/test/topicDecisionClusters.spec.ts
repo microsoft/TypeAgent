@@ -3,6 +3,7 @@
 
 import {
     getRuntimeConfigGeneration,
+    RequestAdmissionError,
     type DecisionModel,
     type DecisionRequest,
     type DecisionResponse,
@@ -553,6 +554,30 @@ test.each(["uncertain", "different_concept"])(
                 .sort(),
         });
         expect(result.concepts[0].validation!.memberScores).toHaveLength(2);
+        const checks = test.receipts.filter(
+            (receipt) =>
+                receipt.stage === "decision" &&
+                (receipt.nativePhase === "localization" ||
+                    receipt.nativePhase === "publication"),
+        );
+        expect(checks.length).toBeGreaterThan(0);
+        expect(
+            checks.every(
+                (receipt) =>
+                    receipt.fixedDefinitionTargetId === prior.concepts[0].id,
+            ),
+        ).toBe(true);
+        expect(
+            checks
+                .flatMap((receipt) => receipt.targetExposure ?? [])
+                .every(
+                    (exposure) =>
+                        exposure.evaluatedTargetIds.length === 1 &&
+                        exposure.evaluatedTargetIds[0] ===
+                            prior.concepts[0].id &&
+                        exposure.candidateGrounding === "complete",
+                ),
+        ).toBe(true);
         expect(result.pending).toBeUndefined();
         expect(prior.concepts[0].memberIds).toEqual([value.nodes[0].id]);
         expect(
@@ -977,6 +1002,27 @@ test("old-member questions exceeding capacity do not consume the new admission b
             evidenceText(evidenceRecord(state.cluster).anchorHealth),
         ).toContain("Not checked");
     }
+    const checks = test.receipts.filter(
+        (receipt) =>
+            receipt.stage === "decision" &&
+            (receipt.nativePhase === "localization" ||
+                receipt.nativePhase === "publication"),
+    );
+    expect(checks.length).toBeGreaterThan(0);
+    for (const receipt of checks) {
+        expect(receipt.fixedDefinitionTargetId).toBe(prior.concepts[0].id);
+        expect(receipt.targetExposure).toHaveLength(2);
+        expect(receipt.targetExposure).toEqual(
+            expect.arrayContaining(
+                value.nodes.slice(1).map((node) => ({
+                    nodeId: node.id,
+                    evaluatedTargetIds: [],
+                    unavailableTargetIds: [],
+                    candidateGrounding: "complete",
+                })),
+            ),
+        );
+    }
     validateTopicSnapshot({ ...value, curation: result });
 });
 
@@ -1057,6 +1103,63 @@ test("old-anchor evidence exceeding 24576 tokens is explicitly excluded from the
             Object.keys(evidenceRecord(evidenceRecord(request.state).targets)),
         ).toHaveLength(0);
     }
+    validateTopicSnapshot({ ...value, curation: result });
+});
+
+test("provider wire-capacity rejection preserves maintenance debt and never dispatches a generative call", async () => {
+    const value = fixture(1);
+    const prior: TopicCuration = {
+        concepts: [oldConcept(value)],
+        deferred: [],
+    };
+    prioritizeTopicMaintenance(
+        value,
+        prior.concepts[0],
+        [value.nodes[0].id],
+        0.8,
+        "Prioritized old-anchor uncertainty",
+    );
+    const original = structuredClone(prior);
+    let calls = 0;
+    const complete: TopicCurationCompletion = Object.assign(
+        async () => {
+            calls++;
+            throw new Error("Over-capacity review must not dispatch");
+        },
+        {
+            inspectRequest: () => {
+                throw new RequestAdmissionError(
+                    "Synthetic complete-wire reservation exceeds context",
+                );
+            },
+        },
+    );
+    const result = await maintainTopicClusters(
+        value,
+        prior,
+        complete,
+        new AbortController().signal,
+        {
+            model: {
+                provider: "azure",
+                model: "offline",
+                providerSource: "factory",
+                configGeneration: getRuntimeConfigGeneration(),
+                decide: async () => {
+                    throw new Error("Maintenance uses no native inference");
+                },
+            },
+        },
+    );
+    expect(calls).toBe(0);
+    expect(result.concepts[0].memberIds).toEqual(
+        original.concepts[0].memberIds,
+    );
+    expect(result.concepts[0].maintenance).toMatchObject({
+        priority: 0.8,
+        suspectMemberIds: [value.nodes[0].id],
+    });
+    expect(prior).toEqual(original);
     validateTopicSnapshot({ ...value, curation: result });
 });
 

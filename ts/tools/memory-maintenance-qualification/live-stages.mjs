@@ -112,6 +112,13 @@ export async function liveDependencyCheckpoint(root) {
     return result;
 }
 
+function providerRequestType(pathname, decisionQuestions) {
+    if (decisionQuestions) return "decision";
+    if (/\/chat\/completions$/.test(pathname)) return "chat";
+    if (/\/embeddings$/.test(pathname)) return "embedding";
+    return "other-production-request";
+}
+
 export function observeProvider(
     events,
     currentRole = () => "production-default",
@@ -135,13 +142,7 @@ export function observeProvider(
             startedEpochMs,
             responseEpochMs: Date.now(),
             role,
-            type: decisionQuestions
-                ? "decision"
-                : /\/chat\/completions$/.test(url.pathname)
-                  ? "chat"
-                  : /\/embeddings$/.test(url.pathname)
-                    ? "embedding"
-                    : "other-production-request",
+            type: providerRequestType(url.pathname, decisionQuestions),
             requestedModel: request?.model,
             decisionQuestionCount: decisionQuestions
                 ? Object.keys(decisionQuestions).length

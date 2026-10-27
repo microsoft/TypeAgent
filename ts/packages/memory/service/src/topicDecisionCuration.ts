@@ -521,7 +521,11 @@ async function authorClusters(
                     payload,
                     schema,
                 }),
-                () => complete(rules, payload, schema),
+                () =>
+                    complete(rules, payload, schema, {
+                        kind: "metadata",
+                        signal: context.signal,
+                    }),
             ),
         );
         context.signal.throwIfAborted();
@@ -736,6 +740,7 @@ async function resolveUncertainty(
         instructions,
         payload,
         schema,
+        call,
     ) => {
         const serialized = JSON.stringify({ instructions, payload, schema });
         const output = await observeTopicDecisionWork(
@@ -751,11 +756,17 @@ async function resolveUncertainty(
             "resolution",
             "explicit-uncertainty-or-incomplete-evidence",
             serialized,
-            () => complete(instructions, payload, schema),
+            () =>
+                complete(instructions, payload, schema, {
+                    ...call,
+                    kind: "resolution",
+                    signal: call?.signal ?? context.signal,
+                }),
         );
         context.signal.throwIfAborted();
         return output;
     };
+    resolutionComplete.inspectRequest = complete.inspectRequest;
     const resolution = await curateTopics(
         {
             ...withoutCuration(snapshot),

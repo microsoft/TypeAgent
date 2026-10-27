@@ -52,6 +52,7 @@ import {
 } from "../src/viewSynthesisEvidence.js";
 import { getConfiguredMemoryViewOptions } from "../src/viewHostOptions.js";
 import { FileMemoryService } from "../src/fileMemoryService.js";
+import { viewHash } from "../src/viewMerge.js";
 import { createConfiguredTopicGenerator } from "../src/topicGeneration.js";
 import type { ViewBuildSnapshot } from "../src/viewTypes.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
@@ -257,6 +258,60 @@ test("bounded fixed-packet waves reduce in packet order despite reversed respons
     ).toEqual(
         packets.map((packet) => Object.keys(packet.request.questions)[0]),
     );
+});
+
+test("partition receipts distinguish nominated concepts, actual target exposure and unavailable grounding without changing packets", async () => {
+    const value = snapshot(4);
+    const candidate = task(value);
+    candidate.nomination = { availableConcepts: 3, nominatedConcepts: 3 };
+    const targets = [task(value, 1).candidate, task(value, 2).candidate];
+    targets[1].complete = false;
+    const packets = targets.flatMap((target) =>
+        packTopicDecisions(
+            [
+                {
+                    ...candidate,
+                    targets: [{ key: target.key, candidate: target }],
+                },
+            ],
+            "offline",
+        ),
+    );
+    const hashes = packets.map((packet) => viewHash(packet.request));
+    const receipts: TopicDecisionReceipt[] = [];
+    await executeTopicDecisionWave(
+        {
+            concurrency: 24,
+            model: model(async (request) => ({
+                success: true,
+                data: answer(request),
+            })),
+            onReceipt: (receipt) => receipts.push(receipt),
+        },
+        packets,
+        new AbortController().signal,
+        "candidate-disposition",
+    );
+    expect(receipts.map((receipt) => receipt.requestHash)).toEqual(hashes);
+    expect(packets.map((packet) => viewHash(packet.request))).toEqual(hashes);
+    expect(receipts.map((receipt) => receipt.nativePhase)).toEqual([
+        "classification",
+        "classification",
+    ]);
+    expect(
+        receipts.flatMap(
+            (receipt) => receipt.targetExposure![0].evaluatedTargetIds,
+        ),
+    ).toEqual(targets.map((target) => target.node.id));
+    expect(receipts[1].targetExposure![0].unavailableTargetIds).toEqual([
+        targets[1].node.id,
+    ]);
+    expect(receipts[0].nomination![0].nominatedConcepts).toBe(3);
+    expect(
+        receipts.every(
+            (receipt) => receipt.providerAttemptBreakdown === "unavailable",
+        ),
+    ).toBe(true);
 });
 
 test("failed waves cancel queued work and drain in-flight calls before rejecting", async () => {

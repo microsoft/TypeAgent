@@ -14,6 +14,135 @@ import { checkSerializedRequestConstraints } from "../src/requestConstraints.js"
 import { RequestAdmissionError } from "../src/requestBudget.js";
 import { callJsonApiWithPool } from "../src/restClient.js";
 import type { EndpointPool } from "../src/endpointPool.js";
+import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
+import type { PromptSection } from "typechat";
+
+test.each(["chat_completions", "responses", "messages"] as const)(
+    "%s request inspection is offline and serializes the same request as dispatch",
+    async (wireApi) => {
+        const originalFetch = globalThis.fetch;
+        const bodies: string[] = [];
+        try {
+            globalThis.fetch = async (_url, options) => {
+                bodies.push(String(options?.body));
+                return new Response(
+                    JSON.stringify({
+                        choices: [{ message: { content: "{}" } }],
+                        output: [
+                            {
+                                type: "message",
+                                content: [{ type: "output_text", text: "{}" }],
+                            },
+                        ],
+                        content: [{ type: "text", text: "{}" }],
+                    }),
+                    { status: 200 },
+                );
+            };
+            const model = createChatModel(
+                {
+                    provider: "azure",
+                    modelType: ModelType.Chat,
+                    apiKey: "synthetic-key",
+                    endpoint: "https://synthetic.invalid/inspection",
+                    wireApi,
+                    supportsResponseFormat: true,
+                    requestConstraints: {
+                        contextTokens: 30000,
+                        inputTokens: 20000,
+                        outputTokens: 5000,
+                    },
+                },
+                { response_format: { type: "json_object" } },
+            );
+            const schema = {
+                name: "test",
+                schema: { type: "object", description: "Schema counts too" },
+            };
+            const prompts: (string | PromptSection[])[] = [
+                "Multibyte: \u2603",
+                [
+                    { role: "system", content: "Synthetic system instruction" },
+                    { role: "user", content: "Multibyte: \u2603" },
+                ],
+            ];
+            for (const prompt of prompts) {
+                const fetchesBeforeInspection = bodies.length;
+                const inspected = model.inspectRequest!(prompt, schema);
+                expect(bodies).toHaveLength(fetchesBeforeInspection);
+                expect(inspected.constraints).toEqual(
+                    checkSerializedRequestConstraints(
+                        inspected.serializedRequest,
+                        {
+                            contextTokens: 30000,
+                            inputTokens: 20000,
+                            outputTokens: 5000,
+                        },
+                    ),
+                );
+                expect(inspected.constraints.outputTokens).toBe(5000);
+                expect(inspected.tokenizer).toBe("o200k_base");
+                expect(inspected.estimatedInputTokens).toBe(
+                    countTokens(inspected.serializedRequest),
+                );
+                if (wireApi === "chat_completions") {
+                    expect(inspected.serializedRequest).toContain(
+                        "Schema counts too",
+                    );
+                } else {
+                    expect(inspected.serializedRequest).not.toContain(
+                        "Schema counts too",
+                    );
+                }
+                expect(inspected.serializedRequest).not.toContain(
+                    "synthetic-key",
+                );
+                expect(
+                    (await model.complete(prompt, undefined, schema)).success,
+                ).toBe(true);
+                expect(bodies[fetchesBeforeInspection]).toBe(
+                    inspected.serializedRequest,
+                );
+            }
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    },
+);
+
+test("request inspection rejects configured constraints before fetching and reports missing metadata", async () => {
+    const originalFetch = globalThis.fetch;
+    let fetches = 0;
+    try {
+        globalThis.fetch = async () => {
+            fetches++;
+            throw new Error("Inspection must not fetch");
+        };
+        const settings = {
+            provider: "azure" as const,
+            modelType: ModelType.Chat,
+            apiKey: "synthetic-key",
+            endpoint: "https://synthetic.invalid/inspection",
+        };
+        expect(
+            createChatModel(settings).inspectRequest!("bounded").constraints
+                .metadata,
+        ).toBe("missing");
+        const model = createChatModel({
+            ...settings,
+            requestConstraints: { inputTokens: 100, outputTokens: 5000 },
+        });
+        expect(() => model.inspectRequest!("x".repeat(200))).toThrow(
+            RequestAdmissionError,
+        );
+        await expect(model.complete("x".repeat(200))).rejects.toBeInstanceOf(
+            RequestAdmissionError,
+        );
+        expect(fetches).toBe(0);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
 
 test("uncapped chat reserves provider output capacity without adding a wire limit", async () => {
     const originalFetch = globalThis.fetch;

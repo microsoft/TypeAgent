@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import os from "node:os";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import {
     main,
@@ -13,9 +13,12 @@ import {
     captureTopicClusterPackets,
     captureTopicClusterCompletion,
 } from "./topic-decision-microtrial.mjs";
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 test("private cluster capture retains exact requests/results and preserves model binding and signals", async () => {
-    const directory = await mkdtemp(path.join(os.tmpdir(), "cluster-capture-"));
+    const directory = await mkdtemp(
+        path.join(testDirectory, "cluster-capture-"),
+    );
     try {
         const file = path.join(directory, "packets.jsonl");
         const signal = new AbortController().signal;
@@ -64,7 +67,7 @@ test("private cluster capture retains exact requests/results and preserves model
 
 test("private generative capture preserves complete review scope and completion arguments without capturing metadata authoring", async () => {
     const directory = await mkdtemp(
-        path.join(os.tmpdir(), "cluster-review-capture-"),
+        path.join(testDirectory, "cluster-review-capture-"),
     );
     try {
         const file = path.join(directory, "packets.jsonl");

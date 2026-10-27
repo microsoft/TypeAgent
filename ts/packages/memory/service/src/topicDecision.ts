@@ -68,6 +68,7 @@ export interface TopicDecisionPacket {
     request: DecisionRequest;
     tasks: TopicDecisionTask[];
     tokens: number;
+    fixedDefinitionTargetId?: string;
 }
 export interface TopicDecisionReceipt {
     stage:
@@ -106,6 +107,21 @@ export interface TopicDecisionReceipt {
         availableConcepts: number;
         nominatedConcepts: number;
     }>;
+    nativePhase?:
+        | "classification"
+        | "reconciliation"
+        | "alternatives"
+        | "localization"
+        | "publication"
+        | "other";
+    targetExposure?: Array<{
+        nodeId: string;
+        evaluatedTargetIds: string[];
+        unavailableTargetIds: string[];
+        candidateGrounding: "complete" | "unavailable";
+    }>;
+    fixedDefinitionTargetId?: string;
+    providerAttemptBreakdown?: "unavailable";
     transactionId?: string;
     batchOffset?: number;
     taskReasons?: string[];
@@ -939,6 +955,30 @@ export function topicChoice(
     return answer.choice;
 }
 
+function nativePhase(
+    request: DecisionRequest,
+    reason: string,
+): NonNullable<TopicDecisionReceipt["nativePhase"]> {
+    const cluster =
+        typeof request.state === "string" ? undefined : request.state.cluster;
+    if (cluster && typeof cluster === "object" && !Array.isArray(cluster)) {
+        const phase = cluster.phase;
+        if (
+            phase === "alternatives" ||
+            phase === "localization" ||
+            phase === "publication"
+        )
+            return phase;
+    }
+    if (reason === "candidate-disposition") return "classification";
+    if (
+        reason === "root-reconciliation" ||
+        reason === "conflicting-target-batches"
+    )
+        return "reconciliation";
+    return "other";
+}
+
 export async function executeTopicDecision(
     options: TopicDecisionOptions,
     value: TopicDecisionPacket,
@@ -1009,6 +1049,29 @@ export async function executeTopicDecision(
                 ? [{ nodeId: task.candidate.node.id, ...task.nomination }]
                 : [],
         ),
+        nativePhase: nativePhase(value.request, reason),
+        ...(value.fixedDefinitionTargetId
+            ? { fixedDefinitionTargetId: value.fixedDefinitionTargetId }
+            : {}),
+        targetExposure: value.tasks.map((task) => ({
+            nodeId: task.candidate.node.id,
+            evaluatedTargetIds: task.targets.map(
+                (target) => target.concept?.id ?? target.candidate!.node.id,
+            ),
+            unavailableTargetIds: task.targets
+                .filter(
+                    (target) =>
+                        (target.complete ?? target.candidate?.complete) !==
+                        true,
+                )
+                .map(
+                    (target) => target.concept?.id ?? target.candidate!.node.id,
+                ),
+            candidateGrounding: task.candidate.complete
+                ? "complete"
+                : "unavailable",
+        })),
+        providerAttemptBreakdown: "unavailable",
         ...(result.success
             ? {
                   answers,

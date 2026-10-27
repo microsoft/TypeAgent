@@ -16,9 +16,7 @@ import {
     writeJson,
 } from "./harness.mjs";
 import { liveDependencyCheckpoint } from "./live-stages.mjs";
-
-const hash = (value) =>
-    createHash("sha256").update(JSON.stringify(value)).digest("hex");
+import { hashValue as hash } from "./replay-artifacts.mjs";
 
 export function validateFrozenTopicInput(input) {
     assert.equal(
@@ -273,6 +271,10 @@ export async function compiledIdentity(root) {
         "topic-decision-study.mjs",
         "topic-decision-microtrial.mjs",
         "topic-decision-sweep.mjs",
+        "topic-decision-replay.mjs",
+        "replay-artifacts.mjs",
+        "replay-tape.mjs",
+        "replay-storage.mjs",
         "harness.mjs",
     ]) {
         const relative = path.join(

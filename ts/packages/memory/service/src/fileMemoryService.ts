@@ -288,6 +288,11 @@ import {
     type TopicConceptSummarizer,
 } from "./topicGeneration.js";
 import {
+    topicCurationPolicy,
+    validateTopicCurationSettings,
+    type TopicCurationSettings,
+} from "./topicCuration.js";
+import {
     configuredTopicDecisionModel,
     configuredTopicDecisionIdentity,
     type TopicDecisionReceipt,
@@ -642,6 +647,8 @@ export interface FileMemoryServiceOptions {
     /** Experimental Decision curation; the generative pipeline remains the default. */
     decisionTopics?: boolean;
     decisionTopicExecution?: TopicDecisionExecutionOptions;
+    /** Opt-in generative curation settings, independent of native Decision execution. */
+    topicCuration?: TopicCurationSettings;
     onTopicDecisionReceipt?: (receipt: TopicDecisionReceipt) => void;
     indexFactory?: CorpusIndexFactory;
     eventIndexFactory?: CorpusIndexFactory;
@@ -659,6 +666,24 @@ function decisionTopicsEnabled(options: FileMemoryServiceOptions): boolean {
             "Decision topic curation cannot override a custom topic generator",
         );
     return enabled;
+}
+
+function configuredTopicCuration(
+    options: FileMemoryServiceOptions,
+    decisionTopics: boolean,
+    curatedTopics: boolean,
+): TopicCurationSettings | undefined {
+    if (!options.topicCuration) return undefined;
+    validateTopicCurationSettings(options.topicCuration);
+    if (
+        decisionTopics ||
+        !curatedTopics ||
+        options.viewSynthesisAdapter?.generateTopics
+    )
+        throw new Error(
+            "Generative topic settings require generative curated topics without a custom generator",
+        );
+    return { ...options.topicCuration };
 }
 
 function now(): string {
@@ -1218,6 +1243,8 @@ export class FileMemoryService
     private readonly viewAdapter: ViewSynthesisAdapter;
     private readonly curatedTopics: boolean;
     private readonly decisionTopics: boolean;
+    private readonly topicCuration: TopicCurationSettings | undefined;
+    private readonly topicPolicy: string;
     private readonly decisionTopicExecution: ReturnType<
         typeof resolveTopicDecisionExecution
     >;
@@ -1443,6 +1470,15 @@ export class FileMemoryService
         this.wikiModelEndpoint = options.viewModelEndpoint;
         this.curatedTopics = options.curatedTopics ?? true;
         this.decisionTopics = decisionTopicsEnabled(options);
+        this.topicCuration = configuredTopicCuration(
+            options,
+            this.decisionTopics,
+            this.curatedTopics,
+        );
+        this.topicPolicy = topicCurationPolicy(
+            this.curatedTopics,
+            this.topicCuration,
+        );
         this.decisionTopicExecution = resolveTopicDecisionExecution(
             options.decisionTopicExecution,
         );
@@ -9291,6 +9327,7 @@ export class FileMemoryService
                       };
                   }
                 : undefined,
+            this.topicCuration,
         );
     }
 
@@ -9301,9 +9338,7 @@ export class FileMemoryService
                   "v2",
                   this.decisionTopicExecution,
               )
-            : this.curatedTopics
-              ? "curated-lazy-v6"
-              : "raw-v1";
+            : this.topicPolicy;
         return `${this.viewAdapter.identity}:topics-${policy}`;
     }
 
@@ -9538,7 +9573,9 @@ export class FileMemoryService
             model: this.topicModelIdentity(),
             curationRecipe: this.decisionTopics
                 ? topicDecisionRecipe
-                : "curated-lazy-v6",
+                : this.curatedTopics
+                  ? this.topicPolicy
+                  : "curated-lazy-v6",
             eventOccurrences,
             influenceEvents: this.topicEvents(runtime),
             ...(runtime.manifest.indexGeneration

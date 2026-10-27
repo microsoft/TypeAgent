@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import {
     openai,
     type ChatModel,
+    type CompleteUsageStatsCallback,
     type StructuredOutputJsonSchema,
 } from "@typeagent/aiclient";
 import { recordSearchTiming, timeSearchStage } from "@typeagent/knowpro";
@@ -16,7 +17,15 @@ import type {
     TopicSnapshot,
 } from "./topicTypes.js";
 import { initialTopicNodes, validateTopicSnapshot } from "./topicSnapshot.js";
-import { curateTopics } from "./topicCuration.js";
+import {
+    curateTopics,
+    topicCurationPolicy,
+    validateTopicCurationSettings,
+    type TopicCurationSettings,
+    type TopicCurationCall,
+    type TopicCurationCompletion,
+} from "./topicCuration.js";
+import { viewHash } from "./viewMerge.js";
 import { TopicEvidenceIndex } from "./topicIndexes.js";
 import { curateTopicsWithDecision } from "./topicDecisionCuration.js";
 import { maintainTopicClusters } from "./topicClusterMaintenance.js";
@@ -276,52 +285,7 @@ export function summaryEvidence(
     node: TopicNode,
     index?: TopicEvidenceIndex,
 ): TopicNode["citations"] {
-    if (index) return index.evidenceFor(node);
-    const membership = new Set(node.occurrenceIds);
-    const sourceRevisions = new Set(
-        snapshot.occurrences
-            .filter((entry) => membership.has(entry.id))
-            .map((entry) => `${entry.sourceId}\n${entry.revisionId}`),
-    );
-    const context = [
-        ...new Map(
-            snapshot.occurrences
-                .filter((entry) =>
-                    sourceRevisions.has(
-                        `${entry.sourceId}\n${entry.revisionId}`,
-                    ),
-                )
-                .flatMap((entry) => entry.citations)
-                .map((citation) => [JSON.stringify(citation), citation]),
-        ).values(),
-    ];
-    const priority = (text: string) =>
-        /Governing tail exception:/i.test(text)
-            ? 3
-            : /governing|withdraw|invalid|correct|supersed|retract/i.test(text)
-              ? 2
-              : /qualification|caveat|only|cohort|not applicable|held lease/i.test(
-                      text,
-                  )
-                ? 1
-                : 0;
-    const own = node.citations.slice(0, 2);
-    const ranked = [...context].sort(
-        (a, b) => priority(b.excerpt) - priority(a.excerpt),
-    );
-    const evidence = [
-        ...new Map(
-            [...own, ...ranked, ...context.slice(-2)].map((citation) => [
-                JSON.stringify(citation),
-                citation,
-            ]),
-        ).values(),
-    ].slice(0, 8);
-    if (context.length > evidence.length)
-        node.limits.push(
-            "Summary uses bounded original-source context, including nominated qualifications; full incidence remains maintained.",
-        );
-    return evidence;
+    return (index ?? new TopicEvidenceIndex(snapshot)).evidenceFor(node);
 }
 
 export function createTopicCompletion(
@@ -329,49 +293,138 @@ export function createTopicCompletion(
     injectedModel?: ChatModel,
 ) {
     let model = injectedModel;
-    return async function complete(
+    function configuredModel() {
+        return (model ??= openai.createChatModel(
+            endpoint,
+            { temperature: 0, response_format: { type: "json_object" } },
+            undefined,
+            ["memory-views"],
+        ));
+    }
+    function messages(instructions: string, payload: unknown) {
+        return [
+            { role: "system" as const, content: instructions },
+            { role: "user" as const, content: JSON.stringify(payload) },
+        ];
+    }
+    return Object.assign(complete, {
+        inspectRequest:
+            injectedModel && !injectedModel.inspectRequest
+                ? undefined
+                : inspectRequest,
+    });
+    function inspectRequest(
+        instructions: string,
+        payload: unknown,
+        schema?: StructuredOutputJsonSchema,
+    ) {
+        const model = configuredModel();
+        if (!model.inspectRequest)
+            throw new Error(
+                "Configured topic model does not support request inspection",
+            );
+        return model.inspectRequest(
+            messages(instructions, payload),
+            model.completionSettings.response_format?.type === "json_object"
+                ? schema
+                : undefined,
+        );
+    }
+    async function complete(
         instructions: string,
         payload: unknown,
         signal: AbortSignal,
         stage: string,
         ordinal?: number,
         schema?: StructuredOutputJsonSchema,
+        call?: TopicCurationCall,
     ): Promise<unknown> {
         signal.throwIfAborted();
-        model ??= openai.createChatModel(
-            endpoint,
-            {
-                temperature: 0,
-                response_format: { type: "json_object" },
-            },
-            undefined,
-            ["memory-views"],
-        );
+        const model = configuredModel();
+        const prompt = messages(instructions, payload);
+        const outputSchema =
+            model.completionSettings.response_format?.type === "json_object"
+                ? schema
+                : undefined;
+        const request = model.inspectRequest?.(prompt, outputSchema);
+        let usage: Parameters<CompleteUsageStatsCallback>[0] | undefined;
         const result = await timeSearchStage(
             stage,
             () =>
-                model!.complete(
-                    [
-                        {
-                            role: "system",
-                            content: instructions,
-                        },
-                        { role: "user", content: JSON.stringify(payload) },
-                    ],
-                    undefined,
-                    model!.completionSettings.response_format?.type ===
-                        "json_object"
-                        ? schema
-                        : undefined,
+                model.complete(
+                    prompt,
+                    (value) => {
+                        usage = value;
+                    },
+                    outputSchema,
                     undefined,
                     signal,
                 ),
-            { ordinal },
+            {
+                ordinal,
+                callKind: call?.kind,
+                requestHash: request
+                    ? viewHash(request.serializedRequest)
+                    : undefined,
+                serializedBytes: request
+                    ? Buffer.byteLength(request.serializedRequest)
+                    : undefined,
+                inputTokens: request?.estimatedInputTokens,
+                tokenizer: request?.tokenizer,
+                outputReservation: request?.constraints.outputTokens,
+                constraintAccounting: request?.constraints.tokenAccounting,
+                providerAttemptBreakdown: "unavailable",
+            },
         );
         signal.throwIfAborted();
         if (!result.success) throw new Error(result.message);
-        return JSON.parse(result.data);
-    };
+        recordSearchTiming(`${stage}.response`, 0, {
+            ordinal,
+            callKind: call?.kind,
+            outputBytes: Buffer.byteLength(result.data),
+            promptTokens: usage?.prompt_tokens,
+            completionTokens: usage?.completion_tokens,
+        });
+        return timeSearchStage(
+            `${stage}.parse`,
+            () => JSON.parse(result.data),
+            {
+                ordinal,
+                callKind: call?.kind,
+            },
+        );
+    }
+}
+
+export function bindTopicCompletion(
+    complete: ReturnType<typeof createTopicCompletion>,
+    signal: AbortSignal,
+    kind: TopicCurationCall["kind"] = "normal",
+): TopicCurationCompletion {
+    return Object.assign(
+        (
+            instructions: string,
+            payload: unknown,
+            schema?: StructuredOutputJsonSchema,
+            call?: TopicCurationCall,
+        ) => {
+            const callKind = call?.kind ?? kind;
+            return complete(
+                instructions,
+                payload,
+                call?.signal ?? signal,
+                callKind === "normal" ||
+                    callKind === "contract-repair" ||
+                    callKind === "omission-repair"
+                    ? "topic.curation.model"
+                    : `topic.${callKind}.model`,
+                call?.ordinal,
+                schema,
+                call ?? { kind, signal },
+            );
+        },
+        { inspectRequest: complete.inspectRequest },
+    );
 }
 
 export function createConfiguredTopicConceptSummarizer(
@@ -435,24 +488,17 @@ async function generateCuratedTopicSnapshot(
     complete: ReturnType<typeof createTopicCompletion>,
     checkpoint?: TopicGenerationCheckpoint,
     decision?: TopicDecisionOptions,
+    settings?: TopicCurationSettings,
 ): Promise<void> {
-    snapshot.recipe += `:${decision ? topicDecisionRecipe : "curated-lazy-v6"}`;
+    snapshot.recipe += `:${decision ? topicDecisionRecipe : topicCurationPolicy(true, settings)}`;
     const evidenceIndex = new TopicEvidenceIndex(snapshot);
     const evidenceFor = (node: TopicNode) =>
         summaryEvidence(snapshot, node, evidenceIndex);
-    const completion = (
-        instructions: string,
-        payload: unknown,
-        schema?: StructuredOutputJsonSchema,
-    ) =>
-        complete(
-            instructions,
-            payload,
-            signal,
-            "topic.curation.model",
-            undefined,
-            schema,
-        );
+    const completion = bindTopicCompletion(
+        complete,
+        signal,
+        decision ? "adjudication" : "normal",
+    );
     const save = checkpoint
         ? async (curation: TopicCuration) => {
               snapshot.curationProgress = curation;
@@ -477,12 +523,18 @@ async function generateCuratedTopicSnapshot(
               true,
               save,
               input.topicInput?.reusableCuration,
+              {
+                  ...settings,
+                  ...(complete.inspectRequest
+                      ? { inspectRequest: complete.inspectRequest }
+                      : {}),
+              },
           );
     if (input.topicInput?.maintainClusters && decision?.clusterValidation)
         curation = await maintainTopicClusters(
             snapshot,
             curation,
-            completion,
+            bindTopicCompletion(complete, signal, "maintenance"),
             signal,
             decision,
             save,
@@ -506,9 +558,18 @@ export function createConfiguredTopicGenerator(
     injectedModel?: ChatModel,
     curated = false,
     decision?: (input: ViewBuildSnapshot) => TopicDecisionOptions,
+    settings?: TopicCurationSettings,
 ): TopicGenerator {
     if (decision && !curated)
         throw new Error("Decision topic curation requires curated topics");
+    if (settings) {
+        validateTopicCurationSettings(settings);
+        if (decision || !curated)
+            throw new Error(
+                "Generative topic settings require generative curated topics",
+            );
+        settings = { ...settings };
+    }
     const defaultComplete = createTopicCompletion(endpoint, injectedModel);
     return async (input, signal, checkpoint) => {
         const complete = decision
@@ -526,6 +587,7 @@ export function createConfiguredTopicGenerator(
                 complete,
                 checkpoint,
                 decisionOptions,
+                settings,
             );
         } else {
             const evidenceIndex = new TopicEvidenceIndex(snapshot);
@@ -757,6 +819,7 @@ export function createConfiguredTopicGenerator(
                                 : "topic.organization.model",
                             undefined,
                             schema,
+                            { kind: "organization", signal },
                         );
                     return decisionOptions
                         ? observeTopicDecisionWork(

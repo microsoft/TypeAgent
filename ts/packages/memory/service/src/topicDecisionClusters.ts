@@ -357,6 +357,8 @@ function clusterPacket(
         request,
         tasks,
         tokens,
+        fixedDefinitionTargetId:
+            proposal.anchor.concept?.id ?? proposal.anchor.candidate!.node.id,
     };
 }
 

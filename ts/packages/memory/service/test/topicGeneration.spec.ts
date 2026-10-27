@@ -7,6 +7,7 @@ import {
     RequestBudget,
     runWithRequestBudget,
     type ChatModel,
+    type StructuredOutputJsonSchema,
 } from "@typeagent/aiclient";
 import { runWithSearchTiming } from "@typeagent/knowpro";
 import {
@@ -17,6 +18,8 @@ import {
     createConfiguredTopicGenerator,
     createConfiguredTopicConceptSummarizer,
     createTopicSnapshot,
+    createTopicCompletion,
+    bindTopicCompletion,
 } from "../src/topicGeneration.js";
 import { indexedTopicOccurrence } from "../src/topicIncidence.js";
 import type { TopicOccurrence, TopicSnapshot } from "../src/topicTypes.js";
@@ -75,6 +78,222 @@ function deferred<T>() {
     const promise = new Promise<T>((done) => (resolve = done));
     return { promise, resolve };
 }
+
+test.each([true, false])(
+    "completion adapters inspect the dispatched framing/schema and preserve child cancellation (structured=%s)",
+    async (structured) => {
+        const model = openai.createChatModel(
+            {
+                provider: "azure",
+                modelType: openai.ModelType.Chat,
+                apiKey: "synthetic-key",
+                endpoint: "https://synthetic.invalid/inspection",
+                supportsResponseFormat: true,
+                requestConstraints: {
+                    inputTokens: 32000,
+                    contextTokens: 64000,
+                    outputTokens: 4096,
+                },
+            },
+            structured ? { response_format: { type: "json_object" } } : {},
+        );
+        const inspect = import.meta.jest.fn(model.inspectRequest!.bind(model));
+        model.inspectRequest = inspect;
+        const dispatch = import.meta.jest
+            .fn<
+                ReturnType<ChatModel["complete"]>,
+                Parameters<ChatModel["complete"]>
+            >()
+            .mockResolvedValue({ success: true, data: '{"accepted":true}' });
+        model.complete = dispatch;
+        const complete = createTopicCompletion(undefined, model);
+        const outer = new AbortController();
+        const child = new AbortController();
+        const bound = bindTopicCompletion(complete, outer.signal, "metadata");
+        const schema: StructuredOutputJsonSchema = {
+            name: "test",
+            strict: true,
+            schema: {
+                type: "object",
+                properties: { accepted: { type: "boolean" } },
+                required: ["accepted"],
+                additionalProperties: false,
+            },
+        };
+        const inspected = bound.inspectRequest!(
+            "Exact untrusted framing",
+            { evidence: "\u00e9vidence" },
+            schema,
+        );
+        expect(dispatch).not.toHaveBeenCalled();
+        expect(inspected.serializedRequest).toContain(
+            "Exact untrusted framing",
+        );
+        expect(inspected.serializedRequest.includes("json_schema")).toBe(
+            structured,
+        );
+        expect(
+            await bound(
+                "Exact untrusted framing",
+                { evidence: "\u00e9vidence" },
+                schema,
+                {
+                    signal: child.signal,
+                    ordinal: 7,
+                    kind: "adjudication",
+                },
+            ),
+        ).toEqual({ accepted: true });
+        const call = dispatch.mock.calls[0];
+        expect(inspect).toHaveBeenLastCalledWith(call[0], call[2]);
+        expect(call[4]).toBe(child.signal);
+        expect(call[2]).toEqual(structured ? schema : undefined);
+        child.abort(new Error("Cancelled child"));
+        await expect(
+            bound("No late provider call", {}, schema, {
+                signal: child.signal,
+                kind: "maintenance",
+            }),
+        ).rejects.toThrow("Cancelled child");
+        expect(dispatch).toHaveBeenCalledTimes(1);
+    },
+);
+
+test("legacy models remain usable but context-aware packing explicitly requires inspection", async () => {
+    const model: ChatModel = {
+        completionSettings: {},
+        complete: async () => ({ success: true, data: '{"accepted":true}' }),
+    };
+    const complete = createTopicCompletion(undefined, model);
+    expect(complete.inspectRequest).toBeUndefined();
+    expect(
+        await complete(
+            "Legacy request",
+            {},
+            new AbortController().signal,
+            "topic.test.model",
+        ),
+    ).toEqual({ accepted: true });
+    const generate = createConfiguredTopicGenerator(
+        undefined,
+        model,
+        true,
+        undefined,
+        { inputTokenTarget: 32000 },
+    );
+    await expect(
+        generate(input(1), new AbortController().signal),
+    ).rejects.toThrow("requires request inspection");
+    const factory = () => {
+        throw new Error("Factory must not run");
+    };
+    expect(() =>
+        createConfiguredTopicGenerator(undefined, model, true, factory, {
+            concurrency: 2,
+        }),
+    ).toThrow("Generative topic settings require");
+});
+
+test("generative stage receipts retain legacy curation names, separate Decision work and leave unknown usage absent", async () => {
+    const previous = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+    const logs: string[] = [];
+    const spy = import.meta.jest
+        .spyOn(console, "warn")
+        .mockImplementation((line: unknown) => logs.push(String(line)));
+    const complete = createTopicCompletion(undefined, {
+        completionSettings: {},
+        complete: async () => ({ success: true, data: '{"accepted":true}' }),
+    });
+    const kinds = [
+        "normal",
+        "contract-repair",
+        "omission-repair",
+        "metadata",
+        "adjudication",
+        "maintenance",
+        "resolution",
+    ] as const;
+    const signal = new AbortController().signal;
+    try {
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        await runWithSearchTiming(
+            "shared-receipts",
+            "memory.build.topics-v1",
+            async () => {
+                for (const kind of kinds)
+                    await bindTopicCompletion(
+                        complete,
+                        signal,
+                        kind,
+                    )("PRIVATE RULES", { evidence: "PRIVATE EVIDENCE" });
+            },
+        );
+        const entries = logs.map((line) =>
+            JSON.parse(line.replace("[memory-search-timing] ", "")),
+        );
+        const responses = entries.filter((entry) =>
+            entry.stage.endsWith(".response"),
+        );
+        expect(responses.map((entry) => entry.metadata.callKind)).toEqual([
+            ...kinds,
+        ]);
+        for (const entry of responses) {
+            expect(entry.metadata).not.toHaveProperty("promptTokens");
+            expect(entry.metadata).not.toHaveProperty("completionTokens");
+        }
+        expect(
+            entries.filter((entry) => entry.stage === "topic.curation.model"),
+        ).toHaveLength(3);
+        for (const kind of kinds.slice(3))
+            expect(
+                entries.some(
+                    (entry) => entry.stage === `topic.${kind}.model.parse`,
+                ),
+            ).toBe(true);
+        expect(logs.join("\n")).not.toContain("PRIVATE");
+    } finally {
+        spy.mockRestore();
+        if (previous === undefined)
+            delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = previous;
+    }
+});
+
+test("fifth-argument generative settings use their own recipe and keep the fourth Decision slot unchanged", async () => {
+    let curationCalls = 0;
+    const generate = createConfiguredTopicGenerator(
+        undefined,
+        {
+            completionSettings: {},
+            complete: async (messages) => {
+                const payload = JSON.parse(promptText(messages, 1));
+                expect(promptText(messages, 0)).toContain(
+                    "Curate useful reference",
+                );
+                curationCalls++;
+                return {
+                    success: true,
+                    data: JSON.stringify({
+                        concepts: [],
+                        deferred: payload.nodes.map(
+                            ({ id }: { id: string }) => ({
+                                nodeId: id,
+                                reason: "Synthetic diagnostic deferral",
+                            }),
+                        ),
+                    }),
+                };
+            },
+        },
+        true,
+        undefined,
+        { concurrency: 2 },
+    );
+    const result = await generate(input(1), new AbortController().signal);
+    expect(curationCalls).toBe(1);
+    expect(result.recipe).toMatch(/:curated-lazy-v8:[0-9a-f]{16}$/);
+    expect(result.curation?.deferred).toHaveLength(1);
+});
 
 test.each([false, true])(
     "topic generation consumes maintenance only for an explicit rebuild, even without new nodes: %s",
