@@ -72,15 +72,17 @@ test("topic model timers retain node ordinals without logging labels or evidence
     const originalWarn = console.warn;
     const logs: string[] = [];
     const captured = input();
-    const generator = createConfiguredTopicGenerator(undefined, {
-        completionSettings: {},
-        complete: async () => ({
-            success: true,
-            data: JSON.stringify({
-                summary: "Recorded topic context.",
-                evidenceIds: [0],
+    const generator = createConfiguredTopicGenerator({
+        model: {
+            completionSettings: {},
+            complete: async () => ({
+                success: true,
+                data: JSON.stringify({
+                    summary: "Recorded topic context.",
+                    evidenceIds: [0],
+                }),
             }),
-        }),
+        },
     });
     try {
         console.warn = (line: unknown) => logs.push(String(line));

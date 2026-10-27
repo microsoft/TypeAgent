@@ -112,6 +112,13 @@ export async function liveDependencyCheckpoint(root) {
     return result;
 }
 
+function providerRequestType(pathname, decisionQuestions) {
+    if (decisionQuestions) return "decision";
+    if (/\/chat\/completions$/.test(pathname)) return "chat";
+    if (/\/embeddings$/.test(pathname)) return "embedding";
+    return "other-production-request";
+}
+
 export function observeProvider(
     events,
     currentRole = () => "production-default",
@@ -124,16 +131,22 @@ export function observeProvider(
         );
         const started = performance.now();
         const role = roles.getStore() ?? currentRole();
+        const startedEpochMs = Date.now();
         const request =
             typeof args[1]?.body === "string"
                 ? JSON.parse(args[1].body)
                 : undefined;
         const response = await Reflect.apply(original, this, args);
+        const decisionQuestions = request?.questions;
         const item = {
+            startedEpochMs,
+            responseEpochMs: Date.now(),
             role,
-            type: /\/chat\/completions$/.test(url.pathname)
-                ? "chat"
-                : "other-production-request",
+            type: providerRequestType(url.pathname, decisionQuestions),
+            requestedModel: request?.model,
+            decisionQuestionCount: decisionQuestions
+                ? Object.keys(decisionQuestions).length
+                : undefined,
             status: response.status,
             durationMs: performance.now() - started,
             retryAfter: response.headers.get("retry-after"),

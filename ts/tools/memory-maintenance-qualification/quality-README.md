@@ -1,5 +1,9 @@
 # Memory quality: offline contracts and preparation
 
+For the separate frozen topic-curation tool, including its explicitly authorized
+live mode, see [Frozen topic-curation replay](topic-curation-README.md).
+The offline-only scope below describes the quality utilities on this page.
+
 This lane adds **offline evaluation utilities**, not a memory implementation,
 inference runner, factual judge, or new lifecycle harness. It makes no model calls,
 reads no credentials, and opens no production stores. No LongMemEval, AP-news,
@@ -406,6 +410,201 @@ not automatic retries of a blocked view target. The full temporal/human-edit/
 forget timeline still requires a fresh run. Successful source ingestion does not
 by itself certify maintained-view drain or the cold-reopen checks.
 
+## Decision-only frozen topic investigation
+
+The native LongMemEval runner also writes `topic-operations.jsonl` through the
+actual production service's diagnostic hook. V2 receipts distinguish packing
+CPU, Decision request reasons and focal/target counts, generative authoring and
+uncertainty resolution, full transactions and checkpoint persistence. Transaction
+durations contain their child operations: do not add overlapping scopes as
+exclusive wall time. Provider observations retain request/response epoch times.
+Missing usage remains missing, and a cancelled transaction is not durable
+progress. These diagnostics contain opaque corpus identifiers and must remain
+on private approved storage.
+
+For a fresh-store pilot with expensive import and a thirty-minute knowledge
+allowance, explicitly select `--work-minutes 60 --knowledge-minutes 30`.
+Invocation work accepts 1-60 minutes plus five minutes of cleanup; the default
+remains thirty minutes of work. This does not extend the knowledge deadline or
+permit changing a resumed run's frozen allowances.
+
+Scorecard token totals accept both chat `prompt_tokens`/`completion_tokens`
+and native Decision `input_tokens`/`output_tokens`. Missing totals are computed
+from the reported input and output counts, without double-counting aliases.
+
+`topic-decision-study.mjs` adds a frozen-incidence workload; it does not run a
+local LLM comparator. Use a separate machine for any previous-LLM reference.
+Serialize timed inference across machines when deployment capacity is shared
+or unverified. Do not run builds, tests, bulk replays or unrelated workloads
+during a timed trial.
+
+Build first, then freeze the source/compiled dependency checkpoint into an
+existing private artifact directory. Commands below run from the product's
+`ts` directory; `$privateArtifacts` and `$isolationNotes` are operator-supplied.
+
+```powershell
+node tools\memory-maintenance-qualification\topic-decision-study.mjs --product (Get-Location).Path --freeze-only --output (Join-Path $privateArtifacts 'topic-decision-checkpoint.json')
+node tools\memory-maintenance-qualification\topic-decision-study.mjs --product (Get-Location).Path --input (Join-Path $privateArtifacts 'captured-topic-input.json') --checkpoint (Join-Path $privateArtifacts 'topic-decision-checkpoint.json') --output (Join-Path $privateArtifacts 'topic-decision-result.json') --isolation-notes $isolationNotes --authorized-live-topic-decision
+```
+
+The input is a complete production-captured `topics-v1` build input with no
+reused curation/summaries or reader questions/reference answers. The runner
+derives the experimental treatment identity without altering frozen incidence.
+It verifies source/compiled hashes before and after inference, takes an
+exclusive study lock, refuses existing output files, records actual machine
+information plus operator-declared cache/power/network/provider-isolation
+conditions, and retains per-call JSONL receipts and explicit failure status.
+Output/receipts contain private corpus data and belong on approved storage.
+The lock prevents another invocation of this study, not unrelated host work;
+the operator must verify isolation.
+
+### Conditioned 24-topic microtrials
+
+`topic-decision-microtrial.mjs` consumes saved `batch-96-fixture.json` or
+`batch-240-fixture.json` with the full raw snapshot alongside it. This is an
+explicit historical-state-conditioned experiment, not a from-scratch benchmark.
+The fixture identifies its exact next focal prefix, bounded node count, original
+snapshot hash and prior curation. Prefix fixtures instead require null prior
+curation. Full raw incidence remains available as evidence; later focal nodes
+are not processed. The runner uses production evidence selection, nomination,
+classification, authoring and fallback, and validates partial progress only.
+
+Freeze a checkpoint with the command above after building. Then run baseline
+and treatment sequentially (never concurrently), using distinct output names:
+
+```powershell
+node tools\memory-maintenance-qualification\topic-decision-microtrial.mjs --product (Get-Location).Path --fixture (Join-Path $privateArtifacts 'batch-240-fixture.json') --checkpoint (Join-Path $privateArtifacts 'topic-decision-checkpoint.json') --output (Join-Path $privateArtifacts 'batch-240-v2.json') --packet-policy v2 --work-minutes 10 --isolation-notes $isolationNotes --authorized-live-topic-decision
+node tools\memory-maintenance-qualification\topic-decision-microtrial.mjs --product (Get-Location).Path --fixture (Join-Path $privateArtifacts 'batch-240-fixture.json') --checkpoint (Join-Path $privateArtifacts 'topic-decision-checkpoint.json') --output (Join-Path $privateArtifacts 'batch-240-factored.json') --packet-policy factored-best-fit --work-minutes 10 --isolation-notes $isolationNotes --authorized-live-topic-decision
+```
+
+The packet policy is fingerprinted. The experimental treatment combines exact
+chronology value interning with bounded overlap-aware placement; `"v2"` remains
+the default. Both use unchanged nomination and conservative uncertainty fallback.
+Results include native selected choices/scores, final partial curation, child
+operation receipts and wall time. Child timings must not be added to enclosing
+transaction time. The work bound is 1-15 minutes; errors/cancellation write an
+explicit failure, never readiness or fabricated accuracy. Historical grouping
+and baseline agreement are not human semantic gold or downstream QA scores.
+
+### Identical-packet concurrency and batch-size studies
+
+After building, freeze the checkpoint above. The sweep first prepares and saves
+exact production packets without inference, then reuses the same bodies in every
+native wave. Use a 24-focal conditioned fixture for this control:
+
+```powershell
+node tools\memory-maintenance-qualification\topic-decision-sweep.mjs --product (Get-Location).Path --fixture (Join-Path $privateArtifacts 'batch-96-fixture.json') --checkpoint (Join-Path $privateArtifacts 'topic-decision-checkpoint.json') --output (Join-Path $privateArtifacts 'frozen-96.json') --freeze-only
+node tools\memory-maintenance-qualification\topic-decision-sweep.mjs --product (Get-Location).Path --frozen (Join-Path $privateArtifacts 'frozen-96.json') --checkpoint (Join-Path $privateArtifacts 'topic-decision-checkpoint.json') --output (Join-Path $privateArtifacts 'concurrency-96.json') --repeats 2 --isolation-notes $isolationNotes --authorized-live-topic-decision
+```
+
+The sweep serializes complete trials at concurrency 1/2/4/8, reversing order on
+the second repeat. No import, authoring or fallback occurs in the fixed-request
+wave. Outputs retain all answers, provider usage, queue/service/wall durations,
+peak in-flight work and explicit failures. A failed wave drains before returning;
+it does not automatically change packet bodies to make a trial succeed.
+Freeze includes separate 24/32/48/context capacity probes; those are not semantic
+qualification of the larger transaction variants.
+
+Then use the microtrial runner with a common larger focal prefix fixture, such
+as 48 from-scratch focal nodes with full raw incidence, to compare end-to-end
+curation. It accepts `--concurrency`, `--batch-size 24|32|48|context`,
+`--lookahead` and `--max-questions`. The fixed prefix and exact assigned-node
+scope must be identical across variants. Native context/output admission still
+applies; changing the safety guard is not permission to exceed provider bounds.
+Choose the smallest concurrency near measured throughput saturation, and assess
+batch size using fallback scope, admission/membership differences and end-to-end
+latency as well as request counts. Neither study establishes human semantic
+accuracy or full corpus readiness.
+
+For complete speculative transactions, add `--full-transactions --lookahead 2`
+or `--lookahead 4` to the prefix microtrial, retaining the same batch size,
+request concurrency (maximum 24), fixture and new frozen checkpoint in its
+serial-transaction control. Roots, fallback and metadata are staged privately
+in parallel, then validated compatible prefixes are installed with one atomic
+group checkpoint. Inspect `speculation` receipts for nomination/read/write
+conflicts, discarded suffixes and committed transaction counts. Shorter wall
+time without useful validated reuse does not establish a speculation benefit.
+Existing transport retry/throttling applies; no live overload is needed to
+test 429 behavior.
+
+For local cluster validation, add `--cluster-validation --concurrency 24
+--batch-size 24 --lookahead 1` and omit `--full-transactions`. Freeze a new
+checkpoint after building the treatment. Initial classification remains
+unchanged, but subsequent coherence/member-disposition and final-publication
+requests differ. Unresolved or over-capacity clusters are explicitly pending,
+not broad generative fallback. Pending assignments count toward exact focal
+scope accounting and are retried by a later explicit pass. Compare newly
+validated members, pending members and unchanged old concepts alongside
+latency: time to pending is not time to fully validated completion. Validation
+receipts distinguish a `pending` outcome from native request success/failure.
+
+Optional `--capture-cluster-packets` records exact admitted cluster requests,
+native results and local generative review requests/results in the owned
+`<output>.packets.jsonl`. Generative records use `generative-request` and
+`generative-result`; fixed metadata authoring remains outside this capture.
+This file contains
+original evidence and must stay in private run artifacts; ordinary receipt
+logging still omits excerpts. Request/result records share a
+`serializedRequestHash` (SHA-256 of plain JSON), which is distinct from the
+production canonical request hash. Source/chronology compaction and singleton
+publication are included in the cluster policy identity. Packing receipts
+compare literal versus selected logical-token counts for the same questions;
+they are not native usage. Compare fixed-question encodings separately when
+evaluating model agreement, and retain negative/uncertain results rather than
+interpreting data-level losslessness as semantic equivalence.
+
+The current opt-in policy separates new-member admission from old-member
+maintenance. Inspect `validation.coverage`, `validatedMemberIds` and `method`;
+do not count an admission receipt as a whole-cluster health certificate.
+Measure persistent `maintenance` priorities separately from pending new topics.
+Fixed checks exclude alternative-target context; rejected members search their
+complete nominations separately. Native uncertainty/new-group conflicts can
+use one local, schema-bound generative review per fixed version. These reviews
+are explicit validation receipts, not legacy broad-stack fallback. This
+microtrial exercises admission only, not the explicit production topic-rebuild
+maintenance phase.
+
+Prefix runs also retain an atomic `<output>.progress.json` diagnostic snapshot
+at each production checkpoint callback and a `progressCheckpoints` count.
+These private partial results are not completed curation or published views.
+Compare the final progress curation with the returned result when auditing
+group publication; keep all outputs write-once at the run level.
+
+Optional `--annotations <private-json>` is consumed only for post-generation
+scoring. Its shape is:
+
+```json
+{
+  "splitId": "calibration-source-family-1",
+  "reviewerIds": ["reviewer-1", "reviewer-2"],
+  "adjudicated": true,
+  "items": [
+    {
+      "nodeId": "topic:host-owned-id",
+      "admission": "admit",
+      "group": "scoped-concept-1",
+      "highRisk": true
+    },
+    { "nodeId": "topic:another-host-id", "admission": "defer" }
+  ]
+}
+```
+
+`insufficient_evidence` is also a valid judgment. Actual human review and
+independence must be established externally; setting a flag does not create
+gold. Metrics expose exact sample denominators, admission and pairwise merge
+precision/recall, coverage and high-risk false merges. Empty denominators are
+`null`, not invented accuracy. These are unweighted sample point estimates:
+sampling weights, confidence intervals, source/family-disjoint holdouts and
+nomination-recall auditing are required before qualification claims.
+
+Frozen replay includes curation/selective authoring/organization but excludes
+fresh extraction, store publication and native readiness. Production-factory
+LongMemEval runs can independently opt in using
+`TYPEAGENT_MEMORY_DECISION_TOPICS=true`; the policy identity is recorded in the
+benchmark configuration fingerprint. Existing ten-minute readiness limits and
+explicit inference authorization remain unchanged.
+
 ## Executing the full LongMemEval suite
 
 Derived-knowledge readiness is separate from source ingestion and the overall
@@ -423,6 +622,16 @@ An explicit non-ready checkpoint raises `EKNOWLEDGENOTREADY` and is reported as
 rubric or provider. Those words alone must not turn a materialization failure
 into a missing-endpoint diagnosis; raw evidence remains suppressed in the
 sanitized benchmark error.
+
+For an explicitly authorized larger readiness allowance after a bounded,
+unscored interruption, use `--continue-from $oldRun` instead of `--resume`.
+This creates a new owned run, copies the closed isolated store and validated
+import ledger, and creates a fresh checkpoint with the new allowance. The
+parent remains unchanged; original latency/requests are not included in the
+child's totals. `continuation-origin.json` records custody and the previous
+allowance. This is a **warm continuation**, not a from-scratch latency result.
+The compiled build, configuration dependencies and case selection must still
+match. Failed semantic runs or existing hypotheses cannot be reset this way.
 
 `longmemeval-live.mjs` runs real production ingestion, retrieval and synthesized
 answers, followed by model judging. It is separate from the offline preparation

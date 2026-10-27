@@ -25,6 +25,7 @@ export const topicOccurrenceSchema = source.extend({
     label: text,
     scope: text,
     citations: citation.array(),
+    context: z.strictObject({ role: text, chronology: text }).optional(),
 });
 const topicNodeSchema = z.strictObject({
     id,
@@ -46,6 +47,45 @@ const related = z.strictObject({
     toId: id,
     kind: z.literal("related"),
 });
+const clusterValidation = z
+    .strictObject({
+        recipe: z.literal("cluster-local-v1"),
+        signature: z.string().regex(/^[0-9a-f]{64}$/),
+        modelIdentity: z.string().min(1),
+        inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+        coverage: z.literal("member-admission-v2").optional(),
+        method: z.enum(["decision", "generative"]).optional(),
+        validatedMemberIds: id.array().min(1).optional(),
+        score: z.number().min(0).max(1).optional(),
+        memberScores: z
+            .strictObject({
+                nodeId: id,
+                score: z.number().min(0).max(1),
+            })
+            .array()
+            .max(255)
+            .optional(),
+    })
+    .refine(
+        (validation) =>
+            validation.coverage === undefined
+                ? validation.method === undefined &&
+                  validation.validatedMemberIds === undefined
+                : validation.method !== undefined &&
+                  validation.validatedMemberIds !== undefined &&
+                  new Set(validation.validatedMemberIds).size ===
+                      validation.validatedMemberIds.length &&
+                  (validation.method !== "generative" ||
+                      (validation.score === undefined &&
+                          validation.memberScores === undefined)),
+        "Validation method and checked membership must match declared coverage",
+    );
+const pendingAssignment = z.strictObject({
+    nodeId: id,
+    reason: z.string().min(1).max(2000),
+    candidateTargetIds: id.array(),
+    score: z.number().min(0).max(1).optional(),
+});
 const topicConceptSchema = z
     .strictObject({
         id,
@@ -57,6 +97,16 @@ const topicConceptSchema = z
         summaryState: z.enum(["pending", "ready"]).optional(),
         citations: citation.array().min(1),
         salience: z.number().int().min(1).max(8),
+        validation: clusterValidation.optional(),
+        summaryCitations: citation.array().min(1).optional(),
+        maintenance: z
+            .strictObject({
+                signature: z.string().regex(/^[0-9a-f]{64}$/),
+                priority: z.number().min(0).max(1),
+                reasons: z.string().min(1).max(2000).array().min(1).max(16),
+                suspectMemberIds: id.array(),
+            })
+            .optional(),
     })
     .refine(
         (concept) =>
@@ -70,6 +120,7 @@ const topicCurationSchema = z.strictObject({
     deferred: z
         .strictObject({ nodeId: id, reason: z.string().min(1).max(2000) })
         .array(),
+    pending: pendingAssignment.array().optional(),
 });
 export const topicQueryRequestSchema = z
     .strictObject({
@@ -142,9 +193,14 @@ export const topicQueryPageSchema = z.strictObject({
         .max(200)
         .optional(),
     totalConcepts: count.optional(),
+    pendingAssignments: pendingAssignment.array().max(200).optional(),
+    pendingCount: count.optional(),
+    omittedPendingAssignments: count.optional(),
 });
 export const topicBuildInputSchema = z.strictObject({
     occurrences: topicOccurrenceSchema.array(),
+    maintainClusters: z.boolean().optional(),
+    reusableCuration: topicCurationSchema.optional(),
     indexGeneration: id.optional(),
     authoredLabels: z
         .strictObject({ id, label: text, aliases: alias.array() })

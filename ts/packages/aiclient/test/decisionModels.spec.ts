@@ -133,6 +133,8 @@ describe("native decision models", () => {
         acquisitions = 0;
     });
     afterEach(() => {
+        import.meta.jest.useRealTimers();
+        import.meta.jest.restoreAllMocks();
         globalThis.fetch = originalFetch;
         setActiveModelProvider(undefined);
     });
@@ -563,6 +565,51 @@ describe("native decision models", () => {
             if (!result.success) expect(result.httpStatus).toBe(status);
         },
     );
+    test.each([false, true])(
+        "Azure 429 respects Retry-After and bounds retries (exhaust=%s)",
+        async (exhaust) => {
+            const jest = import.meta.jest;
+            jest.useFakeTimers();
+            const jitter = jest
+                .spyOn(Math, "random")
+                .mockReturnValue(1 - Number.EPSILON);
+            let calls = 0;
+            try {
+                globalThis.fetch = async () => {
+                    const reply =
+                        ++calls === 1 || exhaust
+                            ? new Response("{}", {
+                                  status: 429,
+                                  headers: { "Retry-After": "1" },
+                              })
+                            : response();
+                    // Body stream I/O is outside Jest's virtual retry clock.
+                    jest.spyOn(reply, "text").mockResolvedValue("{}");
+                    jest.spyOn(reply, "json").mockResolvedValue(native);
+                    return reply;
+                };
+                const pending = model(
+                    config({ AZURE_OPENAI_MAX_RETRYATTEMPTS: "1" }),
+                ).decide(request);
+                // Retry-After adds one second to the maximum five-second jitter.
+                await jest.advanceTimersByTimeAsync(5999);
+                expect(calls).toBe(1);
+                await jest.advanceTimersByTimeAsync(1);
+                const result = await pending;
+                expect(calls).toBe(2);
+                if (exhaust)
+                    expect(result).toMatchObject({
+                        success: false,
+                        code: "rate_limit",
+                        httpStatus: 429,
+                    });
+                else expect(result.success).toBe(true);
+            } finally {
+                jitter.mockRestore();
+                jest.useRealTimers();
+            }
+        },
+    );
     test("malformed JSON response is classified", async () => {
         globalThis.fetch = async () => new Response("not-json");
         expect(await model().decide(request)).toMatchObject({
@@ -775,6 +822,33 @@ describe("native decision models", () => {
         });
         expect(calls).toBe(0);
     });
+    test.each(["azure", "copilot"] as const)(
+        "packing preflight enforces %s wire constraints without acquiring credentials",
+        (provider) => {
+            let calls = 0;
+            globalThis.fetch = async () => {
+                calls++;
+                return response();
+            };
+            const key =
+                provider === "azure"
+                    ? "azure:decision:decision_1"
+                    : `copilot:decision:${model(config(), "copilot").model}`;
+            const nativeModel = model(
+                config({
+                    TYPEAGENT_MODEL_REQUEST_CONSTRAINTS: JSON.stringify({
+                        [key]: { outputTokens: 1 },
+                    }),
+                }),
+                provider,
+            );
+            expect(() => nativeModel.checkRequest!(request)).toThrow(
+                "request constraints",
+            );
+            expect(calls).toBe(0);
+            expect(acquisitions).toBe(0);
+        },
+    );
     test("configured Azure character guard rejects without truncating native input", async () => {
         let calls = 0;
         globalThis.fetch = async () => {

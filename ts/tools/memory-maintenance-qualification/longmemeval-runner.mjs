@@ -312,7 +312,18 @@ export function benchmarkScorecard(prepared, records, events) {
         (record) => record.status === "complete",
     );
     const answerTimes = completed.map((record) => record.answerMilliseconds);
-    const usages = events.filter((event) => event.usage);
+    const usages = events
+        .filter((event) => event.usage)
+        .map(({ usage }) => {
+            const prompt = usage.prompt_tokens ?? usage.input_tokens ?? 0;
+            const completion =
+                usage.completion_tokens ?? usage.output_tokens ?? 0;
+            return {
+                prompt,
+                completion,
+                total: usage.total_tokens ?? prompt + completion,
+            };
+        });
     return {
         protocol:
             "Official reference answers and pinned judge prompts; actual configured judge model, not assumed official GPT-4o",
@@ -365,18 +376,12 @@ export function benchmarkScorecard(prepared, records, events) {
         ],
         observedRequests: events.length,
         requestsWithUsage: usages.length,
-        knownPromptTokens: usages.reduce(
-            (sum, event) => sum + (event.usage.prompt_tokens ?? 0),
-            0,
-        ),
+        knownPromptTokens: usages.reduce((sum, usage) => sum + usage.prompt, 0),
         knownCompletionTokens: usages.reduce(
-            (sum, event) => sum + (event.usage.completion_tokens ?? 0),
+            (sum, usage) => sum + usage.completion,
             0,
         ),
-        knownTotalTokens: usages.reduce(
-            (sum, event) => sum + (event.usage.total_tokens ?? 0),
-            0,
-        ),
+        knownTotalTokens: usages.reduce((sum, usage) => sum + usage.total, 0),
         dollarCost: null,
         costQualification:
             "Observed provider usage only; no verified token pricing configured; interrupted requests may lack usage",

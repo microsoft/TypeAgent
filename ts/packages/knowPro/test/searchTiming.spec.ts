@@ -136,6 +136,110 @@ describe("search timing", () => {
         expect(logs.some((line) => line.includes('"traceId":"b"'))).toBe(true);
     });
 
+    test("curation receipts allow opaque hashes and bounded enums but reject source text in those fields", () => {
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        runWithSearchTiming("curation", "test", () => {
+            recordSearchTiming("receipt", 1, {
+                requestHash: "a".repeat(64),
+                fingerprint: "b".repeat(64),
+                callKind: "normal",
+                tokenizer: "o200k_base",
+                constraintAccounting: "utf8-byte-upper-bound",
+                providerAttemptBreakdown: "unavailable",
+                reason: "packet-or-expansion-changed",
+                serializedBytes: 1000,
+            });
+            recordSearchTiming("invalid", 1, {
+                requestHash: "A".repeat(64),
+                fingerprint: "private source text",
+                callKind: "private source text",
+                stage: "private source text",
+                tokenizer: "private source text",
+                constraintAccounting: "private source text",
+                providerAttemptBreakdown: "private source text",
+                reason: "private source text",
+                serializedRequest: "private source text",
+                apiKey: "private source text",
+                toString: "private source text",
+            });
+        });
+        const entries = logs.map((line) =>
+            JSON.parse(line.replace("[memory-search-timing] ", "")),
+        );
+        expect(entries[0].metadata).toEqual({
+            requestHash: "a".repeat(64),
+            fingerprint: "b".repeat(64),
+            callKind: "normal",
+            tokenizer: "o200k_base",
+            constraintAccounting: "utf8-byte-upper-bound",
+            providerAttemptBreakdown: "unavailable",
+            reason: "packet-or-expansion-changed",
+            serializedBytes: 1000,
+        });
+        expect(entries[1].metadata).toEqual({});
+        expect(logs.join("")).not.toContain("private source text");
+    });
+
+    test.each([
+        "normal",
+        "contract-repair",
+        "omission-repair",
+        "decision",
+        "authoring",
+        "resolution",
+        "organization",
+        "maintenance",
+        "metadata",
+        "adjudication",
+        "validation",
+    ])("curation call kind %s is an explicitly permitted enum", (callKind) => {
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        runWithSearchTiming("curation", "test", () =>
+            recordSearchTiming("receipt", 1, { callKind }),
+        );
+        expect(
+            JSON.parse(logs[0].replace("[memory-search-timing] ", "")).metadata,
+        ).toEqual({ callKind });
+    });
+
+    test.each([
+        "decision",
+        "authoring",
+        "resolution",
+        "organization",
+        "packing",
+        "transaction",
+        "planning",
+        "speculation",
+        "checkpoint",
+        "validation",
+    ])("Decision stage %s is an explicitly permitted enum", (stage) => {
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        runWithSearchTiming("curation", "test", () =>
+            recordSearchTiming("receipt", 1, { stage }),
+        );
+        expect(
+            JSON.parse(logs[0].replace("[memory-search-timing] ", "")).metadata,
+        ).toEqual({ stage });
+    });
+
+    test.each(["", "a".repeat(63), "a".repeat(65), "g".repeat(64)])(
+        "malformed curation hash %s is omitted",
+        (hash) => {
+            process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+            runWithSearchTiming("curation", "test", () =>
+                recordSearchTiming("receipt", 1, {
+                    requestHash: hash,
+                    fingerprint: hash,
+                }),
+            );
+            expect(
+                JSON.parse(logs[0].replace("[memory-search-timing] ", ""))
+                    .metadata,
+            ).toEqual({});
+        },
+    );
+
     test("sync and async failures retain their error and never log error content", async () => {
         process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
         const error = new Error("secret query source prompt tokens");

@@ -224,6 +224,34 @@ test("live observer returns unchanged responses and records only model/usage/adm
     }
 });
 
+test("provider observation preserves request classification precedence and endpoint matching", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = async () => new Response(null, { status: 204 });
+    const events = [];
+    const restore = observeProvider(events);
+    try {
+        for (const [endpoint, body, type, questionCount] of [
+            ["/decision", { questions: { fit: {} } }, "decision", 1],
+            ["/chat/completions", { questions: {} }, "decision", 0],
+            ["/chat/completions", {}, "chat", undefined],
+            ["/embeddings", { questions: null }, "embedding", undefined],
+            ["/responses", {}, "other-production-request", undefined],
+            ["/chat/completions/", {}, "other-production-request", undefined],
+        ]) {
+            await fetch(`https://example.invalid${endpoint}`, {
+                body: JSON.stringify(body),
+            });
+            assert.equal(events.at(-1).type, type);
+            assert.equal(events.at(-1).decisionQuestionCount, questionCount);
+            assert.equal(events.at(-1).status, 204);
+        }
+        assert.equal(events.length, 6);
+    } finally {
+        restore();
+        globalThis.fetch = original;
+    }
+});
+
 test("production role observation delegates exact arguments and output without validation substitutes", async () => {
     const sentinel = {};
     const signal = new AbortController().signal;
