@@ -449,6 +449,7 @@ export function mountMemoryHubViews(
                     ...(route
                         ? { viewId: route.viewId, pageSize: 1 }
                         : {
+                              excludeKinds: ["schemaView"],
                               ...(searchQuery ? { query: searchQuery } : {}),
                               ...(selectedKind ? { kind: selectedKind } : {}),
                           }),

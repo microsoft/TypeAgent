@@ -303,24 +303,31 @@ export function mountMemoryHubQuestions(
         }
         return section;
     }
-    async function edit(question: MemoryQuestion, edit: QuestionEdit) {
-        const current = detailSequence;
+    function questionHead(question: QuestionTarget) {
         if (
             readerHead === undefined ||
-            selectedKey !== questionIdentity(question)
+            selectedKey !== questionIdentity(question) ||
+            reader.hidden
         )
             throw new Error(
-                "Question inventory is unavailable. Reload the question before editing.",
+                "Question inventory is unavailable. Reload the question before modifying it.",
             );
+        return readerHead;
+    }
+    async function edit(question: MemoryQuestion, edit: QuestionEdit) {
+        const current = detailSequence;
         await invokeMemory("memoryEditQuestion", {
             corpusId: question.corpusId,
             viewId: question.viewId,
             slotId: question.slot.id,
-            expectedHead: readerHead,
+            expectedHead: questionHead(question),
             expectedVersion: question.viewVersion,
             edit,
         });
         dirty = false;
+        await refreshReader(question, current);
+    }
+    async function refreshReader(question: QuestionTarget, current: number) {
         loadedAt = 0;
         const updated = await fetchQuestion(question);
         if (current !== detailSequence || reader.hidden) return;
@@ -697,15 +704,15 @@ export function mountMemoryHubQuestions(
                 icon: "fa-wand-magic-sparkles",
                 action: () =>
                     action(async () => {
+                        const current = detailSequence;
                         await invokeMemory("memoryDiscoverSchemaQuestions", {
                             corpusId: question.corpusId,
                             viewId: question.viewId,
-                            expectedHead: inventories.get(question.corpusId)!
-                                .head,
+                            expectedHead: questionHead(question),
                             expectedVersion: question.viewVersion,
                         });
-                        await refresh();
-                        inspector.replaceChildren(
+                        await refreshReader(question, current);
+                        inspector.prepend(
                             rbNode(
                                 "p",
                                 "Discovery completed. Review proposals in the inventory; they are not approved facts.",

@@ -736,6 +736,21 @@ describe("ordinary-source schema lifecycle", () => {
             targets,
         });
         await settled(job);
+        const views = await service.listViewSummaries({
+            corpusId,
+            pageSize: 1,
+        });
+        expect(views.total).toBe(2);
+        expect(views.items[0].content.kind).toBe("schemaView");
+        expect(views.nextContinuationToken).toBe("1");
+        const gallery = await service.listViewSummaries({
+            corpusId,
+            pageSize: 1,
+            excludeKinds: ["schemaView"],
+        });
+        expect(gallery.items).toEqual([]);
+        expect(gallery.total).toBe(0);
+        expect(gallery.nextContinuationToken).toBeUndefined();
         const first = await service.listQuestionSummaries({ corpusId });
         expect(first.items).toHaveLength(25);
         expect(first.total).toBe(30);

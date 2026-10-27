@@ -280,6 +280,64 @@ describe("Memory Center preview-first views", () => {
         click(host, "Compare and resolve conflict");
         await settle();
     }
+    test("All excludes question views in every inventory request before totals and paging", async () => {
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation(
+            inventoryFixture(async (method, params) => {
+                if (method === "memoryListViews")
+                    return {
+                        head,
+                        views: [
+                            ...Array.from({ length: 25 }, (_, index) => ({
+                                ...view,
+                                viewId: `question-${index}`,
+                                content: {
+                                    ...content,
+                                    kind: "schemaView",
+                                    title: `Hidden question ${index}`,
+                                },
+                            })),
+                            ...Array.from({ length: 30 }, (_, index) => ({
+                                ...view,
+                                viewId: `guide-${index}`,
+                                content: {
+                                    ...content,
+                                    title: `Visible guide ${index}`,
+                                },
+                            })),
+                        ],
+                    };
+                return original(method, params);
+            }),
+        );
+        await panel.refresh();
+        let card = host.querySelector('[aria-label="Views list"]')!;
+        expect(card.querySelector(".hub-list-total")!.textContent).toBe(
+            "30 total",
+        );
+        expect(card.querySelectorAll(".hub-view-card")).toHaveLength(25);
+        expect(card.textContent).not.toContain("Hidden question");
+        click(host, "Next views page");
+        await settle();
+        card = host.querySelector('[aria-label="Views list"]')!;
+        expect(card.querySelectorAll(".hub-view-card")).toHaveLength(5);
+        expect(card.querySelector(".hub-list-total")!.textContent).toBe(
+            "30 total",
+        );
+        expect(card.textContent).not.toContain("Hidden question");
+        const requests = invoke.mock.calls
+            .filter(([method]) => method === "memoryListViewSummaries")
+            .map(([, request]) => request);
+        expect(requests).toEqual([
+            { corpusId: "c", pageSize: 25, excludeKinds: ["schemaView"] },
+            {
+                corpusId: "c",
+                pageSize: 25,
+                continuationToken: "25",
+                excludeKinds: ["schemaView"],
+            },
+        ]);
+    });
     test("gallery puts tabs before its white list card and shows the server total, not the loaded count", async () => {
         const original = invoke.getMockImplementation()!;
         invoke.mockImplementation(async (method, params) => {
@@ -791,6 +849,7 @@ describe("Memory Center preview-first views", () => {
         expect(invoke).toHaveBeenCalledWith("memoryListViewSummaries", {
             corpusId: "c",
             pageSize: 25,
+            excludeKinds: ["schemaView"],
         });
         expect(
             invoke.mock.calls.filter(([method]) =>

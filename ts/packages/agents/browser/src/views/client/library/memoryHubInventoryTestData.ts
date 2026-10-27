@@ -6,6 +6,7 @@ import type {
     ViewVersion,
     ViewBuildJob,
     InventoryPageRequest,
+    ViewSummaryRequest,
 } from "@typeagent/memory-service";
 
 type Fixture = (method: string, params?: unknown) => unknown | Promise<unknown>;
@@ -28,6 +29,7 @@ export function inventoryFixture(legacy: Fixture): Fixture {
         const request = params as InventoryPageRequest;
         const corpus = { corpusId: request?.corpusId };
         if (method === "memoryListViewSummaries") {
+            const filters = params as ViewSummaryRequest;
             const snapshot = (await legacy("memoryListViews", corpus)) as {
                 head: string | null;
                 views: ViewVersion[];
@@ -68,7 +70,9 @@ export function inventoryFixture(legacy: Fixture): Fixture {
                 ...page(
                     items.filter(
                         (item) =>
-                            !request.viewId || item.viewId === request.viewId,
+                            (!filters.viewId ||
+                                item.viewId === filters.viewId) &&
+                            !filters.excludeKinds?.includes(item.content.kind),
                     ),
                     request,
                 ),

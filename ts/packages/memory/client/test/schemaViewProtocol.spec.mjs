@@ -23,6 +23,7 @@ import {
     projectAcquisitionProgress,
     safeAcquisitionOperation,
     viewBuildSummarySchema,
+    viewSummaryRequestSchema,
 } from "../dist/index.js";
 
 const view = JSON.parse(
@@ -34,6 +35,31 @@ const base = {
     expectedHead: null,
     expectedVersion: 1,
 };
+test("view inventory queries accept bounded kind exclusions without changing default discovery", () => {
+    const request = {
+        corpusId: "corpus",
+        pageSize: 1,
+        excludeKinds: ["schemaView"],
+    };
+    assert.deepEqual(viewSummaryRequestSchema.parse(request), request);
+    assert.deepEqual(viewSummaryRequestSchema.parse({ corpusId: "corpus" }), {
+        corpusId: "corpus",
+    });
+    assert.equal(
+        viewSummaryRequestSchema.safeParse({
+            ...request,
+            excludeKinds: ["unknown"],
+        }).success,
+        false,
+    );
+    assert.equal(
+        viewSummaryRequestSchema.safeParse({
+            ...request,
+            excludeKinds: Array(6).fill("schemaView"),
+        }).success,
+        false,
+    );
+});
 test("build summaries preserve lightweight conflict state and accept legacy responses", () => {
     const summary = {
         jobId: "00000000-0000-4000-8000-000000000001",

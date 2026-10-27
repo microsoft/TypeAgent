@@ -14431,6 +14431,9 @@ export class FileMemoryService
                                 view.viewId === request.viewId) &&
                             (!request.kind ||
                                 view.content.kind === request.kind) &&
+                            !request.excludeKinds?.includes(
+                                view.content.kind,
+                            ) &&
                             view.content.title.toLowerCase().includes(query),
                     )
                     .sort((a, b) => a.viewId.localeCompare(b.viewId));

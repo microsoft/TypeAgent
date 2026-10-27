@@ -31,6 +31,9 @@ View, build and publication summary operations avoid loading full evidence bodie
 for list navigation. A committed read projection preserves historical conflict
 fallback and source eligibility checks. View/event index preparation can release
 the writer lease, then revalidates captured evidence before installation.
+View-summary requests support optional `excludeKinds` filtering before paging
+and totals. Callers without this filter still receive every eligible kind;
+explicit question/schema-view lookups and question inventories are unchanged.
 Build-result summaries include optional `conflictState` metadata (`pending`,
 `resolved`, or `missing`) so attention lists need not fetch full conflict
 snapshots. Older clients may ignore this field; clients connected to older

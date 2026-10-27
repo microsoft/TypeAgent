@@ -80,6 +80,11 @@ and Troubleshooting Guide. Questions has its own left-navigation entry rather
 than a duplicate Views filter tab. Collection-maintenance entry points use the
 screwdriver-and-wrench icon.
 
+The Views gallery sends `excludeKinds: ["schemaView"]` to the view-summary query,
+including on subsequent pages. The service excludes question views before
+pagination and totals; the dedicated Questions workspace and
+explicit schema-view reader links remain supported.
+
 Views and Questions place those tabs directly after the page title. Their lists,
 search controls and bottom pagination live in Sources-style surface cards with
 server-reported totals in the upper-right corner, not loaded-page counts.
@@ -118,9 +123,10 @@ retry, history and exact evidence. Back returns to the previous scoped inventory
 with its filters and paging; direct links can load slots outside the current page
 without scanning every collection.
 
-Question route transitions clear old controls before fetching. Reader edit heads
+Question route transitions clear old controls before fetching. Reader mutation heads
 are refreshed for the exact reader corpus/view independently of the preserved
-inventory scope. Pending operations block navigation, and background polling
+inventory scope, including direct-link discovery and discovery after an edit.
+Discovery refreshes reader metadata before another mutation. Pending operations block navigation, and background polling
 does not reload an unsaved reader draft.
 
 Graph toolbars include an on-demand, keyboard-accessible item picker for the
@@ -131,6 +137,7 @@ restoring the removed graph coverage and browse disclosures.
 Inbox detail panels survive unchanged and unrelated count refreshes. Stable item
 identities and state fingerprints close a panel only when its selected item
 changes or disappears; category navigation and scope resets still close it.
+Retained panels restore focus to the replacement Review button after a refresh.
 
 The Memory hub's Questions workspace is a complete projection of versioned
 schema-view slots, including proposed and rejected slots. The inspector reviews

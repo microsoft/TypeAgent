@@ -217,6 +217,75 @@ test("a new slot route removes old edit controls before loading and after a deta
     expect(onError).toHaveBeenCalledTimes(1);
 });
 
+test.each([false, true])(
+    "direct reader discovery uses the current reader head and refreshes it afterward (edited first: %s)",
+    async (editedFirst) => {
+        const original = invoke.getMockImplementation()!;
+        let version = 2;
+        invoke.mockImplementation((method, params) => {
+            if (method === "memoryGetQuestion")
+                return Promise.resolve({
+                    ...question("slot", "view"),
+                    viewVersion: version,
+                });
+            if (method === "memoryListQuestionSummaries")
+                return Promise.resolve({
+                    head: `head-${version}`,
+                    items: [],
+                    total: 0,
+                });
+            if (
+                method === "memoryEditQuestion" ||
+                method === "memoryDiscoverSchemaQuestions"
+            ) {
+                version++;
+                return Promise.resolve({});
+            }
+            return original(method, params);
+        });
+        const { panel, onError } = setup();
+        await panel.show("view", "corpus", "slot");
+        if (editedFirst) {
+            const editor = document.querySelector<HTMLTextAreaElement>(
+                ".hub-qdetail textarea",
+            )!;
+            editor.value = '"Updated answer"';
+            editor.dispatchEvent(new Event("input"));
+            click("Save user assertion");
+            await settle();
+        }
+        for (let count = 0; count < 2; count++) {
+            const expectedVersion = version;
+            click("More question actions");
+            click("Discover question proposals");
+            await settle();
+            expect(invoke).toHaveBeenLastCalledWith(
+                "memoryListQuestionSummaries",
+                {
+                    corpusId: "corpus",
+                    viewId: "view",
+                    pageSize: 1,
+                },
+            );
+            expect(invoke).toHaveBeenCalledWith(
+                "memoryDiscoverSchemaQuestions",
+                {
+                    corpusId: "corpus",
+                    viewId: "view",
+                    expectedHead: `head-${expectedVersion}`,
+                    expectedVersion,
+                },
+            );
+            expect(document.querySelector(".hub-view-infobox")).not.toBeNull();
+        }
+        expect(
+            invoke.mock.calls.filter(
+                ([method]) => method === "memoryDiscoverSchemaQuestions",
+            ),
+        ).toHaveLength(2);
+        expect(onError).not.toHaveBeenCalled();
+    },
+);
 test("cross-collection readers refresh their own edit head independently of the list scope", async () => {
     const original = invoke.getMockImplementation()!;
     let version = 2;

@@ -203,6 +203,34 @@ test("count refreshes retain unchanged details but changed or removed selected i
     inbox.setCount("views", 0);
     expect(panel.hidden).toBe(true);
 });
+test.each(["all", "views"])(
+    "retained details restore focus to the replacement Review button in %s",
+    (category) => {
+        const { host, inbox, views, add } = setup();
+        add(views, "Retained view");
+        inbox.setCount("views", 1);
+        if (category === "views") button(host, "Views (1)").click();
+        const currentPanel = host.querySelector<HTMLElement>(
+            `#inbox-panel-${category}`,
+        )!;
+        const original = button(currentPanel, "Review: Retained view");
+        original.focus();
+        original.click();
+        const details = host.querySelector<HTMLElement>(
+            'aside[aria-label="Inbox details"]',
+        )!;
+        inbox.setCount("operations", 2);
+        views.replaceChildren();
+        add(views, "Retained view");
+        inbox.setCount("views", 1);
+        expect(details.hidden).toBe(false);
+        const replacement = button(currentPanel, "Review: Retained view");
+        expect(replacement).not.toBe(original);
+        expect(original.isConnected).toBe(false);
+        button(details, "Close").click();
+        expect(document.activeElement).toBe(replacement);
+    },
+);
 
 test("distinguishes loading and errors from empty counts and resets details on scope changes", () => {
     const { host, inbox, views, add } = setup();

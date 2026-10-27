@@ -236,6 +236,16 @@ export function mountMemoryHubInbox(
                 : "All (...)",
         );
         overview.replaceChildren(...sections.map(renderCategory));
+        if (inspector.isOpen() && active) {
+            const replacement = [
+                ...panels
+                    .get(selected)!
+                    .querySelectorAll<HTMLElement>(".hub-inbox-item"),
+            ].find((item) => cards.get(item)?.id === active?.card.id);
+            const review =
+                replacement?.querySelector<HTMLButtonElement>("button");
+            if (review) inspector.setReturnFocus(review);
+        }
         if (restoreTabFocus) buttons.get(selected)!.focus();
     }
     select("all");
