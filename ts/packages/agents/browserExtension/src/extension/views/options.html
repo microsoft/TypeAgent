@@ -57,6 +57,49 @@
         </div>
 
         <div class="section">
+          <div class="section-title">Shopping Mode</div>
+          <fieldset id="shoppingMode">
+            <legend class="form-label fs-6">
+              Product search and navigation
+            </legend>
+            <div class="form-check form-check-inline">
+              <input
+                class="form-check-input"
+                type="radio"
+                name="shoppingMode"
+                id="shoppingModeGenerative"
+                value="generative"
+                checked
+              />
+              <label class="form-check-label" for="shoppingModeGenerative">
+                Generative
+              </label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input
+                class="form-check-input"
+                type="radio"
+                name="shoppingMode"
+                id="shoppingModeDecision"
+                value="decision"
+              />
+              <label class="form-check-label" for="shoppingModeDecision">
+                Decision
+              </label>
+            </div>
+          </fieldset>
+          <div class="form-text">
+            Generative extracts CSS selectors. Decision selects observed
+            controls and validates the resulting page using a native decision
+            model configured in TypeAgent. This applies to the normal product
+            search and product-page commands; other shopping flows, including
+            cart and checkout, are unchanged. Explicit decision commands always
+            use Decision. Decision errors do not fall back to Generative. Save
+            settings to apply to the next command.
+          </div>
+        </div>
+
+        <div class="section">
           <div class="section-title">Crossword Mode</div>
           <fieldset id="crosswordMode">
             <legend class="form-label fs-6">

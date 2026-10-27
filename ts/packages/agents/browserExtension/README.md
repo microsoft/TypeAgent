@@ -102,6 +102,90 @@ checks the page without inference or recording. The default local fixture is
 deterministic; the optional Seattle and Universal scenarios assert specific
 editions and are not general all-puzzle qualification.
 
+## Commerce Decision pilot
+
+In extension **Options**, select **Shopping Mode → Generative / Decision** and
+**Save Settings**. This setting is independent of **Crossword Mode**. Both
+default to Generative; reset restores both, and exported settings include both.
+
+Shopping Mode controls the normal `searchForProduct` and
+`navigateToProductPage` commands (for example, “search for coffee 12-pack” and
+“open coffee 12-pack”). Decision selects the shipped native implementation
+while preserving the saved command's site scope. Generative runs the existing
+saved implementation. The setting is read for each command, so switching does
+not require an agent restart or changing the command wording. Saved scripts
+are not overwritten. Other flow names, including cart/checkout and custom
+flows, are unchanged; they do not gain native Decision support.
+
+Two explicit saved WebFlow samples always opt into Decision regardless of the
+Shopping Mode preference:
+
+- `decision search for coffee 12-pack`
+- `decision open product coffee 12-pack`
+
+Start on an appropriate HTTP(S) storefront or product-results page. Enable the
+browser agent's WebFlow integration, rebuild/reload the extension, and restart
+the agent to register the new sample names. Existing manually saved flows are
+not overwritten. The search pilot requires a native form; custom search widgets
+and non-link product navigation are not supported.
+
+Configure the same [native Decision provider](../../config/README.md#native-decision-configuration)
+used by crossword Decision mode. Azure uses the `decision_1` deployment pool
+and `decision-1` deployment name; Copilot requires native Decision access.
+Unavailable providers and unsupported hosts fail explicitly, without chat
+fallback.
+
+The new WebFlow methods are `selectElement({ condition, capability, frameScope? })`,
+`evaluatePageCondition(condition, frameScope?)`, and `executeUiAction(targetId, action)`.
+Frame scope defaults to `"all-frames"`, requiring every frame to be accessible.
+The two commerce samples explicitly use `"main-document"` for selection and
+postconditions. This excludes **all** iframe content, not just presumed ads;
+the native evidence and host-generated condition summary identify that scope.
+These samples cannot establish embedded checkout/product-frame state. Selecting
+main-document scope never falls back to all frames or silently changes scope.
+Selection uses issued control IDs, visible names and product/form context, not
+model-generated CSS. Execution validates the same tab, frame, document and live
+node, then consumes its opaque target. Input filling and native selection
+include value readback. Activation acknowledges dispatch only; each sample
+requires a separate `matched` page condition before reporting success.
+Page conditions classify the captured page evidence without a subsequent DOM
+comparison or action-target snapshot-expiry check. Dynamic content arriving
+during inference does not reject the semantic verdict. Action selection and
+execution retain their existing target validation.
+
+This is a bounded Chrome/Edge pilot, not cart/checkout automation or general
+website qualification. Inaccessible participating frames, visible open shadow DOM, oversized
+evidence, stale snapshots, ambiguity, and insufficient evidence stop the flow.
+Selections partition every eligible control into batches of at most 32 controls
+and 24 KiB per serialized native request, with at most eight batches. Batches
+run concurrently and all settle before selection returns, including on failure
+or ambiguity. Multiple winners require a subsequent final comparison. An ambiguous batch
+or final comparison stops selection. No controls or page text are silently
+dropped, and the original 30-second snapshot lifetime is unchanged.
+Closed shadow DOM, canvas/visual-only controls, Electron support,
+cart-delta verification, and continuation/reasoning-tool parity are deferred.
+Do not automatically retry an action whose result is uncertain.
+The shared page wait rejects uncommitted navigation and retries an absent
+DOMContentLoaded stability listener only while the document is loading. It
+rechecks document identity and pending navigation before accepting a reply,
+without waiting for unrelated iframe/ad resources to finish.
+Main-document capture likewise checks pending main navigation and the content
+host's document readiness, not whole-tab completion. Postconditions do not
+require the dynamic page to remain unchanged throughout inference.
+The four search/product-navigation samples accept optional `navigationTimeoutMs`.
+Omitting it retains the existing five-second wait default. Live paired testing
+uses an explicit equal 15-second budget for both variants.
+
+After building from `ts`, run the deterministic offline suites:
+
+```powershell
+pnpm --filter @typeagent/browser run test:ui-decision
+pnpm --filter @typeagent/browser-extension exec jest --runInBand --testPathPattern=uiDecision
+```
+
+Native Azure/Copilot tests use mocked HTTP with actual DOM grounding and private
+frame-message handling; no live storefront, inference or purchase is involved.
+
 ## Chat panel
 
 The extension's chat panel supports the same `@conversation` slash

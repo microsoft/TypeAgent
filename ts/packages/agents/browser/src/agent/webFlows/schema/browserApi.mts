@@ -39,7 +39,41 @@ export interface WebFlowBrowserMethods {
         componentDef: ComponentDef,
         userRequest?: string,
     ): Promise<T>;
+
+    // Opt-in native decisions; require extension support and never fall back to chat.
+    selectElement(request: {
+        condition: string;
+        capability: "activate" | "fill" | "select";
+        frameScope?: "all-frames" | "main-document";
+    }): Promise<UiTarget>;
+    evaluatePageCondition(
+        condition: string,
+        frameScope?: "all-frames" | "main-document",
+    ): Promise<{
+        status: "matched" | "not_matched" | "insufficient_evidence";
+        explanation: string;
+    }>;
+    // A target is single-use. Dispatch is not proof of a business postcondition.
+    executeUiAction(
+        targetId: string,
+        action: UiAction,
+    ): Promise<{
+        dispatched: true;
+        valueVerified?: true;
+    }>;
 }
+
+export type UiTarget = {
+    targetId: string;
+    name: string;
+    role: string;
+    options?: { id: string; text: string; disabled: boolean }[];
+};
+
+export type UiAction =
+    | { type: "activate" }
+    | { type: "fill"; text: string; submit?: boolean }
+    | { type: "select"; optionId: string };
 
 export type ComponentDef = {
     typeName: string;

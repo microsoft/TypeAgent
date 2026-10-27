@@ -6,6 +6,7 @@ import {
     getRecordedActions,
     saveRecordedActions,
     getCrosswordDecisionSettings,
+    getShoppingMode,
     notifyCrosswordModeChanged,
 } from "./storage";
 import { forwardCrosswordDecisionRpc } from "./crosswordDecisionRpc";
@@ -247,10 +248,14 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         },
 
         async settingsUpdated(params: any) {
-            const { mode, strategy } = await getCrosswordDecisionSettings();
+            const [{ mode, strategy }, shoppingMode] = await Promise.all([
+                getCrosswordDecisionSettings(),
+                getShoppingMode(),
+            ]);
             await chrome.storage.local.set({
                 knowledgeSettings: {
                     ...params.settings,
+                    shoppingMode,
                     crosswordMode: mode,
                     crosswordDecisionStrategy: strategy,
                 },

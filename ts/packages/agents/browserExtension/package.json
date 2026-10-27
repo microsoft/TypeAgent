@@ -51,7 +51,7 @@
     "debug": "^4.4.0",
     "dompurify": "^3.4.17",
     "html-to-text": "^9.0.5",
-    "markdown-it": "^14.3.2",
+    "markdown-it": "^14.3.3",
     "pdfjs-dist": "5.3.31",
     "prismjs": "^1.30.0"
   },

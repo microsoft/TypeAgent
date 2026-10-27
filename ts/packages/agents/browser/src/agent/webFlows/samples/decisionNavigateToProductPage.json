@@ -1,0 +1,26 @@
+{
+  "name": "decisionNavigateToProductPage",
+  "description": "Opt-in native decision pilot: select a main-document product detail link and verify the main-document destination. Iframe content is outside this flow's evidence. Does not add items or purchase.",
+  "version": 3,
+  "parameters": {
+    "productName": {
+      "type": "string",
+      "required": true,
+      "description": "The product and required variant to open"
+    },
+    "navigationTimeoutMs": {
+      "type": "number",
+      "required": false,
+      "description": "Optional navigation wait budget in milliseconds; omitted preserves the browser host default."
+    }
+  },
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    const link = await browser.selectElement({\n        condition: 'The main-document product detail link for ' + JSON.stringify(params.productName) + ', not an add-to-cart, checkout, sponsored alternative or unrelated recommendation control',\n        capability: 'activate',\n        frameScope: 'main-document'\n    });\n    if (link.role !== 'link') {\n        throw new Error('The selected product detail control is not a link; no action attempted');\n    }\n    await browser.executeUiAction(link.targetId, { type: 'activate' });\n    await browser.awaitPageLoad(params.navigationTimeoutMs);\n    const result = await browser.evaluatePageCondition('The main document shows the primary product detail page for ' + JSON.stringify(params.productName) + ', including its requested variant, rather than a search listing or recommendation.', 'main-document');\n    if (result.status !== 'matched') {\n        throw new Error('Product destination was not verified (' + result.status + '). Navigation may have occurred; no retry.');\n    }\n    return { success: true, message: 'Verified main-document product page for ' + params.productName };\n}",
+  "grammarPatterns": ["decision open product $(productName:wildcard)"],
+  "scope": {
+    "type": "global"
+  },
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-10-25T00:00:00.000Z"
+  }
+}

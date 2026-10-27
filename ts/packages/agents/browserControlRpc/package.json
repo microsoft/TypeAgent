@@ -15,6 +15,7 @@
     "./types": "./dist/browserControl.js",
     "./webAgentMessageTypes": "./dist/webAgentMessageTypes.js",
     "./crosswordDecisionTypes": "./dist/crosswordDecisionTypes.js",
+    "./uiDecisionTypes": "./dist/uiDecisionTypes.js",
     "./serviceTypes": "./dist/serviceTypes.js",
     "./viewRpc": "./dist/viewRpc.js",
     "./runbookImportViewTypes": "./dist/runbookImportViewTypes.js",

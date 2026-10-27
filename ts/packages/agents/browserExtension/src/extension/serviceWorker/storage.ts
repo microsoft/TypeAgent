@@ -7,10 +7,15 @@ import {
     type CrosswordDecisionStrategy,
     type CrosswordMode,
 } from "@typeagent/browser-control-rpc/crosswordDecisionTypes";
+import {
+    isShoppingMode,
+    type ShoppingMode,
+} from "@typeagent/browser-control-rpc/uiDecisionTypes";
 
 export interface ExtensionSettings {
     agentServerHost: string;
     defaultExtractionMode: "content";
+    shoppingMode: ShoppingMode;
     crosswordMode: CrosswordMode;
     crosswordDecisionStrategy: CrosswordDecisionStrategy;
     maxConcurrentExtractions: number;
@@ -26,6 +31,7 @@ export interface ExtensionSettings {
 export const DEFAULT_EXTENSION_SETTINGS: ExtensionSettings = {
     agentServerHost: "",
     defaultExtractionMode: "content",
+    shoppingMode: "generative",
     crosswordMode: "generative",
     crosswordDecisionStrategy: "hybrid",
     maxConcurrentExtractions: 3,
@@ -37,6 +43,18 @@ export const DEFAULT_EXTENSION_SETTINGS: ExtensionSettings = {
     autoOpenChatPanel: true,
     caseInsensitiveWindowTitleMatching: true,
 };
+
+export async function getShoppingMode(): Promise<ShoppingMode> {
+    const { shoppingMode } = await chrome.storage.sync.get("shoppingMode");
+    if (isShoppingMode(shoppingMode)) {
+        return shoppingMode;
+    }
+    if (shoppingMode !== undefined) {
+        console.warn("Invalid shopping mode; resetting to Generative.");
+        await chrome.storage.sync.set({ shoppingMode: "generative" });
+    }
+    return "generative";
+}
 
 export async function getCrosswordMode(): Promise<CrosswordMode> {
     const { crosswordMode } = await chrome.storage.sync.get("crosswordMode");
