@@ -87,6 +87,8 @@ describe("timeline configured service pipeline", () => {
     const open = () =>
         new FileMemoryService(root, {
             viewDrafts: true,
+            maintenanceMode: "manual",
+            discoveryPolicy: "off",
             indexFactory: (_id, directory) =>
                 new FakeSemanticCorpusIndex(directory),
         });

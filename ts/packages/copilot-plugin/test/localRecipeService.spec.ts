@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLocalRecipeService } from "../src/extension/local-recipe-service.js";
 import { connectToMacroOwner } from "../src/shared/macro-owner.js";
+import { MacroCatalogAdapter } from "../src/mcp/macroServer.js";
 
 const originalData = process.env.TYPEAGENT_PLUGIN_DATA;
 const originalOwner = process.env.TYPEAGENT_RECIPE_OWNER;
@@ -60,6 +61,26 @@ test("canonical macro commands and ordinary misses need no TypeAgent or model", 
     ).resolves.toEqual({ status: "miss" });
     await client.close();
     await expect(service.connection.listMacros()).resolves.toEqual([]);
+    expect(forbidden).not.toHaveBeenCalled();
+});
+test("opted-in bypass macro calls still use the real local owner's execution checks", async () => {
+    const adapter = new MacroCatalogAdapter({
+        getMode: () => "bypass",
+        getBypassMacroToolsEnabled: () => true,
+        connect: () => connectToMacroOwner(directory, "native-session"),
+    });
+    expect((await adapter.listMacros({})).isError).toBeUndefined();
+    const response = await adapter.runMacro({ macroId: "missing-macro" });
+    expect(response.isError).toBe(true);
+    expect(response.content[0]).not.toMatchObject({
+        text: expect.stringContaining("disabled in bypass"),
+    });
+    expect(forbidden).not.toHaveBeenCalled();
+    process.env.TYPEAGENT_RECIPE_OWNER = "off";
+    expect((await adapter.listMacros({})).isError).toBe(true);
+    expect((await adapter.runMacro({ macroId: "missing-macro" })).isError).toBe(
+        true,
+    );
     expect(forbidden).not.toHaveBeenCalled();
 });
 test("MCP resolves its actual native session workspace independently of process cwd", async () => {
