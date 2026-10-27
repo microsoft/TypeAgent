@@ -1214,17 +1214,6 @@ export function mountMemoryHubQuestions(
             .corpora()
             .filter((corpus) => !corpusId || corpus.corpusId === corpusId);
     }
-    // Reloads the inventory only. Acquisition progress loads
-    // when their panel is opened, not on every question edit.
-    async function refreshInventory() {
-        const version = ++sequence;
-        const corpora = scopedCorpora().filter((corpus) =>
-            pager.includes(corpus.corpusId),
-        );
-        const results = await loadQuestions(corpora);
-        if (version !== sequence) return;
-        applyInventory(results, corpora, options.scope());
-    }
     async function refresh() {
         const version = ++sequence;
         status.textContent = "Loading questions…";
