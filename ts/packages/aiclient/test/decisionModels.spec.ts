@@ -133,6 +133,8 @@ describe("native decision models", () => {
         acquisitions = 0;
     });
     afterEach(() => {
+        import.meta.jest.useRealTimers();
+        import.meta.jest.restoreAllMocks();
         globalThis.fetch = originalFetch;
         setActiveModelProvider(undefined);
     });
@@ -568,6 +570,9 @@ describe("native decision models", () => {
         async (exhaust) => {
             const jest = import.meta.jest;
             jest.useFakeTimers();
+            const jitter = jest
+                .spyOn(Math, "random")
+                .mockReturnValue(1 - Number.EPSILON);
             let calls = 0;
             try {
                 globalThis.fetch = async () => {
@@ -586,9 +591,10 @@ describe("native decision models", () => {
                 const pending = model(
                     config({ AZURE_OPENAI_MAX_RETRYATTEMPTS: "1" }),
                 ).decide(request);
-                await jest.advanceTimersByTimeAsync(999);
+                // Retry-After adds one second to the maximum five-second jitter.
+                await jest.advanceTimersByTimeAsync(5999);
                 expect(calls).toBe(1);
-                await jest.advanceTimersByTimeAsync(4000);
+                await jest.advanceTimersByTimeAsync(1);
                 const result = await pending;
                 expect(calls).toBe(2);
                 if (exhaust)
@@ -599,6 +605,7 @@ describe("native decision models", () => {
                     });
                 else expect(result.success).toBe(true);
             } finally {
+                jitter.mockRestore();
                 jest.useRealTimers();
             }
         },
