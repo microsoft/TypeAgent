@@ -647,8 +647,6 @@ export interface FileMemoryServiceOptions {
     viewModelEndpoint?: string;
     /** Disable to retain raw-topic summaries instead of lazy curated concepts. */
     curatedTopics?: boolean;
-    /** Opt-in LLM curation experiments; defaults retain legacy packing and one worker. */
-    topicCuration?: TopicCurationSettings;
     /** Experimental Decision curation; the generative pipeline remains the default. */
     decisionTopics?: boolean;
     decisionTopicExecution?: TopicDecisionExecutionOptions;
@@ -1247,7 +1245,6 @@ export class FileMemoryService
     private readonly viewPublicationCheckpoint: FileMemoryServiceOptions["viewPublicationCheckpoint"];
     private readonly viewAdapter: ViewSynthesisAdapter;
     private readonly curatedTopics: boolean;
-    private readonly topicPolicy: string;
     private readonly decisionTopics: boolean;
     private readonly topicCuration: TopicCurationSettings | undefined;
     private readonly topicPolicy: string;
@@ -1432,10 +1429,6 @@ export class FileMemoryService
         this.viewDrafts = options.viewDrafts !== false;
         this.wikiModelEndpoint = options.viewModelEndpoint;
         this.curatedTopics = options.curatedTopics ?? true;
-        this.topicPolicy = topicCurationPolicy(
-            this.curatedTopics,
-            options.topicCuration,
-        );
         this.decisionTopics = decisionTopicsEnabled(options);
         this.topicCuration = configuredTopicCuration(
             options,
@@ -8653,27 +8646,29 @@ export class FileMemoryService
     }
 
     private createTopicGenerator() {
-        return createConfiguredTopicGenerator(
-            this.wikiModelEndpoint,
-            undefined,
-            this.curatedTopics,
-            this.decisionTopics
-                ? (input) => {
-                      if (input.model !== this.topicModelIdentity())
-                          throw new ViewBuildStaleError(
-                              "Decision topic configuration changed",
-                          );
-                      return {
-                          ...this.decisionTopicExecution,
-                          model: configuredTopicDecisionModel(),
-                          ...(this.onTopicDecisionReceipt
-                              ? { onReceipt: this.onTopicDecisionReceipt }
-                              : {}),
-                      };
+        return createConfiguredTopicGenerator({
+            endpoint: this.wikiModelEndpoint,
+            mode: this.decisionTopics
+                ? {
+                      kind: "decision",
+                      createOptions: (input) => {
+                          if (input.model !== this.topicModelIdentity())
+                              throw new ViewBuildStaleError(
+                                  "Decision topic configuration changed",
+                              );
+                          return {
+                              ...this.decisionTopicExecution,
+                              model: configuredTopicDecisionModel(),
+                              ...(this.onTopicDecisionReceipt
+                                  ? { onReceipt: this.onTopicDecisionReceipt }
+                                  : {}),
+                          };
+                      },
                   }
-                : undefined,
-            this.topicCuration,
-        );
+                : this.curatedTopics
+                  ? { kind: "generative", settings: this.topicCuration }
+                  : { kind: "raw" },
+        });
     }
 
     private topicModelIdentity(): string {

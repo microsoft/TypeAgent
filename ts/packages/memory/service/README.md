@@ -137,6 +137,39 @@ synonyms missed by retrieval or evidence-budget bounds may remain separate.
 Salience is a model-assigned ordinal, not truth confidence or an automatic
 host-side admission threshold.
 
+### Common topic-generator and lexical-index contracts
+
+`createConfiguredTopicGenerator` accepts one named options object:
+
+```typescript
+createConfiguredTopicGenerator({
+  endpoint,
+  model,
+  mode: { kind: "generative", settings },
+});
+createConfiguredTopicGenerator({
+  endpoint,
+  model,
+  mode: {
+    kind: "decision",
+    createOptions: (input) => decisionOptionsFor(input),
+  },
+});
+```
+
+`endpoint`, `model` and `mode` are optional. No mode preserves the factory's raw
+behavior; the service host explicitly selects generative curation by default.
+Decision curation remains opt-in. Old positional calls and mixed engine settings
+are rejected before provider creation, including calls from JavaScript.
+
+`TopicConceptIndex` is the shared lexical implementation; `TopicNominationIndex`
+is an alias. `replace(removed, added)` updates only supplied entries, refreshes
+stored concept objects even when lexical text is unchanged, and removes stale
+postings on rename. `update(fullCatalog)` explicitly performs full reconciliation.
+The lexical index does not own mutable packet positions: native planning derives
+dense target keys from each frozen transaction's concept array. Native full
+catalog synchronization is still full-catalog work, not an incremental operation.
+
 ### Experimental Decision curation
 
 Set `FileMemoryServiceOptions.decisionTopics: true`, or

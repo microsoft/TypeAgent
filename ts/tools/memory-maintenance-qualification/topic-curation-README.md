@@ -116,8 +116,10 @@ is rejected. Existing output directories are never overwritten.
 
 ## Exact Decision recording, playback and resume
 
-The Decision driver runs `createConfiguredTopicGenerator` with the native
-factory in argument four. Thus metadata, local adjudication, maintenance and
+The Decision driver runs `createConfiguredTopicGenerator` with one options object
+and `mode: { kind: "decision", createOptions }`. Positional engine arguments are
+rejected; generative callers use `mode: { kind: "generative", settings }`.
+Thus metadata, local adjudication, maintenance and
 organization use the same generator as production, and every native or
 generative completion consumes the same explicit call budget/deadline. Native
 execution settings are passed unchanged; concurrency 24 is supported and never

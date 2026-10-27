@@ -1596,9 +1596,8 @@ test("configured generation wires Decision, preserves human labels, checkpoints 
         success: true,
         data: answer(request),
     }));
-    const generate = createConfiguredTopicGenerator(
-        undefined,
-        {
+    const generate = createConfiguredTopicGenerator({
+        model: {
             completionSettings: { response_format: { type: "json_object" } },
             complete: async (messages) => {
                 chatCalls++;
@@ -1613,12 +1612,14 @@ test("configured generation wires Decision, preserves human labels, checkpoints 
                 return { success: true, data: JSON.stringify(result) };
             },
         },
-        true,
-        () => ({
-            model: native,
-            onReceipt: (receipt) => receipts.push(receipt),
-        }),
-    );
+        mode: {
+            kind: "decision",
+            createOptions: () => ({
+                model: native,
+                onReceipt: (receipt) => receipts.push(receipt),
+            }),
+        },
+    });
     const saved: TopicSnapshot[] = [];
     const result = await generate(
         input,

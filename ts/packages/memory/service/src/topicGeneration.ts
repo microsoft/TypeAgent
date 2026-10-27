@@ -54,6 +54,97 @@ export type TopicGenerator = (
     checkpoint?: TopicGenerationCheckpoint,
 ) => Promise<TopicSnapshot>;
 
+export type TopicGenerationMode =
+    | { kind: "raw" }
+    | { kind: "generative"; settings?: TopicCurationSettings | undefined }
+    | {
+          kind: "decision";
+          createOptions: (input: ViewBuildSnapshot) => TopicDecisionOptions;
+      };
+
+export interface ConfiguredTopicGeneratorOptions {
+    endpoint?: string | undefined;
+    model?: ChatModel | undefined;
+    mode?: TopicGenerationMode | undefined;
+}
+
+function validateTopicGeneratorOptions(
+    options: ConfiguredTopicGeneratorOptions,
+): void {
+    if (
+        !options ||
+        typeof options !== "object" ||
+        Array.isArray(options) ||
+        Object.keys(options).some(
+            (key) => !["endpoint", "model", "mode"].includes(key),
+        ) ||
+        (options.endpoint !== undefined &&
+            typeof options.endpoint !== "string") ||
+        (options.model !== undefined &&
+            (!options.model || typeof options.model.complete !== "function"))
+    )
+        throw new Error(
+            "Topic generator requires named options; migrate positional arguments",
+        );
+}
+
+function configuredGenerativeSettings(
+    settings: TopicCurationSettings | undefined,
+): TopicCurationSettings | undefined {
+    if (settings === undefined) return undefined;
+    if (
+        !settings ||
+        typeof settings !== "object" ||
+        Array.isArray(settings) ||
+        Object.keys(settings).some(
+            (key) =>
+                ![
+                    "inputTokenTarget",
+                    "concurrency",
+                    "priorContextFraction",
+                ].includes(key),
+        )
+    )
+        throw new Error("Invalid generative topic settings");
+    validateTopicCurationSettings(settings);
+    return { ...settings };
+}
+
+function configuredTopicMode(
+    options: ConfiguredTopicGeneratorOptions,
+): TopicGenerationMode {
+    validateTopicGeneratorOptions(options);
+    const mode =
+        options.mode === undefined ? { kind: "raw" as const } : options.mode;
+    if (!mode || typeof mode !== "object" || Array.isArray(mode))
+        throw new Error("Invalid topic generation mode");
+    const fields =
+        mode.kind === "raw"
+            ? ["kind"]
+            : mode.kind === "generative"
+              ? ["kind", "settings"]
+              : ["kind", "createOptions"];
+    if (Object.keys(mode).some((key) => !fields.includes(key)))
+        throw new Error("Invalid topic generation mode fields");
+    switch (mode.kind) {
+        case "raw":
+            return { kind: "raw" };
+        case "generative":
+            return {
+                kind: "generative",
+                settings: configuredGenerativeSettings(mode.settings),
+            };
+        case "decision":
+            if (typeof mode.createOptions !== "function")
+                throw new Error(
+                    "Decision topic mode requires an options factory",
+                );
+            return { kind: "decision", createOptions: mode.createOptions };
+        default:
+            throw new Error("Invalid topic generation mode");
+    }
+}
+
 export type TopicConceptSummarizer = (
     concept: TopicConcept,
     signal: AbortSignal,
@@ -554,22 +645,17 @@ async function generateCuratedTopicSnapshot(
 }
 
 export function createConfiguredTopicGenerator(
-    endpoint?: string,
-    injectedModel?: ChatModel,
-    curated = false,
-    decision?: (input: ViewBuildSnapshot) => TopicDecisionOptions,
-    settings?: TopicCurationSettings,
+    options: ConfiguredTopicGeneratorOptions = {},
 ): TopicGenerator {
-    if (decision && !curated)
-        throw new Error("Decision topic curation requires curated topics");
-    if (settings) {
-        validateTopicCurationSettings(settings);
-        if (decision || !curated)
-            throw new Error(
-                "Generative topic settings require generative curated topics",
-            );
-        settings = { ...settings };
-    }
+    if (arguments.length > 1)
+        throw new Error(
+            "Topic generator requires named options; migrate positional arguments",
+        );
+    const mode = configuredTopicMode(options);
+    const { endpoint, model: injectedModel } = options;
+    const curated = mode.kind !== "raw";
+    const decision = mode.kind === "decision" ? mode.createOptions : undefined;
+    const settings = mode.kind === "generative" ? mode.settings : undefined;
     const defaultComplete = createTopicCompletion(endpoint, injectedModel);
     return async (input, signal, checkpoint) => {
         const complete = decision

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
     mkdir,
@@ -17,6 +17,32 @@ import path from "node:path";
 export const hashBytes = (value) =>
     createHash("sha256").update(value).digest("hex");
 export const hashValue = (value) => hashBytes(JSON.stringify(value));
+
+export function hashWorkingTreePatch(root) {
+    return new Promise((resolve, reject) => {
+        const digest = createHash("sha256");
+        const child = spawn("git", ["--no-pager", "diff", "--binary", "HEAD"], {
+            cwd: root,
+            windowsHide: true,
+            stdio: ["ignore", "pipe", "pipe"],
+        });
+        let diagnostic = "";
+        child.stdout.on("data", (chunk) => digest.update(chunk));
+        child.stderr.on("data", (chunk) => {
+            diagnostic = (diagnostic + chunk.toString()).slice(0, 8192);
+        });
+        child.once("error", reject);
+        child.once("close", (code, signal) => {
+            if (code === 0) resolve(digest.digest("hex"));
+            else
+                reject(
+                    new Error(
+                        `Git patch identity failed (${code ?? signal}): ${diagnostic}`,
+                    ),
+                );
+        });
+    });
+}
 
 export function positiveInteger(value, fallback, name) {
     if (value === undefined) return fallback;

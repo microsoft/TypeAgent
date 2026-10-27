@@ -84,7 +84,7 @@ function originalEvidence(snapshot: TopicSnapshot, node: TopicNode) {
     ].slice(0, 8);
 }
 
-test("shared index retains ordered strict Decision members and positional keys", () => {
+test("shared index retains ordered strict Decision members without owning packet positions", () => {
     const value = fixture();
     const index = new TopicEvidenceIndex(value);
     expect(index.members([value.nodes[8].id, value.nodes[1].id])).toEqual([
@@ -99,10 +99,9 @@ test("shared index retains ordered strict Decision members and positional keys",
         expect(() => index.members(members)).toThrow("membership");
     const all = concepts();
     const nominations = new TopicNominationIndex(all);
-    expect(nominations.positions.get(all[9].id)).toBe(9);
     nominations.update([all[9], all[0]]);
-    expect(nominations.positions.get(all[9].id)).toBe(0);
-    expect(nominations.positions.has(all[8].id)).toBe(false);
+    expect(nominations.query([{ label: "unmatched" }])).toEqual([]);
+    expect(Reflect.has(nominations, "positions")).toBe(false);
     expect(nominations.query([{ label: "AI" }])).toEqual(
         nominations.related([{ label: "AI" }]),
     );
@@ -210,6 +209,46 @@ function concepts(): TopicConcept[] {
         salience: 5,
     }));
 }
+
+test.each([32, 320, 3200])(
+    "delta replacement does not visit unchanged records in a catalog of %i",
+    (size) => {
+        const template = concepts()[0];
+        let visits = 0;
+        const all = Array.from({ length: size }, (_, ordinal) => {
+            const concept = { ...template, id: `c${ordinal}` };
+            return ordinal === 0
+                ? concept
+                : new Proxy(concept, {
+                      get(target, key, receiver) {
+                          if (["id", "label", "purpose"].includes(String(key)))
+                              visits++;
+                          return Reflect.get(target, key, receiver);
+                      },
+                  });
+        });
+        const index = new TopicNominationIndex(all);
+        visits = 0;
+        const replacement = {
+            ...all[0],
+            label: "revisedcore",
+            purpose: "distinctfocus",
+        };
+        index.replace([all[0]], [replacement]);
+        expect(visits).toBe(0);
+        expect(index.query([{ label: "revisedcore" }])).toEqual([replacement]);
+        const membershipOnly = { ...replacement, memberIds: ["new-member"] };
+        index.replace([replacement], [membershipOnly]);
+        expect(index.query([{ label: "revisedcore" }])[0]).toBe(membershipOnly);
+        const renamed = { ...membershipOnly, label: "renamedcore" };
+        index.replace([], [renamed, renamed]);
+        expect(index.query([{ label: "revisedcore" }])).toEqual([]);
+        expect(index.query([{ label: "renamedcore" }])).toEqual([renamed]);
+        index.replace([renamed, renamed], []);
+        expect(index.query([{ label: "renamedcore" }])).toEqual([]);
+        expect(visits).toBe(0);
+    },
+);
 
 function originalNomination(all: TopicConcept[], nodes: { label: string }[]) {
     const terms = (text: string) =>

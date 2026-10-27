@@ -402,15 +402,16 @@ async function main() {
             },
             validate: product.validateTopicSnapshot,
             generate: (captured, signal, onReceipt) =>
-                product.createConfiguredTopicGenerator(
-                    process.env.TYPEAGENT_BENCHMARK_MODEL,
-                    undefined,
-                    true,
-                    () => ({
-                        model: product.configuredTopicDecisionModel(),
-                        onReceipt,
-                    }),
-                )(captured, signal),
+                product.createConfiguredTopicGenerator({
+                    endpoint: process.env.TYPEAGENT_BENCHMARK_MODEL,
+                    mode: {
+                        kind: "decision",
+                        createOptions: () => ({
+                            model: product.configuredTopicDecisionModel(),
+                            onReceipt,
+                        }),
+                    },
+                })(captured, signal),
         });
         assertCheckpoint(await compiledIdentity(root), expected);
         assert.equal(

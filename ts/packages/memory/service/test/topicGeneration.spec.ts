@@ -174,13 +174,10 @@ test("legacy models remain usable but context-aware packing explicitly requires 
             "topic.test.model",
         ),
     ).toEqual({ accepted: true });
-    const generate = createConfiguredTopicGenerator(
-        undefined,
-        model,
-        true,
-        undefined,
-        { inputTokenTarget: 32000 },
-    );
+    const generate = createConfiguredTopicGenerator({
+        model: model,
+        mode: { kind: "generative", settings: { inputTokenTarget: 32000 } },
+    });
     await expect(
         generate(input(1), new AbortController().signal),
     ).rejects.toThrow("requires request inspection");
@@ -188,10 +185,17 @@ test("legacy models remain usable but context-aware packing explicitly requires 
         throw new Error("Factory must not run");
     };
     expect(() =>
-        createConfiguredTopicGenerator(undefined, model, true, factory, {
-            concurrency: 2,
-        }),
-    ).toThrow("Generative topic settings require");
+        Reflect.apply(createConfiguredTopicGenerator, undefined, [
+            {
+                model,
+                mode: {
+                    kind: "decision",
+                    createOptions: factory,
+                    settings: { concurrency: 2 },
+                },
+            },
+        ]),
+    ).toThrow("Invalid topic generation mode fields");
 });
 
 test("generative stage receipts retain legacy curation names, separate Decision work and leave unknown usage absent", async () => {
@@ -259,11 +263,10 @@ test("generative stage receipts retain legacy curation names, separate Decision 
     }
 });
 
-test("fifth-argument generative settings use their own recipe and keep the fourth Decision slot unchanged", async () => {
+test("named generative settings and Decision factories retain distinct recipes", async () => {
     let curationCalls = 0;
-    const generate = createConfiguredTopicGenerator(
-        undefined,
-        {
+    const generate = createConfiguredTopicGenerator({
+        model: {
             completionSettings: {},
             complete: async (messages) => {
                 const payload = JSON.parse(promptText(messages, 1));
@@ -285,10 +288,8 @@ test("fifth-argument generative settings use their own recipe and keep the fourt
                 };
             },
         },
-        true,
-        undefined,
-        { concurrency: 2 },
-    );
+        mode: { kind: "generative", settings: { concurrency: 2 } },
+    });
     const result = await generate(input(1), new AbortController().signal);
     expect(curationCalls).toBe(1);
     expect(result.recipe).toMatch(/:curated-lazy-v8:[0-9a-f]{16}$/);
@@ -326,9 +327,8 @@ test.each([false, true])(
         };
         captured.topicInput!.maintainClusters = maintain;
         let calls = 0;
-        const generator = createConfiguredTopicGenerator(
-            undefined,
-            {
+        const generator = createConfiguredTopicGenerator({
+            model: {
                 completionSettings: {
                     response_format: { type: "json_object" },
                 },
@@ -351,22 +351,24 @@ test.each([false, true])(
                     };
                 },
             },
-            true,
-            () => ({
-                clusterValidation: true,
-                model: {
-                    provider: "azure",
-                    model: "offline",
-                    providerSource: "factory",
-                    configGeneration: getRuntimeConfigGeneration(),
-                    decide: async () => {
-                        throw new Error(
-                            "No new topics should require Decision calls",
-                        );
+            mode: {
+                kind: "decision",
+                createOptions: () => ({
+                    clusterValidation: true,
+                    model: {
+                        provider: "azure",
+                        model: "offline",
+                        providerSource: "factory",
+                        configGeneration: getRuntimeConfigGeneration(),
+                        decide: async () => {
+                            throw new Error(
+                                "No new topics should require Decision calls",
+                            );
+                        },
                     },
-                },
-            }),
-        );
+                }),
+            },
+        });
         const result = await generator(captured, new AbortController().signal);
         expect(calls).toBe(maintain ? 1 : 0);
         expect(Boolean(result.curation!.concepts[0].maintenance)).toBe(
@@ -409,9 +411,8 @@ test.each([false, true])(
     "configured curated generation admits concepts without eager prose (structured output: %s)",
     async (structured) => {
         let calls = 0;
-        const generator = createConfiguredTopicGenerator(
-            undefined,
-            {
+        const generator = createConfiguredTopicGenerator({
+            model: {
                 completionSettings: structured
                     ? { response_format: { type: "json_object" } }
                     : {},
@@ -477,8 +478,8 @@ test.each([false, true])(
                     };
                 },
             },
-            true,
-        );
+            mode: { kind: "generative" },
+        });
         const snapshot = await generator(
             input(7),
             new AbortController().signal,
@@ -507,9 +508,8 @@ test.each([
         const stages: string[] = [];
         let organizations = 0;
         const controller = new AbortController();
-        const generator = createConfiguredTopicGenerator(
-            undefined,
-            {
+        const generator = createConfiguredTopicGenerator({
+            model: {
                 completionSettings: {
                     response_format: { type: "json_object" },
                 },
@@ -604,8 +604,8 @@ test.each([
                     };
                 },
             },
-            true,
-        );
+            mode: { kind: "generative" },
+        });
         const outcome = generator(input(2), controller.signal);
         if (mode === "repeated" || mode === "transport" || mode === "abort") {
             await expect(outcome).rejects.toThrow(
@@ -688,9 +688,8 @@ test("curation checkpoints seed only unchanged policy and exact captured evidenc
     const frozen = await capture(input(55).topicInput!.occurrences);
     const checkpoints: TopicSnapshot[] = [];
     let calls = 0;
-    const generator = createConfiguredTopicGenerator(
-        undefined,
-        {
+    const generator = createConfiguredTopicGenerator({
+        model: {
             completionSettings: {},
             complete: async (messages) => {
                 if (++calls === 2)
@@ -708,8 +707,8 @@ test("curation checkpoints seed only unchanged policy and exact captured evidenc
                 };
             },
         },
-        true,
-    );
+        mode: { kind: "generative" },
+    });
     await expect(
         generator(frozen, new AbortController().signal, async (partial) => {
             checkpoints.push(partial);
@@ -747,32 +746,34 @@ test("partial summary checkpoints retain only audited prose and can seed exact-e
     const held = deferred<void>();
     const audited = new Set<string>();
     const checkpoints: TopicSnapshot[] = [];
-    const generator = createConfiguredTopicGenerator(undefined, {
-        completionSettings: {},
-        complete: async (messages) => {
-            const instructions = promptText(messages, 0);
-            if (instructions.includes("Organize supplied topics"))
+    const generator = createConfiguredTopicGenerator({
+        model: {
+            completionSettings: {},
+            complete: async (messages) => {
+                const instructions = promptText(messages, 0);
+                if (instructions.includes("Organize supplied topics"))
+                    return {
+                        success: true,
+                        data: JSON.stringify({ parents: [], related: [] }),
+                    };
+                const payload = JSON.parse(promptText(messages, 1));
+                if (instructions.includes("Check the ACTUAL")) {
+                    const sourceId = payload.evidence[0].sourceId;
+                    if (sourceId === "source-0") await held.promise;
+                    audited.add(sourceId);
+                    return {
+                        success: true,
+                        data: JSON.stringify({ safe: true, failures: [] }),
+                    };
+                }
                 return {
                     success: true,
-                    data: JSON.stringify({ parents: [], related: [] }),
+                    data: JSON.stringify({
+                        summary: "Rollout remains blocked.",
+                        evidenceIds: [0],
+                    }),
                 };
-            const payload = JSON.parse(promptText(messages, 1));
-            if (instructions.includes("Check the ACTUAL")) {
-                const sourceId = payload.evidence[0].sourceId;
-                if (sourceId === "source-0") await held.promise;
-                audited.add(sourceId);
-                return {
-                    success: true,
-                    data: JSON.stringify({ safe: true, failures: [] }),
-                };
-            }
-            return {
-                success: true,
-                data: JSON.stringify({
-                    summary: "Rollout remains blocked.",
-                    evidenceIds: [0],
-                }),
-            };
+            },
         },
     });
     try {
@@ -820,23 +821,25 @@ test("partial summary checkpoints retain only audited prose and can seed exact-e
 
 test("checkpoint persistence failure drains workers and prevents organization", async () => {
     let organizations = 0;
-    const generator = createConfiguredTopicGenerator(undefined, {
-        completionSettings: {},
-        complete: async (messages) => {
-            const instructions = promptText(messages, 0);
-            if (instructions.includes("Organize supplied topics"))
-                organizations++;
-            return {
-                success: true,
-                data: JSON.stringify(
-                    instructions.includes("Check the ACTUAL")
-                        ? { safe: true, failures: [] }
-                        : {
-                              summary: "Rollout remains blocked.",
-                              evidenceIds: [0],
-                          },
-                ),
-            };
+    const generator = createConfiguredTopicGenerator({
+        model: {
+            completionSettings: {},
+            complete: async (messages) => {
+                const instructions = promptText(messages, 0);
+                if (instructions.includes("Organize supplied topics"))
+                    organizations++;
+                return {
+                    success: true,
+                    data: JSON.stringify(
+                        instructions.includes("Check the ACTUAL")
+                            ? { safe: true, failures: [] }
+                            : {
+                                  summary: "Rollout remains blocked.",
+                                  evidenceIds: [0],
+                              },
+                    ),
+                };
+            },
         },
     });
     await expect(
@@ -880,7 +883,7 @@ test("large raw organization visits every topic without inventing same-label par
             };
         },
     };
-    const snapshot = await createConfiguredTopicGenerator(undefined, model)(
+    const snapshot = await createConfiguredTopicGenerator({ model: model })(
         value,
         new AbortController().signal,
     );
@@ -944,7 +947,7 @@ test("summary schema permits only the exact numeric IDs in each request", async 
             };
         },
     };
-    await createConfiguredTopicGenerator(undefined, model)(
+    await createConfiguredTopicGenerator({ model: model })(
         input(2),
         new AbortController().signal,
     );
@@ -1018,7 +1021,7 @@ async function flush(): Promise<void> {
 test("three worker slots bound overlapping summary/editorial calls and retain ordered identities and incidence", async () => {
     const captured = input();
     const fake = blockedModel();
-    const pending = createConfiguredTopicGenerator(undefined, fake.model)(
+    const pending = createConfiguredTopicGenerator({ model: fake.model })(
         captured,
         new AbortController().signal,
     );
@@ -1088,7 +1091,7 @@ test.each(["abort", "provider", "evidence", "editorial-provider"] as const)(
         const controller = new AbortController();
         const fake = blockedModel();
         let settled = false;
-        const pending = createConfiguredTopicGenerator(undefined, fake.model)(
+        const pending = createConfiguredTopicGenerator({ model: fake.model })(
             input(),
             controller.signal,
         );
@@ -1254,7 +1257,7 @@ test("reuse requires exact owned evidence AND complete same-source revision cont
             return { success: true, data: JSON.stringify(response) };
         },
     };
-    const generate = createConfiguredTopicGenerator(undefined, model);
+    const generate = createConfiguredTopicGenerator({ model: model });
     const current = await generate(
         await capture(occurrences),
         new AbortController().signal,
@@ -1333,7 +1336,7 @@ test("concurrent timing retains input ordinals and enabled/disabled equivalence"
             ),
         }),
     };
-    const generate = createConfiguredTopicGenerator(undefined, model);
+    const generate = createConfiguredTopicGenerator({ model: model });
     try {
         delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
         const disabled = await generate(captured, new AbortController().signal);
@@ -1438,7 +1441,7 @@ test("production model retries quota 429s in worker slots with one inherited agg
     });
     try {
         const pending = runWithRequestBudget(budget, () =>
-            createConfiguredTopicGenerator(undefined, model)(
+            createConfiguredTopicGenerator({ model: model })(
                 input(),
                 new AbortController().signal,
             ),

@@ -36,6 +36,7 @@ import { validateTopicSnapshot } from "../../packages/memory/service/dist/topicS
 import {
     createReplayOutput,
     hashBytes as hash,
+    hashWorkingTreePatch,
     loadCapturedTopicInput,
     positiveInteger as integer,
     compiledFileHashes,
@@ -530,13 +531,11 @@ async function callReplay(values, snapshot, settings, output, identity, input) {
                     return { success: true, data: JSON.stringify(response) };
                 },
             };
-            const organized = await createConfiguredTopicGenerator(
-                values.endpoint,
-                organizationModel,
-                true,
-                undefined,
-                settings,
-            )(organizationInput, controller.signal);
+            const organized = await createConfiguredTopicGenerator({
+                endpoint: values.endpoint,
+                model: organizationModel,
+                mode: { kind: "generative", settings: settings },
+            })(organizationInput, controller.signal);
             await writeFile(
                 path.join(output, "snapshot.json"),
                 JSON.stringify(organized),
@@ -599,11 +598,7 @@ async function implementationIdentity() {
             cwd: productRoot,
             encoding: "utf8",
         }).trim(),
-        patchHash: hash(
-            execFileSync("git", ["--no-pager", "diff", "--binary", "HEAD"], {
-                cwd: productRoot,
-            }),
-        ),
+        patchHash: await hashWorkingTreePatch(productRoot),
         compiled: {},
     };
     identity.compiled = await compiledFileHashes(productRoot, [

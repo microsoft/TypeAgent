@@ -571,12 +571,17 @@ describe("native decision models", () => {
             let calls = 0;
             try {
                 globalThis.fetch = async () => {
-                    if (++calls === 1 || exhaust)
-                        return new Response("{}", {
-                            status: 429,
-                            headers: { "Retry-After": "1" },
-                        });
-                    return response();
+                    const reply =
+                        ++calls === 1 || exhaust
+                            ? new Response("{}", {
+                                  status: 429,
+                                  headers: { "Retry-After": "1" },
+                              })
+                            : response();
+                    // Body stream I/O is outside Jest's virtual retry clock.
+                    jest.spyOn(reply, "text").mockResolvedValue("{}");
+                    jest.spyOn(reply, "json").mockResolvedValue(native);
+                    return reply;
                 };
                 const pending = model(
                     config({ AZURE_OPENAI_MAX_RETRYATTEMPTS: "1" }),

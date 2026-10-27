@@ -329,17 +329,19 @@ export async function runDecisionReplay(values, dependencies = {}) {
         },
         reviveError,
     );
-    const generate = product.createConfiguredTopicGenerator(
-        values.endpoint,
-        chat,
-        true,
-        () => ({
-            ...execution,
-            model,
-            packetPolicy: binding.packetPolicy ?? "v2",
-            onReceipt: (receipt) => receipts.push(receipt),
-        }),
-    );
+    const generate = product.createConfiguredTopicGenerator({
+        endpoint: values.endpoint,
+        model: chat,
+        mode: {
+            kind: "decision",
+            createOptions: () => ({
+                ...execution,
+                model,
+                packetPolicy: binding.packetPolicy ?? "v2",
+                onReceipt: (receipt) => receipts.push(receipt),
+            }),
+        },
+    });
     let lastCuration = progress?.curation ?? input.topicInput.reusableCuration;
     const save = async (working) => {
         tape.signal.throwIfAborted();

@@ -232,7 +232,6 @@ export class TopicConceptIndex {
     private readonly entries = new Map<string, LexicalEntry>();
     private readonly postings = new Map<string, Set<string>>();
     private readonly labels = new Map<string, Set<string>>();
-    readonly positions = new Map<string, number>();
 
     constructor(concepts: readonly TopicConcept[] = []) {
         this.update(concepts);
@@ -242,42 +241,20 @@ export class TopicConceptIndex {
         const retained = new Set(concepts.map((concept) => concept.id));
         for (const [id, entry] of this.entries)
             if (!retained.has(id)) this.remove(id, entry);
-        this.positions.clear();
-        concepts.forEach((concept, ordinal) => {
-            this.positions.set(concept.id, ordinal);
-            const previous = this.entries.get(concept.id);
-            const text = JSON.stringify([concept.label, concept.purpose]);
-            if (previous?.text === text) {
-                previous.concept = concept;
-                return;
-            }
-            if (previous) this.remove(concept.id, previous);
-            const entry = {
-                concept,
-                terms: terms(`${concept.label} ${concept.purpose}`),
-                label: labelKey(concept.label),
-                text,
-            };
-            this.entries.set(concept.id, entry);
-            for (const term of entry.terms)
-                this.add(this.postings, term, concept.id);
-            this.add(this.labels, entry.label, concept.id);
-        });
+        concepts.forEach((concept) => this.upsert(concept));
     }
 
     replace(
         removed: readonly TopicConcept[],
         added: readonly TopicConcept[],
     ): void {
-        const remove = new Set(
-            [...removed, ...added].map((concept) => concept.id),
-        );
-        this.update([
-            ...[...this.entries.values()]
-                .filter(({ concept }) => !remove.has(concept.id))
-                .map(({ concept }) => concept),
-            ...added,
-        ]);
+        const replaced = new Set(added.map((concept) => concept.id));
+        for (const concept of removed) {
+            if (replaced.has(concept.id)) continue;
+            const previous = this.entries.get(concept.id);
+            if (previous) this.remove(concept.id, previous);
+        }
+        added.forEach((concept) => this.upsert(concept));
     }
 
     related(nodes: ReadonlyArray<{ label: string }>): TopicConcept[] {
@@ -305,6 +282,26 @@ export class TopicConceptIndex {
             )
             .slice(0, 24)
             .map(([id]) => this.entries.get(id)!.concept);
+    }
+
+    private upsert(concept: TopicConcept): void {
+        const previous = this.entries.get(concept.id);
+        const text = JSON.stringify([concept.label, concept.purpose]);
+        if (previous?.text === text) {
+            previous.concept = concept;
+            return;
+        }
+        if (previous) this.remove(concept.id, previous);
+        const entry = {
+            concept,
+            terms: terms(`${concept.label} ${concept.purpose}`),
+            label: labelKey(concept.label),
+            text,
+        };
+        this.entries.set(concept.id, entry);
+        for (const term of entry.terms)
+            this.add(this.postings, term, concept.id);
+        this.add(this.labels, entry.label, concept.id);
     }
 
     private add(
