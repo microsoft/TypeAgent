@@ -59,7 +59,7 @@ describe("ScriptAnalyzer Copilot transport", () => {
             "location.ps1",
         );
 
-        expect(createChatModel).toHaveBeenCalledWith("copilot:gpt-5.6-sol");
+        expect(createChatModel).toHaveBeenCalledWith("copilot:gpt-6.1-sol");
         expect(result.actionName).toBe("importedScript");
     });
 

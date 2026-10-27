@@ -179,6 +179,7 @@ export function azureApiSettingsFromConfig(
         modelType,
         apiKey: auth.apiKey,
         endpoint: endpoint.endpoint,
+        ...(endpoint.model !== undefined ? { modelName: endpoint.model } : {}),
         supportsResponseFormat: ao.responseFormat,
         maxConcurrency: ao.maxConcurrency,
         timeout: ao.maxTimeoutMs,

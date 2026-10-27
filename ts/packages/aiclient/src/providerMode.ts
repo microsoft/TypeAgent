@@ -80,6 +80,8 @@ const CANONICAL_NAMES = [
     "GPT_5_MINI",
     "GPT_5_NANO",
     "GPT_6_LUNA",
+    "GPT_6_1_SOL",
+    "GPT_6_1_TERRA",
     "GPT_V",
 ] as const;
 
@@ -104,10 +106,12 @@ const COPILOT_MAP: Record<CanonicalName, string> = {
     DEFAULT: DEFAULT_COPILOT_MODEL,
     GPT_35_TURBO: "gpt-6-luna",
     GPT_4_O: "gpt-6-sol",
-    GPT_5: "gpt-6-sol",
+    GPT_5: "gpt-6.1-terra",
     GPT_5_MINI: "gpt-6-luna",
     GPT_5_NANO: "gpt-6-luna",
     GPT_6_LUNA: "gpt-6-luna",
+    GPT_6_1_SOL: "gpt-6.1-sol",
+    GPT_6_1_TERRA: "gpt-6.1-terra",
     GPT_V: "gpt-6-sol",
 };
 
@@ -119,6 +123,8 @@ const OLLAMA_MAP: Record<CanonicalName, string> = {
     GPT_5_MINI: "llama3.2:3b",
     GPT_5_NANO: "llama3.2:1b",
     GPT_6_LUNA: "llama3.2",
+    GPT_6_1_SOL: "llama3.1:70b",
+    GPT_6_1_TERRA: "llama3.1:70b",
     GPT_V: "llava",
 };
 

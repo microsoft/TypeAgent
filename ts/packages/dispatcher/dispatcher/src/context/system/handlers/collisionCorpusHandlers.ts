@@ -256,7 +256,7 @@ function resolveStyles(flag: string | undefined): {
 
 // Mirror corpus-runner.mjs: only OpenAI-family endpoints currently working
 // in this checkout. Override with --models on the command line.
-const DEFAULT_MODELS = ["GPT_4_1", "GPT_5", "GPT_5_NANO"];
+const DEFAULT_MODELS = ["GPT_6_1_SOL", "GPT_6_1_TERRA", "GPT_6_LUNA"];
 const DEFAULT_CONCURRENCY = 8;
 const DEFAULT_DELTA = 0.05;
 const DEFAULT_PROBE_TOP = 5;

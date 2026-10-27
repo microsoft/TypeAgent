@@ -20,7 +20,7 @@ try {
 
 process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_v = "180000";
 process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_6_LUNA = "180000";
-process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_5 = "300000";
+process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_6_1_TERRA = "300000";
 process.env.AZURE_OPENAI_MAX_TIMEOUT = "180000";
 
 import { HelperClient } from "../helperClient.js";
