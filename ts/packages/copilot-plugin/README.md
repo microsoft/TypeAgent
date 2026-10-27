@@ -21,9 +21,9 @@ User prompt
 Explicit @typeagent run commands and optional structured action MCP tools
 remain available. They are not automatic recording or execution fallbacks.
 
-Registered alongside routing (calls are disabled in bypass mode):
+Registered alongside routing (calls are disabled in bypass mode by default):
   typeagent-workspace MCP tools
-  typeagent-macros MCP tools -> checked program execution
+  typeagent-macros MCP tools -> checked program execution (explicit bypass opt-in below)
 ```
 
 The hook output fields `handled`, `responseContent`, and `handledBy` are supported in current Copilot CLI behavior, allowing the hook to skip the agentic loop entirely when TypeAgent handles a request. For local runtime debugging against the runtime repo, use `pnpm copilot:dev`.
@@ -652,7 +652,8 @@ No owner setting is required: the default and only enabled owner is `plugin`.
 `plugin` and `off`. Close and restart the native session after changing it.
 An obsolete explicit `typeagent` value is an actionable error, not a different
 catalog selection. `off` disables recipes, including recording; `bypass` disables
-recipe matching/execution and MCP calls, but permits explicitly armed recordings.
+recipe matching and MCP calls by default, but permits explicitly armed recordings.
+The macro-tool opt-in permits discovery and execution without prompt matching.
 Unmatched ordinary prompts go to native Copilot, not the
 TypeAgent planner. Explicit TypeAgent commands/tools remain optional backend
 operations; they are not required by the local recipe path.
@@ -811,8 +812,10 @@ set a workspace learning preference, then arm the next interaction:
 
 To record Copilot-native or third-party MCP tools without recipe routing, use
 `/typeagent-mode bypass` instead. The selected task stays with Copilot, including
-the success receipt required for learning. TypeAgent workspace and macro MCP
-calls remain disabled in bypass; use the extension recording/status commands.
+the success receipt required for learning. TypeAgent workspace MCP calls remain
+disabled, and macro MCP calls are disabled by default; use the extension
+recording/status commands. The macro-tool opt-in described below is not required
+for recording.
 
 For the MCP-mode example, send this as the next ordinary message, rather than
 using the natural-language file-reading shortcut:
@@ -944,7 +947,7 @@ job data or create a manual draft to force a retry.
 ### Review and run a prepared program
 
 Use the lifecycle MCP tools in direct, MCP or dev mode. They call the selected
-owner; bypass disables them. After learning produces a candidate:
+owner; bypass disables them by default. After learning produces a candidate:
 
 1. Inspect its returned candidate and version, then call `validate_macro`.
 2. In Prepare mode, review it and call `approve_macro`. Drafts cannot run.
@@ -955,6 +958,41 @@ owner; bypass disables them. After learning produces a candidate:
 
 `processCommand` does not create or approve macros. The lifecycle tools have no
 `preference` parameter, manual step-draft creation or adapted-candidate submission.
+
+### Explicit macro tools while Copilot handles prompts
+
+To let Copilot discover and run existing approved macros without enabling prompt
+routing, opt in before starting Copilot:
+
+```powershell
+$env:TYPEAGENT_MODE = 'bypass'
+$env:TYPEAGENT_BYPASS_MACRO_TOOLS = 'true'
+pnpm copilot --experimental
+```
+
+Alternatively, set `"bypassMacroTools": true` alongside `"mode": "bypass"` in
+the plugin config. The environment variable overrides the saved setting and
+accepts `true`/`false`, `1`/`0`, or `on`/`off`; invalid values are rejected.
+The default is `false`. Restart Copilot after changing environment variables;
+config changes are read on subsequent calls.
+
+Only `list_macros`, `search_macros`, `inspect_macro`, `get_macro_requirements`,
+`run_macro`, and `get_macro_run` are permitted by this opt-in. Validation,
+approval, disablement, and deletion remain blocked in bypass; use direct, MCP,
+or dev mode for those lifecycle operations. `@typeagent status` and
+`/typeagent-status` report `Macro tools: discovery and execution only` when
+the bypass opt-in is active.
+
+Ordinary prompts still go to Copilot without local recipe matching or automatic
+TypeAgent delegation. Workspace and other TypeAgent MCP tools remain subject to
+their existing mode gates. This setting does not change learning preferences,
+enable a disabled recipe owner, or grant tool/backend permissions.
+
+Execution uses the same local owner and current approved immutable program
+version as other modes. Unsupported tools, backend denials, failed or cancelled
+runs remain failures; there is no planner fallback or automatic retry. This does
+not add replay support for arbitrary native Copilot tools or make a captured
+trace into a runnable macro. Approval and backend authorization are separate.
 
 ### Route approved macros from natural language
 
@@ -977,7 +1015,8 @@ disable and deletion refresh schemas and reconcile stored routes.
 
 ### Recording controls and recovery
 
-Program authoring/execution is unconditional. Only these recording boundaries
+Program authoring/execution has no legacy feature flag. Explicit macro access in
+bypass is separately opt-in as described above. These recording boundaries
 remain configurable (enabled by default):
 
 | Environment variable                | Boundary                      |
@@ -1092,8 +1131,9 @@ that mode selection requires natural-language dispatch.
 
 Ordinary prompts use local checked-program matching followed by Copilot on a
 miss, in `direct`, `mcp` and `dev`. None of these modes selects a backend macro
-owner or author. `bypass` disables recipe matching/execution and MCP calls,
-while still allowing explicitly armed recordings.
+owner or author. `bypass` disables recipe matching and MCP calls by default,
+while still allowing explicitly armed recordings. The explicit macro-tool opt-in
+above permits discovery and execution without prompt matching.
 
 The settings remain for explicit TypeAgent commands and MCP availability.
 `@typeagent run <request>` intentionally delegates to the TypeAgent dispatcher;
@@ -1153,20 +1193,22 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 ```json
 {
   "mode": "direct",
-  "mcpRouting": "delegate"
+  "mcpRouting": "delegate",
+  "bypassMacroTools": false
 }
 ```
 
 **Environment variable overrides** (take precedence over config file):
 
-| Variable                    | Default                           | Description                                                                                                        |
-| --------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `TYPEAGENT_MODE`            | `direct`                          | `direct`, `mcp`, `dev`, or `bypass`                                                                                |
-| `TYPEAGENT_HOST`            | `localhost`                       | TypeAgent server host                                                                                              |
-| `TYPEAGENT_PORT`            | `8999`                            | TypeAgent server port                                                                                              |
-| `TYPEAGENT_CONVERSATION_ID` | Session-selected server default   | Optional existing public conversation ID for all routes; overrides config `conversationId` and automatic selection |
-| `TYPEAGENT_PLUGIN_DATA`     | `~/.typeagent-copilot`            | Config directory                                                                                                   |
-| `TYPEAGENT_WORKSPACE_ROOTS` | Copilot process working directory | Approved roots for workspace MCP tools, separated by the platform path delimiter                                   |
+| Variable                       | Default                           | Description                                                                                                                         |
+| ------------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `TYPEAGENT_MODE`               | `direct`                          | `direct`, `mcp`, `dev`, or `bypass`                                                                                                 |
+| `TYPEAGENT_BYPASS_MACRO_TOOLS` | `false`                           | Opt in to explicit macro discovery/execution in bypass; overrides config `bypassMacroTools` without changing routing or permissions |
+| `TYPEAGENT_HOST`               | `localhost`                       | TypeAgent server host                                                                                                               |
+| `TYPEAGENT_PORT`               | `8999`                            | TypeAgent server port                                                                                                               |
+| `TYPEAGENT_CONVERSATION_ID`    | Session-selected server default   | Optional existing public conversation ID for all routes; overrides config `conversationId` and automatic selection                  |
+| `TYPEAGENT_PLUGIN_DATA`        | `~/.typeagent-copilot`            | Config directory                                                                                                                    |
+| `TYPEAGENT_WORKSPACE_ROOTS`    | Copilot process working directory | Approved roots for workspace MCP tools, separated by the platform path delimiter                                                    |
 
 ---
 

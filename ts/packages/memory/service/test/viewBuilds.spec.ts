@@ -372,6 +372,7 @@ describe("durable draft builds and explicit edit merge", () => {
     const open = () =>
         new FileMemoryService(root, {
             informationalViews: false,
+            discoveryPolicy: "off",
             indexFactory: (_id, directory) =>
                 new FakeSemanticCorpusIndex(directory),
             viewSynthesisAdapter: {
