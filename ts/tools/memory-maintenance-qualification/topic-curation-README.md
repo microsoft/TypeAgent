@@ -97,6 +97,9 @@ across machines when provider capacity is shared.
 - `--progress <progress.json>` resumes atomic private checkpoints only under
   matching input, node selection, implementation, endpoint and settings; cannot
   combine with `--resume`. Progress includes a curation/state digest.
+  Subset checkpoints use the same `--nodes` selection on restart. The complete
+  frozen source incidence is validated before selection; checkpoint membership
+  is validated against only the selected nodes without discarding source context.
 - `--organize` runs the actual configured organization stage after complete-input
   curation and saves a validated snapshot. Only live/recorded modes support it;
   it cannot combine with `--nodes`. Calls/deadlines also bound organization.

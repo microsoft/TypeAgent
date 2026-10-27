@@ -7,7 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { indexedTopicOccurrence } from "../../packages/memory/service/dist/topicIncidence.js";
-import { runTopicReplay } from "./topic-curation-replay.mjs";
+import { loadTopicReplay, runTopicReplay } from "./topic-curation-replay.mjs";
 import { writeSegmentedJson } from "../../packages/knowPro/dist/segmentedJson.js";
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 
@@ -233,6 +233,118 @@ test("bounded replay resumes only matching validated durable progress", async ()
                 output: path.join(root, "wrong-selection"),
             }),
             /does not match/,
+        );
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("subset replay resumes partial and completed progress with complete source incidence", async () => {
+    const root = await mkdtemp(
+        path.join(testDirectory, "topic-replay-subset-resume-"),
+    );
+    try {
+        const input = await fixture(root, 55);
+        const selected = { input, nodes: "30" };
+        const captured = path.join(root, "captured");
+        const capture = await runTopicReplay({
+            ...selected,
+            output: captured,
+        });
+        assert.equal(capture.nodes, 30);
+        assert.equal(capture.occurrences, 55);
+        const deferCaptured = async (directory) => {
+            const binding = JSON.parse(
+                await readFile(path.join(directory, "binding-1.json"), "utf8"),
+            );
+            await writeFile(
+                path.join(directory, "response-1.json"),
+                JSON.stringify({
+                    concepts: [],
+                    deferred: binding.payload.nodes.map(({ id }) => ({
+                        nodeId: id,
+                        reason: "Synthetic subset replay fixture",
+                    })),
+                }),
+            );
+            return binding.payload.nodes.length;
+        };
+        const processed = await deferCaptured(captured);
+        const partial = path.join(root, "partial");
+        const first = await runTopicReplay({
+            ...selected,
+            mode: "recorded",
+            responses: captured,
+            output: partial,
+        });
+        assert.equal(first.observations.completed, false);
+        const progress = path.join(partial, "progress.json");
+        const remaining = path.join(root, "remaining");
+        await runTopicReplay({
+            ...selected,
+            progress,
+            output: remaining,
+        });
+        assert.equal(processed + (await deferCaptured(remaining)), 30);
+        const completed = path.join(root, "completed");
+        const result = await runTopicReplay({
+            ...selected,
+            progress,
+            mode: "recorded",
+            responses: remaining,
+            output: completed,
+        });
+        assert.equal(result.observations.completed, true);
+        assert.equal(result.observations.accountedNodes, 30);
+        assert.equal(result.occurrences, 55);
+        const resumed = await runTopicReplay({
+            ...selected,
+            progress: path.join(completed, "progress.json"),
+            mode: "recorded",
+            responses: path.join(root, "unused-responses"),
+            output: path.join(root, "resumed"),
+        });
+        assert.equal(resumed.observations.completed, true);
+        assert.equal(resumed.observations.accountedNodes, 30);
+        assert.equal(resumed.observations.calls.length, 0);
+        await assert.rejects(
+            runTopicReplay({
+                ...selected,
+                nodes: "31",
+                progress,
+                output: path.join(root, "wrong-selection"),
+            }),
+            /does not match/,
+        );
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("subset selection still validates evidence outside the selected nodes", async () => {
+    const root = await mkdtemp(
+        path.join(testDirectory, "topic-replay-subset-evidence-"),
+    );
+    try {
+        const input = await fixture(root, 55);
+        const { snapshot } = await loadTopicReplay({ input, nodes: "30" });
+        const selected = new Set(
+            snapshot.nodes.flatMap((node) => node.occurrenceIds),
+        );
+        const captured = JSON.parse(await readFile(input, "utf8"));
+        const outside = captured.topicInput.occurrences.find(
+            (occurrence) => !selected.has(occurrence.id),
+        );
+        assert.ok(outside);
+        outside.citations[0].excerpt += " altered";
+        await writeFile(input, JSON.stringify(captured));
+        await assert.rejects(
+            runTopicReplay({
+                input,
+                nodes: "30",
+                output: path.join(root, "invalid-evidence"),
+            }),
+            /Topic evidence excerpt does not match indexed coordinate length/,
         );
     } finally {
         await rm(root, { recursive: true, force: true });

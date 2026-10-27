@@ -26,6 +26,7 @@ import {
     curateTopics,
     orderedTopicNodes,
     validateTopicCuration,
+    validateTopicCurationProgress,
     validateTopicCurationSettings,
 } from "../../packages/memory/service/dist/topicCuration.js";
 import {
@@ -63,6 +64,7 @@ export async function loadTopicReplay(values) {
     const { input, state, inputHash, retainedCurationHash } =
         await loadCapturedTopicInput(values);
     const snapshot = createTopicSnapshot(input, input.model);
+    validateTopicSnapshot(snapshot);
     if (values.nodes) {
         assert.ok(!values.resume, "--nodes and --resume cannot be combined");
         snapshot.nodes = orderedTopicNodes(snapshot.nodes).slice(
@@ -705,7 +707,7 @@ export async function runTopicReplay(values) {
             values.progress,
             identity,
             (curation) =>
-                validateTopicSnapshot({
+                validateTopicCurationProgress({
                     ...snapshot,
                     curationProgress: curation,
                 }),
