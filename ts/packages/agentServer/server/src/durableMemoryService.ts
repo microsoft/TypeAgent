@@ -7,15 +7,18 @@ import {
     FileMemoryService,
     createKnowProCorpusIndex,
     getConfiguredMemoryViewOptions,
+    type TopicDecisionReceipt,
 } from "@typeagent/memory-service";
 import { getConfiguredViewModelOptions } from "./viewModelOptions.js";
 
 export function createDurableMemoryService(
     rootDirectory: string,
+    onTopicDecisionReceipt?: (receipt: TopicDecisionReceipt) => void,
 ): FileMemoryService {
     return new FileMemoryService(rootDirectory, {
         ...getConfiguredMemoryViewOptions(),
         ...getConfiguredViewModelOptions(),
+        ...(onTopicDecisionReceipt ? { onTopicDecisionReceipt } : {}),
         indexFactory: (corpusId, indexDirectory) =>
             createKnowProCorpusIndex(corpusId, indexDirectory, () => {
                 const settings = createDocMemorySettings(

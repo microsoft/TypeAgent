@@ -16,6 +16,9 @@ import type {
 } from "../src/viewTypes.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { topicClusterSignature } from "../src/topicDecision.js";
+import { prioritizeTopicMaintenance } from "../src/topicClusterMaintenance.js";
+import { viewHash } from "../src/viewContent.js";
 
 class TopicIndex extends FakeSemanticCorpusIndex {
     public async getTopicOccurrences(
@@ -81,6 +84,8 @@ describe("production topic service vertical slice", () => {
     let summaryHold: Promise<void> | undefined;
     let summaryEntered: (() => void) | undefined;
     let summaryFailure = false;
+    let certified = false;
+    let admissionCertified = false;
     const synthesis: ViewSynthesisAdapter = {
         identity: "offline-topics",
         generate: async () => {
@@ -132,6 +137,48 @@ describe("production topic service vertical slice", () => {
                     ],
                     deferred: [],
                 };
+                if (certified) {
+                    const concept = snapshot.curation.concepts[0];
+                    concept.citations = [
+                        ...new Map(
+                            snapshot.nodes.flatMap((node) =>
+                                node.citations.map(
+                                    (citation) =>
+                                        [viewHash(citation), citation] as const,
+                                ),
+                            ),
+                        ).values(),
+                    ];
+                    concept.validation = {
+                        recipe: "cluster-local-v1",
+                        modelIdentity: "offline-cluster-validation",
+                        inputFingerprint: snapshot.inputFingerprint,
+                        signature: topicClusterSignature(
+                            snapshot,
+                            concept,
+                            "offline-cluster-validation",
+                        ),
+                    };
+                    if (admissionCertified) {
+                        concept.validation.coverage = "member-admission-v2";
+                        concept.validation.method = "decision";
+                        concept.validation.validatedMemberIds = [
+                            concept.memberIds[0],
+                        ];
+                        concept.validation.signature = topicClusterSignature(
+                            snapshot,
+                            concept,
+                            "offline-cluster-validation",
+                        );
+                        prioritizeTopicMaintenance(
+                            snapshot,
+                            concept,
+                            [concept.memberIds[1]],
+                            0.8,
+                            "Old-anchor uncertainty survives admission",
+                        );
+                    }
+                }
             }
             return snapshot;
         },
@@ -144,7 +191,9 @@ describe("production topic service vertical slice", () => {
                 throw new Error("Intentional concept summary failure");
             return {
                 summary: "Command lifetime differs from held lease lifetime.",
-                citations: concept.citations,
+                citations: certified
+                    ? concept.citations.slice(0, 1)
+                    : concept.citations,
             };
         },
     };
@@ -192,6 +241,8 @@ describe("production topic service vertical slice", () => {
         summaryHold = undefined;
         summaryEntered = undefined;
         summaryFailure = false;
+        certified = false;
+        admissionCertified = false;
         service = open();
     });
     afterEach(async () => {
@@ -199,7 +250,7 @@ describe("production topic service vertical slice", () => {
         await rm(directory, { recursive: true, force: true });
     });
 
-    async function conceptCorpus() {
+    async function conceptCorpus(secondSource = false) {
         curated = true;
         const { corpusId } = await service.createCorpus("Lazy concepts");
         await service.maintainViews({
@@ -218,6 +269,20 @@ describe("production topic service vertical slice", () => {
             },
         });
         await waitForMemoryJob(service, admitted.jobId, { pollIntervalMs: 10 });
+        if (secondSource) {
+            const additional = await service.ingestDocument({
+                corpusId,
+                source: {
+                    sourceId: "second-worksheet",
+                    sourceType: "text",
+                    title: "Qualifications",
+                    text: "A held lease remains active after the command completes.",
+                },
+            });
+            await waitForMemoryJob(service, additional.jobId, {
+                pollIntervalMs: 10,
+            });
+        }
         const receipt = await service.maintainViews({
             corpusId,
             expectedHead: (await service.listViews(corpusId)).head,
@@ -273,6 +338,41 @@ describe("production topic service vertical slice", () => {
             release();
         }
     });
+
+    test.each([false, true])(
+        "validated concepts retain provenance, declared coverage and maintenance across selective summaries and restart: %s",
+        async (admission) => {
+            certified = true;
+            admissionCertified = admission;
+            const corpusId = await conceptCorpus(true);
+            const initial = await service.queryTopics({
+                corpusId,
+                curated: true,
+            });
+            const concept = initial.concepts![0];
+            expect(concept.citationCount).toBe(2);
+            const request = {
+                corpusId,
+                topicId: concept.id,
+                curated: true,
+                summarize: true,
+            };
+            const detailed = (await service.queryTopics(request)).concepts![0];
+            expect(detailed.citationCount).toBe(2);
+            expect(detailed.citations).toEqual(concept.citations);
+            expect(detailed.summaryCitations).toHaveLength(1);
+            expect(detailed.validation).toEqual(concept.validation);
+            expect(detailed.maintenance).toEqual(concept.maintenance);
+            await service.close();
+            service = open();
+            const reopened = (await service.queryTopics(request)).concepts![0];
+            expect(reopened.citations).toEqual(concept.citations);
+            expect(reopened.summaryCitations).toHaveLength(1);
+            expect(reopened.validation).toEqual(concept.validation);
+            expect(reopened.maintenance).toEqual(concept.maintenance);
+            expect(summaryCalls).toBe(1);
+        },
+    );
 
     test("lazy concept failures propagate and remain explicitly retryable", async () => {
         const corpusId = await conceptCorpus();

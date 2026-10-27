@@ -19,7 +19,31 @@ type SearchTimingContext = {
 const searchTiming = new AsyncLocalStorage<SearchTimingContext>();
 
 const curationTimingEnums: Readonly<Record<string, readonly string[]>> = {
-    callKind: ["normal", "contract-repair", "omission-repair"],
+    callKind: [
+        "normal",
+        "contract-repair",
+        "omission-repair",
+        "decision",
+        "authoring",
+        "resolution",
+        "organization",
+        "maintenance",
+        "metadata",
+        "adjudication",
+        "validation",
+    ],
+    stage: [
+        "decision",
+        "authoring",
+        "resolution",
+        "organization",
+        "packing",
+        "transaction",
+        "planning",
+        "speculation",
+        "checkpoint",
+        "validation",
+    ],
     tokenizer: ["o200k_base"],
     constraintAccounting: ["utf8-byte-upper-bound"],
     providerAttemptBreakdown: ["unavailable"],
@@ -29,7 +53,10 @@ const curationTimingEnums: Readonly<Record<string, readonly string[]>> = {
 function curationTimingAttribute(key: string, value: string): boolean {
     if (["requestHash", "fingerprint"].includes(key))
         return /^[0-9a-f]{64}$/.test(value);
-    return curationTimingEnums[key]?.includes(value) ?? false;
+    return (
+        Object.prototype.hasOwnProperty.call(curationTimingEnums, key) &&
+        curationTimingEnums[key].includes(value)
+    );
 }
 
 export function isSearchTimingEnabled(): boolean {

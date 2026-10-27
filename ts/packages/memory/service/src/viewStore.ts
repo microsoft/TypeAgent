@@ -550,7 +550,9 @@ export class TypedViewStore {
             throw new Error("Topic summary changed supplied concept evidence");
         concept.summary = output.summary;
         concept.summaryState = "ready";
-        concept.citations = structuredClone(output.citations);
+        if (concept.validation)
+            concept.summaryCitations = structuredClone(output.citations);
+        else concept.citations = structuredClone(output.citations);
         validateTopicSnapshot(snapshot);
         await this.commitBuildState(
             corpusId,

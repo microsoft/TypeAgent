@@ -3,13 +3,13 @@
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { indexedTopicOccurrence } from "../../packages/memory/service/dist/topicIncidence.js";
 import { runTopicReplay } from "./topic-curation-replay.mjs";
 import { writeSegmentedJson } from "../../packages/knowPro/dist/segmentedJson.js";
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 async function fixture(root, count = 8) {
     const input = {
@@ -52,7 +52,7 @@ async function fixture(root, count = 8) {
 }
 
 test("capture, indexed parity and recorded parser replay require no provider", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "topic-replay-test-"));
+    const root = await mkdtemp(path.join(testDirectory, "topic-replay-test-"));
     const originalFetch = globalThis.fetch;
     globalThis.fetch = () => {
         throw new Error("Offline replay attempted network access");
@@ -127,7 +127,7 @@ test("capture, indexed parity and recorded parser replay require no provider", a
 });
 
 test("replay rejects invalid budgets and mismatched response bindings", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "topic-replay-test-"));
+    const root = await mkdtemp(path.join(testDirectory, "topic-replay-test-"));
     try {
         const input = await fixture(root);
         await assert.rejects(
@@ -180,7 +180,9 @@ test("implementation identity excludes generated tool data artifacts", async () 
 });
 
 test("bounded replay resumes only matching validated durable progress", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "topic-replay-resume-"));
+    const root = await mkdtemp(
+        path.join(testDirectory, "topic-replay-resume-"),
+    );
     try {
         const input = await fixture(root, 55);
         const captured = path.join(root, "captured");
@@ -239,7 +241,7 @@ test("bounded replay resumes only matching validated durable progress", async ()
 
 test("index storage replay preserves data and reuses unchanged artifacts without inference", async () => {
     const root = await mkdtemp(
-        path.join(os.tmpdir(), "topic-index-replay-test-"),
+        path.join(testDirectory, "topic-index-replay-test-"),
     );
     const originalFetch = globalThis.fetch;
     globalThis.fetch = () => {
@@ -280,7 +282,7 @@ test("index storage replay preserves data and reuses unchanged artifacts without
 
 test("completed curation resumes through the real organization generator without recuration", async () => {
     const root = await mkdtemp(
-        path.join(os.tmpdir(), "topic-organize-replay-"),
+        path.join(testDirectory, "topic-organize-replay-"),
     );
     try {
         const input = await fixture(root);

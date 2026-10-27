@@ -11,17 +11,24 @@ import type {
     TopicConcept,
     TopicCuration,
     TopicNode,
+    TopicPendingAssignment,
     TopicSnapshot,
 } from "./topicTypes.js";
 import type { ViewCitation } from "./viewTypes.js";
 import { viewHash } from "./viewMerge.js";
 import { viewSourceKey } from "./viewContent.js";
+import { validateTopicMaintenance } from "./topicClusterMaintenance.js";
 import {
     TopicEvidenceIndex,
     TopicNominationIndex,
     topicSourceKey,
 } from "./topicLookup.js";
 import { runOrderedTopicBatches } from "./topicCurationScheduler.js";
+import {
+    indexTopicDecisionEvidence,
+    topicClusterSignature,
+    type TopicDecisionEvidenceContexts,
+} from "./topicDecision.js";
 import {
     evidenceArray,
     evidenceRecord,
@@ -34,27 +41,38 @@ import {
     parseEditorialAssessment,
 } from "./viewEditorial.js";
 
-type Complete = (
+export type TopicCurationCompletion = ((
     instructions: string,
     payload: unknown,
     schema?: StructuredOutputJsonSchema,
     context?: TopicCurationCall,
-) => Promise<unknown>;
+) => Promise<unknown>) & {
+    inspectRequest?: TopicCurationOptions["inspectRequest"];
+};
+type Complete = TopicCurationCompletion;
 export interface TopicCurationSettings {
     inputTokenTarget?: number;
     concurrency?: 1 | 2;
     priorContextFraction?: number;
 }
 export interface TopicCurationCall {
-    ordinal: number;
-    kind: "normal" | "contract-repair" | "omission-repair";
+    ordinal?: number;
+    kind:
+        | "normal"
+        | "contract-repair"
+        | "omission-repair"
+        | "metadata"
+        | "adjudication"
+        | "maintenance"
+        | "resolution"
+        | "organization";
     signal: AbortSignal;
 }
 export interface TopicCurationOptions extends TopicCurationSettings {
     inspectRequest?: (
         instructions: string,
         payload: unknown,
-        schema: StructuredOutputJsonSchema,
+        schema?: StructuredOutputJsonSchema,
     ) => ChatRequestInspection;
 }
 type Candidate = Pick<TopicNode, "id" | "label" | "scope" | "citations"> & {
@@ -279,6 +297,13 @@ function curationSchema(
     };
 }
 
+export function relatedTopicConcepts(
+    concepts: TopicConcept[],
+    nodes: Candidate[],
+) {
+    return new TopicNominationIndex(concepts).related(nodes);
+}
+
 function appendRelatedConcepts(
     nodes: Candidate[],
     concepts: TopicNominationIndex,
@@ -445,6 +470,10 @@ export async function curateTopics(
 ): Promise<TopicCuration> {
     validateTopicCurationSettings(options);
     options = { ...options };
+    if (reusable?.pending?.length)
+        throw new Error(
+            "Pending cluster assignments cannot be resumed with generative curation",
+        );
     const result: TopicCuration = structuredClone(
         reusable ?? { concepts: [], deferred: [] },
     );
@@ -453,10 +482,7 @@ export async function curateTopics(
     const rules = instructions(lazy, options.inputTokenTarget !== undefined);
     if (reusable)
         validateTopicCurationProgress(
-            {
-                ...snapshot,
-                curationProgress: reusable,
-            },
+            { ...snapshot, curationProgress: reusable },
             evidenceIndex,
         );
     const processed = new Set([
@@ -756,6 +782,7 @@ export function validateTopicCurationProgress(
     const ids = [
         ...progress.concepts.flatMap((concept) => concept.memberIds),
         ...progress.deferred.map((entry) => entry.nodeId),
+        ...(progress.pending?.map((entry) => entry.nodeId) ?? []),
     ];
     const selected = new Set(ids);
     const nodes = snapshot.nodes.filter((node) => selected.has(node.id));
@@ -772,10 +799,16 @@ export function validateTopicCuration(
     evidenceIndex?: TopicEvidenceIndex,
 ): void {
     if (!snapshot.curation) return;
+    evidenceIndex ??= new TopicEvidenceIndex(snapshot);
+    evidenceIndex.assertSnapshot(snapshot);
     const members = new Set<string>();
     const concepts = new Set<string>();
     const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
-    evidenceIndex ??= new TopicEvidenceIndex(snapshot);
+    const contexts = snapshot.curation.concepts.some(
+        (concept) => concept.validation,
+    )
+        ? indexTopicDecisionEvidence(snapshot)
+        : undefined;
     const admit = (id: string) => {
         if (!nodes.has(id) || members.has(id))
             throw new Error("Invalid curated topic membership");
@@ -810,12 +843,132 @@ export function validateTopicCuration(
         concept.memberIds.forEach(admit);
         if (!evidenceIndex.ownsEvidence(concept.memberIds, concept.citations))
             throw new Error("Curated topic lost exact original evidence");
+        validateConceptSupport(concept, nodes, snapshot, contexts);
+        validateTopicMaintenance(snapshot, concept);
     }
     for (const decision of snapshot.curation.deferred) {
         admit(decision.nodeId);
         if (!decision.reason.trim() || decision.reason.length > 2000)
             throw new Error("Invalid topic deferral");
     }
+    for (const pending of snapshot.curation.pending ?? []) {
+        admit(pending.nodeId);
+        validatePendingAssignment(pending, nodes, concepts);
+    }
     if (members.size !== nodes.size)
         throw new Error("Incomplete topic curation decisions");
+}
+
+function validatePendingAssignment(
+    pending: TopicPendingAssignment,
+    nodes: ReadonlyMap<string, TopicNode>,
+    concepts: ReadonlySet<string>,
+) {
+    if (
+        !pending.reason.trim() ||
+        pending.reason.length > 2000 ||
+        new Set(pending.candidateTargetIds).size !==
+            pending.candidateTargetIds.length ||
+        pending.candidateTargetIds.some(
+            (id) => !nodes.has(id) && !concepts.has(id),
+        ) ||
+        (pending.score !== undefined &&
+            (!Number.isFinite(pending.score) ||
+                pending.score < 0 ||
+                pending.score > 1))
+    )
+        throw new Error("Invalid pending topic assignment");
+}
+
+function validateConceptSupport(
+    concept: TopicConcept,
+    nodes: ReadonlyMap<string, TopicNode>,
+    snapshot: TopicSnapshot,
+    contexts?: TopicDecisionEvidenceContexts,
+): void {
+    const supplied = new Set(concept.citations.map(viewHash));
+    if (
+        concept.summaryCitations &&
+        (!concept.summaryCitations.length ||
+            concept.summaryCitations.some(
+                (citation) => !supplied.has(viewHash(citation)),
+            ))
+    )
+        throw new Error("Topic summary cites evidence outside member support");
+    if (!concept.validation) return;
+    const validation = concept.validation;
+    if (
+        validation.recipe !== "cluster-local-v1" ||
+        !/^[0-9a-f]{64}$/.test(validation.signature) ||
+        validation.inputFingerprint !== snapshot.inputFingerprint ||
+        !validation.modelIdentity.trim() ||
+        (validation.score !== undefined &&
+            (!Number.isFinite(validation.score) ||
+                validation.score < 0 ||
+                validation.score > 1))
+    )
+        throw new Error("Invalid topic cluster validation receipt");
+    if (
+        !contexts ||
+        validation.signature !==
+            topicClusterSignature(snapshot, concept, validation.modelIdentity, {
+                nodes,
+                contexts,
+            })
+    )
+        throw new Error("Stale topic cluster validation receipt");
+    const scores = validation.memberScores;
+    const checked = validatedMembers(concept);
+    if (
+        scores &&
+        (scores.length !== checked.length ||
+            new Set(scores.map((entry) => entry.nodeId)).size !==
+                checked.length ||
+            scores.some(
+                (entry) =>
+                    !checked.includes(entry.nodeId) ||
+                    !Number.isFinite(entry.score) ||
+                    entry.score < 0 ||
+                    entry.score > 1,
+            ))
+    )
+        throw new Error("Invalid cluster member validation scores");
+    const originals = new Set(
+        concept.memberIds.flatMap((id) =>
+            nodes.get(id)!.citations.map(viewHash),
+        ),
+    );
+    if (
+        supplied.size !== originals.size ||
+        [...originals].some((hash) => !supplied.has(hash))
+    )
+        throw new Error(
+            "Validated topic lost complete original member support",
+        );
+}
+
+function validatedMembers(concept: TopicConcept): string[] {
+    const validation = concept.validation!;
+    if (validation.coverage === undefined) {
+        if (
+            validation.method !== undefined ||
+            validation.validatedMemberIds !== undefined
+        )
+            throw new Error("Legacy cluster receipt has undeclared coverage");
+        return concept.memberIds;
+    }
+    const ids = validation.validatedMemberIds;
+    if (
+        validation.coverage !== "member-admission-v2" ||
+        (validation.method !== "decision" &&
+            validation.method !== "generative") ||
+        !ids?.length ||
+        new Set(ids).size !== ids.length ||
+        ids.some((id) => !concept.memberIds.includes(id)) ||
+        (validation.method === "generative" &&
+            (validation.memberScores !== undefined ||
+                validation.score !== undefined))
+    )
+        throw new Error("Invalid member-admission validation coverage");
+    return ids;
 }

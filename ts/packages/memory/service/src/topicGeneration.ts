@@ -5,12 +5,17 @@ import { randomUUID } from "node:crypto";
 import {
     openai,
     type ChatModel,
-    type StructuredOutputJsonSchema,
     type CompleteUsageStatsCallback,
+    type StructuredOutputJsonSchema,
 } from "@typeagent/aiclient";
 import { recordSearchTiming, timeSearchStage } from "@typeagent/knowpro";
 import type { ViewBuildSnapshot, ViewSynthesisAdapter } from "./viewTypes.js";
-import type { TopicConcept, TopicNode, TopicSnapshot } from "./topicTypes.js";
+import type {
+    TopicConcept,
+    TopicCuration,
+    TopicNode,
+    TopicSnapshot,
+} from "./topicTypes.js";
 import { initialTopicNodes, validateTopicSnapshot } from "./topicSnapshot.js";
 import {
     curateTopics,
@@ -18,9 +23,17 @@ import {
     validateTopicCurationSettings,
     type TopicCurationSettings,
     type TopicCurationCall,
+    type TopicCurationCompletion,
 } from "./topicCuration.js";
 import { viewHash } from "./viewMerge.js";
-import { TopicEvidenceIndex } from "./topicLookup.js";
+import { TopicEvidenceIndex } from "./topicIndexes.js";
+import { curateTopicsWithDecision } from "./topicDecisionCuration.js";
+import { maintainTopicClusters } from "./topicClusterMaintenance.js";
+import {
+    topicDecisionRecipe,
+    type TopicDecisionOptions,
+    observeTopicDecisionWork,
+} from "./topicDecision.js";
 import { redactRunbookText } from "./runbookRedaction.js";
 import {
     editorialRules,
@@ -267,7 +280,18 @@ function generationError(error: unknown): string {
     ).slice(0, 500);
 }
 
-function createTopicCompletion(endpoint?: string, injectedModel?: ChatModel) {
+export function summaryEvidence(
+    snapshot: TopicSnapshot,
+    node: TopicNode,
+    index?: TopicEvidenceIndex,
+): TopicNode["citations"] {
+    return (index ?? new TopicEvidenceIndex(snapshot)).evidenceFor(node);
+}
+
+export function createTopicCompletion(
+    endpoint?: string,
+    injectedModel?: ChatModel,
+) {
     let model = injectedModel;
     function configuredModel() {
         return (model ??= openai.createChatModel(
@@ -284,24 +308,28 @@ function createTopicCompletion(endpoint?: string, injectedModel?: ChatModel) {
         ];
     }
     return Object.assign(complete, {
-        inspectRequest(
-            instructions: string,
-            payload: unknown,
-            schema: StructuredOutputJsonSchema,
-        ) {
-            const model = configuredModel();
-            if (!model.inspectRequest)
-                throw new Error(
-                    "Configured topic model does not support request inspection",
-                );
-            return model.inspectRequest(
-                messages(instructions, payload),
-                model.completionSettings.response_format?.type === "json_object"
-                    ? schema
-                    : undefined,
-            );
-        },
+        inspectRequest:
+            injectedModel && !injectedModel.inspectRequest
+                ? undefined
+                : inspectRequest,
     });
+    function inspectRequest(
+        instructions: string,
+        payload: unknown,
+        schema?: StructuredOutputJsonSchema,
+    ) {
+        const model = configuredModel();
+        if (!model.inspectRequest)
+            throw new Error(
+                "Configured topic model does not support request inspection",
+            );
+        return model.inspectRequest(
+            messages(instructions, payload),
+            model.completionSettings.response_format?.type === "json_object"
+                ? schema
+                : undefined,
+        );
+    }
     async function complete(
         instructions: string,
         payload: unknown,
@@ -318,9 +346,7 @@ function createTopicCompletion(endpoint?: string, injectedModel?: ChatModel) {
             model.completionSettings.response_format?.type === "json_object"
                 ? schema
                 : undefined;
-        const request = call
-            ? model.inspectRequest?.(prompt, outputSchema)
-            : undefined;
+        const request = model.inspectRequest?.(prompt, outputSchema);
         let usage: Parameters<CompleteUsageStatsCallback>[0] | undefined;
         const result = await timeSearchStage(
             stage,
@@ -347,7 +373,7 @@ function createTopicCompletion(endpoint?: string, injectedModel?: ChatModel) {
                 tokenizer: request?.tokenizer,
                 outputReservation: request?.constraints.outputTokens,
                 constraintAccounting: request?.constraints.tokenAccounting,
-                providerAttemptBreakdown: call ? "unavailable" : undefined,
+                providerAttemptBreakdown: "unavailable",
             },
         );
         signal.throwIfAborted();
@@ -359,8 +385,46 @@ function createTopicCompletion(endpoint?: string, injectedModel?: ChatModel) {
             promptTokens: usage?.prompt_tokens,
             completionTokens: usage?.completion_tokens,
         });
-        return JSON.parse(result.data);
+        return timeSearchStage(
+            `${stage}.parse`,
+            () => JSON.parse(result.data),
+            {
+                ordinal,
+                callKind: call?.kind,
+            },
+        );
     }
+}
+
+export function bindTopicCompletion(
+    complete: ReturnType<typeof createTopicCompletion>,
+    signal: AbortSignal,
+    kind: TopicCurationCall["kind"] = "normal",
+): TopicCurationCompletion {
+    return Object.assign(
+        (
+            instructions: string,
+            payload: unknown,
+            schema?: StructuredOutputJsonSchema,
+            call?: TopicCurationCall,
+        ) => {
+            const callKind = call?.kind ?? kind;
+            return complete(
+                instructions,
+                payload,
+                call?.signal ?? signal,
+                callKind === "normal" ||
+                    callKind === "contract-repair" ||
+                    callKind === "omission-repair"
+                    ? "topic.curation.model"
+                    : `topic.${callKind}.model`,
+                call?.ordinal,
+                schema,
+                call ?? { kind, signal },
+            );
+        },
+        { inspectRequest: complete.inspectRequest },
+    );
 }
 
 export function createConfiguredTopicConceptSummarizer(
@@ -417,54 +481,116 @@ export function createConfiguredTopicConceptSummarizer(
     };
 }
 
+async function generateCuratedTopicSnapshot(
+    snapshot: TopicSnapshot,
+    input: ViewBuildSnapshot,
+    signal: AbortSignal,
+    complete: ReturnType<typeof createTopicCompletion>,
+    checkpoint?: TopicGenerationCheckpoint,
+    decision?: TopicDecisionOptions,
+    settings?: TopicCurationSettings,
+): Promise<void> {
+    snapshot.recipe += `:${decision ? topicDecisionRecipe : topicCurationPolicy(true, settings)}`;
+    const evidenceIndex = new TopicEvidenceIndex(snapshot);
+    const evidenceFor = (node: TopicNode) =>
+        summaryEvidence(snapshot, node, evidenceIndex);
+    const completion = bindTopicCompletion(
+        complete,
+        signal,
+        decision ? "adjudication" : "normal",
+    );
+    const save = checkpoint
+        ? async (curation: TopicCuration) => {
+              snapshot.curationProgress = curation;
+              await checkpoint(structuredClone(snapshot));
+          }
+        : undefined;
+    let curation = decision
+        ? await curateTopicsWithDecision(
+              snapshot,
+              evidenceFor,
+              completion,
+              signal,
+              decision,
+              save,
+              input.topicInput?.reusableCuration,
+          )
+        : await curateTopics(
+              snapshot,
+              evidenceFor,
+              completion,
+              signal,
+              true,
+              save,
+              input.topicInput?.reusableCuration,
+              {
+                  ...settings,
+                  ...(complete.inspectRequest
+                      ? { inspectRequest: complete.inspectRequest }
+                      : {}),
+              },
+          );
+    if (input.topicInput?.maintainClusters && decision?.clusterValidation)
+        curation = await maintainTopicClusters(
+            snapshot,
+            curation,
+            bindTopicCompletion(complete, signal, "maintenance"),
+            signal,
+            decision,
+            save,
+        );
+    snapshot.curation = curation;
+    delete snapshot.curationProgress;
+    if (snapshot.curation.pending?.length)
+        snapshot.limits.push(
+            `${snapshot.curation.pending.length} topic assignments require further cluster resolution. Build completion does not certify pending assignments; original source evidence remains available.`,
+        );
+    snapshot.limits.push(
+        "Raw occurrences remain complete and independently addressable; deferred topics are not deleted. Concept summaries are generated only on explicit detail requests and do not block readiness.",
+        "Cross-batch reconciliation retrieves corpus-wide lexical candidates; only evidence-grounded model decisions merge concepts. Synonyms outside candidate retrieval may remain separate.",
+    );
+    validateTopicSnapshot(snapshot);
+    if (checkpoint) await checkpoint(structuredClone(snapshot));
+}
+
 export function createConfiguredTopicGenerator(
     endpoint?: string,
     injectedModel?: ChatModel,
     curated = false,
+    decision?: (input: ViewBuildSnapshot) => TopicDecisionOptions,
     settings?: TopicCurationSettings,
 ): TopicGenerator {
-    if (settings) validateTopicCurationSettings(settings);
-    settings = settings ? { ...settings } : undefined;
-    const complete = createTopicCompletion(endpoint, injectedModel);
+    if (decision && !curated)
+        throw new Error("Decision topic curation requires curated topics");
+    if (settings) {
+        validateTopicCurationSettings(settings);
+        if (decision || !curated)
+            throw new Error(
+                "Generative topic settings require generative curated topics",
+            );
+        settings = { ...settings };
+    }
+    const defaultComplete = createTopicCompletion(endpoint, injectedModel);
     return async (input, signal, checkpoint) => {
+        const complete = decision
+            ? createTopicCompletion(endpoint, injectedModel)
+            : defaultComplete;
+        const decisionOptions = decision?.(input);
         const snapshot = timeSearchStage("topic.snapshot.construct", () =>
             createTopicSnapshot(input, input.model),
         );
-        const evidenceIndex = new TopicEvidenceIndex(snapshot);
         if (curated) {
-            snapshot.recipe += `:${topicCurationPolicy(true, settings)}`;
-            snapshot.curation = await curateTopics(
+            await generateCuratedTopicSnapshot(
                 snapshot,
-                (node) => evidenceIndex.evidence(node),
-                (instructions, payload, schema, call) =>
-                    complete(
-                        instructions,
-                        payload,
-                        call?.signal ?? signal,
-                        "topic.curation.model",
-                        call?.ordinal,
-                        schema,
-                        call,
-                    ),
+                input,
                 signal,
-                true,
-                checkpoint
-                    ? async (curation) => {
-                          snapshot.curationProgress = curation;
-                          await checkpoint(structuredClone(snapshot));
-                      }
-                    : undefined,
-                input.topicInput?.reusableCuration,
-                { ...settings, inspectRequest: complete.inspectRequest },
+                complete,
+                checkpoint,
+                decisionOptions,
+                settings,
             );
-            delete snapshot.curationProgress;
-            snapshot.limits.push(
-                "Raw occurrences remain complete and independently addressable; deferred topics are not deleted. Concept summaries are generated only on explicit detail requests and do not block readiness.",
-                "Cross-batch reconciliation retrieves corpus-wide lexical candidates; only evidence-grounded model decisions merge concepts. Synonyms outside candidate retrieval may remain separate.",
-            );
-            validateTopicSnapshot(snapshot);
-            if (checkpoint) await checkpoint(structuredClone(snapshot));
         } else {
+            const evidenceIndex = new TopicEvidenceIndex(snapshot);
             recordSearchTiming("topic.snapshot.counts", 0, {
                 nodes: snapshot.nodes.length,
                 occurrences: snapshot.occurrences.length,
@@ -496,7 +622,11 @@ export function createConfiguredTopicGenerator(
                     const node = snapshot.nodes[ordinal - 1];
                     if (node.summaryState === "ready") continue;
                     const baseLimitCount = node.limits.length;
-                    const evidence = evidenceIndex.evidence(node);
+                    const evidence = summaryEvidence(
+                        snapshot,
+                        node,
+                        evidenceIndex,
+                    ).slice(0, 8);
                     const contextKey = deduplicateIdenticalContexts
                         ? JSON.stringify([
                               node.label.trim().toLocaleLowerCase(),
@@ -678,14 +808,36 @@ export function createConfiguredTopicGenerator(
                 const batch = labels.slice(offset, offset + 200);
                 const suppliedIds = new Set(batch.map((node) => node.id));
                 const schema = organizationSchema([...suppliedIds]);
-                const raw = await complete(
-                    organizationInstructions,
-                    batch,
-                    signal,
-                    "topic.organization.model",
-                    undefined,
-                    schema,
-                );
+                const organize = (instructions: string, repair = false) => {
+                    const work = () =>
+                        complete(
+                            instructions,
+                            batch,
+                            signal,
+                            repair
+                                ? "topic.organization.repair.model"
+                                : "topic.organization.model",
+                            undefined,
+                            schema,
+                            { kind: "organization", signal },
+                        );
+                    return decisionOptions
+                        ? observeTopicDecisionWork(
+                              decisionOptions,
+                              "organization",
+                              repair
+                                  ? "bounded-contract-repair"
+                                  : "unchanged-organization",
+                              JSON.stringify({
+                                  instructions,
+                                  payload: batch,
+                                  schema,
+                              }),
+                              work,
+                          )
+                        : work();
+                };
+                const raw = await organize(organizationInstructions);
                 let organization: Pick<TopicSnapshot, "parents" | "related">;
                 try {
                     organization = checkedOrganization(
@@ -701,13 +853,9 @@ export function createConfiguredTopicGenerator(
                         `Topic organization requires contract repair: ${error.message}`,
                     );
                     organization = checkedOrganization(
-                        await complete(
+                        await organize(
                             `${organizationInstructions}\nRepair the rejected organization: ${error.message}. Use only the exact supplied IDs. Do not create self-links or parent cycles. Return the complete replacement edge set; prior invalid edges are discarded.`,
-                            batch,
-                            signal,
-                            "topic.organization.repair.model",
-                            undefined,
-                            schema,
+                            true,
                         ),
                         snapshot,
                         suppliedIds,

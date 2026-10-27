@@ -38,6 +38,32 @@ test("topic experiments are opt-in and reject invalid host settings", () => {
         expect(() => getConfiguredMemoryViewOptions(environment)).toThrow();
 });
 
+test("generative and native execution families retain distinct capacities and reject conflicting activation", () => {
+    expect(
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_CONCURRENCY: "24",
+            TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "2",
+        }),
+    ).toMatchObject({
+        decisionTopicExecution: { concurrency: 24 },
+        topicCuration: { concurrency: 2 },
+    });
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_TOPICS: "true",
+            TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "2",
+        }),
+    ).toThrow("cannot configure Decision");
+    for (const options of [{ decisionTopics: true }, { curatedTopics: false }])
+        expect(
+            () =>
+                new FileMemoryService("unused", {
+                    ...options,
+                    topicCuration: { concurrency: 2 },
+                }),
+        ).toThrow("Generative topic settings require");
+});
+
 class DeadlineCorpusIndex extends FakeSemanticCorpusIndex {
     public async readFragments(request: IndexedFragmentRequest) {
         return selectIndexedFragments(
@@ -52,6 +78,69 @@ class DeadlineCorpusIndex extends FakeSemanticCorpusIndex {
         );
     }
 }
+
+test("Decision execution environment validates bounded concurrency, lookahead and context sizing", () => {
+    expect(
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_FULL_TRANSACTIONS: "true",
+            TYPEAGENT_MEMORY_DECISION_CONCURRENCY: "24",
+        }).decisionTopicExecution,
+    ).toMatchObject({ fullTransactions: true, concurrency: 24 });
+    expect(
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_CONCURRENCY: "4",
+            TYPEAGENT_MEMORY_DECISION_BATCH_SIZE: "context",
+            TYPEAGENT_MEMORY_DECISION_LOOKAHEAD: "2",
+            TYPEAGENT_MEMORY_DECISION_MAX_QUESTIONS: "128",
+        }).decisionTopicExecution,
+    ).toEqual({
+        concurrency: 4,
+        batchSize: "context",
+        lookahead: 2,
+        maxQuestions: 128,
+    });
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_CONCURRENCY: "0",
+        }),
+    ).toThrow("concurrency");
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_BATCH_SIZE: "invalid",
+        }),
+    ).toThrow("batch size");
+});
+
+test("cluster validation environment preserves legacy defaults and rejects speculation", () => {
+    expect(
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_CLUSTER_VALIDATION: "true",
+            TYPEAGENT_MEMORY_DECISION_CONCURRENCY: "24",
+            TYPEAGENT_MEMORY_DECISION_BATCH_SIZE: "24",
+        }).decisionTopicExecution,
+    ).toMatchObject({
+        clusterValidation: true,
+        concurrency: 24,
+        batchSize: 24,
+        lookahead: 1,
+    });
+    expect(
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_CLUSTER_VALIDATION: "false",
+        }).decisionTopicExecution,
+    ).not.toHaveProperty("clusterValidation");
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_CLUSTER_VALIDATION: "invalid",
+        }),
+    ).toThrow("TYPEAGENT_MEMORY_DECISION_CLUSTER_VALIDATION");
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_CLUSTER_VALIDATION: "true",
+            TYPEAGENT_MEMORY_DECISION_FULL_TRANSACTIONS: "true",
+        }),
+    ).toThrow("lookahead 1");
+});
 
 test.each([
     { family: "wiki", elapsedMs: undefined },
@@ -238,6 +327,25 @@ test("shared host options ignore rehearsal variables and preserve explicit YAML/
             TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS: "invalid",
         }),
     ).toThrow("TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS must be true or false");
+    expect(
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_TOPICS: "true",
+        }),
+    ).toEqual({
+        viewDrafts: true,
+        informationalViews: true,
+        decisionTopics: true,
+    });
+    expect(
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_TOPICS: "false",
+        }).decisionTopics,
+    ).toBe(false);
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_DECISION_TOPICS: "invalid",
+        }),
+    ).toThrow("TYPEAGENT_MEMORY_DECISION_TOPICS must be true or false");
 });
 
 test.each([{ viewDrafts: false }, { informationalViews: false }])(

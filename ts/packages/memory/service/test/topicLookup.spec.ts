@@ -7,6 +7,7 @@ import {
 } from "../src/topicLookup.js";
 import { indexedTopicOccurrence } from "../src/topicIncidence.js";
 import { initialTopicNodes } from "../src/topicSnapshot.js";
+import { validateTopicCurationProgress } from "../src/topicCuration.js";
 import type {
     TopicConcept,
     TopicNode,
@@ -82,6 +83,66 @@ function originalEvidence(snapshot: TopicSnapshot, node: TopicNode) {
         ).values(),
     ].slice(0, 8);
 }
+
+test("shared index retains ordered strict Decision members and positional keys", () => {
+    const value = fixture();
+    const index = new TopicEvidenceIndex(value);
+    expect(index.members([value.nodes[8].id, value.nodes[1].id])).toEqual([
+        value.nodes[1],
+        value.nodes[8],
+    ]);
+    for (const members of [
+        [],
+        ["missing"],
+        [value.nodes[0].id, value.nodes[0].id],
+    ])
+        expect(() => index.members(members)).toThrow("membership");
+    const all = concepts();
+    const nominations = new TopicNominationIndex(all);
+    expect(nominations.positions.get(all[9].id)).toBe(9);
+    nominations.update([all[9], all[0]]);
+    expect(nominations.positions.get(all[9].id)).toBe(0);
+    expect(nominations.positions.has(all[8].id)).toBe(false);
+    expect(nominations.query([{ label: "AI" }])).toEqual(
+        nominations.related([{ label: "AI" }]),
+    );
+});
+
+test("validation refuses reuse after evidence, incidence or snapshot identity changes", () => {
+    const original = fixture();
+    const index = new TopicEvidenceIndex(original);
+    for (const change of [
+        "evidence",
+        "incidence",
+        "fingerprint",
+        "property-order",
+    ] as const) {
+        const value = structuredClone(original);
+        value.curationProgress = {
+            concepts: [],
+            deferred: [
+                { nodeId: value.nodes[0].id, reason: "A diagnostic deferral" },
+            ],
+        };
+        if (change === "evidence")
+            value.occurrences[0].citations[0].excerpt = "Changed evidence";
+        else if (change === "incidence")
+            value.nodes[0].occurrenceIds.push(value.occurrences[1].id);
+        else if (change === "fingerprint")
+            value.inputFingerprint = "b".repeat(64);
+        else {
+            const { excerpt, ...rest } = value.occurrences[0].citations[0];
+            value.occurrences[0].citations[0] = { excerpt, ...rest };
+        }
+        expect(() => validateTopicCurationProgress(value, index)).toThrow(
+            "snapshot version",
+        );
+    }
+    original.nodes[0].occurrenceIds.push(original.occurrences[1].id);
+    expect(() => index.memberSources([original.nodes[0].id])).toThrow(
+        "membership changed",
+    );
+});
 
 test("indexed evidence preserves scan ordering, qualification priority and interleaved multi-source context", () => {
     const value = fixture();

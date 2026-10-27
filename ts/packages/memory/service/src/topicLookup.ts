@@ -5,15 +5,17 @@ import type { TopicConcept, TopicNode, TopicSnapshot } from "./topicTypes.js";
 import type { ViewCitation } from "./viewTypes.js";
 import { viewHash } from "./viewMerge.js";
 
-const evidenceLimit =
-    "Summary uses bounded original-source context, including nominated qualifications; full incidence remains maintained.";
+export { TopicConceptIndex as TopicNominationIndex };
+
 export const topicSourceKey = (value: {
     sourceId: string;
     revisionId: string;
 }) => JSON.stringify([value.sourceId, value.revisionId]);
 const terms = (text: string) =>
     new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
-const labelKey = (label: string) => label.trim().toLowerCase();
+const labelKey = (text: string) => text.trim().toLowerCase();
+const contextLimit =
+    "Summary uses bounded original-source context, including nominated qualifications; full incidence remains maintained.";
 
 function priority(text: string): number {
     if (/Governing tail exception:/i.test(text)) return 3;
@@ -27,54 +29,100 @@ function priority(text: string): number {
 }
 
 export class TopicEvidenceIndex {
-    private readonly nodes;
-    private readonly occurrences;
+    private readonly nodes = new Map<
+        string,
+        { node: TopicNode; ordinal: number; membership: string }
+    >();
+    private readonly occurrences = new Map<string, string>();
     private readonly sources = new Map<
         string,
-        { ordinal: number; citation: ViewCitation }[]
+        Array<{ ordinal: number; citation: ViewCitation }>
+    >();
+    private readonly contexts = new Map<
+        string,
+        { citations: ViewCitation[]; ranked: ViewCitation[] }
     >();
     private readonly hashes = new Map<string, Set<string>>();
     private readonly exactEvidence = new Map<string, Set<string>>();
-    private readonly contexts = new Map<
-        string,
-        { context: ViewCitation[]; ranked: ViewCitation[] }
-    >();
-    private readonly selections = new Map<string, ViewCitation[]>();
+    private readonly sourceVersion: string;
 
-    public constructor(snapshot: TopicSnapshot) {
-        this.nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
-        this.occurrences = new Map(
-            snapshot.occurrences.map((entry) => [entry.id, entry]),
+    constructor(snapshot: TopicSnapshot) {
+        this.sourceVersion = viewHash(
+            JSON.stringify([snapshot.inputFingerprint, snapshot.occurrences]),
         );
-        let ordinal = 0;
-        for (const occurrence of snapshot.occurrences) {
+        snapshot.nodes.forEach((node, ordinal) =>
+            this.nodes.set(node.id, {
+                node,
+                ordinal,
+                membership: JSON.stringify(node.occurrenceIds),
+            }),
+        );
+        snapshot.occurrences.forEach((occurrence, ordinal) => {
             const key = topicSourceKey(occurrence);
-            const citations = this.sources.get(key) ?? [];
+            this.occurrences.set(occurrence.id, key);
+            const entries = this.sources.get(key) ?? [];
             const hashes = this.hashes.get(key) ?? new Set<string>();
             for (const citation of occurrence.citations) {
-                citations.push({ ordinal: ordinal++, citation });
+                entries.push({ ordinal, citation });
                 hashes.add(viewHash(citation));
             }
-            this.sources.set(key, citations);
+            this.sources.set(key, entries);
             this.hashes.set(key, hashes);
-        }
+        });
     }
 
-    public memberSources(memberIds: readonly string[]): Set<string> {
+    assertSnapshot(snapshot: TopicSnapshot): void {
+        if (
+            this.sourceVersion !==
+                viewHash(
+                    JSON.stringify([
+                        snapshot.inputFingerprint,
+                        snapshot.occurrences,
+                    ]),
+                ) ||
+            snapshot.nodes.some(
+                (node) =>
+                    this.nodes.get(node.id)?.membership !==
+                    JSON.stringify(node.occurrenceIds),
+            )
+        )
+            throw new Error(
+                "Topic evidence index belongs to a different snapshot version",
+            );
+    }
+
+    members(memberIds: readonly string[]): TopicNode[] {
+        const entries = [...new Set(memberIds)].map((id) => {
+            const entry = this.nodes.get(id);
+            if (!entry)
+                throw new Error("Decision target lost original membership");
+            return entry;
+        });
+        if (!entries.length || entries.length !== memberIds.length)
+            throw new Error("Decision target lost original membership");
+        return entries
+            .sort((a, b) => a.ordinal - b.ordinal)
+            .map(({ node }) => node);
+    }
+
+    memberSources(memberIds: readonly string[]): Set<string> {
         const sources = new Set<string>();
         for (const id of memberIds) {
-            const node = this.nodes.get(id);
-            if (!node) throw new Error("Unknown topic member");
-            for (const occurrenceId of node.occurrenceIds) {
-                const occurrence = this.occurrences.get(occurrenceId);
-                if (!occurrence) throw new Error("Unknown topic occurrence");
-                sources.add(topicSourceKey(occurrence));
+            const entry = this.nodes.get(id);
+            if (!entry) throw new Error("Unknown topic member");
+            if (entry.membership !== JSON.stringify(entry.node.occurrenceIds))
+                throw new Error("Topic evidence index membership changed");
+            for (const occurrence of entry.node.occurrenceIds) {
+                const key = this.occurrences.get(occurrence);
+                if (key === undefined)
+                    throw new Error("Unknown topic occurrence");
+                sources.add(key);
             }
         }
         return sources;
     }
 
-    public ownsSources(
+    ownsSources(
         memberIds: readonly string[],
         citations: readonly ViewCitation[],
     ): boolean {
@@ -84,7 +132,7 @@ export class TopicEvidenceIndex {
         );
     }
 
-    public ownsEvidence(
+    ownsEvidence(
         memberIds: readonly string[],
         citations: readonly ViewCitation[],
     ): boolean {
@@ -98,51 +146,7 @@ export class TopicEvidenceIndex {
         });
     }
 
-    public evidence(node: TopicNode): ViewCitation[] {
-        const selected = this.selections.get(node.id);
-        if (selected) return selected.slice();
-        const keys = [...this.memberSources([node.id])].sort();
-        const key = JSON.stringify(keys);
-        let group = this.contexts.get(key);
-        if (!group) {
-            const context = [
-                ...new Map(
-                    keys
-                        .flatMap((key) => this.sources.get(key) ?? [])
-                        .sort((a, b) => a.ordinal - b.ordinal)
-                        .map(({ citation }) => [
-                            JSON.stringify(citation),
-                            citation,
-                        ]),
-                ).values(),
-            ];
-            group = {
-                context,
-                ranked: [...context].sort(
-                    (a, b) => priority(b.excerpt) - priority(a.excerpt),
-                ),
-            };
-            this.contexts.set(key, group);
-        }
-        const evidence = [
-            ...new Map(
-                [
-                    ...node.citations.slice(0, 2),
-                    ...group.ranked,
-                    ...group.context.slice(-2),
-                ].map((citation) => [JSON.stringify(citation), citation]),
-            ).values(),
-        ].slice(0, 8);
-        if (
-            group.context.length > evidence.length &&
-            !node.limits.includes(evidenceLimit)
-        )
-            node.limits.push(evidenceLimit);
-        this.selections.set(node.id, evidence);
-        return evidence.slice();
-    }
-
-    public ownsExactEvidence(
+    ownsExactEvidence(
         memberIds: readonly string[],
         citations: readonly ViewCitation[],
     ): boolean {
@@ -163,77 +167,165 @@ export class TopicEvidenceIndex {
             return evidence.has(JSON.stringify(citation));
         });
     }
-}
 
-export class TopicNominationIndex {
-    private readonly concepts = new Map<string, TopicConcept>();
-    private readonly labels = new Map<string, Set<string>>();
-    private readonly postings = new Map<string, Set<string>>();
-    private readonly conceptTerms = new Map<string, Set<string>>();
-
-    public constructor(concepts: readonly TopicConcept[] = []) {
-        concepts.forEach((concept) => this.add(concept));
+    evidence(node: TopicNode): ViewCitation[] {
+        return this.evidenceFor(node);
     }
 
-    public replace(
+    evidenceFor(node: TopicNode): ViewCitation[] {
+        const keys = [
+            ...new Set(
+                node.occurrenceIds.flatMap((id) => {
+                    const key = this.occurrences.get(id);
+                    return key === undefined ? [] : [key];
+                }),
+            ),
+        ].sort();
+        const key = JSON.stringify(keys);
+        let context = this.contexts.get(key);
+        if (!context) {
+            const citations = [
+                ...new Map(
+                    keys
+                        .flatMap((key) => this.sources.get(key) ?? [])
+                        .sort((a, b) => a.ordinal - b.ordinal)
+                        .map(({ citation }) => [
+                            JSON.stringify(citation),
+                            citation,
+                        ]),
+                ).values(),
+            ];
+            context = {
+                citations,
+                ranked: [...citations].sort(
+                    (a, b) => priority(b.excerpt) - priority(a.excerpt),
+                ),
+            };
+            this.contexts.set(key, context);
+        }
+        const result = [
+            ...new Map(
+                [
+                    ...node.citations.slice(0, 2),
+                    ...context.ranked,
+                    ...context.citations.slice(-2),
+                ].map((citation) => [JSON.stringify(citation), citation]),
+            ).values(),
+        ].slice(0, 8);
+        if (
+            context.citations.length > result.length &&
+            !node.limits.includes(contextLimit)
+        )
+            node.limits.push(contextLimit);
+        return result;
+    }
+}
+
+type LexicalEntry = {
+    concept: TopicConcept;
+    terms: Set<string>;
+    label: string;
+    text: string;
+};
+
+export class TopicConceptIndex {
+    private readonly entries = new Map<string, LexicalEntry>();
+    private readonly postings = new Map<string, Set<string>>();
+    private readonly labels = new Map<string, Set<string>>();
+    readonly positions = new Map<string, number>();
+
+    constructor(concepts: readonly TopicConcept[] = []) {
+        this.update(concepts);
+    }
+
+    update(concepts: readonly TopicConcept[]): void {
+        const retained = new Set(concepts.map((concept) => concept.id));
+        for (const [id, entry] of this.entries)
+            if (!retained.has(id)) this.remove(id, entry);
+        this.positions.clear();
+        concepts.forEach((concept, ordinal) => {
+            this.positions.set(concept.id, ordinal);
+            const previous = this.entries.get(concept.id);
+            const text = JSON.stringify([concept.label, concept.purpose]);
+            if (previous?.text === text) {
+                previous.concept = concept;
+                return;
+            }
+            if (previous) this.remove(concept.id, previous);
+            const entry = {
+                concept,
+                terms: terms(`${concept.label} ${concept.purpose}`),
+                label: labelKey(concept.label),
+                text,
+            };
+            this.entries.set(concept.id, entry);
+            for (const term of entry.terms)
+                this.add(this.postings, term, concept.id);
+            this.add(this.labels, entry.label, concept.id);
+        });
+    }
+
+    replace(
         removed: readonly TopicConcept[],
         added: readonly TopicConcept[],
     ): void {
-        removed.forEach((concept) => this.remove(concept.id));
-        added.forEach((concept) => this.add(concept));
+        const remove = new Set(
+            [...removed, ...added].map((concept) => concept.id),
+        );
+        this.update([
+            ...[...this.entries.values()]
+                .filter(({ concept }) => !remove.has(concept.id))
+                .map(({ concept }) => concept),
+            ...added,
+        ]);
     }
 
-    public related(nodes: readonly { label: string }[]): TopicConcept[] {
+    related(nodes: ReadonlyArray<{ label: string }>): TopicConcept[] {
+        return this.query(nodes);
+    }
+
+    query(nodes: ReadonlyArray<{ label: string }>): TopicConcept[] {
         const scores = new Map<string, number>();
+        const exact = new Set<string>();
         for (const term of terms(nodes.map((node) => node.label).join(" ")))
             for (const id of this.postings.get(term) ?? [])
                 scores.set(id, (scores.get(id) ?? 0) + 1);
-        const exact = new Set<string>();
         for (const node of nodes)
             for (const id of this.labels.get(labelKey(node.label)) ?? []) {
                 exact.add(id);
                 if (!scores.has(id)) scores.set(id, 0);
             }
+
         return [...scores]
             .sort(
-                ([a, scoreA], [b, scoreB]) =>
+                ([a, aScore], [b, bScore]) =>
                     Number(exact.has(b)) - Number(exact.has(a)) ||
-                    scoreB - scoreA ||
+                    bScore - aScore ||
                     a.localeCompare(b),
             )
             .slice(0, 24)
-            .map(([id]) => this.concepts.get(id)!);
+            .map(([id]) => this.entries.get(id)!.concept);
     }
 
-    private add(concept: TopicConcept): void {
-        this.remove(concept.id);
-        this.concepts.set(concept.id, concept);
-        const keys = terms(`${concept.label} ${concept.purpose}`);
-        this.conceptTerms.set(concept.id, keys);
-        this.insert(this.labels, labelKey(concept.label), concept.id);
-        keys.forEach((term) => this.insert(this.postings, term, concept.id));
+    private add(
+        index: Map<string, Set<string>>,
+        key: string,
+        id: string,
+    ): void {
+        const values = index.get(key) ?? new Set<string>();
+        values.add(id);
+        index.set(key, values);
     }
 
-    private remove(id: string): void {
-        const concept = this.concepts.get(id);
-        if (!concept) return;
-        this.erase(this.labels, labelKey(concept.label), id);
-        this.conceptTerms
-            .get(id)!
-            .forEach((term) => this.erase(this.postings, term, id));
-        this.conceptTerms.delete(id);
-        this.concepts.delete(id);
-    }
-
-    private insert(index: Map<string, Set<string>>, key: string, id: string) {
-        const entries = index.get(key) ?? new Set<string>();
-        entries.add(id);
-        index.set(key, entries);
-    }
-
-    private erase(index: Map<string, Set<string>>, key: string, id: string) {
-        const entries = index.get(key)!;
-        entries.delete(id);
-        if (!entries.size) index.delete(key);
+    private remove(id: string, entry: LexicalEntry): void {
+        for (const term of entry.terms) {
+            const values = this.postings.get(term)!;
+            values.delete(id);
+            if (!values.size) this.postings.delete(term);
+        }
+        const labels = this.labels.get(entry.label)!;
+        labels.delete(id);
+        if (!labels.size) this.labels.delete(entry.label);
+        this.entries.delete(id);
     }
 }

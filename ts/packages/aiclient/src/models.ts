@@ -78,6 +78,7 @@ export type FunctionCallingResult = {
 
 export type CompleteUsageStatsCallback = (usage: CompletionUsageStats) => void;
 
+/** Offline inspection of the non-streaming wire request. Contains prompt/schema; do not log it. */
 export interface ChatRequestInspection {
     serializedRequest: string;
     estimatedInputTokens: number;
@@ -90,6 +91,7 @@ export interface ChatRequestInspection {
  */
 export interface ChatModel extends TypeChatLanguageModel {
     completionSettings: CompletionSettings;
+    /** Available on supported providers; throws when configured request constraints fail. */
     inspectRequest?(
         prompt: string | PromptSection[],
         jsonSchema?: CompletionJsonSchema,

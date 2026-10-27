@@ -563,6 +563,41 @@ describe("native decision models", () => {
             if (!result.success) expect(result.httpStatus).toBe(status);
         },
     );
+    test.each([false, true])(
+        "Azure 429 respects Retry-After and bounds retries (exhaust=%s)",
+        async (exhaust) => {
+            const jest = import.meta.jest;
+            jest.useFakeTimers();
+            let calls = 0;
+            try {
+                globalThis.fetch = async () => {
+                    if (++calls === 1 || exhaust)
+                        return new Response("{}", {
+                            status: 429,
+                            headers: { "Retry-After": "1" },
+                        });
+                    return response();
+                };
+                const pending = model(
+                    config({ AZURE_OPENAI_MAX_RETRYATTEMPTS: "1" }),
+                ).decide(request);
+                await jest.advanceTimersByTimeAsync(999);
+                expect(calls).toBe(1);
+                await jest.advanceTimersByTimeAsync(4000);
+                const result = await pending;
+                expect(calls).toBe(2);
+                if (exhaust)
+                    expect(result).toMatchObject({
+                        success: false,
+                        code: "rate_limit",
+                        httpStatus: 429,
+                    });
+                else expect(result.success).toBe(true);
+            } finally {
+                jest.useRealTimers();
+            }
+        },
+    );
     test("malformed JSON response is classified", async () => {
         globalThis.fetch = async () => new Response("not-json");
         expect(await model().decide(request)).toMatchObject({
@@ -775,6 +810,33 @@ describe("native decision models", () => {
         });
         expect(calls).toBe(0);
     });
+    test.each(["azure", "copilot"] as const)(
+        "packing preflight enforces %s wire constraints without acquiring credentials",
+        (provider) => {
+            let calls = 0;
+            globalThis.fetch = async () => {
+                calls++;
+                return response();
+            };
+            const key =
+                provider === "azure"
+                    ? "azure:decision:decision_1"
+                    : `copilot:decision:${model(config(), "copilot").model}`;
+            const nativeModel = model(
+                config({
+                    TYPEAGENT_MODEL_REQUEST_CONSTRAINTS: JSON.stringify({
+                        [key]: { outputTokens: 1 },
+                    }),
+                }),
+                provider,
+            );
+            expect(() => nativeModel.checkRequest!(request)).toThrow(
+                "request constraints",
+            );
+            expect(calls).toBe(0);
+            expect(acquisitions).toBe(0);
+        },
+    );
     test("configured Azure character guard rejects without truncating native input", async () => {
         let calls = 0;
         globalThis.fetch = async () => {

@@ -87,7 +87,7 @@
     "test:local": "pnpm run test:local:packages && pnpm run test:local:scripts",
     "test:local:packages": "node tools/scripts/runLocalTestPackages.mjs",
     "test:local:scripts": "node --test tools/scripts/test/*.spec.mjs && pnpm run test:memory-quality",
-    "test:memory-quality": "node --test tools/memory-maintenance-qualification/quality-*.test.mjs tools/memory-maintenance-qualification/live-resume.test.mjs tools/memory-maintenance-qualification/longmemeval-*.test.mjs tools/memory-maintenance-qualification/ingestion-profile.test.mjs tools/memory-maintenance-qualification/topic-curation-replay.test.mjs",
+    "test:memory-quality": "node --test tools/memory-maintenance-qualification/quality-*.test.mjs tools/memory-maintenance-qualification/live-resume.test.mjs tools/memory-maintenance-qualification/longmemeval-*.test.mjs tools/memory-maintenance-qualification/topic-decision-*.test.mjs tools/memory-maintenance-qualification/topic-curation-*.test.mjs tools/memory-maintenance-qualification/ingestion-profile.test.mjs",
     "test:ui": "pnpm -r --no-bail --no-sort --stream --if-present run test:ui"
   },
   "devDependencies": {

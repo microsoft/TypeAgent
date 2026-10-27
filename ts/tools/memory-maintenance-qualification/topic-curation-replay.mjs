@@ -3,17 +3,8 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import {
-    mkdir,
-    mkdtemp,
-    readFile,
-    rename,
-    rm,
-    writeFile,
-} from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -26,12 +17,6 @@ import {
     isSearchTimingEnabled,
     runWithSearchTiming,
 } from "../../packages/knowPro/dist/searchTiming.js";
-import {
-    clearJsonSegmentCache,
-    isSegmentedJson,
-    readSegmentedJson,
-    writeSegmentedJson,
-} from "../../packages/knowPro/dist/segmentedJson.js";
 import { ChatCompletionsWireApiProvider } from "../../packages/aiclient/dist/wireApiProvider/chatCompletionsWireApiProvider.js";
 import {
     createConfiguredTopicGenerator,
@@ -47,15 +32,23 @@ import {
     TopicEvidenceIndex,
     TopicNominationIndex,
 } from "../../packages/memory/service/dist/topicLookup.js";
-import { ViewHistory } from "../../packages/memory/service/dist/viewHistory.js";
 import { validateTopicSnapshot } from "../../packages/memory/service/dist/topicSnapshot.js";
+import {
+    createReplayOutput,
+    hashBytes as hash,
+    loadCapturedTopicInput,
+    positiveInteger as integer,
+    compiledFileHashes,
+    readReplayProgress,
+    writeReplayProgress,
+} from "./replay-artifacts.mjs";
+import { replayIndexStorage, replayViewStorage } from "./replay-storage.mjs";
 
 const productRoot = fileURLToPath(new URL("../../", import.meta.url));
 const requireClient = createRequire(
     new URL("../../packages/aiclient/package.json", import.meta.url),
 );
 const { countTokens } = requireClient("gpt-tokenizer/encoding/o200k_base");
-const hash = (value) => createHash("sha256").update(value).digest("hex");
 const wire = new ChatCompletionsWireApiProvider();
 const diagnosticConstraints = {
     contextTokens: 1050000,
@@ -65,68 +58,9 @@ const diagnosticConstraints = {
 class CaptureComplete extends Error {}
 class CallLimit extends Error {}
 
-function integer(value, fallback, name) {
-    if (value === undefined) return fallback;
-    const number = Number(value);
-    assert.ok(Number.isSafeInteger(number) && number > 0, `Invalid ${name}`);
-    return number;
-}
-
 export async function loadTopicReplay(values) {
-    assert.ok(
-        Boolean(values.input) !== Boolean(values.history),
-        "Choose --input or --history",
-    );
-    let state, input;
-    if (values.input) input = JSON.parse(await readFile(values.input, "utf8"));
-    else {
-        const revision = values.commit ?? "refs/heads/typeagent-history";
-        assert.ok(
-            revision === "refs/heads/typeagent-history" ||
-                /^[a-f0-9]{8,40}$/i.test(revision),
-            "Use a commit hash or the history head",
-        );
-        state = JSON.parse(
-            execFileSync(
-                "git",
-                [
-                    "--no-pager",
-                    `--git-dir=${path.resolve(values.history)}`,
-                    "show",
-                    `${revision}:state.json`,
-                ],
-                { maxBuffer: 256 * 1024 * 1024 },
-            ),
-        );
-        const targets = Object.entries(state.builds ?? {})
-            .filter(([id]) => !values.job || id === values.job)
-            .flatMap(([, job]) =>
-                job.results.filter(
-                    (result) => result.snapshot.pipeline === "topics-v1",
-                ),
-            );
-        assert.equal(
-            targets.length,
-            1,
-            "Select exactly one captured topics target with --job",
-        );
-        input = structuredClone(targets[0].snapshot);
-    }
-    assert.equal(
-        input.pipeline,
-        "topics-v1",
-        "Expected a captured topics build input",
-    );
-    if (values.resume) {
-        assert.ok(
-            state?.topics?.curationProgress,
-            "--resume requires a durable partial state",
-        );
-        assert.equal(state.topics.inputFingerprint, input.fingerprint);
-        input.topicInput.reusableCuration = structuredClone(
-            state.topics.curationProgress,
-        );
-    } else delete input.topicInput.reusableCuration;
+    const { input, state, inputHash, retainedCurationHash } =
+        await loadCapturedTopicInput(values);
     const snapshot = createTopicSnapshot(input, input.model);
     if (values.nodes) {
         assert.ok(!values.resume, "--nodes and --resume cannot be combined");
@@ -135,7 +69,7 @@ export async function loadTopicReplay(values) {
             integer(values.nodes, undefined, "nodes"),
         );
     }
-    return { input, snapshot, state };
+    return { input, snapshot, state, inputHash, retainedCurationHash };
 }
 
 function offlineInspection(rules, payload, schema) {
@@ -364,104 +298,34 @@ function cpuReplay(snapshot, state, samples, warmups) {
     };
 }
 
-async function storageReplay(state, samples) {
-    assert.ok(state, "Storage mode requires a retained --history state");
+async function storageReplay(state, samples, output) {
     const clone = measure(samples, 0, () => structuredClone(state));
     const serialize = measure(samples, 0, () => JSON.stringify(state));
-    const commits = [];
-    for (let i = 0; i < samples; i++) {
-        const scratch = await mkdtemp(
-            path.join(os.tmpdir(), "typeagent-topic-replay-"),
-        );
-        try {
-            const history = new ViewHistory(
-                path.join(scratch, "views"),
-                () => ({ views: {} }),
-            );
-            const started = performance.now();
-            await history.commit(
-                null,
-                structuredClone(state),
-                {},
-                "offline-replay",
-                "Frozen topic persistence replay",
-            );
-            commits.push(performance.now() - started);
-        } finally {
-            await rm(scratch, { recursive: true, force: true });
-        }
-    }
+    const stored = await replayViewStorage(state, samples, output);
     return {
+        ...stored,
         clone,
         serialize,
-        disposableColdHistoryCommit: summary(commits),
-        stateBytes: Buffer.byteLength(JSON.stringify(state)),
+        disposableColdHistoryCommit: summary(stored.commits),
         limitation:
             "View-state persistence only; not DocMemory index persistence or live checkpoint eligibility.",
     };
 }
 
-async function indexStorageReplay(file, samples) {
+async function indexStorageReplay(file, samples, output) {
     assert.ok(file, "Index storage mode requires --index-file");
-    const source = path.resolve(file);
-    const descriptor = JSON.parse(await readFile(source, "utf8"));
-    assert.ok(
-        isSegmentedJson(descriptor),
-        "Expected a segmented index manifest",
+    const stored = await replayIndexStorage(
+        path.resolve(file),
+        samples,
+        output,
     );
-    clearJsonSegmentCache(path.dirname(path.dirname(source)));
-    const loadStarted = performance.now();
-    const value = await readSegmentedJson(source, descriptor);
-    const loadMs = performance.now() - loadStarted;
-    const writes = [];
-    async function timedWrite(file, checkpoint) {
-        const cpu = process.cpuUsage();
-        const started = performance.now();
-        await writeSegmentedJson(file, value, descriptor.metadata, checkpoint);
-        const used = process.cpuUsage(cpu);
-        return {
-            elapsedMs: performance.now() - started,
-            cpuMs: (used.user + used.system) / 1000,
-        };
-    }
-    for (let sample = 0; sample < samples; sample++) {
-        const scratch = await mkdtemp(
-            path.join(os.tmpdir(), "topic-index-io-"),
-        );
-        try {
-            const generation = path.join(scratch, "generation");
-            await mkdir(generation);
-            const target = path.join(generation, "corpus_data.json");
-            let newArtifacts = 0;
-            const checkpoint = async (point) => {
-                if (point === "segment-written") newArtifacts++;
-            };
-            const cold = await timedWrite(target, checkpoint);
-            cold.newArtifacts = newArtifacts;
-            newArtifacts = 0;
-            const unchanged = await timedWrite(target, checkpoint);
-            unchanged.newArtifacts = newArtifacts;
-            const saved = JSON.parse(await readFile(target, "utf8"));
-            assert.deepEqual(
-                await readSegmentedJson(target, saved),
-                value,
-                "Index persistence changed the retained payload",
-            );
-            assert.equal(unchanged.newArtifacts, 0);
-            writes.push({ cold, unchanged });
-        } finally {
-            clearJsonSegmentCache(scratch);
-            await rm(scratch, { recursive: true, force: true });
-        }
-    }
     return {
-        sourceManifestHash: hash(JSON.stringify(descriptor)),
-        metadata: descriptor.metadata,
-        loadMs,
-        writes,
-        coldWrite: summary(writes.map((sample) => sample.cold.elapsedMs)),
+        ...stored,
+        coldWrite: summary(
+            stored.writes.map((sample) => sample.cold.elapsedMs),
+        ),
         unchangedWrite: summary(
-            writes.map((sample) => sample.unchanged.elapsedMs),
+            stored.writes.map((sample) => sample.unchanged.elapsedMs),
         ),
         payloadParity: true,
         limitation:
@@ -617,17 +481,13 @@ async function callReplay(values, snapshot, settings, output, identity, input) {
             true,
             async (curation) => {
                 const file = path.join(output, "progress.json");
-                await writeFile(
-                    `${file}.tmp`,
-                    JSON.stringify({
-                        schemaVersion: 1,
-                        inputHash: identity.inputHash,
-                        selectedNodeIdsHash: identity.selectedNodeIdsHash,
-                        settings,
-                        curation,
-                    }),
+                await writeReplayProgress(
+                    file,
+                    identity,
+                    curation,
+                    {},
+                    controller.signal,
                 );
-                await rename(`${file}.tmp`, file);
             },
             snapshot.curationProgress,
             { ...settings, inspectRequest: inspect },
@@ -674,6 +534,7 @@ async function callReplay(values, snapshot, settings, output, identity, input) {
                 values.endpoint,
                 organizationModel,
                 true,
+                undefined,
                 settings,
             )(organizationInput, controller.signal);
             await writeFile(
@@ -745,38 +606,20 @@ async function implementationIdentity() {
         ),
         compiled: {},
     };
-    for (const file of [
-        "topicCuration",
-        "topicLookup",
-        "topicCurationScheduler",
-        "topicGeneration",
-    ])
-        identity.compiled[file] = hash(
-            await readFile(
-                new URL(
-                    `../../packages/memory/service/dist/${file}.js`,
-                    import.meta.url,
-                ),
-            ),
-        );
-    for (const file of ["openai", "requestConstraints"])
-        identity.compiled[`aiclient/${file}`] = hash(
-            await readFile(
-                new URL(
-                    `../../packages/aiclient/dist/${file}.js`,
-                    import.meta.url,
-                ),
-            ),
-        );
-    for (const file of ["segmentedJson", "searchTiming"])
-        identity.compiled[`knowPro/${file}`] = hash(
-            await readFile(
-                new URL(
-                    `../../packages/knowPro/dist/${file}.js`,
-                    import.meta.url,
-                ),
-            ),
-        );
+    identity.compiled = await compiledFileHashes(productRoot, [
+        ...[
+            "topicCuration",
+            "topicLookup",
+            "topicCurationScheduler",
+            "topicGeneration",
+        ].map((file) => `packages/memory/service/dist/${file}.js`),
+        ...["openai", "requestConstraints"].map(
+            (file) => `packages/aiclient/dist/${file}.js`,
+        ),
+        ...["segmentedJson", "searchTiming"].map(
+            (file) => `packages/knowPro/dist/${file}.js`,
+        ),
+    ]);
     const untracked = execFileSync(
         "git",
         ["ls-files", "--others", "--exclude-standard", "-z"],
@@ -819,6 +662,7 @@ export async function runTopicReplay(values) {
             (["live", "recorded"].includes(mode) && !values.nodes),
         "--organize requires complete input in live or recorded mode, not --nodes",
     );
+    /** @type {import("../../packages/memory/service/dist/index.js").TopicCurationSettings} */
     const settings = {
         ...(values["input-tokens"]
             ? {
@@ -839,46 +683,37 @@ export async function runTopicReplay(values) {
         values.output,
         "--output must name a new private artifact directory",
     );
-    const output = path.resolve(values.output);
-    if (values.history) {
-        const relative = path.relative(
-            path.dirname(path.dirname(path.resolve(values.history))),
-            output,
-        );
-        assert.ok(
-            relative === ".." ||
-                relative.startsWith(`..${path.sep}`) ||
-                path.isAbsolute(relative),
-            "Output must be outside the original view-store directory",
-        );
-    }
-    await mkdir(output);
-    const { input, snapshot, state } = await loadTopicReplay(values);
+    const output = await createReplayOutput(
+        values.output,
+        values.history
+            ? path.dirname(path.dirname(path.resolve(values.history)))
+            : values["index-file"]
+              ? path.dirname(path.dirname(path.resolve(values["index-file"])))
+              : undefined,
+    );
+    const { input, snapshot, state, inputHash, retainedCurationHash } =
+        await loadTopicReplay(values);
     const implementation = await implementationIdentity();
     const identity = {
         ...implementation,
-        inputHash: hash(JSON.stringify(input)),
+        inputHash,
+        retainedCurationHash,
         selectedNodeIdsHash: hash(
             JSON.stringify(snapshot.nodes.map((node) => node.id)),
         ),
+        settings,
+        endpoint: values.endpoint ?? null,
     };
     if (values.progress) {
         assert.ok(!values.resume, "--progress and --resume cannot be combined");
-        const progress = JSON.parse(await readFile(values.progress, "utf8"));
-        assert.deepEqual(
-            {
-                schemaVersion: progress.schemaVersion,
-                inputHash: progress.inputHash,
-                selectedNodeIdsHash: progress.selectedNodeIdsHash,
-                settings: progress.settings,
-            },
-            {
-                schemaVersion: 1,
-                inputHash: identity.inputHash,
-                selectedNodeIdsHash: identity.selectedNodeIdsHash,
-                settings,
-            },
-            "Replay progress does not match the frozen input, selected nodes or policy",
+        const progress = await readReplayProgress(
+            values.progress,
+            identity,
+            (curation) =>
+                validateTopicSnapshot({
+                    ...snapshot,
+                    curationProgress: curation,
+                }),
         );
         snapshot.curationProgress = progress.curation;
     }
@@ -898,13 +733,17 @@ export async function runTopicReplay(values) {
             mode === "cpu"
                 ? cpuReplay(snapshot, state, samples, warmups)
                 : mode === "storage"
-                  ? await storageReplay(state, samples)
+                  ? await storageReplay(state, samples, output)
                   : mode === "index-storage"
                     ? await runWithSearchTiming(
                           undefined,
                           "topic-index-storage",
                           () =>
-                              indexStorageReplay(values["index-file"], samples),
+                              indexStorageReplay(
+                                  values["index-file"],
+                                  samples,
+                                  output,
+                              ),
                       )
                     : await runWithSearchTiming(
                           undefined,
@@ -974,7 +813,10 @@ if (
     runTopicReplay(values).then(
         (result) => {
             process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-            if (result.mode === "live" && !result.observations.completed)
+            if (
+                ["live", "recorded"].includes(result.mode) &&
+                !result.observations.completed
+            )
                 process.exitCode = 2;
         },
         (error) => {

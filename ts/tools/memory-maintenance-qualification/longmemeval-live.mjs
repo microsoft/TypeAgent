@@ -2,11 +2,12 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, realpath } from "node:fs/promises";
+import { cp, mkdtemp, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { randomUUID } from "node:crypto";
+import { appendFileSync } from "node:fs";
 import {
     assertCheckpoint,
     checkpointExpectationHash,
@@ -33,14 +34,19 @@ import {
 const datasetSha256 =
     "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442";
 const datasetRevision = "98d7416c24c778c2fee6e6f3006e7a073259d48f";
-const workAllowanceMs = 35 * 60 * 1000;
+const workAllowanceMs = 65 * 60 * 1000;
 const cleanupReserveMs = 5 * 60 * 1000;
 const seed = "typeagent-longmemeval-full-2026-10-20";
 const productFactory =
     "packages\\agentServer\\server\\dist\\durableMemoryService.js";
 
-export async function createBenchmarkMemoryService(load, rootDirectory) {
+export async function createBenchmarkMemoryService(
+    load,
+    rootDirectory,
+    onReceipt,
+) {
     const { createDurableMemoryService } = await load(productFactory);
+    if (onReceipt) return createDurableMemoryService(rootDirectory, onReceipt);
     return createDurableMemoryService(rootDirectory);
 }
 
@@ -113,6 +119,11 @@ function validateBenchmarkSpec(spec) {
         "Knowledge readiness timeout must be between one and sixty minutes",
     );
     assert.equal(typeof spec.resume, "boolean");
+    if (spec.continuation) {
+        assert.equal(spec.resume, false, "Continuation requires a fresh run");
+        assert.ok(path.isAbsolute(spec.continuation.parentRunDirectory));
+        assert.match(spec.continuation.parentStateSha256, /^[a-f0-9]{64}$/);
+    }
     assert.ok(
         Number.isSafeInteger(spec.maximumCompletedQuestions) &&
             spec.maximumCompletedQuestions > 0 &&
@@ -133,8 +144,8 @@ export function benchmarkInvocationAllowance(value) {
     if (value === "unlimited") return null;
     const minutes = Number(value);
     assert.ok(
-        Number.isSafeInteger(minutes) && minutes >= 1 && minutes <= 30,
-        "Invocation work minutes must be an integer from 1 to 30, or unlimited",
+        Number.isSafeInteger(minutes) && minutes >= 1 && minutes <= 60,
+        "Invocation work minutes must be an integer from 1 to 60, or unlimited",
     );
     return minutes * 60000 + cleanupReserveMs;
 }
@@ -318,27 +329,149 @@ export function recordKnowledgeAllowance(state, timeoutMs = 600000) {
     state.knowledgeTimeoutMs = timeoutMs;
 }
 
-async function runWorker(spec) {
-    const prepared = await loadPrepared(spec);
+export function continuedBenchmarkState(
+    prior,
+    runId,
+    timeoutMs,
+    engineHash,
+    origin,
+) {
+    assert.equal(
+        prior.outcome,
+        "PARTIAL_BOUNDED_WORK",
+        "Only a bounded interruption can seed a continuation",
+    );
+    benchmarkKnowledgeTimeout(String(timeoutMs / 60000));
+    assert.ok(
+        timeoutMs > (prior.knowledgeTimeoutMs ?? 600000),
+        "Continuation requires an explicitly larger readiness allowance",
+    );
+    const state = structuredClone(prior);
+    for (const record of Object.values(state.cases)) {
+        assert.equal(
+            record.status,
+            "interrupted",
+            "Continuation requires interrupted, unscored cases",
+        );
+        assert.ok(!record.hypothesis, "Do not discard an existing hypothesis");
+        delete record.knowledgeCheckpoint;
+        delete record.error;
+    }
+    state.runId = runId;
+    state.knowledgeTimeoutMs = timeoutMs;
+    if (state.arm) state.arm.knowledgeTimeoutMs = timeoutMs;
+    state.engineHash = engineHash;
+    state.providerRequests = [];
+    state.roleCalls = [];
+    state.attempts = [];
+    state.outcome = "IN_PROGRESS";
+    state.continuation = {
+        ...origin,
+        parentRunId: prior.runId,
+        previousKnowledgeTimeoutMs: prior.knowledgeTimeoutMs ?? 600000,
+        knowledgeTimeoutMs: timeoutMs,
+        reusedCompletedImports: Object.values(prior.cases).reduce(
+            (count, record) => count + record.operations.length,
+            0,
+        ),
+        timingScope:
+            "Warm continuation; parent ingestion and maintenance latency excluded",
+    };
+    delete state.scorecard;
+    delete state.stopAfterQuestion;
+    return state;
+}
+
+async function prepareContinuation(parent, spec) {
+    const parentRunDirectory = await realpath(parent);
+    return withLiveRunLock(parentRunDirectory, async () => {
+        const termination = JSON.parse(
+            await readFile(
+                path.join(parentRunDirectory, "termination.json"),
+                "utf8",
+            ),
+        );
+        const owner = JSON.parse(
+            await readFile(
+                path.join(parentRunDirectory, "ownership.json"),
+                "utf8",
+            ),
+        );
+        assert.equal(termination.receiptId, owner.receiptId);
+        assert.equal(termination.workerExited, true);
+        assert.equal(
+            alive(termination.workerPid),
+            false,
+            "Parent worker is still present",
+        );
+        assert.equal(
+            alive(termination.watchdogPid),
+            false,
+            "Parent watchdog is still present",
+        );
+        const bytes = await readFile(
+            path.join(parentRunDirectory, "benchmark-state.json"),
+        );
+        const prior = JSON.parse(bytes.toString("utf8"));
+        assert.equal(prior.runId, owner.receiptId);
+        const origin = { parentRunDirectory, parentStateSha256: digest(bytes) };
+        const state = continuedBenchmarkState(
+            prior,
+            spec.receiptId,
+            spec.knowledgeTimeoutMs,
+            await engineIdentity(),
+            origin,
+        );
+        assert.equal(
+            state.compiledDigest,
+            digest(JSON.stringify(spec.expectedCheckpoint.hashes)),
+            "Production build changed before continuation",
+        );
+        assert.deepEqual(
+            state.questionIds ?? null,
+            spec.questionIds ?? null,
+            "Continuation selection changed",
+        );
+        assert.deepEqual(
+            state.dependencies,
+            await liveDependencyCheckpoint(spec.productRoot),
+            "Model/config dependencies changed before continuation",
+        );
+        await cp(
+            path.join(parentRunDirectory, "isolated-store"),
+            path.join(spec.runDirectory, "isolated-store"),
+            {
+                recursive: true,
+                force: false,
+                errorOnExist: true,
+            },
+        );
+        await writeJson(
+            path.join(spec.runDirectory, "benchmark-state.json"),
+            state,
+        );
+        await writeJson(
+            path.join(spec.runDirectory, "continuation-origin.json"),
+            state.continuation,
+        );
+        return origin;
+    });
+}
+
+async function loadBenchmarkWorkerState(spec, manifestHash) {
     const selection = spec.questionIds;
-    const constructionCases = selectConstructionCases(
-        prepared.construction,
-        selection,
-    );
-    const templates = officialJudgeTemplates(
-        await readFile(spec.judgeSourcePath, "utf8"),
-    );
     const hashes = await benchmarkCheckpoint(spec.productRoot);
     assertCheckpoint(hashes, spec.expectedCheckpoint);
     const compiledDigest = digest(JSON.stringify(hashes));
     const dependencies = await liveDependencyCheckpoint(spec.productRoot);
     const engineHash = await engineIdentity();
     const statePath = path.join(spec.runDirectory, "benchmark-state.json");
-    const state = spec.resume
+    const seeded = spec.resume || !!spec.continuation;
+    const state = seeded
         ? JSON.parse(await readFile(statePath, "utf8"))
         : {
               runId: spec.receiptId,
-              manifestHash: prepared.manifest.sha256,
+              manifestHash,
               compiledDigest,
               knowledgeTimeoutMs: spec.knowledgeTimeoutMs,
               dependencies,
@@ -358,7 +491,7 @@ async function runWorker(spec) {
     );
     assert.equal(
         state.manifestHash,
-        prepared.manifest.sha256,
+        manifestHash,
         "Dataset or construction plan changed",
     );
     assert.equal(
@@ -376,6 +509,21 @@ async function runWorker(spec) {
         engineHash,
         "Benchmark implementation changed",
     );
+    return { state, statePath, seeded, compiledDigest };
+}
+
+async function runWorker(spec) {
+    const prepared = await loadPrepared(spec);
+    const selection = spec.questionIds;
+    const constructionCases = selectConstructionCases(
+        prepared.construction,
+        selection,
+    );
+    const templates = officialJudgeTemplates(
+        await readFile(spec.judgeSourcePath, "utf8"),
+    );
+    const { state, statePath, seeded, compiledDigest } =
+        await loadBenchmarkWorkerState(spec, prepared.manifest.sha256);
     const persist = () => writeJson(statePath, state);
     const attempt = {
         startedEpochMs: spec.spawnedEpochMs,
@@ -405,7 +553,7 @@ async function runWorker(spec) {
     client.initRuntimeConfigFromProcessEnv();
     const settings = client.openai.getChatModelSettings();
     const configuration = benchmarkConfiguration(settings);
-    if (spec.resume)
+    if (seeded)
         assert.deepEqual(
             state.configuration,
             configuration,
@@ -431,6 +579,16 @@ async function runWorker(spec) {
     const service = await createBenchmarkMemoryService(
         load,
         path.join(spec.runDirectory, "isolated-store"),
+        (receipt) =>
+            appendFileSync(
+                path.join(spec.runDirectory, "topic-operations.jsonl"),
+                `${JSON.stringify({
+                    ...receipt,
+                    timestamp: new Date().toISOString(),
+                    role,
+                })}\n`,
+                { encoding: "utf8", flag: "a" },
+            ),
     );
     const judge = async (reference, hypothesis, abortSignal) => {
         const firstRequest = state.providerRequests.length;
@@ -452,7 +610,7 @@ async function runWorker(spec) {
     };
     try {
         await service.initialize();
-        recordBenchmarkArm(state, await service.getCapabilities(), spec.resume);
+        recordBenchmarkArm(state, await service.getCapabilities(), seeded);
         await persist();
         const admittedEpochMs = Date.now();
         await writeJson(path.join(spec.runDirectory, "admitted.json"), {
@@ -608,6 +766,7 @@ export async function main(args = process.argv.slice(2)) {
             "judge-source": { type: "string" },
             output: { type: "string" },
             resume: { type: "string" },
+            "continue-from": { type: "string" },
             spec: { type: "string" },
             "authorized-live-benchmark": { type: "boolean" },
             "max-questions": { type: "string", default: "500" },
@@ -631,6 +790,10 @@ export async function main(args = process.argv.slice(2)) {
         return;
     }
     assert.equal(values["authorized-live-benchmark"], true);
+    assert.ok(
+        !(values.resume && values["continue-from"]),
+        "Choose resume or continue-from, not both",
+    );
     const maximumCompletedQuestions = Number(values["max-questions"]);
     assert.ok(
         Number.isSafeInteger(maximumCompletedQuestions) &&
@@ -684,6 +847,11 @@ export async function main(args = process.argv.slice(2)) {
             : { questionIds: values["question-ids"].split(",") }),
         resume: !!values.resume,
     };
+    if (values["continue-from"])
+        spec.continuation = await prepareContinuation(
+            values["continue-from"],
+            spec,
+        );
     const result = await withLiveRunLock(runDirectory, async () => {
         if (spec.resume) {
             const prior = JSON.parse(
