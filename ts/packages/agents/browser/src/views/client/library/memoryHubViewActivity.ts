@@ -158,6 +158,7 @@ export function mountMemoryHubViewActivity(
                         ? "Retry indexing"
                         : "Preview update";
                 Object.assign(card.dataset, {
+                    fingerprint: JSON.stringify([view, target]),
                     group: `${corpusName} · ${reason}`,
                     summary: reason,
                     title: view.content.title,
@@ -374,6 +375,13 @@ export function mountMemoryHubViewActivity(
         );
         attentionHost.append(
             options.presentAttention?.({
+                id: JSON.stringify([
+                    "view-result",
+                    corpus.corpusId,
+                    job.jobId,
+                    result.viewId,
+                ]),
+                fingerprint: JSON.stringify([job.updatedAt, result]),
                 title: `${resultTitle(result)} · ${states[result.state]}`,
                 summary: result.reason,
                 detail: item,
@@ -402,6 +410,10 @@ export function mountMemoryHubViewActivity(
             if (collapsed.has(bucket[0])) continue;
             bucket.forEach((entry) => collapsed.add(entry));
             const card = rbNode("article", undefined, "card");
+            card.dataset.group = key;
+            card.dataset.fingerprint = JSON.stringify(
+                bucket.map((entry) => entry.dataset.fingerprint),
+            );
             card.dataset.entries = String(bucket.length);
             card.dataset.summary = alert.dataset.summary;
             const rows = rbNode("div", undefined, "hub-rows");
@@ -447,6 +459,15 @@ export function mountMemoryHubViewActivity(
                 ...collapseAlerts(alerts).map(
                     (card) =>
                         options.presentAttention?.({
+                            id: JSON.stringify([
+                                "view-alert",
+                                corpus.corpusId,
+                                card.dataset.viewId ?? card.dataset.group,
+                            ]),
+                            fingerprint: JSON.stringify([
+                                card.dataset.fingerprint,
+                                card.outerHTML,
+                            ]),
                             title:
                                 card.querySelector("h4")?.textContent ??
                                 "View attention",

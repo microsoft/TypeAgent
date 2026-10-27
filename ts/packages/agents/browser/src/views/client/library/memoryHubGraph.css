@@ -57,3 +57,14 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.hub-graph-item-picker {
+  display: grid;
+  gap: 12px;
+}
+
+.hub-graph-item-picker select,
+.hub-graph-item-picker input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}

@@ -118,6 +118,20 @@ retry, history and exact evidence. Back returns to the previous scoped inventory
 with its filters and paging; direct links can load slots outside the current page
 without scanning every collection.
 
+Question route transitions clear old controls before fetching. Reader edit heads
+are refreshed for the exact reader corpus/view independently of the preserved
+inventory scope. Pending operations block navigation, and background polling
+does not reload an unsaved reader draft.
+
+Graph toolbars include an on-demand, keyboard-accessible item picker for the
+displayed nodes and relationships. It reuses the bounded graph projection and
+generation-qualified evidence flow without fetching a separate inventory or
+restoring the removed graph coverage and browse disclosures.
+
+Inbox detail panels survive unchanged and unrelated count refreshes. Stable item
+identities and state fingerprints close a panel only when its selected item
+changes or disappears; category navigation and scope resets still close it.
+
 The Memory hub's Questions workspace is a complete projection of versioned
 schema-view slots, including proposed and rejected slots. The inspector reviews
 candidates and exact source revisions, records schema-validated user assertions,

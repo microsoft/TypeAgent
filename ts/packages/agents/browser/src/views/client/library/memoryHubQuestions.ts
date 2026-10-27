@@ -65,6 +65,7 @@ export function mountMemoryHubQuestions(
     type Filter = "all" | "open" | "answered";
     let selectedKey: string | undefined;
     let selectedQuestion: QuestionTarget | undefined;
+    let readerHead: QuestionSummaryPage["head"] | undefined;
     let filter: Filter = "all";
     let search = "";
     let loadedAt = 0;
@@ -304,8 +305,10 @@ export function mountMemoryHubQuestions(
     }
     async function edit(question: MemoryQuestion, edit: QuestionEdit) {
         const current = detailSequence;
-        const inventory = inventories.get(question.corpusId);
-        if (!inventory)
+        if (
+            readerHead === undefined ||
+            selectedKey !== questionIdentity(question)
+        )
             throw new Error(
                 "Question inventory is unavailable. Reload the question before editing.",
             );
@@ -313,15 +316,17 @@ export function mountMemoryHubQuestions(
             corpusId: question.corpusId,
             viewId: question.viewId,
             slotId: question.slot.id,
-            expectedHead: inventory.head,
+            expectedHead: readerHead,
             expectedVersion: question.viewVersion,
             edit,
         });
         dirty = false;
-        await refreshInventory();
-        if (current !== detailSequence || reader.hidden) return;
+        loadedAt = 0;
         const updated = await fetchQuestion(question);
-        if (current === detailSequence && !reader.hidden) inspect(updated);
+        if (current !== detailSequence || reader.hidden) return;
+        readerHead = updated.head;
+        selectedQuestion = updated.detail;
+        inspect(updated.detail);
     }
     function originLabel(question: QuestionListItem) {
         return (
@@ -372,13 +377,20 @@ export function mountMemoryHubQuestions(
         return row;
     }
     async function fetchQuestion(question: QuestionTarget) {
-        const detail = await invokeMemory("memoryGetQuestion", {
-            corpusId: question.corpusId,
-            viewId: question.viewId,
-            slotId: question.slot.id,
-        });
+        const [detail, page] = await Promise.all([
+            invokeMemory("memoryGetQuestion", {
+                corpusId: question.corpusId,
+                viewId: question.viewId,
+                slotId: question.slot.id,
+            }),
+            invokeMemory("memoryListQuestionSummaries", {
+                corpusId: question.corpusId,
+                viewId: question.viewId,
+                pageSize: 1,
+            }),
+        ]);
         if (!detail) throw new Error("This question is no longer available.");
-        return detail;
+        return { detail, head: page.head };
     }
     let detailSequence = 0;
     function select(question: QuestionListItem) {
@@ -400,6 +412,7 @@ export function mountMemoryHubQuestions(
         const key = questionIdentity(question);
         selectedKey = key;
         selectedQuestion = question;
+        readerHead = undefined;
         setDetailMode(true);
         readerActions.replaceChildren(back);
         const isCurrent = () =>
@@ -407,7 +420,7 @@ export function mountMemoryHubQuestions(
             selectedKey === key &&
             scope === options.scope();
         inspector.setAttribute("aria-busy", "true");
-        inspector.append(
+        inspector.replaceChildren(
             rbNode("h2", question.slot.question ?? "Question"),
             rbNode("p", "Loading question details..."),
         );
@@ -426,19 +439,11 @@ export function mountMemoryHubQuestions(
                         "Schema-defined questions capability is unavailable.",
                     );
             }
-            const detail = await fetchQuestion(question);
+            const loaded = await fetchQuestion(question);
             if (!isCurrent()) return;
-            if (!inventories.has(question.corpusId)) {
-                const page = await invokeMemory("memoryListQuestionSummaries", {
-                    corpusId: question.corpusId,
-                    viewId: question.viewId,
-                    pageSize: 1,
-                });
-                if (!isCurrent()) return;
-                inventories.set(question.corpusId, page);
-                loadedAt = 0;
-            }
-            inspect(detail);
+            readerHead = loaded.head;
+            selectedQuestion = loaded.detail;
+            inspect(loaded.detail);
         } catch (error: unknown) {
             if (!isCurrent()) return;
             const alert = rbNode(
@@ -446,7 +451,7 @@ export function mountMemoryHubQuestions(
                 `Question details unavailable: ${rbError(error)}`,
             );
             alert.setAttribute("role", "alert");
-            inspector.append(
+            inspector.replaceChildren(
                 rbNode("h2", question.slot.question ?? "Question"),
                 alert,
                 rbButton("Retry question details", () => {
@@ -1022,6 +1027,19 @@ export function mountMemoryHubQuestions(
             }
             attentionHost.append(
                 options.presentAttention?.({
+                    id: JSON.stringify([
+                        "questions",
+                        reason,
+                        members.map((group) => group.id),
+                    ]),
+                    fingerprint: JSON.stringify(
+                        members.flatMap((group) =>
+                            group.questions.map((item) => [
+                                questionIdentity(item),
+                                item.fingerprint,
+                            ]),
+                        ),
+                    ),
                     title: reason,
                     summary: members.map((group) => group.title).join(", "),
                     entries: members.length,
@@ -1312,7 +1330,7 @@ export function mountMemoryHubQuestions(
         },
         async refresh() {
             await refresh();
-            if (!reader.hidden && selectedQuestion)
+            if (!reader.hidden && selectedQuestion && !dirty && !busy)
                 await loadDetail(selectedQuestion);
         },
         hide() {
@@ -1333,6 +1351,7 @@ export function mountMemoryHubQuestions(
             }
         },
         discardChanges() {
+            if (busy) return false;
             if (!dirty) return true;
             if (!confirm("Discard unsaved question edits?")) return false;
             dirty = false;

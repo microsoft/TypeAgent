@@ -14,7 +14,12 @@ function setup() {
         { id: "views", label: "Views", host: views },
         { id: "operations", label: "Sources & operations", host: operations },
     ]);
-    function add(target: HTMLElement, title: string, summary = "Needs review") {
+    function add(
+        target: HTMLElement,
+        title: string,
+        summary = "Needs review",
+        fingerprint = summary,
+    ) {
         const detail = document.createElement("article");
         detail.textContent = `${title}: Full explanation, corpus-opaque-id and provenance. ${"Long evidence. ".repeat(150)}`;
         const action = document.createElement("button");
@@ -22,7 +27,9 @@ function setup() {
         const inspect = jest.fn();
         action.onclick = inspect;
         detail.append(action);
-        target.append(inbox.present({ title, summary, detail }));
+        target.append(
+            inbox.present({ id: title, fingerprint, title, summary, detail }),
+        );
         return { detail, inspect };
     }
     return { host, inbox, questions, views, operations, add };
@@ -160,6 +167,41 @@ test("supports arrow, Home and End navigation with one tabbable category", () =>
             host.querySelector<HTMLElement>(`#inbox-panel-${id}`)!.hidden,
         ).toBe(false);
     }
+});
+test("count refreshes retain unchanged details but changed or removed selected items invalidate them", () => {
+    const { host, inbox, views, add } = setup();
+    const { detail, inspect } = add(views, "Blocked view");
+    inbox.setCount("views", 1);
+    button(
+        host.querySelector("#inbox-panel-all")!,
+        "Review: Blocked view",
+    ).click();
+    const panel = host.querySelector<HTMLElement>(
+        'aside[aria-label="Inbox details"]',
+    )!;
+    inbox.setCount("questions", 2);
+    inbox.setCount("views", 1);
+    inbox.fail("operations", new Error("Unrelated failure"));
+    expect(panel.hidden).toBe(false);
+    expect(panel.contains(detail)).toBe(true);
+    views.replaceChildren();
+    add(views, "Blocked view");
+    inbox.setCount("views", 1);
+    expect(panel.hidden).toBe(false);
+    expect(panel.contains(detail)).toBe(true);
+    button(panel, "Inspect operation").click();
+    expect(inspect).toHaveBeenCalledTimes(1);
+    views.replaceChildren();
+    add(views, "Blocked view", "Needs review", "changed-version");
+    inbox.setCount("views", 1);
+    expect(panel.hidden).toBe(true);
+    button(
+        host.querySelector("#inbox-panel-all")!,
+        "Review: Blocked view",
+    ).click();
+    views.replaceChildren();
+    inbox.setCount("views", 0);
+    expect(panel.hidden).toBe(true);
 });
 
 test("distinguishes loading and errors from empty counts and resets details on scope changes", () => {

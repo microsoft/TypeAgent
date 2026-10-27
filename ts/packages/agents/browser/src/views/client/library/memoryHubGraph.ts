@@ -14,6 +14,8 @@ import { TopicGraphVisualizer } from "./topicGraphVisualizer";
 import { graphText, mountGraphDetails } from "./memoryHubGraphDetails";
 import { mountGraphControls } from "./memoryHubGraphControls";
 import { iconButton } from "./memoryHubUi";
+import { rbButton } from "./memoryHubDocumentUi";
+import { viewSheet } from "./memoryHubViewUi";
 import { invokeView } from "./viewClient";
 import "./memoryHubGraph.css";
 
@@ -73,11 +75,80 @@ export function mountMemoryHubGraph(
     let kind: GraphKind = "entities";
     let result: MemoryHubGraphResult | undefined;
     let renderer: EntityGraphVisualizer | TopicGraphVisualizer | undefined;
+    let picker: ReturnType<typeof viewSheet> | undefined;
+    const browse = iconButton("fa-list", "Browse graph items", () => {
+        if (result) showPicker(result);
+    });
+    browse.disabled = true;
+
+    function showPicker(data: MemoryHubGraphResult) {
+        picker?.close();
+        picker = viewSheet(host, "Graph items");
+        picker.body.classList.add("hub-graph-item-picker");
+        const search = graphText("input");
+        search.type = "search";
+        search.setAttribute("aria-label", "Find graph items");
+        const items = graphText("select");
+        items.setAttribute("aria-label", "Graph nodes and relationships");
+        items.size = 8;
+        const entries = data.corpora.flatMap((corpus) => [
+            ...corpus.graph.nodes.map((node) => ({
+                id: node.id,
+                label: `Node · ${corpus.corpusName} · ${node.label}`,
+            })),
+            ...corpus.graph.edges.map((edge) => ({
+                id: edge.id,
+                label: `Relationship · ${corpus.corpusName} · ${corpus.graph.nodes.find((node) => node.id === edge.source)?.label ?? edge.source} - ${edge.label ?? edge.type} -> ${corpus.graph.nodes.find((node) => node.id === edge.target)?.label ?? edge.target}`,
+            })),
+        ]);
+        const note = graphText("p");
+        note.setAttribute("role", "status");
+        const inspect = rbButton("Inspect graph item", () => {
+            const id = items.value;
+            picker?.close();
+            picker = undefined;
+            openSelection(id);
+        });
+        const filter = () => {
+            const matching = entries.filter((entry) =>
+                entry.label.toLowerCase().includes(search.value.toLowerCase()),
+            );
+            items.replaceChildren(
+                ...matching.map((entry) => {
+                    const option = graphText("option", entry.label);
+                    option.value = entry.id;
+                    return option;
+                }),
+            );
+            items.selectedIndex = matching.length ? 0 : -1;
+            items.disabled = !matching.length;
+            inspect.disabled = !matching.length;
+            note.textContent = matching.length
+                ? ""
+                : "No graph items match this search.";
+        };
+        search.addEventListener("input", filter);
+        picker.body.append(
+            graphText(
+                "p",
+                "Choose from nodes and relationships in the displayed graph. Use the arrow keys to select an item, then inspect its evidence.",
+            ),
+            search,
+            items,
+            note,
+            inspect,
+        );
+        filter();
+        search.focus();
+    }
 
     function topicKind(): "topics" | "hierarchy" {
         return controls.mode.value === "topics" ? "topics" : "hierarchy";
     }
     function release() {
+        picker?.close();
+        picker = undefined;
+        browse.disabled = true;
         if (renderer && "destroy" in renderer) renderer.destroy();
         else renderer?.dispose();
         renderer = undefined;
@@ -191,6 +262,7 @@ export function mountMemoryHubGraph(
             const nodes = data.corpora.flatMap((corpus) => corpus.graph.nodes);
             if (nodes.length) await renderGraph(data, ticket);
             if (ticket !== version || disposed) return;
+            browse.disabled = !nodes.length;
             status.textContent = nodes.length
                 ? ""
                 : "No nodes in the available projection.";
@@ -221,6 +293,7 @@ export function mountMemoryHubGraph(
             if (renderer instanceof EntityGraphVisualizer) renderer.fitToView();
             else renderer?.fitToView();
         }),
+        browse,
     );
     return {
         async show(request: {

@@ -523,6 +523,8 @@ function renderInbox(): void {
     list.replaceChildren(
         ...items.slice(inboxPage * 25, (inboxPage + 1) * 25).map((item) =>
             inboxPanel.present({
+                id: item.id,
+                fingerprint: item.fingerprint,
                 title: item.title,
                 summary: `${inboxKinds[item.kind].label} · ${item.reason}`,
                 detail: inboxCard(item, dismissed),

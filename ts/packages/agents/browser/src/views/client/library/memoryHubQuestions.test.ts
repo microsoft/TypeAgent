@@ -29,6 +29,7 @@ function click(label: string) {
 function setup(
     scope: () => string | undefined = () => "corpus",
     onNavigate?: Parameters<typeof mountMemoryHubQuestions>[2]["onNavigate"],
+    corpora = [{ corpusId: "corpus", name: "Corpus" }],
 ) {
     document.body.innerHTML = "<main></main><aside></aside>";
     const onError = jest.fn();
@@ -39,7 +40,7 @@ function setup(
             document.querySelector("aside")!,
             {
                 scope,
-                corpora: () => [{ corpusId: "corpus", name: "Corpus" }],
+                corpora: () => corpora,
                 hidden: {},
                 persistHidden: jest.fn(),
                 onError,
@@ -178,6 +179,139 @@ test("Back invalidates pending question details and operation errors stay visibl
     expect(
         document.querySelector(".hub-qdetail [role=alert]")!.textContent,
     ).toContain("Edit rejected");
+});
+test("a new slot route removes old edit controls before loading and after a detail failure", async () => {
+    const original = invoke.getMockImplementation()!;
+    invoke.mockImplementation((method, params) =>
+        method === "memoryGetQuestion"
+            ? Promise.resolve(question(params.slotId))
+            : original(method, params),
+    );
+    const { panel, onError } = setup();
+    await panel.show("view", "corpus", "first");
+    expect(document.querySelector(".hub-qdetail textarea")).not.toBeNull();
+    let reject!: (error: Error) => void;
+    invoke.mockImplementation((method, params) =>
+        method === "memoryGetQuestion"
+            ? new Promise((_resolve, fail) => {
+                  reject = fail;
+              })
+            : original(method, params),
+    );
+    const pending = panel.show("view", "corpus", "second");
+    expect(document.querySelector(".hub-qdetail")!.textContent).toContain(
+        "Loading question details",
+    );
+    expect(document.querySelector(".hub-qdetail textarea")).toBeNull();
+    expect(document.querySelectorAll(".hub-qdetail h2")).toHaveLength(1);
+    reject(new Error("Second slot unavailable"));
+    await pending;
+    expect(document.querySelector(".hub-qdetail")!.textContent).toContain(
+        "Second slot unavailable",
+    );
+    expect(document.querySelector(".hub-qdetail textarea")).toBeNull();
+    expect(document.querySelector(".hub-qdetail")!.textContent).not.toContain(
+        "Save user assertion",
+    );
+    expect(document.querySelectorAll(".hub-qdetail h2")).toHaveLength(1);
+    expect(onError).toHaveBeenCalledTimes(1);
+});
+
+test("cross-collection readers refresh their own edit head independently of the list scope", async () => {
+    const original = invoke.getMockImplementation()!;
+    let version = 2;
+    invoke.mockImplementation((method, params) => {
+        if (method === "memoryGetQuestion")
+            return Promise.resolve({
+                ...question("slot", "view-b"),
+                corpusId: "b",
+                viewVersion: version,
+            });
+        if (method === "memoryListQuestionSummaries" && params.corpusId === "b")
+            return Promise.resolve({
+                head: `b-head-${version}`,
+                items: [],
+                total: 0,
+            });
+        if (method === "memoryEditQuestion") {
+            version++;
+            return Promise.resolve({});
+        }
+        return original(method, params);
+    });
+    const navigate = jest.fn();
+    const { panel, onError } = setup(() => "a", navigate, [
+        { corpusId: "a", name: "Alpha" },
+        { corpusId: "b", name: "Beta" },
+    ]);
+    await panel.show("view-b", "b", "slot");
+    for (const answer of ['"First"', '"Second"']) {
+        const editor = document.querySelector<HTMLTextAreaElement>(
+            ".hub-qdetail textarea",
+        )!;
+        editor.value = answer;
+        editor.dispatchEvent(new Event("input"));
+        click("Save user assertion");
+        await settle();
+    }
+    expect(
+        invoke.mock.calls
+            .filter(([method]) => method === "memoryEditQuestion")
+            .map(([, params]) => ({
+                corpusId: params.corpusId,
+                head: params.expectedHead,
+                version: params.expectedVersion,
+            })),
+    ).toEqual([
+        { corpusId: "b", head: "b-head-2", version: 2 },
+        { corpusId: "b", head: "b-head-3", version: 3 },
+    ]);
+    expect(
+        invoke.mock.calls
+            .filter(([method]) => method === "memoryListQuestionSummaries")
+            .every(
+                ([, params]) =>
+                    params.corpusId === "b" && params.pageSize === 1,
+            ),
+    ).toBe(true);
+    click("Back to questions");
+    expect(navigate).toHaveBeenCalledWith({ page: "questions" });
+    expect(onError).not.toHaveBeenCalled();
+});
+
+test("busy question operations reject navigation and background refresh preserves unsaved drafts", async () => {
+    const { panel, onError } = setup();
+    await panel.show("view", "corpus", "slot");
+    const editor = document.querySelector<HTMLTextAreaElement>(
+        ".hub-qdetail textarea",
+    )!;
+    editor.value = '"Draft"';
+    editor.dispatchEvent(new Event("input"));
+    const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
+    await panel.refresh();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(document.querySelector(".hub-qdetail textarea")).toBe(editor);
+    expect(editor.value).toBe('"Draft"');
+    const original = invoke.getMockImplementation()!;
+    let finish!: () => void;
+    invoke.mockImplementation((method, params) =>
+        method === "memoryEditQuestion"
+            ? new Promise<void>((resolve) => {
+                  finish = resolve;
+              })
+            : original(method, params),
+    );
+    click("Save user assertion");
+    expect(panel.discardChanges()).toBe(false);
+    expect(confirm).not.toHaveBeenCalled();
+    await panel.refresh();
+    expect(document.querySelector(".hub-qdetail textarea")).toBe(editor);
+    expect(confirm).not.toHaveBeenCalled();
+    finish();
+    await settle();
+    expect(panel.discardChanges()).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+    confirm.mockRestore();
 });
 test("questions put tabs after the title, totals and paging inside the list card, and preparation last", async () => {
     const original = invoke.getMockImplementation()!;

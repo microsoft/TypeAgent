@@ -7,6 +7,8 @@ import { setTabLabel } from "./memoryHubUi";
 
 export type InboxCategory = "questions" | "views" | "operations";
 export interface InboxAttentionCard {
+    id: string;
+    fingerprint: string;
     title: string;
     summary: string;
     detail: HTMLElement;
@@ -41,6 +43,9 @@ export function mountMemoryHubInbox(
     const cards = new WeakMap<HTMLElement, InboxAttentionCard>();
     const inspector = mountFlyout(host, "Inbox details");
     let selected = "all";
+    let active:
+        | { card: InboxAttentionCard; category?: InboxCategory }
+        | undefined;
 
     root.append(tabs, overview);
     for (const section of sections) {
@@ -125,14 +130,25 @@ export function mountMemoryHubInbox(
         const review = rbIconButton(
             "fa-file-lines",
             `Review: ${card.title}`,
-            () =>
+            () => {
+                active = {
+                    card,
+                    category: sections.find((section) =>
+                        [
+                            ...section.host.querySelectorAll<HTMLElement>(
+                                ".hub-inbox-item",
+                            ),
+                        ].some((row) => cards.get(row) === card),
+                    )?.id,
+                };
                 inspector.open({
                     title: card.title,
                     render(body) {
                         body.append(card.detail);
                         return () => card.detail.remove();
                     },
-                }),
+                });
+            },
         );
         item.append(content, review);
         cards.set(item, card);
@@ -224,16 +240,27 @@ export function mountMemoryHubInbox(
     }
     select("all");
     render();
+    function invalidateDetails(id: InboxCategory) {
+        if (!inspector.isOpen() || active?.category !== id) return;
+        const section = sections.find((section) => section.id === id)!;
+        const current = [
+            ...section.host.querySelectorAll<HTMLElement>(".hub-inbox-item"),
+        ]
+            .map((item) => cards.get(item))
+            .find((card) => card?.id === active?.card.id);
+        if (!current || current.fingerprint !== active.card.fingerprint)
+            inspector.close();
+    }
     return {
         present: row,
         setCount(id: InboxCategory, count: number, more = false) {
-            inspector.close();
+            invalidateDetails(id);
             counts.set(id, { count, more });
             errors.delete(id);
             render();
         },
         fail(id: InboxCategory, error: unknown) {
-            inspector.close();
+            if (active?.category === id) inspector.close();
             errors.set(
                 id,
                 error instanceof Error ? error.message : String(error),

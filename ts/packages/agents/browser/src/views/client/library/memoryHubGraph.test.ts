@@ -151,6 +151,7 @@ test.each(["entities", "topics"] as const)(
             ["Refresh graph", "fa-rotate"],
             ["Global graph", "fa-globe"],
             ["Fit graph", "fa-expand"],
+            ["Browse graph items", "fa-list"],
         ]) {
             const control = button(label);
             expect(control.title).toBe(label);
@@ -180,7 +181,7 @@ test.each(["entities", "topics"] as const)(
         expect(host.querySelector('[aria-label="Graph controls"]')).toBe(
             toolbar,
         );
-        expect(toolbar.querySelectorAll("button")).toHaveLength(3);
+        expect(toolbar.querySelectorAll("button")).toHaveLength(4);
         expect(onError).not.toHaveBeenCalled();
     },
 );
@@ -195,6 +196,78 @@ test("opaque graph routes retain node identity instead of becoming label searche
     expect(invoke.mock.calls[0][1]).not.toHaveProperty("search");
     expect(onRouteChanged).toHaveBeenCalledWith("entities", nodeId);
 });
+test.each(["entities", "topics"] as const)(
+    "%s offers lazy keyboard-accessible node and relationship selection from the displayed projection",
+    async (view) => {
+        const edgeId = "graph:a:edge:one";
+        invoke.mockResolvedValueOnce({
+            ...sample,
+            corpora: [
+                {
+                    ...sample.corpora[0],
+                    graph: {
+                        ...sample.corpora[0].graph,
+                        edges: [
+                            {
+                                id: edgeId,
+                                source: nodeId,
+                                target: nodeId,
+                                type: "related",
+                                count: 1,
+                                supportCount: 1,
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+        await mounted.show({ view });
+        expect(
+            host.querySelector('[aria-label="Graph nodes and relationships"]'),
+        ).toBeNull();
+        button("Browse graph items").focus();
+        button("Browse graph items").click();
+        const search = host.querySelector<HTMLInputElement>(
+            '[aria-label="Find graph items"]',
+        )!;
+        const items = select("Graph nodes and relationships");
+        expect(document.activeElement).toBe(search);
+        expect(items.options).toHaveLength(2);
+        expect(items.options[0].textContent).toContain("Node · Alpha · Casey");
+        expect(items.options[1].textContent).toContain(
+            "Relationship · Alpha · Casey",
+        );
+        expect(items.value).toBe(nodeId);
+        expect(invoke.mock.calls).toHaveLength(1);
+        search.value = "not in graph";
+        search.dispatchEvent(new Event("input"));
+        expect(button("Inspect graph item").disabled).toBe(true);
+        expect(host.textContent).toContain("No graph items match");
+        search.value = "relationship";
+        search.dispatchEvent(new Event("input"));
+        expect(items.options).toHaveLength(1);
+        expect(items.value).toBe(edgeId);
+        button("Inspect graph item").click();
+        await settle();
+        expect(
+            host.querySelector('dialog[aria-label="Graph items"]'),
+        ).toBeNull();
+        expect(invoke).toHaveBeenLastCalledWith(
+            "memoryHubGraphSupport",
+            expect.objectContaining({
+                corpusId: "a",
+                generation: "g1",
+                edgeId,
+            }),
+        );
+        button("Browse graph items").click();
+        mounted.scopeChanged();
+        expect(
+            host.querySelector('dialog[aria-label="Graph items"]'),
+        ).toBeNull();
+        expect(button("Browse graph items").disabled).toBe(true);
+    },
+);
 
 test.each(["entities", "topics"] as const)(
     "%s shows the graph without coverage, collection inventory or browse disclosures",
