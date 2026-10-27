@@ -453,7 +453,12 @@ describe("staged plugin artifact", () => {
             await client.connect(transport);
             const catalog = await client.listTools();
             expect(catalog.tools.map((tool) => tool.name)).toEqual(
-                expect.arrayContaining(["list_macros", "run_macro"]),
+                expect.arrayContaining([
+                    "list_macros",
+                    "run_macro",
+                    "revise_macro",
+                    "get_macro_learning_job",
+                ]),
             );
             expect(catalog.tools.map((tool) => tool.name)).not.toEqual(
                 expect.arrayContaining([
@@ -474,7 +479,15 @@ describe("staged plugin artifact", () => {
                 idempotentHint: true,
                 openWorldHint: false,
             });
-            for (const name of ["run_macro", "approve_macro"]) {
+            const reviseSchema = catalog.tools.find(
+                (tool) => tool.name === "revise_macro",
+            )!.inputSchema;
+            expect(reviseSchema.required).toEqual([
+                "macroId",
+                "version",
+                "feedback",
+            ]);
+            for (const name of ["run_macro", "approve_macro", "revise_macro"]) {
                 expect(
                     catalog.tools.find((tool) => tool.name === name)
                         ?.annotations?.readOnlyHint,

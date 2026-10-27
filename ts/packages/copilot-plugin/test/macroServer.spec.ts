@@ -65,6 +65,21 @@ const operations: {
         invoke: (adapter) => adapter.approveMacro({ macroId: "macro-1" }),
     },
     {
+        name: "revise",
+        allowInBypass: false,
+        invoke: (adapter) =>
+            adapter.reviseMacro({
+                macroId: "macro-1",
+                version: 1,
+                feedback: "Clarify the output",
+            }),
+    },
+    {
+        name: "learning status",
+        allowInBypass: false,
+        invoke: (adapter) => adapter.getMacroLearningJob({ jobId: "job-1" }),
+    },
+    {
         name: "disable",
         allowInBypass: false,
         invoke: (adapter) => adapter.disableMacro({ macroId: "macro-1" }),
@@ -77,6 +92,36 @@ const operations: {
 ];
 
 describe("macro MCP catalog adapter", () => {
+    it("forwards corrections and job status without approving or executing the macro", async () => {
+        const reviseMacro = jest.fn<MacroOwnerConnection["reviseMacro"]>(
+            async () => {
+                throw new Error("Revision rejected by validator");
+            },
+        );
+        const getMacroLearningJob = jest.fn<
+            MacroOwnerConnection["getMacroLearningJob"]
+        >(async () => {
+            throw new Error("Job still awaiting author");
+        });
+        const client = connection({ reviseMacro, getMacroLearningJob });
+        const adapter = new MacroCatalogAdapter({
+            connect: async () => client,
+            getMode: () => "direct",
+        });
+        const request = {
+            macroId: "saved",
+            version: 2,
+            feedback: "Return only the title",
+        };
+        expect((await adapter.reviseMacro(request)).isError).toBe(true);
+        expect(reviseMacro).toHaveBeenCalledWith(request);
+        expect(
+            (await adapter.getMacroLearningJob({ jobId: "job" })).isError,
+        ).toBe(true);
+        expect(getMacroLearningJob).toHaveBeenCalledWith("job");
+        expect(client.close).toHaveBeenCalledTimes(2);
+    });
+
     it.each(operations)(
         "rejects $name in bypass without opt-in before connecting",
         async ({ invoke }) => {
