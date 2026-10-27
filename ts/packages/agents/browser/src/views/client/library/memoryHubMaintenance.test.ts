@@ -164,6 +164,16 @@ test("maintenance editor sends explicit guarded configuration, previews blockers
     });
     expect(saved).toHaveBeenCalledTimes(1);
     click(host, "Preview maintenance");
+    for (const control of host.querySelectorAll("button")) {
+        if (
+            ["Preview maintenance", "Run manual maintenance"].includes(
+                control.textContent ?? "",
+            )
+        )
+            expect(control.querySelector("i")!.className).toBe(
+                "fa-solid fa-screwdriver-wrench",
+            );
+    }
     await pending;
     expect(host.textContent).toContain("Pending ingestion");
     click(host, "Run manual maintenance");

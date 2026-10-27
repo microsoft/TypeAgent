@@ -118,6 +118,64 @@ test("partial builds and failed targets remain explicit in Activity and Inbox", 
     mounted.dispose();
 });
 
+test.each(["pending", "resolved", "missing", undefined] as const)(
+    "conflict attention uses summary state %s and fetches full evidence only for legacy summaries",
+    async (conflictState) => {
+        const previous = invoke.getMockImplementation()!;
+        invoke.mockImplementation(async (method, params) => {
+            if (method === "memoryListViewBuildSummaries")
+                return {
+                    total: 1,
+                    items: [
+                        {
+                            ...job(),
+                            results: [
+                                {
+                                    viewId: "wiki",
+                                    state: "conflicted",
+                                    reason: "Review overlap",
+                                    current: true,
+                                    conflictId: "conflict",
+                                    conflictState,
+                                    snapshot: {
+                                        pipeline: "informational-wiki-v1",
+                                        definition: { kind: "wiki" },
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                };
+            if (method === "memoryGetViewConflict") return { state: "pending" };
+            return previous(method, params);
+        });
+        const attention = document.createElement("div");
+        const mounted = mountMemoryHubViewActivity(
+            document.createElement("div"),
+            attention,
+            {
+                scope: () => "alpha",
+                onError: jest.fn(),
+                onOpenView: jest.fn(),
+                onOpenBuild: jest.fn(),
+            },
+        );
+        try {
+            await mounted.show();
+            expect(attention.textContent?.includes("Resolve conflict")).toBe(
+                conflictState === "pending" || conflictState === undefined,
+            );
+            expect(
+                invoke.mock.calls.filter(
+                    ([method]) => method === "memoryGetViewConflict",
+                ),
+            ).toHaveLength(conflictState === undefined ? 1 : 0);
+        } finally {
+            mounted.dispose();
+        }
+    },
+);
+
 test("cancellation is not displayed as acknowledged until the service says so", async () => {
     jest.useFakeTimers();
     const running = job("running");
@@ -289,7 +347,7 @@ test("current indexing attention is counted once and maintenance plans respect t
         ([method]) => method === "memoryPlanViewMaintenance",
     );
     expect(plans.map(([, params]) => params.viewIds.length)).toEqual([25]);
-    expect(onAttentionCount).toHaveBeenLastCalledWith(2);
+    expect(onAttentionCount).toHaveBeenLastCalledWith(1, true);
     expect(attention.textContent).toContain(
         "Indexing failed: Indexer unavailable",
     );

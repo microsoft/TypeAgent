@@ -11,9 +11,9 @@ jest.mock("./entityGraphVisualizer", () => ({
     EntityGraphVisualizer: jest.fn().mockImplementation(() => ({
         initialize: jest.fn().mockResolvedValue(undefined),
         loadGlobalGraph: jest.fn().mockResolvedValue(undefined),
-        onEntityClick: jest.fn(),
-        onEdgeClick: jest.fn(),
-        fitToView: jest.fn(),
+        onEntityClick: mockEntityClick,
+        onEdgeClick: mockEdgeClick,
+        fitToView: mockFitToView,
         resize: jest.fn(),
         destroy: jest.fn(),
     })),
@@ -21,15 +21,19 @@ jest.mock("./entityGraphVisualizer", () => ({
 jest.mock("./topicGraphVisualizer", () => ({
     TopicGraphVisualizer: jest.fn().mockImplementation(() => ({
         init: jest.fn().mockResolvedValue(undefined),
-        onTopicClick: jest.fn(),
-        onEdgeClick: jest.fn(),
-        fitToView: jest.fn(),
+        onTopicClick: mockTopicClick,
+        onEdgeClick: mockEdgeClick,
+        fitToView: mockFitToView,
         resize: jest.fn(),
         dispose: jest.fn(),
     })),
 }));
 
 const invoke = invokeView as jest.Mock;
+const mockEntityClick = jest.fn();
+const mockTopicClick = jest.fn();
+const mockEdgeClick = jest.fn();
+const mockFitToView = jest.fn();
 const nodeId = `graph:a:entity:${"1".repeat(32)}`;
 const sample: MemoryHubGraphResult = {
     corpora: [
@@ -37,9 +41,7 @@ const sample: MemoryHubGraphResult = {
             corpusId: "a",
             corpusName: "Alpha",
             graph: {
-                corpusId: "a",
                 generation: "g1",
-                state: "ready",
                 nodes: [
                     {
                         id: nodeId,
@@ -51,28 +53,6 @@ const sample: MemoryHubGraphResult = {
                     },
                 ],
                 edges: [],
-                counts: {
-                    nodes: 1,
-                    edges: 0,
-                    omittedNodes: 0,
-                    omittedEdges: 0,
-                },
-                limits: { maxNodes: 250, maxEdges: 500 },
-                coverage: {
-                    documents: {
-                        state: "ready",
-                        total: 1,
-                        eligible: 1,
-                        indexed: 1,
-                    },
-                    events: {
-                        state: "ready",
-                        total: 0,
-                        eligible: 0,
-                        indexed: 0,
-                    },
-                    reasons: [],
-                },
             },
         },
     ],
@@ -92,7 +72,9 @@ async function settle() {
 }
 function button(label: string) {
     const value = [...host.querySelectorAll<HTMLButtonElement>("button")].find(
-        (element) => element.textContent === label,
+        (element) =>
+            element.getAttribute("aria-label") === label ||
+            element.textContent === label,
     );
     if (!value) throw new Error(`Missing button: ${label}`);
     return value;
@@ -101,6 +83,10 @@ function select(label: string) {
     return host.querySelector<HTMLSelectElement>(
         `select[aria-label="${label}"]`,
     )!;
+}
+function clickNode(view: "entities" | "topics" = "entities") {
+    const listener = view === "entities" ? mockEntityClick : mockTopicClick;
+    listener.mock.calls[0][0]({ id: nodeId });
 }
 
 beforeEach(() => {
@@ -111,6 +97,10 @@ beforeEach(() => {
     onOpenSource = jest.fn();
     onRouteChanged = jest.fn();
     invoke.mockReset();
+    mockEntityClick.mockClear();
+    mockTopicClick.mockClear();
+    mockEdgeClick.mockClear();
+    mockFitToView.mockClear();
     invoke.mockImplementation((method) => {
         if (method === "memoryHubGraph") return Promise.resolve(sample);
         if (method === "memoryHubGraphSupport")
@@ -143,9 +133,57 @@ test("uses bounded corpus-neutral graph calls and never fetches browser analytic
     );
     expect(invoke.mock.calls).toHaveLength(1);
     expect(invoke.mock.calls[0][1]).not.toHaveProperty("corpusId");
-    expect(host.textContent).toContain("1 of 1 matching nodes");
+    expect(host.querySelector(".hub-scoped-graph-canvas")).not.toBeNull();
     expect(onError).not.toHaveBeenCalled();
 });
+
+test.each(["entities", "topics"] as const)(
+    "%s keeps accessible icon controls inside the graph viewport across refreshes",
+    async (view) => {
+        await mounted.show({ view });
+        const toolbar = host.querySelector('[aria-label="Graph controls"]')!;
+        expect(toolbar.getAttribute("role")).toBe("group");
+        expect(toolbar.parentElement?.className).toBe("hub-graph-viewport");
+        expect(
+            toolbar.parentElement?.querySelector(".hub-scoped-graph-canvas"),
+        ).not.toBeNull();
+        for (const [label, glyph] of [
+            ["Refresh graph", "fa-rotate"],
+            ["Global graph", "fa-globe"],
+            ["Fit graph", "fa-expand"],
+        ]) {
+            const control = button(label);
+            expect(control.title).toBe(label);
+            expect(control.type).toBe("button");
+            expect(control.classList.contains("icon-btn")).toBe(true);
+            expect(control.textContent).toBe("");
+            expect(
+                control
+                    .querySelector(`.fa-solid.${glyph}`)
+                    ?.getAttribute("aria-hidden"),
+            ).toBe("true");
+            expect(toolbar.contains(control)).toBe(true);
+        }
+        button("Fit graph").click();
+        expect(mockFitToView).toHaveBeenCalledTimes(1);
+        expect(invoke.mock.calls).toHaveLength(1);
+        button("Global graph").click();
+        await settle();
+        expect(onRouteChanged).toHaveBeenLastCalledWith(
+            view === "entities" ? "entities" : "hierarchy",
+        );
+        expect(invoke.mock.calls).toHaveLength(2);
+        expect(invoke.mock.calls[1][1]).not.toHaveProperty("nodeId");
+        button("Refresh graph").click();
+        await settle();
+        expect(invoke.mock.calls).toHaveLength(3);
+        expect(host.querySelector('[aria-label="Graph controls"]')).toBe(
+            toolbar,
+        );
+        expect(toolbar.querySelectorAll("button")).toHaveLength(3);
+        expect(onError).not.toHaveBeenCalled();
+    },
+);
 
 test("opaque graph routes retain node identity instead of becoming label searches", async () => {
     scope = "a";
@@ -158,62 +196,41 @@ test("opaque graph routes retain node identity instead of becoming label searche
     expect(onRouteChanged).toHaveBeenCalledWith("entities", nodeId);
 });
 
-test("inventory pages preserve the original query and effective limits, with honest last-page omissions", async () => {
-    invoke.mockImplementation((method, request) => {
-        if (method !== "memoryHubGraph")
-            throw new Error(`Unexpected graph call: ${method}`);
-        const last = request.continuationToken !== undefined;
-        return Promise.resolve({
-            ...sample,
-            corpora: [
-                {
-                    ...sample.corpora[0],
-                    graph: {
-                        ...sample.corpora[0].graph,
-                        counts: {
-                            nodes: 2,
-                            edges: 0,
-                            omittedNodes: 1,
-                            omittedEdges: 0,
-                        },
-                        limits: { maxNodes: 1, maxEdges: 1 },
-                        ...(last ? {} : { nextContinuationToken: "next-page" }),
-                    },
-                },
-            ],
-        });
-    });
-    await mounted.show({ view: "entities" });
-    expect(host.textContent).toContain("1 of 2 matching nodes");
-    host.querySelector<HTMLInputElement>(
-        'input[aria-label="Find graph nodes"]',
-    )!.value = "An unapplied search";
-    select("Graph evidence kinds").value = "event";
-    button("Next nodes in Alpha").click();
-    await settle();
-    const request = invoke.mock.calls[invoke.mock.calls.length - 1][1];
-    expect(request).toEqual(
-        expect.objectContaining({
-            corpusId: "a",
-            kind: "entities",
-            maxNodes: 1,
-            maxEdges: 1,
-            evidenceKinds: ["document", "event"],
-            eventFilter: {},
-            expectedGeneration: "g1",
-            continuationToken: "next-page",
-        }),
-    );
-    expect(request).not.toHaveProperty("search");
-    expect(button("Next nodes in Alpha").disabled).toBe(true);
-    expect(button("First nodes in Alpha").disabled).toBe(false);
-    expect(host.textContent).toContain("1 not on this page");
-    button("First nodes in Alpha").click();
-    await settle();
-    expect(
-        invoke.mock.calls[invoke.mock.calls.length - 1][1],
-    ).not.toHaveProperty("continuationToken");
-});
+test.each(["entities", "topics"] as const)(
+    "%s shows the graph without coverage, collection inventory or browse disclosures",
+    async (view) => {
+        await mounted.show({ view });
+        const root = host.querySelector(".hub-scoped-graph")!;
+        expect(root.textContent).not.toContain("Graph coverage");
+        expect(root.textContent).not.toContain(
+            "Browse graph nodes and relationships",
+        );
+        expect(root.textContent).not.toContain("Alpha");
+        expect(root.textContent).not.toContain("matching nodes");
+        expect(root.textContent).not.toContain("responding corpora");
+        expect(
+            root.querySelector('[aria-label="Graph inventory pages"]'),
+        ).toBeNull();
+        expect(root.querySelector(".hub-graph-items")).toBeNull();
+        expect(
+            [...root.querySelectorAll<HTMLElement>('[role="status"]')].every(
+                (element) => element.hidden,
+            ),
+        ).toBe(true);
+        expect(invoke.mock.calls).toHaveLength(1);
+        clickNode(view);
+        await settle();
+        expect(host.textContent).toContain("Alpha · Casey");
+        expect(invoke).toHaveBeenLastCalledWith(
+            "memoryHubGraphSupport",
+            expect.objectContaining({
+                corpusId: "a",
+                generation: "g1",
+                nodeId,
+            }),
+        );
+    },
+);
 
 test("opens a loading shell before the graph resolves and rejects stale scope results", async () => {
     let finish!: (value: typeof sample) => void;
@@ -234,7 +251,7 @@ test("opens a loading shell before the graph resolves and rejects stale scope re
 test("preserves selected corpus and qualified node identity in support reads", async () => {
     scope = "a";
     await mounted.show({ view: "entities" });
-    button("Alpha · Casey · 2 mentions").click();
+    clickNode();
     await settle();
     expect(invoke).toHaveBeenLastCalledWith(
         "memoryHubGraphSupport",
@@ -246,6 +263,45 @@ test("preserves selected corpus and qualified node identity in support reads", a
         }),
     );
     expect(onRouteChanged).toHaveBeenCalledWith("entities", nodeId);
+});
+
+test("graph edge selection still loads exact generation-bound evidence", async () => {
+    const edgeId = "graph:a:edge:one";
+    invoke.mockResolvedValueOnce({
+        ...sample,
+        corpora: [
+            {
+                ...sample.corpora[0],
+                graph: {
+                    ...sample.corpora[0].graph,
+                    edges: [
+                        {
+                            id: edgeId,
+                            source: nodeId,
+                            target: nodeId,
+                            type: "related",
+                            count: 1,
+                            supportCount: 1,
+                        },
+                    ],
+                },
+            },
+        ],
+    });
+    await mounted.show({ view: "entities" });
+    expect(invoke.mock.calls).toHaveLength(1);
+    mockEdgeClick.mock.calls[0][0](edgeId);
+    await settle();
+    expect(invoke).toHaveBeenLastCalledWith(
+        "memoryHubGraphSupport",
+        expect.objectContaining({
+            corpusId: "a",
+            generation: "g1",
+            edgeId,
+            pageSize: 50,
+        }),
+    );
+    expect(onError).not.toHaveBeenCalled();
 });
 
 test("topic hierarchy and co-occurrence remain explicitly distinct", async () => {
@@ -261,7 +317,9 @@ test("topic hierarchy and co-occurrence remain explicitly distinct", async () =>
         "memoryHubGraph",
         expect.objectContaining({ kind: "topics" }),
     );
-    expect(host.textContent).toContain("not a topic hierarchy");
+    expect(select("Topic graph meaning").selectedOptions[0].textContent).toBe(
+        "Source co-occurrence",
+    );
     expect(onRouteChanged).toHaveBeenCalledWith("topics");
 });
 
@@ -290,7 +348,7 @@ test("event filters preserve conversation, producer and authority semantics", as
     );
 });
 
-test("reports partial and building coverage rather than claiming complete empty memory", async () => {
+test("keeps actual collection failures and omitted collections visible without coverage status", async () => {
     invoke.mockResolvedValue({
         ...sample,
         corpora: [
@@ -298,11 +356,6 @@ test("reports partial and building coverage rather than claiming complete empty 
                 ...sample.corpora[0],
                 graph: {
                     ...sample.corpora[0].graph,
-                    state: "building",
-                    coverage: {
-                        ...sample.corpora[0].graph.coverage,
-                        reasons: ["Event projection is not ready."],
-                    },
                     nodes: [],
                 },
             },
@@ -311,50 +364,54 @@ test("reports partial and building coverage rather than claiming complete empty 
         omittedCorpora: 2,
     });
     await mounted.show({ view: "entities" });
-    expect(host.textContent).toContain("Alpha: building");
-    expect(host.textContent).toContain("Event projection is not ready.");
+    expect(host.textContent).toContain("No nodes in the available projection.");
     expect(host.textContent).toContain("b: Unavailable");
     expect(host.textContent).toContain("2 corpora omitted");
 });
 
-test("coverage distinguishes eligible and indexed documents and events from inventory totals", async () => {
-    invoke.mockResolvedValue({
-        ...sample,
-        corpora: [
-            {
-                ...sample.corpora[0],
-                graph: {
-                    ...sample.corpora[0].graph,
-                    state: "building",
-                    coverage: {
-                        documents: {
-                            state: "building",
-                            total: 10,
-                            eligible: 4,
-                            indexed: 2,
+test.each(["entities", "topics"] as const)(
+    "%s ignores routine coverage/build messages from older responses",
+    async (view) => {
+        invoke.mockResolvedValue({
+            ...sample,
+            corpora: [
+                {
+                    ...sample.corpora[0],
+                    graph: {
+                        ...sample.corpora[0].graph,
+                        state: "building",
+                        coverage: {
+                            documents: {
+                                state: "building",
+                                total: 10,
+                                eligible: 4,
+                                indexed: 2,
+                            },
+                            events: {
+                                state: "stale",
+                                total: 12,
+                                eligible: 8,
+                                indexed: 7,
+                            },
+                            topics: {
+                                state: "building",
+                                generation: "topics-v1",
+                            },
+                            reasons: [
+                                "Rebuild topics to populate the hierarchy.",
+                            ],
                         },
-                        events: {
-                            state: "stale",
-                            total: 12,
-                            eligible: 8,
-                            indexed: 7,
-                        },
-                        topics: { state: "building", generation: "topics-v1" },
-                        reasons: [],
                     },
                 },
-            },
-        ],
-    });
-    await mounted.show({ view: "entities" });
-    expect(host.textContent).toContain(
-        "documents building: 2 of 4 eligible indexed (10 total)",
-    );
-    expect(host.textContent).toContain(
-        "events stale: 7 of 8 eligible indexed (12 total)",
-    );
-    expect(host.textContent).toContain("topics building");
-});
+            ],
+        });
+        await mounted.show({ view });
+        expect(host.textContent).not.toContain("building");
+        expect(host.textContent).not.toContain("eligible indexed");
+        expect(host.textContent).not.toContain("Rebuild topics");
+        expect(onError).not.toHaveBeenCalled();
+    },
+);
 
 test("loads exact event evidence without document reads or timeline capability calls", async () => {
     invoke.mockImplementation((method) => {
@@ -385,7 +442,7 @@ test("loads exact event evidence without document reads or timeline capability c
         throw new Error(`Unexpected event evidence call: ${method}`);
     });
     await mounted.show({ view: "entities" });
-    button("Alpha · Casey · 2 mentions").click();
+    clickNode();
     await settle();
     expect(host.textContent).toContain("evidence-only");
     button("Original turn").click();
@@ -418,7 +475,7 @@ test("support from a different generation is rejected before rendering", async (
         throw new Error(`Unexpected graph call: ${method}`);
     });
     await mounted.show({ view: "entities" });
-    button("Alpha · Casey · 2 mentions").click();
+    clickNode();
     await settle();
     expect(host.textContent).toContain("Graph generation changed");
     expect(host.textContent).not.toContain("Unexpected support");
@@ -433,7 +490,11 @@ test("failed graph reads have an explicit error and retry control", async () => 
     expect(onError).toHaveBeenCalledTimes(1);
     button("Refresh graph").click();
     await settle();
-    expect(host.textContent).toContain("Alpha · Casey");
+    expect(
+        host.querySelector(".hub-scoped-graph")?.getAttribute("aria-busy"),
+    ).toBe("false");
+    expect(host.textContent).not.toContain("Projection unavailable");
+    expect(host.textContent).not.toContain("Graph could not be loaded");
 });
 
 test("support paging stays generation-bound and failed pages can be retried", async () => {
@@ -458,7 +519,7 @@ test("support paging stays generation-bound and failed pages can be retried", as
         throw new Error(`Unexpected support call: ${method}`);
     });
     await mounted.show({ view: "entities" });
-    button("Alpha · Casey · 2 mentions").click();
+    clickNode();
     await settle();
     button("Next support page").click();
     await settle();
@@ -506,7 +567,7 @@ test("document evidence retains exact revision and locator rather than reading c
         throw new Error(`Unexpected document call: ${method}`);
     });
     await mounted.show({ view: "entities" });
-    button("Alpha · Casey · 2 mentions").click();
+    clickNode();
     await settle();
     button("Document evidence").click();
     await settle();
@@ -548,13 +609,7 @@ test.each([
                                         summaryState: "pending",
                                     },
                                 ],
-                                coverage: {
-                                    ...sample.corpora[0].graph.coverage,
-                                    topics: {
-                                        state: "ready",
-                                        generation: "topic-g1",
-                                    },
-                                },
+                                topicGeneration: "topic-g1",
                             },
                         },
                     ],
@@ -598,7 +653,7 @@ test.each([
             "memoryQueryTopics",
             expect.anything(),
         );
-        button("Alpha · Casey · 2 mentions · summary pending").click();
+        clickNode("topics");
         await settle();
         expect(invoke).toHaveBeenCalledWith("memoryQueryTopics", {
             corpusId: "a",
@@ -628,7 +683,7 @@ test("closing the graph invalidates outstanding evidence reads", async () => {
             : new Promise((resolve) => (finish = resolve)),
     );
     await mounted.show({ view: "entities" });
-    button("Alpha · Casey · 2 mentions").click();
+    clickNode();
     mounted.hide();
     finish({ items: [{ title: "Stale secret" }], total: 1 });
     await settle();

@@ -101,42 +101,44 @@
             <h2>Inbox</h2>
             <span id="inboxSummary" class="hub-chip"></span>
           </div>
-          <div class="hub-controls" id="inboxFilters">
-            <div
-              id="inboxChips"
-              class="hub-chips"
-              role="group"
-              aria-label="Filter by kind"
-            ></div>
-            <label class="checkbox"
-              ><input id="inboxDismissed" type="checkbox" />Show dismissed and
-              snoozed</label
-            >
+          <div id="hubInboxOperations">
+            <div class="hub-controls" id="inboxFilters">
+              <div
+                id="inboxChips"
+                class="hub-chips"
+                role="group"
+                aria-label="Filter by kind"
+              ></div>
+              <label class="checkbox"
+                ><input id="inboxDismissed" type="checkbox" />Show dismissed and
+                snoozed</label
+              >
+            </div>
+            <div id="hubInbox"></div>
+            <div class="pager">
+              <button
+                id="inboxPrevious"
+                class="icon-btn"
+                type="button"
+                aria-label="Previous page"
+                title="Previous page"
+              >
+                <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+              </button>
+              <span id="inboxPage"></span>
+              <button
+                id="inboxNext"
+                class="icon-btn"
+                type="button"
+                aria-label="Next page"
+                title="Next page"
+              >
+                <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+              </button>
+            </div>
           </div>
-          <div id="hubInbox"></div>
           <div id="hubViewAttention"></div>
           <div id="hubQuestionAttention"></div>
-          <div class="pager">
-            <button
-              id="inboxPrevious"
-              class="icon-btn"
-              type="button"
-              aria-label="Previous page"
-              title="Previous page"
-            >
-              <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
-            </button>
-            <span id="inboxPage"></span>
-            <button
-              id="inboxNext"
-              class="icon-btn"
-              type="button"
-              aria-label="Next page"
-              title="Next page"
-            >
-              <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-            </button>
-          </div>
         </section>
         <section id="page-questions" class="hub-page hidden">
           <div id="hubQuestions"></div>

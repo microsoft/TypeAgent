@@ -145,6 +145,9 @@ export const viewBuildSummarySchema = viewBuildJobSchema
             })
             .extend({
                 current: z.boolean(),
+                conflictState: z
+                    .enum(["pending", "resolved", "missing"])
+                    .optional(),
                 snapshot: result.shape.snapshot
                     .pick({ pipeline: true })
                     .extend({

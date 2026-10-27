@@ -7,7 +7,7 @@ import type {
     MemoryHubKnowledgeItem,
     MemoryHubKnowledgeKind,
 } from "@typeagent/browser-control-rpc/viewRpc";
-import { iconButton, watchSlowRequest } from "./memoryHubUi";
+import { watchSlowRequest } from "./memoryHubUi";
 import { invokeView } from "./viewClient";
 import {
     mountKnowledgeCollection,
@@ -39,7 +39,6 @@ export function mountMemoryHubExplore(
 ) {
     const root = text("section", undefined, "memory-phase2 memory-explore");
     root.setAttribute("aria-label", "Corpus overview");
-    const controls = text("div", undefined, "phase2-controls");
     const status = text(
         "p",
         "Open Overview to load corpus-neutral knowledge.",
@@ -54,7 +53,7 @@ export function mountMemoryHubExplore(
     const flyout = mountFlyout(host, "Knowledge detail");
     const graphDetails = mountGraphDetails(host, options);
     const lists = text("div", undefined, "phase2-lists");
-    root.append(controls, status, warning, counts, note, lists);
+    root.append(status, warning, counts, note, lists);
     host.append(root);
     const topics = mountTopicBrowser(root, {
         corpusId: options.scope,
@@ -66,7 +65,6 @@ export function mountMemoryHubExplore(
     let cached: MemoryHubExploreResult | undefined;
     let version = 0;
     let disposed = false;
-    let loading = false;
     let collections: ReturnType<typeof mountKnowledgeCollection>[] = [];
 
     function sourceItems(
@@ -191,13 +189,6 @@ export function mountMemoryHubExplore(
         collections.forEach((value) => value.dispose());
         collections = [];
     }
-    function renderControls() {
-        const refresh = iconButton("fa-rotate", "Refresh overview", () => {
-            void load();
-        });
-        refresh.disabled = loading;
-        controls.replaceChildren(refresh);
-    }
     function render(data: MemoryHubExploreResult) {
         counts.replaceChildren(
             ...Object.entries(data.counts).map(([name, count]) =>
@@ -291,20 +282,15 @@ export function mountMemoryHubExplore(
                         : "No derived knowledge in this scope.",
                 ),
             );
-        renderControls();
     }
     async function load() {
         topics.refresh();
         const requestVersion = ++version;
         const scope = options.scope();
-        loading = true;
         status.textContent = "Loading corpus overview…";
-        renderControls();
         const stopWatching = watchSlowRequest(status, () => {
             version++;
-            loading = false;
             status.textContent = "Overview loading cancelled.";
-            renderControls();
         });
         try {
             const data = await invokeView("memoryHubExplore", {
@@ -318,7 +304,6 @@ export function mountMemoryHubExplore(
             )
                 return;
             cached = data;
-            loading = false;
             render(data);
         } catch (error) {
             if (
@@ -327,15 +312,12 @@ export function mountMemoryHubExplore(
                 scope !== options.scope()
             )
                 return;
-            loading = false;
             status.textContent = `Explore unavailable: ${error instanceof Error ? error.message : String(error)}`;
             options.onError(error);
-            renderControls();
         } finally {
             stopWatching();
         }
     }
-    renderControls();
     return {
         async show() {
             if (disposed) return;
@@ -347,14 +329,12 @@ export function mountMemoryHubExplore(
             version++;
             cached = undefined;
             clearCollections();
-            loading = false;
             counts.replaceChildren();
             lists.replaceChildren();
             note.replaceChildren();
             warning.hidden = true;
             status.textContent =
                 "Scope changed. Open Overview to load this corpus.";
-            renderControls();
         },
         hide() {
             flyout.close();

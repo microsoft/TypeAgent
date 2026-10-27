@@ -146,6 +146,9 @@ test("explicit authenticated unit unlock and current related navigation use exis
         await settle();
         click(host, "Deliberate human title");
         await settle();
+        host.querySelector<HTMLButtonElement>(
+            'button[aria-label="More actions"]',
+        )!.click();
         expect(
             [...host.querySelectorAll("button")].some(
                 (entry) =>

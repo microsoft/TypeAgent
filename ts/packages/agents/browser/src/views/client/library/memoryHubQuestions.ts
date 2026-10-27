@@ -17,7 +17,7 @@ import {
     rbField,
     rbError,
 } from "./memoryHubDocumentUi";
-import { icon, menuButton } from "./memoryHubUi";
+import { icon, menuButton, setTabLabel } from "./memoryHubUi";
 import {
     questionAttention,
     questionIdentity,
@@ -26,10 +26,15 @@ import {
     questionCandidateCount,
     type QuestionListItem,
 } from "./memoryHubQuestionsModel";
-import { routeHash, type HiddenItems } from "./memoryHubModel";
+import { routeHash, type HiddenItems, type HubRoute } from "./memoryHubModel";
 import { schemaViewPageBrowserLink } from "./memoryHubViewPages";
 import { mountMemoryHubAcquisitions } from "./memoryHubAcquisitions";
 import { mountMemoryHubKnowledgeStatus } from "./memoryHubKnowledgeStatus";
+import type { InboxAttentionCard } from "./memoryHubInbox";
+
+type QuestionTarget = Pick<MemoryQuestion, "corpusId" | "viewId"> & {
+    slot: { id: string; question?: string };
+};
 
 export function mountMemoryHubQuestions(
     host: HTMLElement,
@@ -41,7 +46,10 @@ export function mountMemoryHubQuestions(
         persistHidden: () => void;
         onError: (error: unknown) => void;
         onOpenSource: (corpusId: string, sourceId: string) => void;
-        onAttentionCount?: (count: number) => void;
+        onNavigate?: (route: HubRoute) => void;
+        onAttentionCount?: (count: number, hasMore?: boolean) => void;
+        onAttentionError?: (error: unknown) => void;
+        presentAttention?: (card: InboxAttentionCard) => HTMLElement;
     },
 ) {
     let inventories = new Map<string, QuestionSummaryPage>();
@@ -56,6 +64,7 @@ export function mountMemoryHubQuestions(
     let dirty = false;
     type Filter = "all" | "open" | "answered";
     let selectedKey: string | undefined;
+    let selectedQuestion: QuestionTarget | undefined;
     let filter: Filter = "all";
     let search = "";
     let loadedAt = 0;
@@ -64,16 +73,45 @@ export function mountMemoryHubQuestions(
     let failureLines: string[] = [];
     const status = rbChip("");
     status.setAttribute("role", "status");
+    const total = rbNode("span", "Loading...", "hub-list-total");
     const notice = rbNode("div", undefined, "hub-notice");
     notice.hidden = true;
     const list = rbNode("div", undefined, "hub-qlist");
-    const inspector = rbNode("section", undefined, "hub-qdetail");
+    const inspector = rbNode(
+        "article",
+        undefined,
+        "hub-qdetail hub-view-document",
+    );
     inspector.setAttribute("aria-label", "Question inspector");
+    const reader = rbNode("section", undefined, "hub-question-reader");
+    reader.hidden = true;
+    const readerActions = rbNode("div", undefined, "hub-view-actions");
+    const back = rbIconButton(
+        "fa-arrow-left",
+        "Back to questions",
+        backToQuestions,
+    );
+    readerActions.append(back);
+    reader.append(readerActions, inspector);
     const author = rbNode("section");
     const acquisitionHost = rbNode("section");
     const acquisitions = mountMemoryHubAcquisitions(acquisitionHost);
     const knowledgeHost = rbNode("section");
     const knowledge = mountMemoryHubKnowledgeStatus(knowledgeHost);
+    const knowledgePanel = rbNode("details", undefined, "hub-panel");
+    knowledgePanel.append(
+        rbNode("summary", "Knowledge preparation"),
+        knowledgeHost,
+    );
+    let knowledgeLoaded = false;
+    async function loadKnowledge() {
+        if (!knowledgePanel.open || knowledgeLoaded || attentionOnly) return;
+        knowledgeLoaded = true;
+        await knowledge.refresh(panelCorpora);
+    }
+    knowledgePanel.addEventListener("toggle", () => {
+        void loadKnowledge().catch(options.onError);
+    });
     const panel = rbNode("details", undefined, "hub-panel");
     panel.append(
         rbNode("summary", "Deferred evidence acquisition"),
@@ -82,20 +120,20 @@ export function mountMemoryHubQuestions(
     let panelCorpora: Array<{ corpusId: string; name: string }> = [];
     let panelLoaded = false;
     async function loadPanel() {
-        if (!panel.open || panelLoaded) return;
+        if (!panel.open || panelLoaded || attentionOnly) return;
         panelLoaded = true;
         await acquisitions.refresh(panelCorpora, selectedView);
     }
     panel.addEventListener("toggle", () => {
         void loadPanel().catch((error: unknown) => options.onError(error));
     });
-    const chips = rbNode("div", undefined, "hub-chips");
+    const chips = rbNode("div", undefined, "hub-tabs");
     chips.setAttribute("role", "group");
     chips.setAttribute("aria-label", "Question filter");
-    for (const [value, label] of [
-        ["all", "All"],
-        ["open", "Open"],
-        ["answered", "Answered"],
+    for (const [value, label, glyph] of [
+        ["all", "All", "fa-list"],
+        ["open", "Open", "fa-circle-question"],
+        ["answered", "Answered", "fa-circle-check"],
     ] as const) {
         const chip = rbButton(label, () => {
             filter = value;
@@ -105,6 +143,7 @@ export function mountMemoryHubQuestions(
             pager.reset();
             void refresh().catch(options.onError);
         });
+        setTabLabel(chip, glyph, label);
         chip.setAttribute("aria-pressed", String(value === filter));
         chips.append(chip);
     }
@@ -149,19 +188,47 @@ export function mountMemoryHubQuestions(
         }),
     );
     const filters = rbNode("div", undefined, "hub-qfilters");
-    filters.append(chips, searchBox);
-    const split = rbNode("div", undefined, "hub-split");
-    split.append(list, inspector);
-    host.append(
-        head,
-        notice,
-        knowledgeHost,
-        author,
-        filters,
-        split,
-        pagination,
-        panel,
-    );
+    filters.append(searchBox);
+    const card = rbNode("section", undefined, "card hub-list-card");
+    card.setAttribute("aria-label", "Questions list");
+    const cardHead = rbNode("div", undefined, "section-heading");
+    cardHead.append(rbNode("h2", "Questions"), total);
+    card.append(cardHead, notice, filters, list, pagination);
+    host.append(head, chips, card, reader, author, panel, knowledgePanel);
+
+    function setDetailMode(detail: boolean) {
+        reader.hidden = !detail;
+        for (const element of [
+            head,
+            chips,
+            card,
+            author,
+            panel,
+            knowledgePanel,
+        ])
+            element.hidden = detail;
+    }
+
+    function backToQuestions() {
+        if (busy || (dirty && !confirm("Discard unsaved question edits?")))
+            return;
+        dirty = false;
+        detailSequence++;
+        selectedKey = undefined;
+        selectedQuestion = undefined;
+        inspector.setAttribute("aria-busy", "false");
+        inspector.replaceChildren();
+        if (options.onNavigate)
+            options.onNavigate({
+                page: "questions",
+                ...(selectedView ? { objectId: selectedView } : {}),
+                ...(selectedCorpus ? { corpusId: selectedCorpus } : {}),
+            });
+        else {
+            setDetailMode(false);
+            renderList();
+        }
+    }
 
     function action(work: () => Promise<void>) {
         if (busy) return;
@@ -169,6 +236,11 @@ export function mountMemoryHubQuestions(
         void work()
             .catch((error: unknown) => {
                 status.textContent = `Question operation failed: ${rbError(error)}`;
+                if (!reader.hidden) {
+                    const alert = rbNode("p", status.textContent);
+                    alert.setAttribute("role", "alert");
+                    inspector.append(alert);
+                }
                 options.onError(error);
             })
             .finally(() => {
@@ -231,24 +303,25 @@ export function mountMemoryHubQuestions(
         return section;
     }
     async function edit(question: MemoryQuestion, edit: QuestionEdit) {
+        const current = detailSequence;
+        const inventory = inventories.get(question.corpusId);
+        if (!inventory)
+            throw new Error(
+                "Question inventory is unavailable. Reload the question before editing.",
+            );
         await invokeMemory("memoryEditQuestion", {
             corpusId: question.corpusId,
             viewId: question.viewId,
             slotId: question.slot.id,
-            expectedHead: inventories.get(question.corpusId)!.head,
+            expectedHead: inventory.head,
             expectedVersion: question.viewVersion,
             edit,
         });
         dirty = false;
         await refreshInventory();
-        const current = all().find(
-            (item) => questionIdentity(item) === questionIdentity(question),
-        );
-        if (current) inspect(await fetchQuestion(current));
-        else
-            inspector.replaceChildren(
-                rbNode("p", "This question is no longer available."),
-            );
+        if (current !== detailSequence || reader.hidden) return;
+        const updated = await fetchQuestion(question);
+        if (current === detailSequence && !reader.hidden) inspect(updated);
     }
     function originLabel(question: QuestionListItem) {
         return (
@@ -298,7 +371,7 @@ export function mountMemoryHubQuestions(
         if (count > 1) row.append(rbChip(`${count} candidates`));
         return row;
     }
-    async function fetchQuestion(question: QuestionListItem) {
+    async function fetchQuestion(question: QuestionTarget) {
         const detail = await invokeMemory("memoryGetQuestion", {
             corpusId: question.corpusId,
             viewId: question.viewId,
@@ -309,45 +382,81 @@ export function mountMemoryHubQuestions(
     }
     let detailSequence = 0;
     function select(question: QuestionListItem) {
+        if (options.onNavigate) {
+            options.onNavigate({
+                page: "questions",
+                corpusId: question.corpusId,
+                objectId: question.viewId,
+                questionSlotId: question.slot.id,
+            });
+        } else void loadDetail(question);
+    }
+    async function loadDetail(question: QuestionTarget) {
         if (busy) return;
         if (dirty && !confirm("Discard unsaved question edits?")) return;
         dirty = false;
         const current = ++detailSequence;
         const scope = options.scope();
-        selectedKey = questionKey(question);
+        const key = questionIdentity(question);
+        selectedKey = key;
+        selectedQuestion = question;
+        setDetailMode(true);
+        readerActions.replaceChildren(back);
         const isCurrent = () =>
             current === detailSequence &&
-            selectedKey === questionKey(question) &&
+            selectedKey === key &&
             scope === options.scope();
         inspector.setAttribute("aria-busy", "true");
-        inspector.replaceChildren(
-            rbNode("h3", question.slot.question),
+        inspector.append(
+            rbNode("h2", question.slot.question ?? "Question"),
             rbNode("p", "Loading question details..."),
         );
-        void fetchQuestion(question)
-            .then((detail) => {
-                if (isCurrent()) inspect(detail);
-            })
-            .catch((error: unknown) => {
+        try {
+            if (!schemaViewsSupported) {
+                const capabilities = await invokeMemory(
+                    "memoryViewCapabilities",
+                    {},
+                );
                 if (!isCurrent()) return;
-                const alert = rbNode(
-                    "p",
-                    `Question details unavailable: ${rbError(error)}`,
-                );
-                alert.setAttribute("role", "alert");
-                inspector.replaceChildren(
-                    rbNode("h3", question.slot.question),
-                    alert,
-                    rbButton("Retry question details", () => select(question)),
-                );
-                options.onError(error);
-            })
-            .finally(() => {
-                if (isCurrent()) inspector.setAttribute("aria-busy", "false");
-            });
-        renderList();
-        if (window.matchMedia?.("(max-width: 900px)").matches)
-            inspector.scrollIntoView?.({ block: "start" });
+                schemaViewsSupported =
+                    capabilities.derivedViews?.kinds.includes("schemaView") ??
+                    false;
+                if (!schemaViewsSupported)
+                    throw new Error(
+                        "Schema-defined questions capability is unavailable.",
+                    );
+            }
+            const detail = await fetchQuestion(question);
+            if (!isCurrent()) return;
+            if (!inventories.has(question.corpusId)) {
+                const page = await invokeMemory("memoryListQuestionSummaries", {
+                    corpusId: question.corpusId,
+                    viewId: question.viewId,
+                    pageSize: 1,
+                });
+                if (!isCurrent()) return;
+                inventories.set(question.corpusId, page);
+                loadedAt = 0;
+            }
+            inspect(detail);
+        } catch (error: unknown) {
+            if (!isCurrent()) return;
+            const alert = rbNode(
+                "p",
+                `Question details unavailable: ${rbError(error)}`,
+            );
+            alert.setAttribute("role", "alert");
+            inspector.append(
+                rbNode("h2", question.slot.question ?? "Question"),
+                alert,
+                rbButton("Retry question details", () => {
+                    void loadDetail(question);
+                }),
+            );
+            options.onError(error);
+        } finally {
+            if (isCurrent()) inspector.setAttribute("aria-busy", "false");
+        }
     }
     function visibleQuestions() {
         return all().filter(
@@ -446,9 +555,36 @@ export function mountMemoryHubQuestions(
         // Decision first: the question, its status and the candidates.
         // Schemas, revisions and raw support stay under Advanced.
         inspector.replaceChildren();
+        const title = rbNode("h2", question.slot.question);
+        title.tabIndex = -1;
+        const flow = rbNode("div", undefined, "hub-view-reading-flow");
+        const overview = rbNode("aside", undefined, "hub-view-infobox");
+        overview.setAttribute("aria-label", "About this question");
+        overview.append(
+            rbNode("h3", "Question overview"),
+            rbNode(
+                "p",
+                "Answer coverage and metadata",
+                "hub-view-infobox-label",
+            ),
+            rowChips(question),
+            rbNode("p", detailMeta(question), "hub-view-note"),
+            rbNode(
+                "p",
+                `Collection: ${options.corpora().find((corpus) => corpus.corpusId === question.corpusId)?.name ?? question.corpusId}`,
+            ),
+            rbNode("p", `View: ${question.viewTitle}`),
+            rbNode(
+                "p",
+                `Version ${question.viewVersion} · ${details.evaluatedSources.length} evaluated sources`,
+            ),
+        );
+        const content = rbNode("div", undefined, "hub-question-content");
+        flow.append(overview, content);
+        inspector.append(title, flow);
         if (question.slot.admission) {
             const admission = question.slot.admission;
-            inspector.append(
+            overview.append(
                 rbChip(
                     admission.actor === "policy"
                         ? "Policy-discovered"
@@ -525,7 +661,7 @@ export function mountMemoryHubQuestions(
                                     ),
                                 );
                         }
-                        inspector.append(revisions);
+                        content.append(revisions);
                     }),
             },
             {
@@ -541,7 +677,7 @@ export function mountMemoryHubQuestions(
                         });
                         const link = rbNode("a", page.uri);
                         link.href = schemaViewPageBrowserLink(page.uri);
-                        inspector.append(
+                        content.append(
                             rbNode(
                                 "p",
                                 `Deterministic page · revision ${page.revisionId}`,
@@ -577,22 +713,20 @@ export function mountMemoryHubQuestions(
         headerActions.append(
             rbIconButton("fa-bell-slash", "Snooze one day", () => {
                 hideQuestions([question], Date.now() + 86400000);
-                inspector.replaceChildren();
+                backToQuestions();
             }),
             rbIconButton("fa-xmark", "Dismiss", () => {
                 hideQuestions([question]);
-                inspector.replaceChildren();
+                backToQuestions();
             }),
             menuButton("More question actions", menuItems),
         );
-        const titleRow = rbNode("div", undefined, "hub-qdetail-head");
-        titleRow.append(
-            rbNode("h3", question.slot.question),
-            rowChips(question),
+        readerActions.replaceChildren(
+            back,
+            rbNode("span", undefined, "hub-spacer"),
             headerActions,
         );
-        const meta = rbNode("p", detailMeta(question), "hub-muted");
-        inspector.append(titleRow, meta);
+        title.focus();
         const discovery = rbNode("details");
         discovery.append(rbNode("summary", "Configure bounded discovery"));
         const enable = rbNode("input");
@@ -637,7 +771,7 @@ export function mountMemoryHubQuestions(
             ),
         );
         advanced.append(discovery);
-        inspector.append(
+        content.append(
             details.candidates.length
                 ? rbNode("h4", "Candidates")
                 : rbNode("p", "No candidate answers yet."),
@@ -714,7 +848,7 @@ export function mountMemoryHubQuestions(
                 rbNode("pre", JSON.stringify(candidate.support, null, 2)),
             );
             card.append(detail);
-            inspector.append(card);
+            content.append(card);
         }
         const why = rbNode("details");
         why.append(
@@ -725,7 +859,7 @@ export function mountMemoryHubQuestions(
                 "Question discovery evidence",
             ),
         );
-        inspector.append(why);
+        content.append(why);
         let answer = "";
         let itemKey = "";
         let meaning = question.slot.question;
@@ -817,7 +951,7 @@ export function mountMemoryHubQuestions(
                 }),
             ),
         );
-        inspector.append(assertion, contract, advanced);
+        content.append(assertion, contract, advanced);
     }
     function hideQuestions(questions: QuestionListItem[], until?: number) {
         for (const question of questions)
@@ -830,17 +964,20 @@ export function mountMemoryHubQuestions(
     }
     function renderAttention() {
         attentionHost.replaceChildren();
-        const groups = questionAttention(
+        const allGroups = questionAttention(
             all().filter(
                 (question) =>
                     !options.scope() || question.corpusId === options.scope(),
             ),
             options.hidden,
+            Date.now(),
+            20,
         );
-        options.onAttentionCount?.(
-            groups.length + (attentionOnly && pager.hasNext ? 1 : 0),
-        );
-        if (!groups.length && !pager.hasNext) return;
+        const groups = allGroups.slice(0, 5);
+        if (!groups.length && !pager.hasNext) {
+            options.onAttentionCount?.(0, false);
+            return;
+        }
         attentionHost.append(rbNode("h3", "Question decisions"));
         const byReason = new Map<string, typeof groups>();
         for (const group of groups) {
@@ -867,6 +1004,9 @@ export function mountMemoryHubQuestions(
                     page: "questions",
                     corpusId: first.corpusId,
                     objectId: first.viewId,
+                    ...(group.questions.length === 1
+                        ? { questionSlotId: first.slot.id }
+                        : {}),
                 });
                 row.append(link);
                 for (const [label, glyph, until] of [
@@ -880,7 +1020,14 @@ export function mountMemoryHubQuestions(
                     );
                 rows.append(row);
             }
-            attentionHost.append(card);
+            attentionHost.append(
+                options.presentAttention?.({
+                    title: reason,
+                    summary: members.map((group) => group.title).join(", "),
+                    entries: members.length,
+                    detail: card,
+                }) ?? card,
+            );
         }
         if (attentionOnly)
             attentionHost.append(
@@ -888,6 +1035,14 @@ export function mountMemoryHubQuestions(
                     void refresh().catch(options.onError);
                 }),
             );
+        const workspace = rbNode("a", "Open Questions workspace");
+        workspace.href = "#/questions";
+        attentionHost.append(workspace);
+        options.onAttentionCount?.(
+            groups.length,
+            allGroups.length > groups.length ||
+                (attentionOnly && pager.hasNext),
+        );
     }
     function renderAuthor() {
         author.replaceChildren();
@@ -1011,7 +1166,12 @@ export function mountMemoryHubQuestions(
         );
         renderAuthor();
         const questions = all();
-        status.textContent = `Showing ${questions.length} of ${pager.total} questions`;
+        status.textContent = "";
+        total.textContent =
+            failureLines.length && failureLines.length === corpora.length
+                ? "Unavailable"
+                : `${pager.total} total${failureLines.length ? " (partial)" : ""}`;
+        total.title = `Showing ${questions.length} loaded questions${failureLines.length ? "; some collections are unavailable" : ""}.`;
         pagination.replaceChildren(
             pager.controls("questions", () => {
                 void refresh().catch(options.onError);
@@ -1019,6 +1179,7 @@ export function mountMemoryHubQuestions(
         );
         if (!corpora.length && corpusId) {
             status.textContent = "";
+            total.textContent = "Unavailable";
             failureLines = [
                 "Selected collection is unavailable; scope has not been broadened.",
             ];
@@ -1030,15 +1191,10 @@ export function mountMemoryHubQuestions(
         loadedScope = corpusId;
     }
     function scopedCorpora() {
-        const corpusId = options.scope();
+        const corpusId = selectedCorpus ?? options.scope();
         return options
             .corpora()
-            .filter(
-                (corpus) =>
-                    !corpusId ||
-                    corpus.corpusId === corpusId ||
-                    corpus.corpusId === selectedCorpus,
-            );
+            .filter((corpus) => !corpusId || corpus.corpusId === corpusId);
     }
     // Reloads the inventory only. Acquisition progress loads
     // when their panel is opened, not on every question edit.
@@ -1054,6 +1210,8 @@ export function mountMemoryHubQuestions(
     async function refresh() {
         const version = ++sequence;
         status.textContent = "Loading questions…";
+        total.textContent = "Loading...";
+        total.title = "";
         const corpora = scopedCorpora().filter((corpus) =>
             pager.includes(corpus.corpusId),
         );
@@ -1082,6 +1240,7 @@ export function mountMemoryHubQuestions(
             );
             options.onAttentionCount?.(0);
             status.textContent = `Questions unavailable: ${rbError(error)}`;
+            total.textContent = "Unavailable";
             throw error;
         }
         if (version !== sequence) return;
@@ -1097,6 +1256,7 @@ export function mountMemoryHubQuestions(
             attentionHost.replaceChildren();
             options.onAttentionCount?.(0);
             status.textContent = "";
+            total.textContent = "Unavailable";
             list.append(
                 rbNode(
                     "p",
@@ -1109,17 +1269,28 @@ export function mountMemoryHubQuestions(
         const results = await loadQuestions(corpora);
         if (version !== sequence) return;
         applyInventory(results, corpora, options.scope());
-        if (failureLines.length)
+        if (failureLines.length) {
             attentionHost.prepend(rbNode("p", failureLines.join("; ")));
+            if (attentionOnly)
+                options.onAttentionError?.(new Error(failureLines.join("; ")));
+        }
         panelCorpora = corpora.filter(
             (corpus) => !selectedCorpus || corpus.corpusId === selectedCorpus,
         );
         panelLoaded = false;
-        await knowledge.refresh(panelCorpora);
+        knowledgeLoaded = false;
+        knowledge.clear();
+        await loadKnowledge();
         if (panel.open) await loadPanel();
     }
     return {
-        async show(viewId?: string, corpusId?: string) {
+        async show(viewId?: string, corpusId?: string, slotId?: string) {
+            if (slotId && viewId && corpusId) {
+                attentionOnly = false;
+                await loadDetail({ corpusId, viewId, slot: { id: slotId } });
+                return;
+            }
+            setDetailMode(false);
             detailSequence++;
             inspector.setAttribute("aria-busy", "false");
             const same =
@@ -1139,7 +1310,11 @@ export function mountMemoryHubQuestions(
             }
             await refresh();
         },
-        refresh,
+        async refresh() {
+            await refresh();
+            if (!reader.hidden && selectedQuestion)
+                await loadDetail(selectedQuestion);
+        },
         hide() {
             detailSequence++;
             inspector.setAttribute("aria-busy", "false");
@@ -1150,7 +1325,12 @@ export function mountMemoryHubQuestions(
             selectedCorpus = undefined;
             clearTimeout(searchTimer);
             pager.reset();
-            await refresh();
+            try {
+                await refresh();
+            } catch (error) {
+                options.onAttentionError?.(error);
+                throw error;
+            }
         },
         discardChanges() {
             if (!dirty) return true;

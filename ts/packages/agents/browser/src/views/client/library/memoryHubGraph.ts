@@ -11,17 +11,13 @@ import type {
 } from "@typeagent/browser-control-rpc/viewRpc";
 import { EntityGraphVisualizer } from "./entityGraphVisualizer";
 import { TopicGraphVisualizer } from "./topicGraphVisualizer";
-import {
-    graphText,
-    graphButton,
-    mountGraphDetails,
-} from "./memoryHubGraphDetails";
+import { graphText, mountGraphDetails } from "./memoryHubGraphDetails";
 import { mountGraphControls } from "./memoryHubGraphControls";
+import { iconButton } from "./memoryHubUi";
 import { invokeView } from "./viewClient";
 import "./memoryHubGraph.css";
 
 type GraphKind = MemoryGraphQueryRequest["kind"];
-type CorpusGraph = MemoryHubGraphResult["corpora"][number];
 export interface MemoryHubGraphOptions {
     scope: () => string | undefined;
     onOpenSource: (corpusId: string, sourceId: string) => void;
@@ -62,28 +58,14 @@ export function mountMemoryHubGraph(
     status.setAttribute("role", "status");
     const warning = graphText("div");
     warning.setAttribute("role", "status");
-    const coverageDetails = graphText("details");
-    coverageDetails.append(graphText("summary", "Graph coverage"));
-    const coverageInfo = graphText("div");
-    coverageDetails.append(coverageInfo);
     const toolbar = graphText("div", undefined, "hub-graph-toolbar");
-    const paging = graphText("div");
-    paging.setAttribute("aria-label", "Graph inventory pages");
+    toolbar.setAttribute("role", "group");
+    toolbar.setAttribute("aria-label", "Graph controls");
+    const viewport = graphText("div", undefined, "hub-graph-viewport");
     const canvas = graphText("div", undefined, "hub-scoped-graph-canvas");
     canvas.setAttribute("aria-label", "Memory graph visualization");
-    const browse = graphText("details");
-    browse.append(graphText("summary", "Browse graph nodes and relationships"));
-    const items = graphText("ul", undefined, "hub-graph-items");
-    browse.append(items);
-    root.append(
-        status,
-        warning,
-        coverageDetails,
-        toolbar,
-        paging,
-        canvas,
-        browse,
-    );
+    viewport.append(toolbar, canvas);
+    root.append(status, warning, viewport);
     host.append(root);
     const details = mountGraphDetails(host, options);
     let version = 0;
@@ -100,9 +82,6 @@ export function mountMemoryHubGraph(
         else renderer?.dispose();
         renderer = undefined;
         canvas.replaceChildren();
-        items.replaceChildren();
-        paging.replaceChildren();
-        coverageInfo.replaceChildren();
         details.close();
         result = undefined;
     }
@@ -138,37 +117,15 @@ export function mountMemoryHubGraph(
             node?.topicId
                 ? {
                       topicId: node.topicId,
-                      ...(corpus.graph.coverage.topics?.generation
+                      ...(corpus.graph.topicGeneration
                           ? {
-                                generation:
-                                    corpus.graph.coverage.topics.generation,
+                                generation: corpus.graph.topicGeneration,
                             }
                           : {}),
                   }
                 : undefined,
         );
         if (node) options.onRouteChanged(kind, id);
-    }
-    function browseCorpus(corpus: CorpusGraph) {
-        const entries = [
-            ...corpus.graph.nodes.map((node) => ({
-                id: node.id,
-                label: `${node.label} · ${node.mentionCount} mentions${node.summaryState ? ` · summary ${node.summaryState}` : ""}`,
-            })),
-            ...corpus.graph.edges.map((edge) => ({
-                id: edge.id,
-                label: `${edge.label ?? edge.type} · ${edge.count} mentions`,
-            })),
-        ];
-        for (const entry of entries) {
-            const row = graphText("li");
-            row.append(
-                graphButton(`${corpus.corpusName} · ${entry.label}`, () =>
-                    openSelection(entry.id),
-                ),
-            );
-            items.append(row);
-        }
     }
     async function renderGraph(data: MemoryHubGraphResult, ticket: number) {
         if (kind === "entities") {
@@ -190,28 +147,10 @@ export function mountMemoryHubGraph(
         }
         if (ticket === version) renderer?.resize();
     }
-    function coverage(data: MemoryHubGraphResult) {
+    function showErrors(data: MemoryHubGraphResult) {
         const messages = data.errors.map(
             (error) => `${error.corpusId}: ${error.message}`,
         );
-        for (const corpus of data.corpora) {
-            const parts = (["documents", "events"] as const).map((kind) => {
-                const coverage = corpus.graph.coverage[kind];
-                return `${kind} ${coverage.state}: ${coverage.indexed} of ${coverage.eligible} eligible indexed (${coverage.total} total)`;
-            });
-            if (corpus.graph.coverage.topics)
-                parts.push(`topics ${corpus.graph.coverage.topics.state}`);
-            coverageInfo.append(
-                graphText("p", `${corpus.corpusName}: ${parts.join("; ")}`),
-            );
-            messages.push(
-                ...corpus.graph.coverage.reasons.map(
-                    (reason) => `${corpus.corpusName}: ${reason}`,
-                ),
-            );
-            if (corpus.graph.state !== "ready")
-                messages.push(`${corpus.corpusName}: ${corpus.graph.state}`);
-        }
         if (data.omittedCorpora)
             messages.push(
                 `${data.omittedCorpora} corpora omitted by node budget.`,
@@ -219,116 +158,50 @@ export function mountMemoryHubGraph(
         warning.textContent = messages.join("\n");
         warning.hidden = !messages.length;
     }
-    function inventoryPages(
-        data: MemoryHubGraphResult,
-        request: MemoryHubGraphRequest,
-    ) {
-        for (const corpus of data.corpora) {
-            const graph = corpus.graph;
-            if (
-                !graph.counts.omittedNodes &&
-                !graph.nextContinuationToken &&
-                !request.continuationToken
-            )
-                continue;
-            const firstRequest: MemoryHubGraphRequest = {
-                ...request,
-                corpusId: corpus.corpusId,
-                expectedGeneration: graph.generation,
-                maxNodes: graph.limits.maxNodes,
-                maxEdges: graph.limits.maxEdges,
-            };
-            delete firstRequest.continuationToken;
-            const row = graphText("div", undefined, "hub-graph-toolbar");
-            row.append(
-                graphText(
-                    "span",
-                    `${corpus.corpusName}: ${graph.nodes.length} of ${graph.counts.nodes} matching nodes on this page; ${graph.counts.omittedNodes} not on this page.`,
-                ),
-            );
-            const first = graphButton(
-                `First nodes in ${corpus.corpusName}`,
-                () => void load({}, firstRequest),
-            );
-            first.disabled = !request.continuationToken;
-            const token = graph.nextContinuationToken;
-            const next = graphButton(
-                `Next nodes in ${corpus.corpusName}`,
-                () => {
-                    if (token)
-                        void load(
-                            {},
-                            { ...firstRequest, continuationToken: token },
-                        );
-                },
-            );
-            next.disabled = !token;
-            row.append(first, next);
-            paging.append(row);
-        }
-    }
     async function load(
         focus: Partial<
             Pick<MemoryHubGraphRequest, "corpusId" | "nodeId" | "search">
         > = {},
-        snapshot?: MemoryHubGraphRequest,
     ) {
         const ticket = ++version;
         release();
         root.hidden = false;
         root.setAttribute("aria-busy", "true");
         warning.replaceChildren();
+        warning.hidden = true;
         controls.showMode(kind !== "entities");
+        status.hidden = false;
         status.textContent = "Loading scoped memory graph...";
         try {
-            let request = snapshot;
-            if (!request) {
-                const filters = controls.request();
-                const corpusId = options.scope();
-                request = {
-                    ...filters,
-                    evidenceKinds: [...filters.evidenceKinds],
-                    ...(corpusId === undefined ? {} : { corpusId }),
-                    kind,
-                    maxNodes: 250,
-                    maxEdges: 500,
-                    ...focus,
-                };
-            }
+            const filters = controls.request();
+            const corpusId = options.scope();
+            const request: MemoryHubGraphRequest = {
+                ...filters,
+                evidenceKinds: [...filters.evidenceKinds],
+                ...(corpusId === undefined ? {} : { corpusId }),
+                kind,
+                maxNodes: 250,
+                maxEdges: 500,
+                ...focus,
+            };
             const data = await invokeView("memoryHubGraph", request);
             if (ticket !== version || disposed) return;
             result = data;
-            coverage(data);
+            showErrors(data);
             const nodes = data.corpora.flatMap((corpus) => corpus.graph.nodes);
-            const edges = data.corpora.flatMap((corpus) => corpus.graph.edges);
-            const totalNodes = data.corpora.reduce(
-                (total, corpus) => total + corpus.graph.counts.nodes,
-                0,
-            );
-            const totalEdges = data.corpora.reduce(
-                (total, corpus) => total + corpus.graph.counts.edges,
-                0,
-            );
-            const meaning =
-                kind === "entities"
-                    ? "Extracted entity relationships"
-                    : kind === "hierarchy"
-                      ? "Maintained topic hierarchy and related topics"
-                      : "Source co-occurrence, not a topic hierarchy";
-            status.textContent = `${meaning} · ${nodes.length} of ${totalNodes} matching nodes · ${edges.length} of ${totalEdges} matching edges · ${data.corpora.length} responding corpora`;
             if (nodes.length) await renderGraph(data, ticket);
-            else
-                status.textContent +=
-                    " · No nodes in the available projection.";
             if (ticket !== version || disposed) return;
-            data.corpora.forEach(browseCorpus);
-            inventoryPages(data, request);
+            status.textContent = nodes.length
+                ? ""
+                : "No nodes in the available projection.";
+            status.hidden = nodes.length > 0;
             if (request.nodeId) openSelection(request.nodeId);
         } catch (error) {
             if (ticket === version && !disposed) {
                 release();
                 status.textContent =
                     "Graph could not be loaded. Retry with Refresh graph.";
+                status.hidden = false;
                 warning.textContent =
                     error instanceof Error ? error.message : String(error);
                 warning.hidden = false;
@@ -339,12 +212,12 @@ export function mountMemoryHubGraph(
         }
     }
     toolbar.append(
-        graphButton("Refresh graph", () => void load()),
-        graphButton("Global graph", () => {
+        iconButton("fa-rotate", "Refresh graph", () => void load()),
+        iconButton("fa-globe", "Global graph", () => {
             options.onRouteChanged(kind);
             void load();
         }),
-        graphButton("Fit graph", () => {
+        iconButton("fa-expand", "Fit graph", () => {
             if (renderer instanceof EntityGraphVisualizer) renderer.fitToView();
             else renderer?.fitToView();
         }),

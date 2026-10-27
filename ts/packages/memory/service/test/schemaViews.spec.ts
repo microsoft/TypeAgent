@@ -639,6 +639,80 @@ describe("ordinary-source schema lifecycle", () => {
         return { corpus, request };
     }
 
+    test.each([false, true])(
+        "oversized reconciliation remains visible without failing close; recovery=%s",
+        async (recover) => {
+            const corpus = await service.createCorpus("Bounded questions");
+            const corpusId = corpus.corpusId;
+            const def = definition([name]);
+            def.maintenance = {
+                schemaVersion: 1,
+                scope: { mode: "scopedSources", tags: ["profile"] },
+            };
+            await settled(
+                await service.buildViews({
+                    corpusId,
+                    expectedHead: (await service.listViews(corpusId)).head,
+                    publication: false,
+                    targets: [{ definition: def, expectedVersion: 0 }],
+                }),
+            );
+            const calls = modelCalls;
+            const source = {
+                sourceId: "bounded-profile",
+                sourceType: "text" as const,
+                title: "Profile",
+                tags: ["profile"],
+                text: "Preferred name is Ada. " + "x".repeat(120001),
+            };
+            const job = await service.ingestDocument({ corpusId, source });
+            await waitForMemoryJob(service, job.jobId);
+            let error: string | undefined;
+            for (let count = 0; count < 1000; count++) {
+                error = (await service.listQuestions(corpusId))
+                    .maintenanceError;
+                if (error) break;
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+            expect(error).toContain(
+                "Complete input exceeds 120000 characters; no truncation",
+            );
+            expect(service.getMaintenanceStatus()).toMatchObject({
+                settled: false,
+                failures: [{ key: `${corpusId}:schema`, error }],
+            });
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            expect(modelCalls).toBe(calls);
+            if (recover) {
+                const replacement = await service.ingestDocument({
+                    corpusId,
+                    source: { ...source, text: "Preferred name is Ada." },
+                });
+                await waitForMemoryJob(service, replacement.jobId);
+                for (let count = 0; count < 1000; count++) {
+                    const inventory = await service.listQuestions(corpusId);
+                    if (
+                        !inventory.maintenanceError &&
+                        inventory.items[0].details.candidates.length
+                    )
+                        break;
+                    await new Promise((resolve) => setTimeout(resolve, 10));
+                }
+                expect(
+                    (await service.listQuestions(corpusId)).maintenanceError,
+                ).toBeUndefined();
+                expect(
+                    service.getMaintenanceStatus().failures,
+                ).not.toContainEqual(
+                    expect.objectContaining({ key: `${corpusId}:schema` }),
+                );
+                expect(modelCalls).toBeGreaterThan(calls);
+            }
+            await expect(service.close()).resolves.toBeUndefined();
+        },
+        60000,
+    );
+
     test("paged inventories omit evidence and frozen inputs; detail and bulk publication remain authoritative", async () => {
         const corpus = await service.createCorpus("Inventory contracts");
         const corpusId = corpus.corpusId;
@@ -923,6 +997,10 @@ describe("ordinary-source schema lifecycle", () => {
             await new Promise((resolve) => setTimeout(resolve, 500));
             expect(rebuildPlans).toBe(4);
             expectedCloseFailure = failure;
+            expect(service.getMaintenanceStatus().failures).toContainEqual({
+                key: `${corpus.corpusId}:schema`,
+                error: failure,
+            });
         },
         60000,
     );

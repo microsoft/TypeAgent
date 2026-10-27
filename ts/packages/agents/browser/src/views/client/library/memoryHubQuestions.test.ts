@@ -26,7 +26,10 @@ function click(label: string) {
     if (!target) throw new Error(`Missing button ${label}`);
     target.click();
 }
-function setup(scope: () => string | undefined = () => "corpus") {
+function setup(
+    scope: () => string | undefined = () => "corpus",
+    onNavigate?: Parameters<typeof mountMemoryHubQuestions>[2]["onNavigate"],
+) {
     document.body.innerHTML = "<main></main><aside></aside>";
     const onError = jest.fn();
     return {
@@ -41,6 +44,7 @@ function setup(scope: () => string | undefined = () => "corpus") {
                 persistHidden: jest.fn(),
                 onError,
                 onOpenSource: jest.fn(),
+                onNavigate,
             },
         ),
     };
@@ -58,6 +62,169 @@ beforeEach(() => {
             throw new Error(`Unexpected operation ${method}`);
         }),
     );
+});
+test("question cards navigate to a corpus-qualified slot reader and Back restores the list route", async () => {
+    const onNavigate = jest.fn();
+    const { panel, onError } = setup(() => "corpus", onNavigate);
+    await panel.show();
+    click("What is the name?");
+    expect(onNavigate).toHaveBeenLastCalledWith({
+        page: "questions",
+        corpusId: "corpus",
+        objectId: "view",
+        questionSlotId: "slot",
+    });
+    await panel.show("view", "corpus", "slot");
+    const reader = document.querySelector<HTMLElement>(".hub-question-reader")!;
+    expect(reader.hidden).toBe(false);
+    expect(
+        document.querySelector<HTMLElement>('[aria-label="Questions list"]')!
+            .hidden,
+    ).toBe(true);
+    const overview = reader.querySelector(
+        'aside[aria-label="About this question"]',
+    )!;
+    expect(overview.classList).toContain("hub-view-infobox");
+    expect(overview.textContent).toContain("Coverage unknown");
+    expect(overview.textContent).toContain("Version 2");
+    expect(reader.querySelector(".hub-question-content")).not.toBeNull();
+    click("Back to questions");
+    expect(onNavigate).toHaveBeenLastCalledWith({ page: "questions" });
+    await panel.show();
+    expect(reader.hidden).toBe(true);
+    expect(
+        document.querySelector<HTMLElement>('[aria-label="Questions list"]')!
+            .hidden,
+    ).toBe(false);
+    expect(onError).not.toHaveBeenCalled();
+});
+
+test("direct question links load the exact slot without searching every collection or inventory page", async () => {
+    const original = invoke.getMockImplementation()!;
+    invoke.mockImplementation((method, params) =>
+        method === "memoryGetQuestion"
+            ? Promise.resolve(question("off-page"))
+            : original(method, params),
+    );
+    const { panel, onError } = setup();
+    await panel.show("view", "corpus", "off-page");
+    expect(invoke).toHaveBeenCalledWith("memoryGetQuestion", {
+        corpusId: "corpus",
+        viewId: "view",
+        slotId: "off-page",
+    });
+    expect(invoke).toHaveBeenCalledWith("memoryListQuestionSummaries", {
+        corpusId: "corpus",
+        viewId: "view",
+        pageSize: 1,
+    });
+    expect(document.querySelector(".hub-view-infobox")!.textContent).toContain(
+        "Coverage unknown",
+    );
+    const answer = document.querySelector<HTMLTextAreaElement>(
+        '[aria-label="Question inspector"] textarea',
+    )!;
+    answer.value = '"Ada"';
+    answer.dispatchEvent(new Event("input"));
+    click("Save user assertion");
+    await settle();
+    expect(invoke).toHaveBeenCalledWith(
+        "memoryEditQuestion",
+        expect.objectContaining({
+            slotId: "off-page",
+            expectedHead: "head",
+            expectedVersion: 2,
+        }),
+    );
+    expect(document.querySelector(".hub-view-infobox")).not.toBeNull();
+    expect(onError).not.toHaveBeenCalled();
+});
+
+test("Back invalidates pending question details and operation errors stay visible on the reader", async () => {
+    const { panel } = setup();
+    await panel.show();
+    const original = invoke.getMockImplementation()!;
+    let resolve!: (value: unknown) => void;
+    invoke.mockImplementation((method, params) =>
+        method === "memoryGetQuestion"
+            ? new Promise((done) => {
+                  resolve = done;
+              })
+            : original(method, params),
+    );
+    click("What is the name?");
+    click("Back to questions");
+    resolve(question());
+    await settle();
+    expect(
+        document.querySelector<HTMLElement>(".hub-question-reader")!.hidden,
+    ).toBe(true);
+    expect(document.querySelector(".hub-qdetail")!.textContent).toBe("");
+    invoke.mockImplementation(original);
+    click("What is the name?");
+    await settle();
+    invoke.mockImplementation((method, params) =>
+        method === "memoryEditQuestion"
+            ? Promise.reject(new Error("Edit rejected"))
+            : original(method, params),
+    );
+    const answer = document.querySelector<HTMLTextAreaElement>(
+        '[aria-label="Question inspector"] textarea',
+    )!;
+    answer.value = '"Ada"';
+    answer.dispatchEvent(new Event("input"));
+    click("Save user assertion");
+    await settle();
+    expect(
+        document.querySelector(".hub-qdetail [role=alert]")!.textContent,
+    ).toContain("Edit rejected");
+});
+test("questions put tabs after the title, totals and paging inside the list card, and preparation last", async () => {
+    const original = invoke.getMockImplementation()!;
+    invoke.mockImplementation(async (method, params) => {
+        const result = await original(method, params);
+        return method === "memoryListQuestionSummaries" &&
+            result &&
+            typeof result === "object"
+            ? { ...result, total: 70 }
+            : result;
+    });
+    const { panel } = setup();
+    await panel.show();
+    const host = document.querySelector("main")!;
+    const tabs = host.querySelector('[aria-label="Question filter"]')!;
+    const card = host.querySelector('[aria-label="Questions list"]')!;
+    expect(tabs.previousElementSibling!.classList).toContain("hub-qhead");
+    expect(tabs.nextElementSibling).toBe(card);
+    expect(card.classList).toContain("card");
+    expect(card.querySelector(".hub-list-total")!.textContent).toBe("70 total");
+    expect(card.querySelectorAll(".hub-qrow")).toHaveLength(1);
+    expect(
+        card.lastElementChild!.querySelector("nav")!.getAttribute("aria-label"),
+    ).toBe("questions pages");
+    expect(host.lastElementChild!.querySelector("summary")!.textContent).toBe(
+        "Knowledge preparation",
+    );
+});
+test("question filter tabs keep icons, exclusive selection and server filters", async () => {
+    const { panel, onError } = setup();
+    await panel.show();
+    const filters = document.querySelector('[aria-label="Question filter"]')!;
+    expect(filters.classList).toContain("hub-tabs");
+    expect(filters.closest(".hub-qfilters")).toBeNull();
+    expect(filters.querySelectorAll('i[aria-hidden="true"]')).toHaveLength(3);
+    for (const answerFilter of ["open", "answered"]) {
+        click(answerFilter === "open" ? "Open" : "Answered");
+        await settle();
+        expect(filters.querySelectorAll('[aria-pressed="true"]')).toHaveLength(
+            1,
+        );
+        expect(invoke).toHaveBeenCalledWith(
+            "memoryListQuestionSummaries",
+            expect.objectContaining({ answerFilter }),
+        );
+    }
+    expect(onError).not.toHaveBeenCalled();
 });
 test("a scope switch cannot reuse another collection's fresh cached question page", async () => {
     let scope = "corpus";
@@ -225,7 +392,7 @@ test.each([false, true])(
             invoke.mock.calls.some(
                 ([method]) => method === "memoryGetKnowledgeStatus",
             ),
-        ).toBe(true);
+        ).toBe(false);
         if (policyAdmission) {
             expect(document.body.textContent).toContain("Policy-discovered");
             expect(document.body.textContent).toContain(
@@ -242,6 +409,37 @@ test.each([false, true])(
         ).not.toBeNull();
     },
 );
+test("knowledge progress loads only when expanded and is not fetched for Inbox attention", async () => {
+    const { panel } = setup();
+    await panel.show();
+    expect(
+        invoke.mock.calls.some(
+            ([method]) =>
+                method === "memoryGetKnowledgeStatus" ||
+                method === "memoryGetCorpus",
+        ),
+    ).toBe(false);
+    const knowledgePanel = document
+        .querySelector('[aria-label="Knowledge preparation"]')!
+        .closest("details")!;
+    knowledgePanel.open = true;
+    knowledgePanel.dispatchEvent(new Event("toggle"));
+    await settle();
+    expect(invoke).toHaveBeenCalledWith("memoryGetKnowledgeStatus", {
+        corpusId: "corpus",
+    });
+    const calls = invoke.mock.calls.length;
+    await panel.refreshAttention();
+    expect(
+        invoke.mock.calls
+            .slice(calls)
+            .some(
+                ([method]) =>
+                    method === "memoryGetKnowledgeStatus" ||
+                    method === "memoryGetCorpus",
+            ),
+    ).toBe(false);
+});
 test("invalid answers and unapproved authoring do not reach service edits", async () => {
     const { panel, onError } = setup();
     await panel.show();
@@ -297,6 +495,9 @@ test("an inventory failure clears stale decisions and reports an incomplete resu
     );
 
     await panel.refresh();
+    expect(document.querySelector(".hub-list-total")!.textContent).toBe(
+        "Unavailable",
+    );
     expect(document.body.textContent).toContain(
         "Incomplete question inventory",
     );
@@ -325,7 +526,9 @@ test("question maintenance errors remain explicit alongside the complete invento
     expect(document.body.textContent).toContain(
         "Question maintenance failed: Source evaluation failed",
     );
-    expect(document.body.textContent).toContain("1 question");
+    expect(document.querySelector(".hub-list-total")!.textContent).toBe(
+        "1 total",
+    );
 });
 
 test("candidate review retains exact source citations and never counts mentions as votes", async () => {

@@ -30,6 +30,7 @@ import { maintenanceManifest } from "./viewMaintenance.js";
 import {
     viewReadProjection,
     viewReadProjectionEntry,
+    viewReadProjectionVersion,
     type ViewInventoryBuild,
     type ViewReadProjection,
 } from "./viewReadProjection.js";
@@ -329,7 +330,7 @@ export class TypedViewStore {
         const { head, value } = await history.readEntry<ViewReadProjection>(
             viewReadProjectionEntry,
         );
-        if (!head || value) return;
+        if (!head || value?.version === viewReadProjectionVersion) return;
         const { state } = await history.read(head);
         await history.commit(
             head,

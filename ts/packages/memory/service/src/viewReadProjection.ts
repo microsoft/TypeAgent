@@ -14,6 +14,7 @@ import type {
 } from "./viewTypes.js";
 
 export const viewReadProjectionEntry = "view-read-projection.json";
+export const viewReadProjectionVersion = 1;
 
 export interface ViewInventoryBuild extends Omit<ViewBuildSummary, "results"> {
     results: Array<
@@ -26,6 +27,7 @@ export interface ViewInventoryBuild extends Omit<ViewBuildSummary, "results"> {
 }
 
 export interface ViewReadProjection {
+    version?: number;
     views: ViewVersion[];
     builds: ViewInventoryBuild[];
     publications: Record<string, ViewPublicationStatus>;
@@ -44,6 +46,7 @@ export function viewReadProjection(state: {
     conflicts?: Record<string, ViewMergeConflict>;
 }): ViewReadProjection {
     return {
+        version: viewReadProjectionVersion,
         views: Object.values(state.views).flatMap((versions) =>
             versions.length ? [versions[versions.length - 1]] : [],
         ),
@@ -55,6 +58,13 @@ export function viewReadProjection(state: {
                     const target = job.results[index]!;
                     return {
                         ...result,
+                        ...(target.conflictId
+                            ? {
+                                  conflictState:
+                                      state.conflicts?.[target.conflictId]
+                                          ?.state ?? "missing",
+                              }
+                            : {}),
                         inputFingerprint: target.snapshot.fingerprint,
                         evidenceFingerprint:
                             result.state === "conflicted" && result.conflictId

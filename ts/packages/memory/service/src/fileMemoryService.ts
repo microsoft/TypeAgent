@@ -507,6 +507,8 @@ function knowledgeMaintenanceResult(
     };
 }
 
+class SchemaMaintenanceBlockedError extends Error {}
+
 interface StoredRevision extends SourceRevision {
     content: string;
     synopsis?: SourceSynopsis & { attempts: number };
@@ -1999,6 +2001,11 @@ export class FileMemoryService
                     error: synopsis.reason ?? "Source synopsis failed",
                 });
             }
+        for (const [corpusId, failure] of this.schemaMaintenanceFailures)
+            status.failures.push({
+                key: `${corpusId}:schema`,
+                error: failure.message,
+            });
         status.settled &&= status.failures.length === 0;
         return status;
     }
@@ -5580,7 +5587,7 @@ export class FileMemoryService
                 ),
             );
             if (failure)
-                throw new Error(
+                throw new SchemaMaintenanceBlockedError(
                     `Question reconciliation for ${failure.viewId} needs an explicit retry or changed evidence; automatic retries are stopped`,
                 );
             await this.maintainViews({
@@ -5595,7 +5602,7 @@ export class FileMemoryService
             return;
         }
         if (blocked)
-            throw new Error(
+            throw new SchemaMaintenanceBlockedError(
                 `Question reconciliation blocked: ${blocked.reason}`,
             );
     }
@@ -14554,7 +14561,8 @@ export class FileMemoryService
         for (const failure of this.wikiMaintenanceFailures.values())
             throw failure;
         for (const failure of this.schemaMaintenanceFailures.values())
-            throw failure;
+            if (!(failure instanceof SchemaMaintenanceBlockedError))
+                throw failure;
     }
     private closePromise: Promise<void> | undefined;
     private readonly viewIndexCleanup = new Map<string, Promise<void>>();

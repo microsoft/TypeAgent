@@ -7,6 +7,7 @@ import type {
     ViewBuildJob,
     ViewBuildTargetResult,
     ViewBuildSnapshot,
+    ViewMergeConflict,
     ViewDefinition,
     ViewPublicationStatus,
     ViewSnapshot,
@@ -70,6 +71,7 @@ export interface ViewBuildResultSummary
         "viewId" | "state" | "reason" | "revisionId" | "conflictId"
     > {
     current: boolean;
+    conflictState?: ViewMergeConflict["state"] | "missing";
     snapshot: Pick<ViewBuildSnapshot, "pipeline"> & {
         definition: Pick<ViewDefinition, "kind">;
     };

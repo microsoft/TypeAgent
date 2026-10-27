@@ -69,9 +69,21 @@ async function settle() {
     for (let index = 0; index < 30; index++) await Promise.resolve();
 }
 function click(host: HTMLElement, label: string) {
-    const button = [...host.querySelectorAll("button")].find(
-        (button) => button.textContent === label,
-    );
+    const find = () =>
+        [...host.querySelectorAll("button")].find(
+            (button) =>
+                button.textContent === label ||
+                button.getAttribute("aria-label") === label,
+        );
+    let button = find();
+    if (!button) {
+        host
+            .querySelector<HTMLButtonElement>(
+                '.hub-view-actions button[aria-haspopup="menu"]',
+            )
+            ?.click();
+        button = find();
+    }
     if (!button) throw new Error(`Missing button ${label}`);
     for (
         let parent = button.parentElement;
@@ -268,6 +280,247 @@ describe("Memory Center preview-first views", () => {
         click(host, "Compare and resolve conflict");
         await settle();
     }
+    test("gallery puts tabs before its white list card and shows the server total, not the loaded count", async () => {
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation(async (method, params) => {
+            const result = await original(method, params);
+            return method === "memoryListViewSummaries" &&
+                result &&
+                typeof result === "object"
+                ? {
+                      ...result,
+                      total: 85,
+                      wikiFamily: {
+                          enabled: true,
+                          pending: true,
+                          error: "Maintenance unavailable",
+                      },
+                  }
+                : result;
+        });
+        await panel.refresh();
+        const card = host.querySelector('[aria-label="Views list"]')!;
+        expect(card.classList).toContain("card");
+        expect(card.previousElementSibling!.getAttribute("aria-label")).toBe(
+            "Filter view type",
+        );
+        expect(card.querySelector(".hub-list-total")!.textContent).toBe(
+            "85 total",
+        );
+        expect(card.querySelectorAll(".hub-view-card")).toHaveLength(1);
+        expect(card.querySelector('[role="alert"]')!.textContent).toContain(
+            "Wiki retry needed: Maintenance unavailable",
+        );
+        expect(card.lastElementChild!.getAttribute("aria-label")).toBe(
+            "views pages",
+        );
+        expect(host.querySelector(".hub-draft-views > h3")).toBeNull();
+        expect(host.textContent).not.toContain("Read reusable documents");
+        expect(host.textContent).not.toContain("saved views across");
+    });
+    test.each(["empty", "failure"])(
+        "type tabs show loading inside the card until an %s result settles",
+        async (outcome) => {
+            await panel.refresh();
+            const original = invoke.getMockImplementation()!;
+            let resolve!: (value: unknown) => void;
+            let reject!: (error: Error) => void;
+            invoke.mockImplementation((method, params) =>
+                method === "memoryListViewSummaries"
+                    ? new Promise((done, fail) => {
+                          resolve = done;
+                          reject = fail;
+                      })
+                    : original(method, params),
+            );
+            click(host, "Knowledge Wiki");
+            await settle();
+            const pending = host.querySelector('[aria-label="Views list"]')!;
+            expect(pending.getAttribute("aria-busy")).toBe("true");
+            expect(
+                pending.querySelector<HTMLElement>(".hub-view-list-loading")!
+                    .hidden,
+            ).toBe(false);
+            expect(
+                pending.querySelector(".hub-view-list-loading i")!.classList,
+            ).toContain("fa-solid");
+            expect(
+                pending.querySelector<HTMLElement>(".hub-view-list")!.hidden,
+            ).toBe(true);
+            expect(
+                pending.querySelector<HTMLElement>(".hub-pager")!.hidden,
+            ).toBe(true);
+            expect(pending.querySelector(".hub-list-total")!.textContent).toBe(
+                "Loading...",
+            );
+            if (outcome === "empty") resolve({ head, total: 0, items: [] });
+            else reject(new Error("Inventory unavailable"));
+            await settle();
+            const settled = host.querySelector('[aria-label="Views list"]')!;
+            expect(settled.getAttribute("aria-busy")).toBe("false");
+            expect(
+                settled.querySelector<HTMLElement>(".hub-view-list-loading")!
+                    .hidden,
+            ).toBe(true);
+            if (outcome === "empty") {
+                expect(
+                    settled.querySelector(".hub-list-total")!.textContent,
+                ).toBe("0 total");
+                expect(
+                    settled.querySelector<HTMLElement>(".hub-view-list")!
+                        .hidden,
+                ).toBe(false);
+            } else {
+                expect(host.textContent).toContain("Inventory unavailable");
+                expect(
+                    settled.querySelector(".hub-list-total")!.textContent,
+                ).toBe("Unavailable");
+                expect(
+                    settled.querySelector<HTMLElement>(".hub-view-list")!
+                        .hidden,
+                ).toBe(true);
+            }
+        },
+    );
+    test("rapid type changes queue the latest filter without showing a stale empty result", async () => {
+        await panel.refresh();
+        const original = invoke.getMockImplementation()!;
+        const pending: Array<(value: unknown) => void> = [];
+        invoke.mockImplementation((method, params) =>
+            method === "memoryListViewSummaries"
+                ? new Promise((resolve) => pending.push(resolve))
+                : original(method, params),
+        );
+        click(host, "Knowledge Wiki");
+        await settle();
+        expect(pending).toHaveLength(1);
+        click(host, "Project Brief");
+        await settle();
+        expect(pending).toHaveLength(1);
+        pending[0]({ head, total: 0, items: [] });
+        await settle();
+        expect(pending).toHaveLength(2);
+        expect(invoke).toHaveBeenLastCalledWith(
+            "memoryListViewSummaries",
+            expect.objectContaining({ kind: "projectBrief" }),
+        );
+        expect(
+            host
+                .querySelector('[aria-label="Views list"]')!
+                .getAttribute("aria-busy"),
+        ).toBe("true");
+        pending[1]({ head, total: 0, items: [] });
+        await settle();
+        expect(
+            host
+                .querySelector('[aria-label="Views list"]')!
+                .getAttribute("aria-busy"),
+        ).toBe("false");
+        expect(host.querySelector('[aria-pressed="true"]')!.textContent).toBe(
+            "Project Brief",
+        );
+        expect(errors).toEqual([]);
+    });
+    test("type tabs use the requested labels and order independently of service capability order", async () => {
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryViewCapabilities"
+                ? Promise.resolve({
+                      derivedViews: {
+                          builds: true,
+                          informationalWiki: true,
+                          kinds: [
+                              "timeline",
+                              "troubleshootingGuide",
+                              "schemaView",
+                              "projectBrief",
+                              "wiki",
+                          ],
+                      },
+                  })
+                : original(method, params),
+        );
+        await panel.refresh();
+        const tabs = host.querySelector('[aria-label="Filter view type"]')!;
+        expect(
+            host.querySelector('button[aria-label="Maintain collection"] i')!
+                .className,
+        ).toBe("fa-solid fa-screwdriver-wrench");
+        click(host, "Maintain collection");
+        const maintenanceItems = host.querySelectorAll('[role="menuitem"]');
+        expect(maintenanceItems).toHaveLength(8);
+        for (const item of maintenanceItems)
+            expect(item.querySelector("i")!.className).toBe(
+                "fa-solid fa-screwdriver-wrench",
+            );
+        click(host, "Maintain collection");
+        expect(
+            [...tabs.querySelectorAll("button")].map((tab) => tab.textContent),
+        ).toEqual([
+            "All",
+            "Knowledge Wiki",
+            "Project Brief",
+            "Timeline",
+            "Troubleshooting Guide",
+        ]);
+        click(host, "Project Brief");
+        await settle();
+        expect(invoke).toHaveBeenCalledWith(
+            "memoryListViewSummaries",
+            expect.objectContaining({ kind: "projectBrief" }),
+        );
+        expect(
+            host.querySelector(
+                '[aria-label="Filter view type"] [aria-pressed="true"]',
+            )!.textContent,
+        ).toBe("Project Brief");
+    });
+
+    test("view type tabs preserve filtering, search, scroll position and keyboard focus across refresh", async () => {
+        await panel.refresh();
+        const kinds = host.querySelector<HTMLElement>(
+            '[aria-label="Filter view type"]',
+        )!;
+        expect(kinds.classList).toContain("hub-tabs");
+        expect(kinds.querySelectorAll('i[aria-hidden="true"]')).toHaveLength(5);
+        kinds.scrollLeft = 120;
+        const wiki = [...kinds.querySelectorAll("button")].find(
+            (tab) => tab.textContent === "Knowledge Wiki",
+        )!;
+        wiki.focus();
+        wiki.click();
+        await settle();
+        expect(invoke).toHaveBeenCalledWith(
+            "memoryListViewSummaries",
+            expect.objectContaining({ kind: "wiki" }),
+        );
+        const refreshed = host.querySelector<HTMLElement>(
+            '[aria-label="Filter view type"]',
+        )!;
+        expect(refreshed.scrollLeft).toBe(120);
+        expect(
+            refreshed.querySelectorAll('[aria-pressed="true"]'),
+        ).toHaveLength(1);
+        expect(document.activeElement).toBe(
+            refreshed.querySelector('[aria-pressed="true"]'),
+        );
+        expect(host.textContent).toContain("No views match.");
+        const search = host.querySelector<HTMLInputElement>(
+            '[aria-label="Find views"]',
+        )!;
+        search.value = "Guide";
+        search.dispatchEvent(new Event("input"));
+        click(host, "All");
+        await settle();
+        expect(
+            host.querySelector<HTMLInputElement>('[aria-label="Find views"]')!
+                .value,
+        ).toBe("Guide");
+        expect(host.querySelector(".hub-view-card")!.textContent).toContain(
+            "Guide",
+        );
+        expect(errors).toEqual([]);
+    });
     test("gallery shows an accessible spinner before capabilities or inventory finish", async () => {
         const original = invoke.getMockImplementation()!;
         let releaseCapabilities!: (value: unknown) => void;
@@ -397,7 +650,7 @@ describe("Memory Center preview-first views", () => {
         );
         expect(
             [...host.querySelectorAll("button")].some(
-                (button) => button.textContent === "Edit",
+                (button) => button.getAttribute("aria-label") === "Edit",
             ),
         ).toBe(false);
         resolve({ head, total: 0, items: [] });
@@ -405,7 +658,7 @@ describe("Memory Center preview-first views", () => {
         expect(host.querySelector(".hub-view-document")).toBe(article);
         expect(
             [...host.querySelectorAll("button")].some(
-                (button) => button.textContent === "Edit",
+                (button) => button.getAttribute("aria-label") === "Edit",
             ),
         ).toBe(true);
         expect(errors).toEqual([]);
@@ -449,7 +702,7 @@ describe("Memory Center preview-first views", () => {
         );
         expect(
             [...host.querySelectorAll("button")].some(
-                (button) => button.textContent === "Edit",
+                (button) => button.getAttribute("aria-label") === "Edit",
             ),
         ).toBe(false);
         expect(errors).toHaveLength(1);
@@ -516,6 +769,7 @@ describe("Memory Center preview-first views", () => {
             "View revision unavailable",
         );
         expect(host.querySelector(".hub-view-document")).toBeNull();
+        expect(host.textContent).not.toContain("Loading view details...");
         click(host, "Back to views");
         await settle();
         expect(navigate).toHaveBeenLastCalledWith("#/views");
@@ -567,7 +821,9 @@ describe("Memory Center preview-first views", () => {
         expect(host.querySelector(".hub-view-document img")).toBeNull();
         expect(host.querySelector("textarea")).toBeNull();
         expect(navigate).toHaveBeenCalledWith("#/views/c/guide");
-        expect(host.querySelector("h2")!.textContent).toBe("Guide");
+        expect(host.querySelector(".hub-view-document h2")!.textContent).toBe(
+            "Guide",
+        );
         click(host, "Edit");
         expect(
             host.querySelector('[aria-label="Troubleshooting guide editor"]'),
@@ -602,7 +858,83 @@ describe("Memory Center preview-first views", () => {
         expect(host.textContent).toContain(summary);
         expect(content).not.toHaveProperty("summary");
     });
-    test("reader keeps only Back and Edit direct and disclosure actions retain keyboard and dialog focus", async () => {
+
+    test.each([
+        {
+            summary: "A **grounded** synopsis",
+            coverageNote: "Partial evidence",
+        },
+        { summary: undefined, coverageNote: "Partial evidence" },
+        { summary: undefined, coverageNote: undefined },
+    ])(
+        "wiki infobox separates synopsis, coverage and metadata from article: %o",
+        async (overview) => {
+            const original = invoke.getMockImplementation()!;
+            const wiki = {
+                ...view,
+                createdAt: "2026-10-13T16:00:00Z",
+                content: {
+                    ...content,
+                    ...overview,
+                    kind: "wiki",
+                    status: "sufficient",
+                    citations: [
+                        { sourceId: "s", revisionId: "r", locator: "f3" },
+                    ],
+                },
+                definition: { ...definition, kind: "wiki" },
+            };
+            invoke.mockImplementation(
+                inventoryFixture((method, params) =>
+                    method === "memoryListViews"
+                        ? Promise.resolve({ ...snapshot, views: [wiki] })
+                        : original(method, params),
+                ),
+            );
+            await panel.refresh();
+            click(host, "Guide");
+            await settle();
+            const article = host.querySelector(".hub-view-document")!;
+            const flow = article.querySelector(".hub-view-reading-flow")!;
+            const infobox = flow.querySelector("aside")!;
+            expect(infobox.getAttribute("aria-label")).toBe(
+                "About this article",
+            );
+            expect(infobox.querySelector("h3")!.textContent).toBe(
+                overview.summary ? "Synopsis" : "About this article",
+            );
+            expect(infobox.textContent).toContain("Version 1");
+            expect(infobox.textContent).toContain("Completeness: sufficient");
+            expect(infobox.querySelector("time")!.dateTime).toBe(
+                "2026-10-13T16:00:00.000Z",
+            );
+            expect(infobox.querySelector(".hub-view-lead")?.textContent).toBe(
+                overview.summary ? "A grounded synopsis\n" : undefined,
+            );
+            expect(infobox.querySelector(".hub-view-note")?.textContent).toBe(
+                overview.coverageNote
+                    ? "Coverage: Partial evidence"
+                    : undefined,
+            );
+            expect(infobox.querySelector(".hub-view-section")).toBeNull();
+            expect(
+                flow.querySelector(".hub-view-section strong")!.textContent,
+            ).toBe("body");
+            expect(article.querySelector("script, img")).toBeNull();
+            const sources = [...article.children].find(
+                (element) => element.tagName === "DETAILS",
+            )!;
+            expect(sources.querySelector("summary")!.textContent).toBe(
+                "Sources (1)",
+            );
+            expect(
+                sources.querySelector("button")?.getAttribute("aria-label"),
+            ).toBe("Open exact evidence s");
+            expect(errors).toEqual([]);
+        },
+    );
+
+    test("reader icon toolbar opens an icon-and-text menu and restores keyboard and dialog focus", async () => {
         await panel.refresh();
         click(host, "Guide");
         await settle();
@@ -610,16 +942,27 @@ describe("Memory Center preview-first views", () => {
         expect(
             [...toolbar.children]
                 .filter((child) => child.tagName === "BUTTON")
-                .map((button) => button.textContent),
+                .map((button) => button.getAttribute("aria-label")),
         ).toEqual(["Back to views", "Edit"]);
-        const more = toolbar.querySelector<HTMLDetailsElement>(
-            ".hub-view-more-actions",
+        for (const button of toolbar.querySelectorAll(":scope > button")) {
+            expect(button.textContent).toBe("");
+            expect(
+                button.querySelector('i[aria-hidden="true"]'),
+            ).not.toBeNull();
+            expect(button.getAttribute("title")).toBe(
+                button.getAttribute("aria-label"),
+            );
+        }
+        const trigger = toolbar.querySelector<HTMLButtonElement>(
+            'button[aria-label="More actions"]',
         )!;
-        const summary = more.querySelector("summary")!;
-        expect(summary.textContent).toBe("More actions");
-        expect(more.open).toBe(false);
+        expect(trigger.getAttribute("aria-haspopup")).toBe("menu");
+        expect(trigger.getAttribute("aria-expanded")).toBe("false");
+        expect(toolbar.querySelector('[role="menu"]')).toBeNull();
+        trigger.click();
+        const menu = toolbar.querySelector('[role="menu"]')!;
         expect(
-            [...more.querySelectorAll("button")].map(
+            [...menu.querySelectorAll('[role="menuitem"]')].map(
                 (button) => button.textContent,
             ),
         ).toEqual([
@@ -628,10 +971,10 @@ describe("Memory Center preview-first views", () => {
             "History",
             "Update view",
         ]);
-        summary.focus();
-        summary.click();
-        expect(more.open).toBe(true);
-        const publication = [...more.querySelectorAll("button")].find(
+        for (const item of menu.querySelectorAll('[role="menuitem"]'))
+            expect(item.querySelector('i[aria-hidden="true"]')).not.toBeNull();
+        expect(document.activeElement).toBe(menu.querySelector("button"));
+        const publication = [...menu.querySelectorAll("button")].find(
             (button) => button.textContent === "Publication and search",
         )!;
         publication.focus();
@@ -642,16 +985,16 @@ describe("Memory Center preview-first views", () => {
                 cancelable: true,
             }),
         );
-        expect(more.open).toBe(false);
-        expect(document.activeElement).toBe(summary);
-        summary.click();
-        publication.focus();
-        publication.click();
+        expect(toolbar.querySelector('[role="menu"]')).toBeNull();
+        expect(document.activeElement).toBe(trigger);
+        trigger.click();
+        click(host, "Publication and search");
         await settle();
+        expect(toolbar.querySelector('[role="menu"]')).toBeNull();
+        expect(trigger.getAttribute("aria-expanded")).toBe("false");
         expect(document.activeElement?.tagName).toBe("DIALOG");
         click(host, "Close");
-        expect(document.activeElement).toBe(publication);
-        expect(more.open).toBe(true);
+        expect(document.activeElement).toBe(trigger);
     });
     test("All memory browsing isolates identical IDs by collection and build collection choice stays in the flow", async () => {
         scope = undefined;
@@ -1212,6 +1555,7 @@ describe("Memory Center preview-first views", () => {
         );
         await panel.show({ corpusId: "c", viewId: "guide" });
         expect(host.querySelector("textarea")).toBeNull();
+        click(host, "More actions");
         expect(host.textContent).toContain("Review pending conflict");
         expect(invoke).toHaveBeenCalledWith("memoryGetViewConflict", {
             corpusId: "c",
@@ -1245,6 +1589,7 @@ describe("Memory Center preview-first views", () => {
             'button[aria-label^="Latest build"]',
         )!;
         expect(latest.textContent).toBe("");
+        expect(latest.querySelector("i")!.className).toBe("fa-solid fa-bell");
         expect(host.querySelector(".hub-view-build-receipt")).toBeNull();
         expect(host.textContent).not.toContain(job.jobId);
         latest.click();
@@ -1281,6 +1626,51 @@ describe("Memory Center preview-first views", () => {
         expect(host.querySelector("textarea")).toBeNull();
         expect(errors).toEqual([]);
     });
+    test.each(["pending", "resolved"] as const)(
+        "reader uses %s conflict summary without fetching evidence until resolution is opened",
+        async (conflictState) => {
+            const original = invoke.getMockImplementation()!;
+            invoke.mockImplementation((method, params) =>
+                method === "memoryListViewBuildSummaries"
+                    ? Promise.resolve({
+                          total: 1,
+                          items: [
+                              {
+                                  ...job,
+                                  maintenance: false,
+                                  results: [
+                                      {
+                                          ...job.results[0],
+                                          current: true,
+                                          conflictState,
+                                      },
+                                  ],
+                              },
+                          ],
+                      })
+                    : original(method, params),
+            );
+            await panel.show({ corpusId: "c", viewId: "guide" });
+            click(host, "More actions");
+            expect(host.textContent?.includes("Review pending conflict")).toBe(
+                conflictState === "pending",
+            );
+            expect(
+                invoke.mock.calls.some(
+                    ([method]) => method === "memoryGetViewConflict",
+                ),
+            ).toBe(false);
+            expect(errors).toEqual([]);
+            if (conflictState === "pending") {
+                click(host, "Review pending conflict");
+                await settle();
+                expect(invoke).toHaveBeenCalledWith("memoryGetViewConflict", {
+                    corpusId: "c",
+                    conflictId: job.results[0].conflictId,
+                });
+            }
+        },
+    );
     test("late source response cannot render after scope switch or disposal", async () => {
         await panel.refresh();
         const original = invoke.getMockImplementation()!;
@@ -1347,7 +1737,7 @@ describe("Memory Center preview-first views", () => {
         expect(host.querySelector("textarea")).toBeNull();
         expect(
             [...host.querySelectorAll("button")].some(
-                (button) => button.textContent === "Edit",
+                (button) => button.getAttribute("aria-label") === "Edit",
             ),
         ).toBe(false);
         expect(errors).toEqual([]);
@@ -1376,7 +1766,7 @@ describe("Memory Center preview-first views", () => {
         expect(host.textContent).toContain("Exact revision (read-only)");
         expect(
             [...host.querySelectorAll("button")].some(
-                (button) => button.textContent === "Edit",
+                (button) => button.getAttribute("aria-label") === "Edit",
             ),
         ).toBe(false);
         click(host, "Open current view");
@@ -1384,7 +1774,7 @@ describe("Memory Center preview-first views", () => {
         expect(navigate).toHaveBeenCalledWith("#/views/c/guide");
         expect(
             [...host.querySelectorAll("button")].some(
-                (button) => button.textContent === "Edit",
+                (button) => button.getAttribute("aria-label") === "Edit",
             ),
         ).toBe(true);
     });
