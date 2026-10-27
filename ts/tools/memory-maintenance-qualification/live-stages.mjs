@@ -124,16 +124,28 @@ export function observeProvider(
         );
         const started = performance.now();
         const role = roles.getStore() ?? currentRole();
+        const startedEpochMs = Date.now();
         const request =
             typeof args[1]?.body === "string"
                 ? JSON.parse(args[1].body)
                 : undefined;
         const response = await Reflect.apply(original, this, args);
+        const decisionQuestions = request?.questions;
         const item = {
+            startedEpochMs,
+            responseEpochMs: Date.now(),
             role,
-            type: /\/chat\/completions$/.test(url.pathname)
-                ? "chat"
-                : "other-production-request",
+            type: decisionQuestions
+                ? "decision"
+                : /\/chat\/completions$/.test(url.pathname)
+                  ? "chat"
+                  : /\/embeddings$/.test(url.pathname)
+                    ? "embedding"
+                    : "other-production-request",
+            requestedModel: request?.model,
+            decisionQuestionCount: decisionQuestions
+                ? Object.keys(decisionQuestions).length
+                : undefined,
             status: response.status,
             durationMs: performance.now() - started,
             retryAfter: response.headers.get("retry-after"),

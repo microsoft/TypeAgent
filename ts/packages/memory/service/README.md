@@ -115,6 +115,233 @@ synonyms missed by retrieval or evidence-budget bounds may remain separate.
 Salience is a model-assigned ordinal, not truth confidence or an automatic
 host-side admission threshold.
 
+### Experimental Decision curation
+
+Set `FileMemoryServiceOptions.decisionTopics: true`, or
+`TYPEAGENT_MEMORY_DECISION_TOPICS=true` in the native/MCP/CLI/benchmark host,
+to select the experimental `curated-decision-v2` pipeline. The default remains
+the generative `curated-lazy-v6` policy. Decision curation requires curated
+topics and explicitly rejects a conflicting custom `generateTopics` adapter;
+ordinary custom-adapter receiver/cancellation behavior is unchanged.
+
+The pipeline reuses the native Azure/Copilot Decision client and its provider
+constraints, typed failures and inference-attempt budget. Complete logical
+requests are counted with the installed `o200k_base` tokenizer. Packets use an
+application guard of 64 questions and at most 248 targets plus seven disposition
+sentinels; 64 is not a claimed service maximum. Every target batch is evaluated.
+One typed Azure HTTP 422 can repack unchanged nominations from 24,576 to 16,384
+tokens within the existing signal/deadline and cumulative budget. Other failures
+do not silently select a generative replacement.
+
+Packet-local dictionaries intern exact evidence and chronology; short criteria
+reference that shared grounding. Fixed-cluster metadata authoring reuses the
+same exact dictionaries rather than repeating each member's support. No
+citations are dropped to fit the authoring guard. Decision criteria
+reference shared target grounding instead of embedding it repeatedly. Candidate
+partitions are interleaved, with binary capacity search and native wire/output
+preflight. Independent root checks share requests in dependency frontiers without
+changing each candidate's original resolved-prefix target universe. Missing
+direct/member citations are restored from maintained incidence before deciding;
+retained concept citations are expanded on merge. No representative-evidence
+cap or admission-first filter is introduced.
+
+Candidates share their original evidence, locator/block identity and available
+role/chronology metadata. Unknown roles/clocks stay unknown. Direct deferrals
+and unchanged-scope concept merges use no generative calls. New fixed clusters
+receive compact label/scope/purpose authoring, without summaries or model-owned
+membership. Redirected earlier roots are compared against actual admitted
+roots; deferred decisions are not inherited. Explicit uncertainty, conflicting
+batch judgments or incomplete owned evidence reopen the affected staged
+partition through the existing bounded generative curation validators.
+
+Salience is the native finite `[0,7]` score mapped by `Math.round(score) + 1`;
+it is neither confidence nor an admission threshold. Raw incidence is retained,
+and only complete validated batches become durable continuation checkpoints.
+The recipe and fingerprint include Decision/chat provider-model identity,
+runtime configuration generation, deployment constraints, packing and policy
+identity. Ordinary lazy detail summaries, organization and stale/forget guards
+remain in place. This is an implementation for investigation, not a measured
+quality, readiness or speedup result.
+
+`FileMemoryServiceOptions.onTopicDecisionReceipt` optionally receives private
+structured diagnostics for packing, Decision calls, authoring, resolution,
+transaction and checkpoint timing. Receipts include transaction identity,
+question/candidate/target counts, root reasons and evidence expansion. The native
+benchmark host forwards this hook without replacing inference and writes
+`topic-operations.jsonl` within its owned run directory. Sink errors propagate;
+raw excerpts are not recorded.
+
+For the saved-state investigation, `TopicDecisionOptions.packetPolicy` accepts
+`"factored-best-fit"`; the default `"v2"` layout/packing remains unchanged.
+The treatment interns exact long field values of canonical JSON chronology and
+tries the last 24 open packets by smallest marginal serialized-token cost.
+Opaque/noncanonical chronology stays literal; no source, time, role, citation or
+target is removed. Every placement is checked against logical and native limits.
+The policy changes the model identity. Receipts retain selected native choices
+and scores for paired diagnostic analysis; these are not semantic gold.
+Nomination, uncertainty fallback, authoring and the one bounded 422 repack are
+unchanged. The explicit `maxNewNodes` argument to `curateTopicsWithDecision`
+supports private diagnostic prefixes only; its partial result must not be
+published as completed curation. Normal generation supplies no such bound.
+
+Decision curation builds snapshot-scoped occurrence/source/node indexes, an
+exact lexical concept posting index, and revision-keyed concept grounding.
+Evidence ordering, qualifications, roles/times, exact-label preference and the
+top-24 concept nomination policy are unchanged; the latter is not a focal batch
+size. Indexes live only for the immutable build and are not model-response caches.
+
+`FileMemoryServiceOptions.decisionTopicExecution` configures:
+
+| Option              | Default | Bound / behavior                                                         |
+| ------------------- | ------- | ------------------------------------------------------------------------ |
+| `concurrency`       | `1`     | Shared native request limit, 1..24                                       |
+| `batchSize`         | `24`    | Fixed 1..256 focal nodes, or `"context"`                                 |
+| `lookahead`         | `1`     | 1..4 initial-classification batches; commits remain ordered              |
+| `maxQuestions`      | `64`    | Application safety guard, 1..256; native constraints still apply         |
+| `clusterValidation` | `false` | Local cluster validation; requires lookahead 1 and full transactions off |
+
+Hosts can use `TYPEAGENT_MEMORY_DECISION_CONCURRENCY`,
+`TYPEAGENT_MEMORY_DECISION_BATCH_SIZE`, `TYPEAGENT_MEMORY_DECISION_LOOKAHEAD`,
+and `TYPEAGENT_MEMORY_DECISION_MAX_QUESTIONS`. Invalid values fail explicitly.
+Settings are part of the view/model identity and benchmark processing policy.
+Default execution remains serial with 24-focal transactions until qualified.
+
+Context mode grows a deterministic prefix until the complete initial request
+hits logical input, question/choice or native admission limits. It can include
+more than 24 topics when capacity permits. One individually heavy candidate
+can still require target partitions. Fixed larger transactions can span multiple
+requests. A 256-node planning guard prevents unbounded work on tiny inputs; it
+is not a claimed model limit. Changing transaction size changes peer/fallback
+universes and must be evaluated as a separate algorithm variant.
+
+Within a wave, packets run concurrently but results reduce in original packet
+order. Failed/cancelled waves stop queued inference and drain in-flight work
+before retry/publication. Lookahead reuses initial answers only when rebuilt
+grounded inputs, nomination results (including newly relevant concepts), packet
+policy/limits and runtime generation match. Stale work is reported and rerun;
+speculative errors are not silently ignored. Roots, broad uncertainty fallback,
+metadata authoring and atomic commits remain conservatively ordered.
+
+Opt-in `decisionTopicExecution.fullTransactions: true` (host environment
+`TYPEAGENT_MEMORY_DECISION_FULL_TRANSACTIONS=true`) instead stages complete
+transactions concurrently, including roots, unchanged broad fallback and
+metadata authoring. `lookahead` bounds this window. Workers never publish.
+Full concept read versions, nomination-query inputs, universe predicates,
+write versions and node ownership are validated in focal order. A compatible
+prefix merges into one atomic checkpoint; the first conflict discards the
+remaining prepared suffix and replans it on the latest state. This setting
+enters model/view identity. Single-writer group installation prevents lost
+updates; it is not competing replacements of the same snapshot file.
+
+The 24-call Decision limit is shared across the build, not per transaction.
+Endpoint-configured transport throttlers and bounded 429 Retry-After/backoff
+remain in force. Informational endpoint `capacity` is not interpreted as an
+RPS limit. An exhausted retry budget fails and drains the transaction window;
+no application-level retry loop masks transport errors.
+
+### Localized cluster validation (investigation)
+
+Opt-in `decisionTopicExecution.clusterValidation: true`, or
+`TYPEAGENT_MEMORY_DECISION_CLUSTER_VALIDATION=true`, replaces broad uncertainty
+re-curation with fixed-context cluster checks. Initial classification, exact
+evidence indexes and the shared native concurrency limiter are retained.
+For the controlled 24/24/1 treatment:
+
+```powershell
+$env:TYPEAGENT_MEMORY_DECISION_TOPICS = 'true'
+$env:TYPEAGENT_MEMORY_DECISION_CLUSTER_VALIDATION = 'true'
+$env:TYPEAGENT_MEMORY_DECISION_CONCURRENCY = '24'
+$env:TYPEAGENT_MEMORY_DECISION_BATCH_SIZE = '24'
+$env:TYPEAGENT_MEMORY_DECISION_LOOKAHEAD = '1'
+$env:TYPEAGENT_MEMORY_DECISION_FULL_TRANSACTIONS = 'false'
+```
+
+Each proposed cluster shares complete member grounding across a coherence
+question and per-member disposition questions. Questions reference a fixed
+supplied concept, not another answer. Existing members are read-only diagnostics
+during admission: a suspect old member cannot veto a valid new attachment.
+Fixed-membership checks exclude alternative-target context; only positively
+rejected new members enter separate complete-nomination assignment searches.
+Old-member questions that exceed the admission budget are explicitly left for
+maintenance. If old-anchor evidence also exhausts context, an explicitly narrower
+admission-only packet supplies the complete collection definition and complete
+new-member evidence; it does not claim to check old-anchor health. No new-member
+evidence or alternative-search choice is silently pruned.
+
+Cluster packets and fixed-group metadata authoring share lossless grounding
+compaction: repeated source/revision pairs use `sourceRef` records, and repeated
+long fields in canonical chronology JSON use exact value references. Opaque
+clocks and unique chronology values remain literal. The smaller logical-token
+representation is selected; no member, alternative, citation, role or temporal
+qualification is removed. Existing validation/authoring budgets still apply.
+Packing diagnostics expose `uncompactedInputTokens` alongside planned
+`inputTokens`; these are not provider-reported usage or quality measures.
+
+The host supplies shared validation rules once. Every member choice explicitly
+names its own candidate, and alternatives are distinguished from actual members.
+Fit means original topical evidence explains the fixed reference concept under
+compatible factual scope, not that raw labels must be synonyms. Raw candidate
+scope can be a source boundary, including a source ID, rather than a semantic
+scope. Joint compatibility is a separate question for newly authored groups,
+not a duplicate all-members-fit veto or an old-anchor health gate. For singleton
+publication, whole-cluster coherence and that member's fit are the same logical
+claim: one native question supplies both scores without conflicting duplicate
+judgments. These policy/layout changes enter the opt-in model identity.
+
+Lossless data reconstruction does not guarantee identical native judgments.
+This policy remains experimental; neither context reduction nor time to pending
+establishes semantic quality or completed-curation speedup.
+
+Uncertain member fits, final negative fits after a proposal, and unresolved new-group compatibility receive at most
+one local generative adjudication per fixed version. This review uses exact
+grounding and a strict member-bound schema; a positive joint conflict requires
+supplied member witnesses and an explanation. It cannot rewrite definitions,
+invent evidence or repartition unrelated collections. Unresolved judgments,
+cyclic dependencies and capacity limits produce retryable `curation.pending`.
+There is no broad-stack generative fallback. Provider failures and cancellation still fail
+and drain in-flight work, rather than becoming pending. Transport 429 handling
+is unchanged. Lookahead greater than one and full speculative transactions
+are rejected in this mode.
+
+Validated concepts retain the exact original member citation union. A
+version-bound `validation` receipt binds complete membership, definition,
+original evidence, role/chronology context, input fingerprint and model identity.
+New `coverage: "member-admission-v2"` receipts explicitly list
+`validatedMemberIds` and `method` (`decision` or `generative`). They certify only
+the declared member fits, not the health of unreviewed old members. Legacy
+whole-cluster receipts remain readable. Generative receipts never fabricate
+native scores.
+Native `score`/`memberScores` are uncalibrated choice probabilities, not
+calibrated relationship confidence. Lazy summaries store their selected
+support separately in `summaryCitations`; they cannot shrink certified
+canonical provenance. Legacy concepts retain their existing summary behavior.
+
+Old-member uncertainty persists in a version-bound `maintenance` signal
+(`priority`, `reasons`, `suspectMemberIds`). Priority is an uncalibrated scheduling
+heuristic, not semantic confidence. Successful admission and lazy summaries do
+not clear it. Explicit topic-family rebuilds in cluster mode process signaled
+collections by descending priority, then concept ID, including when there are
+no new topics. Ordinary ingestion only records the queue. Each maintenance
+review is local, complete and bounded; only positive outliers leave the fixed
+collection, returning to retryable pending assignment. Uncertain members remain
+in place with maintenance priority. Completed units checkpoint durably;
+oversized reviews retain a capacity signal, and failures/cancellation do not
+publish a partial unit. This is prioritized collection maintenance, not a
+whole-corpus generative rebuild.
+
+Curated queries expose bounded `pendingAssignments`, `pendingCount`,
+`omittedPendingAssignments` and explicit limits. Raw evidence remains
+queryable; pending members are not validated concepts or low-value deferrals.
+An explicit subsequent curation pass retries them. A completed build with
+pending assignments is not fully validated semantic completion. Switching
+pending continuation state to the legacy Decision or generative path fails
+explicitly. The cluster recipe and option enter model/view identity; legacy
+defaults remain unchanged.
+
+This is a retained-concept implementation, not a wholesale relationship graph
+or a general confidence-bearing assertion store. It does not add broader/related
+semantics, transitive equivalence closure, or graph expansion to QA.
+
 Configured curation sends a strict, per-batch response schema with bounded
 text fields and enumerated occurrence/evidence IDs. JSON-only adapters retain
 the same prompt bounds and host validation. Contract failures in text bounds,

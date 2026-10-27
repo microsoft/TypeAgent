@@ -8,7 +8,34 @@ import {
     topicQueryPageSchema,
     topicQueryRequestSchema,
     topicSnapshotSchema,
+    topicOccurrenceSchema,
 } from "../dist/topicProtocol.js";
+
+test("original role and chronology metadata survive strict incidence transport without invented defaults", () => {
+    const occurrence = {
+        id: "occurrence:one",
+        sourceId: "source",
+        revisionId: "r1",
+        ordinal: 0,
+        label: "Reference",
+        scope: "source",
+        citations: [],
+        context: {
+            role: "assistant",
+            chronology: "Explicit source-local clock, no timezone",
+        },
+    };
+    assert.deepEqual(topicOccurrenceSchema.parse(occurrence), occurrence);
+    const { context, ...legacy } = occurrence;
+    assert.deepEqual(topicOccurrenceSchema.parse(legacy), legacy);
+    assert.equal(
+        topicOccurrenceSchema.safeParse({
+            ...occurrence,
+            context: { ...context, inferredUserPreference: true },
+        }).success,
+        false,
+    );
+});
 
 test("lazy detail requests are explicit and pending concept prose crosses strict response contracts", () => {
     const request = {
@@ -65,6 +92,73 @@ test("lazy detail requests are explicit and pending concept prose crosses strict
         totalConcepts: 1,
     };
     assert.deepEqual(topicQueryPageSchema.parse(page), page);
+    const validatedPage = {
+        ...page,
+        concepts: [
+            {
+                ...concept,
+                validation: {
+                    recipe: "cluster-local-v1",
+                    signature: "b".repeat(64),
+                    modelIdentity: "offline",
+                    inputFingerprint: "a".repeat(64),
+                    score: 0.9,
+                    memberScores: [{ nodeId: "topic:one", score: 0.8 }],
+                },
+                summaryCitations: concept.citations,
+            },
+        ],
+        pendingAssignments: [
+            {
+                nodeId: "topic:pending",
+                reason: "Assignment remains uncertain",
+                candidateTargetIds: ["concept:one"],
+                score: 0.6,
+            },
+        ],
+        pendingCount: 1,
+        omittedPendingAssignments: 0,
+    };
+    assert.deepEqual(topicQueryPageSchema.parse(validatedPage), validatedPage);
+    const admissionPage = structuredClone(validatedPage);
+    admissionPage.concepts[0].validation = {
+        recipe: "cluster-local-v1",
+        signature: "b".repeat(64),
+        modelIdentity: "offline",
+        inputFingerprint: "a".repeat(64),
+        coverage: "member-admission-v2",
+        method: "generative",
+        validatedMemberIds: ["topic:one"],
+    };
+    admissionPage.concepts[0].maintenance = {
+        signature: "c".repeat(64),
+        priority: 0.8,
+        reasons: ["Old-anchor uncertainty"],
+        suspectMemberIds: ["topic:one"],
+    };
+    assert.deepEqual(topicQueryPageSchema.parse(admissionPage), admissionPage);
+    for (const invalid of [
+        { ...admissionPage.concepts[0].validation, method: undefined },
+        { ...admissionPage.concepts[0].validation, score: 0.9 },
+        { ...admissionPage.concepts[0].validation, validatedMemberIds: [] },
+        {
+            ...admissionPage.concepts[0].validation,
+            validatedMemberIds: ["topic:one", "topic:one"],
+        },
+    ]) {
+        const bad = structuredClone(admissionPage);
+        bad.concepts[0].validation = invalid;
+        assert.equal(topicQueryPageSchema.safeParse(bad).success, false);
+    }
+    assert.equal(
+        topicQueryPageSchema.safeParse({
+            ...validatedPage,
+            pendingAssignments: [
+                { ...validatedPage.pendingAssignments[0], score: 2 },
+            ],
+        }).success,
+        false,
+    );
     assert.equal(
         topicQueryPageSchema.safeParse({
             ...page,

@@ -9,9 +9,22 @@ import {
 } from "@typeagent/aiclient";
 import { recordSearchTiming, timeSearchStage } from "@typeagent/knowpro";
 import type { ViewBuildSnapshot, ViewSynthesisAdapter } from "./viewTypes.js";
-import type { TopicConcept, TopicNode, TopicSnapshot } from "./topicTypes.js";
+import type {
+    TopicConcept,
+    TopicCuration,
+    TopicNode,
+    TopicSnapshot,
+} from "./topicTypes.js";
 import { initialTopicNodes, validateTopicSnapshot } from "./topicSnapshot.js";
 import { curateTopics } from "./topicCuration.js";
+import { TopicEvidenceIndex } from "./topicIndexes.js";
+import { curateTopicsWithDecision } from "./topicDecisionCuration.js";
+import { maintainTopicClusters } from "./topicClusterMaintenance.js";
+import {
+    topicDecisionRecipe,
+    type TopicDecisionOptions,
+    observeTopicDecisionWork,
+} from "./topicDecision.js";
 import { redactRunbookText } from "./runbookRedaction.js";
 import {
     editorialRules,
@@ -258,10 +271,12 @@ function generationError(error: unknown): string {
     ).slice(0, 500);
 }
 
-function summaryEvidence(
+export function summaryEvidence(
     snapshot: TopicSnapshot,
     node: TopicNode,
+    index?: TopicEvidenceIndex,
 ): TopicNode["citations"] {
+    if (index) return index.evidenceFor(node);
     const membership = new Set(node.occurrenceIds);
     const sourceRevisions = new Set(
         snapshot.occurrences
@@ -309,7 +324,10 @@ function summaryEvidence(
     return evidence;
 }
 
-function createTopicCompletion(endpoint?: string, injectedModel?: ChatModel) {
+export function createTopicCompletion(
+    endpoint?: string,
+    injectedModel?: ChatModel,
+) {
     let model = injectedModel;
     return async function complete(
         instructions: string,
@@ -410,48 +428,107 @@ export function createConfiguredTopicConceptSummarizer(
     };
 }
 
+async function generateCuratedTopicSnapshot(
+    snapshot: TopicSnapshot,
+    input: ViewBuildSnapshot,
+    signal: AbortSignal,
+    complete: ReturnType<typeof createTopicCompletion>,
+    checkpoint?: TopicGenerationCheckpoint,
+    decision?: TopicDecisionOptions,
+): Promise<void> {
+    snapshot.recipe += `:${decision ? topicDecisionRecipe : "curated-lazy-v6"}`;
+    const evidenceIndex = new TopicEvidenceIndex(snapshot);
+    const evidenceFor = (node: TopicNode) =>
+        summaryEvidence(snapshot, node, evidenceIndex);
+    const completion = (
+        instructions: string,
+        payload: unknown,
+        schema?: StructuredOutputJsonSchema,
+    ) =>
+        complete(
+            instructions,
+            payload,
+            signal,
+            "topic.curation.model",
+            undefined,
+            schema,
+        );
+    const save = checkpoint
+        ? async (curation: TopicCuration) => {
+              snapshot.curationProgress = curation;
+              await checkpoint(structuredClone(snapshot));
+          }
+        : undefined;
+    let curation = decision
+        ? await curateTopicsWithDecision(
+              snapshot,
+              evidenceFor,
+              completion,
+              signal,
+              decision,
+              save,
+              input.topicInput?.reusableCuration,
+          )
+        : await curateTopics(
+              snapshot,
+              evidenceFor,
+              completion,
+              signal,
+              true,
+              save,
+              input.topicInput?.reusableCuration,
+          );
+    if (input.topicInput?.maintainClusters && decision?.clusterValidation)
+        curation = await maintainTopicClusters(
+            snapshot,
+            curation,
+            completion,
+            signal,
+            decision,
+            save,
+        );
+    snapshot.curation = curation;
+    delete snapshot.curationProgress;
+    if (snapshot.curation.pending?.length)
+        snapshot.limits.push(
+            `${snapshot.curation.pending.length} topic assignments require further cluster resolution. Build completion does not certify pending assignments; original source evidence remains available.`,
+        );
+    snapshot.limits.push(
+        "Raw occurrences remain complete and independently addressable; deferred topics are not deleted. Concept summaries are generated only on explicit detail requests and do not block readiness.",
+        "Cross-batch reconciliation retrieves corpus-wide lexical candidates; only evidence-grounded model decisions merge concepts. Synonyms outside candidate retrieval may remain separate.",
+    );
+    validateTopicSnapshot(snapshot);
+    if (checkpoint) await checkpoint(structuredClone(snapshot));
+}
+
 export function createConfiguredTopicGenerator(
     endpoint?: string,
     injectedModel?: ChatModel,
     curated = false,
+    decision?: (input: ViewBuildSnapshot) => TopicDecisionOptions,
 ): TopicGenerator {
-    const complete = createTopicCompletion(endpoint, injectedModel);
+    if (decision && !curated)
+        throw new Error("Decision topic curation requires curated topics");
+    const defaultComplete = createTopicCompletion(endpoint, injectedModel);
     return async (input, signal, checkpoint) => {
+        const complete = decision
+            ? createTopicCompletion(endpoint, injectedModel)
+            : defaultComplete;
+        const decisionOptions = decision?.(input);
         const snapshot = timeSearchStage("topic.snapshot.construct", () =>
             createTopicSnapshot(input, input.model),
         );
         if (curated) {
-            snapshot.recipe += ":curated-lazy-v6";
-            snapshot.curation = await curateTopics(
+            await generateCuratedTopicSnapshot(
                 snapshot,
-                (node) => summaryEvidence(snapshot, node),
-                (instructions, payload, schema) =>
-                    complete(
-                        instructions,
-                        payload,
-                        signal,
-                        "topic.curation.model",
-                        undefined,
-                        schema,
-                    ),
+                input,
                 signal,
-                true,
-                checkpoint
-                    ? async (curation) => {
-                          snapshot.curationProgress = curation;
-                          await checkpoint(structuredClone(snapshot));
-                      }
-                    : undefined,
-                input.topicInput?.reusableCuration,
+                complete,
+                checkpoint,
+                decisionOptions,
             );
-            delete snapshot.curationProgress;
-            snapshot.limits.push(
-                "Raw occurrences remain complete and independently addressable; deferred topics are not deleted. Concept summaries are generated only on explicit detail requests and do not block readiness.",
-                "Cross-batch reconciliation retrieves corpus-wide lexical candidates; only evidence-grounded model decisions merge concepts. Synonyms outside candidate retrieval may remain separate.",
-            );
-            validateTopicSnapshot(snapshot);
-            if (checkpoint) await checkpoint(structuredClone(snapshot));
         } else {
+            const evidenceIndex = new TopicEvidenceIndex(snapshot);
             recordSearchTiming("topic.snapshot.counts", 0, {
                 nodes: snapshot.nodes.length,
                 occurrences: snapshot.occurrences.length,
@@ -483,10 +560,11 @@ export function createConfiguredTopicGenerator(
                     const node = snapshot.nodes[ordinal - 1];
                     if (node.summaryState === "ready") continue;
                     const baseLimitCount = node.limits.length;
-                    const evidence = summaryEvidence(snapshot, node).slice(
-                        0,
-                        8,
-                    );
+                    const evidence = summaryEvidence(
+                        snapshot,
+                        node,
+                        evidenceIndex,
+                    ).slice(0, 8);
                     const contextKey = deduplicateIdenticalContexts
                         ? JSON.stringify([
                               node.label.trim().toLocaleLowerCase(),
@@ -668,14 +746,35 @@ export function createConfiguredTopicGenerator(
                 const batch = labels.slice(offset, offset + 200);
                 const suppliedIds = new Set(batch.map((node) => node.id));
                 const schema = organizationSchema([...suppliedIds]);
-                const raw = await complete(
-                    organizationInstructions,
-                    batch,
-                    signal,
-                    "topic.organization.model",
-                    undefined,
-                    schema,
-                );
+                const organize = (instructions: string, repair = false) => {
+                    const work = () =>
+                        complete(
+                            instructions,
+                            batch,
+                            signal,
+                            repair
+                                ? "topic.organization.repair.model"
+                                : "topic.organization.model",
+                            undefined,
+                            schema,
+                        );
+                    return decisionOptions
+                        ? observeTopicDecisionWork(
+                              decisionOptions,
+                              "organization",
+                              repair
+                                  ? "bounded-contract-repair"
+                                  : "unchanged-organization",
+                              JSON.stringify({
+                                  instructions,
+                                  payload: batch,
+                                  schema,
+                              }),
+                              work,
+                          )
+                        : work();
+                };
+                const raw = await organize(organizationInstructions);
                 let organization: Pick<TopicSnapshot, "parents" | "related">;
                 try {
                     organization = checkedOrganization(
@@ -691,13 +790,9 @@ export function createConfiguredTopicGenerator(
                         `Topic organization requires contract repair: ${error.message}`,
                     );
                     organization = checkedOrganization(
-                        await complete(
+                        await organize(
                             `${organizationInstructions}\nRepair the rejected organization: ${error.message}. Use only the exact supplied IDs. Do not create self-links or parent cycles. Return the complete replacement edge set; prior invalid edges are discarded.`,
-                            batch,
-                            signal,
-                            "topic.organization.repair.model",
-                            undefined,
-                            schema,
+                            true,
                         ),
                         snapshot,
                         suppliedIds,

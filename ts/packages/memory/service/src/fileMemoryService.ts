@@ -287,6 +287,14 @@ import {
     createConfiguredTopicConceptSummarizer,
     type TopicConceptSummarizer,
 } from "./topicGeneration.js";
+import {
+    configuredTopicDecisionModel,
+    configuredTopicDecisionIdentity,
+    type TopicDecisionReceipt,
+    type TopicDecisionExecutionOptions,
+    resolveTopicDecisionExecution,
+    topicDecisionRecipe,
+} from "./topicDecision.js";
 import { validateTopicQuery } from "./topicSnapshot.js";
 import {
     applyTopicFamilyOperation,
@@ -629,13 +637,28 @@ export interface FileMemoryServiceOptions {
     viewPublicationCheckpoint?: (point: "intent" | "index") => Promise<void>;
     viewSynthesisAdapter?: ViewSynthesisAdapter;
     viewModelEndpoint?: string;
-    /** Opt-in while curated concept quality and edit workflows are qualified. */
+    /** Concept-first curation is enabled by default; raw generation is diagnostic. */
     curatedTopics?: boolean;
+    /** Experimental Decision curation; the generative pipeline remains the default. */
+    decisionTopics?: boolean;
+    decisionTopicExecution?: TopicDecisionExecutionOptions;
+    onTopicDecisionReceipt?: (receipt: TopicDecisionReceipt) => void;
     indexFactory?: CorpusIndexFactory;
     eventIndexFactory?: CorpusIndexFactory;
     capabilities?: MemoryServiceCapabilities;
     /** Opt-in rehearsal envelope only; never enables product behavior. */
     informationalBudget?: RequestBudgetLimits;
+}
+
+function decisionTopicsEnabled(options: FileMemoryServiceOptions): boolean {
+    const enabled = options.decisionTopics ?? false;
+    if (enabled && options.curatedTopics === false)
+        throw new Error("Decision topic curation requires curated topics");
+    if (enabled && options.viewSynthesisAdapter?.generateTopics)
+        throw new Error(
+            "Decision topic curation cannot override a custom topic generator",
+        );
+    return enabled;
 }
 
 function now(): string {
@@ -1194,6 +1217,13 @@ export class FileMemoryService
     private readonly viewPublicationCheckpoint: FileMemoryServiceOptions["viewPublicationCheckpoint"];
     private readonly viewAdapter: ViewSynthesisAdapter;
     private readonly curatedTopics: boolean;
+    private readonly decisionTopics: boolean;
+    private readonly decisionTopicExecution: ReturnType<
+        typeof resolveTopicDecisionExecution
+    >;
+    private readonly onTopicDecisionReceipt:
+        | ((receipt: TopicDecisionReceipt) => void)
+        | undefined;
     private readonly summarizeTopicConcept: TopicConceptSummarizer;
     private readonly topicSummaryWork = new Map<
         string,
@@ -1412,6 +1442,11 @@ export class FileMemoryService
         this.viewDrafts = options.viewDrafts !== false;
         this.wikiModelEndpoint = options.viewModelEndpoint;
         this.curatedTopics = options.curatedTopics ?? true;
+        this.decisionTopics = decisionTopicsEnabled(options);
+        this.decisionTopicExecution = resolveTopicDecisionExecution(
+            options.decisionTopicExecution,
+        );
+        this.onTopicDecisionReceipt = options.onTopicDecisionReceipt;
         this.indexedAnswerModel = options.indexedAnswerModel;
         this.sourceSynopsesEnabled =
             options.sourceSynopses ?? options.informationalViews !== false;
@@ -1611,11 +1646,7 @@ export class FileMemoryService
                     }),
             },
             this.wikiBudget,
-            createConfiguredTopicGenerator(
-                options.viewModelEndpoint,
-                undefined,
-                this.curatedTopics,
-            ),
+            this.createTopicGenerator(),
         );
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
         this.eventIndexFactory = options.eventIndexFactory ?? this.indexFactory;
@@ -9235,9 +9266,45 @@ export class FileMemoryService
             this.topicSources(runtime),
             runtime.manifest.indexGeneration,
             runtime.manifest.knowledgeSuppressions ?? [],
-            `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-lazy-v6" : "raw-v1"}`,
+            this.topicModelIdentity(),
             this.topicEvents(runtime),
         );
+    }
+
+    private createTopicGenerator() {
+        return createConfiguredTopicGenerator(
+            this.wikiModelEndpoint,
+            undefined,
+            this.curatedTopics,
+            this.decisionTopics
+                ? (input) => {
+                      if (input.model !== this.topicModelIdentity())
+                          throw new ViewBuildStaleError(
+                              "Decision topic configuration changed",
+                          );
+                      return {
+                          ...this.decisionTopicExecution,
+                          model: configuredTopicDecisionModel(),
+                          ...(this.onTopicDecisionReceipt
+                              ? { onReceipt: this.onTopicDecisionReceipt }
+                              : {}),
+                      };
+                  }
+                : undefined,
+        );
+    }
+
+    private topicModelIdentity(): string {
+        const policy = this.decisionTopics
+            ? configuredTopicDecisionIdentity(
+                  this.wikiModelEndpoint,
+                  "v2",
+                  this.decisionTopicExecution,
+              )
+            : this.curatedTopics
+              ? "curated-lazy-v6"
+              : "raw-v1";
+        return `${this.viewAdapter.identity}:topics-${policy}`;
     }
 
     private topicEvents(runtime: CorpusRuntime) {
@@ -9286,6 +9353,16 @@ export class FileMemoryService
                 };
                 return {
                     ...occurrence,
+                    ...(event.sender
+                        ? {
+                              context: {
+                                  role: event.sender,
+                                  chronology:
+                                      occurrence.context?.chronology ??
+                                      "unknown",
+                              },
+                          }
+                        : {}),
                     id: graphIdentity(
                         corpusId,
                         "event-occurrence",
@@ -9458,7 +9535,10 @@ export class FileMemoryService
             index: runtime.index,
             sources: this.topicSources(runtime),
             suppressions: runtime.manifest.knowledgeSuppressions ?? [],
-            model: `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-lazy-v6" : "raw-v1"}`,
+            model: this.topicModelIdentity(),
+            curationRecipe: this.decisionTopics
+                ? topicDecisionRecipe
+                : "curated-lazy-v6",
             eventOccurrences,
             influenceEvents: this.topicEvents(runtime),
             ...(runtime.manifest.indexGeneration
@@ -9466,6 +9546,12 @@ export class FileMemoryService
                 : {}),
             ...(state.snapshot ? { current: state.snapshot } : {}),
         });
+        if (
+            request.operation === "rebuild" &&
+            this.decisionTopicExecution.clusterValidation &&
+            input.topicInput
+        )
+            input.topicInput.maintainClusters = true;
         if (this.deferBatchMaintenance(request.corpusId, automatic))
             return this.viewStore.recordViewMaintenance(plan);
         const reservation = this.viewBuilds.reserve();

@@ -45,5 +45,13 @@ export function indexedTopicOccurrence(
         scope: block.sourceId,
         ordinal,
         citations,
+        ...(block.temporalContext
+            ? {
+                  context: {
+                      role: block.temporalContext.role ?? "unknown",
+                      chronology: JSON.stringify(block.temporalContext),
+                  },
+              }
+            : {}),
     };
 }

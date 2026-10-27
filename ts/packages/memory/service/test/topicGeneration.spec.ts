@@ -3,6 +3,7 @@
 
 import {
     openai,
+    getRuntimeConfigGeneration,
     RequestBudget,
     runWithRequestBudget,
     type ChatModel,
@@ -21,6 +22,8 @@ import { indexedTopicOccurrence } from "../src/topicIncidence.js";
 import type { TopicOccurrence, TopicSnapshot } from "../src/topicTypes.js";
 import type { CorpusIndex } from "../src/types.js";
 import type { ViewBuildSnapshot } from "../src/viewTypes.js";
+import { prioritizeTopicMaintenance } from "../src/topicClusterMaintenance.js";
+import { viewHash } from "../src/viewMerge.js";
 
 function occurrence(
     sourceId: string,
@@ -72,6 +75,87 @@ function deferred<T>() {
     const promise = new Promise<T>((done) => (resolve = done));
     return { promise, resolve };
 }
+
+test.each([false, true])(
+    "topic generation consumes maintenance only for an explicit rebuild, even without new nodes: %s",
+    async (maintain) => {
+        const captured = input(1);
+        captured.fingerprint = "a".repeat(64);
+        const prior = createTopicSnapshot(captured, "offline");
+        const node = prior.nodes[0];
+        const concept = {
+            id: `concept:${viewHash(node.id).slice(0, 32)}`,
+            label: node.label,
+            scope: node.scope,
+            purpose: "Explain this collection",
+            memberIds: [node.id],
+            summary: "",
+            summaryState: "pending" as const,
+            citations: node.citations,
+            salience: 4,
+        };
+        prioritizeTopicMaintenance(
+            prior,
+            concept,
+            [node.id],
+            1,
+            "Old-anchor uncertainty",
+        );
+        captured.topicInput!.reusableCuration = {
+            concepts: [concept],
+            deferred: [],
+        };
+        captured.topicInput!.maintainClusters = maintain;
+        let calls = 0;
+        const generator = createConfiguredTopicGenerator(
+            undefined,
+            {
+                completionSettings: {
+                    response_format: { type: "json_object" },
+                },
+                complete: async (messages) => {
+                    calls++;
+                    const payload = JSON.parse(promptText(messages, 1));
+                    expect(payload.state.cluster.phase).toBe("maintenance");
+                    return {
+                        success: true,
+                        data: JSON.stringify({
+                            members: payload.memberKeys.map((key: string) => ({
+                                key,
+                                disposition: "keep",
+                            })),
+                            joint: "compatible",
+                            conflicts: [],
+                            rationale:
+                                "Complete evidence confirms this collection membership.",
+                        }),
+                    };
+                },
+            },
+            true,
+            () => ({
+                clusterValidation: true,
+                model: {
+                    provider: "azure",
+                    model: "offline",
+                    providerSource: "factory",
+                    configGeneration: getRuntimeConfigGeneration(),
+                    decide: async () => {
+                        throw new Error(
+                            "No new topics should require Decision calls",
+                        );
+                    },
+                },
+            }),
+        );
+        const result = await generator(captured, new AbortController().signal);
+        expect(calls).toBe(maintain ? 1 : 0);
+        expect(Boolean(result.curation!.concepts[0].maintenance)).toBe(
+            !maintain,
+        );
+        expect(result.curation!.concepts[0].memberIds).toEqual([node.id]);
+    },
+);
 
 function promptText(
     messages: Parameters<ChatModel["complete"]>[0],
@@ -851,7 +935,12 @@ test.each(["abort", "provider", "evidence", "editorial-provider"] as const)(
 async function capture(
     occurrences: TopicOccurrence[],
     current?: TopicSnapshot,
-    overrides: { model?: string; corpusId?: string; suppressed?: string } = {},
+    overrides: {
+        model?: string;
+        corpusId?: string;
+        suppressed?: string;
+        curationRecipe?: string;
+    } = {},
 ) {
     return captureTopicBuild({
         corpusId: overrides.corpusId ?? "test",
@@ -877,9 +966,51 @@ async function capture(
               ]
             : [],
         model: overrides.model ?? "offline",
+        ...(overrides.curationRecipe
+            ? { curationRecipe: overrides.curationRecipe }
+            : {}),
         ...(current ? { current } : {}),
     });
 }
+
+test("Decision continuation requires the exact experimental recipe, model policy and evidence", async () => {
+    const occurrences = input(2).topicInput!.occurrences;
+    const policy = {
+        model: "decision-policy",
+        curationRecipe: "curated-decision-v1",
+    };
+    const captured = await capture(occurrences, undefined, policy);
+    const current = createTopicSnapshot(captured, captured.model);
+    current.recipe += ":curated-decision-v1";
+    current.curationProgress = {
+        concepts: [],
+        deferred: [{ nodeId: current.nodes[0].id, reason: "Passing mention" }],
+    };
+    expect(
+        (await capture(occurrences, current, policy)).topicInput!
+            .reusableCuration,
+    ).toEqual(current.curationProgress);
+    expect(
+        (await capture(occurrences, current, { model: policy.model }))
+            .topicInput!.reusableCuration,
+    ).toBeUndefined();
+    expect(
+        (
+            await capture(occurrences, current, {
+                ...policy,
+                model: "changed-decision-policy",
+            })
+        ).topicInput!.reusableCuration,
+    ).toBeUndefined();
+    const changed = structuredClone(occurrences);
+    changed[0].context = {
+        role: "assistant",
+        chronology: "Changed source-local context",
+    };
+    expect(
+        (await capture(changed, current, policy)).topicInput!.reusableCuration,
+    ).toBeUndefined();
+});
 
 test("reuse requires exact owned evidence AND complete same-source revision context", async () => {
     const occurrences = [
