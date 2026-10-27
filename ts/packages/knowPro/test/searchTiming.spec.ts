@@ -136,6 +136,35 @@ describe("search timing", () => {
         expect(logs.some((line) => line.includes('"traceId":"b"'))).toBe(true);
     });
 
+    test("curation receipts allow opaque hashes and bounded enums but reject source text in those fields", () => {
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        runWithSearchTiming("curation", "test", () => {
+            recordSearchTiming("receipt", 1, {
+                requestHash: "a".repeat(64),
+                callKind: "normal",
+                tokenizer: "o200k_base",
+                constraintAccounting: "utf8-byte-upper-bound",
+                providerAttemptBreakdown: "unavailable",
+                serializedBytes: 1000,
+            });
+            recordSearchTiming("invalid", 1, {
+                fingerprint: "private source text",
+                callKind: "private source text",
+                reason: "private source text",
+            });
+        });
+        const entries = logs.map((line) =>
+            JSON.parse(line.replace("[memory-search-timing] ", "")),
+        );
+        expect(entries[0].metadata).toMatchObject({
+            requestHash: "a".repeat(64),
+            callKind: "normal",
+            serializedBytes: 1000,
+        });
+        expect(entries[1].metadata).toEqual({});
+        expect(logs.join("")).not.toContain("private source text");
+    });
+
     test("sync and async failures retain their error and never log error content", async () => {
         process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
         const error = new Error("secret query source prompt tokens");

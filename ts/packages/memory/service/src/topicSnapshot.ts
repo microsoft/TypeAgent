@@ -11,6 +11,7 @@ import type {
 } from "./topicTypes.js";
 import { assertViewIdentifier } from "./viewContent.js";
 import { parseIndexedLocator } from "./indexedFragments.js";
+import { TopicEvidenceIndex } from "./topicLookup.js";
 import {
     validateTopicCuration,
     validateTopicCurationProgress,
@@ -70,7 +71,8 @@ export function initialTopicNodes(
 
 function validateOccurrence(
     occurrence: TopicOccurrence,
-    snapshot: TopicSnapshot,
+    eventIds: ReadonlySet<string>,
+    sourceRevisions: ReadonlySet<string>,
 ): void {
     if (
         occurrence.evidence &&
@@ -111,13 +113,9 @@ function validateOccurrence(
     }
     if (
         occurrence.evidence
-            ? !snapshot.influenceEvents?.some(
-                  (event) => event.eventId === occurrence.evidence?.eventId,
-              )
-            : !snapshot.influenceSources.some(
-                  (source) =>
-                      source.sourceId === occurrence.sourceId &&
-                      source.revisionId === occurrence.revisionId,
+            ? !eventIds.has(occurrence.evidence.eventId)
+            : !sourceRevisions.has(
+                  JSON.stringify([occurrence.sourceId, occurrence.revisionId]),
               )
     )
         throw new Error(
@@ -143,6 +141,7 @@ function validateNode(
     snapshot: TopicSnapshot,
     occurrences: Map<string, TopicOccurrence>,
     represented: Set<string>,
+    evidenceIndex: TopicEvidenceIndex,
 ): void {
     validateNodeMetadata(node);
     if (
@@ -164,23 +163,7 @@ function validateNode(
     });
     if (!selected.length || (node.summary && !node.citations.length))
         throw new Error("Topic summary requires original incidence evidence");
-    const sourceRevisions = new Set(
-        selected.map((entry) => `${entry.sourceId}\n${entry.revisionId}`),
-    );
-    const evidence = new Set(
-        snapshot.occurrences
-            .filter((entry) =>
-                sourceRevisions.has(`${entry.sourceId}\n${entry.revisionId}`),
-            )
-            .flatMap((entry) =>
-                entry.citations.map((citation) => JSON.stringify(citation)),
-            ),
-    );
-    if (
-        node.citations.some(
-            (citation) => !evidence.has(JSON.stringify(citation)),
-        )
-    )
+    if (!evidenceIndex.ownsExactEvidence([node.id], node.citations))
         throw new Error("Topic summary cites unsupplied original evidence");
 }
 
@@ -248,16 +231,22 @@ export function validateTopicSnapshot(snapshot: TopicSnapshot): void {
     )
         throw new Error("Duplicate topic or occurrence identity");
     const represented = new Set<string>();
+    const sourceRevisions = new Set(
+        snapshot.influenceSources.map(({ sourceId, revisionId }) =>
+            JSON.stringify([sourceId, revisionId]),
+        ),
+    );
     for (const occurrence of occurrences.values())
-        validateOccurrence(occurrence, snapshot);
+        validateOccurrence(occurrence, eventIds, sourceRevisions);
+    const evidenceIndex = new TopicEvidenceIndex(snapshot);
     for (const node of nodes.values())
-        validateNode(node, snapshot, occurrences, represented);
+        validateNode(node, snapshot, occurrences, represented, evidenceIndex);
     if (represented.size !== occurrences.size)
         throw new Error(
             "Topic snapshot truncated maintained occurrence membership",
         );
-    validateTopicCuration(snapshot);
-    validateTopicCurationProgress(snapshot);
+    validateTopicCuration(snapshot, evidenceIndex);
+    validateTopicCurationProgress(snapshot, evidenceIndex);
     validateEdges(
         snapshot,
         new Set([

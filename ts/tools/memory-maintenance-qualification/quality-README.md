@@ -1,5 +1,9 @@
 # Memory quality: offline contracts and preparation
 
+For the separate frozen topic-curation tool, including its explicitly authorized
+live mode, see [Frozen topic-curation replay](topic-curation-README.md).
+The offline-only scope below describes the quality utilities on this page.
+
 This lane adds **offline evaluation utilities**, not a memory implementation,
 inference runner, factual judge, or new lifecycle harness. It makes no model calls,
 reads no credentials, and opens no production stores. No LongMemEval, AP-news,

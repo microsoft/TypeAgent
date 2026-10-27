@@ -52,6 +52,8 @@ import {
 import { priorityQueue } from "async";
 import registerDebug from "debug";
 import { TokenCounter } from "./tokenCounter.js";
+import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
+import { checkSerializedRequestConstraints } from "./requestConstraints.js";
 import {
     createOllamaChatModel,
     OllamaApiSettings,
@@ -609,6 +611,26 @@ function createAzureOpenAIChatModel(
     const model: ChatModelWithStreaming = {
         completionSettings,
         completionCallback,
+        inspectRequest(prompt, jsonSchema) {
+            const messages =
+                typeof prompt === "string"
+                    ? [{ role: "user" as const, content: prompt }]
+                    : prompt;
+            const serializedRequest = JSON.stringify(
+                adapter.buildRequestBody(
+                    makeModelRequest(messages, jsonSchema, false),
+                ),
+            );
+            return {
+                serializedRequest,
+                estimatedInputTokens: countTokens(serializedRequest),
+                tokenizer: "o200k_base",
+                constraints: checkSerializedRequestConstraints(
+                    serializedRequest,
+                    settings.requestConstraints,
+                ),
+            };
+        },
         complete,
         completeStream,
     };

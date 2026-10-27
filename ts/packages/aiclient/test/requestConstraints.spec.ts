@@ -15,6 +15,51 @@ import { RequestAdmissionError } from "../src/requestBudget.js";
 import { callJsonApiWithPool } from "../src/restClient.js";
 import type { EndpointPool } from "../src/endpointPool.js";
 
+test("request inspection is offline and serializes the same schema-bearing request as dispatch", async () => {
+    const originalFetch = globalThis.fetch;
+    const bodies: string[] = [];
+    try {
+        globalThis.fetch = async (_url, options) => {
+            bodies.push(String(options?.body));
+            return new Response(
+                JSON.stringify({ choices: [{ message: { content: "{}" } }] }),
+                { status: 200 },
+            );
+        };
+        const model = createChatModel(
+            {
+                provider: "azure",
+                modelType: ModelType.Chat,
+                apiKey: "synthetic-key",
+                endpoint: "https://synthetic.invalid/inspection",
+                supportsResponseFormat: true,
+                requestConstraints: {
+                    contextTokens: 30000,
+                    inputTokens: 20000,
+                    outputTokens: 5000,
+                },
+            },
+            { response_format: { type: "json_object" } },
+        );
+        const schema = {
+            name: "test",
+            schema: { type: "object", description: "Schema counts too" },
+        };
+        const inspected = model.inspectRequest!("Multibyte: \u2603", schema);
+        expect(bodies).toHaveLength(0);
+        expect(inspected.constraints).toMatchObject({
+            metadata: "configured",
+            outputTokens: 5000,
+        });
+        expect(inspected.estimatedInputTokens).toBeGreaterThan(0);
+        expect(inspected.serializedRequest).toContain("Schema counts too");
+        await model.complete("Multibyte: \u2603", undefined, schema);
+        expect(bodies).toEqual([inspected.serializedRequest]);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
 test("uncapped chat reserves provider output capacity without adding a wire limit", async () => {
     const originalFetch = globalThis.fetch;
     const settings = {

@@ -6,12 +6,21 @@ import {
     openai,
     type ChatModel,
     type StructuredOutputJsonSchema,
+    type CompleteUsageStatsCallback,
 } from "@typeagent/aiclient";
 import { recordSearchTiming, timeSearchStage } from "@typeagent/knowpro";
 import type { ViewBuildSnapshot, ViewSynthesisAdapter } from "./viewTypes.js";
 import type { TopicConcept, TopicNode, TopicSnapshot } from "./topicTypes.js";
 import { initialTopicNodes, validateTopicSnapshot } from "./topicSnapshot.js";
-import { curateTopics } from "./topicCuration.js";
+import {
+    curateTopics,
+    topicCurationPolicy,
+    validateTopicCurationSettings,
+    type TopicCurationSettings,
+    type TopicCurationCall,
+} from "./topicCuration.js";
+import { viewHash } from "./viewMerge.js";
+import { TopicEvidenceIndex } from "./topicLookup.js";
 import { redactRunbookText } from "./runbookRedaction.js";
 import {
     editorialRules,
@@ -258,102 +267,100 @@ function generationError(error: unknown): string {
     ).slice(0, 500);
 }
 
-function summaryEvidence(
-    snapshot: TopicSnapshot,
-    node: TopicNode,
-): TopicNode["citations"] {
-    const membership = new Set(node.occurrenceIds);
-    const sourceRevisions = new Set(
-        snapshot.occurrences
-            .filter((entry) => membership.has(entry.id))
-            .map((entry) => `${entry.sourceId}\n${entry.revisionId}`),
-    );
-    const context = [
-        ...new Map(
-            snapshot.occurrences
-                .filter((entry) =>
-                    sourceRevisions.has(
-                        `${entry.sourceId}\n${entry.revisionId}`,
-                    ),
-                )
-                .flatMap((entry) => entry.citations)
-                .map((citation) => [JSON.stringify(citation), citation]),
-        ).values(),
-    ];
-    const priority = (text: string) =>
-        /Governing tail exception:/i.test(text)
-            ? 3
-            : /governing|withdraw|invalid|correct|supersed|retract/i.test(text)
-              ? 2
-              : /qualification|caveat|only|cohort|not applicable|held lease/i.test(
-                      text,
-                  )
-                ? 1
-                : 0;
-    const own = node.citations.slice(0, 2);
-    const ranked = [...context].sort(
-        (a, b) => priority(b.excerpt) - priority(a.excerpt),
-    );
-    const evidence = [
-        ...new Map(
-            [...own, ...ranked, ...context.slice(-2)].map((citation) => [
-                JSON.stringify(citation),
-                citation,
-            ]),
-        ).values(),
-    ].slice(0, 8);
-    if (context.length > evidence.length)
-        node.limits.push(
-            "Summary uses bounded original-source context, including nominated qualifications; full incidence remains maintained.",
-        );
-    return evidence;
-}
-
 function createTopicCompletion(endpoint?: string, injectedModel?: ChatModel) {
     let model = injectedModel;
-    return async function complete(
+    function configuredModel() {
+        return (model ??= openai.createChatModel(
+            endpoint,
+            { temperature: 0, response_format: { type: "json_object" } },
+            undefined,
+            ["memory-views"],
+        ));
+    }
+    function messages(instructions: string, payload: unknown) {
+        return [
+            { role: "system" as const, content: instructions },
+            { role: "user" as const, content: JSON.stringify(payload) },
+        ];
+    }
+    return Object.assign(complete, {
+        inspectRequest(
+            instructions: string,
+            payload: unknown,
+            schema: StructuredOutputJsonSchema,
+        ) {
+            const model = configuredModel();
+            if (!model.inspectRequest)
+                throw new Error(
+                    "Configured topic model does not support request inspection",
+                );
+            return model.inspectRequest(
+                messages(instructions, payload),
+                model.completionSettings.response_format?.type === "json_object"
+                    ? schema
+                    : undefined,
+            );
+        },
+    });
+    async function complete(
         instructions: string,
         payload: unknown,
         signal: AbortSignal,
         stage: string,
         ordinal?: number,
         schema?: StructuredOutputJsonSchema,
+        call?: TopicCurationCall,
     ): Promise<unknown> {
         signal.throwIfAborted();
-        model ??= openai.createChatModel(
-            endpoint,
-            {
-                temperature: 0,
-                response_format: { type: "json_object" },
-            },
-            undefined,
-            ["memory-views"],
-        );
+        const model = configuredModel();
+        const prompt = messages(instructions, payload);
+        const outputSchema =
+            model.completionSettings.response_format?.type === "json_object"
+                ? schema
+                : undefined;
+        const request = call
+            ? model.inspectRequest?.(prompt, outputSchema)
+            : undefined;
+        let usage: Parameters<CompleteUsageStatsCallback>[0] | undefined;
         const result = await timeSearchStage(
             stage,
             () =>
-                model!.complete(
-                    [
-                        {
-                            role: "system",
-                            content: instructions,
-                        },
-                        { role: "user", content: JSON.stringify(payload) },
-                    ],
-                    undefined,
-                    model!.completionSettings.response_format?.type ===
-                        "json_object"
-                        ? schema
-                        : undefined,
+                model.complete(
+                    prompt,
+                    (value) => {
+                        usage = value;
+                    },
+                    outputSchema,
                     undefined,
                     signal,
                 ),
-            { ordinal },
+            {
+                ordinal,
+                callKind: call?.kind,
+                requestHash: request
+                    ? viewHash(request.serializedRequest)
+                    : undefined,
+                serializedBytes: request
+                    ? Buffer.byteLength(request.serializedRequest)
+                    : undefined,
+                inputTokens: request?.estimatedInputTokens,
+                tokenizer: request?.tokenizer,
+                outputReservation: request?.constraints.outputTokens,
+                constraintAccounting: request?.constraints.tokenAccounting,
+                providerAttemptBreakdown: call ? "unavailable" : undefined,
+            },
         );
         signal.throwIfAborted();
         if (!result.success) throw new Error(result.message);
+        recordSearchTiming(`${stage}.response`, 0, {
+            ordinal,
+            callKind: call?.kind,
+            outputBytes: Buffer.byteLength(result.data),
+            promptTokens: usage?.prompt_tokens,
+            completionTokens: usage?.completion_tokens,
+        });
         return JSON.parse(result.data);
-    };
+    }
 }
 
 export function createConfiguredTopicConceptSummarizer(
@@ -414,25 +421,30 @@ export function createConfiguredTopicGenerator(
     endpoint?: string,
     injectedModel?: ChatModel,
     curated = false,
+    settings?: TopicCurationSettings,
 ): TopicGenerator {
+    if (settings) validateTopicCurationSettings(settings);
+    settings = settings ? { ...settings } : undefined;
     const complete = createTopicCompletion(endpoint, injectedModel);
     return async (input, signal, checkpoint) => {
         const snapshot = timeSearchStage("topic.snapshot.construct", () =>
             createTopicSnapshot(input, input.model),
         );
+        const evidenceIndex = new TopicEvidenceIndex(snapshot);
         if (curated) {
-            snapshot.recipe += ":curated-lazy-v6";
+            snapshot.recipe += `:${topicCurationPolicy(true, settings)}`;
             snapshot.curation = await curateTopics(
                 snapshot,
-                (node) => summaryEvidence(snapshot, node),
-                (instructions, payload, schema) =>
+                (node) => evidenceIndex.evidence(node),
+                (instructions, payload, schema, call) =>
                     complete(
                         instructions,
                         payload,
-                        signal,
+                        call?.signal ?? signal,
                         "topic.curation.model",
-                        undefined,
+                        call?.ordinal,
                         schema,
+                        call,
                     ),
                 signal,
                 true,
@@ -443,6 +455,7 @@ export function createConfiguredTopicGenerator(
                       }
                     : undefined,
                 input.topicInput?.reusableCuration,
+                { ...settings, inspectRequest: complete.inspectRequest },
             );
             delete snapshot.curationProgress;
             snapshot.limits.push(
@@ -483,10 +496,7 @@ export function createConfiguredTopicGenerator(
                     const node = snapshot.nodes[ordinal - 1];
                     if (node.summaryState === "ready") continue;
                     const baseLimitCount = node.limits.length;
-                    const evidence = summaryEvidence(snapshot, node).slice(
-                        0,
-                        8,
-                    );
+                    const evidence = evidenceIndex.evidence(node);
                     const contextKey = deduplicateIdenticalContexts
                         ? JSON.stringify([
                               node.label.trim().toLocaleLowerCase(),

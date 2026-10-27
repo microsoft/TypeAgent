@@ -13,6 +13,31 @@ import { waitForMemoryJob } from "../src/rpcFacade.js";
 import type { IndexedFragmentRequest } from "../src/types.js";
 import type { ViewSynthesisOutput } from "../src/viewTypes.js";
 
+test("topic experiments are opt-in and reject invalid host settings", () => {
+    expect(getConfiguredMemoryViewOptions({})).not.toHaveProperty(
+        "topicCuration",
+    );
+    expect(
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "32000",
+            TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "2",
+            TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION: "0.25",
+        }).topicCuration,
+    ).toEqual({
+        inputTokenTarget: 32000,
+        concurrency: 2,
+        priorContextFraction: 0.25,
+    });
+    for (const environment of [
+        { TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "" },
+        { TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "NaN" },
+        { TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "3" },
+        { TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION: "0.2" },
+        { TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS: "-1" },
+    ])
+        expect(() => getConfiguredMemoryViewOptions(environment)).toThrow();
+});
+
 class DeadlineCorpusIndex extends FakeSemanticCorpusIndex {
     public async readFragments(request: IndexedFragmentRequest) {
         return selectIndexedFragments(

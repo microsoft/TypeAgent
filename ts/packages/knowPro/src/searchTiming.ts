@@ -18,6 +18,20 @@ type SearchTimingContext = {
 
 const searchTiming = new AsyncLocalStorage<SearchTimingContext>();
 
+const curationTimingEnums: Readonly<Record<string, readonly string[]>> = {
+    callKind: ["normal", "contract-repair", "omission-repair"],
+    tokenizer: ["o200k_base"],
+    constraintAccounting: ["utf8-byte-upper-bound"],
+    providerAttemptBreakdown: ["unavailable"],
+    reason: ["packet-or-expansion-changed"],
+};
+
+function curationTimingAttribute(key: string, value: string): boolean {
+    if (["requestHash", "fingerprint"].includes(key))
+        return /^[0-9a-f]{64}$/.test(value);
+    return curationTimingEnums[key]?.includes(value) ?? false;
+}
+
 export function isSearchTimingEnabled(): boolean {
     return process.env.TYPEAGENT_MEMORY_SEARCH_TRACE === "1";
 }
@@ -78,7 +92,8 @@ function emitTiming(
                                 "documents",
                                 "procedure",
                                 "procedures",
-                            ].includes(value)))),
+                            ].includes(value)) ||
+                        curationTimingAttribute(key, value))),
         ),
     );
     try {

@@ -290,6 +290,10 @@ import {
     createConfiguredTopicConceptSummarizer,
     type TopicConceptSummarizer,
 } from "./topicGeneration.js";
+import {
+    topicCurationPolicy,
+    type TopicCurationSettings,
+} from "./topicCuration.js";
 import { validateTopicQuery } from "./topicSnapshot.js";
 import {
     applyTopicFamilyOperation,
@@ -634,6 +638,8 @@ export interface FileMemoryServiceOptions {
     viewModelEndpoint?: string;
     /** Disable to retain raw-topic summaries instead of lazy curated concepts. */
     curatedTopics?: boolean;
+    /** Opt-in LLM curation experiments; defaults retain legacy packing and one worker. */
+    topicCuration?: TopicCurationSettings;
     indexFactory?: CorpusIndexFactory;
     eventIndexFactory?: CorpusIndexFactory;
     capabilities?: MemoryServiceCapabilities;
@@ -1197,6 +1203,7 @@ export class FileMemoryService
     private readonly viewPublicationCheckpoint: FileMemoryServiceOptions["viewPublicationCheckpoint"];
     private readonly viewAdapter: ViewSynthesisAdapter;
     private readonly curatedTopics: boolean;
+    private readonly topicPolicy: string;
     private readonly summarizeTopicConcept: TopicConceptSummarizer;
     private readonly topicSummaryWork = new Map<
         string,
@@ -1372,6 +1379,10 @@ export class FileMemoryService
         this.viewDrafts = options.viewDrafts !== false;
         this.wikiModelEndpoint = options.viewModelEndpoint;
         this.curatedTopics = options.curatedTopics ?? true;
+        this.topicPolicy = topicCurationPolicy(
+            this.curatedTopics,
+            options.topicCuration,
+        );
         this.indexedAnswerModel = options.indexedAnswerModel;
         this.sourceSynopsesEnabled =
             options.sourceSynopses ?? options.informationalViews !== false;
@@ -1575,6 +1586,7 @@ export class FileMemoryService
                 options.viewModelEndpoint,
                 undefined,
                 this.curatedTopics,
+                options.topicCuration,
             ),
         );
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
@@ -8573,7 +8585,7 @@ export class FileMemoryService
             this.topicSources(runtime),
             runtime.manifest.indexGeneration,
             runtime.manifest.knowledgeSuppressions ?? [],
-            `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-lazy-v6" : "raw-v1"}`,
+            `${this.viewAdapter.identity}:topics-${this.topicPolicy}`,
             this.topicEvents(runtime),
         );
     }
@@ -8739,7 +8751,7 @@ export class FileMemoryService
             index: runtime.index,
             sources: this.topicSources(runtime),
             suppressions: runtime.manifest.knowledgeSuppressions ?? [],
-            model: `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-lazy-v6" : "raw-v1"}`,
+            model: `${this.viewAdapter.identity}:topics-${this.topicPolicy}`,
             eventOccurrences,
             influenceEvents: this.topicEvents(runtime),
             ...(runtime.manifest.indexGeneration
