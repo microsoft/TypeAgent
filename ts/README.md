@@ -40,6 +40,19 @@ In this directory:
 - Run `pnpm i`
 - Run `pnpm run build`
 
+### Dependency security checks
+
+The [workspace overrides](./pnpm-workspace.yaml) require MCP SDK 1.32.0 or
+later and keep Milkdown's Vue runtime and server renderer on the patched
+3.5.x line. Direct MCP consumers also declare the patched SDK minimum so
+standalone installs do not depend on workspace overrides. The shell pins
+Electron 41.10.7; the markdown editor requires ProseMirror View 1.42.3 or later.
+
+After dependency updates, run
+`node --test tools/scripts/test/dependencySecurity.spec.mjs`.
+This checks the lockfile's vulnerable version ranges, standalone SDK minimums,
+and SDK declaration and ESM import compatibility.
+
 ### Docker image
 
 The production [Dockerfile](./Dockerfile) uses Node 24.22.1 on Debian Bookworm,

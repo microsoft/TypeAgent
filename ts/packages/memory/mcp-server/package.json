@@ -30,7 +30,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/memory-client": "workspace:*",
