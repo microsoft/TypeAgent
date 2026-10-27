@@ -62,13 +62,18 @@ function validArguments(parts: string[]) {
     return false;
 }
 
+function parseRecipeVersion(value: string): number {
+    const version = Number(value);
+    if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(version))
+        throw new Error("A positive integer recipe version is required.");
+    return version;
+}
+
 async function runSavedRecipe(
     connection: MacroOwnerConnection,
     run: RegExpMatchArray,
 ) {
-    const version = Number(run[2]);
-    if (!Number.isSafeInteger(version))
-        throw new Error("A positive integer recipe version is required.");
+    const version = parseRecipeVersion(run[2]);
     const inputs: unknown = JSON.parse(run[3] ?? "{}");
     if (inputs === null || typeof inputs !== "object" || Array.isArray(inputs))
         throw new Error("Recipe inputs must be a JSON object.");
@@ -139,14 +144,9 @@ export async function handleRecipeCommand(
         const connection = await connect();
         try {
             if (revise) {
-                const version = Number(revise[2]);
-                if (!Number.isSafeInteger(version))
-                    throw new Error(
-                        "A positive integer recipe version is required.",
-                    );
                 const job = await connection.reviseMacro({
                     macroId: revise[1],
-                    version,
+                    version: parseRecipeVersion(revise[2]),
                     feedback: revise[3],
                 });
                 return response(
@@ -192,14 +192,10 @@ export async function handleRecipeCommand(
                     `Cancellation requested for ${args[0]} ${args[1]}. Completed effects are not rolled back.`,
                 );
             }
-            if (
-                !/^[1-9]\d*$/.test(args[1]) ||
-                !Number.isSafeInteger(Number(args[1]))
-            )
-                throw new Error(
-                    "A positive integer recipe version is required.",
-                );
-            const ref = { macroId: args[0], version: Number(args[1]) };
+            const ref = {
+                macroId: args[0],
+                version: parseRecipeVersion(args[1]),
+            };
             if (command === "inspect")
                 return response(
                     JSON.stringify(await connection.inspectMacro(ref), null, 2),
