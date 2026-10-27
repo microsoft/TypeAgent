@@ -11,7 +11,7 @@ import { GrammarGenerator } from "./grammarGenerator.js";
 
 const debug = registerDebug("typeagent:actionGrammar:copilotGrammarGenerator");
 
-export const defaultCopilotGrammarModel = "gpt-5.6-sol";
+export const defaultCopilotGrammarModel = "gpt-6.1-sol";
 
 export interface CopilotGrammarSession {
     sendAndWait(

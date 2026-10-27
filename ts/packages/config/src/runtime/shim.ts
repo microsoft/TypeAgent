@@ -100,6 +100,7 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
         if (
             endpoint.capacity !== undefined ||
             endpoint.tpm !== undefined ||
+            endpoint.model !== undefined ||
             endpoint.priority !== (endpoint.mode === "PTU" ? 1 : 2) ||
             (endpoint.wireApi !== undefined &&
                 endpoint.wireApi !== DEFAULT_WIRE_API)
@@ -111,6 +112,7 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
             };
             if (endpoint.capacity !== undefined) o.capacity = endpoint.capacity;
             if (endpoint.tpm !== undefined) o.tpm = endpoint.tpm;
+            if (endpoint.model !== undefined) o.model = endpoint.model;
             o.priority = endpoint.priority;
             if (
                 endpoint.wireApi !== undefined &&
@@ -129,7 +131,9 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
                     "{" +
                     Object.entries(o)
                         .map(([k, v]) =>
-                            typeof v === "string" ? `${k}:${v}` : `${k}:${v}`,
+                            k === "model"
+                                ? `${k}:${JSON.stringify(v)}`
+                                : `${k}:${v}`,
                         )
                         .join(",") +
                     "}",

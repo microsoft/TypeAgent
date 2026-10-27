@@ -42,11 +42,14 @@ describe("Copilot provider mode", () => {
         ["DEFAULT", "gpt-6-luna"],
         ["GPT_35_TURBO", "gpt-6-luna"],
         ["GPT_4_O", "gpt-6-sol"],
-        ["GPT_5", "gpt-6-sol"],
+        ["GPT_5", "gpt-6.1-terra"],
         ["GPT_5_MINI", "gpt-6-luna"],
         ["GPT_5_NANO", "gpt-6-luna"],
         ["GPT_6_LUNA", "gpt-6-luna"],
         ["gpt_6_luna", "gpt-6-luna"],
+        ["GPT_6_1_SOL", "gpt-6.1-sol"],
+        ["GPT_6_1_TERRA", "gpt-6.1-terra"],
+        ["gpt_6_1_terra", "gpt-6.1-terra"],
         ["GPT_V", "gpt-6-sol"],
     ])("maps %s to %s", (canonical, expected) => {
         expect(resolveTarget("copilot", canonical)).toBe(expected);
@@ -56,20 +59,28 @@ describe("Copilot provider mode", () => {
         expect(usesProviderDefault("GPT_4_O")).toBe(false);
         expect(usesProviderDefault("GPT_6_LUNA")).toBe(false);
         expect(usesProviderDefault("gpt_6_luna")).toBe(false);
+        expect(usesProviderDefault("GPT_6_1_SOL")).toBe(false);
+        expect(usesProviderDefault("GPT_6_1_TERRA")).toBe(false);
     });
 });
 
-describe("GPT_6_LUNA provider mappings", () => {
-    test.each(["azure", "openai"] as const)(
-        "preserves the deployment name in %s mode",
-        (mode) => {
-            expect(resolveTarget(mode, "GPT_6_LUNA")).toBe("GPT_6_LUNA");
-        },
-    );
-
-    test("preserves the default local model in Ollama mode", () => {
-        expect(resolveTarget("ollama", "GPT_6_LUNA")).toBe(
-            resolveTarget("ollama", "DEFAULT"),
+describe.each(["GPT_6_LUNA", "GPT_6_1_SOL", "GPT_6_1_TERRA"])(
+    "%s provider mappings",
+    (model) => {
+        test.each(["azure", "openai"] as const)(
+            "preserves the deployment name in %s mode",
+            (mode) => {
+                expect(resolveTarget(mode, model)).toBe(model);
+            },
         );
-    });
-});
+
+        test("preserves the equivalent local model in Ollama mode", () => {
+            expect(resolveTarget("ollama", model)).toBe(
+                resolveTarget(
+                    "ollama",
+                    model === "GPT_6_LUNA" ? "DEFAULT" : "GPT_5",
+                ),
+            );
+        });
+    },
+);

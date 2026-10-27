@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 import {
     clearPackagedEligibleGoldActionsCacheForTests,
@@ -80,6 +81,29 @@ function includeAllLlm(model = "test-model") {
 }
 
 describe("action quality picker", () => {
+    it.each(["", "GPT_6_LUNA"])(
+        "exposes a portable picker default with TB_PICKER_MODEL=%s",
+        (override) => {
+            const result = spawnSync(
+                process.execPath,
+                [
+                    path.join(
+                        packageRoot,
+                        "dist/translationBench/scripts/pickEligibleActions.js",
+                    ),
+                    "--help",
+                ],
+                {
+                    encoding: "utf8",
+                    env: { ...process.env, TB_PICKER_MODEL: override },
+                },
+            );
+            expect(result.error).toBeUndefined();
+            expect(result.status).toBe(0);
+            expect(result.stdout).toContain(override || "GPT_6_1_SOL");
+        },
+    );
+
     it("excludes human removals and builds a non-empty allowlist via LLM", async () => {
         const catalog = loadCatalog();
         const grader = loadGrader();
