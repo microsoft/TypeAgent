@@ -329,7 +329,16 @@ import {
     answerIndexedEvidence,
     mergeIndexedAnswerEvidence,
 } from "./indexedAnswer.js";
-import { answerIntegratedEvidence } from "./integratedAnswer.js";
+import {
+    answerIntegratedEvidence,
+    type IntegratedAnswerReader,
+} from "./integratedAnswer.js";
+import { MemoryUnderstanding } from "./understanding.js";
+import type {
+    UnderstandingRequest,
+    UnderstandingModuleRequest,
+} from "./understandingTypes.js";
+import type { MemoryGraphSupport } from "./graphTypes.js";
 import type {
     AnswerEvidence,
     AnswerSourceReference,
@@ -640,6 +649,7 @@ export interface FileMemoryServiceOptions {
     sourceSynopses?: boolean;
     sourceSynopsisModel?: SourceSynopsisModel;
     indexedAnswerModel?: ChatModel;
+    understanding?: boolean;
     /** Derived Views are enabled unless explicitly disabled by the host. */
     viewDrafts?: boolean;
     /** Informational views follow Views enablement unless explicitly disabled. */
@@ -1358,6 +1368,7 @@ export class FileMemoryService
     private readonly wikiBudget: RequestBudgetLimits | undefined;
     private readonly wikiModelEndpoint: string | undefined;
     private readonly indexedAnswerModel: ChatModel | undefined;
+    private readonly understanding: MemoryUnderstanding | undefined;
     private readonly sourceSynopsesEnabled: boolean;
     private synopsisModel: SourceSynopsisModel | undefined;
     private synopsisModelFailure: string | undefined;
@@ -1446,6 +1457,7 @@ export class FileMemoryService
         );
         this.onTopicDecisionReceipt = options.onTopicDecisionReceipt;
         this.indexedAnswerModel = options.indexedAnswerModel;
+        this.understanding = this.createUnderstanding(options);
         this.sourceSynopsesEnabled =
             options.sourceSynopses ?? options.informationalViews !== false;
         this.synopsisModel = options.sourceSynopsisModel;
@@ -2159,6 +2171,7 @@ export class FileMemoryService
     public async clearCorpus(corpusId: string): Promise<number> {
         await this.initialize();
         validateIdentifier("corpus ID", corpusId);
+        this.understanding?.invalidate(corpusId);
         await this.batchStore.purge(corpusId);
         this.viewBuilds.forget(corpusId);
         for (const work of this.topicSummaryWork.values())
@@ -2241,6 +2254,7 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<void> {
+        this.understanding?.invalidate(corpusId);
         const removedSources = runtime.manifest.pendingCorpusClear;
         await this.acquisition.suppress(corpusId, {
             sourceIds: removedSources?.map((source) => source.sourceId) ?? [],
@@ -3803,6 +3817,7 @@ export class FileMemoryService
             features: {
                 ...capabilities.features,
                 scopedKnowledgeGraphs: true,
+                ...(this.understanding ? { memoryUnderstanding: true } : {}),
                 sourceSynopses: this.sourceSynopsesEnabled,
                 agentSessionImportTypes: this.agentSessionImportsEnabled
                     ? ["agent-session-jsonl", "copilot-session-jsonl"]
@@ -9895,8 +9910,78 @@ export class FileMemoryService
         return true;
     }
 
+    private createUnderstanding(
+        options: FileMemoryServiceOptions,
+    ): MemoryUnderstanding | undefined {
+        if (!options.understanding) return undefined;
+        return new MemoryUnderstanding(
+            {
+                indexVersion: async (corpusId) => {
+                    const corpus = await this.getCorpus(corpusId);
+                    if (!corpus)
+                        throw new Error(
+                            "Understanding collection is unavailable",
+                        );
+                    return corpus.indexVersion;
+                },
+                answer: (request, reader) =>
+                    this.answerRequest(request, reader),
+                validate: (request, evidence) =>
+                    this.validateAnswerEvidence(request, evidence),
+                queryKnowledgeGraph: (request) =>
+                    this.queryKnowledgeGraph(request),
+                queryGraphSupport: (request) => this.queryGraphSupport(request),
+                validateSupport: (items) =>
+                    this.validateUnderstandingSupport(items),
+            },
+            {
+                model: options.indexedAnswerModel,
+                endpoint: options.viewModelEndpoint,
+            },
+        );
+    }
+
+    public async understand(request: UnderstandingRequest) {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        if (!this.understanding)
+            throw new Error("Memory understanding is disabled by this host");
+        const corpus = await this.getCorpusRuntime(request.corpusId);
+        if (!corpus.index.readFragments)
+            throw new Error(
+                "Understanding requires an indexed document collection",
+            );
+        return this.understanding.understand(request);
+    }
+
+    public async understandingModule(request: UnderstandingModuleRequest) {
+        await this.initialize();
+        if (!this.understanding)
+            throw new Error("Memory understanding is disabled by this host");
+        return this.understanding.module(request);
+    }
+
+    private async validateUnderstandingSupport(
+        items: MemoryGraphSupport[],
+    ): Promise<boolean> {
+        for (const item of items) {
+            if (item.kind !== "document") return false;
+            const source = await this.getSource(item.corpusId, item.sourceId);
+            if (!source || source.activeRevisionId !== item.revisionId)
+                return false;
+        }
+        return true;
+    }
+
     public async answer(
         request: MemoryAnswerRequest,
+    ): Promise<MemoryAnswerResult> {
+        return this.answerRequest(request);
+    }
+
+    private async answerRequest(
+        request: MemoryAnswerRequest,
+        reader?: IntegratedAnswerReader,
     ): Promise<MemoryAnswerResult> {
         const question = request.question.trim();
         if (question.length === 0) {
@@ -9972,6 +10057,7 @@ export class FileMemoryService
                             this.validateAnswerEvidence(input, evidence),
                     },
                     {
+                        ...(reader ? { reader, maxEvidenceChars: 16000 } : {}),
                         ...(this.wikiModelEndpoint
                             ? { endpoint: this.wikiModelEndpoint }
                             : {}),
@@ -14510,6 +14596,7 @@ export class FileMemoryService
 
     private async closeService(): Promise<void> {
         this.closed = true;
+        this.understanding?.close();
         for (const work of this.topicSummaryWork.values())
             work.controller.abort(new Error("Memory service is closing"));
         for (const controller of this.eventIndexControllers.values())
@@ -14590,6 +14677,7 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<SourceForgetResult> {
+        this.understanding?.invalidate(corpusId);
         const removal = runtime.manifest.authorizedSourceRemoval;
         if (!removal)
             throw new Error("No authorized source removal to recover");

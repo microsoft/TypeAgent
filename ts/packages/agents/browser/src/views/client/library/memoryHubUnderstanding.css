@@ -1,0 +1,88 @@
+.memory-understanding {
+  max-width: 1440px;
+  margin: 0 auto;
+  overflow-wrap: anywhere;
+}
+.understanding-question,
+.understanding-follow form,
+.understanding-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+.understanding-question input,
+.understanding-follow textarea {
+  flex: 1 1 16rem;
+  min-width: 0;
+  font: inherit;
+}
+.understanding-follow textarea {
+  min-height: 5rem;
+  resize: vertical;
+  padding: 0.75rem;
+}
+.understanding-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 21rem);
+  gap: clamp(1rem, 3vw, 3rem);
+  align-items: start;
+}
+.understanding-grid > *,
+.understanding-card {
+  min-width: 0;
+}
+.understanding-prose {
+  font-size: 1.05rem;
+  line-height: 1.75;
+}
+.understanding-prose h2 {
+  font-size: clamp(1.5rem, 2.5vw, 2.25rem);
+  line-height: 1.2;
+}
+.understanding-card,
+.understanding-follow {
+  border: 1px solid var(--border-color, #b8bcc3);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-block: 0 1rem;
+}
+.understanding-card > small,
+.understanding-timeline small {
+  display: block;
+  margin-block: 0.4rem;
+}
+.understanding-card p {
+  white-space: pre-wrap;
+}
+.understanding-rail .understanding-card > p {
+  max-height: 12rem;
+  overflow: auto;
+  font-size: 0.85rem;
+}
+.understanding-rail {
+  font-size: 0.9rem;
+}
+.understanding-timeline {
+  border-inline-start: 2px solid var(--border-color, #b8bcc3);
+}
+.understanding-timeline li,
+.understanding-relationships li {
+  padding: 0.5rem;
+}
+.understanding-follow {
+  margin-block-start: 1.5rem;
+}
+.understanding-suggestions {
+  margin-block-end: 0.75rem;
+}
+@media (max-width: 900px) {
+  .understanding-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .memory-understanding * {
+    scroll-behavior: auto;
+  }
+}

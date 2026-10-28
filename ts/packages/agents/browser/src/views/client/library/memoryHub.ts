@@ -12,6 +12,11 @@ import type {
 import { invokeView, invokeMemory } from "./viewClient";
 import { mountMemoryManagement } from "./memoryManagement";
 import { mountMemoryHubSearch } from "./memoryHubSearch";
+import {
+    mountMemoryHubUnderstanding,
+    toUnderstandingRequest,
+} from "./memoryHubUnderstanding";
+import type { UnderstandingRequest } from "@typeagent/memory-service";
 import { mountMemoryHubExplore } from "./memoryHubExplore";
 import { mountMemoryHubGraph } from "./memoryHubGraph";
 import { mountMemoryHubChanges } from "./memoryHubChanges";
@@ -75,6 +80,8 @@ let reverting = false;
 let focusReturn: { corpusId: string; sourceId: string } | undefined;
 let manager: ReturnType<typeof mountMemoryManagement>;
 let searchPanel: ReturnType<typeof mountMemoryHubSearch>;
+let understandingPanel: ReturnType<typeof mountMemoryHubUnderstanding>;
+let pendingUnderstanding: UnderstandingRequest | undefined;
 let explorePanel: ReturnType<typeof mountMemoryHubExplore>;
 let graphPanel: ReturnType<typeof mountMemoryHubGraph>;
 let changesPanel: ReturnType<typeof mountMemoryHubChanges>;
@@ -98,6 +105,7 @@ let pendingSearchQuery: string | undefined;
 
 function invalidateDiscovery(): void {
     searchPanel.scopeChanged();
+    understandingPanel.scopeChanged();
     explorePanel.scopeChanged();
     graphPanel?.scopeChanged();
 }
@@ -198,6 +206,34 @@ function synchronizeQuery(query: string): void {
     history.replaceState(history.state, "", url);
 }
 
+function rememberUnderstanding(request: UnderstandingRequest): void {
+    synchronizeQuery(request.question);
+    const url = new URL(location.href);
+    url.searchParams.set("understandingCorpus", request.corpusId);
+    for (const [key, value] of [
+        ["understandingPolicy", request.retrievalPolicy],
+        ["understandingCheckpoint", request.knowledgeCheckpointId],
+    ] as const) {
+        if (value) url.searchParams.set(key, value);
+        else url.searchParams.delete(key);
+    }
+    history.replaceState(history.state, "", url);
+}
+
+function restoredUnderstanding(): UnderstandingRequest {
+    const url = new URL(location.href);
+    const policy = url.searchParams.get("understandingPolicy");
+    const checkpoint = url.searchParams.get("understandingCheckpoint");
+    return {
+        corpusId: url.searchParams.get("understandingCorpus") ?? scope,
+        question: url.searchParams.get("query") ?? "",
+        ...(policy === "sourcesOnly" || policy === "sourcesAndViews"
+            ? { retrievalPolicy: policy }
+            : {}),
+        ...(checkpoint ? { knowledgeCheckpointId: checkpoint } : {}),
+    };
+}
+
 function mountPhaseTwo(): void {
     const onError = (error: unknown) => {
         void hubAction(async () => {
@@ -217,7 +253,37 @@ function mountPhaseTwo(): void {
             open({ page: "views", corpusId, objectId, viewRevisionId }),
         onQueryChanged: synchronizeQuery,
         onNotify: (message) => notificationManager.showInfo(message),
+        onUnderstand: (request) => {
+            const value = toUnderstandingRequest(request);
+            rememberUnderstanding(value);
+            if (parseRoute(location.hash).page === "understanding")
+                void understandingPanel.show(value);
+            else {
+                pendingUnderstanding = value;
+                open({ page: "understanding" });
+            }
+        },
     });
+    understandingPanel = mountMemoryHubUnderstanding(el("hubUnderstanding"), {
+        scope: selectedScope,
+        onError,
+        onQueryChanged: rememberUnderstanding,
+        onResults: () => {
+            pendingSearchQuery = el<HTMLInputElement>("hubAsk").value;
+            open({ page: "search" });
+        },
+        onEvidence: (value, focus, owner) =>
+            searchPanel.inspect(value, focus, owner),
+        onGraph: (nodeId) =>
+            open({ page: "explore", webView: "entities", webEntity: nodeId }),
+    });
+    void invokeView("memoryViewCapabilities", {})
+        .then((capabilities) => {
+            searchPanel.setUnderstandingEnabled(
+                capabilities.features.memoryUnderstanding === true,
+            );
+        })
+        .catch(onError);
     explorePanel = mountMemoryHubExplore(el("hubExplore"), {
         scope: selectedScope,
         onOpenSource,
@@ -1105,6 +1171,7 @@ function updateExploreScope(
 }
 
 function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
+    if (visiblePage !== "understanding") understandingPanel.hide();
     inboxPanel.close();
     if (visiblePage !== "views") draftViewsPanel.hide();
     if (visiblePage !== "questions") questionsPanel.hide();
@@ -1128,7 +1195,10 @@ function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
     for (const link of document.querySelectorAll<HTMLAnchorElement>(
         "#hubRail a",
     )) {
-        if (link.hash === `#/${route.page}`)
+        if (
+            link.hash ===
+            `#/${route.page === "understanding" ? "search" : route.page}`
+        )
             link.setAttribute("aria-current", "page");
         else link.removeAttribute("aria-current");
     }
@@ -1284,6 +1354,20 @@ function restoreFocus(visiblePage: (typeof pages)[number]): void {
     }
 }
 
+async function showReadingPage(
+    page: "search" | "understanding",
+): Promise<void> {
+    if (page === "understanding") {
+        const request = pendingUnderstanding ?? restoredUnderstanding();
+        pendingUnderstanding = undefined;
+        await understandingPanel.show(request);
+    } else {
+        const query = pendingSearchQuery;
+        pendingSearchQuery = undefined;
+        await searchPanel.show(query);
+    }
+}
+
 async function applyRoute(): Promise<void> {
     const version = ++routeVersion;
     manager.cancelSourceSelection();
@@ -1304,10 +1388,8 @@ async function applyRoute(): Promise<void> {
     showPage(route, visiblePage);
     await showManagedRoute(route, item, version);
     if (version !== routeVersion) return;
-    if (route.page === "search") {
-        const query = pendingSearchQuery;
-        pendingSearchQuery = undefined;
-        await searchPanel.show(query);
+    if (route.page === "understanding" || route.page === "search") {
+        await showReadingPage(route.page);
     } else if (route.page === "explore") {
         if (!route.webView) await explorePanel.show();
         else if (route.webView === "analytics")
@@ -1634,6 +1716,7 @@ export async function mountMemoryHub(): Promise<void> {
         const alreadySearch = parseRoute(location.hash).page === "search";
         if (!open({ page: "search" })) return;
         searchPanel.scopeChanged();
+        understandingPanel.scopeChanged();
         pendingSearchQuery = ask;
         synchronizeQuery(ask);
         if (alreadySearch) void hubAction(applyRoute);
@@ -1681,6 +1764,7 @@ export async function mountMemoryHub(): Promise<void> {
         if (event.persisted) return;
         clearInterval(refreshTimer);
         searchPanel.dispose();
+        understandingPanel.dispose();
         explorePanel.dispose();
         changesPanel.dispose();
         importsPanel.dispose();

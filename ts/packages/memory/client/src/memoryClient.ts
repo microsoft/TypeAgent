@@ -8,6 +8,19 @@ import {
     graphSupportPageSchema,
     graphToolNames,
 } from "./graphProtocol.js";
+import {
+    understandingToolNames,
+    understandingRequestSchema,
+    understandingResultSchema,
+    understandingModuleRequestSchema,
+    understandingModuleResultSchema,
+} from "./understandingProtocol.js";
+import type {
+    UnderstandingRequest,
+    UnderstandingResult,
+    UnderstandingModuleRequest,
+    UnderstandingModuleResult,
+} from "@typeagent/memory-service";
 
 import {
     Client,
@@ -235,6 +248,10 @@ export interface MemoryServiceClient
     extends MemoryService,
         MemoryViewService,
         MemoryAcquisitionProgressService {
+    understand(request: UnderstandingRequest): Promise<UnderstandingResult>;
+    understandingModule(
+        request: UnderstandingModuleRequest,
+    ): Promise<UnderstandingModuleResult>;
     getKnowledgeStatus(corpusId: string): Promise<KnowledgeStatus>;
     updateKnowledgeDiscovery(
         request: KnowledgeDiscoveryUpdate,
@@ -794,6 +811,30 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
 
     public answer(request: MemoryAnswerRequest) {
         return this.service.answer(request);
+    }
+
+    public understand(
+        request: UnderstandingRequest,
+    ): Promise<UnderstandingResult> {
+        return (
+            this.service.understand?.(
+                understandingRequestSchema.parse(request),
+            ) ??
+            Promise.reject(new Error("Memory understanding is not supported"))
+        );
+    }
+
+    public understandingModule(
+        request: UnderstandingModuleRequest,
+    ): Promise<UnderstandingModuleResult> {
+        return (
+            this.service.understandingModule?.(
+                understandingModuleRequestSchema.parse(request),
+            ) ??
+            Promise.reject(
+                new Error("Memory understanding modules are not supported"),
+            )
+        );
     }
 
     public getKnowledgeGraph(corpusId: string) {
@@ -1545,6 +1586,26 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             memoryToolNames.answer,
             answerRequestSchema.parse(request),
             answerResultSchema,
+        );
+    }
+
+    public understand(
+        request: UnderstandingRequest,
+    ): Promise<UnderstandingResult> {
+        return this.invoke(
+            understandingToolNames.understand,
+            understandingRequestSchema.parse(request),
+            understandingResultSchema,
+        );
+    }
+
+    public understandingModule(
+        request: UnderstandingModuleRequest,
+    ): Promise<UnderstandingModuleResult> {
+        return this.invoke(
+            understandingToolNames.module,
+            understandingModuleRequestSchema.parse(request),
+            understandingModuleResultSchema,
         );
     }
 

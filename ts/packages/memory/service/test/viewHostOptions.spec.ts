@@ -13,6 +13,28 @@ import { waitForMemoryJob } from "../src/rpcFacade.js";
 import type { IndexedFragmentRequest } from "../src/types.js";
 import type { ViewSynthesisOutput } from "../src/viewTypes.js";
 
+test("rich understanding is opt-in and rejects invalid settings", () => {
+    expect(getConfiguredMemoryViewOptions({})).not.toHaveProperty(
+        "understanding",
+    );
+    for (const [value, expected] of [
+        ["true", true],
+        ["false", false],
+        ["1", true],
+        ["0", false],
+    ] as const)
+        expect(
+            getConfiguredMemoryViewOptions({
+                TYPEAGENT_MEMORY_UNDERSTANDING: value,
+            }).understanding,
+        ).toBe(expected);
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_UNDERSTANDING: "invalid",
+        }),
+    ).toThrow("TYPEAGENT_MEMORY_UNDERSTANDING");
+});
+
 test("topic experiments are opt-in and reject invalid host settings", () => {
     expect(getConfiguredMemoryViewOptions({})).not.toHaveProperty(
         "topicCuration",

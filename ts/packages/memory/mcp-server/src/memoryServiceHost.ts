@@ -14,7 +14,8 @@ import {
     type Server,
     type ServerResponse,
 } from "node:http";
-import { MemoryMcpServer } from "./memoryMcpServer.js";
+import { MemoryMcpServer, memoryPreviewsEnabled } from "./memoryMcpServer.js";
+import { MemoryAppSessions } from "./memoryAppSessions.js";
 
 export interface MemoryServiceHostOptions {
     host?: string;
@@ -22,6 +23,7 @@ export interface MemoryServiceHostOptions {
     bearerToken?: string;
     maxRequestBytes?: number;
     onError?: (error: Error) => void;
+    previews?: boolean;
 }
 
 export class MemoryServiceHost {
@@ -57,6 +59,19 @@ export class MemoryServiceHost {
         const bearerToken =
             options.bearerToken ?? randomBytes(32).toString("base64url");
         const activeServers = new Set<MemoryMcpServer>();
+        const appSessions =
+            (options.previews ?? memoryPreviewsEnabled())
+                ? new MemoryAppSessions(
+                      service,
+                      activeServers,
+                      options.onError ??
+                          ((error) =>
+                              console.error(
+                                  "Memory Apps session error",
+                                  error,
+                              )),
+                  )
+                : undefined;
         let closing = false;
         const httpServer = createServer(async (request, response) => {
             try {
@@ -99,11 +114,25 @@ export class MemoryServiceHost {
                     response.end(JSON.stringify({ error: "Shutting down" }));
                     return;
                 }
+                if (appSessions) {
+                    const webResponse = await appSessions.handle(
+                        new Request(requestUrl, {
+                            method: request.method ?? "GET",
+                            headers: toWebHeaders(request.headers),
+                        }),
+                        parsedBody,
+                    );
+                    webResponse.headers.set("connection", "close");
+                    await writeWebResponse(response, webResponse);
+                    return;
+                }
                 const transport = new WebStandardStreamableHTTPServerTransport({
                     sessionIdGenerator: undefined,
                     enableJsonResponse: false,
                 } as unknown as WebStandardStreamableHTTPServerTransportOptions);
-                const mcpServer = new MemoryMcpServer(service);
+                const mcpServer = new MemoryMcpServer(service, {
+                    previews: false,
+                });
                 activeServers.add(mcpServer);
                 mcpServer.server.server.onerror = (error) =>
                     options.onError?.(error);
@@ -218,21 +247,38 @@ async function writeWebResponse(
         return;
     }
     const reader = webResponse.body.getReader();
+    let cancellation: Promise<void> | undefined;
+    const disconnected = () => {
+        cancellation ??= reader.cancel();
+    };
+    response.once("close", disconnected);
+    if (response.destroyed) disconnected();
     try {
-        while (true) {
+        while (!response.destroyed) {
             const { done, value } = await reader.read();
             if (done) {
-                response.end();
+                if (!response.destroyed) response.end();
                 return;
             }
             if (!response.write(Buffer.from(value))) {
-                await new Promise<void>((resolve) =>
-                    response.once("drain", resolve),
-                );
+                await new Promise<void>((resolve) => {
+                    const settled = () => {
+                        response.off("drain", settled);
+                        response.off("close", settled);
+                        resolve();
+                    };
+                    response.once("drain", settled);
+                    response.once("close", settled);
+                });
             }
         }
     } finally {
-        reader.releaseLock();
+        response.off("close", disconnected);
+        try {
+            await cancellation;
+        } finally {
+            reader.releaseLock();
+        }
     }
 }
 

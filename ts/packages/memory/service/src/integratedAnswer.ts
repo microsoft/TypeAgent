@@ -6,6 +6,7 @@ import { mergeIndexedAnswerEvidence } from "./indexedAnswer.js";
 import {
     readIntegratedEvidence,
     serializeAnswerEvidence,
+    type IntegratedReaderResponse,
 } from "./integratedAnswerReader.js";
 import type {
     AnswerEvidence,
@@ -47,7 +48,15 @@ export interface IntegratedAnswerOptions {
     maxDerivedBlocks?: number;
     /** Ceiling for serialized messages plus structured-output schema, not just evidence. */
     maxRequestChars?: number;
+    reader?: IntegratedAnswerReader;
 }
+
+export type IntegratedAnswerReader = (
+    request: MemoryAnswerRequest,
+    evidence: AnswerEvidence[],
+    options: IntegratedAnswerOptions,
+    allowRefinement: boolean,
+) => Promise<IntegratedReaderResponse>;
 
 interface EvidenceBudget {
     chars: number;
@@ -406,6 +415,8 @@ export async function answerIntegratedEvidence(
     host: IntegratedAnswerHost,
     options: IntegratedAnswerOptions = {},
 ): Promise<MemoryAnswerResult> {
+    const read: IntegratedAnswerReader =
+        options.reader ?? readIntegratedEvidence;
     const budget = {
         chars: boundedLimit(options.maxEvidenceChars, 24000),
         sources: boundedLimit(options.maxSourceFragments, 12),
@@ -441,7 +452,7 @@ export async function answerIntegratedEvidence(
             budget,
             diagnostics,
         );
-        let response = await readIntegratedEvidence(request, evidence, options);
+        let response = await read(request, evidence, options, true);
         const initialEvidence = evidence;
         if (response.retrievalQueries?.length) {
             const groups: MemoryEvidence[][] = [];
@@ -480,7 +491,7 @@ export async function answerIntegratedEvidence(
                 budget,
                 diagnostics,
             );
-            response = await readIntegratedEvidence(request, evidence, options);
+            response = await read(request, evidence, options, false);
         }
         const selected = selectedEvidence(evidence, response.evidenceIds);
         // Validate everything supplied, not only what the reader chose: omitted

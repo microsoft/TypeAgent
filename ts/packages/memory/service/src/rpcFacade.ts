@@ -27,6 +27,12 @@ export function createMemoryServiceRpcFacade(
     MemoryTopicService &
     MemoryKnowledgeService {
     return {
+        understand: (request) =>
+            service.understand?.(request) ??
+            unsupportedCapability("understanding"),
+        understandingModule: (request) =>
+            service.understandingModule?.(request) ??
+            unsupportedCapability("understanding modules"),
         ...(service.queryKnowledgeGraph
             ? { queryKnowledgeGraph: service.queryKnowledgeGraph.bind(service) }
             : {}),

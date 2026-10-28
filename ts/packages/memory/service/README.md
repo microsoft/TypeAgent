@@ -10,6 +10,34 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Opt-in memory understanding
+
+Set `TYPEAGENT_MEMORY_UNDERSTANDING=true` in the host environment (or pass
+`understanding: true` to `FileMemoryService`) to advertise
+`features.memoryUnderstanding`. `understand` and `understandingModule` reuse
+the existing indexed original/Views retrieval, support closure, refinement
+and access validation. Existing search/answer contracts and defaults do not change.
+
+The initial release supports one indexed document collection with optional
+checkpoint/retrieval policy, and a one-parent-turn follow-on. All-memory,
+conversation and filtered Hub searches remain in Results with an explicit
+scope limitation. Attachments, durable chat history and model-authored HTML
+are not enabled.
+
+Rich output is strict, cited JSON rendered by trusted UI code, not executable
+model HTML. Source cards are ready with the explanation. Timelines require
+supported dates; concept cards use existing supported entities; relationship
+edges require accessible original support at the captured graph generation.
+Module-only requests do not invoke the prose reader.
+
+Snapshots are service-local: 64 entries, 8 MiB total, 512 KiB per entry, with
+absolute 15-minute expiry. Corpus clear, source forgetting and close purge
+cached bodies. Parent/module reads revalidate all influencing evidence and
+index versions. Handles do not replace authorization or provide per-chat-session
+isolation; this is the existing local single-principal service boundary.
+Enable `TYPEAGENT_MEMORY_SEARCH_TRACE=1` for redacted rich-stage timing,
+reader-call counts and response-byte/module counts, not prompt/source text.
+
 ## Scoped knowledge graphs and read inventories
 
 `queryKnowledgeGraph` reads bounded entity, raw-topic or maintained-hierarchy

@@ -97,8 +97,30 @@ describe("service source-plus-view answer integration", () => {
                     throw new Error("Reader must receive serialized evidence");
                 const input = JSON.parse(content) as {
                     evidence: AnswerEvidence[];
+                    candidates?: unknown;
                 };
                 readerInputs.push(input.evidence);
+                if (input.candidates !== undefined)
+                    return {
+                        success: true,
+                        data: JSON.stringify({
+                            schemaVersion: 1,
+                            status: "answered",
+                            title: "Harbor rollout",
+                            summary: {
+                                text: "Morgan leads the Harbor rollout; owner approval remains pending.",
+                                evidenceIds: input.evidence.map(
+                                    (item) => item.id,
+                                ),
+                                role: "memory",
+                            },
+                            sections: [],
+                            unknowns: [],
+                            moduleSignals: [],
+                            followUps: [],
+                            retrievalQueries: [],
+                        }),
+                    };
                 return {
                     success: true,
                     data: JSON.stringify({
@@ -151,6 +173,7 @@ describe("service source-plus-view answer integration", () => {
             informationalViews: false,
             sourceSynopses: false,
             indexedAnswerModel: model,
+            understanding: true,
             viewSynthesisAdapter: adapter,
             indexFactory: (_corpusId, directory) =>
                 new AnsweringIndexedCorpus(directory),
@@ -192,6 +215,74 @@ describe("service source-plus-view answer integration", () => {
         }
         throw new Error("Offline schema build did not finish");
     }
+
+    test("rich understanding uses the real indexed pipeline and forget/clear purge its handles", async () => {
+        const { corpusId } = await service.createCorpus("Understanding Harbor");
+        const receipt = await ingest(
+            corpusId,
+            "captured",
+            "Morgan leads the Harbor rollout. Owner approval remains pending.",
+        );
+        expect(
+            (await service.getCapabilities()).features.memoryUnderstanding,
+        ).toBe(true);
+        const result = await service.understand({
+            corpusId,
+            question: "Who leads the Harbor rollout?",
+        });
+        expect(result.answer?.summary.text).toContain("Morgan");
+        expect(result.citations).toContainEqual(
+            expect.objectContaining({
+                kind: "source",
+                source: expect.objectContaining({
+                    revisionId: receipt.revisionId,
+                }),
+            }),
+        );
+        const module = await service.understandingModule({
+            corpusId,
+            snapshotId: result.snapshotId,
+            kind: "sources",
+        });
+        expect(module.status).toBe("ready");
+        expect(readerInputs).toHaveLength(1);
+        await service.understand({
+            corpusId,
+            question: "Is owner approval pending?",
+            parentSnapshotId: result.snapshotId,
+            parentTurnId: result.turnId,
+        });
+        const preview = await service.previewForgetSource(
+            corpusId,
+            receipt.sourceId,
+        );
+        await service.forgetSource({
+            corpusId,
+            sourceId: receipt.sourceId,
+            confirmationToken: preview.confirmationToken,
+        });
+        await expect(
+            service.understandingModule({
+                corpusId,
+                snapshotId: result.snapshotId,
+                kind: "sources",
+            }),
+        ).rejects.toThrow("expired");
+        const empty = await service.understand({
+            corpusId,
+            question: "Who leads Harbor?",
+        });
+        expect(empty.answer?.status).toBe("noAnswer");
+        expect(readerInputs).toHaveLength(2);
+        await service.clearCorpus(corpusId);
+        await expect(
+            service.understandingModule({
+                corpusId,
+                snapshotId: empty.snapshotId,
+                kind: "sources",
+            }),
+        ).rejects.toThrow("expired");
+    });
 
     test("published derived state and exact original support reach the real service reader", async () => {
         const { corpusId } = await service.createCorpus(

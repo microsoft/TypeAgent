@@ -82,6 +82,7 @@ export function getConfiguredMemoryViewOptions(
     | "decisionTopics"
     | "decisionTopicExecution"
     | "topicCuration"
+    | "understanding"
 > {
     const execution = configuredDecisionExecution(environment);
     const topicCuration = curationSettings(environment);
@@ -97,6 +98,14 @@ export function getConfiguredMemoryViewOptions(
             "Generative topic settings cannot configure Decision topics",
         );
     return {
+        ...(environment.TYPEAGENT_MEMORY_UNDERSTANDING !== undefined
+            ? {
+                  understanding: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_UNDERSTANDING,
+                      "TYPEAGENT_MEMORY_UNDERSTANDING",
+                  ),
+              }
+            : {}),
         ...(execution ? { decisionTopicExecution: execution } : {}),
         ...(topicCuration ? { topicCuration } : {}),
         viewDrafts: parseViewDraftCapability(

@@ -6,6 +6,7 @@ import type { MemoryHubInboxItem } from "@typeagent/browser-control-rpc/viewRpc"
 export const pages = [
     "inbox",
     "search",
+    "understanding",
     "library",
     "views",
     "questions",
