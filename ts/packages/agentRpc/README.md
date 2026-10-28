@@ -2,6 +2,15 @@
 
 This package contains code to support remoting TypeAgent SDK interfaces via an abstract RpcChannel interface.
 
+## Initialization option callbacks
+
+An agent process can serve multiple conversation contexts. Initialization options
+containing functions use a shared options RPC channel, with references retained
+per initialized context (including initializations still in flight). Closing one
+context releases only its options reference; the channel remains available to
+other contexts. The last release closes the channel, and subsequent initialization
+can create it again. Failed initialization also releases its reference.
+
 ## Connection convention: prefer `rpc.rebind` over recreate
 
 **Decision (adopted):** rpc connection clients should be built as a **durable

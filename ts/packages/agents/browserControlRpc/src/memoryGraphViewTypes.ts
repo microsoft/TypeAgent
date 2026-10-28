@@ -19,7 +19,10 @@ export interface MemoryHubGraphResult {
     corpora: Array<{
         corpusId: string;
         corpusName: string;
-        graph: MemoryGraphQueryResult;
+        graph: Pick<
+            MemoryGraphQueryResult,
+            "generation" | "nodes" | "edges"
+        > & { topicGeneration?: string };
     }>;
     errors: Array<{ corpusId: string; message: string }>;
     omittedCorpora: number;

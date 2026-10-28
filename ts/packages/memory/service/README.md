@@ -31,6 +31,15 @@ View, build and publication summary operations avoid loading full evidence bodie
 for list navigation. A committed read projection preserves historical conflict
 fallback and source eligibility checks. View/event index preparation can release
 the writer lease, then revalidates captured evidence before installation.
+View-summary requests support optional `excludeKinds` filtering before paging
+and totals. Callers without this filter still receive every eligible kind;
+explicit question/schema-view lookups and question inventories are unchanged.
+Build-result summaries include optional `conflictState` metadata (`pending`,
+`resolved`, or `missing`) so attention lists need not fetch full conflict
+snapshots. Older clients may ignore this field; clients connected to older
+services can still resolve conflict status through the detail operation.
+Startup upgrades an unversioned read projection once, without regenerating
+views, and subsequent clean restarts reuse that projection.
 
 ## Document import token budgets
 
@@ -718,6 +727,13 @@ failures appear in `failures` under a corpus/family/target key and keep
 rather than spinning until its deadline. A successful retry clears only that
 target's diagnostic. Infrastructure and persistence failures still block the
 affected family until its existing retry conditions are met.
+Question reconciliation also reports blocked or exhausted automatic outcomes
+in `failures` under a corpus/schema key and in the question inventory's
+`maintenanceError`. These outcomes keep `settled: false` without failing service
+shutdown. Full-input limits and stopped retries remain enforced; changed
+evidence or a successful explicit retry clears the diagnostic. Unexpected
+schema-maintenance errors, including exhausted head/version conflicts, still
+fail shutdown.
 Shutdown cancels their linked work before releasing storage. A provider that
 ignores cancellation must still be drained before storage ownership is released.
 

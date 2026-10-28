@@ -12,6 +12,7 @@ import type {
 } from "@typeagent/memory-service";
 import { invokeMemory } from "./viewClient";
 import { MemoryHubInventoryPager } from "./memoryHubInventoryPager";
+import type { InboxAttentionCard } from "./memoryHubInbox";
 import {
     rbButton,
     rbChip,
@@ -79,7 +80,9 @@ export function mountMemoryHubViewActivity(
             revisionId?: string,
         ) => void;
         onOpenBuild: (corpusId: string, jobId: string) => void;
-        onAttentionCount?: (count: number) => void;
+        onAttentionCount?: (count: number, hasMore?: boolean) => void;
+        onAttentionError?: (error: unknown) => void;
+        presentAttention?: (card: InboxAttentionCard) => HTMLElement;
     },
 ) {
     const root = rbNode("section", undefined, "hub-view-activity");
@@ -104,6 +107,7 @@ export function mountMemoryHubViewActivity(
             await operation();
         } catch (error) {
             status.textContent = `View activity unavailable: ${rbError(error)}`;
+            if (!visible) options.onAttentionError?.(error);
             options.onError(error);
         }
     }
@@ -154,7 +158,9 @@ export function mountMemoryHubViewActivity(
                         ? "Retry indexing"
                         : "Preview update";
                 Object.assign(card.dataset, {
+                    fingerprint: JSON.stringify([view, target]),
                     group: `${corpusName} · ${reason}`,
+                    summary: reason,
                     title: view.content.title,
                     label,
                     corpusId,
@@ -341,12 +347,19 @@ export function mountMemoryHubViewActivity(
         current: number,
     ): Promise<boolean> {
         if (result.conflictId) {
-            const conflict = await invokeMemory("memoryGetViewConflict", {
-                corpusId: corpus.corpusId,
-                conflictId: result.conflictId,
-            });
-            if (disposed || current !== sequence) return false;
-            if (!conflict || conflict.state === "resolved") return true;
+            if (
+                result.conflictState === "resolved" ||
+                result.conflictState === "missing"
+            )
+                return true;
+            if (result.conflictState === undefined) {
+                const conflict = await invokeMemory("memoryGetViewConflict", {
+                    corpusId: corpus.corpusId,
+                    conflictId: result.conflictId,
+                });
+                if (disposed || current !== sequence) return false;
+                if (!conflict || conflict.state === "resolved") return true;
+            }
         }
         const item = rbNode("article", undefined, "card");
         item.append(
@@ -360,7 +373,20 @@ export function mountMemoryHubViewActivity(
                         : options.onOpenBuild(corpus.corpusId, job.jobId),
             ),
         );
-        attentionHost.append(item);
+        attentionHost.append(
+            options.presentAttention?.({
+                id: JSON.stringify([
+                    "view-result",
+                    corpus.corpusId,
+                    job.jobId,
+                    result.viewId,
+                ]),
+                fingerprint: JSON.stringify([job.updatedAt, result]),
+                title: `${resultTitle(result)} · ${states[result.state]}`,
+                summary: result.reason,
+                detail: item,
+            }) ?? item,
+        );
         return true;
     }
 
@@ -384,7 +410,12 @@ export function mountMemoryHubViewActivity(
             if (collapsed.has(bucket[0])) continue;
             bucket.forEach((entry) => collapsed.add(entry));
             const card = rbNode("article", undefined, "card");
+            card.dataset.group = key;
+            card.dataset.fingerprint = JSON.stringify(
+                bucket.map((entry) => entry.dataset.fingerprint),
+            );
             card.dataset.entries = String(bucket.length);
+            card.dataset.summary = alert.dataset.summary;
             const rows = rbNode("div", undefined, "hub-rows");
             card.append(
                 rbNode("h4", `${bucket.length} views need attention`),
@@ -424,7 +455,28 @@ export function mountMemoryHubViewActivity(
         let running = false;
         const seen = new Set<string>();
         for (const { corpus, jobs, alerts } of groups) {
-            attentionHost.append(...collapseAlerts(alerts));
+            attentionHost.append(
+                ...collapseAlerts(alerts).map(
+                    (card) =>
+                        options.presentAttention?.({
+                            id: JSON.stringify([
+                                "view-alert",
+                                corpus.corpusId,
+                                card.dataset.viewId ?? card.dataset.group,
+                            ]),
+                            fingerprint: JSON.stringify([
+                                card.dataset.fingerprint,
+                                card.outerHTML,
+                            ]),
+                            title:
+                                card.querySelector("h4")?.textContent ??
+                                "View attention",
+                            summary: card.dataset.summary ?? "",
+                            entries: Number(card.dataset.entries ?? 1),
+                            detail: card,
+                        }) ?? card,
+                ),
+            );
             const ordered = [...jobs].sort((a, b) =>
                 b.updatedAt.localeCompare(a.updatedAt),
             );
@@ -539,15 +591,10 @@ export function mountMemoryHubViewActivity(
         status.textContent = total
             ? `Showing ${total} of ${jobPager.total} view operations`
             : "No view builds yet.";
-        options.onAttentionCount?.(
-            [...attentionHost.children].reduce(
-                (sum, child) =>
-                    sum + Number((child as HTMLElement).dataset.entries ?? 1),
-                0,
-            ) +
-                Number(
-                    !visible && (attentionPager.hasNext || jobPager.hasNext),
-                ),
+        const attentionCount = [...attentionHost.children].reduce(
+            (sum, child) =>
+                sum + Number((child as HTMLElement).dataset.entries ?? 1),
+            0,
         );
         if (visible)
             list.append(
@@ -573,6 +620,10 @@ export function mountMemoryHubViewActivity(
                 "Current view and build issues in this scope. The filters above apply to source and guide notifications.";
             attentionHost.prepend(heading);
         }
+        options.onAttentionCount?.(
+            attentionCount,
+            !visible && (attentionPager.hasNext || jobPager.hasNext),
+        );
         if (selected) {
             const job = await invokeMemory("memoryGetViewBuild", selected);
             if (disposed || current !== sequence) return;

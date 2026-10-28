@@ -39,8 +39,15 @@ separately. Updating Puppeteer does not patch system Chrome.
 ### Scoped graphs and Memory Hub navigation
 
 Memory Hub Explore supports entity, topic and maintained hierarchy graphs with
-document/event filters, bounded generation-aware paging, coverage diagnostics and
-exact evidence drilldown. Graph preparation happens separately from reads; hosts
+document/event filters, bounded graph previews and exact evidence drilldown.
+The entity and topic pages show filters, graph controls and the canvas without
+coverage disclosures, collection/count paging rows, browse lists or routine
+maintenance status messages. Loading, empty states and request failures remain
+visible. Refresh, Global and Fit are Font Awesome icon buttons with accessible
+labels and tooltips, grouped inside the upper-left corner of the graph canvas.
+The graph response omits coverage, counts, limits and inventory paging
+metadata; topic generation is retained for snapshot-safe evidence drilldown.
+Graph preparation happens separately from reads; hosts
 without the scoped capability report it explicitly. Retained originals and event
 bodies remain subject to current eligibility and suppression checks.
 
@@ -48,8 +55,89 @@ Views use paginated cards and a separate detail reader, with build receipts in a
 flyout. Grouped activity, Inbox navigation and responsive detail panels reuse
 summary inventories rather than fetching every view's full evidence. These
 navigation features do not depend on checkpoint or integrated-answer APIs.
+Inventory pages contain up to 25 summaries per collection, not 25 globally.
+Inbox has counted tabs for Question decisions, Views, and Sources & operations.
+Its All overview shows at most two compact rows per category, with Questions
+first; full explanations and existing actions open in a details side panel.
+Review uses a file-lines icon button, and each All-overview section's View all
+action uses a list icon button. Both retain descriptive accessible names and
+tooltips. Views uses a bell for Latest build, retaining its spinner while a build
+is running.
+Counts describe loaded attention items/groups, with `+` when more may be
+available, rather than claiming a complete cross-collection total. Switching
+tabs or opening an explanation does not fetch another evidence inventory.
+Activity and Inbox use summary conflict state where available; full conflict
+evidence is reserved for selected details or older-service compatibility.
+
+Explore, Inbox, Sources, Views, Questions and Activity share icon-and-underline
+navigation styling. Active filters retain their pressed state; actual tab panels
+retain their selected state. Tab strips scroll horizontally rather than wrapping
+or widening the page on smaller screens. Views exposes its existing type filter
+as tabs above search and build controls, preserving paginated inventory queries,
+search text, keyboard focus and horizontal scroll position when it refreshes.
+Supported Views tabs are ordered All, Knowledge Wiki, Project Brief, Timeline
+and Troubleshooting Guide. Questions has its own left-navigation entry rather
+than a duplicate Views filter tab. Collection-maintenance entry points use the
+screwdriver-and-wrench icon.
+
+The Views gallery sends `excludeKinds: ["schemaView"]` to the view-summary query,
+including on subsequent pages. The service excludes question views before
+pagination and totals; the dedicated Questions workspace and
+explicit schema-view reader links remain supported.
+
+Views and Questions place those tabs directly after the page title. Their lists,
+search controls and bottom pagination live in Sources-style surface cards with
+server-reported totals in the upper-right corner, not loaded-page counts.
+Unavailable question inventories are marked unavailable or partial rather than
+displayed as a complete zero. Knowledge preparation remains lazy and is placed
+at the bottom of Questions. Explore Overview has no separate refresh button;
+scope changes and the main refresh action retain their existing behavior.
+
+Wiki and Project Brief readers distinguish synopsis and coverage caveats from
+their main sections in a blue-tinted right-hand infobox, alongside version,
+completeness and revision
+metadata. Article text wraps beside the infobox on wide screens; at 800 px and
+below the panel stacks above the article. Source disclosures, section navigation
+and edit actions remain available. Project Brief goals, owners, status, milestones,
+decisions, risks and context stay in the main reading flow; other view types retain
+their layout.
+Reader Back and Edit controls are icon-only with accessible names and tooltips.
+The overflow control opens the shared icon-and-text action menu, including
+conditional conflict review and generated-update unlocks. Escape dismisses the
+menu; closing an action dialog returns focus to the overflow trigger.
+
+Views shows a spinner and loading message inside the list card during type
+changes, hiding stale results and paging until the new inventory settles.
+Rapid type changes queue the latest filter rather than dropping it while another
+read is in flight. Failed reads remain explicit and do not display a misleading
+empty result.
 
 ### Schema-defined questions
+
+The Questions landing page uses two columns of compact cards, stacking into one
+column at 800 px and below. A card opens a dedicated question reader at a
+corpus/view/slot deep link. Answer candidates and evidence stay in the main content,
+while an option B sidecard groups coverage, review/admission state, view version
+and evaluated-source metadata. The reader retains guarded edits, explicit errors,
+retry, history and exact evidence. Back returns to the previous scoped inventory
+with its filters and paging; direct links can load slots outside the current page
+without scanning every collection.
+
+Question route transitions clear old controls before fetching. Reader mutation heads
+are refreshed for the exact reader corpus/view independently of the preserved
+inventory scope, including direct-link discovery and discovery after an edit.
+Discovery refreshes reader metadata before another mutation. Pending operations block navigation, and background polling
+does not reload an unsaved reader draft.
+
+Graph toolbars include an on-demand, keyboard-accessible item picker for the
+displayed nodes and relationships. It reuses the bounded graph projection and
+generation-qualified evidence flow without fetching a separate inventory or
+restoring the removed graph coverage and browse disclosures.
+
+Inbox detail panels survive unchanged and unrelated count refreshes. Stable item
+identities and state fingerprints close a panel only when its selected item
+changes or disappears; category navigation and scope resets still close it.
+Retained panels restore focus to the replacement Review button after a refresh.
 
 The Memory hub's Questions workspace is a complete projection of versioned
 schema-view slots, including proposed and rejected slots. The inspector reviews
@@ -72,8 +160,10 @@ Markdown links preserve exact revisions, slots and collection item keys when
 opened in the browser. Optional service capabilities and operation errors are
 reported explicitly, not interpreted as empty inventories. Question lists use
 bounded summary pages; selecting a question separately loads its full evidence.
-Questions also mounts knowledge preparation status, discovery policy controls,
-bounded failed-discovery retries and captured readiness checkpoints. Existing
+Questions loads knowledge preparation status, discovery policy controls,
+bounded failed-discovery retries and captured readiness checkpoints. This
+progress is fetched only when the Knowledge preparation disclosure is expanded,
+not when loading question lists or Inbox attention. Existing
 corpora remain off until enabled; new corpora default to source observed.
 Policy admission is not human confirmation, and source indexing alone never
 implies knowledge readiness. Integrated search answers retain original-source

@@ -15,7 +15,11 @@ export function questionCandidateCount(question: QuestionListItem): number {
         ? question.details.candidateCount
         : question.details.candidates.length;
 }
-export function questionIdentity(question: QuestionListItem): string {
+export function questionIdentity(
+    question: Pick<MemoryQuestion, "corpusId" | "viewId"> & {
+        slot: { id: string };
+    },
+): string {
     return JSON.stringify([
         "question",
         question.corpusId,

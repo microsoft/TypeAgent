@@ -70,7 +70,9 @@ async function settle() {
 }
 function click(host: HTMLElement, label: string) {
     const button = [...host.querySelectorAll("button")].find(
-        (button) => button.textContent === label,
+        (button) =>
+            button.textContent === label ||
+            button.getAttribute("aria-label") === label,
     );
     if (!button) throw new Error(`Missing timeline button ${label}`);
     button.click();

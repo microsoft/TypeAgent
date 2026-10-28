@@ -20,6 +20,7 @@ import { mountMemoryHubCapture } from "./memoryHubCapture";
 
 import { mountMemoryHubViews } from "./memoryHubViews";
 import { mountMemoryHubQuestions } from "./memoryHubQuestions";
+import { mountMemoryHubInbox } from "./memoryHubInbox";
 import { mountMemoryHubViewActivity } from "./memoryHubViewActivity";
 import { renderDerivedViewUsage } from "./memoryHubViewUsage";
 
@@ -30,7 +31,13 @@ import { mountMemoryHubWebExplore } from "./memoryHubWebExplore";
 import { notificationManager } from "./knowledgeUtilities";
 import { migrateLegacyMemoryLocation } from "./memoryHubMigration";
 import { mountThemeToggle } from "./memoryHubTheme";
-import { icon, iconButton, menuButton, setIconButton } from "./memoryHubUi";
+import {
+    icon,
+    iconButton,
+    menuButton,
+    setIconButton,
+    setTabLabel,
+} from "./memoryHubUi";
 import {
     inboxCounts,
     inboxItems,
@@ -79,6 +86,9 @@ let questionsPanel: ReturnType<typeof mountMemoryHubQuestions>;
 let viewActivityPanel: ReturnType<typeof mountMemoryHubViewActivity>;
 let viewAttentionCount = 0;
 let questionAttentionCount = 0;
+let viewAttentionMore = false;
+let questionAttentionMore = false;
+let inboxPanel: ReturnType<typeof mountMemoryHubInbox>;
 
 let runbookImportsPanel: ReturnType<typeof mountMemoryHubRunbookImports>;
 let webMaintenancePanel: ReturnType<typeof mountMemoryHubWebMaintenance>;
@@ -483,7 +493,9 @@ function renderInbox(): void {
             : "?";
     el("activityBadge").dataset.count = String(counts.failedJobs);
     el("inboxSummary").textContent =
-        snapshotAvailable && attentionCount ? `${attentionCount} need you` : "";
+        snapshotAvailable && attentionCount
+            ? `${attentionCount}${viewAttentionMore || questionAttentionMore ? "+" : ""} need you`
+            : "";
     const dismissedBox = el<HTMLInputElement>("inboxDismissed");
     const dismissed = dismissedBox.checked;
     const available = inboxItems(snapshot.inbox, hidden, {
@@ -509,9 +521,15 @@ function renderInbox(): void {
     );
     const list = el("hubInbox");
     list.replaceChildren(
-        ...items
-            .slice(inboxPage * 25, (inboxPage + 1) * 25)
-            .map((item) => inboxCard(item, dismissed)),
+        ...items.slice(inboxPage * 25, (inboxPage + 1) * 25).map((item) =>
+            inboxPanel.present({
+                id: item.id,
+                fingerprint: item.fingerprint,
+                title: item.title,
+                summary: `${inboxKinds[item.kind].label} · ${item.reason}`,
+                detail: inboxCard(item, dismissed),
+            }),
+        ),
     );
     if (!items.length && !viewAttentionCount && !questionAttentionCount)
         list.append(
@@ -530,6 +548,7 @@ function renderInbox(): void {
     el<HTMLButtonElement>("inboxPrevious").disabled = inboxPage === 0;
     el<HTMLButtonElement>("inboxNext").disabled =
         (inboxPage + 1) * 25 >= items.length;
+    if (snapshotAvailable) inboxPanel.setCount("operations", counts.inbox);
 }
 
 function renderErrors(): void {
@@ -558,6 +577,7 @@ async function refreshSnapshot(refreshQuestions = true): Promise<void> {
     } catch (error) {
         if (version === snapshotVersion) {
             snapshotAvailable = false;
+            inboxPanel.fail("operations", error);
             renderInbox();
         }
         throw error;
@@ -689,17 +709,17 @@ async function loadManagement(): Promise<void> {
     typeSelect.id = "hubSourceType";
     typeSelect.hidden = true;
     const typeChips = document.createElement("div");
-    typeChips.className = "hub-chips hub-source-types";
+    typeChips.className = "hub-tabs hub-source-types";
     typeChips.setAttribute("role", "group");
     typeChips.setAttribute("aria-label", "Source type");
-    for (const [type, label] of [
-        ["", "All"],
-        ["web", "Web"],
-        ["markdown", "Markdown"],
-        ["text", "Text"],
-        ["html", "HTML"],
-        ["vtt", "Transcript"],
-        [PDF_CHIP, "PDF"],
+    for (const [type, label, glyph] of [
+        ["", "All", "fa-layer-group"],
+        ["web", "Web", "fa-globe"],
+        ["markdown", "Markdown", "fa-file-lines"],
+        ["text", "Text", "fa-file"],
+        ["html", "HTML", "fa-code"],
+        ["vtt", "Transcript", "fa-closed-captioning"],
+        [PDF_CHIP, "PDF", "fa-file-pdf"],
     ]) {
         if (type !== PDF_CHIP) {
             const option = document.createElement("option");
@@ -717,6 +737,7 @@ async function loadManagement(): Promise<void> {
                 other.setAttribute("aria-pressed", String(other === chip));
             el("applySourceFilter").click();
         });
+        setTabLabel(chip, glyph, label);
         chip.setAttribute("aria-pressed", String(type === ""));
         typeChips.append(chip);
     }
@@ -831,7 +852,7 @@ function mountPageTabs(
     pageId: string,
     attribute: string,
     label: string,
-    tabs: ReadonlyArray<readonly [string, string]>,
+    tabs: ReadonlyArray<readonly [string, string, string]>,
 ): void {
     const page = el(pageId);
     const nav = document.createElement("nav");
@@ -846,8 +867,12 @@ function mountPageTabs(
                 String(tab.dataset.pageTab === name),
             );
     };
-    for (const [name, text] of tabs) {
-        const tab = button(text, () => select(name));
+    for (const [name, text, glyph] of tabs) {
+        const tab = setTabLabel(
+            button(text, () => select(name)),
+            glyph,
+            text,
+        );
         tab.setAttribute("role", "tab");
         tab.dataset.pageTab = name;
         nav.append(tab);
@@ -858,13 +883,13 @@ function mountPageTabs(
 
 function mountPageTabSets(): void {
     mountPageTabs("page-activity", "activityTab", "Activity views", [
-        ["jobs", "Operations"],
-        ["web", "Web history"],
-        ["changes", "Changes"],
+        ["jobs", "Operations", "fa-list-check"],
+        ["web", "Web history", "fa-clock-rotate-left"],
+        ["changes", "Changes", "fa-code-compare"],
     ]);
     mountPageTabs("page-settings", "settingsTab", "Settings groups", [
-        ["graph", "Browser graph"],
-        ["view", "View"],
+        ["graph", "Browser graph", "fa-diagram-project"],
+        ["view", "View", "fa-sliders"],
     ]);
 }
 
@@ -1080,6 +1105,7 @@ function updateExploreScope(
 }
 
 function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
+    inboxPanel.close();
     if (visiblePage !== "views") draftViewsPanel.hide();
     if (visiblePage !== "questions") questionsPanel.hide();
     if (visiblePage !== "activity") viewActivityPanel.hide();
@@ -1205,7 +1231,11 @@ async function showManagedRoute(
         );
     const corpusId = item?.corpusId ?? route.corpusId ?? scope;
     if (route.page === "questions") {
-        await questionsPanel.show(route.objectId, corpusId || undefined);
+        await questionsPanel.show(
+            route.objectId,
+            corpusId || undefined,
+            route.questionSlotId,
+        );
         return;
     }
     if (route.page === "views") {
@@ -1327,6 +1357,19 @@ export async function mountMemoryHub(): Promise<void> {
         history.replaceState(history.state, "", migrated.href);
         lastHash = location.hash;
     }
+    inboxPanel = mountMemoryHubInbox(el("page-inbox"), [
+        {
+            id: "questions",
+            label: "Question decisions",
+            host: el("hubQuestionAttention"),
+        },
+        { id: "views", label: "Views", host: el("hubViewAttention") },
+        {
+            id: "operations",
+            label: "Sources & operations",
+            host: el("hubInboxOperations"),
+        },
+    ]);
     el("hubRefresh").onclick = () => location.reload();
     await loadManagement();
     mountPhaseTwo();
@@ -1338,6 +1381,9 @@ export async function mountMemoryHub(): Promise<void> {
             corpora: () => snapshot.corpora,
             hidden,
             persistHidden,
+            onNavigate: (route) => {
+                open(route);
+            },
             onError: (error) => {
                 void hubAction(async () => {
                     throw error;
@@ -1346,8 +1392,12 @@ export async function mountMemoryHub(): Promise<void> {
             onOpenSource: (corpusId, objectId) => {
                 open({ page: "library", corpusId, objectId });
             },
-            onAttentionCount: (count) => {
+            presentAttention: inboxPanel.present,
+            onAttentionError: (error) => inboxPanel.fail("questions", error),
+            onAttentionCount: (count, hasMore = false) => {
                 questionAttentionCount = count;
+                questionAttentionMore = hasMore;
+                inboxPanel.setCount("questions", count, hasMore);
                 renderInbox();
             },
         },
@@ -1395,8 +1445,12 @@ export async function mountMemoryHub(): Promise<void> {
                     objectId,
                     activityKind: "view-build",
                 }),
-            onAttentionCount: (count) => {
+            presentAttention: inboxPanel.present,
+            onAttentionError: (error) => inboxPanel.fail("views", error),
+            onAttentionCount: (count, hasMore = false) => {
                 viewAttentionCount = count;
+                viewAttentionMore = hasMore;
+                inboxPanel.setCount("views", count, hasMore);
                 renderInbox();
             },
         },
@@ -1507,6 +1561,11 @@ export async function mountMemoryHub(): Promise<void> {
 
         draftViewsPanel.scopeChanged();
         viewActivityPanel.scopeChanged();
+        viewAttentionCount = 0;
+        questionAttentionCount = 0;
+        viewAttentionMore = false;
+        questionAttentionMore = false;
+        inboxPanel.reset();
 
         runbookImportsPanel.scopeChanged();
         renderErrors();

@@ -67,6 +67,9 @@ export function mountFlyout(host: HTMLElement, label: string) {
     });
     return {
         isOpen: () => !panel.hidden,
+        setReturnFocus(target: HTMLElement) {
+            opener = target;
+        },
         open(view: FlyoutView) {
             if (panel.hidden && document.activeElement instanceof HTMLElement)
                 opener = document.activeElement;
