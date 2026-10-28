@@ -27,6 +27,8 @@ const moduleKind = z.enum([
 ]);
 export const understandingRequestSchema = z
     .strictObject({
+        evidenceSnapshotId: z.string().uuid().optional(),
+        phase: z.enum(["retrieve", "initial", "refine"]).optional(),
         corpusId: identifierSchema,
         question: z.string().trim().min(1).max(2000),
         retrievalPolicy: z.enum(["sourcesOnly", "sourcesAndViews"]).optional(),
@@ -47,6 +49,10 @@ export const understandingRequestSchema = z
     .refine(
         (value) => !!value.parentSnapshotId === !!value.parentTurnId,
         "Parent snapshot and turn must be supplied together",
+    )
+    .refine(
+        (value) => value.phase !== "refine" || !!value.evidenceSnapshotId,
+        "Refinement requires a prepared evidence snapshot",
     );
 
 const claim = z.strictObject({
@@ -80,6 +86,14 @@ const date = z.strictObject({
     label: z.string().max(180),
 });
 export const understandingResultSchema = z.strictObject({
+    previousAnswer: z
+        .strictObject({
+            text: z.string().max(12000),
+            evidenceIds: id.array().max(32),
+        })
+        .optional(),
+    evidenceSnapshotId: z.string().uuid().optional(),
+    refinementPending: z.boolean().optional(),
     schemaVersion: z.literal(1),
     snapshotId: z.string().uuid(),
     turnId: z.string().uuid(),

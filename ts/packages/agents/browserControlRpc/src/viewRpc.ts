@@ -26,6 +26,8 @@ export type * from "./memoryGraphViewTypes.js";
 export type * from "./runbookImportViewTypes.js";
 
 export type MemoryHubSearchRequest = {
+    evidenceSnapshotId?: string;
+    prepareUnderstanding?: boolean;
     query: string;
     corpusId?: string;
     limit?: number;
@@ -98,6 +100,7 @@ export type MemoryHubAnswer = {
 };
 
 export type MemoryHubSearchResult = {
+    evidenceSnapshotId?: string;
     query: string;
     matches: MemoryHubEvidence[];
     answer?: MemoryHubAnswer;

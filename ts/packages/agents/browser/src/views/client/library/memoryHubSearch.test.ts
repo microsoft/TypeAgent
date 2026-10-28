@@ -96,6 +96,7 @@ function field<T extends HTMLElement>(name: string): T {
     return host.querySelector<T>(`[name="${name}"]`)!;
 }
 test("Ask forwards explicit retrieval/checkpoint policy and shows exact derived and user assertion references", async () => {
+    field<HTMLSelectElement>("intent").value = "ask";
     const reference = {
         corpusId: "a",
         viewId: "knowledge",
@@ -131,6 +132,43 @@ test("Ask forwards explicit retrieval/checkpoint policy and shows exact derived 
         "candidate candidate (not independent source evidence)",
     );
 });
+test("Find defaults to retrieval and only forwards prepared evidence for an unchanged scope", async () => {
+    mounted.dispose();
+    host.replaceChildren();
+    const onUnderstand = jest.fn();
+    mounted = mountMemoryHubSearch(host, {
+        scope: () => scope,
+        onError,
+        onOpenSource: onSource,
+        onUnderstand,
+    });
+    mounted.setUnderstandingEnabled(true);
+    invoke.mockResolvedValue({
+        ...result([source]),
+        answer: undefined,
+        evidenceSnapshotId: "prepared",
+    });
+    await mounted.show("worker");
+    expect(invoke).toHaveBeenCalledWith(
+        "memoryHubSearch",
+        expect.objectContaining({
+            generateAnswer: false,
+            prepareUnderstanding: true,
+        }),
+    );
+    button("Understand").click();
+    expect(onUnderstand).toHaveBeenLastCalledWith(
+        expect.objectContaining({ query: "worker" }),
+        "prepared",
+    );
+    field<HTMLInputElement>("tags").value = "different";
+    button("Understand").click();
+    expect(onUnderstand).toHaveBeenLastCalledWith(
+        expect.objectContaining({ tags: ["different"] }),
+        undefined,
+    );
+});
+
 test("empty search hides recent and result controls, and source-type disclosure preserves multiselect filters", async () => {
     expect(
         host.querySelector<HTMLElement>('[aria-label="Recent queries"]')!
@@ -417,6 +455,7 @@ test("published derived results disclose their exact revision and drill through 
 });
 
 test("submitted filters include corpus, types, tags, inclusive dates and conversation scope", async () => {
+    field<HTMLSelectElement>("intent").value = "ask";
     scope = "a";
     field<HTMLSelectElement>("sourceTypes").options[1].selected = true;
     field<HTMLInputElement>("tags").value = "ops, worker";

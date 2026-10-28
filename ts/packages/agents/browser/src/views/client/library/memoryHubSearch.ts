@@ -36,7 +36,10 @@ export type MemoryHubSearchOptions = {
     onError: (error: unknown) => void;
     onQueryChanged?: (query: string) => void;
     onNotify?: (message: string) => void;
-    onUnderstand?: (request: MemoryHubSearchRequest) => void;
+    onUnderstand?: (
+        request: MemoryHubSearchRequest,
+        evidenceSnapshotId?: string,
+    ) => void;
 };
 const RECENT_KEY = "memoryHub.recentQueries";
 
@@ -216,6 +219,17 @@ export function mountMemoryHubSearch(
     );
     submit.type = "submit";
     submit.classList.add("primary");
+    const intent = node("select");
+    intent.name = "intent";
+    intent.setAttribute("aria-label", "Search intent");
+    for (const [value, label] of [
+        ["find", "Find sources"],
+        ["ask", "Ask for an answer"],
+    ]) {
+        const option = node("option", label);
+        option.value = value;
+        intent.append(option);
+    }
     const dateNote = node(
         "small",
         "Dates mean source capture, view creation or conversation event time. Unknown dates are excluded when filtering.",
@@ -235,10 +249,11 @@ export function mountMemoryHubSearch(
         field("Require ready knowledge checkpoint", checkpoint),
     );
     filters.append(filtersSummary, filterFields, dateNote);
-    form.append(queryLabel, submit, filters);
+    form.append(queryLabel, intent, submit, filters);
     const understand = action("Understand", () => {
         try {
-            options.onUnderstand?.(readRequest());
+            const request = readRequest();
+            options.onUnderstand?.(request, preparedId(request));
         } catch (error) {
             report(error, status);
         }
@@ -329,6 +344,21 @@ export function mountMemoryHubSearch(
     host.append(root);
     let result: MemoryHubSearchResult | undefined;
     let submitted: MemoryHubSearchRequest | undefined;
+    let searchElapsedMs: number | undefined;
+    function preparedId(request: MemoryHubSearchRequest): string | undefined {
+        const scope = (value: MemoryHubSearchRequest) => {
+            const {
+                generateAnswer: _answer,
+                prepareUnderstanding: _prepare,
+                evidenceSnapshotId: _snapshot,
+                ...rest
+            } = value;
+            return JSON.stringify(rest);
+        };
+        return submitted && scope(submitted) === scope(request)
+            ? result?.evidenceSnapshotId
+            : undefined;
+    }
     let searchVersion = 0;
     let evidenceVersion = 0;
     let disposed = false;
@@ -774,7 +804,7 @@ export function mountMemoryHubSearch(
         warning.textContent = messages.length
             ? `${result.errors.length ? "Partial or degraded results" : "Search limits and notices"}:\n${messages.join("\n")}`
             : "";
-        status.textContent = `${result.matches.length} returned evidence results (bounded, not a full total) · reciprocal-rank fusion · ${submitted?.corpusId ? "selected corpus" : "All memory"} · submitted query: ${result.query}`;
+        status.textContent = `${result.matches.length} returned evidence results (bounded, not a full total) · reciprocal-rank fusion · ${submitted?.corpusId ? "selected corpus" : "All memory"} · submitted query: ${result.query}${searchElapsedMs === undefined ? "" : ` · Ready in ${(searchElapsedMs / 1000).toFixed(1)}s`}`;
         renderAnswer();
         renderInsights();
         results.replaceChildren(
@@ -807,7 +837,8 @@ export function mountMemoryHubSearch(
             query: text,
             corpusId: options.scope(),
             limit: 50,
-            generateAnswer: true,
+            generateAnswer: intent.value === "ask",
+            prepareUnderstanding: !understand.hidden,
             ...(retrieval.value === "sourcesOnly" ||
             retrieval.value === "sourcesAndViews"
                 ? { retrievalPolicy: retrieval.value }
@@ -838,16 +869,23 @@ export function mountMemoryHubSearch(
         };
     }
     async function search(request: MemoryHubSearchRequest) {
+        const snapshotId = preparedId(request);
+        if (snapshotId)
+            request = { ...request, evidenceSnapshotId: snapshotId };
         const version = ++searchVersion;
         const queryChanged = submitted?.query !== request.query;
         submitted = request;
+        searchElapsedMs = undefined;
         result = undefined;
         results.replaceChildren();
         insights.replaceChildren();
         renderResult();
         answer.hidden = true;
         warning.hidden = true;
-        status.textContent = "Searching memory…";
+        const started = performance.now();
+        status.textContent = request.generateAnswer
+            ? "Finding evidence and preparing an answer…"
+            : "Finding sources without generating an answer…";
         submit.disabled = true;
         const stopWatching = watchSlowRequest(status, () => {
             searchVersion++;
@@ -864,6 +902,7 @@ export function mountMemoryHubSearch(
             )
                 return;
             result = response;
+            searchElapsedMs = performance.now() - started;
             saveRecent(request.query);
             renderResult();
             if (

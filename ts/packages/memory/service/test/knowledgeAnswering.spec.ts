@@ -211,10 +211,70 @@ describe("service source-plus-view answer integration", () => {
                 expect(current.state).toBe("complete");
                 return;
             }
+
             await new Promise((resolve) => setTimeout(resolve, 10));
         }
         throw new Error("Offline schema build did not finish");
     }
+
+    test("Find and staged Understanding share validated evidence without repeated search or an initial prose call", async () => {
+        const corpus = await service.createCorpus("Prepared answer");
+        await ingest(
+            corpus.corpusId,
+            "source",
+            "Morgan leads the Harbor rollout.",
+        );
+        const search = service.search.bind(service);
+        let searches = 0;
+        service.search = (input) => {
+            searches++;
+            return search(input);
+        };
+        const question = {
+            corpusId: corpus.corpusId,
+            question: "Who leads Harbor?",
+        };
+        const prepared = await service.answer({
+            ...question,
+            prepareOnly: true,
+        });
+        expect(prepared.evidenceSnapshotId).toBeDefined();
+        const preparedId = prepared.evidenceSnapshotId;
+        if (!preparedId) throw new Error("Prepared evidence was not retained");
+        expect(readerInputs).toHaveLength(0);
+        const sources = await service.understand({
+            ...question,
+            phase: "retrieve",
+            evidenceSnapshotId: preparedId,
+        });
+        expect(sources.citations.length).toBeGreaterThan(0);
+        expect(sources.answer).toBeUndefined();
+        expect(readerInputs).toHaveLength(0);
+        const sourcesId = sources.evidenceSnapshotId;
+        if (!sourcesId) throw new Error("Source evidence was not retained");
+        const rich = await service.understand({
+            ...question,
+            phase: "initial",
+            evidenceSnapshotId: sourcesId,
+        });
+        expect(rich.answer?.summary.text).toContain("Morgan");
+        expect(readerInputs).toHaveLength(1);
+        expect(searches).toBe(1);
+        await expect(
+            service.understand({
+                ...question,
+                question: "A different question",
+                evidenceSnapshotId: preparedId,
+            }),
+        ).rejects.toThrow("scope");
+        await ingest(corpus.corpusId, "new-source", "Another Harbor update.");
+        await expect(
+            service.understand({
+                ...question,
+                evidenceSnapshotId: preparedId,
+            }),
+        ).rejects.toThrow("changed");
+    });
 
     test("rich understanding uses the real indexed pipeline and forget/clear purge its handles", async () => {
         const { corpusId } = await service.createCorpus("Understanding Harbor");
@@ -245,6 +305,8 @@ describe("service source-plus-view answer integration", () => {
             kind: "sources",
         });
         expect(module.status).toBe("ready");
+        const preparedId = result.evidenceSnapshotId;
+        if (!preparedId) throw new Error("Answer evidence was not retained");
         expect(readerInputs).toHaveLength(1);
         await service.understand({
             corpusId,
@@ -261,6 +323,13 @@ describe("service source-plus-view answer integration", () => {
             sourceId: receipt.sourceId,
             confirmationToken: preview.confirmationToken,
         });
+        await expect(
+            service.understand({
+                corpusId,
+                question: "Who leads the Harbor rollout?",
+                evidenceSnapshotId: preparedId,
+            }),
+        ).rejects.toThrow("expired");
         await expect(
             service.understandingModule({
                 corpusId,

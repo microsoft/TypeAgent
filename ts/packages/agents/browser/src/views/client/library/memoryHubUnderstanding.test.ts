@@ -9,11 +9,15 @@ import {
     mountMemoryHubUnderstanding,
     toUnderstandingRequest,
 } from "./memoryHubUnderstanding";
-import { invokeView } from "./viewClient";
+import { invokeView, streamUnderstanding } from "./viewClient";
 
 jest.mock("./memoryHubUnderstanding.css", () => ({}));
-jest.mock("./viewClient", () => ({ invokeView: jest.fn() }));
+jest.mock("./viewClient", () => ({
+    invokeView: jest.fn(),
+    streamUnderstanding: jest.fn(),
+}));
 const invoke = invokeView as jest.Mock;
+const stream = streamUnderstanding as jest.Mock;
 function result(snapshotId = "snapshot"): UnderstandingResult {
     return {
         schemaVersion: 1,
@@ -85,6 +89,10 @@ let onError: jest.Mock;
 let onEvidence: jest.Mock;
 beforeEach(() => {
     invoke.mockReset();
+    stream.mockReset();
+    stream.mockImplementation(async (request, onResult, signal) =>
+        onResult(await invoke("memoryHubUnderstand", request, { signal })),
+    );
     host = document.createElement("div");
     document.body.append(host);
     scope = "corpus";
@@ -140,6 +148,7 @@ test("ready prose and exact source cards do not wait for timeline; late modules 
             },
         ],
     });
+
     await settle();
     expect(host.querySelector("article")).toBe(prose);
     expect(draft.value).toBe("Was the change verified?");
@@ -154,6 +163,66 @@ test("ready prose and exact source cards do not wait for timeline; late modules 
     expect(onEvidence.mock.calls[0][0]).not.toHaveProperty("locator");
     expect(onEvidence.mock.calls[0][1]).toBe(button(host, "Gallery source"));
 });
+
+test("sources and provisional prose render before stream completion without losing the follow-on draft", async () => {
+    const finished = deferred<void>();
+    let publish!: (value: UnderstandingResult) => void;
+    stream.mockImplementation(async (_request, onResult) => {
+        publish = onResult;
+        await finished.promise;
+    });
+    const showing = mounted.show({
+        corpusId: "corpus",
+        question: result().question,
+    });
+    const sources = result("sources");
+    sources.answer = undefined;
+    sources.modules = [{ kind: "sources", status: "ready" }];
+    publish(sources);
+    expect(host.textContent).toContain("Gallery source");
+    expect(host.textContent).toContain("Preparing the explanation");
+    const initial = result("initial");
+    initial.modules = sources.modules;
+    initial.refinementPending = true;
+    publish(initial);
+    expect(host.textContent).toContain("Checking additional evidence");
+    const draft = host.querySelector("textarea")!;
+    draft.value = "How was it verified?";
+    draft.focus();
+    const final = result("final");
+    final.modules = sources.modules;
+    publish(final);
+    expect(draft.value).toBe("How was it verified?");
+    expect(document.activeElement).toBe(draft);
+    expect(button(host, "Ask more").disabled).toBe(true);
+    finished.resolve();
+    await showing;
+    expect(button(host, "Ask more").disabled).toBe(false);
+});
+test("failed refinement clears provisional claims and retries without a stale prepared handle", async () => {
+    const initial = result("initial");
+    initial.modules = [];
+    stream.mockImplementationOnce(async (_request, publish) => {
+        publish(initial);
+        throw new Error("Prepared evidence changed or was forgotten");
+    });
+    await mounted.show({
+        corpusId: "corpus",
+        question: initial.question,
+        evidenceSnapshotId: "stale",
+    });
+    expect(host.querySelector("article")?.textContent).toBe("");
+    expect(host.textContent).not.toContain("Gallery source");
+    expect(host.textContent).toContain("forgotten");
+    stream.mockImplementationOnce(async (_request, publish) =>
+        publish(initial),
+    );
+    button(host, "Retry question").click();
+    await settle();
+    expect(stream.mock.calls[1][0]).not.toHaveProperty("evidenceSnapshotId");
+    expect(host.textContent).toContain("The user reported six projects.");
+});
+
 test("year-precision dates never display an invented January 1 event", async () => {
     invoke.mockImplementation((method) =>
         Promise.resolve(

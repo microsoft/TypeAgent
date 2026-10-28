@@ -7,12 +7,100 @@ import type { ViewRequest } from "@typeagent/browser-control-rpc/viewRpc";
 import type { SSEManager } from "../../core/types.js";
 import { SSEManagerImpl } from "../../core/sseManager.js";
 import { validateViewRequest } from "./viewValidation.mjs";
+import type {
+    UnderstandingRequest,
+    UnderstandingResult,
+} from "@typeagent/memory-service";
+import {
+    understandingRequestSchema,
+    understandingResultSchema,
+} from "@typeagent/memory-client";
+
+export async function* understandingStages(
+    input: UnderstandingRequest,
+    invoke: (request: ViewRequest) => Promise<unknown>,
+): AsyncGenerator<UnderstandingResult> {
+    const read = async (params: UnderstandingRequest) =>
+        understandingResultSchema.parse(
+            await invoke(
+                validateViewRequest({
+                    method: "memoryHubUnderstand",
+                    params,
+                }),
+            ),
+        ) as UnderstandingResult;
+    const sources = await read({ ...input, phase: "retrieve" });
+    yield sources;
+    if (!sources.evidenceSnapshotId)
+        throw new Error("Understanding host did not retain prepared evidence");
+    const initial = await read({
+        ...input,
+        phase: "initial",
+        evidenceSnapshotId: sources.evidenceSnapshotId,
+    });
+    yield initial;
+    if (initial.refinementPending) {
+        if (!initial.evidenceSnapshotId)
+            throw new Error("Understanding refinement snapshot is unavailable");
+        yield await read({
+            ...input,
+            phase: "refine",
+            evidenceSnapshotId: initial.evidenceSnapshotId,
+        });
+    }
+}
 
 export function registerViewRoutes(
     app: Express,
     sse: SSEManager,
     invoke: (request: ViewRequest) => Promise<unknown>,
 ) {
+    app.post("/api/views/understand", async (req, res) => {
+        let request: UnderstandingRequest;
+        try {
+            if (!req.is("application/json"))
+                throw new Error("Expected application/json");
+            request = understandingRequestSchema.parse(req.body);
+        } catch {
+            res.status(400).json({
+                success: false,
+                error: "Invalid understanding request",
+            });
+            return;
+        }
+        SSEManagerImpl.setupSSEHeaders(res);
+        res.flushHeaders();
+        let disconnected = false;
+        res.on("close", () => {
+            disconnected = true;
+        });
+        const heartbeat = setInterval(() => {
+            if (!disconnected) res.write(": keepalive\n\n");
+        }, 15000);
+        try {
+            for await (const data of understandingStages(request, invoke)) {
+                if (disconnected) break;
+                res.write(
+                    `data: ${JSON.stringify({ type: "result", data })}\n\n`,
+                );
+            }
+            if (!disconnected) res.write('data: {"type":"complete"}\n\n');
+        } catch (error) {
+            if (!disconnected)
+                res.write(
+                    `data: ${JSON.stringify({
+                        type: "error",
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Understanding failed",
+                    })}\n\n`,
+                );
+        } finally {
+            clearInterval(heartbeat);
+            res.end();
+        }
+    });
     app.post("/api/views/invoke", async (req, res) => {
         if (!req.is("application/json")) {
             res.status(415).json({

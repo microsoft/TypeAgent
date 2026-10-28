@@ -253,8 +253,8 @@ function mountPhaseTwo(): void {
             open({ page: "views", corpusId, objectId, viewRevisionId }),
         onQueryChanged: synchronizeQuery,
         onNotify: (message) => notificationManager.showInfo(message),
-        onUnderstand: (request) => {
-            const value = toUnderstandingRequest(request);
+        onUnderstand: (request, evidenceSnapshotId) => {
+            const value = toUnderstandingRequest(request, evidenceSnapshotId);
             rememberUnderstanding(value);
             if (parseRoute(location.hash).page === "understanding")
                 void understandingPanel.show(value);

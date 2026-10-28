@@ -423,6 +423,7 @@ export type AnswerEvidence =
       });
 
 export interface IntegratedAnswerDiagnostics {
+    influencingEvidence?: AnswerEvidence[];
     sourceSelection?: IndexedSelectionDiagnostics;
     refinement?: {
         queries: string[];
@@ -441,6 +442,10 @@ export interface IntegratedAnswerDiagnostics {
 }
 
 export interface MemoryAnswerRequest {
+    evidenceSnapshotId?: string;
+    prepareOnly?: boolean;
+    deferRefinement?: boolean;
+    resumeRefinement?: boolean;
     knowledgeCheckpointId?: string;
     includeDiagnostics?: boolean;
     temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
@@ -461,6 +466,8 @@ export interface MemoryAnswerRequest {
 }
 
 export interface MemoryAnswerResult {
+    evidenceSnapshotId?: string;
+    refinementPending?: boolean;
     question: string;
     answer: string;
     mode: AnswerMode;

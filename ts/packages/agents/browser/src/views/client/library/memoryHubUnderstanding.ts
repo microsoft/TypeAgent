@@ -13,11 +13,12 @@ import type {
     MemoryHubEvidence,
     MemoryHubSearchRequest,
 } from "@typeagent/browser-control-rpc/viewRpc";
-import { invokeView } from "./viewClient";
+import { invokeView, streamUnderstanding } from "./viewClient";
 import "./memoryHubUnderstanding.css";
 
 export function toUnderstandingRequest(
     request: MemoryHubSearchRequest,
+    evidenceSnapshotId?: string,
 ): UnderstandingRequest {
     if (
         !request.corpusId ||
@@ -32,6 +33,7 @@ export function toUnderstandingRequest(
             "Understanding needs one document collection with no search filters or conversations. Keep Results for this scope; filters have not been removed.",
         );
     return {
+        ...(evidenceSnapshotId ? { evidenceSnapshotId } : {}),
         corpusId: request.corpusId,
         question: request.query,
         ...(request.retrievalPolicy
@@ -233,6 +235,20 @@ export function mountMemoryHubUnderstanding(
                 prose.append(node("h3", section.title));
                 for (const value of section.claims) prose.append(claim(value));
             }
+        } else if (result?.previousAnswer) {
+            prose.append(node("h2", "Previous grounded answer"));
+            const previous = node("p", result.previousAnswer.text);
+            for (const id of result.previousAnswer.evidenceIds)
+                previous.append(" ", cite(id));
+            prose.append(previous);
+        } else if (busy && result) {
+            prose.append(
+                node("h2", "Preparing a grounded explanation"),
+                node(
+                    "p",
+                    "Source cards are ready. Review them or draft a follow-on while the explanation is prepared.",
+                ),
+            );
         }
         sourceRail();
         suggestions.replaceChildren();
@@ -243,7 +259,7 @@ export function mountMemoryHubUnderstanding(
                     draft.focus();
                 }),
             );
-        follow.hidden = !answer;
+        follow.hidden = !answer && !busy;
         modules.replaceChildren();
         moduleVersions.clear();
         for (const module of result?.modules ?? []) {
@@ -455,25 +471,46 @@ export function mountMemoryHubUnderstanding(
         status.textContent = "Reading supporting memory…";
         const submittedDraft = draft.value;
         try {
-            const response = await invokeView("memoryHubUnderstand", request, {
-                signal: controller.signal,
-            });
-            if (!valid(token, request.corpusId)) return;
-            input = request;
-            result = response;
-            question.value = response.question;
-            if (parent && draft.value === submittedDraft) draft.value = "";
-            options.onQueryChanged(request);
-            status.textContent =
-                response.warnings.join(" · ") ||
-                "Grounded explanation ready. Supporting visuals load independently.";
-            render();
+            const started = performance.now();
+            await streamUnderstanding(
+                request,
+                (response) => {
+                    if (!valid(token, request.corpusId)) return;
+                    input = request;
+                    result = response;
+                    question.value = response.question;
+                    const elapsed = (
+                        (performance.now() - started) /
+                        1000
+                    ).toFixed(1);
+                    status.textContent = response.answer
+                        ? response.refinementPending
+                            ? `Initial explanation ready in ${elapsed}s. Checking additional evidence…`
+                            : `Grounded explanation ready in ${elapsed}s. Supporting visuals load independently.`
+                        : `Sources ready in ${elapsed}s. Preparing the explanation…`;
+                    if (response.warnings.length)
+                        status.append(
+                            node("small", response.warnings.join(" · ")),
+                        );
+                    render();
+                },
+                controller.signal,
+            );
+            if (valid(token, request.corpusId)) {
+                if (parent && draft.value === submittedDraft) draft.value = "";
+                options.onQueryChanged(request);
+            }
         } catch (error) {
             if (valid(token, request.corpusId) && !controller.signal.aborted) {
+                result = undefined;
+                render();
+                follow.hidden = true;
                 report(error);
                 status.append(
                     button("Retry question", () => {
-                        void run(request, parent);
+                        const { evidenceSnapshotId: _prepared, ...retry } =
+                            request;
+                        void run(retry, parent);
                     }),
                 );
             }
@@ -503,6 +540,7 @@ export function mountMemoryHubUnderstanding(
         void run(
             {
                 ...input,
+                evidenceSnapshotId: undefined,
                 question: draft.value.trim(),
                 parentSnapshotId: result.snapshotId,
                 parentTurnId: result.turnId,
@@ -517,6 +555,9 @@ export function mountMemoryHubUnderstanding(
                 (!result ||
                     request.question !== result.question ||
                     request.corpusId !== result.corpusId ||
+                    (!!request.evidenceSnapshotId &&
+                        request.evidenceSnapshotId !==
+                            input?.evidenceSnapshotId) ||
                     request.knowledgeCheckpointId !==
                         input?.knowledgeCheckpointId ||
                     request.retrievalPolicy !== input?.retrievalPolicy)

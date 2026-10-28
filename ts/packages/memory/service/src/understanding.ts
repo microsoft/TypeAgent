@@ -51,6 +51,8 @@ export function assertUnderstandingBytes(
 }
 
 function validateRequest(request: UnderstandingRequest): void {
+    if (request.phase === "refine" && !request.evidenceSnapshotId)
+        throw new Error("Refinement requires a prepared evidence snapshot");
     if (
         !request.corpusId ||
         !request.question.trim() ||
@@ -215,6 +217,12 @@ export class MemoryUnderstanding {
             request: {
                 corpusId: input.corpusId,
                 question,
+                ...(input.evidenceSnapshotId
+                    ? { evidenceSnapshotId: input.evidenceSnapshotId }
+                    : {}),
+                ...(input.phase === "retrieve" ? { prepareOnly: true } : {}),
+                ...(input.phase === "initial" ? { deferRefinement: true } : {}),
+                ...(input.phase === "refine" ? { resumeRefinement: true } : {}),
                 ...(input.knowledgeCheckpointId
                     ? { knowledgeCheckpointId: input.knowledgeCheckpointId }
                     : {}),
@@ -247,9 +255,12 @@ export class MemoryUnderstanding {
                 "Understanding requires indexed document evidence; this scope is unsupported",
             );
         const diagnostics = answer.readerContext.integratedAnswer;
+        if (!snapshot.evidence.length)
+            snapshot.evidence = diagnostics.suppliedEvidence;
         snapshot.indexVersion = answer.indexVersion;
         snapshot.influence = mergeInfluence([
             snapshot.influence,
+            diagnostics.influencingEvidence ?? [],
             diagnostics.refinement?.initialEvidence ?? [],
             diagnostics.suppliedEvidence,
         ]);
@@ -262,7 +273,20 @@ export class MemoryUnderstanding {
                 "Understanding influence changed; retry the question",
             );
         const result = snapshot.result;
+        if (answer.evidenceSnapshotId)
+            result.evidenceSnapshotId = answer.evidenceSnapshotId;
+        if (answer.refinementPending !== undefined)
+            result.refinementPending = answer.refinementPending;
         if (snapshot.reader) result.answer = publicAnswer(snapshot.reader);
+        else if (
+            input.phase === "retrieve" &&
+            wantsExplanation(input) &&
+            answer.mode === "synthesized"
+        )
+            result.previousAnswer = {
+                text: answer.answer,
+                evidenceIds: diagnostics.selectedEvidenceIds,
+            };
         result.citations = understandingCitations(snapshot.evidence);
         result.modules = understandingModules(
             input,

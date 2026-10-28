@@ -25,6 +25,8 @@ export type UnderstandingModuleKind =
     | "sources";
 
 export interface UnderstandingRequest {
+    evidenceSnapshotId?: string | undefined;
+    phase?: "retrieve" | "initial" | "refine" | undefined;
     corpusId: string;
     question: string;
     retrievalPolicy?: MemoryAnswerRequest["retrievalPolicy"];
@@ -110,6 +112,9 @@ export interface UnderstandingModule {
 }
 
 export interface UnderstandingResult {
+    previousAnswer?: { text: string; evidenceIds: string[] };
+    evidenceSnapshotId?: string;
+    refinementPending?: boolean;
     schemaVersion: 1;
     snapshotId: string;
     turnId: string;

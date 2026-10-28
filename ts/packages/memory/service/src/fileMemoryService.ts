@@ -332,8 +332,10 @@ import {
 import {
     answerIntegratedEvidence,
     type IntegratedAnswerReader,
+    type IntegratedAnswerSeed,
 } from "./integratedAnswer.js";
 import { MemoryUnderstanding } from "./understanding.js";
+import { UnderstandingStore } from "./understandingStore.js";
 import type {
     UnderstandingRequest,
     UnderstandingModuleRequest,
@@ -1369,6 +1371,11 @@ export class FileMemoryService
     private readonly wikiModelEndpoint: string | undefined;
     private readonly indexedAnswerModel: ChatModel | undefined;
     private readonly understanding: MemoryUnderstanding | undefined;
+    private readonly answerSnapshots = new UnderstandingStore<{
+        corpusId: string;
+        request: MemoryAnswerRequest;
+        seed: IntegratedAnswerSeed;
+    }>();
     private readonly sourceSynopsesEnabled: boolean;
     private synopsisModel: SourceSynopsisModel | undefined;
     private synopsisModelFailure: string | undefined;
@@ -1891,103 +1898,188 @@ export class FileMemoryService
         if (this.closed) {
             return Promise.reject(new Error("Memory service is closed"));
         }
-        this.initializePromise ??= this.acquireStorageLock().then(async () => {
-            await this.batchStore.recover();
-            const directories = await readdir(this.rootDirectory, {
-                withFileTypes: true,
-            });
-            for (const directory of directories) {
-                if (
-                    directory.isDirectory() &&
-                    /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(directory.name)
-                ) {
-                    await this.cleanManifestStaging(directory.name);
-                    await rm(this.viewIndexStagingDirectory(directory.name), {
-                        recursive: true,
-                        force: true,
-                    });
-                    await this.viewStore.recover(directory.name);
-                    await this.cleanArchivedViewIndexes(directory.name);
-                    await this.viewStore.recoverViewBuilds(directory.name);
-                    await this.viewStore.ensureReadProjection(directory.name);
-                    let manifest:
-                        | Pick<
-                              CorpusManifest,
-                              | "authorizedSourceRemoval"
-                              | "pendingCorpusClear"
-                              | "indexGeneration"
-                          >
-                        | undefined = await this.readSerializedManifest(
-                        directory.name,
-                    );
-                    if (manifest) {
-                        await this.agentSessionStore.recover(directory.name);
-                        if (manifest.pendingCorpusClear) {
-                            const runtime = await this.getCorpusRuntime(
-                                directory.name,
-                                true,
-                            );
-                            await this.completeCorpusClear(
-                                directory.name,
-                                runtime,
-                            );
-                            manifest = runtime.manifest;
-                        }
-                        if (manifest.authorizedSourceRemoval) {
-                            const runtime = await this.getCorpusRuntime(
-                                directory.name,
-                                true,
-                            );
-                            await this.completeAuthorizedSourceRemoval(
-                                directory.name,
-                                runtime,
-                            );
-                            manifest = runtime.manifest;
-                        }
-                        this.scheduleSourceSynopses(directory.name);
-                        const runtime = await this.getCorpusRuntime(
+        this.initializePromise ??= timeSearchStage("service.initialize", () =>
+            timeSearchStage("service.initialize.storageLock", () =>
+                this.acquireStorageLock(),
+            ).then(async () => {
+                await timeSearchStage("service.initialize.batches", () =>
+                    this.batchStore.recover(),
+                );
+                const directories = await readdir(this.rootDirectory, {
+                    withFileTypes: true,
+                });
+                for (const directory of directories) {
+                    if (
+                        directory.isDirectory() &&
+                        /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(
                             directory.name,
-                        );
-                        this.scheduleIndexCollection(
-                            directory.name,
-                            this.indexDirectory(directory.name),
-                        );
-                        await this.textStore(directory.name).purge(
-                            runtime.manifest.sources,
-                        );
-                        await this.reconcileTopics(directory.name, runtime);
-                        await this.recoverKnowledge(directory.name);
-                        this.knowledge.schedule(directory.name);
-                        if (!this.informationalWikiEnabled) continue;
-                        await this.enqueueWrite(directory.name, () =>
-                            this.recoverWikiConsolidationsLocked(
-                                directory.name,
-                            ),
-                        );
-                        const views = (
-                            await this.viewStore.listViews(directory.name)
-                        ).views;
-                        for (const kind of ["projects", "wiki"] as const) {
-                            const family =
-                                await this.reconcileInformationalFamily(
-                                    directory.name,
-                                    kind,
-                                    manifest.indexGeneration,
-                                    views,
+                        )
+                    ) {
+                        await timeSearchStage(
+                            "service.initialize.collection",
+                            async () => {
+                                await timeSearchStage(
+                                    "service.initialize.views",
+                                    async () => {
+                                        await this.cleanManifestStaging(
+                                            directory.name,
+                                        );
+                                        await rm(
+                                            this.viewIndexStagingDirectory(
+                                                directory.name,
+                                            ),
+                                            {
+                                                recursive: true,
+                                                force: true,
+                                            },
+                                        );
+                                        await this.viewStore.recover(
+                                            directory.name,
+                                        );
+                                        await this.cleanArchivedViewIndexes(
+                                            directory.name,
+                                        );
+                                        await this.viewStore.recoverViewBuilds(
+                                            directory.name,
+                                        );
+                                        await this.viewStore.ensureReadProjection(
+                                            directory.name,
+                                        );
+                                    },
+                                    { corpusId: directory.name },
                                 );
-                            if (family.enabled && family.dirty && !family.error)
-                                this.scheduleWikiMaintenance(
-                                    directory.name,
-                                    kind,
-                                );
-                        }
+                                let manifest:
+                                    | Pick<
+                                          CorpusManifest,
+                                          | "authorizedSourceRemoval"
+                                          | "pendingCorpusClear"
+                                          | "indexGeneration"
+                                      >
+                                    | undefined =
+                                    await this.readSerializedManifest(
+                                        directory.name,
+                                    );
+                                if (manifest) {
+                                    await this.agentSessionStore.recover(
+                                        directory.name,
+                                    );
+                                    if (manifest.pendingCorpusClear) {
+                                        const runtime =
+                                            await this.getCorpusRuntime(
+                                                directory.name,
+                                                true,
+                                            );
+                                        await this.completeCorpusClear(
+                                            directory.name,
+                                            runtime,
+                                        );
+                                        manifest = runtime.manifest;
+                                    }
+                                    if (manifest.authorizedSourceRemoval) {
+                                        const runtime =
+                                            await this.getCorpusRuntime(
+                                                directory.name,
+                                                true,
+                                            );
+                                        await this.completeAuthorizedSourceRemoval(
+                                            directory.name,
+                                            runtime,
+                                        );
+                                        manifest = runtime.manifest;
+                                    }
+                                    this.scheduleSourceSynopses(directory.name);
+                                    const runtime = await timeSearchStage(
+                                        "service.initialize.runtime",
+                                        () =>
+                                            this.getCorpusRuntime(
+                                                directory.name,
+                                            ),
+                                        { corpusId: directory.name },
+                                    );
+                                    this.scheduleIndexCollection(
+                                        directory.name,
+                                        this.indexDirectory(directory.name),
+                                    );
+                                    await timeSearchStage(
+                                        "service.initialize.textPurge",
+                                        () =>
+                                            this.textStore(
+                                                directory.name,
+                                            ).purge(runtime.manifest.sources),
+                                        { corpusId: directory.name },
+                                    );
+                                    await timeSearchStage(
+                                        "service.initialize.topics",
+                                        () =>
+                                            this.reconcileTopics(
+                                                directory.name,
+                                                runtime,
+                                            ),
+                                        { corpusId: directory.name },
+                                    );
+                                    await timeSearchStage(
+                                        "service.initialize.knowledge",
+                                        () =>
+                                            this.recoverKnowledge(
+                                                directory.name,
+                                            ),
+                                        { corpusId: directory.name },
+                                    );
+                                    this.knowledge.schedule(directory.name);
+                                    if (!this.informationalWikiEnabled) return;
+                                    await timeSearchStage(
+                                        "service.initialize.wikiRecovery",
+                                        () =>
+                                            this.enqueueWrite(
+                                                directory.name,
+                                                () =>
+                                                    this.recoverWikiConsolidationsLocked(
+                                                        directory.name,
+                                                    ),
+                                            ),
+                                        { corpusId: directory.name },
+                                    );
+                                    const views = (
+                                        await this.viewStore.listViews(
+                                            directory.name,
+                                        )
+                                    ).views;
+                                    for (const kind of [
+                                        "projects",
+                                        "wiki",
+                                    ] as const) {
+                                        const family =
+                                            await this.reconcileInformationalFamily(
+                                                directory.name,
+                                                kind,
+                                                manifest.indexGeneration,
+                                                views,
+                                            );
+                                        if (
+                                            family.enabled &&
+                                            family.dirty &&
+                                            !family.error
+                                        )
+                                            this.scheduleWikiMaintenance(
+                                                directory.name,
+                                                kind,
+                                            );
+                                    }
+                                }
+                            },
+                            { corpusId: directory.name },
+                        );
                     }
                 }
-            }
-            await this.pruneStoredChanges();
-            await this.recoverInterruptedJobs();
-            this.startMaintenanceReconciliation();
-        });
+                await timeSearchStage("service.initialize.changes", () =>
+                    this.pruneStoredChanges(),
+                );
+                await timeSearchStage("service.initialize.jobs", () =>
+                    this.recoverInterruptedJobs(),
+                );
+                this.startMaintenanceReconciliation();
+            }),
+        );
         return this.initializePromise;
     }
 
@@ -2172,6 +2264,7 @@ export class FileMemoryService
         await this.initialize();
         validateIdentifier("corpus ID", corpusId);
         this.understanding?.invalidate(corpusId);
+        this.answerSnapshots.invalidate(corpusId);
         await this.batchStore.purge(corpusId);
         this.viewBuilds.forget(corpusId);
         for (const work of this.topicSummaryWork.values())
@@ -2255,6 +2348,7 @@ export class FileMemoryService
         runtime: CorpusRuntime,
     ): Promise<void> {
         this.understanding?.invalidate(corpusId);
+        this.answerSnapshots.invalidate(corpusId);
         const removedSources = runtime.manifest.pendingCorpusClear;
         await this.acquisition.suppress(corpusId, {
             sourceIds: removedSources?.map((source) => source.sourceId) ?? [],
@@ -9979,6 +10073,54 @@ export class FileMemoryService
         return this.answerRequest(request);
     }
 
+    private async answerSeed(
+        request: MemoryAnswerRequest,
+        runtime: CorpusRuntime,
+    ): Promise<IntegratedAnswerSeed | undefined> {
+        if (
+            (request.prepareOnly &&
+                (request.deferRefinement || request.resumeRefinement)) ||
+            (request.deferRefinement && request.resumeRefinement)
+        )
+            throw new Error("Prepared answer phases cannot be combined");
+        if (!request.evidenceSnapshotId) {
+            if (request.resumeRefinement)
+                throw new Error("Refinement requires prepared evidence");
+            return undefined;
+        }
+        const snapshot = this.answerSnapshots.get(request.evidenceSnapshotId);
+        const scope = (input: MemoryAnswerRequest) =>
+            JSON.stringify([
+                input.corpusId,
+                input.question.trim(),
+                input.retrievalPolicy,
+                input.knowledgeCheckpointId,
+                input.sourceIds,
+                input.temporalContext,
+            ]);
+        if (scope(snapshot.request) !== scope(request))
+            throw new Error("Prepared answer question or scope does not match");
+        if (
+            snapshot.seed.original.indexVersion !==
+                this.indexVersion(runtime.manifest) ||
+            !(await this.validateAnswerEvidence(
+                request,
+                snapshot.seed.influence,
+            ))
+        ) {
+            this.answerSnapshots.delete(request.evidenceSnapshotId);
+            throw new Error(
+                "Prepared evidence changed or was forgotten; search again",
+            );
+        }
+        if (
+            request.resumeRefinement &&
+            !snapshot.seed.response.retrievalQueries?.length
+        )
+            throw new Error("Prepared answer has no pending refinement");
+        return structuredClone(snapshot.seed);
+    }
+
     private async answerRequest(
         request: MemoryAnswerRequest,
         reader?: IntegratedAnswerReader,
@@ -10022,8 +10164,12 @@ export class FileMemoryService
             request.answerMode !== "extractive" &&
             answerRuntime.index.readFragments
         ) {
-            const answer = () =>
-                answerIntegratedEvidence(
+            const seed = await this.answerSeed(request, answerRuntime);
+            const epoch = this.answerSnapshots.version;
+            const answer = async () => {
+                let evidenceSnapshotId: string | undefined;
+                let refinementPending = false;
+                const result = await answerIntegratedEvidence(
                     request,
                     {
                         searchOriginal: (input) =>
@@ -10059,6 +10205,32 @@ export class FileMemoryService
                             this.validateAnswerEvidence(input, evidence),
                     },
                     {
+                        ...(seed ? { seed } : {}),
+                        prepareOnly: request.prepareOnly === true,
+                        deferRefinement: request.deferRefinement === true,
+                        resumeRefinement: request.resumeRefinement === true,
+                        ...(this.understanding
+                            ? {
+                                  onPrepared: (
+                                      prepared: IntegratedAnswerSeed,
+                                  ) => {
+                                      evidenceSnapshotId = randomUUID();
+                                      refinementPending =
+                                          !!request.deferRefinement &&
+                                          !!prepared.response.retrievalQueries
+                                              ?.length;
+                                      this.answerSnapshots.put(
+                                          evidenceSnapshotId,
+                                          {
+                                              corpusId: request.corpusId,
+                                              request: structuredClone(request),
+                                              seed: prepared,
+                                          },
+                                          epoch,
+                                      );
+                                  },
+                              }
+                            : {}),
                         ...(reader ? { reader, maxEvidenceChars: 16000 } : {}),
                         ...(this.wikiModelEndpoint
                             ? { endpoint: this.wikiModelEndpoint }
@@ -10072,6 +10244,13 @@ export class FileMemoryService
                         ),
                     },
                 );
+                return {
+                    ...result,
+                    ...(evidenceSnapshotId
+                        ? { evidenceSnapshotId, refinementPending }
+                        : {}),
+                };
+            };
             return this.wikiBudget
                 ? runWithRequestBudget(
                       new RequestBudget(this.wikiBudget),
@@ -10079,6 +10258,15 @@ export class FileMemoryService
                   )
                 : answer();
         }
+        if (
+            request.evidenceSnapshotId ||
+            request.prepareOnly ||
+            request.deferRefinement ||
+            request.resumeRefinement
+        )
+            throw new Error(
+                "Prepared answering requires an indexed document collection",
+            );
         if (
             request.retrievalPolicy === "sourcesAndViews" &&
             request.answerMode !== "extractive"
@@ -14599,6 +14787,7 @@ export class FileMemoryService
     private async closeService(): Promise<void> {
         this.closed = true;
         this.understanding?.close();
+        this.answerSnapshots.close();
         for (const work of this.topicSummaryWork.values())
             work.controller.abort(new Error("Memory service is closing"));
         for (const controller of this.eventIndexControllers.values())
@@ -14680,6 +14869,7 @@ export class FileMemoryService
         runtime: CorpusRuntime,
     ): Promise<SourceForgetResult> {
         this.understanding?.invalidate(corpusId);
+        this.answerSnapshots.invalidate(corpusId);
         const removal = runtime.manifest.authorizedSourceRemoval;
         if (!removal)
             throw new Error("No authorized source removal to recover");

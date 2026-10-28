@@ -6,6 +6,7 @@ import { runWithSearchTiming } from "@typeagent/knowpro";
 import {
     answerIntegratedEvidence,
     type IntegratedAnswerHost,
+    type IntegratedAnswerSeed,
 } from "../src/integratedAnswer.js";
 import type {
     AnswerDerivedEvidence,
@@ -121,6 +122,163 @@ function fixture(
 }
 
 describe("bounded source-plus-view answering", () => {
+    test("prepared retrieval skips synthesis and is reused without repeating retrieval", async () => {
+        const { host, model, calls } = fixture();
+        const searchOriginal = host.searchOriginal.bind(host);
+        const getViews = host.getEligibleViewMatches!.bind(host);
+        let searches = 0;
+        let viewReads = 0;
+        host.searchOriginal = (input) => {
+            searches++;
+            return searchOriginal(input);
+        };
+        host.getEligibleViewMatches = (input) => {
+            viewReads++;
+            return getViews(input);
+        };
+        let seed: IntegratedAnswerSeed | undefined;
+        const prepared = await answerIntegratedEvidence(request, host, {
+            model,
+            prepareOnly: true,
+            onPrepared: (value) => {
+                seed = value;
+            },
+        });
+        expect(prepared.mode).toBe("extractive");
+        expect(calls).toHaveLength(0);
+        if (!seed) throw new Error("Prepared evidence was not retained");
+        const answer = await answerIntegratedEvidence(request, host, {
+            model,
+            seed,
+        });
+        expect(answer.answer).toBe("Launch is in May.");
+        expect(calls).toHaveLength(1);
+        expect(searches).toBe(1);
+        expect(viewReads).toBe(1);
+    });
+
+    test("defers refinement and resumes with overlapping searches, stable ordering, and one final reader", async () => {
+        const { host } = fixture();
+        let seed: IntegratedAnswerSeed | undefined;
+        let readerCalls = 0;
+        const reader = async (
+            _request: MemoryAnswerRequest,
+            evidence: AnswerEvidence[],
+            _options: unknown,
+            allowRefinement: boolean,
+        ) => {
+            readerCalls++;
+            return {
+                status: "answered" as const,
+                answer: "Launch is in May.",
+                evidenceIds: evidence.map((item) => item.id),
+                ...(allowRefinement
+                    ? { retrievalQueries: ["first", "second"] }
+                    : {}),
+            };
+        };
+        await answerIntegratedEvidence(request, host, {
+            reader,
+            deferRefinement: true,
+            onPrepared: (value) => {
+                seed = value;
+            },
+        });
+        expect(readerCalls).toBe(1);
+        if (!seed) throw new Error("Deferred evidence was not retained");
+        let release!: () => void;
+        let bothStarted!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const started = new Promise<void>((resolve) => {
+            bothStarted = resolve;
+        });
+        const queries: string[] = [];
+        host.searchOriginal = async (input) => {
+            queries.push(input.question);
+            if (queries.length === 2) bothStarted();
+            await gate;
+            return {
+                query: input.question,
+                matches: [source(input.question)],
+                warnings: [],
+                capabilitiesUsed: [],
+                indexVersion: "index1",
+            };
+        };
+        const finishing = answerIntegratedEvidence(request, host, {
+            reader,
+            seed,
+            resumeRefinement: true,
+        });
+        await started;
+        expect(queries).toEqual(["first", "second"]);
+        expect(readerCalls).toBe(1);
+        release();
+        const answer = await finishing;
+        expect(readerCalls).toBe(2);
+        expect(
+            answer.readerContext?.integratedAnswer?.refinement?.queries,
+        ).toEqual(["first", "second"]);
+    }, 10000);
+
+    test("settles sibling refinement searches before surfacing the first query's original error", async () => {
+        const { host } = fixture();
+        const failure = new Error("first failed");
+        let seed: IntegratedAnswerSeed | undefined;
+        const reader = async (
+            _request: MemoryAnswerRequest,
+            evidence: AnswerEvidence[],
+        ) => ({
+            status: "answered" as const,
+            answer: "Launch is in May.",
+            evidenceIds: evidence.map((item) => item.id),
+            retrievalQueries: ["first", "second"],
+        });
+        await answerIntegratedEvidence(request, host, {
+            reader,
+            deferRefinement: true,
+            onPrepared: (value) => {
+                seed = value;
+            },
+        });
+        if (!seed) throw new Error("Deferred evidence was not retained");
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        let siblingSettled = false;
+        host.searchOriginal = async (input) => {
+            if (input.question === "first") throw failure;
+            await gate;
+            siblingSettled = true;
+            return {
+                query: input.question,
+                matches: [],
+                warnings: [],
+                capabilitiesUsed: [],
+                indexVersion: "index1",
+            };
+        };
+        let rejected = false;
+        const finishing = answerIntegratedEvidence(request, host, {
+            reader,
+            seed,
+            resumeRefinement: true,
+        });
+        const checked = expect(finishing)
+            .rejects.toBe(failure)
+            .then(() => {
+                rejected = true;
+            });
+        await Promise.resolve();
+        expect(rejected).toBe(false);
+        release();
+        await checked;
+        expect(siblingSettled).toBe(true);
+    });
+
     test("times both reader passes and validation without logging private inputs or changing failures", async () => {
         const flag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
         const warn = console.warn;

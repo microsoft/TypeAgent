@@ -181,6 +181,8 @@ const schemas: Record<ViewMethod, z.ZodType> = {
             .optional(),
     }),
     memoryHubSearch: z.strictObject({
+        evidenceSnapshotId: z.string().uuid().optional(),
+        prepareUnderstanding: boolean,
         query: text,
         corpusId: optionalText,
         limit: z.number().int().min(1).max(100).optional(),
