@@ -219,10 +219,10 @@ try {
         ),
         { flag: "wx" },
     );
-    console.log(
+    process.stdout.write(
         JSON.stringify(
             samples.map(({ translations: _spans, ...sample }) => sample),
-        ),
+        ) + "\n",
     );
 } finally {
     console.warn = warn;

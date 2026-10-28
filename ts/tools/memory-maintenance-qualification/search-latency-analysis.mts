@@ -328,6 +328,6 @@ if (values.evidence) {
         ),
     );
 }
-console.log(
-    `Analyzed ${report.samples.length} requests across ${primary.length} primary samples.`,
+process.stdout.write(
+    `Analyzed ${report.samples.length} requests across ${primary.length} primary samples.\n`,
 );

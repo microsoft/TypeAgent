@@ -504,8 +504,8 @@ async function main() {
             JSON.stringify(sample) + "\n",
         );
         await save();
-        console.log(
-            `${samples.length}: ${variant}/${test.id}/${round} ${sample.status} ${(sample.elapsedMs / 1000).toFixed(2)}s; ${sample.providers.length} provider calls`,
+        process.stdout.write(
+            `${samples.length}: ${variant}/${test.id}/${round} ${sample.status} ${(sample.elapsedMs / 1000).toFixed(2)}s; ${sample.providers.length} provider calls\n`,
         );
         return outcome;
     }
