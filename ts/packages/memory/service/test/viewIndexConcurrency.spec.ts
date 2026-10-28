@@ -244,6 +244,73 @@ describe("detached view index preparation", () => {
             (error: unknown) => ({ value: undefined, error }),
         );
     }
+
+    test("foreground surfaces read the committed head while an exclusive publication is held", async () => {
+        await service.search({ corpusId, query: "pressure" });
+        const policy = await service.getViewPublicationPolicy(corpusId);
+        const snapshot = await service.listViews(corpusId);
+        const entered = deferred();
+        const resume = deferred();
+        releases.push(resume.resolve);
+        const original = TypedViewStore.prototype.updateViewPublicationPolicy;
+        const spy = jest
+            .spyOn(TypedViewStore.prototype, "updateViewPublicationPolicy")
+            .mockImplementation(async function (
+                this: InstanceType<typeof TypedViewStore>,
+                input,
+            ) {
+                const result = await original.call(this, input);
+                entered.resolve();
+                await resume.promise;
+                return result;
+            });
+        const write = service.updateViewPublicationPolicy({
+            corpusId,
+            expectedHead: snapshot.head,
+            expectedRevision: policy.revision,
+            autoPublish: !policy.autoPublish,
+        });
+        try {
+            await entered.promise;
+            const read = <T>(name: string, operation: Promise<T>) =>
+                within(operation).catch((error: unknown) => {
+                    throw new Error(`Blocked read: ${name}: ${String(error)}`);
+                });
+            const values = await Promise.all([
+                read("policy", service.getViewPublicationPolicy(corpusId)),
+                read("views", service.listViews(corpusId)),
+                read("view", service.getView(request)),
+                read("questions", service.listQuestions(corpusId)),
+                read("builds", service.listViewBuilds(corpusId)),
+                read(
+                    "source",
+                    service.getSourceContent({
+                        corpusId,
+                        sourceId: "evidence",
+                    }),
+                ),
+                read("search", service.search({ corpusId, query: "pressure" })),
+                read("changes", service.listChanges({ corpusId })),
+                read("events", service.listEvents({ corpusId })),
+                read(
+                    "event search",
+                    service.searchEvents({ corpusId, query: "pressure" }),
+                ),
+            ]);
+            expect(values[0]).toEqual(policy);
+            expect(values[1].head).toBe(snapshot.head);
+            expect(values[2]).toBeDefined();
+            expect(values[5].content).toContain("Inspect pressure");
+        } finally {
+            resume.resolve();
+            await write;
+            spy.mockRestore();
+        }
+        expect(
+            (await service.getViewPublicationPolicy(corpusId)).autoPublish,
+        ).toBe(!policy.autoPublish);
+    });
+
     async function edit() {
         const snapshot = await service.listViews(corpusId);
         const current = snapshot.views[0];
@@ -599,7 +666,9 @@ describe("detached view index preparation", () => {
             expect(finished).toBe(false);
             if (kind === "close") expect(repeatedCloseFinished).toBe(false);
             if (kind !== "close" && kind !== "source")
-                await within(service.listViews(corpusId));
+                await expect(
+                    within(service.listViews(corpusId)),
+                ).rejects.toThrow("removal");
             pending.resume.resolve();
             await within(removal);
             await repeatedClose;
@@ -672,10 +741,12 @@ describe("detached view index preparation", () => {
         expect((await service.retryViewIndex(request)).indexState).toBe(
             "ready",
         );
+        const built = directories.length;
         request = await publicationRequest();
         expect((await service.retryViewIndex(request)).indexState).toBe(
             "ready",
         );
+        expect(directories).toHaveLength(built);
         expect(await stagedFiles()).toEqual([]);
     });
 

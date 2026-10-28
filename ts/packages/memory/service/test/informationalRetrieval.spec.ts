@@ -50,6 +50,10 @@ type Runtime = {
     };
 };
 type Inspection = {
+    enqueueWrite(
+        corpusId: string,
+        operation: () => Promise<void>,
+    ): Promise<void>;
     viewStore: {
         getView(request: {
             corpusId: string;
@@ -386,35 +390,39 @@ describe("fresh informational recapture preserves the original retrieval request
                 target,
                 current,
             );
-            runtime = await inspect.getCorpusRuntime(corpusId);
-            const excluded = runtime.manifest.sources.find(
-                (source) =>
-                    !input.inputs.some(
-                        (item) => item.sourceId === source.sourceId,
-                    ),
-            )!;
-            const original = structuredClone(runtime.manifest);
-            try {
-                if (change === "index")
-                    runtime.manifest.indexGeneration = "changed-index";
-                if (change === "revision")
-                    excluded.activeRevisionId = "changed-revision";
-                if (change === "suppression")
-                    runtime.manifest.knowledgeSuppressions = [
-                        { sourceId: excluded.sourceId },
-                    ];
-                if (change === "forget")
-                    runtime.manifest.authorizedSourceRemoval = {
-                        sourceId: excluded.sourceId,
-                    };
-                await expect(inspect.recheckViewInput(input)).rejects.toThrow(
-                    /Informational retrieval|pending purge recovery/,
-                );
-            } finally {
-                Object.assign(runtime.manifest, original);
-                delete runtime.manifest.knowledgeSuppressions;
-                delete runtime.manifest.authorizedSourceRemoval;
-            }
+            await inspect.enqueueWrite(corpusId, async () => {
+                runtime = await inspect.getCorpusRuntime(corpusId);
+                const excluded = runtime.manifest.sources.find(
+                    (source) =>
+                        !input.inputs.some(
+                            (item) => item.sourceId === source.sourceId,
+                        ),
+                )!;
+                const original = structuredClone(runtime.manifest);
+                try {
+                    if (change === "index")
+                        runtime.manifest.indexGeneration = "changed-index";
+                    if (change === "revision")
+                        excluded.activeRevisionId = "changed-revision";
+                    if (change === "suppression")
+                        runtime.manifest.knowledgeSuppressions = [
+                            { sourceId: excluded.sourceId },
+                        ];
+                    if (change === "forget")
+                        runtime.manifest.authorizedSourceRemoval = {
+                            sourceId: excluded.sourceId,
+                        };
+                    await expect(
+                        inspect.recheckViewInput(input),
+                    ).rejects.toThrow(
+                        /Informational retrieval|pending purge recovery/,
+                    );
+                } finally {
+                    Object.assign(runtime.manifest, original);
+                    delete runtime.manifest.knowledgeSuppressions;
+                    delete runtime.manifest.authorizedSourceRemoval;
+                }
+            });
         },
     );
 

@@ -81,6 +81,11 @@ interface SessionHost {
         sources: SourceReference[],
         operation: () => Promise<void>,
     ): Promise<void>;
+    withEligibleRead?(
+        corpusId: string,
+        sources: SourceReference[],
+        operation: () => Promise<void>,
+    ): Promise<void>;
 }
 
 function digest(value: unknown): string {
@@ -276,13 +281,15 @@ export class AgentSessionStore {
             operation,
         );
         // Queue tails settle independently; callers still receive the original error.
-        this.checkpointWork.set(
-            key,
-            work.then(
-                () => undefined,
-                () => undefined,
-            ),
+        const settled = work.then(
+            () => undefined,
+            () => undefined,
         );
+        this.checkpointWork.set(key, settled);
+        void settled.then(() => {
+            if (this.checkpointWork.get(key) === settled)
+                this.checkpointWork.delete(key);
+        });
         return work;
     }
 
@@ -610,15 +617,32 @@ export class AgentSessionStore {
         );
     }
 
+    private withEligibleRead(
+        corpusId: string,
+        sources: SourceReference[],
+        operation: () => Promise<void>,
+    ): Promise<void> {
+        return this.host.withEligibleRead
+            ? this.host.withEligibleRead(corpusId, sources, operation)
+            : this.host.withEligible(corpusId, sources, operation);
+    }
+
     public async get(
         request: AgentSessionReadRequest,
     ): Promise<AgentSessionImportReceipt | undefined> {
         const { key } = this.location(request);
-        const stored = await this.enqueueCheckpoint(key, () =>
-            this.readReceipt(request),
-        );
+        const failure = this.failures.get(key);
+        if (failure) throw failure;
+        const cached = this.checkpointWork.has(key)
+            ? this.receipts.get(key)
+            : undefined;
+        const stored =
+            cached ??
+            (await this.enqueueCheckpoint(key, () =>
+                this.readReceipt(request),
+            ));
         if (!stored) return undefined;
-        await this.host.withEligible(
+        await this.withEligibleRead(
             request.corpusId,
             stored.sources,
             async () => {},
@@ -731,7 +755,7 @@ export class AgentSessionStore {
                 )
             )
                 continue;
-            await this.host.withEligible(
+            await this.withEligibleRead(
                 request.corpusId,
                 stored.sources,
                 async () => {

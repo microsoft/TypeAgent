@@ -15,7 +15,9 @@ import { createTopicSnapshot } from "../src/topicGeneration.js";
 import { FakeIndexedCorpusIndex } from "./fakeIndexedCorpusIndex.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { ViewHistory } from "../src/viewHistory.js";
+import { EventSegmentStore } from "../src/eventSegmentStore.js";
 
+const jest = import.meta.jest;
 let graphReads = 0;
 let documentGraphReads = 0;
 class GraphIndex extends FakeIndexedCorpusIndex {
@@ -495,6 +497,73 @@ describe("bounded corpus graph service", () => {
         }
         expect(graphReads).toBe(reads);
     });
+    test("graph and support reads keep their committed event version during an exclusive append", async () => {
+        const corpusId = await corpus();
+        await event(corpusId, "first");
+        const request = {
+            corpusId,
+            kind: "entities" as const,
+            evidenceKinds: ["event" as const],
+        };
+        const selected = await ready(request);
+        let resume!: () => void;
+        const paused = new Promise<void>((resolve) => {
+            resume = resolve;
+        });
+        let notify!: () => void;
+        const started = new Promise<void>((resolve) => {
+            notify = resolve;
+        });
+        const append = EventSegmentStore.prototype.append;
+        const spy = jest
+            .spyOn(EventSegmentStore.prototype, "append")
+            .mockImplementation(async function (
+                this: EventSegmentStore<unknown>,
+                record,
+            ) {
+                await append.call(this, record);
+                notify();
+                await paused;
+            });
+        const writer = event(corpusId, "second");
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+            await started;
+            const [graph, support] = await Promise.race([
+                Promise.all([
+                    service.queryKnowledgeGraph(request),
+                    service.queryGraphSupport({
+                        corpusId,
+                        generation: selected.generation,
+                        nodeId: selected.nodes[0].id,
+                    }),
+                ]),
+                new Promise<never>((_resolve, reject) => {
+                    timer = setTimeout(
+                        () =>
+                            reject(
+                                new Error(
+                                    "Graph reads waited for the event writer",
+                                ),
+                            ),
+                        1500,
+                    );
+                }),
+            ]);
+            expect(graph.generation).toBe(selected.generation);
+            expect(graph.coverage.events.indexed).toBe(1);
+            expect(support.total).toBe(1);
+        } finally {
+            clearTimeout(timer);
+            resume();
+            await writer;
+            spy.mockRestore();
+        }
+        const fresh = await ready(request);
+        expect(fresh.generation).not.toBe(selected.generation);
+        expect(fresh.coverage.events.indexed).toBe(2);
+        expect(fresh.nodes[0].supportCount).toBe(2);
+    });
     test("warm event projections remain filter-bound and invalidate on append and forgetting", async () => {
         const corpusId = await corpus();
         const first = await event(corpusId, "asserted");
@@ -734,10 +803,9 @@ describe("bounded corpus graph service", () => {
             });
         await new Promise((resolve) => setTimeout(resolve, 25));
         expect(forgotten).toBe(false);
-        expect(
-            (await service.queryKnowledgeGraph({ corpusId, kind: "entities" }))
-                .state,
-        ).toBe("building");
+        await expect(
+            service.queryKnowledgeGraph({ corpusId, kind: "entities" }),
+        ).rejects.toThrow("Memory evidence removal is in progress");
         release!();
         await forgetting;
         block = undefined;
@@ -894,10 +962,12 @@ describe("bounded corpus graph service", () => {
             "related",
         ]);
         const topicState = await service["viewStore"].getTopicState(corpusId);
-        await service["viewStore"].saveTopicFamily(corpusId, {
-            ...topicState.family,
-            enabled: false,
-        });
+        await service["enqueueWrite"](corpusId, () =>
+            service["viewStore"].saveTopicFamily(corpusId, {
+                ...topicState.family,
+                enabled: false,
+            }),
+        );
         await expect(
             service.queryGraphSupport({
                 corpusId,

@@ -1215,6 +1215,7 @@ describe("ordinary-source schema lifecycle", () => {
                 (source) => source.sourceId,
             ),
         ).toEqual(["profile"]);
+        expect((await service.drainMaintenance(15_000)).settled).toBe(true);
         const calls = modelCalls;
         const page = await service.getViewPage({
             corpusId: corpus.corpusId,

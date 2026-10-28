@@ -849,17 +849,19 @@ async function rehearsal(
         if (mode === "binding-replay") {
             expect(result.wikiContribution?.state).toBe("bound");
             await maintainFamily(service, corpusId, "wiki", "pause");
-            await new TypedViewStore(root).updateViewBuild(
-                corpusId,
-                job.jobId,
-                (saved) => {
-                    saved.state = "interrupted";
-                    const target = saved.results.find(
-                        (entry) => entry.viewId === result.viewId,
-                    )!;
-                    target.state = "interrupted";
-                    target.wikiContribution!.state = "committed";
-                },
+            await service["enqueueWrite"](corpusId, () =>
+                new TypedViewStore(root).updateViewBuild(
+                    corpusId,
+                    job.jobId,
+                    (saved) => {
+                        saved.state = "interrupted";
+                        const target = saved.results.find(
+                            (entry) => entry.viewId === result.viewId,
+                        )!;
+                        target.state = "interrupted";
+                        target.wikiContribution!.state = "committed";
+                    },
+                ),
             );
             const before = [
                 generated,

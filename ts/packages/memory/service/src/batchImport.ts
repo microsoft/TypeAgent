@@ -362,6 +362,12 @@ export class MemoryBatchStore {
         { controller: AbortController; task: Promise<void>; batch: StoredBatch }
     >();
     private readonly fileAccess = new Map<string, Promise<void>>();
+    private readonly committedStatuses = new Map<
+        string,
+        { batch: MemoryBatchImport; bytes: number }
+    >();
+    private statusBytes = 0;
+    private readonly purging = new Set<string>();
     private readonly forgettingSources = new Set<string>();
     private readonly maintenanceHolds = new Map<string, string>();
     public constructor(
@@ -405,8 +411,8 @@ export class MemoryBatchStore {
         batchId: string,
         operation: () => Promise<T>,
     ): Promise<T> {
-        // Windows reads can prevent atomic replacement; durable reads and
-        // publication share the same owner-local gate, not an in-memory fallback.
+        // Cold durable reads share the Windows replacement gate. Status polling
+        // can use the last published metadata while replacement is in flight.
         const previous = this.fileAccess.get(batchId) ?? Promise.resolve();
         const task = previous.then(operation);
         const settled = task.then(
@@ -429,7 +435,29 @@ export class MemoryBatchStore {
     private async write(batch: StoredBatch): Promise<void> {
         const file = this.file(batch.batchId);
         batch.updatedAt = new Date().toISOString();
+        const { request: _request, requestHash: _hash, ...status } = batch;
+        const committed = structuredClone(status);
         await writeRunbookJson(file, encoded(batch));
+        this.rememberStatus(committed);
+    }
+
+    private rememberStatus(batch: MemoryBatchImport): void {
+        const bytes = Buffer.byteLength(encoded(batch));
+        this.statusBytes -=
+            this.committedStatuses.get(batch.batchId)?.bytes ?? 0;
+        this.committedStatuses.delete(batch.batchId);
+        if (bytes <= 8 * 1024 * 1024) {
+            this.committedStatuses.set(batch.batchId, { batch, bytes });
+            this.statusBytes += bytes;
+        }
+        while (
+            this.statusBytes > 16 * 1024 * 1024 ||
+            this.committedStatuses.size > 64
+        ) {
+            const oldest = this.committedStatuses.keys().next().value!;
+            this.statusBytes -= this.committedStatuses.get(oldest)!.bytes;
+            this.committedStatuses.delete(oldest);
+        }
     }
 
     private async load(batchId: string): Promise<StoredBatch> {
@@ -525,21 +553,30 @@ export class MemoryBatchStore {
         }
     }
 
-    private async *stored(): AsyncGenerator<StoredBatch> {
+    private async batchFiles(): Promise<string[]> {
         let files: string[];
         try {
             files = await readdir(path.join(this.root, "batches"));
         } catch (error) {
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
             throw error;
         }
-        for (const file of files.filter((file) =>
-            /^[a-f0-9]{64}\.json$/.test(file),
-        ))
+        return files.filter((file) => /^[a-f0-9]{64}\.json$/.test(file));
+    }
+
+    private async *stored(): AsyncGenerator<StoredBatch> {
+        for (const file of await this.batchFiles())
             yield await this.load(file.slice(0, -5));
     }
 
     public async get(batchId: string): Promise<MemoryBatchImport> {
+        this.file(batchId);
+        const cached = this.committedStatuses.get(batchId);
+        if (cached && this.fileAccess.has(batchId)) {
+            if (this.purging.has(cached.batch.corpusId))
+                throw new Error("Batch metadata removal is in progress");
+            return structuredClone(cached.batch);
+        }
         const {
             request: _request,
             requestHash: _hash,
@@ -547,6 +584,10 @@ export class MemoryBatchStore {
         } = await this.load(batchId);
         if (Buffer.byteLength(encoded(batch)) > 8 * 1024 * 1024)
             throw new Error("Batch metadata exceeds the 8 MiB transport limit");
+        if (this.purging.has(batch.corpusId))
+            throw new Error("Batch metadata removal is in progress");
+        if (!this.committedStatuses.has(batchId))
+            this.rememberStatus(structuredClone(batch));
         return batch;
     }
 
@@ -565,11 +606,8 @@ export class MemoryBatchStore {
 
     public async list(corpusId: string): Promise<MemoryBatchImport[]> {
         const results: MemoryBatchImport[] = [];
-        for await (const {
-            request: _request,
-            requestHash: _hash,
-            ...batch
-        } of this.stored()) {
+        for (const file of await this.batchFiles()) {
+            const batch = await this.get(file.slice(0, -5));
             if (batch.corpusId !== corpusId) continue;
             results.push(batch);
             results.sort((left, right) =>
@@ -1040,6 +1078,18 @@ export class MemoryBatchStore {
     }
 
     public async purge(corpusId: string, sourceId?: string): Promise<void> {
+        this.purging.add(corpusId);
+        try {
+            await this.purgeStored(corpusId, sourceId);
+        } finally {
+            this.purging.delete(corpusId);
+        }
+    }
+
+    private async purgeStored(
+        corpusId: string,
+        sourceId?: string,
+    ): Promise<void> {
         for await (const batch of this.stored()) {
             if (
                 batch.corpusId !== corpusId ||
@@ -1055,6 +1105,9 @@ export class MemoryBatchStore {
                 await this.accessFile(batch.batchId, () =>
                     rm(this.file(batch.batchId), { force: true }),
                 );
+                this.statusBytes -=
+                    this.committedStatuses.get(batch.batchId)?.bytes ?? 0;
+                this.committedStatuses.delete(batch.batchId);
             } else {
                 const current = await this.load(batch.batchId);
                 const forgotten = current.members.filter(

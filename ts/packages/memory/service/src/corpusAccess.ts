@@ -5,19 +5,50 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 type WriteLease = { release: () => void; held: boolean; active: boolean };
 
+export interface CommittedCorpusAccess {
+    read<T>(operation: () => Promise<T>): Promise<T>;
+    publish(): Promise<void>;
+}
+
 export class CorpusAccess {
     private writeTail: Promise<void> = Promise.resolve();
     private readonly readers = new Set<Promise<void>>();
     private readonly writers = new Set<Promise<unknown>>();
     private readonly lease = new AsyncLocalStorage<WriteLease>();
+    private readonly snapshotReaders = new Set<Promise<void>>();
 
-    public constructor(private readonly assertReadable?: () => void) {}
+    public constructor(
+        private readonly assertReadable?: () => void,
+        private readonly committed?: CommittedCorpusAccess,
+    ) {}
+
+    public get isWriting(): boolean {
+        const lease = this.lease.getStore();
+        return !!lease?.active && lease.held;
+    }
+
+    public get isWriterContext(): boolean {
+        return !!this.lease.getStore()?.active;
+    }
 
     public read<T>(operation: () => Promise<T>): Promise<T> {
-        const result = this.writeTail.then(() => {
+        const run = async () => {
             this.assertReadable?.();
-            return operation();
-        });
+            const value = await operation();
+            this.assertReadable?.();
+            return value;
+        };
+        if (this.committed && !this.isWriting) {
+            const result = this.committed.read(run);
+            const settled = result.then(
+                () => {},
+                () => {},
+            );
+            this.snapshotReaders.add(settled);
+            void settled.then(() => this.snapshotReaders.delete(settled));
+            return result;
+        }
+        const result = this.isWriting ? run() : this.writeTail.then(run);
         const settled = result.then(
             () => undefined,
             () => undefined,
@@ -37,7 +68,9 @@ export class CorpusAccess {
         const result = reservation.ready.then(() =>
             this.lease.run(lease, async () => {
                 try {
-                    return await operation();
+                    const value = await operation();
+                    await this.committed?.publish();
+                    return value;
                 } finally {
                     lease.active = false;
                     lease.release();
@@ -60,6 +93,7 @@ export class CorpusAccess {
             throw new Error(
                 "Detached preparation requires an exclusive writer",
             );
+        await this.committed?.publish();
         lease.held = false;
         lease.release();
         try {
@@ -83,8 +117,16 @@ export class CorpusAccess {
     }
 
     public async idle(): Promise<void> {
-        while (this.writers.size || this.readers.size)
-            await Promise.allSettled([...this.writers, ...this.readers]);
+        while (
+            this.writers.size ||
+            this.readers.size ||
+            this.snapshotReaders.size
+        )
+            await Promise.allSettled([
+                ...this.writers,
+                ...this.readers,
+                ...this.snapshotReaders,
+            ]);
         await this.writeTail;
     }
 }

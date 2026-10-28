@@ -214,6 +214,21 @@ export async function settleConsolidation(
                 !snapshot.projectFamily.pending)
         )
             return snapshot;
+        if (attempt === 999)
+            throw new Error(
+                `Offline consolidation did not settle: ${JSON.stringify({
+                    wiki: snapshot.wikiFamily,
+                    project: snapshot.projectFamily,
+                    maintenance: service.getMaintenanceStatus(),
+                    jobs: jobs.map(({ state, results }) => ({
+                        state,
+                        results: results.map(({ state, reason }) => ({
+                            state,
+                            reason,
+                        })),
+                    })),
+                })}`,
+            );
         await new Promise((resolve) => setTimeout(resolve, 20));
     }
     throw new Error("Offline consolidation did not settle");
