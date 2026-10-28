@@ -1485,6 +1485,9 @@ export class FileMemoryService
     }
 
     private retainedIndex(corpusId: string, directory: string): boolean {
+        const manifest = this.corpora.get(corpusId)?.manifest;
+        if (manifest?.authorizedSourceRemoval || manifest?.pendingCorpusClear)
+            return false;
         return [
             this.committedCorpora.get(corpusId),
             ...this.committedReaders,
@@ -11295,12 +11298,10 @@ export class FileMemoryService
                         entry.isDirectory() &&
                         entry.name !== jsonSegmentDirectory &&
                         entry.name !== activeGeneration &&
-                        (removal ||
-                            clearing ||
-                            !this.retainedIndex(
-                                corpusId,
-                                path.join(root, entry.name),
-                            )) &&
+                        !this.retainedIndex(
+                            corpusId,
+                            path.join(root, entry.name),
+                        ) &&
                         !this.preparingIndexes.has(path.join(root, entry.name)),
                 )
                 .map(async (entry) => {
