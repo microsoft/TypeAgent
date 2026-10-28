@@ -309,7 +309,9 @@ describe("conservative indexed grouping", () => {
                     sourceIds: ["charter"],
                 },
             ];
-            await store.saveWikiFamily(corpusId, legacy);
+            await service["corpusAccess"](corpusId).write(() =>
+                store.saveWikiFamily(corpusId, legacy),
+            );
             const resumed = await service.maintainViews({
                 corpusId,
                 expectedHead: (await service.listViews(corpusId)).head,

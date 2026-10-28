@@ -187,13 +187,30 @@ test("event index reconciles replay, failed extraction, forgetting, and restart"
             runId: "run-2",
         });
         failExtraction.value = true;
-        await expect(
-            service.searchEvents({ corpusId, query: question }),
-        ).rejects.toThrow("Expected extraction failure");
+        expect(
+            (
+                await service.searchEvents({ corpusId, query: question })
+            ).matches.map((match) => match.event.eventId),
+        ).toEqual([first.event.eventId]);
+        await service["graphEventWork"].get(corpusId);
+        const failed = await service.queryKnowledgeGraph({
+            corpusId,
+            kind: "entities",
+            evidenceKinds: ["event"],
+        });
+        expect(failed.coverage.events.state).toBe("error");
+        expect(failed.coverage.reasons).toContain(
+            "Expected extraction failure",
+        );
+        await service["graphEventWork"].get(corpusId);
         expect(await readdir(indexRoot)).toHaveLength(3);
         expect((await service.listEvents({ corpusId })).total).toBe(2);
         failExtraction.value = false;
         const beforeAppend = extracted.length;
+        expect(
+            (await service.searchEvents({ corpusId, query: question })).matches,
+        ).toHaveLength(1);
+        await service["graphEventWork"].get(corpusId);
         expect(
             (await service.searchEvents({ corpusId, query: question })).matches,
         ).toHaveLength(2);

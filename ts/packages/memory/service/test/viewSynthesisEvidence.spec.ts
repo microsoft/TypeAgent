@@ -416,6 +416,7 @@ describe("actual configured evidence-first adapter and durable service", () => {
             ).publishedRevisionId,
         ).toBeUndefined();
         expect(await service.listSources(corpusId)).toEqual(sources);
+        expect((await service.drainMaintenance(15_000)).settled).toBe(true);
         await expect(
             stat(
                 path.join(

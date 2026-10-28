@@ -3889,62 +3889,67 @@ export class FileMemoryService
             throw new Error("Event search query must not be empty");
         }
         const limit = Math.max(1, Math.min(request.limit ?? 20, 100));
-        const runtime = await this.getCorpusRuntime(request.corpusId);
-        if (
-            !this.committedCorpora.get(request.corpusId)?.eventIndex &&
-            runtime.events.length
-        )
-            await this.enqueueWrite(request.corpusId, () =>
-                this.getEventIndex(request.corpusId, runtime),
-            );
-        return runtime.access.read(async () => {
-            const eligible = runtime.events.filter(
-                (event) =>
-                    !isSuppressedEvent(runtime, event) &&
-                    matchesEventFilter(event, request),
-            );
-            if (eligible.length === 0) {
-                return { query: request.query, matches: [] };
-            }
-            const prepared = this.activeRead(request.corpusId)?.eventIndex;
-            if (!prepared)
-                throw new ViewBuildStaleError(
-                    "No committed event index is available",
+        return this.enqueueRead(
+            request.corpusId,
+            (runtime) => this.eventIndexReady(request.corpusId, runtime),
+            async (runtime) => {
+                await this.getEventIndex(request.corpusId, runtime);
+            },
+            async (runtime) => {
+                const eligible = runtime.events.filter(
+                    (event) =>
+                        !isSuppressedEvent(runtime, event) &&
+                        matchesEventFilter(event, request),
                 );
-            const version = await this.eventStore(request.corpusId).version();
-            if (version.sequence !== prepared.sequence)
-                this.scheduleGraphEvents(request.corpusId);
-            const index = prepared.index;
-            const eligibleById = new Map(
-                eligible.map((event) => [event.eventId, event]),
-            );
-            const tags =
-                eligible.length === runtime.events.length
-                    ? undefined
-                    : eligible.map((event) => `event-id:${event.eventId}`);
-            const matches: MemoryEventSearchResult["matches"] = [];
-            const seen = new Set<string>();
-            for (const match of await index.search(query, limit * 4, tags)) {
-                const event = eligibleById.get(match.sourceId);
-                if (event === undefined) {
-                    throw new Error(
-                        `Event index returned an out-of-scope event '${match.sourceId}'`,
+                if (eligible.length === 0) {
+                    return { query: request.query, matches: [] };
+                }
+                const prepared = this.activeRead(request.corpusId)?.eventIndex;
+                if (!prepared)
+                    throw new ViewBuildStaleError(
+                        "No committed event index is available",
                     );
+                const version = await this.eventStore(
+                    request.corpusId,
+                ).version();
+                if (version.sequence !== prepared.sequence)
+                    this.scheduleGraphEvents(request.corpusId);
+                const index = prepared.index;
+                const eligibleById = new Map(
+                    eligible.map((event) => [event.eventId, event]),
+                );
+                const tags =
+                    eligible.length === runtime.events.length
+                        ? undefined
+                        : eligible.map((event) => `event-id:${event.eventId}`);
+                const matches: MemoryEventSearchResult["matches"] = [];
+                const seen = new Set<string>();
+                for (const match of await index.search(
+                    query,
+                    limit * 4,
+                    tags,
+                )) {
+                    const event = eligibleById.get(match.sourceId);
+                    if (event === undefined) {
+                        throw new Error(
+                            `Event index returned an out-of-scope event '${match.sourceId}'`,
+                        );
+                    }
+                    if (!seen.has(event.eventId)) {
+                        seen.add(event.eventId);
+                        matches.push({
+                            event: structuredClone(event),
+                            snippet: match.snippet,
+                            score: match.score,
+                        });
+                    }
+                    if (matches.length === limit) {
+                        break;
+                    }
                 }
-                if (!seen.has(event.eventId)) {
-                    seen.add(event.eventId);
-                    matches.push({
-                        event: structuredClone(event),
-                        snippet: match.snippet,
-                        score: match.score,
-                    });
-                }
-                if (matches.length === limit) {
-                    break;
-                }
-            }
-            return { query: request.query, matches };
-        });
+                return { query: request.query, matches };
+            },
+        );
     }
 
     public async forgetEvents(
@@ -12829,6 +12834,35 @@ export class FileMemoryService
         return state;
     }
 
+    private async eventIndexReady(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<boolean> {
+        if (!runtime.events.length) return true;
+        const prepared = this.activeRead(corpusId)?.eventIndex;
+        if (!prepared) return false;
+        const directory = this.eventIndexDirectory(
+            corpusId,
+            prepared.generation,
+        );
+        if (
+            (await classifyIndexSchema(
+                directory,
+                "conversation-events",
+                true,
+            )) === "reset"
+        )
+            return false;
+        try {
+            await access(path.join(directory, "ready"));
+            return true;
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT")
+                return false;
+            throw error;
+        }
+    }
+
     private async getEventIndex(
         corpusId: string,
         runtime: CorpusRuntime,
@@ -12852,7 +12886,6 @@ export class FileMemoryService
         let state = await this.purgeObsoleteEventIndex(corpusId, runtime);
         if (state !== undefined && state.sequence === version.sequence) {
             const cached = this.graphEventIndexes.get(corpusId);
-            if (cached?.generation === state.generation) return cached.index;
             try {
                 await access(
                     path.join(
@@ -12860,6 +12893,8 @@ export class FileMemoryService
                         "ready",
                     ),
                 );
+                if (cached?.generation === state.generation)
+                    return cached.index;
                 const index = this.eventIndexFactory(
                     corpusId,
                     this.eventIndexDirectory(corpusId, state.generation),
@@ -12901,7 +12936,7 @@ export class FileMemoryService
         try {
             await mkdir(directory);
             const index = this.eventIndexFactory(corpusId, directory);
-            const preparation = Promise.resolve().then(async () => {
+            const prepare = async () => {
                 if (
                     state &&
                     index.append &&
@@ -12930,9 +12965,12 @@ export class FileMemoryService
                         async () => {},
                     );
                 }
+            };
+            await runtime.access.outsideWrite(() => {
+                const preparation = prepare();
+                this.eventIndexPreparationWork.set(corpusId, preparation);
+                return preparation;
             });
-            this.eventIndexPreparationWork.set(corpusId, preparation);
-            await runtime.access.outsideWrite(() => preparation);
             controller.signal.throwIfAborted();
             const currentVersion = await store.version();
             if (
@@ -14756,10 +14794,12 @@ export class FileMemoryService
             throw new ViewBuildStaleError("Memory service is closing");
         const controller = new AbortController();
         this.eventIndexControllers.set(corpusId, controller);
-        const preparation = Promise.resolve().then(() => index.initialize());
-        this.eventIndexPreparationWork.set(corpusId, preparation);
         try {
-            await runtime.access.outsideWrite(() => preparation);
+            await runtime.access.outsideWrite(() => {
+                const preparation = index.initialize();
+                this.eventIndexPreparationWork.set(corpusId, preparation);
+                return preparation;
+            });
             controller.signal.throwIfAborted();
         } finally {
             this.eventIndexControllers.delete(corpusId);

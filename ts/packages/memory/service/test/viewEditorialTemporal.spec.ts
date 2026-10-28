@@ -166,7 +166,7 @@ class EditorialIndex extends FakeSemanticCorpusIndex {
 }
 
 async function settled(service: FileMemoryService, corpusId: string) {
-    const maintenance = await service.drainMaintenance();
+    const maintenance = await service.drainMaintenance(15_000);
     if (
         maintenance.reason ||
         maintenance.pending.length ||
