@@ -11231,12 +11231,11 @@ export class FileMemoryService
     ): Promise<void> {
         validateIndexGeneration(activeGeneration);
         const root = this.indexDirectory(corpusId);
-        const removal =
-            this.corpora.get(corpusId)?.manifest.authorizedSourceRemoval;
+        const manifest = this.corpora.get(corpusId)?.manifest;
+        const removal = manifest?.authorizedSourceRemoval;
+        const clearing = manifest?.pendingCorpusClear;
         const sources = new Set(
-            this.corpora
-                .get(corpusId)
-                ?.manifest.sources.map((source) => source.sourceId),
+            manifest?.sources.map((source) => source.sourceId),
         );
         for (const [directory, preparation] of this.detachedRebuilds) {
             if (
@@ -11244,7 +11243,7 @@ export class FileMemoryService
                 directory === this.indexDirectory(corpusId, activeGeneration) ||
                 !(removal
                     ? preparation.sourceIds.has(removal.sourceId)
-                    : this.corpora.get(corpusId)?.manifest.pendingCorpusClear ||
+                    : clearing ||
                       [...preparation.baseSourceIds].some(
                           (id) => !sources.has(id),
                       ))
@@ -11255,7 +11254,7 @@ export class FileMemoryService
                     "Source removal invalidated reindex preparation",
                 ),
             );
-            if (this.corpora.get(corpusId)?.manifest.pendingCorpusClear)
+            if (clearing)
                 for (const jobId of preparation.jobIds ?? [])
                     this.controllers
                         .get(jobId)
@@ -11297,8 +11296,7 @@ export class FileMemoryService
                         entry.name !== jsonSegmentDirectory &&
                         entry.name !== activeGeneration &&
                         (removal ||
-                            this.corpora.get(corpusId)?.manifest
-                                .pendingCorpusClear ||
+                            clearing ||
                             !this.retainedIndex(
                                 corpusId,
                                 path.join(root, entry.name),
