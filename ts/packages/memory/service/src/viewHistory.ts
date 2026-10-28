@@ -289,11 +289,12 @@ export class ViewHistory<T> {
     public async historyForRecord<R>(
         id: string,
         expectedHead?: string | null,
+        validateHead = true,
     ): Promise<Array<{ commitId: string; record: R | undefined }>> {
         await this.assertReadable();
         const head =
             expectedHead === undefined ? await this.head() : expectedHead;
-        await this.assertHead(head);
+        if (validateHead) await this.assertHead(head);
         if (!head) return [];
         const commits = await git.log({ ...this.options(), ref: head });
         const records = new Map<string, Promise<R>>();
@@ -319,7 +320,10 @@ export class ViewHistory<T> {
             recordTrees.push(
                 recordEntry
                     ? readTree(recordEntry.oid)
-                    : await this.legacyRecordTree(entry.oid, head),
+                    : await this.legacyRecordTree(
+                          entry.oid,
+                          validateHead ? head : undefined,
+                      ),
             );
         }
         const result = await Promise.all(
@@ -333,13 +337,14 @@ export class ViewHistory<T> {
                 ),
             })),
         );
-        await this.assertHead(head);
+        if (validateHead) await this.assertHead(head);
+        else await this.assertReadable();
         return result;
     }
 
     private async legacyRecordTree(
         commitId: string,
-        expectedHead: string,
+        expectedHead?: string,
     ): Promise<TreeEntry[]> {
         const cache = path.join(this.gitdir, "view-record-index", commitId);
         const cached = await this.cachedRecordTree(cache);
@@ -348,7 +353,8 @@ export class ViewHistory<T> {
         // records once, inside the repository removed by the privacy swap.
         const release = await this.lock(true);
         try {
-            await this.assertHead(expectedHead);
+            if (expectedHead === undefined) await this.assertReadable();
+            else await this.assertHead(expectedHead);
             const cached = await this.cachedRecordTree(cache);
             if (cached) return cached;
             if (!this.records)

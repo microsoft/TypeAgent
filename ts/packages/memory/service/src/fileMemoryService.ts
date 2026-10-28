@@ -1421,7 +1421,7 @@ export class FileMemoryService
             eventVersion,
         });
         if (
-            previous?.readers &&
+            previous &&
             (previous.head !== head ||
                 previous.runtime.manifest.indexGeneration !==
                     runtime.manifest.indexGeneration ||
@@ -1553,12 +1553,8 @@ export class FileMemoryService
             await this.removeInactiveIndexGenerations(
                 corpusId,
                 generation,
-                false,
-                false,
+                true,
             );
-            const root = this.indexDirectory(corpusId);
-            if (!this.hasUnpublishedIndex(corpusId, root))
-                await this.collectIndexSegments(root);
         }
         const eventIndex = this.graphEventIndexes.get(corpusId);
         if (eventIndex && !this.eventIndexControllers.has(corpusId))
@@ -6812,9 +6808,9 @@ export class FileMemoryService
     private async cleanArchivedViewIndexes(corpusId: string): Promise<void> {
         if (
             !this.viewIndexRemovalBarriers.has(corpusId) &&
-            [...this.committedReaders].some(
-                (read) => read.runtime.manifest.corpus.corpusId === corpusId,
-            )
+            (this.hasCommittedReaders(corpusId) ||
+                this.committedCorpora.get(corpusId)?.head !==
+                    (await this.viewStore.getCommittedHead(corpusId)))
         ) {
             this.retiredCorpora.add(corpusId);
             return;
@@ -11230,7 +11226,6 @@ export class FileMemoryService
         corpusId: string,
         activeGeneration: string,
         forceCollection = false,
-        reclaim = true,
     ): Promise<void> {
         validateIndexGeneration(activeGeneration);
         const root = this.indexDirectory(corpusId);
@@ -11313,7 +11308,7 @@ export class FileMemoryService
                     });
                 }),
         );
-        if (reclaim && !this.hasUnpublishedIndex(corpusId, root))
+        if (!this.hasUnpublishedIndex(corpusId, root))
             await this.reclaimIndexSegments(corpusId, root, forceCollection);
     }
 

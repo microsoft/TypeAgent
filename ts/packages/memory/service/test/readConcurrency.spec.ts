@@ -231,6 +231,16 @@ describe("snapshot-safe indexed reads", () => {
         expect(older.matches[0].snippet).toBe("Zephyr deployment evidence");
     });
 
+    test("publication reclaims its previously committed generation even without an older active reader", async () => {
+        await documentSearch();
+        const oldDirectory = searchedDirectories.documents.at(-1)!;
+        await service.reindexCorpus(corpusId);
+        expect((await service.drainMaintenance(5000)).settled).toBe(true);
+        await expect(readdir(oldDirectory)).rejects.toThrow();
+        expect((await documentSearch()).matches).toHaveLength(1);
+        expect(searchedDirectories.documents.at(-1)).not.toBe(oldDirectory);
+    });
+
     test("failed reindex preserves the healthy generation", async () => {
         await documentSearch();
         const directory = searchedDirectories.documents.at(-1);

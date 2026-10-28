@@ -1910,7 +1910,7 @@ export class TypedViewStore {
         const commits = (
             await this.history(request.corpusId).historyForRecord<
                 ViewVersion[]
-            >(request.viewId, head)
+            >(request.viewId, head, committed?.corpusId !== request.corpusId)
         ).reverse();
         const seen = new Set<string>();
         const entries = commits.flatMap(({ commitId, record }) => {

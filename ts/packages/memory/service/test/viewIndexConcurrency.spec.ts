@@ -296,11 +296,13 @@ describe("detached view index preparation", () => {
                     "event search",
                     service.searchEvents({ corpusId, query: "pressure" }),
                 ),
+                read("history", service.getViewHistory(request)),
             ]);
             expect(values[0]).toEqual(policy);
             expect(values[1].head).toBe(snapshot.head);
             expect(values[2]).toBeDefined();
             expect(values[5].content).toContain("Inspect pressure");
+            expect(values[10].length).toBeGreaterThan(0);
         } finally {
             resume.resolve();
             await write;
@@ -309,6 +311,52 @@ describe("detached view index preparation", () => {
         expect(
             (await service.getViewPublicationPolicy(corpusId)).autoPublish,
         ).toBe(!policy.autoPublish);
+    });
+
+    test("archive retains the committed view index until publication, then reclaims it", async () => {
+        expect((await publish()).value?.indexState).toBe("ready");
+        const query = { corpusId, query: "pressure" };
+        expect(await service.searchViews(query)).toHaveLength(1);
+        const snapshot = await service.listViews(corpusId);
+        const view = snapshot.views[0];
+        const directory = service["viewIndexDirectory"](view);
+        const entered = deferred();
+        const resume = deferred();
+        releases.push(resume.resolve);
+        let hold = true;
+        const original = TypedViewStore.prototype.getCommittedHead;
+        const spy = jest
+            .spyOn(TypedViewStore.prototype, "getCommittedHead")
+            .mockImplementation(async function (
+                this: InstanceType<typeof TypedViewStore>,
+                id,
+            ) {
+                const head = await original.call(this, id);
+                if (hold && id === corpusId && head !== snapshot.head) {
+                    hold = false;
+                    entered.resolve();
+                    await resume.promise;
+                }
+                return head;
+            });
+        const archiving = service.archiveView({
+            corpusId,
+            viewId: view.viewId,
+            expectedVersion: view.version,
+            expectedHead: snapshot.head,
+        });
+        try {
+            await within(entered.promise);
+            expect(await within(service.searchViews(query))).toHaveLength(1);
+            expect(await readdir(directory)).not.toHaveLength(0);
+        } finally {
+            resume.resolve();
+            await archiving;
+            spy.mockRestore();
+        }
+        expect(await service.searchViews(query)).toHaveLength(0);
+        expect((await service.drainMaintenance(5000)).settled).toBe(true);
+        await expect(readdir(directory)).rejects.toThrow();
     });
 
     async function edit() {
