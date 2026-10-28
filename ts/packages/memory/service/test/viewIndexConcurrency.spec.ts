@@ -315,9 +315,14 @@ describe("detached view index preparation", () => {
 
     test("archive retains the committed view index until publication, then reclaims it", async () => {
         expect((await publish()).value?.indexState).toBe("ready");
-        const query = { corpusId, query: "pressure" };
+        const query = {
+            corpusId,
+            query: "pressure",
+            freshness: "current" as const,
+        };
         expect(await service.searchViews(query)).toHaveLength(1);
         const snapshot = await service.listViews(corpusId);
+        if (!snapshot.head) throw new Error("Published view head is missing");
         const view = snapshot.views[0];
         const directory = service["viewIndexDirectory"](view);
         const entered = deferred();
