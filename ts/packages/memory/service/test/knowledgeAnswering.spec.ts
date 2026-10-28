@@ -185,6 +185,45 @@ describe("service source-plus-view answer integration", () => {
         await rm(root, { recursive: true, force: true });
     });
 
+    test("startup emits its own trace and shares one initialization promise", async () => {
+        const flag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        const warn = console.warn;
+        const logs: string[] = [];
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        console.warn = (line: unknown) => logs.push(String(line));
+        try {
+            const initialized = service.initialize();
+            expect(service.initialize()).toBe(initialized);
+            await initialized;
+            await service.initialize();
+            const stages = logs.map(
+                (line): { stage: string; scope: string; traceId: string } =>
+                    JSON.parse(line.replace("[memory-search-timing] ", "")),
+            );
+            expect(stages.map((item) => item.stage)).toEqual(
+                expect.arrayContaining([
+                    "service.initialize.storageLock",
+                    "service.initialize.batches",
+                    "service.initialize.changes",
+                    "service.initialize.jobs",
+                    "service.initialize",
+                ]),
+            );
+            expect(
+                stages.filter((item) => item.stage === "service.initialize"),
+            ).toHaveLength(1);
+            expect(
+                stages.every((item) => item.scope === "service.initialize"),
+            ).toBe(true);
+            expect(new Set(stages.map((item) => item.traceId)).size).toBe(1);
+        } finally {
+            console.warn = warn;
+            if (flag === undefined)
+                delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+            else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = flag;
+        }
+    });
+
     async function ingest(corpusId: string, sourceId: string, text: string) {
         const receipt = await service.ingestDocument({
             corpusId,

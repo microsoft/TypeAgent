@@ -1898,187 +1898,210 @@ export class FileMemoryService
         if (this.closed) {
             return Promise.reject(new Error("Memory service is closed"));
         }
-        this.initializePromise ??= timeSearchStage("service.initialize", () =>
-            timeSearchStage("service.initialize.storageLock", () =>
-                this.acquireStorageLock(),
-            ).then(async () => {
-                await timeSearchStage("service.initialize.batches", () =>
-                    this.batchStore.recover(),
-                );
-                const directories = await readdir(this.rootDirectory, {
-                    withFileTypes: true,
-                });
-                for (const directory of directories) {
-                    if (
-                        directory.isDirectory() &&
-                        /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(
-                            directory.name,
-                        )
-                    ) {
+        this.initializePromise ??= runWithSearchTiming(
+            undefined,
+            "service.initialize",
+            () =>
+                timeSearchStage("service.initialize", () =>
+                    timeSearchStage("service.initialize.storageLock", () =>
+                        this.acquireStorageLock(),
+                    ).then(async () => {
                         await timeSearchStage(
-                            "service.initialize.collection",
-                            async () => {
+                            "service.initialize.batches",
+                            () => this.batchStore.recover(),
+                        );
+                        const directories = await readdir(this.rootDirectory, {
+                            withFileTypes: true,
+                        });
+                        for (const directory of directories) {
+                            if (
+                                directory.isDirectory() &&
+                                /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(
+                                    directory.name,
+                                )
+                            ) {
                                 await timeSearchStage(
-                                    "service.initialize.views",
+                                    "service.initialize.collection",
                                     async () => {
-                                        await this.cleanManifestStaging(
-                                            directory.name,
-                                        );
-                                        await rm(
-                                            this.viewIndexStagingDirectory(
-                                                directory.name,
-                                            ),
-                                            {
-                                                recursive: true,
-                                                force: true,
+                                        await timeSearchStage(
+                                            "service.initialize.views",
+                                            async () => {
+                                                await this.cleanManifestStaging(
+                                                    directory.name,
+                                                );
+                                                await rm(
+                                                    this.viewIndexStagingDirectory(
+                                                        directory.name,
+                                                    ),
+                                                    {
+                                                        recursive: true,
+                                                        force: true,
+                                                    },
+                                                );
+                                                await this.viewStore.recover(
+                                                    directory.name,
+                                                );
+                                                await this.cleanArchivedViewIndexes(
+                                                    directory.name,
+                                                );
+                                                await this.viewStore.recoverViewBuilds(
+                                                    directory.name,
+                                                );
+                                                await this.viewStore.ensureReadProjection(
+                                                    directory.name,
+                                                );
                                             },
+                                            { corpusId: directory.name },
                                         );
-                                        await this.viewStore.recover(
-                                            directory.name,
-                                        );
-                                        await this.cleanArchivedViewIndexes(
-                                            directory.name,
-                                        );
-                                        await this.viewStore.recoverViewBuilds(
-                                            directory.name,
-                                        );
-                                        await this.viewStore.ensureReadProjection(
-                                            directory.name,
-                                        );
+                                        let manifest:
+                                            | Pick<
+                                                  CorpusManifest,
+                                                  | "authorizedSourceRemoval"
+                                                  | "pendingCorpusClear"
+                                                  | "indexGeneration"
+                                              >
+                                            | undefined =
+                                            await this.readSerializedManifest(
+                                                directory.name,
+                                            );
+                                        if (manifest) {
+                                            await this.agentSessionStore.recover(
+                                                directory.name,
+                                            );
+                                            if (manifest.pendingCorpusClear) {
+                                                const runtime =
+                                                    await this.getCorpusRuntime(
+                                                        directory.name,
+                                                        true,
+                                                    );
+                                                await this.completeCorpusClear(
+                                                    directory.name,
+                                                    runtime,
+                                                );
+                                                manifest = runtime.manifest;
+                                            }
+                                            if (
+                                                manifest.authorizedSourceRemoval
+                                            ) {
+                                                const runtime =
+                                                    await this.getCorpusRuntime(
+                                                        directory.name,
+                                                        true,
+                                                    );
+                                                await this.completeAuthorizedSourceRemoval(
+                                                    directory.name,
+                                                    runtime,
+                                                );
+                                                manifest = runtime.manifest;
+                                            }
+                                            this.scheduleSourceSynopses(
+                                                directory.name,
+                                            );
+                                            const runtime =
+                                                await timeSearchStage(
+                                                    "service.initialize.runtime",
+                                                    () =>
+                                                        this.getCorpusRuntime(
+                                                            directory.name,
+                                                        ),
+                                                    {
+                                                        corpusId:
+                                                            directory.name,
+                                                    },
+                                                );
+                                            this.scheduleIndexCollection(
+                                                directory.name,
+                                                this.indexDirectory(
+                                                    directory.name,
+                                                ),
+                                            );
+                                            await timeSearchStage(
+                                                "service.initialize.textPurge",
+                                                () =>
+                                                    this.textStore(
+                                                        directory.name,
+                                                    ).purge(
+                                                        runtime.manifest
+                                                            .sources,
+                                                    ),
+                                                { corpusId: directory.name },
+                                            );
+                                            await timeSearchStage(
+                                                "service.initialize.topics",
+                                                () =>
+                                                    this.reconcileTopics(
+                                                        directory.name,
+                                                        runtime,
+                                                    ),
+                                                { corpusId: directory.name },
+                                            );
+                                            await timeSearchStage(
+                                                "service.initialize.knowledge",
+                                                () =>
+                                                    this.recoverKnowledge(
+                                                        directory.name,
+                                                    ),
+                                                { corpusId: directory.name },
+                                            );
+                                            this.knowledge.schedule(
+                                                directory.name,
+                                            );
+                                            if (!this.informationalWikiEnabled)
+                                                return;
+                                            await timeSearchStage(
+                                                "service.initialize.wikiRecovery",
+                                                () =>
+                                                    this.enqueueWrite(
+                                                        directory.name,
+                                                        () =>
+                                                            this.recoverWikiConsolidationsLocked(
+                                                                directory.name,
+                                                            ),
+                                                    ),
+                                                { corpusId: directory.name },
+                                            );
+                                            const views = (
+                                                await this.viewStore.listViews(
+                                                    directory.name,
+                                                )
+                                            ).views;
+                                            for (const kind of [
+                                                "projects",
+                                                "wiki",
+                                            ] as const) {
+                                                const family =
+                                                    await this.reconcileInformationalFamily(
+                                                        directory.name,
+                                                        kind,
+                                                        manifest.indexGeneration,
+                                                        views,
+                                                    );
+                                                if (
+                                                    family.enabled &&
+                                                    family.dirty &&
+                                                    !family.error
+                                                )
+                                                    this.scheduleWikiMaintenance(
+                                                        directory.name,
+                                                        kind,
+                                                    );
+                                            }
+                                        }
                                     },
                                     { corpusId: directory.name },
                                 );
-                                let manifest:
-                                    | Pick<
-                                          CorpusManifest,
-                                          | "authorizedSourceRemoval"
-                                          | "pendingCorpusClear"
-                                          | "indexGeneration"
-                                      >
-                                    | undefined =
-                                    await this.readSerializedManifest(
-                                        directory.name,
-                                    );
-                                if (manifest) {
-                                    await this.agentSessionStore.recover(
-                                        directory.name,
-                                    );
-                                    if (manifest.pendingCorpusClear) {
-                                        const runtime =
-                                            await this.getCorpusRuntime(
-                                                directory.name,
-                                                true,
-                                            );
-                                        await this.completeCorpusClear(
-                                            directory.name,
-                                            runtime,
-                                        );
-                                        manifest = runtime.manifest;
-                                    }
-                                    if (manifest.authorizedSourceRemoval) {
-                                        const runtime =
-                                            await this.getCorpusRuntime(
-                                                directory.name,
-                                                true,
-                                            );
-                                        await this.completeAuthorizedSourceRemoval(
-                                            directory.name,
-                                            runtime,
-                                        );
-                                        manifest = runtime.manifest;
-                                    }
-                                    this.scheduleSourceSynopses(directory.name);
-                                    const runtime = await timeSearchStage(
-                                        "service.initialize.runtime",
-                                        () =>
-                                            this.getCorpusRuntime(
-                                                directory.name,
-                                            ),
-                                        { corpusId: directory.name },
-                                    );
-                                    this.scheduleIndexCollection(
-                                        directory.name,
-                                        this.indexDirectory(directory.name),
-                                    );
-                                    await timeSearchStage(
-                                        "service.initialize.textPurge",
-                                        () =>
-                                            this.textStore(
-                                                directory.name,
-                                            ).purge(runtime.manifest.sources),
-                                        { corpusId: directory.name },
-                                    );
-                                    await timeSearchStage(
-                                        "service.initialize.topics",
-                                        () =>
-                                            this.reconcileTopics(
-                                                directory.name,
-                                                runtime,
-                                            ),
-                                        { corpusId: directory.name },
-                                    );
-                                    await timeSearchStage(
-                                        "service.initialize.knowledge",
-                                        () =>
-                                            this.recoverKnowledge(
-                                                directory.name,
-                                            ),
-                                        { corpusId: directory.name },
-                                    );
-                                    this.knowledge.schedule(directory.name);
-                                    if (!this.informationalWikiEnabled) return;
-                                    await timeSearchStage(
-                                        "service.initialize.wikiRecovery",
-                                        () =>
-                                            this.enqueueWrite(
-                                                directory.name,
-                                                () =>
-                                                    this.recoverWikiConsolidationsLocked(
-                                                        directory.name,
-                                                    ),
-                                            ),
-                                        { corpusId: directory.name },
-                                    );
-                                    const views = (
-                                        await this.viewStore.listViews(
-                                            directory.name,
-                                        )
-                                    ).views;
-                                    for (const kind of [
-                                        "projects",
-                                        "wiki",
-                                    ] as const) {
-                                        const family =
-                                            await this.reconcileInformationalFamily(
-                                                directory.name,
-                                                kind,
-                                                manifest.indexGeneration,
-                                                views,
-                                            );
-                                        if (
-                                            family.enabled &&
-                                            family.dirty &&
-                                            !family.error
-                                        )
-                                            this.scheduleWikiMaintenance(
-                                                directory.name,
-                                                kind,
-                                            );
-                                    }
-                                }
-                            },
-                            { corpusId: directory.name },
+                            }
+                        }
+                        await timeSearchStage(
+                            "service.initialize.changes",
+                            () => this.pruneStoredChanges(),
                         );
-                    }
-                }
-                await timeSearchStage("service.initialize.changes", () =>
-                    this.pruneStoredChanges(),
-                );
-                await timeSearchStage("service.initialize.jobs", () =>
-                    this.recoverInterruptedJobs(),
-                );
-                this.startMaintenanceReconciliation();
-            }),
+                        await timeSearchStage("service.initialize.jobs", () =>
+                            this.recoverInterruptedJobs(),
+                        );
+                        this.startMaintenanceReconciliation();
+                    }),
+                ),
         );
         return this.initializePromise;
     }
