@@ -321,7 +321,13 @@ describe("strict understanding reader", () => {
 
 describe("understanding lifecycle and orchestration", () => {
     test("returns ready exact sources and scoped one-parent context without another model for source reads", async () => {
-        const { engine, calls } = fixture();
+        const { engine, host, calls } = fixture();
+        const questions: string[] = [];
+        const answer = host.answer.bind(host);
+        host.answer = (request, reader) => {
+            questions.push(request.question);
+            return answer(request, reader);
+        };
         const first = await engine.understand(request);
         expect(first.citations[0]).toMatchObject({
             id: "s0",
@@ -343,6 +349,24 @@ describe("understanding lifecycle and orchestration", () => {
         expect(calls[1].parentContext).toMatchObject({
             question: request.question,
             answer: first.answer?.summary.text,
+        });
+        expect(questions[1]).toContain(first.answer?.summary.text);
+        engine.close();
+    });
+    test("preserves a maximum-length follow-on instead of exceeding the retrieval question limit", async () => {
+        const { engine, host } = fixture();
+        const first = await engine.understand(request);
+        const question = "q".repeat(2000);
+        const answer = host.answer.bind(host);
+        host.answer = (request, reader) => {
+            expect(request.question).toBe(question);
+            return answer(request, reader);
+        };
+        await engine.understand({
+            ...request,
+            question,
+            parentSnapshotId: first.snapshotId,
+            parentTurnId: first.turnId,
         });
         engine.close();
     });
@@ -403,6 +427,60 @@ describe("understanding lifecycle and orchestration", () => {
         });
         expect(first.modules).toMatchObject([
             { kind: "timeline", status: "unavailable" },
+        ]);
+        engine.close();
+    });
+    test("deduplicates repeated turn dates before applying the timeline candidate bound", async () => {
+        const earlier = source();
+        earlier.snippet = Array.from(
+            { length: 20 },
+            (_, index) =>
+                `[Session 0; date March-15-2024; turn ${index}; speaker user]\nEarlier request.`,
+        ).join("\n");
+        const later = source("later");
+        later.snippet =
+            "[Session 1; date April-10-2024; turn 1; speaker assistant]\nLater advice.";
+        const { engine } = fixture([earlier, later]);
+        const first = await engine.understand({
+            ...request,
+            selection: { mode: "only", modules: ["timeline"] },
+        });
+        const timeline = await engine.module({
+            corpusId: "corpus",
+            snapshotId: first.snapshotId,
+            kind: "timeline",
+        });
+        expect(timeline.timeline?.map((item) => item.date)).toEqual([
+            "2024-03-15",
+            "2024-04-10",
+        ]);
+        engine.close();
+    });
+    test("retains explicit session provenance from a source title when an indexed window omits its header", async () => {
+        const earlier = source();
+        earlier.title = "Conversation 3; session 0; date March-15-2024";
+        earlier.snippet = "An indexed window without the original turn header.";
+        const later = source("later");
+        later.title = "Conversation 3; session 1; date April-10-2024";
+        later.snippet = "A later indexed window, also without a header.";
+        const { engine } = fixture([earlier, later]);
+        const result = await engine.understand({
+            ...request,
+            selection: { mode: "only", modules: ["timeline"] },
+        });
+        const timeline = await engine.module({
+            corpusId: "corpus",
+            snapshotId: result.snapshotId,
+            kind: "timeline",
+        });
+        expect(
+            timeline.timeline?.map((item) => ({
+                date: item.date,
+                kind: item.kind,
+            })),
+        ).toEqual([
+            { date: "2024-03-15", kind: "sourceSession" },
+            { date: "2024-04-10", kind: "sourceSession" },
         ]);
         engine.close();
     });

@@ -943,7 +943,19 @@ export class KnowProCorpusIndex implements CorpusIndex {
             );
         const selection = selectIndexedFragments(
             blocks.sort((a, b) => b.score - a.score),
-            request,
+            {
+                ...request,
+                terms: request.query
+                    ? [
+                          ...new Set([
+                              ...request.terms,
+                              ...[...requested].filter(
+                                  (term) => term.length <= 200,
+                              ),
+                          ]),
+                      ]
+                    : request.terms,
+            },
         );
         selection.limited ||= followed.limited;
         if (selection.diagnostics)

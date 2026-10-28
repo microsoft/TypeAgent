@@ -89,6 +89,16 @@ test("late table cells outrank repeated early individual query words and keep as
     ).toBe(true);
 });
 
+test("a rare factual selector outranks repeated generic terms in a long conversation", () => {
+    const report = "I reduced the gallery script from 140 lines to 95 lines.";
+    const text = `${"The JavaScript gallery is discussed here. ".repeat(600)}\n\n${report}`;
+    const selected = select(text, ["javascript", "gallery", "reduced"], {
+        query: "How much was the gallery JavaScript reduced?",
+        maxFragments: 1,
+    });
+    expect(selected.fragments[0].snippet).toContain(report);
+});
+
 test("repeated early literal matches cannot hide a late literal clarification", () => {
     const late =
         "Budget review correction: the former denominator is withdrawn; only this current cohort is supported.";

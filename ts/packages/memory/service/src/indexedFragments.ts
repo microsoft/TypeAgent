@@ -302,6 +302,11 @@ function candidateWindows(
         const words = matchedWindows(block, terms, window, wholeWords);
         const primary = passages.length ? passages : words;
         if (wholeWords) {
+            const frequencies = new Map<string, number>();
+            for (const word of block.text
+                .toLocaleLowerCase()
+                .match(/[\p{L}\p{N}-]+/gu) ?? [])
+                frequencies.set(word, (frequencies.get(word) ?? 0) + 1);
             const coverage = (candidate: WindowCandidate) => {
                 const text = block.text
                     .slice(candidate.offset, candidate.offset + window)
@@ -309,7 +314,14 @@ function candidateWindows(
                 const words = new Set<string>(
                     text.match(/[\p{L}\p{N}-]+/gu) ?? [],
                 );
-                return terms.filter((term) => words.has(term)).length;
+                return terms.reduce(
+                    (score, term) =>
+                        score +
+                        (words.has(term)
+                            ? 1 / Math.sqrt(frequencies.get(term) ?? 1)
+                            : 0),
+                    0,
+                );
             };
             primary.sort((a, b) => coverage(b) - coverage(a));
         }

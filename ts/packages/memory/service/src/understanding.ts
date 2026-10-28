@@ -93,6 +93,27 @@ function publicAnswer(reader: UnderstandingReaderResult) {
     return answer;
 }
 
+function retrievalQuestion(question: string, parent?: Snapshot): string {
+    if (!parent) return question;
+    const context: string[] = [];
+    for (const part of [
+        parent.result.answer?.summary.text
+            ? `Previous grounded summary (retrieval context, not independent evidence): ${parent.result.answer.summary.text}`
+            : undefined,
+        `Previous question: ${parent.result.question}`,
+    ]) {
+        if (
+            part &&
+            [...context, part, `Follow-on: ${question}`].join("\n").length <=
+                2000
+        )
+            context.push(part);
+    }
+    return context.length
+        ? [...context, `Follow-on: ${question}`].join("\n")
+        : question;
+}
+
 export class MemoryUnderstanding {
     private readonly store: UnderstandingStore<Snapshot>;
     private active = 0;
@@ -185,9 +206,7 @@ export class MemoryUnderstanding {
     ): Promise<UnderstandingResult> {
         const epoch = this.store.version;
         const parent = await this.parent(input);
-        const question = parent
-            ? `Previous question: ${parent.result.question}\nFollow-on: ${input.question.trim()}`
-            : input.question.trim();
+        const question = retrievalQuestion(input.question.trim(), parent);
         const snapshot: Snapshot = {
             corpusId: input.corpusId,
             input: structuredClone(input),
@@ -467,17 +486,29 @@ export class MemoryUnderstanding {
             result.reason = "No matching graph identity";
             return;
         }
+        const inventory = await this.host.queryGraphSupport({
+            corpusId: snapshot.corpusId,
+            generation: entity.generation,
+            nodeId: entity.nodeId,
+            pageSize: 1,
+        });
+        if (
+            inventory.generation !== entity.generation ||
+            !inventory.items.length
+        ) {
+            result.reason = "Graph inventory changed; ask again";
+            return;
+        }
         const graph = await this.host.queryKnowledgeGraph({
             corpusId: snapshot.corpusId,
             kind: "entities",
             nodeId: entity.nodeId,
-            expectedGeneration: entity.generation,
             maxNodes: 12,
             maxEdges: 16,
             evidenceKinds: ["document"],
         });
-        if (graph.state !== "ready" || graph.generation !== entity.generation) {
-            result.reason = `Graph changed or is ${graph.state}; ask again`;
+        if (graph.state !== "ready") {
+            result.reason = `Graph is ${graph.state}; ask again`;
             return;
         }
         const support: NonNullable<UnderstandingModuleResult["support"]> = [];

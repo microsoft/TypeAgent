@@ -59,7 +59,9 @@ function sourceDates(item: AnswerEvidence): UnderstandingDate[] {
         if (found.role === "eventTime")
             add(found.value, "event", found.quote ?? found.value.raw);
     if (dates.length) return dates;
-    const headers = temporalContextFromHeaders(item.source.snippet);
+    const headers =
+        temporalContextFromHeaders(item.source.snippet) ??
+        temporalContextFromHeaders(item.source.title);
     for (const scope of headers?.scopes ?? []) {
         if (scope.messageTime)
             add(
@@ -77,6 +79,7 @@ export function understandingDates(
     evidence: AnswerEvidence[],
     warnings: string[],
 ): UnderstandingDate[] {
+    const seen = new Set<string>();
     return evidence
         .flatMap((item) => {
             try {
@@ -87,6 +90,18 @@ export function understandingDates(
                 );
                 return [];
             }
+        })
+        .filter((date) => {
+            const key = JSON.stringify([
+                date.evidenceId,
+                date.date,
+                date.kind,
+                date.precision,
+                date.label,
+            ]);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
         })
         .slice(0, 16);
 }
@@ -120,13 +135,27 @@ export async function understandingCandidates(
     candidates.dates = understandingDates(evidence, candidates.warnings);
     if (!wantsGraph(request) || !host.queryKnowledgeGraph) return candidates;
     try {
+        if (request.focus) {
+            if (!host.queryGraphSupport)
+                throw new Error("Focused graph validation is unavailable");
+            const page = await host.queryGraphSupport({
+                corpusId: request.corpusId,
+                generation: request.focus.generation,
+                nodeId: request.focus.nodeId,
+                pageSize: 1,
+            });
+            if (
+                page.generation !== request.focus.generation ||
+                !page.items.length
+            )
+                throw new Error("Focused graph identity changed; reload it");
+        }
         const graph = await host.queryKnowledgeGraph({
             corpusId: request.corpusId,
             kind: "entities",
             ...(request.focus
                 ? {
                       nodeId: request.focus.nodeId,
-                      expectedGeneration: request.focus.generation,
                   }
                 : {}),
             maxNodes: 100,
