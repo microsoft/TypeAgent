@@ -9,6 +9,23 @@ import type {
 } from "@typeagent/browser-control-rpc/viewRpc";
 import type { MemoryHubReadService } from "./memoryHubQuery.mjs";
 
+function isIntegratedAnswerScope(
+    corpora: MemoryCenterCorpus[],
+    request: MemoryHubSearchRequest,
+): boolean {
+    return (
+        request.corpusId !== undefined &&
+        corpora.length === 1 &&
+        corpora[0].name !== conversationCorpusName &&
+        !request.sourceTypes?.length &&
+        !request.tags?.length &&
+        !request.dateFrom &&
+        !request.dateTo &&
+        !request.viewKinds?.length &&
+        (!request.conversationScope || request.conversationScope === "none")
+    );
+}
+
 export async function tryMemoryHubIntegratedAnswer(
     service: MemoryHubReadService,
     corpora: MemoryCenterCorpus[],
@@ -18,17 +35,7 @@ export async function tryMemoryHubIntegratedAnswer(
     if (!request.generateAnswer && !request.prepareUnderstanding) return false;
     const capability = (await service.getCapabilities()).derivedViews
         ?.integratedAnswering;
-    const eligible =
-        request.corpusId !== undefined &&
-        corpora.length === 1 &&
-        corpora[0].name !== conversationCorpusName &&
-        !request.sourceTypes?.length &&
-        !request.tags?.length &&
-        !request.dateFrom &&
-        !request.dateTo &&
-        !request.viewKinds?.length &&
-        (!request.conversationScope || request.conversationScope === "none");
-    if (!capability || !eligible) {
+    if (!capability || !isIntegratedAnswerScope(corpora, request)) {
         if (
             request.retrievalPolicy === "sourcesAndViews" ||
             request.knowledgeCheckpointId
