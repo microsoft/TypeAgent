@@ -6,7 +6,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { getMode, type Mode } from "../shared/plugin-config.js";
+import {
+    getBypassMacroToolsEnabled,
+    getMode,
+    type Mode,
+} from "../shared/plugin-config.js";
 import {
     connectToMacroOwner,
     type MacroOwnerConnection,
@@ -15,11 +19,13 @@ import {
 export interface MacroServerDependencies {
     connect: () => Promise<MacroOwnerConnection>;
     getMode: () => Mode;
+    getBypassMacroToolsEnabled?: () => boolean;
 }
 
 const defaultDependencies: MacroServerDependencies = {
     connect: connectToMacroOwner,
     getMode,
+    getBypassMacroToolsEnabled,
 };
 
 function result(value: unknown): CallToolResult {
@@ -57,30 +63,35 @@ export class MacroCatalogAdapter {
         state?: "draft" | "approved" | "disabled" | undefined;
         limit?: number | undefined;
     }) {
-        return this.call((connection) =>
-            connection.listMacros({
-                ...(request.state ? { state: request.state } : {}),
-                ...(request.limit !== undefined
-                    ? { limit: request.limit }
-                    : {}),
-            }),
+        return this.call(
+            (connection) =>
+                connection.listMacros({
+                    ...(request.state ? { state: request.state } : {}),
+                    ...(request.limit !== undefined
+                        ? { limit: request.limit }
+                        : {}),
+                }),
+            true,
         );
     }
 
     searchMacros(request: { query: string; limit?: number | undefined }) {
-        return this.call((connection) =>
-            connection.searchMacros({
-                query: request.query,
-                ...(request.limit !== undefined
-                    ? { limit: request.limit }
-                    : {}),
-            }),
+        return this.call(
+            (connection) =>
+                connection.searchMacros({
+                    query: request.query,
+                    ...(request.limit !== undefined
+                        ? { limit: request.limit }
+                        : {}),
+                }),
+            true,
         );
     }
 
     inspectMacro(request: { macroId: string; version?: number | undefined }) {
-        return this.call((connection) =>
-            connection.inspectMacro(this.macroRef(request)),
+        return this.call(
+            (connection) => connection.inspectMacro(this.macroRef(request)),
+            true,
         );
     }
 
@@ -88,8 +99,10 @@ export class MacroCatalogAdapter {
         macroId: string;
         version?: number | undefined;
     }) {
-        return this.call((connection) =>
-            connection.getMacroRequirements(this.macroRef(request)),
+        return this.call(
+            (connection) =>
+                connection.getMacroRequirements(this.macroRef(request)),
+            true,
         );
     }
 
@@ -117,7 +130,10 @@ export class MacroCatalogAdapter {
     }
 
     getMacroRun(request: { runId: string }) {
-        return this.call((connection) => connection.getMacroRun(request.runId));
+        return this.call(
+            (connection) => connection.getMacroRun(request.runId),
+            true,
+        );
     }
 
     async runMacro(
@@ -130,16 +146,14 @@ export class MacroCatalogAdapter {
         },
         signal?: AbortSignal,
     ): Promise<CallToolResult> {
-        if (this.dependencies.getMode() === "bypass") {
-            return errorResult(
-                "TypeAgent macro tools are disabled in bypass mode.",
-            );
-        }
-        const runId = randomUUID();
         let connection: MacroOwnerConnection | undefined;
         let removeAbort: (() => void) | undefined;
         try {
+            this.assertAccess(true);
+            signal?.throwIfAborted();
+            const runId = randomUUID();
             connection = await this.dependencies.connect();
+            signal?.throwIfAborted();
             const activeConnection = connection;
             if (signal) {
                 const cancel = () => {
@@ -188,14 +202,11 @@ export class MacroCatalogAdapter {
 
     private async call(
         operation: (connection: MacroOwnerConnection) => Promise<unknown>,
+        allowInBypass = false,
     ): Promise<CallToolResult> {
-        if (this.dependencies.getMode() === "bypass") {
-            return errorResult(
-                "TypeAgent macro tools are disabled in bypass mode.",
-            );
-        }
         let connection: MacroOwnerConnection | undefined;
         try {
+            this.assertAccess(allowInBypass);
             connection = await this.dependencies.connect();
             return result(await operation(connection));
         } catch (error) {
@@ -203,6 +214,20 @@ export class MacroCatalogAdapter {
         } finally {
             await connection?.close();
         }
+    }
+
+    private assertAccess(allowInBypass: boolean): void {
+        if (this.dependencies.getMode() !== "bypass") return;
+        if (
+            allowInBypass &&
+            this.dependencies.getBypassMacroToolsEnabled?.() === true
+        )
+            return;
+        throw new Error(
+            allowInBypass
+                ? "TypeAgent macro tools are disabled in bypass mode. Opt in with bypassMacroTools or TYPEAGENT_BYPASS_MACRO_TOOLS."
+                : "TypeAgent macro management tools are disabled in bypass mode.",
+        );
     }
 }
 

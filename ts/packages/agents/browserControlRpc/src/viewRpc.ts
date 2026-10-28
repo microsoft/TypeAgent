@@ -15,6 +15,10 @@ import type {
     AnswerDerivedReference,
     AnswerAssertionReference,
     AnswerRetrievalPolicy,
+    UnderstandingRequest,
+    UnderstandingResult,
+    UnderstandingModuleRequest,
+    UnderstandingModuleResult,
 } from "@typeagent/memory-service";
 import type { MemoryHubRunbookImportFunctions } from "./runbookImportViewTypes.js";
 import type { MemoryHubGraphFunctions } from "./memoryGraphViewTypes.js";
@@ -299,6 +303,12 @@ export type ViewSourceUsageRequest = {
 export type MemoryHubFunctions = {
     [M in keyof MemoryHubGraphFunctions]: MemoryHubGraphFunctions[M];
 } & {
+    memoryHubUnderstand(
+        params: UnderstandingRequest,
+    ): Promise<UnderstandingResult>;
+    memoryHubUnderstandingModule(
+        params: UnderstandingModuleRequest,
+    ): Promise<UnderstandingModuleResult>;
     memoryHubViewUsedBy(
         params: ViewSourceUsageRequest,
     ): Promise<ViewSourceUsagePage>;
@@ -415,6 +425,8 @@ export type ViewCancelResult = {
 
 export type ViewMethod = keyof ViewInvokeFunctions;
 export const viewMethods = [
+    "memoryHubUnderstand",
+    "memoryHubUnderstandingModule",
     "memoryHubGraph",
     "memoryHubGraphSupport",
     "memoryHubGraphEvent",

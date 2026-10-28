@@ -16,6 +16,7 @@ import {
 import { createAutomationViewFunctions } from "./automationViewHandlers.mjs";
 import { createMemoryHubFunctions } from "./memoryHub.mjs";
 import { createMemoryHubQueryFunctions } from "./memoryHubQuery.mjs";
+import { createMemoryHubUnderstandingFunctions } from "./memoryHubUnderstanding.mjs";
 import { createMemoryHubExploreFunctions } from "./memoryHubExplore.mjs";
 import { createMemoryHubGraphFunctions } from "./memoryHubGraph.mjs";
 import { createMemoryHubKnowledgeFunctions } from "./memoryHubKnowledge.mjs";
@@ -43,6 +44,7 @@ export function createViewServiceDomain(
     return {
         ...handlers,
         ...hub,
+        ...createMemoryHubUnderstandingFunctions(service),
         ...createMemoryHubQueryFunctions(
             service,
             () => context.conversationId,

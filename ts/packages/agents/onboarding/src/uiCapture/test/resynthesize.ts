@@ -24,13 +24,13 @@ try {
     process.stderr.write(`[resyn] could not load env from ${envPath}: ${e}\n`);
 }
 
-// GPT-5 reasoning calls easily take 90+ seconds for large prompts (the
+// Reasoning calls easily take 90+ seconds for large prompts (the
 // synthesizer's neutral-classification + clustering passes each push 80KB+).
 // Override the default 60s aiclient timeout. Note: aiclient's getEnvSetting
 // short-circuits on its empty-string default and never falls back to the
 // non-suffixed var when an endpoint suffix is set, so we must set the
 // suffixed variant explicitly.
-process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_5 = "300000";
+process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_6_1_TERRA = "300000";
 process.env.AZURE_OPENAI_MAX_TIMEOUT = "300000";
 process.env.OPENAI_MAX_TIMEOUT = "300000";
 

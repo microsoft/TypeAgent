@@ -25,6 +25,7 @@ test("actual P0 C4 clarification consolidates generated reviews losslessly, old 
     const open = () =>
         new FileMemoryService(root, {
             sourceSynopses: false,
+            discoveryPolicy: "off",
             indexFactory: (_id, directory) => new ConsolidationIndex(directory),
             viewSynthesisAdapter: adapter,
         });
@@ -173,6 +174,7 @@ test("actual P0 C5 scope split keeps an old navigation article and independent I
     const { adapter } = offlineConsolidationAdapter();
     const service = new FileMemoryService(root, {
         sourceSynopses: false,
+        discoveryPolicy: "off",
         indexFactory: (_id, directory) => new ConsolidationIndex(directory),
         viewSynthesisAdapter: adapter,
     });
@@ -236,6 +238,7 @@ test("actual P0 C7 authenticated title/annotation and historical human edits pro
     const { adapter, calls } = offlineConsolidationAdapter();
     const service = new FileMemoryService(root, {
         sourceSynopses: false,
+        discoveryPolicy: "off",
         indexFactory: (_id, directory) => new ConsolidationIndex(directory),
         viewSynthesisAdapter: adapter,
     });

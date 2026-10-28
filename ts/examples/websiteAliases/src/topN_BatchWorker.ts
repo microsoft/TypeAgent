@@ -110,14 +110,14 @@ function createModel(fastModel: boolean = true): ChatModelWithStreaming {
             apiSettings = openai.localOpenAIApiSettingsFromEnv(
                 openai.ModelType.Chat,
                 undefined,
-                openai.GPT_5_NANO,
+                openai.GPT_6_LUNA,
                 ["websiteAliases"],
             );
         } else {
             apiSettings = openai.localOpenAIApiSettingsFromEnv(
                 openai.ModelType.Chat,
                 undefined,
-                openai.GPT_5,
+                openai.GPT_6_1_TERRA,
                 ["websiteAliases"],
             );
         }

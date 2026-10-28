@@ -30,6 +30,7 @@ import { maintenanceManifest } from "./viewMaintenance.js";
 import {
     viewReadProjection,
     viewReadProjectionEntry,
+    viewReadProjectionVersion,
     type ViewInventoryBuild,
     type ViewReadProjection,
 } from "./viewReadProjection.js";
@@ -329,7 +330,7 @@ export class TypedViewStore {
         const { head, value } = await history.readEntry<ViewReadProjection>(
             viewReadProjectionEntry,
         );
-        if (!head || value) return;
+        if (!head || value?.version === viewReadProjectionVersion) return;
         const { state } = await history.read(head);
         await history.commit(
             head,
@@ -550,7 +551,9 @@ export class TypedViewStore {
             throw new Error("Topic summary changed supplied concept evidence");
         concept.summary = output.summary;
         concept.summaryState = "ready";
-        concept.citations = structuredClone(output.citations);
+        if (concept.validation)
+            concept.summaryCitations = structuredClone(output.citations);
+        else concept.citations = structuredClone(output.citations);
         validateTopicSnapshot(snapshot);
         await this.commitBuildState(
             corpusId,

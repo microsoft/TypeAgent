@@ -13,6 +13,58 @@ import {
 } from "@typeagent/browser-control-rpc/viewRoutes";
 import { validateViewRequest } from "../dist/views/server/features/views/viewValidation.mjs";
 
+test("understanding crosses the strict gateway without silently broadening scope", () => {
+    for (const [method, params] of [
+        [
+            "memoryHubUnderstand",
+            {
+                corpusId: "corpus",
+                question: "Explain the migration",
+                selection: {
+                    mode: "only",
+                    modules: ["relationships", "concepts"],
+                },
+            },
+        ],
+        [
+            "memoryHubUnderstandingModule",
+            {
+                corpusId: "corpus",
+                snapshotId: "00000000-0000-4000-8000-000000000001",
+                kind: "concepts",
+            },
+        ],
+    ])
+        assert.equal(validateViewRequest({ method, params }).method, method);
+    for (const params of [
+        { question: "Explain the migration" },
+        {
+            corpusId: "corpus",
+            question: "Explain the migration",
+            tags: ["hidden-filter"],
+        },
+        { corpusId: "corpus", question: "Explain", conversationScope: "all" },
+        {
+            corpusId: "corpus",
+            question: "Explain",
+            parentSnapshotId: "00000000-0000-4000-8000-000000000001",
+        },
+    ])
+        assert.throws(() =>
+            validateViewRequest({ method: "memoryHubUnderstand", params }),
+        );
+    assert.throws(() =>
+        validateViewRequest({
+            method: "memoryHubUnderstandingModule",
+            params: {
+                corpusId: "corpus",
+                snapshotId: "00000000-0000-4000-8000-000000000001",
+                kind: "arbitraryHtml",
+            },
+        }),
+    );
+});
+
 test("topic browse/rebuild and maintenance cross strict gateway with honest bounds", () => {
     for (const [method, params] of [
         [

@@ -36,6 +36,7 @@ export type MemoryHubSearchOptions = {
     onError: (error: unknown) => void;
     onQueryChanged?: (query: string) => void;
     onNotify?: (message: string) => void;
+    onUnderstand?: (request: MemoryHubSearchRequest) => void;
 };
 const RECENT_KEY = "memoryHub.recentQueries";
 
@@ -235,6 +236,15 @@ export function mountMemoryHubSearch(
     );
     filters.append(filtersSummary, filterFields, dateNote);
     form.append(queryLabel, submit, filters);
+    const understand = action("Understand", () => {
+        try {
+            options.onUnderstand?.(readRequest());
+        } catch (error) {
+            report(error, status);
+        }
+    });
+    understand.hidden = true;
+    form.append(understand);
     const recent = node("div", undefined, "phase2-controls");
     recent.setAttribute("aria-label", "Recent queries");
     const status = node(
@@ -910,6 +920,13 @@ export function mountMemoryHubSearch(
     }
     return {
         show,
+        setUnderstandingEnabled(enabled: boolean) {
+            understand.hidden = !enabled || !options.onUnderstand;
+        },
+        inspect(evidence: MemoryHubEvidence, focus: HTMLElement, owner = root) {
+            owner.append(dialog);
+            openEvidence(evidence, focus);
+        },
         scopeChanged() {
             searchVersion++;
             evidenceVersion++;
@@ -923,6 +940,10 @@ export function mountMemoryHubSearch(
             status.textContent =
                 "Scope changed. Search again to load evidence for this scope.";
             if (dialog.open) dialog.close();
+            selectedEvidence = undefined;
+            evidencePage = undefined;
+            original.textContent = "";
+            originalView.replaceChildren();
         },
         dispose() {
             disposed = true;
@@ -930,6 +951,7 @@ export function mountMemoryHubSearch(
             evidenceVersion++;
             unsubscribePreferences();
             if (dialog.open) dialog.close();
+            dialog.remove();
             root.remove();
         },
     };

@@ -36,27 +36,35 @@ function calendarDate(parts: number[]): Date {
     return date;
 }
 
+function monthNumber(raw: string): number {
+    const spelling = raw.toLowerCase();
+    return (
+        [
+            "january",
+            "february",
+            "march",
+            "april",
+            "may",
+            "june",
+            "july",
+            "august",
+            "september",
+            "october",
+            "november",
+            "december",
+        ].findIndex(
+            (month) => month === spelling || month.slice(0, 3) === spelling,
+        ) + 1
+    );
+}
+
 function parseRfcTemporalValue(raw: string): TemporalValue | undefined {
     const rfc =
         /^(?:[A-Za-z]{3},\s*)?(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?(?:\s+([A-Za-z]{1,5}|[+-]\d{4}))?$/i.exec(
             raw.trim(),
         );
     if (rfc) {
-        const month =
-            [
-                "jan",
-                "feb",
-                "mar",
-                "apr",
-                "may",
-                "jun",
-                "jul",
-                "aug",
-                "sep",
-                "oct",
-                "nov",
-                "dec",
-            ].indexOf(rfc[2].toLowerCase()) + 1;
+        const month = monthNumber(rfc[2]);
         const zone =
             rfc[7] && /^(Z|UT|UTC|GMT)$/i.test(rfc[7])
                 ? "Z"
@@ -91,6 +99,14 @@ export function parseTemporalValue(raw: string): TemporalValue {
         );
     const rfc = parseRfcTemporalValue(raw);
     if (rfc) return rfc;
+    const named = /^([A-Za-z]+)-(\d{1,2})-(\d{4})$/.exec(raw.trim());
+    if (named)
+        return {
+            ...parseTemporalValue(
+                `${named[3]}-${String(monthNumber(named[1])).padStart(2, "0")}-${named[2].padStart(2, "0")}`,
+            ),
+            raw,
+        };
     const match =
         /^(\d{4})[-/](\d{2})[-/](\d{2})(?: \([A-Za-z]{3}\))?(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-]\d{2}:?\d{2})?)?$/.exec(
             raw.trim(),
@@ -230,7 +246,11 @@ export function normalizeTemporalContext(
 export function temporalContextFromHeaders(
     text: string,
 ): SourceTemporalContext | undefined {
-    const headers = [...text.matchAll(/^Session date:([^\r\n]+)$/gm)];
+    const headers = [
+        ...text.matchAll(
+            /^(?:Session date:([^\r\n]+)|\[Session \d+; date ([^;\r\n]+); turn \d+; speaker (?:user|assistant)\]|Conversation \d+; session \d+; date ([^;\r\n]+))$/gm,
+        ),
+    ];
     if (!headers.length) return undefined;
     return normalizeTemporalContext(
         {
@@ -239,7 +259,7 @@ export function temporalContextFromHeaders(
                 ownerId: `session-header:${header.index}`,
                 start: header.index,
                 end: headers[index + 1]?.index ?? text.length,
-                messageTime: header[1].trimStart(),
+                messageTime: (header[1] ?? header[2] ?? header[3]).trimStart(),
             })),
         },
         text.length,

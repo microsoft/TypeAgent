@@ -30,7 +30,7 @@
  * Options:
  *   --provider <mode>            copilot | ollama | aisystems (required unless --restore).
  *   --embedding <mode>           local | ollama | openai | none | azure (explicit override).
- *   --copilot-model <name>       Copilot chat model (default gpt-5.6-luna).
+ *   --copilot-model <name>       Copilot chat model (default gpt-6-luna).
  *   --ollama-host <url>          Ollama base URL (default http://localhost:11434).
  *   --chat-model <name>          Ollama chat model (default llama3.2).
  *   --embedding-endpoint <url>   Embedding endpoint (openai mode; full path).
@@ -65,7 +65,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DEFAULT_OLLAMA_HOST = "http://localhost:11434";
 const DEFAULT_OLLAMA_CHAT_MODEL = "llama3.2";
-const DEFAULT_COPILOT_MODEL = "gpt-5.6-luna";
+const DEFAULT_COPILOT_MODEL = "gpt-6-luna";
 const DEFAULT_COPILOT_FALLBACK_MODELS = [
     "gpt-5.4-mini",
     "gpt-5-mini",

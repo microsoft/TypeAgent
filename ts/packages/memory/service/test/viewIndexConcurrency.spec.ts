@@ -11,7 +11,13 @@ import type {
     ViewBuildJob,
     ViewPublishRequest,
     ViewSynthesisOutput,
+    ViewMergeConflict,
 } from "../src/viewTypes.js";
+import {
+    viewReadProjection,
+    viewReadProjectionEntry,
+    type ViewReadProjection,
+} from "../src/viewReadProjection.js";
 import type { IndexedDocument } from "../src/types.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { inventoryTestAnswer } from "./viewInventoryTestModel.js";
@@ -280,41 +286,108 @@ describe("detached view index preparation", () => {
         });
     }
 
-    test("legacy view history receives one committed read projection on restart", async () => {
-        await service.close();
-        const history = new ViewHistory(
-            path.join(root, corpusId, "views"),
-            () => ({ views: {} }),
-        );
-        const { head, state } = await history.read();
-        const legacyHead = await history.commit(
-            head,
-            state,
-            {},
-            "fixture",
-            "Legacy state without read entries",
-        );
-        expect(
-            (await new TypedViewStore(root).getViewVersions(request)).map(
-                (version) => version.revisionId,
-            ),
-        ).toContain(request.revisionId);
-        service = open();
-        expect(await service.getView(request)).toBeDefined();
-        const projection = await history.readEntry<{
-            views: Array<{ viewId: string }>;
-        }>("view-read-projection.json");
-        expect(projection.head).not.toBe(legacyHead);
-        expect(projection.value?.views.map((view) => view.viewId)).toEqual([
-            "guide",
-        ]);
-        await service.close();
-        service = open();
-        expect(await service.getView(request)).toBeDefined();
-        expect(
-            (await history.readEntry("view-read-projection.json")).head,
-        ).toBe(projection.head);
-    });
+    test.each(["missing", "unversioned"])(
+        "%s legacy view history receives one committed read projection on restart",
+        async (legacy) => {
+            await service.close();
+            const history = new ViewHistory(
+                path.join(root, corpusId, "views"),
+                () => ({ views: {} }),
+            );
+            const { head, state } = await history.read();
+            const oldProjection = {
+                ...(
+                    await history.readEntry<ViewReadProjection>(
+                        viewReadProjectionEntry,
+                    )
+                ).value,
+            };
+            delete oldProjection.version;
+            const legacyHead = await history.commit(
+                head,
+                state,
+                legacy === "missing"
+                    ? {}
+                    : {
+                          [viewReadProjectionEntry]:
+                              JSON.stringify(oldProjection),
+                      },
+                "fixture",
+                "Legacy state without read entries",
+            );
+            if (legacy === "missing")
+                expect(
+                    (
+                        await new TypedViewStore(root).getViewVersions(request)
+                    ).map((version) => version.revisionId),
+                ).toContain(request.revisionId);
+            service = open();
+            expect(await service.getView(request)).toBeDefined();
+            expect(
+                (await new TypedViewStore(root).getViewVersions(request)).map(
+                    (version) => version.revisionId,
+                ),
+            ).toContain(request.revisionId);
+            const projection = await history.readEntry<{
+                views: Array<{ viewId: string }>;
+            }>("view-read-projection.json");
+            expect(projection.head).not.toBe(legacyHead);
+            expect(projection.value?.views.map((view) => view.viewId)).toEqual([
+                "guide",
+            ]);
+            await service.close();
+            service = open();
+            expect(await service.getView(request)).toBeDefined();
+            expect(
+                (await history.readEntry("view-read-projection.json")).head,
+            ).toBe(projection.head);
+        },
+    );
+
+    test.each(["pending", "resolved", "missing"] as const)(
+        "build projections expose %s conflict status without conflict evidence",
+        async (state) => {
+            const job = (await service.listViewBuilds(corpusId))[0];
+            const human = (await service.listViews(corpusId)).views[0];
+            const conflictId = "conflict";
+            job.results[0].conflictId = conflictId;
+            job.results[0].state = "conflicted";
+            const conflict: ViewMergeConflict = {
+                conflictId,
+                identity: "fixture",
+                corpusId,
+                viewId: human.viewId,
+                jobId: job.jobId,
+                createdAt: job.createdAt,
+                actor: "fixture",
+                state: state === "missing" ? "pending" : state,
+                expectedRevisionId: human.revisionId,
+                input: job.results[0].snapshot,
+                human,
+                candidate: {
+                    content: human.content,
+                    relationships: [],
+                    outcome: "diagnosticOnly",
+                    missingEvidence: [],
+                },
+                targets: [],
+                reason: "Fixture conflict",
+                event: { kind: "viewMergeConflict", editIds: [], evidence: [] },
+            };
+            const projection = viewReadProjection({
+                views: { [human.viewId]: [human] },
+                builds: { [job.jobId]: job },
+                ...(state === "missing"
+                    ? {}
+                    : { conflicts: { [conflictId]: conflict } }),
+            });
+            expect(projection.builds[0].results[0].conflictState).toBe(state);
+            expect(JSON.stringify(projection.builds)).not.toContain(
+                human.content.title,
+            );
+            expect(projection.conflicts).toBeUndefined();
+        },
+    );
 
     test("detail and inventory reads do not wait for the delayed full-history adapter", async () => {
         const entered = deferred();

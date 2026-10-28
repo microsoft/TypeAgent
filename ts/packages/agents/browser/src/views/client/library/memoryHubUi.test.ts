@@ -5,11 +5,25 @@ import {
     iconButton,
     menuButton,
     setIconButton,
+    setTabLabel,
     watchSlowRequest,
 } from "./memoryHubUi";
 
 afterEach(() => {
     document.body.replaceChildren();
+});
+
+test("tab labels retain readable text and one decorative icon after count updates", () => {
+    const button = document.createElement("button");
+    const action = jest.fn();
+    button.addEventListener("click", action);
+    setTabLabel(button, "fa-layer-group", "Views (2)");
+    setTabLabel(button, "fa-layer-group", "Views (3+)");
+    expect(button.textContent).toBe("Views (3+)");
+    expect(button.querySelectorAll("i")).toHaveLength(1);
+    expect(button.querySelector("i")!.getAttribute("aria-hidden")).toBe("true");
+    button.click();
+    expect(action).toHaveBeenCalledTimes(1);
 });
 
 test("icon buttons keep an accessible name and tooltip", () => {
@@ -62,6 +76,7 @@ test("menus open on demand, evaluate disabled state late and close on use", () =
     items[0].click();
     expect(first).toHaveBeenCalledTimes(1);
     expect(host.querySelector(".hub-menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
     locked = false;
     trigger.click();
     host.querySelectorAll<HTMLButtonElement>("[role=menuitem]")[1].click();

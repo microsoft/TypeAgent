@@ -12,6 +12,11 @@ import type {
 import { invokeView, invokeMemory } from "./viewClient";
 import { mountMemoryManagement } from "./memoryManagement";
 import { mountMemoryHubSearch } from "./memoryHubSearch";
+import {
+    mountMemoryHubUnderstanding,
+    toUnderstandingRequest,
+} from "./memoryHubUnderstanding";
+import type { UnderstandingRequest } from "@typeagent/memory-service";
 import { mountMemoryHubExplore } from "./memoryHubExplore";
 import { mountMemoryHubGraph } from "./memoryHubGraph";
 import { mountMemoryHubChanges } from "./memoryHubChanges";
@@ -20,6 +25,7 @@ import { mountMemoryHubCapture } from "./memoryHubCapture";
 
 import { mountMemoryHubViews } from "./memoryHubViews";
 import { mountMemoryHubQuestions } from "./memoryHubQuestions";
+import { mountMemoryHubInbox } from "./memoryHubInbox";
 import { mountMemoryHubViewActivity } from "./memoryHubViewActivity";
 import { renderDerivedViewUsage } from "./memoryHubViewUsage";
 
@@ -30,7 +36,13 @@ import { mountMemoryHubWebExplore } from "./memoryHubWebExplore";
 import { notificationManager } from "./knowledgeUtilities";
 import { migrateLegacyMemoryLocation } from "./memoryHubMigration";
 import { mountThemeToggle } from "./memoryHubTheme";
-import { icon, iconButton, menuButton, setIconButton } from "./memoryHubUi";
+import {
+    icon,
+    iconButton,
+    menuButton,
+    setIconButton,
+    setTabLabel,
+} from "./memoryHubUi";
 import {
     inboxCounts,
     inboxItems,
@@ -68,6 +80,8 @@ let reverting = false;
 let focusReturn: { corpusId: string; sourceId: string } | undefined;
 let manager: ReturnType<typeof mountMemoryManagement>;
 let searchPanel: ReturnType<typeof mountMemoryHubSearch>;
+let understandingPanel: ReturnType<typeof mountMemoryHubUnderstanding>;
+let pendingUnderstanding: UnderstandingRequest | undefined;
 let explorePanel: ReturnType<typeof mountMemoryHubExplore>;
 let graphPanel: ReturnType<typeof mountMemoryHubGraph>;
 let changesPanel: ReturnType<typeof mountMemoryHubChanges>;
@@ -79,6 +93,9 @@ let questionsPanel: ReturnType<typeof mountMemoryHubQuestions>;
 let viewActivityPanel: ReturnType<typeof mountMemoryHubViewActivity>;
 let viewAttentionCount = 0;
 let questionAttentionCount = 0;
+let viewAttentionMore = false;
+let questionAttentionMore = false;
+let inboxPanel: ReturnType<typeof mountMemoryHubInbox>;
 
 let runbookImportsPanel: ReturnType<typeof mountMemoryHubRunbookImports>;
 let webMaintenancePanel: ReturnType<typeof mountMemoryHubWebMaintenance>;
@@ -88,6 +105,7 @@ let pendingSearchQuery: string | undefined;
 
 function invalidateDiscovery(): void {
     searchPanel.scopeChanged();
+    understandingPanel.scopeChanged();
     explorePanel.scopeChanged();
     graphPanel?.scopeChanged();
 }
@@ -188,6 +206,34 @@ function synchronizeQuery(query: string): void {
     history.replaceState(history.state, "", url);
 }
 
+function rememberUnderstanding(request: UnderstandingRequest): void {
+    synchronizeQuery(request.question);
+    const url = new URL(location.href);
+    url.searchParams.set("understandingCorpus", request.corpusId);
+    for (const [key, value] of [
+        ["understandingPolicy", request.retrievalPolicy],
+        ["understandingCheckpoint", request.knowledgeCheckpointId],
+    ] as const) {
+        if (value) url.searchParams.set(key, value);
+        else url.searchParams.delete(key);
+    }
+    history.replaceState(history.state, "", url);
+}
+
+function restoredUnderstanding(): UnderstandingRequest {
+    const url = new URL(location.href);
+    const policy = url.searchParams.get("understandingPolicy");
+    const checkpoint = url.searchParams.get("understandingCheckpoint");
+    return {
+        corpusId: url.searchParams.get("understandingCorpus") ?? scope,
+        question: url.searchParams.get("query") ?? "",
+        ...(policy === "sourcesOnly" || policy === "sourcesAndViews"
+            ? { retrievalPolicy: policy }
+            : {}),
+        ...(checkpoint ? { knowledgeCheckpointId: checkpoint } : {}),
+    };
+}
+
 function mountPhaseTwo(): void {
     const onError = (error: unknown) => {
         void hubAction(async () => {
@@ -207,7 +253,37 @@ function mountPhaseTwo(): void {
             open({ page: "views", corpusId, objectId, viewRevisionId }),
         onQueryChanged: synchronizeQuery,
         onNotify: (message) => notificationManager.showInfo(message),
+        onUnderstand: (request) => {
+            const value = toUnderstandingRequest(request);
+            rememberUnderstanding(value);
+            if (parseRoute(location.hash).page === "understanding")
+                void understandingPanel.show(value);
+            else {
+                pendingUnderstanding = value;
+                open({ page: "understanding" });
+            }
+        },
     });
+    understandingPanel = mountMemoryHubUnderstanding(el("hubUnderstanding"), {
+        scope: selectedScope,
+        onError,
+        onQueryChanged: rememberUnderstanding,
+        onResults: () => {
+            pendingSearchQuery = el<HTMLInputElement>("hubAsk").value;
+            open({ page: "search" });
+        },
+        onEvidence: (value, focus, owner) =>
+            searchPanel.inspect(value, focus, owner),
+        onGraph: (nodeId) =>
+            open({ page: "explore", webView: "entities", webEntity: nodeId }),
+    });
+    void invokeView("memoryViewCapabilities", {})
+        .then((capabilities) => {
+            searchPanel.setUnderstandingEnabled(
+                capabilities.features.memoryUnderstanding === true,
+            );
+        })
+        .catch(onError);
     explorePanel = mountMemoryHubExplore(el("hubExplore"), {
         scope: selectedScope,
         onOpenSource,
@@ -483,7 +559,9 @@ function renderInbox(): void {
             : "?";
     el("activityBadge").dataset.count = String(counts.failedJobs);
     el("inboxSummary").textContent =
-        snapshotAvailable && attentionCount ? `${attentionCount} need you` : "";
+        snapshotAvailable && attentionCount
+            ? `${attentionCount}${viewAttentionMore || questionAttentionMore ? "+" : ""} need you`
+            : "";
     const dismissedBox = el<HTMLInputElement>("inboxDismissed");
     const dismissed = dismissedBox.checked;
     const available = inboxItems(snapshot.inbox, hidden, {
@@ -509,9 +587,15 @@ function renderInbox(): void {
     );
     const list = el("hubInbox");
     list.replaceChildren(
-        ...items
-            .slice(inboxPage * 25, (inboxPage + 1) * 25)
-            .map((item) => inboxCard(item, dismissed)),
+        ...items.slice(inboxPage * 25, (inboxPage + 1) * 25).map((item) =>
+            inboxPanel.present({
+                id: item.id,
+                fingerprint: item.fingerprint,
+                title: item.title,
+                summary: `${inboxKinds[item.kind].label} · ${item.reason}`,
+                detail: inboxCard(item, dismissed),
+            }),
+        ),
     );
     if (!items.length && !viewAttentionCount && !questionAttentionCount)
         list.append(
@@ -530,6 +614,7 @@ function renderInbox(): void {
     el<HTMLButtonElement>("inboxPrevious").disabled = inboxPage === 0;
     el<HTMLButtonElement>("inboxNext").disabled =
         (inboxPage + 1) * 25 >= items.length;
+    if (snapshotAvailable) inboxPanel.setCount("operations", counts.inbox);
 }
 
 function renderErrors(): void {
@@ -558,6 +643,7 @@ async function refreshSnapshot(refreshQuestions = true): Promise<void> {
     } catch (error) {
         if (version === snapshotVersion) {
             snapshotAvailable = false;
+            inboxPanel.fail("operations", error);
             renderInbox();
         }
         throw error;
@@ -689,17 +775,17 @@ async function loadManagement(): Promise<void> {
     typeSelect.id = "hubSourceType";
     typeSelect.hidden = true;
     const typeChips = document.createElement("div");
-    typeChips.className = "hub-chips hub-source-types";
+    typeChips.className = "hub-tabs hub-source-types";
     typeChips.setAttribute("role", "group");
     typeChips.setAttribute("aria-label", "Source type");
-    for (const [type, label] of [
-        ["", "All"],
-        ["web", "Web"],
-        ["markdown", "Markdown"],
-        ["text", "Text"],
-        ["html", "HTML"],
-        ["vtt", "Transcript"],
-        [PDF_CHIP, "PDF"],
+    for (const [type, label, glyph] of [
+        ["", "All", "fa-layer-group"],
+        ["web", "Web", "fa-globe"],
+        ["markdown", "Markdown", "fa-file-lines"],
+        ["text", "Text", "fa-file"],
+        ["html", "HTML", "fa-code"],
+        ["vtt", "Transcript", "fa-closed-captioning"],
+        [PDF_CHIP, "PDF", "fa-file-pdf"],
     ]) {
         if (type !== PDF_CHIP) {
             const option = document.createElement("option");
@@ -717,6 +803,7 @@ async function loadManagement(): Promise<void> {
                 other.setAttribute("aria-pressed", String(other === chip));
             el("applySourceFilter").click();
         });
+        setTabLabel(chip, glyph, label);
         chip.setAttribute("aria-pressed", String(type === ""));
         typeChips.append(chip);
     }
@@ -831,7 +918,7 @@ function mountPageTabs(
     pageId: string,
     attribute: string,
     label: string,
-    tabs: ReadonlyArray<readonly [string, string]>,
+    tabs: ReadonlyArray<readonly [string, string, string]>,
 ): void {
     const page = el(pageId);
     const nav = document.createElement("nav");
@@ -846,8 +933,12 @@ function mountPageTabs(
                 String(tab.dataset.pageTab === name),
             );
     };
-    for (const [name, text] of tabs) {
-        const tab = button(text, () => select(name));
+    for (const [name, text, glyph] of tabs) {
+        const tab = setTabLabel(
+            button(text, () => select(name)),
+            glyph,
+            text,
+        );
         tab.setAttribute("role", "tab");
         tab.dataset.pageTab = name;
         nav.append(tab);
@@ -858,13 +949,13 @@ function mountPageTabs(
 
 function mountPageTabSets(): void {
     mountPageTabs("page-activity", "activityTab", "Activity views", [
-        ["jobs", "Operations"],
-        ["web", "Web history"],
-        ["changes", "Changes"],
+        ["jobs", "Operations", "fa-list-check"],
+        ["web", "Web history", "fa-clock-rotate-left"],
+        ["changes", "Changes", "fa-code-compare"],
     ]);
     mountPageTabs("page-settings", "settingsTab", "Settings groups", [
-        ["graph", "Browser graph"],
-        ["view", "View"],
+        ["graph", "Browser graph", "fa-diagram-project"],
+        ["view", "View", "fa-sliders"],
     ]);
 }
 
@@ -1080,6 +1171,8 @@ function updateExploreScope(
 }
 
 function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
+    if (visiblePage !== "understanding") understandingPanel.hide();
+    inboxPanel.close();
     if (visiblePage !== "views") draftViewsPanel.hide();
     if (visiblePage !== "questions") questionsPanel.hide();
     if (visiblePage !== "activity") viewActivityPanel.hide();
@@ -1102,7 +1195,10 @@ function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
     for (const link of document.querySelectorAll<HTMLAnchorElement>(
         "#hubRail a",
     )) {
-        if (link.hash === `#/${route.page}`)
+        if (
+            link.hash ===
+            `#/${route.page === "understanding" ? "search" : route.page}`
+        )
             link.setAttribute("aria-current", "page");
         else link.removeAttribute("aria-current");
     }
@@ -1205,7 +1301,11 @@ async function showManagedRoute(
         );
     const corpusId = item?.corpusId ?? route.corpusId ?? scope;
     if (route.page === "questions") {
-        await questionsPanel.show(route.objectId, corpusId || undefined);
+        await questionsPanel.show(
+            route.objectId,
+            corpusId || undefined,
+            route.questionSlotId,
+        );
         return;
     }
     if (route.page === "views") {
@@ -1254,6 +1354,20 @@ function restoreFocus(visiblePage: (typeof pages)[number]): void {
     }
 }
 
+async function showReadingPage(
+    page: "search" | "understanding",
+): Promise<void> {
+    if (page === "understanding") {
+        const request = pendingUnderstanding ?? restoredUnderstanding();
+        pendingUnderstanding = undefined;
+        await understandingPanel.show(request);
+    } else {
+        const query = pendingSearchQuery;
+        pendingSearchQuery = undefined;
+        await searchPanel.show(query);
+    }
+}
+
 async function applyRoute(): Promise<void> {
     const version = ++routeVersion;
     manager.cancelSourceSelection();
@@ -1274,10 +1388,8 @@ async function applyRoute(): Promise<void> {
     showPage(route, visiblePage);
     await showManagedRoute(route, item, version);
     if (version !== routeVersion) return;
-    if (route.page === "search") {
-        const query = pendingSearchQuery;
-        pendingSearchQuery = undefined;
-        await searchPanel.show(query);
+    if (route.page === "understanding" || route.page === "search") {
+        await showReadingPage(route.page);
     } else if (route.page === "explore") {
         if (!route.webView) await explorePanel.show();
         else if (route.webView === "analytics")
@@ -1327,6 +1439,19 @@ export async function mountMemoryHub(): Promise<void> {
         history.replaceState(history.state, "", migrated.href);
         lastHash = location.hash;
     }
+    inboxPanel = mountMemoryHubInbox(el("page-inbox"), [
+        {
+            id: "questions",
+            label: "Question decisions",
+            host: el("hubQuestionAttention"),
+        },
+        { id: "views", label: "Views", host: el("hubViewAttention") },
+        {
+            id: "operations",
+            label: "Sources & operations",
+            host: el("hubInboxOperations"),
+        },
+    ]);
     el("hubRefresh").onclick = () => location.reload();
     await loadManagement();
     mountPhaseTwo();
@@ -1338,6 +1463,9 @@ export async function mountMemoryHub(): Promise<void> {
             corpora: () => snapshot.corpora,
             hidden,
             persistHidden,
+            onNavigate: (route) => {
+                open(route);
+            },
             onError: (error) => {
                 void hubAction(async () => {
                     throw error;
@@ -1346,8 +1474,12 @@ export async function mountMemoryHub(): Promise<void> {
             onOpenSource: (corpusId, objectId) => {
                 open({ page: "library", corpusId, objectId });
             },
-            onAttentionCount: (count) => {
+            presentAttention: inboxPanel.present,
+            onAttentionError: (error) => inboxPanel.fail("questions", error),
+            onAttentionCount: (count, hasMore = false) => {
                 questionAttentionCount = count;
+                questionAttentionMore = hasMore;
+                inboxPanel.setCount("questions", count, hasMore);
                 renderInbox();
             },
         },
@@ -1395,8 +1527,12 @@ export async function mountMemoryHub(): Promise<void> {
                     objectId,
                     activityKind: "view-build",
                 }),
-            onAttentionCount: (count) => {
+            presentAttention: inboxPanel.present,
+            onAttentionError: (error) => inboxPanel.fail("views", error),
+            onAttentionCount: (count, hasMore = false) => {
                 viewAttentionCount = count;
+                viewAttentionMore = hasMore;
+                inboxPanel.setCount("views", count, hasMore);
                 renderInbox();
             },
         },
@@ -1507,6 +1643,11 @@ export async function mountMemoryHub(): Promise<void> {
 
         draftViewsPanel.scopeChanged();
         viewActivityPanel.scopeChanged();
+        viewAttentionCount = 0;
+        questionAttentionCount = 0;
+        viewAttentionMore = false;
+        questionAttentionMore = false;
+        inboxPanel.reset();
 
         runbookImportsPanel.scopeChanged();
         renderErrors();
@@ -1575,6 +1716,7 @@ export async function mountMemoryHub(): Promise<void> {
         const alreadySearch = parseRoute(location.hash).page === "search";
         if (!open({ page: "search" })) return;
         searchPanel.scopeChanged();
+        understandingPanel.scopeChanged();
         pendingSearchQuery = ask;
         synchronizeQuery(ask);
         if (alreadySearch) void hubAction(applyRoute);
@@ -1622,6 +1764,7 @@ export async function mountMemoryHub(): Promise<void> {
         if (event.persisted) return;
         clearInterval(refreshTimer);
         searchPanel.dispose();
+        understandingPanel.dispose();
         explorePanel.dispose();
         changesPanel.dispose();
         importsPanel.dispose();

@@ -6,6 +6,7 @@ import type { MemoryHubInboxItem } from "@typeagent/browser-control-rpc/viewRpc"
 export const pages = [
     "inbox",
     "search",
+    "understanding",
     "library",
     "views",
     "questions",
@@ -21,6 +22,7 @@ export type HubRoute = {
     viewRevisionId?: string;
     viewPageId?: string;
     viewItemKey?: string;
+    questionSlotId?: string;
     activityKind?: "view-build";
     webView?: "analytics" | "entities" | "topics";
     webEntity?: string;
@@ -90,6 +92,9 @@ export function parseRoute(hash: string): HubRoute {
         corpusId: parts[1] || undefined,
         objectId: parts[2] || undefined,
         ...(page === "views" ? parseViewSelection(parts) : {}),
+        ...(page === "questions" && parts[3] === "slot" && parts[4]
+            ? { questionSlotId: parts[4] }
+            : {}),
         ...(page === "activity" && parts[3] === "view-build"
             ? { activityKind: "view-build" as const }
             : {}),
@@ -121,6 +126,9 @@ export function routeHash(route: HubRoute): string {
                 : [
                       route.corpusId,
                       route.objectId,
+                      ...(route.page === "questions" && route.questionSlotId
+                          ? ["slot", route.questionSlotId]
+                          : []),
                       ...(route.page === "views" && route.viewRevisionId
                           ? ["revision", route.viewRevisionId]
                           : []),

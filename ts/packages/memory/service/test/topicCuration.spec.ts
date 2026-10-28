@@ -9,6 +9,378 @@ import {
 } from "../src/topicSnapshot.js";
 import { curateTopics } from "../src/topicCuration.js";
 import type { TopicSnapshot, TopicCuration } from "../src/topicTypes.js";
+import { openai } from "@typeagent/aiclient";
+import {
+    topicCurationPolicy,
+    type TopicCurationOptions,
+} from "../src/topicCuration.js";
+
+function contextOptions(outputTokens = 128000): TopicCurationOptions {
+    const model = openai.createChatModel(
+        {
+            provider: "azure",
+            modelType: openai.ModelType.Chat,
+            apiKey: "synthetic-key",
+            endpoint: "https://synthetic.invalid/curation",
+            supportsResponseFormat: true,
+            requestConstraints: {
+                inputTokens: 922000,
+                contextTokens: 1050000,
+                outputTokens,
+            },
+        },
+        { response_format: { type: "json_object" } },
+    );
+    return {
+        inputTokenTarget: 64000,
+        inspectRequest: (rules, payload, schema) =>
+            model.inspectRequest!(
+                [
+                    { role: "system", content: rules },
+                    { role: "user", content: JSON.stringify(payload) },
+                ],
+                schema,
+            ),
+    };
+}
+
+test("context packets bind prior evidence to all hidden original members, not only retained citations", async () => {
+    const value = snapshot();
+    value.occurrences.push(
+        indexedTopicOccurrence(
+            {
+                sourceId: "source-2",
+                revisionId: "r1",
+                blockOrdinal: 1,
+                text: "Mercury is a chemical element with scoped properties.",
+                score: 1,
+            },
+            "Mercury",
+            0,
+        ),
+    );
+    value.nodes = initialTopicNodes(value.corpusId, value.occurrences);
+    const reusable: TopicCuration = {
+        concepts: [
+            {
+                id: `concept:${"b".repeat(32)}`,
+                label: "Mercury",
+                scope: "Elemental chemistry",
+                purpose: "A scoped chemical reference",
+                memberIds: [value.nodes[1].id, value.nodes[2].id],
+                summary: "",
+                summaryState: "pending",
+                citations: value.nodes[1].citations,
+                salience: 6,
+            },
+        ],
+        deferred: [],
+    };
+    await expect(
+        curateTopics(
+            value,
+            (node) => node.citations,
+            async (rules, payload) => {
+                const packet = payload as {
+                    nodes: { id: string; evidenceIds: string[] }[];
+                    evidence: { id: string; sourceId: string }[];
+                };
+                const prior = packet.nodes.find(
+                    (node) => node.id === reusable.concepts[0].id,
+                )!;
+                const hiddenSource = packet.evidence.find(
+                    (entry) => entry.sourceId === "source-2",
+                )!;
+                expect(prior.evidenceIds).toContain(hiddenSource.id);
+                expect(rules).toContain(
+                    "A concept may cite ONLY evidence IDs attached",
+                );
+                throw new Error("Boundary captured");
+            },
+            new AbortController().signal,
+            true,
+            undefined,
+            reusable,
+            contextOptions(),
+        ),
+    ).rejects.toThrow("Boundary captured");
+});
+
+test("unrelated-source repair identifies the permitted evidence for the actual members", async () => {
+    const value = snapshot(2);
+    let calls = 0;
+    value.curation = await curateTopics(
+        value,
+        (node) => node.citations,
+        async (rules, payload, _schema, call) => {
+            const packet = payload as {
+                nodes: { id: string; evidenceIds: string[] }[];
+            };
+            if (++calls === 1) {
+                expect(call?.kind).toBe("normal");
+                return {
+                    concepts: [
+                        {
+                            label: "Mercury",
+                            scope: "Scoped reference",
+                            purpose: "A fixture reference",
+                            memberIds: [packet.nodes[0].id],
+                            evidenceIds: packet.nodes[1].evidenceIds,
+                            salience: 6,
+                        },
+                    ],
+                    deferred: [],
+                };
+            }
+            expect(call?.kind).toBe("contract-repair");
+            expect(rules).toContain(
+                `Members ${packet.nodes[0].id} may use only evidence ${packet.nodes[0].evidenceIds.join(", ")}`,
+            );
+            return {
+                concepts: [],
+                deferred: packet.nodes.map(({ id }) => ({
+                    nodeId: id,
+                    reason: "Synthetic repaired disposition",
+                })),
+            };
+        },
+        new AbortController().signal,
+        true,
+        undefined,
+        undefined,
+        contextOptions(),
+    );
+    expect(calls).toBe(2);
+    validateTopicSnapshot(value);
+});
+
+test("context packing exceeds 24 raw nodes and accounts for all tail nodes", async () => {
+    const value = snapshot(105);
+    const sizes: number[] = [];
+    const options = contextOptions();
+    value.curation = await curateTopics(
+        value,
+        (node) => node.citations,
+        async (_rules, payload, schema, call) => {
+            const batch = payload as { nodes: { id: string }[] };
+            expect(schema).toBeDefined();
+            expect(call?.kind).toBe("normal");
+            sizes.push(batch.nodes.length);
+            return {
+                concepts: [],
+                deferred: batch.nodes.map(({ id }) => ({
+                    nodeId: id,
+                    reason: "Synthetic offline disposition",
+                })),
+            };
+        },
+        new AbortController().signal,
+        true,
+        undefined,
+        undefined,
+        options,
+    );
+    expect(Math.max(...sizes)).toBeGreaterThan(24);
+    expect(value.curation.deferred).toHaveLength(105);
+    expect(sizes.reduce((sum, size) => sum + size, 0)).toBe(105);
+    validateTopicSnapshot(value);
+});
+
+test("context packing rejects an oversized item or insufficient output capacity before dispatch", async () => {
+    const value = snapshot(1);
+    const complete = import.meta.jest.fn();
+    for (const options of [
+        { ...contextOptions(), inputTokenTarget: 1 },
+        contextOptions(1000),
+        { inputTokenTarget: 16000 },
+    ]) {
+        await expect(
+            curateTopics(
+                value,
+                (node) => node.citations,
+                complete,
+                new AbortController().signal,
+                true,
+                undefined,
+                undefined,
+                options,
+            ),
+        ).rejects.toThrow();
+    }
+    expect(complete).not.toHaveBeenCalled();
+});
+
+test("speculative curation recomputes newly created targets and hidden membership before commit", async () => {
+    async function run(concurrency: 1 | 2) {
+        const value = snapshot(55);
+        let calls = 0;
+        const curation = await curateTopics(
+            value,
+            (node) => node.citations,
+            async (_rules, payload) => {
+                calls++;
+                const input = payload as {
+                    nodes: { id: string; evidenceIds: string[] }[];
+                };
+                return {
+                    concepts: [
+                        {
+                            label: "Mercury",
+                            scope: "Synthetic test",
+                            purpose: "Mercury reference",
+                            memberIds: input.nodes.map((node) => node.id),
+                            evidenceIds: [
+                                ...new Set(
+                                    input.nodes.flatMap(
+                                        (node) => node.evidenceIds,
+                                    ),
+                                ),
+                            ],
+                            salience: 6,
+                        },
+                    ],
+                    deferred: [],
+                };
+            },
+            new AbortController().signal,
+            true,
+            undefined,
+            undefined,
+            { concurrency },
+        );
+        validateTopicSnapshot({ ...value, curation });
+        return { curation, calls };
+    }
+    const serial = await run(1),
+        parallel = await run(2);
+    expect(parallel.curation).toEqual(serial.curation);
+    expect(parallel.calls).toBeGreaterThan(serial.calls);
+    expect(parallel.curation.concepts[0].memberIds).toHaveLength(55);
+});
+
+test("experimental policies change input identity and preserve legacy defaults", () => {
+    expect(topicCurationPolicy(true)).toBe("curated-lazy-v6");
+    expect(topicCurationPolicy(true, { concurrency: 2 })).not.toBe(
+        topicCurationPolicy(true),
+    );
+    expect(topicCurationPolicy(true, { inputTokenTarget: 32000 })).not.toBe(
+        topicCurationPolicy(true, { inputTokenTarget: 64000 }),
+    );
+    expect(() =>
+        topicCurationPolicy(true, { priorContextFraction: 0.25 }),
+    ).toThrow();
+});
+
+test("joint allocation reserves both input and output room for nominated prior concepts", async () => {
+    const value = snapshot(55);
+    const first = { ...value, nodes: [value.nodes[0]] };
+    const seed = await curateTopics(
+        first,
+        (node) => node.citations,
+        async (_rules, payload) => {
+            const batch = payload as { nodes: { id: string }[] };
+            return {
+                concepts: [
+                    {
+                        label: "Mercury",
+                        scope: "Reference",
+                        purpose: "Mercury explanation",
+                        memberIds: batch.nodes.map((node) => node.id),
+                        evidenceIds: ["e0"],
+                        salience: 6,
+                    },
+                ],
+                deferred: [],
+            };
+        },
+        new AbortController().signal,
+        true,
+    );
+    async function capture(priorContextFraction: number) {
+        let supplied: string[] = [];
+        await expect(
+            curateTopics(
+                value,
+                (node) => node.citations,
+                async (_rules, payload) => {
+                    supplied = (
+                        payload as { nodes: { id: string }[] }
+                    ).nodes.map((node) => node.id);
+                    throw new Error("Captured");
+                },
+                new AbortController().signal,
+                true,
+                undefined,
+                seed,
+                { ...contextOptions(24000), priorContextFraction },
+            ),
+        ).rejects.toThrow("Captured");
+        return supplied;
+    }
+    expect((await capture(0)).some((id) => id.startsWith("concept:"))).toBe(
+        false,
+    );
+    expect((await capture(0.25)).some((id) => id.startsWith("concept:"))).toBe(
+        true,
+    );
+});
+
+test("complete-wire input target admits an exact boundary and rejects one token below it", async () => {
+    const value = snapshot(1);
+    const options = contextOptions();
+    let exact = 0;
+    const decide = async (
+        rules: string,
+        payload: unknown,
+        schema?: import("@typeagent/aiclient").StructuredOutputJsonSchema,
+    ) => {
+        exact = options.inspectRequest!(
+            rules,
+            payload,
+            schema!,
+        ).estimatedInputTokens;
+        const batch = payload as { nodes: { id: string }[] };
+        return {
+            concepts: [],
+            deferred: batch.nodes.map(({ id }) => ({
+                nodeId: id,
+                reason: "Synthetic",
+            })),
+        };
+    };
+    await curateTopics(
+        value,
+        (node) => node.citations,
+        decide,
+        new AbortController().signal,
+        true,
+        undefined,
+        undefined,
+        options,
+    );
+    await curateTopics(
+        value,
+        (node) => node.citations,
+        decide,
+        new AbortController().signal,
+        true,
+        undefined,
+        undefined,
+        { ...options, inputTokenTarget: exact },
+    );
+    await expect(
+        curateTopics(
+            value,
+            (node) => node.citations,
+            decide,
+            new AbortController().signal,
+            true,
+            undefined,
+            undefined,
+            { ...options, inputTokenTarget: exact - 1 },
+        ),
+    ).rejects.toThrow("bounded batch");
+});
 
 function snapshot(count = 3): TopicSnapshot {
     const occurrences = Array.from({ length: count }, (_, index) =>
@@ -273,67 +645,80 @@ test("lazy curation packs interleaved labels by source without discarding origin
     validateTopicSnapshot(value);
 });
 
-test("curation resumes only validated checkpoint membership after a later provider failure", async () => {
-    const value = snapshot(55);
-    let checkpoint: TopicCuration | undefined;
-    let calls = 0;
-    const decide = async (_rules: string, payload: unknown) => {
-        const batch = payload as { nodes: Array<{ id: string }> };
-        return {
-            concepts: [],
-            deferred: batch.nodes.map(({ id }) => ({
-                nodeId: id,
-                reason: "Incidental mention",
-            })),
+test.each([1, 2] as const)(
+    "curation resumes validated checkpoint membership after a later failure at concurrency %i",
+    async (concurrency) => {
+        const value = snapshot(55);
+        let checkpoint: TopicCuration | undefined;
+        let calls = 0;
+        const decide = async (_rules: string, payload: unknown) => {
+            const batch = payload as { nodes: Array<{ id: string }> };
+            return {
+                concepts: [],
+                deferred: batch.nodes.map(({ id }) => ({
+                    nodeId: id,
+                    reason: "Incidental mention",
+                })),
+            };
         };
-    };
-    await expect(
-        curateTopics(
+        await expect(
+            curateTopics(
+                value,
+                (node) => node.citations,
+                async (rules, payload) => {
+                    if (++calls === 3) throw new Error("Provider interrupted");
+                    return decide(rules, payload);
+                },
+                new AbortController().signal,
+                true,
+                async (progress) => {
+                    validateTopicSnapshot({
+                        ...value,
+                        curationProgress: progress,
+                    });
+                    checkpoint = progress;
+                },
+                undefined,
+                { concurrency },
+            ),
+        ).rejects.toThrow("Provider interrupted");
+        expect(checkpoint!.deferred).toHaveLength(24);
+        const saved = new Set(
+            checkpoint!.deferred.map((entry) => entry.nodeId),
+        );
+        const resumed = await curateTopics(
             value,
             (node) => node.citations,
             async (rules, payload) => {
-                if (++calls === 2) throw new Error("Provider interrupted");
+                const batch = payload as { nodes: Array<{ id: string }> };
+                expect(batch.nodes.every(({ id }) => !saved.has(id))).toBe(
+                    true,
+                );
                 return decide(rules, payload);
             },
             new AbortController().signal,
             true,
-            async (progress) => {
-                validateTopicSnapshot({ ...value, curationProgress: progress });
-                checkpoint = progress;
-            },
-        ),
-    ).rejects.toThrow("Provider interrupted");
-    expect(checkpoint!.deferred).toHaveLength(24);
-    const saved = new Set(checkpoint!.deferred.map((entry) => entry.nodeId));
-    const resumed = await curateTopics(
-        value,
-        (node) => node.citations,
-        async (rules, payload) => {
-            const batch = payload as { nodes: Array<{ id: string }> };
-            expect(batch.nodes.every(({ id }) => !saved.has(id))).toBe(true);
-            return decide(rules, payload);
-        },
-        new AbortController().signal,
-        true,
-        undefined,
-        checkpoint,
-    );
-    expect(resumed.deferred).toHaveLength(55);
-    validateTopicSnapshot({ ...value, curation: resumed });
-    const invalid = structuredClone(checkpoint!);
-    invalid.deferred[0].nodeId = "invented";
-    await expect(
-        curateTopics(
-            value,
-            (node) => node.citations,
-            decide,
-            new AbortController().signal,
-            true,
             undefined,
-            invalid,
-        ),
-    ).rejects.toThrow("Invalid partial topic curation membership");
-});
+            checkpoint,
+            { concurrency },
+        );
+        expect(resumed.deferred).toHaveLength(55);
+        validateTopicSnapshot({ ...value, curation: resumed });
+        const invalid = structuredClone(checkpoint!);
+        invalid.deferred[0].nodeId = "invented";
+        await expect(
+            curateTopics(
+                value,
+                (node) => node.citations,
+                decide,
+                new AbortController().signal,
+                true,
+                undefined,
+                invalid,
+            ),
+        ).rejects.toThrow("Invalid partial topic curation membership");
+    },
+);
 
 test("curation checkpoint persistence failure stops before another model request", async () => {
     const value = snapshot(55);

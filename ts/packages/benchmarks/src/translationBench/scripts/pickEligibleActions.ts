@@ -28,7 +28,11 @@ export function parseCli(argv: string[]) {
         .description(
             "Build eligible-gold-actions.generated.json (human policy + LLM classifier)",
         )
-        .requiredOption("--model <name>", "chat model for LLM picker pass")
+        .option(
+            "--model <name>",
+            "chat model for LLM picker pass",
+            process.env.TB_PICKER_MODEL || "GPT_6_1_SOL",
+        )
         .option("--catalog <path>", "catalog.generated.json", DEFAULT_CATALOG)
         .option(
             "--grader <path>",

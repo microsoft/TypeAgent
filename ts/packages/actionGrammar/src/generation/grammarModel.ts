@@ -7,7 +7,7 @@ import { claudeExecutableOption } from "./cliPath.js";
 export type GrammarModelProvider = "copilot" | "claude";
 export type GrammarModelQuery = (prompt: string) => Promise<string>;
 
-export const defaultGrammarModel = "gpt-5.6-sol";
+export const defaultGrammarModel = "gpt-6.1-sol";
 export const defaultClaudeGrammarModel = "claude-sonnet-4-20250514";
 
 export interface GrammarModelOptions {

@@ -3,6 +3,7 @@
 
 import type { AgentEdition } from "./agentEdition.js";
 import type { MemoryGraphService } from "./graphTypes.js";
+import type { MemoryUnderstandingService } from "./understandingTypes.js";
 import type {
     AgentMemorySearchRequest,
     AgentMemorySearchResult,
@@ -667,6 +668,7 @@ export interface MemoryServiceCapabilities {
         management: boolean;
         groundedAnswer: boolean;
         scopedKnowledgeGraphs?: boolean;
+        memoryUnderstanding?: boolean;
         sourceSynopses?: boolean;
         agentSessionImportTypes?: AgentSessionImportRequest["importType"][];
     };
@@ -709,7 +711,9 @@ export interface ProcedureVersion {
     previousVersion?: number;
 }
 
-export interface MemoryService extends MemoryGraphService {
+export interface MemoryService
+    extends MemoryGraphService,
+        MemoryUnderstandingService {
     initialize?(): Promise<void>;
     close?(): Promise<void>;
     deferMaintenance?(): () => void;
