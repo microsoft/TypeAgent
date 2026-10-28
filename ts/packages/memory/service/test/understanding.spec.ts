@@ -192,6 +192,9 @@ describe("strict understanding reader", () => {
             expect(body).not.toHaveProperty("max_tokens");
             expect(body).not.toHaveProperty("max_output_tokens");
             expect(JSON.stringify(body?.messages)).toContain("1,600");
+            expect(JSON.stringify(body?.messages)).toContain(
+                "Do not assume the metric",
+            );
         } finally {
             globalThis.fetch = fetch;
             setRuntimeConfig(runtimeConfig);

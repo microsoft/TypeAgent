@@ -253,15 +253,16 @@ function matchedWindows(
             .split(/\s+/)
             .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
             .join("\\s+");
-        return representativeMatches(
-            block.text,
-            new RegExp(
-                wholeWords
-                    ? `(?<![\\p{L}\\p{N}_])${pattern}(?![\\p{L}\\p{N}_])`
-                    : pattern,
-                "giu",
-            ),
-        ).map((match) => ({
+        const expression = new RegExp(
+            wholeWords
+                ? `(?<![\\p{L}\\p{N}_])${pattern}(?![\\p{L}\\p{N}_])`
+                : pattern,
+            "giu",
+        );
+        const matches = wholeWords
+            ? [...block.text.matchAll(expression)]
+            : representativeMatches(block.text, expression);
+        return matches.map((match) => ({
             block,
             offset: passageOffset(block.text, match.index, window),
             matched: true,
@@ -300,16 +301,16 @@ function candidateWindows(
         const headings = [...block.text.matchAll(/^#{1,6} .+$/gm)];
         const passages = matchedWindows(block, selectors, window, wholeWords);
         const words = matchedWindows(block, terms, window, wholeWords);
-        const primary = passages.length ? passages : words;
+        let primary = passages.length ? passages : words;
         if (wholeWords) {
             const frequencies = new Map<string, number>();
             for (const word of block.text
                 .toLocaleLowerCase()
                 .match(/[\p{L}\p{N}-]+/gu) ?? [])
                 frequencies.set(word, (frequencies.get(word) ?? 0) + 1);
-            const coverage = (candidate: WindowCandidate) => {
+            const coverage = (candidate: WindowCandidate, length: number) => {
                 const text = block.text
-                    .slice(candidate.offset, candidate.offset + window)
+                    .slice(candidate.offset, candidate.offset + length)
                     .toLocaleLowerCase();
                 const words = new Set<string>(
                     text.match(/[\p{L}\p{N}-]+/gu) ?? [],
@@ -323,7 +324,17 @@ function candidateWindows(
                     0,
                 );
             };
-            primary.sort((a, b) => coverage(b) - coverage(a));
+            const ranked = primary.map((candidate) => ({
+                candidate,
+                coverage: coverage(candidate, window),
+                leadingCoverage: coverage(candidate, Math.ceil(window / 2)),
+            }));
+            ranked.sort(
+                (a, b) =>
+                    b.coverage - a.coverage ||
+                    b.leadingCoverage - a.leadingCoverage,
+            );
+            primary = ranked.map((item) => item.candidate);
         }
         const qualifications = representativeMatches(
             block.text,
@@ -588,7 +599,7 @@ export function selectIndexedFragments(
                     term.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ?? [],
             ),
         ),
-    ].filter((term) => term.length > 2);
+    ].filter((term) => term.length > (request.query !== undefined ? 1 : 2));
     const eligible = new Set(request.sourceIds);
     const state: FragmentSelectionState = {
         fragments: [],

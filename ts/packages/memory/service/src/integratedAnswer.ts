@@ -3,6 +3,7 @@
 
 import type { ChatModel } from "@typeagent/aiclient";
 import { mergeIndexedAnswerEvidence } from "./indexedAnswer.js";
+import { indexedQueryTerms } from "./indexedFragments.js";
 import {
     readIntegratedEvidence,
     serializeAnswerEvidence,
@@ -468,7 +469,24 @@ export async function answerIntegratedEvidence(
                     ...request,
                     question,
                 });
-                groups.push(followup.matches);
+                const terms = indexedQueryTerms(question);
+                const ranked = followup.matches.map((item, order) => {
+                    const words = new Set(
+                        item.snippet
+                            .toLocaleLowerCase()
+                            .match(/[\p{L}\p{N}-]+/gu) ?? [],
+                    );
+                    return {
+                        item,
+                        order,
+                        coverage: terms.filter((term) => words.has(term))
+                            .length,
+                    };
+                });
+                ranked.sort(
+                    (a, b) => b.coverage - a.coverage || a.order - b.order,
+                );
+                groups.push(ranked.map((entry) => entry.item));
                 diagnostics.warnings.push(...followup.warnings);
                 if (followup.indexedSelection)
                     refinement.selections.push(followup.indexedSelection);
