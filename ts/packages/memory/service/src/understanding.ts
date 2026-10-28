@@ -205,7 +205,9 @@ export class MemoryUnderstanding {
         input: UnderstandingRequest,
     ): Promise<UnderstandingResult> {
         const epoch = this.store.version;
-        const parent = await this.parent(input);
+        const parent = await timeSearchStage("understanding.parent", () =>
+            this.parent(input),
+        );
         const question = retrievalQuestion(input.question.trim(), parent);
         const snapshot: Snapshot = {
             corpusId: input.corpusId,
@@ -251,7 +253,11 @@ export class MemoryUnderstanding {
             diagnostics.refinement?.initialEvidence ?? [],
             diagnostics.suppliedEvidence,
         ]);
-        if (!(await this.current(snapshot)))
+        if (
+            !(await timeSearchStage("understanding.influenceValidation", () =>
+                this.current(snapshot),
+            ))
+        )
             throw new Error(
                 "Understanding influence changed; retry the question",
             );

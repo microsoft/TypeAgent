@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { ChatModel } from "@typeagent/aiclient";
+import { timeSearchStage } from "@typeagent/knowpro";
 import { mergeIndexedAnswerEvidence } from "./indexedAnswer.js";
 import { indexedQueryTerms } from "./indexedFragments.js";
 import {
@@ -176,7 +177,9 @@ async function expandView(
         const key = JSON.stringify(reference);
         let pending = cache.get(key);
         if (!pending) {
-            pending = host.expandSource(reference, request);
+            pending = timeSearchStage("answer.expandSource", () =>
+                host.expandSource(reference, request),
+            );
             cache.set(key, pending);
         }
         const source = await pending;
@@ -366,16 +369,22 @@ async function retrieve(
     host: IntegratedAnswerHost,
     diagnostics: IntegratedAnswerDiagnostics,
 ) {
-    const original = await host.searchOriginal(request);
+    const original = await timeSearchStage("answer.originalSearch", () =>
+        host.searchOriginal(request),
+    );
     if (original.indexedSelection)
         diagnostics.sourceSelection = original.indexedSelection;
     diagnostics.warnings.push(...original.warnings);
     if (request.retrievalPolicy === "sourcesOnly")
         return { original, views: [] };
     try {
-        if (!host.getEligibleViewMatches)
-            throw new Error("Host does not support maintained-view retrieval");
-        const result = await host.getEligibleViewMatches(request);
+        const result = await timeSearchStage("answer.maintainedViews", () => {
+            if (!host.getEligibleViewMatches)
+                throw new Error(
+                    "Host does not support maintained-view retrieval",
+                );
+            return host.getEligibleViewMatches(request);
+        });
         diagnostics.warnings.push(...(result.warnings ?? []));
         diagnostics.omittedViewCandidates = result.omittedCandidates ?? 0;
         return { original, views: result.matches };
@@ -442,18 +451,27 @@ export async function answerIntegratedEvidence(
             warnings: [],
             reconstructionCount: attempt,
         };
-        const retrieved = await retrieve(request, host, diagnostics);
+        const retrieved = await timeSearchStage("answer.retrieve", () =>
+            retrieve(request, host, diagnostics),
+        );
         const { views } = retrieved;
         let original = retrieved.original;
-        let evidence = await assembleEvidence(
-            request,
-            host,
-            original.matches,
-            views,
-            budget,
-            diagnostics,
+        let evidence = await timeSearchStage(
+            "answer.assemble.initial",
+            () =>
+                assembleEvidence(
+                    request,
+                    host,
+                    original.matches,
+                    views,
+                    budget,
+                    diagnostics,
+                ),
+            { reconstruction: attempt },
         );
-        let response = await read(request, evidence, options, true);
+        let response = await timeSearchStage("answer.reader.initial", () =>
+            read(request, evidence, options, true),
+        );
         const initialEvidence = evidence;
         if (response.retrievalQueries?.length) {
             const groups: MemoryEvidence[][] = [];
@@ -465,10 +483,11 @@ export async function answerIntegratedEvidence(
                 selections: [],
             };
             for (const question of refinement.queries) {
-                const followup = await host.searchOriginal({
-                    ...request,
-                    question,
-                });
+                const followup = await timeSearchStage(
+                    "answer.refinementSearch",
+                    () => host.searchOriginal({ ...request, question }),
+                    { refinementOrdinal: groups.length + 1 },
+                );
                 const terms = indexedQueryTerms(question);
                 const ranked = followup.matches.map((item, order) => {
                     const words = new Set(
@@ -501,26 +520,35 @@ export async function answerIntegratedEvidence(
                 ),
             };
             diagnostics.refinement = refinement;
-            evidence = await assembleEvidence(
-                request,
-                host,
-                original.matches,
-                views,
-                budget,
-                diagnostics,
+            evidence = await timeSearchStage(
+                "answer.assemble.refined",
+                () =>
+                    assembleEvidence(
+                        request,
+                        host,
+                        original.matches,
+                        views,
+                        budget,
+                        diagnostics,
+                    ),
+                { reconstruction: attempt },
             );
-            response = await read(request, evidence, options, false);
+            response = await timeSearchStage("answer.reader.refined", () =>
+                read(request, evidence, options, false),
+            );
         }
         const selected = selectedEvidence(evidence, response.evidenceIds);
         // Validate everything supplied, not only what the reader chose: omitted
         // context can still influence prose, and forget barriers take precedence.
         if (
-            !(await host.validateEvidence({
-                request,
-                evidence: diagnostics.refinement
-                    ? [...initialEvidence, ...evidence]
-                    : evidence,
-            }))
+            !(await timeSearchStage("answer.validate", () =>
+                host.validateEvidence({
+                    request,
+                    evidence: diagnostics.refinement
+                        ? [...initialEvidence, ...evidence]
+                        : evidence,
+                }),
+            ))
         )
             continue;
         const citations = selected.flatMap((item) =>

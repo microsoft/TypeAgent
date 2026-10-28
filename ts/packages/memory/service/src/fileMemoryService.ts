@@ -10015,7 +10015,9 @@ export class FileMemoryService
             };
         }
         await this.initialize();
-        const answerRuntime = await this.getCorpusRuntime(request.corpusId);
+        const answerRuntime = await timeSearchStage("answer.runtime", () =>
+            this.getCorpusRuntime(request.corpusId),
+        );
         if (
             request.answerMode !== "extractive" &&
             answerRuntime.index.readFragments

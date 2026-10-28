@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { ChatModel } from "@typeagent/aiclient";
+import { runWithSearchTiming } from "@typeagent/knowpro";
 import {
     answerIntegratedEvidence,
     type IntegratedAnswerHost,
@@ -120,6 +121,75 @@ function fixture(
 }
 
 describe("bounded source-plus-view answering", () => {
+    test("times both reader passes and validation without logging private inputs or changing failures", async () => {
+        const flag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        const warn = console.warn;
+        const logs: string[] = [];
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        console.warn = (line: unknown) => logs.push(String(line));
+        const { host } = fixture();
+        const reader = async (
+            _request: MemoryAnswerRequest,
+            evidence: AnswerEvidence[],
+            _options: unknown,
+            allowRefinement: boolean,
+        ) => ({
+            status: "answered" as const,
+            answer: "Launch is in May.",
+            evidenceIds: evidence.map((item) => item.id),
+            ...(allowRefinement
+                ? { retrievalQueries: ["Exact launch month"] }
+                : {}),
+        });
+        try {
+            const result = await runWithSearchTiming(
+                "latency-test",
+                "test",
+                () => answerIntegratedEvidence(request, host, { reader }),
+            );
+            expect(result.answer).toBe("Launch is in May.");
+            const stages = logs.map(
+                (line): { stage: string; traceId: string; status: string } =>
+                    JSON.parse(line.replace("[memory-search-timing] ", "")),
+            );
+            expect(stages.map((item) => item.stage)).toEqual(
+                expect.arrayContaining([
+                    "answer.originalSearch",
+                    "answer.maintainedViews",
+                    "answer.retrieve",
+                    "answer.expandSource",
+                    "answer.assemble.initial",
+                    "answer.reader.initial",
+                    "answer.refinementSearch",
+                    "answer.assemble.refined",
+                    "answer.reader.refined",
+                    "answer.validate",
+                ]),
+            );
+            expect(
+                stages.every((item) => item.traceId === "latency-test"),
+            ).toBe(true);
+            const failure = new Error("private validation failure");
+            host.validateEvidence = async () => {
+                throw failure;
+            };
+            await expect(
+                runWithSearchTiming("latency-test", "test", () =>
+                    answerIntegratedEvidence(request, host, { reader }),
+                ),
+            ).rejects.toBe(failure);
+            expect(logs.at(-1)).toContain('"status":"error"');
+            expect(logs.join("\n")).not.toContain(request.question);
+            expect(logs.join("\n")).not.toContain("Launch is in May.");
+            expect(logs.join("\n")).not.toContain(failure.message);
+        } finally {
+            console.warn = warn;
+            if (flag === undefined)
+                delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+            else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = flag;
+        }
+    });
+
     test("prioritizes focused refinement passages before applying the shared source limit", async () => {
         const initial = source("initial", "The gallery is being discussed.");
         const generic = source("generic", "General JS background.");
