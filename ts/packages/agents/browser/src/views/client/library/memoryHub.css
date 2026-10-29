@@ -741,7 +741,7 @@ body[data-memory-hub] {
   flex-shrink: 0;
   text-decoration: none;
 }
-#hubNotificationsLink.active {
+#hubNotificationsLink[aria-current="page"] {
   background: var(--accent-soft-hover);
   color: var(--primary-dark);
 }
@@ -766,6 +766,9 @@ body[data-memory-hub] {
 }
 .hub-notification h3 {
   margin: 0;
+}
+.hub-notification h3 a {
+  color: var(--primary-dark);
 }
 .hub-notification ul {
   margin-bottom: 0;
