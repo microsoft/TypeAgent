@@ -58,6 +58,10 @@ export class CorpusAccess {
         return result;
     }
 
+    public backgroundRead<T>(operation: () => Promise<T>): Promise<T> {
+        return this.lease.exit(() => this.read(operation));
+    }
+
     public write<T>(operation: () => Promise<T>): Promise<T> {
         const reservation = this.reserve();
         const lease: WriteLease = {

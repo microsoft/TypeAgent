@@ -25,6 +25,7 @@ export type UnderstandingModuleKind =
     | "sources";
 
 export interface UnderstandingRequest {
+    requestId?: string | undefined;
     evidenceSnapshotId?: string | undefined;
     phase?: "retrieve" | "initial" | "refine" | undefined;
     corpusId: string;
@@ -128,6 +129,7 @@ export interface UnderstandingResult {
 }
 
 export interface UnderstandingModuleRequest {
+    requestId?: string | undefined;
     corpusId: string;
     snapshotId: string;
     kind: "timeline" | "relationships" | "concepts" | "sources";
@@ -148,6 +150,10 @@ export interface UnderstandingModuleResult {
 }
 
 export interface MemoryUnderstandingService {
+    cancelUnderstanding?(request: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<boolean>;
     understand?(request: UnderstandingRequest): Promise<UnderstandingResult>;
     understandingModule?(
         request: UnderstandingModuleRequest,
@@ -155,6 +161,11 @@ export interface MemoryUnderstandingService {
 }
 
 export interface UnderstandingHost extends MemoryGraphService {
+    validateSnapshot?(
+        request: MemoryAnswerRequest,
+        evidence: AnswerEvidence[],
+        indexVersion: string | undefined,
+    ): Promise<boolean>;
     indexVersion?(corpusId: string): Promise<string>;
     answer(
         request: MemoryAnswerRequest,

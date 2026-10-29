@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { ViewIndexPool } from "./viewIndexPool.js";
+import { IndexWarmupScheduler, type IndexWarmupJob } from "./indexWarmup.js";
 import {
     boundGraphInventory,
     graphIdentity,
@@ -1300,6 +1302,9 @@ export class FileMemoryService
     >();
     private readonly viewBuilds: ViewBuildRunner;
     private readonly indexFactory: CorpusIndexFactory;
+    private readonly viewIndexes: ViewIndexPool;
+    private readonly viewWarmup: IndexWarmupScheduler;
+    private readonly pendingViewWarmup = new Set<string>();
     private readonly eventIndexFactory: CorpusIndexFactory;
     private readonly capabilities: MemoryServiceCapabilities;
     private readonly viewStore: TypedViewStore;
@@ -1315,7 +1320,10 @@ export class FileMemoryService
     private readonly committedCorpora = new Map<string, CommittedCorpus>();
     private readonly committedReaders = new Set<CommittedCorpus>();
     private readonly readScope = new AsyncLocalStorage<
-        Map<string, { snapshot: CommittedCorpus | undefined }>
+        Map<
+            string,
+            { snapshot: CommittedCorpus | undefined; documentReady?: boolean }
+        >
     >();
     private readonly runtimeViews = new WeakMap<CorpusRuntime, CorpusRuntime>();
     private readonly visibility = new Map<string, number>();
@@ -1420,6 +1428,8 @@ export class FileMemoryService
             eventIndex: this.graphEventIndexes.get(corpusId),
             eventVersion,
         });
+        if (this.pendingViewWarmup.delete(corpusId))
+            this.viewWarmup.refresh(corpusId);
         if (
             previous &&
             (previous.head !== head ||
@@ -1441,6 +1451,7 @@ export class FileMemoryService
         corpusId: string,
         operation: () => Promise<T>,
     ): Promise<T> {
+        const enteredAt = performance.now();
         this.assertCorpusReadable(corpusId);
         const inherited = this.readScope.getStore();
         if (this.activeRead(corpusId)) return operation();
@@ -1460,6 +1471,11 @@ export class FileMemoryService
                     corpusId,
                     snapshot.head,
                     async () => {
+                        recordSearchTiming(
+                            "read.entry",
+                            performance.now() - enteredAt,
+                            { corpusId, pinned: true },
+                        );
                         const result = await operation();
                         this.assertCorpusReadable(corpusId);
                         if (
@@ -1935,6 +1951,16 @@ export class FileMemoryService
             this.createTopicGenerator(),
         );
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
+        this.viewIndexes = new ViewIndexPool(this.indexFactory);
+        this.viewWarmup = new IndexWarmupScheduler(
+            (corpusId) => this.viewWarmupJobs(corpusId),
+            (error, corpusId) =>
+                console.warn("Memory view-index warmup failed", {
+                    corpusId,
+                    errorType:
+                        error instanceof Error ? error.name : "UnknownError",
+                }),
+        );
         this.eventIndexFactory = options.eventIndexFactory ?? this.indexFactory;
         this.capabilities = options.capabilities ?? defaultCapabilities();
         this.assetStore = new RevisionAssetStore(rootDirectory);
@@ -6665,6 +6691,7 @@ export class FileMemoryService
         view: ViewVersion,
         signal?: AbortSignal,
     ): Promise<ViewPublicationStatus> {
+        this.pendingViewWarmup.add(view.corpusId);
         signal?.throwIfAborted();
         if (this.closed || this.viewIndexRemovalBarriers.has(view.corpusId))
             throw new ViewBuildStaleError(
@@ -6909,18 +6936,13 @@ export class FileMemoryService
                     if (error instanceof ViewBuildStaleError) continue;
                     throw error;
                 }
+
                 const directory = this.viewIndexDirectory(view);
-                if (
-                    (await classifyIndexSchema(directory, "views", true)) !==
-                        "current" ||
-                    (await readFile(path.join(directory, "ready"), "utf8")) !==
-                        view.revisionId
-                )
-                    throw new Error(
-                        "Published view index is missing or does not match the exact revision; retry indexing",
-                    );
-                const index = this.indexFactory(request.corpusId, directory);
-                await index.initialize();
+                const index = await this.viewIndexes.acquire(
+                    request.corpusId,
+                    directory,
+                    view.revisionId,
+                );
                 const matches =
                     informationalWiki(view.content) && index.readFragments
                         ? (
@@ -6963,6 +6985,88 @@ export class FileMemoryService
                 .sort((a, b) => b.score - a.score)
                 .slice(0, request.limit ?? 20);
         });
+    }
+
+    public async warmViewIndexes(corpusId?: string): Promise<void> {
+        if (this.closed) throw new Error("Memory service is closing");
+        if (!this.viewDrafts) return;
+        if (corpusId === undefined) this.viewWarmup.start();
+        else {
+            validateIdentifier("corpus ID", corpusId);
+            this.viewWarmup.open(corpusId);
+        }
+    }
+
+    private async viewWarmupJobs(corpusId?: string): Promise<IndexWarmupJob[]> {
+        if (this.closed) return [];
+        const corpora = corpusId ? [{ corpusId }] : await this.listCorpora();
+        const jobs: IndexWarmupJob[] = [];
+        for (const corpus of corpora) {
+            const runtime = await this.requireViews(corpus.corpusId);
+            await runtime.access.backgroundRead(async () => {
+                for (const {
+                    current,
+                    view,
+                    publication,
+                } of await this.viewStore.listPublishedViews(corpus.corpusId)) {
+                    if (
+                        !view ||
+                        current.state === "archived" ||
+                        publication.blockedReason ||
+                        publication.indexState !== "ready" ||
+                        publication.indexedRevisionId !== view.revisionId
+                    )
+                        continue;
+                    const identity = {
+                        corpusId: view.corpusId,
+                        viewId: view.viewId,
+                        revisionId: view.revisionId,
+                    };
+                    jobs.push({
+                        key: this.viewIndexDirectory(view),
+                        corpusId: corpus.corpusId,
+                        run: (priority) =>
+                            this.warmPublishedView(identity, priority),
+                    });
+                }
+            });
+        }
+        return jobs;
+    }
+
+    private async warmPublishedView(
+        identity: Pick<ViewVersion, "corpusId" | "viewId" | "revisionId">,
+        priority: boolean,
+    ): Promise<boolean> {
+        return runWithSearchTiming(
+            randomUUID(),
+            "memory.view-warmup",
+            async () => {
+                const runtime = await this.requireViews(identity.corpusId);
+                return runtime.access.backgroundRead(async () => {
+                    const view = await this.viewStore.getView(identity);
+                    if (!view) return false;
+                    const published =
+                        await this.viewStore.getViewPublication(view);
+                    if (
+                        this.closed ||
+                        published.blockedReason ||
+                        published.indexState !== "ready" ||
+                        published.indexedRevisionId !== view.revisionId ||
+                        published.publishedRevisionId !== view.revisionId
+                    )
+                        return false;
+                    await this.assertViewPublicationFresh(view);
+                    return this.viewIndexes.warm(
+                        view.corpusId,
+                        this.viewIndexDirectory(view),
+                        view.revisionId,
+                        priority,
+                    );
+                });
+            },
+            { corpusId: identity.corpusId, background: true },
+        );
     }
 
     private async snapshotInformationalTarget(
@@ -10317,6 +10421,10 @@ export class FileMemoryService
         request: MemoryAnswerRequest,
         evidence: AnswerEvidence[],
     ): Promise<boolean> {
+        if (!this.activeRead(request.corpusId))
+            return this.enqueueDocumentRead(request.corpusId, () =>
+                this.validateAnswerEvidence(request, evidence),
+            );
         if (request.knowledgeCheckpointId) {
             const checkpoint = await this.getKnowledgeCheckpoint({
                 corpusId: request.corpusId,
@@ -10336,47 +10444,57 @@ export class FileMemoryService
             )
                 return false;
         }
+        const checked = new Set<string>();
         for (const item of evidence) {
-            if (item.kind === "source") {
-                const source = await this.expandAnswerSource(
-                    item.source,
-                    request,
-                );
-                if (!source || source.snippet !== item.source.snippet)
-                    return false;
-            } else {
-                const view = await this.viewStore.getView({
-                    corpusId: request.corpusId,
-                    viewId: item.reference.viewId,
-                });
-                if (!view || view.revisionId !== item.reference.revisionId)
-                    return false;
-                try {
-                    await this.assertViewPublicationFresh(view);
-                } catch (error) {
-                    if (error instanceof ViewBuildStaleError) return false;
-                    throw error;
-                }
-                const publication = await this.viewStore.getViewPublication({
-                    corpusId: request.corpusId,
-                    viewId: view.viewId,
-                });
-                if (
-                    publication.publishedRevisionId !== view.revisionId ||
-                    publication.blockedReason ||
-                    publication.indexState !== "ready"
-                )
-                    return false;
-                if (
-                    request.sourceIds &&
-                    this.answerViewSources(view).some(
-                        (sourceId) => !request.sourceIds!.includes(sourceId),
-                    )
-                )
-                    return false;
-            }
+            const identity = JSON.stringify([
+                item.kind,
+                item.kind === "source" ? item.source : item.reference,
+            ]);
+            if (checked.has(identity)) continue;
+            checked.add(identity);
+            if (!(await this.validateAnswerEvidenceItem(request, item)))
+                return false;
         }
         return true;
+    }
+
+    private async validateAnswerEvidenceItem(
+        request: MemoryAnswerRequest,
+        item: AnswerEvidence,
+    ): Promise<boolean> {
+        if (item.kind === "source") {
+            const source = await this.expandAnswerSource(item.source, request);
+            return !!source && source.snippet === item.source.snippet;
+        }
+        const view = await this.viewStore.getView({
+            corpusId: request.corpusId,
+            viewId: item.reference.viewId,
+        });
+        if (!view || view.revisionId !== item.reference.revisionId)
+            return false;
+        try {
+            await this.assertViewPublicationFresh(view);
+        } catch (error) {
+            if (error instanceof ViewBuildStaleError) return false;
+            throw error;
+        }
+        const publication = await this.viewStore.getViewPublication({
+            corpusId: request.corpusId,
+            viewId: view.viewId,
+        });
+        if (
+            publication.publishedRevisionId !== view.revisionId ||
+            publication.blockedReason ||
+            publication.indexState !== "ready"
+        )
+            return false;
+        const sourceIds = request.sourceIds;
+        return (
+            !sourceIds ||
+            !this.answerViewSources(view).some(
+                (sourceId) => !sourceIds.includes(sourceId),
+            )
+        );
     }
 
     private createUnderstanding(
@@ -10397,6 +10515,18 @@ export class FileMemoryService
                     this.answerRequest(request, reader),
                 validate: (request, evidence) =>
                     this.validateAnswerEvidence(request, evidence),
+                validateSnapshot: (request, evidence, indexVersion) =>
+                    this.enqueueDocumentRead(request.corpusId, async () => {
+                        if (
+                            !(await this.validateAnswerEvidence(
+                                request,
+                                evidence,
+                            ))
+                        )
+                            return false;
+                        const corpus = await this.getCorpus(request.corpusId);
+                        return corpus?.indexVersion === indexVersion;
+                    }),
                 queryKnowledgeGraph: (request) =>
                     this.queryKnowledgeGraph(request),
                 queryGraphSupport: (request) => this.queryGraphSupport(request),
@@ -10428,6 +10558,17 @@ export class FileMemoryService
         if (!this.understanding)
             throw new Error("Memory understanding is disabled by this host");
         return this.understanding.module(request);
+    }
+
+    public async cancelUnderstanding(request: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<boolean> {
+        validateIdentifier("corpus ID", request.corpusId);
+        validateIdentifier("request ID", request.requestId);
+        if (!this.understanding)
+            throw new Error("Memory understanding is disabled by this host");
+        return this.understanding.cancel(request);
     }
 
     private async validateUnderstandingSupport(
@@ -12436,11 +12577,20 @@ export class FileMemoryService
         corpusId: string,
         operation: (runtime: CorpusRuntime) => Promise<T>,
     ): Promise<T> {
+        const lease = this.readScope.getStore()?.get(corpusId);
+        if (lease?.documentReady && lease.snapshot) {
+            this.assertCorpusReadable(corpusId);
+            return operation(lease.snapshot.runtime);
+        }
         return this.enqueueRead(
             corpusId,
             (runtime) => this.documentIndexReady(corpusId, runtime),
             (runtime) => this.prepareDocumentReadIndex(corpusId, runtime),
-            operation,
+            (runtime) => {
+                const active = this.readScope.getStore()?.get(corpusId);
+                if (active) active.documentReady = true;
+                return operation(runtime);
+            },
             true,
         );
     }
@@ -14898,6 +15048,10 @@ export class FileMemoryService
         operation: () => Promise<T>,
     ): Promise<T> {
         this.visibility.set(corpusId, (this.visibility.get(corpusId) ?? 0) + 1);
+        this.viewIndexes.invalidate(corpusId);
+        this.viewWarmup.invalidate(corpusId);
+        this.pendingViewWarmup.delete(corpusId);
+        this.viewStore.invalidateReadCaches(corpusId);
         this.pendingReadCleanup.delete(corpusId);
         this.eventIndexControllers
             .get(corpusId)
@@ -15271,6 +15425,7 @@ export class FileMemoryService
 
     private async closeService(): Promise<void> {
         this.closed = true;
+        const warmupClosure = this.viewWarmup.close();
         this.understanding?.close();
         this.answerSnapshots.close();
         for (const work of this.topicSummaryWork.values())
@@ -15319,6 +15474,9 @@ export class FileMemoryService
         await this.drainViewIndexPreparations([
             ...this.viewIndexPreparations.values(),
         ]);
+        await warmupClosure;
+        this.viewStore.closeReadCaches();
+        this.viewIndexes.close();
         await this.releaseLock?.();
         this.releaseLock = undefined;
         const viewFailure = viewClosure[0];

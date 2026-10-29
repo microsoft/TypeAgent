@@ -1,12 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
     runWithSearchTiming,
     timeSearchStage,
     recordSearchTiming,
+    runWithSearchCancellation,
+    currentSearchAbortSignal,
 } from "@typeagent/knowpro";
+import { ImmutableReadCache } from "./immutableReadCache.js";
 import type { IntegratedAnswerReader } from "./integratedAnswer.js";
 import type { AnswerEvidence, MemoryAnswerRequest } from "./types.js";
 import {
@@ -117,6 +120,16 @@ function retrievalQuestion(question: string, parent?: Snapshot): string {
 }
 
 export class MemoryUnderstanding {
+    private readonly operations = new Map<
+        string,
+        { corpusId: string; controller: AbortController }
+    >();
+    private readonly moduleResults =
+        new ImmutableReadCache<UnderstandingModuleResult>(
+            "understanding.module",
+            64,
+            8 * 1024 * 1024,
+        );
     private readonly store: UnderstandingStore<Snapshot>;
     private active = 0;
     private readonly now: () => number;
@@ -131,9 +144,59 @@ export class MemoryUnderstanding {
 
     invalidate(corpusId?: string): void {
         this.store.invalidate(corpusId);
+        this.moduleResults.invalidate(corpusId);
+        for (const operation of this.operations.values())
+            if (!corpusId || operation.corpusId === corpusId)
+                operation.controller.abort(
+                    new Error("Understanding invalidated by evidence removal"),
+                );
     }
     close(): void {
+        this.invalidate();
+        this.moduleResults.close();
         this.store.close();
+    }
+
+    cancel(request: { corpusId: string; requestId: string }): boolean {
+        const operation = this.operations.get(
+            this.validatedRequestId(request.requestId),
+        );
+        if (!operation || operation.corpusId !== request.corpusId) return false;
+        operation.controller.abort(
+            new DOMException("Understanding request cancelled", "AbortError"),
+        );
+        return true;
+    }
+
+    private validatedRequestId(id: string): string {
+        if (
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+                id,
+            )
+        )
+            throw new Error("Understanding request ID must be a UUID");
+        return id;
+    }
+
+    private async operation<T>(
+        input: { corpusId: string; requestId?: string | undefined },
+        work: (signal: AbortSignal) => Promise<T>,
+    ): Promise<T> {
+        const id = this.validatedRequestId(input.requestId ?? randomUUID());
+        if (this.operations.has(id))
+            throw new Error("Understanding request ID is already active");
+        const controller = new AbortController();
+        this.operations.set(id, { corpusId: input.corpusId, controller });
+        try {
+            const result = await runWithSearchCancellation(
+                controller.signal,
+                () => work(controller.signal),
+            );
+            controller.signal.throwIfAborted();
+            return result;
+        } finally {
+            this.operations.delete(id);
+        }
     }
 
     private async checked(id: string, corpusId: string): Promise<Snapshot> {
@@ -153,6 +216,12 @@ export class MemoryUnderstanding {
     }
 
     private async current(snapshot: Snapshot): Promise<boolean> {
+        if (this.host.validateSnapshot)
+            return this.host.validateSnapshot(
+                snapshot.request,
+                snapshot.influence,
+                snapshot.indexVersion,
+            );
         if (!(await this.host.validate(snapshot.request, snapshot.influence)))
             return false;
         return (
@@ -194,9 +263,17 @@ export class MemoryUnderstanding {
                 undefined,
                 "memory.understand",
                 () =>
-                    timeSearchStage("understanding.total", () =>
-                        this.prepare(input),
+                    this.operation(input, (signal) =>
+                        timeSearchStage("understanding.total", () =>
+                            this.prepare(input, signal),
+                        ),
                     ),
+                {
+                    corpusId: input.corpusId,
+                    operationId: input.requestId,
+                    phase: input.phase ?? "direct",
+                    origin: input.parentTurnId ? "follow-on" : "initial",
+                },
             );
         } finally {
             this.active--;
@@ -205,6 +282,7 @@ export class MemoryUnderstanding {
 
     private async prepare(
         input: UnderstandingRequest,
+        signal: AbortSignal,
     ): Promise<UnderstandingResult> {
         const epoch = this.store.version;
         const parent = await timeSearchStage("understanding.parent", () =>
@@ -250,6 +328,7 @@ export class MemoryUnderstanding {
             snapshot.request,
             this.reader(snapshot, parent),
         );
+        signal.throwIfAborted();
         if (!answer.readerContext?.integratedAnswer)
             throw new Error(
                 "Understanding requires indexed document evidence; this scope is unsupported",
@@ -387,21 +466,32 @@ export class MemoryUnderstanding {
             undefined,
             "memory.understanding-module",
             () =>
-                timeSearchStage("understanding.module", () =>
-                    this.readModule(input),
+                this.operation(input, (signal) =>
+                    timeSearchStage("understanding.module", () =>
+                        this.readModule(input, signal),
+                    ),
                 ),
-            { groupId: input.snapshotId },
+            {
+                groupId: input.snapshotId,
+                operationId: input.requestId,
+                phase: "module",
+                origin: "module",
+            },
         );
     }
 
     private async readModule(
         input: UnderstandingModuleRequest,
+        signal: AbortSignal,
     ): Promise<UnderstandingModuleResult> {
         const epoch = this.store.version;
         const snapshot = await this.checked(input.snapshotId, input.corpusId);
+        signal.throwIfAborted();
         const result: UnderstandingModuleResult = {
             schemaVersion: 1,
-            ...input,
+            corpusId: input.corpusId,
+            snapshotId: input.snapshotId,
+            kind: input.kind,
             status: "unavailable",
             citations: [],
         };
@@ -412,13 +502,44 @@ export class MemoryUnderstanding {
             result.reason =
                 planned?.reason ??
                 "Module was not selected for this understanding";
-        else if (input.kind === "sources") {
-            result.status = "ready";
-            result.citations = snapshot.result.citations;
-        } else if (input.kind === "timeline") this.timeline(snapshot, result);
-        else if (input.kind === "concepts")
+        else if (input.kind === "sources" || input.kind === "timeline") {
+            const key = createHash("sha256")
+                .update(
+                    JSON.stringify([
+                        input.corpusId,
+                        input.kind,
+                        snapshot.indexVersion,
+                        snapshot.evidence,
+                        snapshot.influence,
+                        snapshot.candidates,
+                        snapshot.reader?.moduleSignals,
+                    ]),
+                )
+                .digest("hex");
+            const cached = await this.moduleResults.get(
+                key,
+                input.corpusId,
+                async () => {
+                    if (input.kind === "sources") {
+                        result.status = "ready";
+                        result.citations = snapshot.result.citations;
+                    } else this.timeline(snapshot, result);
+                    return {
+                        value: structuredClone(result),
+                        bytes: Buffer.byteLength(
+                            JSON.stringify(result),
+                            "utf8",
+                        ),
+                    };
+                },
+            );
+            Object.assign(result, cached, {
+                snapshotId: input.snapshotId,
+            });
+        } else if (input.kind === "concepts")
             await this.concepts(snapshot, result);
         else await this.relationships(snapshot, result);
+        signal.throwIfAborted();
         await this.checked(input.snapshotId, input.corpusId);
         if (epoch !== this.store.version)
             throw new Error(
@@ -444,6 +565,7 @@ export class MemoryUnderstanding {
         );
         const concepts: typeof candidates = [];
         for (const entity of candidates) {
+            currentSearchAbortSignal()?.throwIfAborted();
             const page = await this.host.queryGraphSupport({
                 corpusId: snapshot.corpusId,
                 generation: entity.generation,
@@ -545,6 +667,7 @@ export class MemoryUnderstanding {
         for (const edge of graph.edges.filter(
             (edge) => edge.supportCount > 0,
         )) {
+            currentSearchAbortSignal()?.throwIfAborted();
             const page = await this.host.queryGraphSupport({
                 corpusId: snapshot.corpusId,
                 generation: graph.generation,

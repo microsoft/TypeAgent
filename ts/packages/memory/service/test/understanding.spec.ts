@@ -94,6 +94,74 @@ function graph(): MemoryGraphQueryResult {
         },
     };
 }
+describe("Understanding operation cancellation", () => {
+    test("cancel reaches the active reader and does not cross collection scope", async () => {
+        const { engine, model } = fixture();
+        const original = model.complete;
+        const requestId = "00000000-0000-4000-8000-000000000001";
+        let entered!: () => void;
+        const started = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        model.complete = async (
+            _prompt,
+            _settings,
+            _schema,
+            _callback,
+            signal,
+        ) => {
+            if (!signal) throw new Error("Reader cancellation signal missing");
+            entered();
+            return new Promise<Awaited<ReturnType<ChatModel["complete"]>>>(
+                (_resolve, reject) => {
+                    signal.addEventListener(
+                        "abort",
+                        () => reject(signal.reason),
+                        { once: true },
+                    );
+                },
+            );
+        };
+        const pending = engine.understand({ ...request, requestId });
+        const rejected = expect(pending).rejects.toThrow("cancelled");
+        await started;
+        await expect(
+            engine.understand({ ...request, requestId }),
+        ).rejects.toThrow("already active");
+        expect(() =>
+            engine.cancel({ corpusId: request.corpusId, requestId: "invalid" }),
+        ).toThrow("UUID");
+        expect(engine.cancel({ corpusId: "other", requestId })).toBe(false);
+        expect(engine.cancel({ corpusId: request.corpusId, requestId })).toBe(
+            true,
+        );
+        await rejected;
+        expect(engine.cancel({ corpusId: request.corpusId, requestId })).toBe(
+            false,
+        );
+        model.complete = original;
+        expect(
+            (await engine.understand({ ...request, requestId })).answer?.status,
+        ).toBe("answered");
+        engine.close();
+    });
+
+    test("batched validation receives all influencing evidence and source-set identity", async () => {
+        const { engine, host } = fixture();
+        let validations = 0;
+        host.validateSnapshot = async (input, evidence, indexVersion) => {
+            validations++;
+            expect(input.corpusId).toBe(request.corpusId);
+            expect(evidence.length).toBeGreaterThan(0);
+            expect(indexVersion).toBe("index1");
+            return true;
+        };
+        await engine.understand(request);
+        expect(validations).toBeGreaterThan(0);
+        engine.close();
+    });
+});
+
 function fixture(originals = [source()]) {
     const calls: {
         evidence: AnswerEvidence[];

@@ -152,6 +152,11 @@ export function mountMemoryHubUnderstanding(
     let busy = false;
     let disposed = false;
     const moduleVersions = new Map<HTMLElement, number>();
+    const moduleControllers = new Map<HTMLElement, AbortController>();
+    const moduleSlots = new Map<
+        string,
+        { key: string; slot: HTMLElement; body: HTMLElement }
+    >();
 
     function report(error: unknown, target: HTMLElement = status) {
         target.textContent =
@@ -260,11 +265,33 @@ export function mountMemoryHubUnderstanding(
                 }),
             );
         follow.hidden = !answer && !busy;
+        renderModules();
+    }
+
+    function renderModules() {
         modules.replaceChildren();
-        moduleVersions.clear();
+        const wanted = new Set<string>();
         for (const module of result?.modules ?? []) {
             if (module.kind === "sources" || module.kind === "explanation")
                 continue;
+            wanted.add(module.kind);
+            const key = JSON.stringify([
+                result?.snapshotId,
+                module.kind,
+                module.status,
+                module.reason,
+            ]);
+            const existing = moduleSlots.get(module.kind);
+            if (existing?.key === key) {
+                if (module.kind === "concepts") rail.append(existing.slot);
+                else modules.append(existing.slot);
+                continue;
+            }
+            if (existing) {
+                moduleControllers.get(existing.body)?.abort();
+                moduleControllers.delete(existing.body);
+                moduleVersions.delete(existing.body);
+            }
             const slot = node("section", undefined, "understanding-card");
             slot.setAttribute("aria-label", module.kind);
             slot.append(
@@ -278,6 +305,7 @@ export function mountMemoryHubUnderstanding(
                 ),
             );
             const body = node("div");
+            moduleSlots.set(module.kind, { key, slot, body });
             const kind = module.kind;
             slot.append(
                 body,
@@ -291,6 +319,13 @@ export function mountMemoryHubUnderstanding(
                 body.append(node("p", module.reason));
             else void loadModule(module.kind, body);
         }
+        for (const [kind, slot] of moduleSlots)
+            if (!wanted.has(kind)) {
+                moduleControllers.get(slot.body)?.abort();
+                moduleControllers.delete(slot.body);
+                moduleVersions.delete(slot.body);
+                moduleSlots.delete(kind);
+            }
     }
     function renderTimeline(
         value: UnderstandingModuleResult,
@@ -384,6 +419,14 @@ export function mountMemoryHubUnderstanding(
         moduleVersions.set(body, moduleVersion);
         const snapshotId = result.snapshotId;
         const corpusId = result.corpusId;
+        moduleControllers.get(body)?.abort();
+        const moduleController = new AbortController();
+        moduleControllers.set(body, moduleController);
+        const parentSignal = controller.signal;
+        const abort = () => moduleController.abort(parentSignal.reason);
+        if (parentSignal.aborted) abort();
+        else parentSignal.addEventListener("abort", abort, { once: true });
+        const signal = moduleController.signal;
         body.replaceChildren(node("p", `Loading ${kind}…`));
         body.setAttribute("aria-busy", "true");
         const retry = button("Retry module", () => {
@@ -392,8 +435,8 @@ export function mountMemoryHubUnderstanding(
         try {
             const value = await invokeView(
                 "memoryHubUnderstandingModule",
-                { corpusId, snapshotId, kind },
-                { signal: controller.signal },
+                { corpusId, snapshotId, kind, requestId: crypto.randomUUID() },
+                { signal },
             );
             if (
                 !valid(token, corpusId) ||
@@ -436,7 +479,7 @@ export function mountMemoryHubUnderstanding(
         } catch (error) {
             if (
                 !valid(token, corpusId) ||
-                controller.signal.aborted ||
+                signal.aborted ||
                 moduleVersion !== moduleVersions.get(body)
             )
                 return;
@@ -444,6 +487,10 @@ export function mountMemoryHubUnderstanding(
             body.replaceChildren();
             report(error, body);
             body.append(retry);
+        } finally {
+            parentSignal.removeEventListener("abort", abort);
+            if (moduleControllers.get(body) === moduleController)
+                moduleControllers.delete(body);
         }
     }
     async function run(request: UnderstandingRequest, parent = false) {
@@ -464,6 +511,9 @@ export function mountMemoryHubUnderstanding(
             return;
         }
         controller.abort();
+        moduleControllers.clear();
+        moduleVersions.clear();
+        moduleSlots.clear();
         controller = new AbortController();
         const token = ++version;
         busy = true;
@@ -583,6 +633,8 @@ export function mountMemoryHubUnderstanding(
         scopeChanged() {
             this.hide();
             moduleVersions.clear();
+            moduleSlots.clear();
+            moduleControllers.clear();
             result = undefined;
             input = undefined;
             prose.replaceChildren();

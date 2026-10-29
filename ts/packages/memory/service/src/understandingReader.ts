@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { ChatModel } from "@typeagent/aiclient";
+import { currentSearchAbortSignal } from "@typeagent/knowpro";
 import type { PromptSection } from "typechat";
 import {
     createIndexedAnswerModel,
@@ -292,7 +293,12 @@ export async function readUnderstanding(input: {
         undefined,
         jsonSchema,
         undefined,
-        AbortSignal.timeout(90_000),
+        AbortSignal.any([
+            AbortSignal.timeout(90_000),
+            ...(currentSearchAbortSignal()
+                ? [currentSearchAbortSignal()!]
+                : []),
+        ]),
     );
     if (!result.success) throw new Error(result.message);
     return parseUnderstanding(

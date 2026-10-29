@@ -27,6 +27,7 @@ const moduleKind = z.enum([
 ]);
 export const understandingRequestSchema = z
     .strictObject({
+        requestId: z.string().uuid().optional(),
         evidenceSnapshotId: z.string().uuid().optional(),
         phase: z.enum(["retrieve", "initial", "refine"]).optional(),
         corpusId: identifierSchema,
@@ -133,6 +134,7 @@ export const understandingResultSchema = z.strictObject({
     warnings: z.string().array(),
 });
 export const understandingModuleRequestSchema = z.strictObject({
+    requestId: z.string().uuid().optional(),
     corpusId: identifierSchema,
     snapshotId: z.string().uuid(),
     kind: z.enum(["timeline", "relationships", "concepts", "sources"]),

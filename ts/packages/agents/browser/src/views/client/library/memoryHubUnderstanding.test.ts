@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { randomUUID } from "node:crypto";
 import type {
     UnderstandingResult,
     UnderstandingModuleResult,
@@ -87,6 +88,12 @@ let mounted: ReturnType<typeof mountMemoryHubUnderstanding>;
 let scope: string | undefined;
 let onError: jest.Mock;
 let onEvidence: jest.Mock;
+beforeAll(() => {
+    Object.defineProperty(crypto, "randomUUID", {
+        configurable: true,
+        value: randomUUID,
+    });
+});
 beforeEach(() => {
     invoke.mockReset();
     stream.mockReset();
@@ -199,6 +206,34 @@ test("sources and provisional prose render before stream completion without losi
     await showing;
     expect(button(host, "Ask more").disabled).toBe(false);
 });
+test("same-snapshot stream updates reuse a module slot and refresh aborts only its prior request", async () => {
+    const finished = deferred<void>();
+    let publish!: (value: UnderstandingResult) => void;
+    stream.mockImplementation(async (_request, onResult) => {
+        publish = onResult;
+        await finished.promise;
+    });
+    const pending = deferred<UnderstandingModuleResult>();
+    invoke.mockReturnValue(pending.promise);
+    const showing = mounted.show({ corpusId: "corpus", question: "Explain" });
+    publish(result());
+    const slot = button(host, "Refresh module").closest("section");
+    expect(slot).not.toBeNull();
+    const first = invoke.mock.calls[0];
+    expect(first[1].requestId).toMatch(/^[a-f0-9-]{36}$/);
+    publish(result());
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(button(host, "Refresh module").closest("section")).toBe(slot);
+    button(host, "Refresh module").click();
+    expect(first[2].signal.aborted).toBe(true);
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(invoke.mock.calls[1][1].requestId).not.toBe(first[1].requestId);
+    mounted.scopeChanged();
+    expect(invoke.mock.calls[1][2].signal.aborted).toBe(true);
+    finished.resolve();
+    await showing;
+});
+
 test("failed refinement clears provisional claims and retries without a stale prepared handle", async () => {
     const initial = result("initial");
     initial.modules = [];

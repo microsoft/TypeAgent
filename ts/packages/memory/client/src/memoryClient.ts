@@ -837,6 +837,27 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         );
     }
 
+    public warmViewIndexes(corpusId?: string): Promise<void> {
+        return (
+            this.service.warmViewIndexes?.(corpusId) ??
+            Promise.reject(
+                new Error("Memory view-index warmup is not supported"),
+            )
+        );
+    }
+
+    public cancelUnderstanding(request: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<boolean> {
+        return (
+            this.service.cancelUnderstanding?.(request) ??
+            Promise.reject(
+                new Error("Memory understanding cancellation is not supported"),
+            )
+        );
+    }
+
     public getKnowledgeGraph(corpusId: string) {
         return this.service.getKnowledgeGraph(corpusId);
     }

@@ -722,6 +722,7 @@ export interface MemoryService
     extends MemoryGraphService,
         MemoryUnderstandingService {
     initialize?(): Promise<void>;
+    warmViewIndexes?(corpusId?: string): Promise<void>;
     close?(): Promise<void>;
     deferMaintenance?(): () => void;
     getMaintenanceStatus?(): import("./maintenanceScheduler.js").MaintenanceStatus;

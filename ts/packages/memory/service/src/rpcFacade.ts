@@ -27,12 +27,18 @@ export function createMemoryServiceRpcFacade(
     MemoryTopicService &
     MemoryKnowledgeService {
     return {
+        warmViewIndexes: (corpusId) =>
+            service.warmViewIndexes?.(corpusId) ??
+            unsupportedCapability("view-index warmup"),
         understand: (request) =>
             service.understand?.(request) ??
             unsupportedCapability("understanding"),
         understandingModule: (request) =>
             service.understandingModule?.(request) ??
             unsupportedCapability("understanding modules"),
+        cancelUnderstanding: (request) =>
+            service.cancelUnderstanding?.(request) ??
+            unsupportedCapability("understanding cancellation"),
         ...(service.queryKnowledgeGraph
             ? { queryKnowledgeGraph: service.queryKnowledgeGraph.bind(service) }
             : {}),

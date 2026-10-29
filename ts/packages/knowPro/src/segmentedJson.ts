@@ -356,6 +356,28 @@ export async function readSegmentedJson(
     );
 }
 
+/** Verify immutable publication artifacts without rebuilding their object graph. */
+export async function verifySegmentedJson(
+    file: string,
+    descriptor: SegmentedJsonDescriptor,
+): Promise<number> {
+    const root = directory(file);
+    return serialize(root, async () => {
+        const node = await readNode(root, descriptor.root, true);
+        if (node.kind !== "publication") {
+            const value = await hydrate(root, descriptor.root, {
+                reuseVerified: true,
+            });
+            return Buffer.byteLength(stringify(value) ?? "", "utf8");
+        }
+        validatePublication(node);
+        let bytes = 0;
+        for (const artifact of node.artifacts)
+            bytes += (await readArtifact(root, artifact, true)).byteLength;
+        return bytes;
+    });
+}
+
 async function writeNew(file: string, bytes: Buffer): Promise<void> {
     const handle = await open(file, "wx");
     try {

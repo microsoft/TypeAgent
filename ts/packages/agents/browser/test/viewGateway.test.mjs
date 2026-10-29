@@ -46,6 +46,52 @@ test("progressive understanding yields before subsequent reads and carries prepa
     assert.equal((await stages.next()).done, true);
 });
 
+test("disconnect cancellation prevents the next progressive phase", async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    const id = "00000000-0000-4000-8000-000000000001";
+    const input = { corpusId: "corpus", question: "Explain" };
+    const stages = understandingStages(
+        input,
+        async () => {
+            calls++;
+            return {
+                ...input,
+                schemaVersion: 1,
+                snapshotId: id,
+                turnId: id,
+                evidenceSnapshotId: id,
+                expiresAt: "2099-01-01T00:00:00.000Z",
+                citations: [],
+                modules: [],
+                warnings: [],
+            };
+        },
+        controller.signal,
+    );
+    await stages.next();
+    controller.abort(new Error("disconnected"));
+    await assert.rejects(stages.next(), /disconnected/);
+    assert.equal(calls, 1);
+});
+
+test("Understanding cancellation is a strict, collection-scoped operation", () => {
+    const request = {
+        method: "memoryHubCancelUnderstanding",
+        params: {
+            corpusId: "corpus",
+            requestId: "00000000-0000-4000-8000-000000000001",
+        },
+    };
+    assert.deepEqual(validateViewRequest(request), request);
+    assert.throws(() =>
+        validateViewRequest({
+            ...request,
+            params: { ...request.params, requestId: "not-an-id" },
+        }),
+    );
+});
+
 test("closing the progressive iterator prevents scheduling another model phase", async () => {
     let calls = 0;
     const id = "00000000-0000-4000-8000-000000000001";

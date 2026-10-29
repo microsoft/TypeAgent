@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { ChatModel } from "@typeagent/aiclient";
+import { currentSearchAbortSignal } from "@typeagent/knowpro";
 import {
     createIndexedAnswerModel,
     indexedEvidenceGroundingInstructions,
@@ -144,7 +145,13 @@ export async function readIntegratedEvidence(
         throw new Error(
             "Complete integrated reader request exceeds the serialized request budget",
         );
-    const result = await model.complete(messages, undefined, jsonSchema);
+    const result = await model.complete(
+        messages,
+        undefined,
+        jsonSchema,
+        undefined,
+        currentSearchAbortSignal(),
+    );
     if (!result.success) throw new Error(result.message);
     return parseReaderResponse(result.data, evidence);
 }
