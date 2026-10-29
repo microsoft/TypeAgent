@@ -9,6 +9,7 @@ import {
 } from "@typeagent/conversation-memory";
 import {
     memoryPerformanceExperiments,
+    resolveInitialReaderModelEndpoint,
     type MemoryPerformanceExperiment,
 } from "./memoryPerformanceExperiments.js";
 import { TranslationCache } from "./translationCache.js";
@@ -1706,16 +1707,11 @@ export class FileMemoryService
         this.fastQueryModelEndpoint =
             options.fastQueryModelEndpoint ??
             process.env.TYPEAGENT_MEMORY_FAST_MODEL;
-        if (
-            options.initialReaderModelEndpoint !== undefined &&
-            !options.initialReaderModelEndpoint.trim()
-        )
-            throw new Error("initialReaderModelEndpoint must not be empty");
-        this.initialReaderModelEndpoint =
-            options.initialReaderModelEndpoint ??
-            (this.experiments.has("fast-models")
-                ? this.fastQueryModelEndpoint
-                : undefined);
+        this.initialReaderModelEndpoint = resolveInitialReaderModelEndpoint(
+            options.initialReaderModelEndpoint,
+            this.fastQueryModelEndpoint,
+            this.experiments,
+        );
         this.indexFactory = this.createIndexFactory(options);
         const commitPolicy = resolveIngestionCommitPolicy(
             options.ingestionCommitPolicy,

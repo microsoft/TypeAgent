@@ -22,6 +22,7 @@ import { MaintenanceScheduler } from "../src/maintenanceScheduler.js";
 import {
     boundedSupportMap,
     memoryPerformanceExperiments,
+    resolveInitialReaderModelEndpoint,
 } from "../src/memoryPerformanceExperiments.js";
 import { TranslationCache } from "../src/translationCache.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
@@ -103,6 +104,27 @@ describe("bounded serving experiments", () => {
     });
 
     test("presets are explicit and unknown switches fail closed", () => {
+        expect(
+            resolveInitialReaderModelEndpoint(
+                undefined,
+                "mini",
+                memoryPerformanceExperiments(""),
+            ),
+        ).toBeUndefined();
+        expect(
+            resolveInitialReaderModelEndpoint(
+                "original-reader",
+                "mini",
+                memoryPerformanceExperiments("fast-models"),
+            ),
+        ).toBe("original-reader");
+        expect(
+            resolveInitialReaderModelEndpoint(
+                undefined,
+                "mini",
+                memoryPerformanceExperiments("fast-models"),
+            ),
+        ).toBe("mini");
         expect(memoryPerformanceExperiments("").size).toBe(0);
         expect(memoryPerformanceExperiments("p2").size).toBe(5);
         expect(memoryPerformanceExperiments("p3").size).toBe(4);

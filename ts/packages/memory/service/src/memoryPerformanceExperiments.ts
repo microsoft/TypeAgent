@@ -17,6 +17,19 @@ export const memoryPerformanceExperimentNames = [
 export type MemoryPerformanceExperiment =
     (typeof memoryPerformanceExperimentNames)[number];
 
+export function resolveInitialReaderModelEndpoint(
+    configured: string | undefined,
+    fastEndpoint: string | undefined,
+    experiments: ReadonlySet<MemoryPerformanceExperiment>,
+): string | undefined {
+    if (configured !== undefined && !configured.trim())
+        throw new Error("initialReaderModelEndpoint must not be empty");
+    return (
+        configured ??
+        (experiments.has("fast-models") ? fastEndpoint : undefined)
+    );
+}
+
 export function memoryPerformanceExperiments(
     value = process.env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS ?? "",
 ): ReadonlySet<MemoryPerformanceExperiment> {
