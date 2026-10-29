@@ -494,6 +494,14 @@ export class MemoryUnderstanding {
                 (item) => item.status === "unavailable",
             ).length,
         });
+        return this.storeResult(snapshot, epoch);
+    }
+
+    private storeResult(
+        snapshot: Snapshot,
+        epoch: number,
+    ): UnderstandingResult {
+        const { input, result } = snapshot;
         result.expiresAt = new Date(
             this.store.put(result.snapshotId, snapshot, epoch),
         ).toISOString();
