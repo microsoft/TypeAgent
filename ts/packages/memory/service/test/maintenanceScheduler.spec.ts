@@ -3,6 +3,110 @@
 
 import { setTimeout as delay } from "node:timers/promises";
 import { MaintenanceScheduler } from "../src/maintenanceScheduler.js";
+import {
+    createMaintenanceBuildScheduler,
+    yieldMaintenanceBuild,
+} from "../src/maintenanceConcurrency.js";
+
+test("automatic native waits let independent short work reach the build queue without releasing corpus exclusion", async () => {
+    const scheduler = new MaintenanceScheduler(
+        () => false,
+        "manual",
+        undefined,
+        1,
+        true,
+    );
+    const builds = createMaintenanceBuildScheduler(1, false, true);
+    const order: string[] = [];
+    let shortAdmitted!: () => void;
+    const admitted = new Promise<void>((resolve) => {
+        shortAdmitted = resolve;
+    });
+    scheduler.request(
+        "native-corpus",
+        "topics",
+        "generation",
+        async (signal) => {
+            const build = builds(async () => {
+                order.push("native-start");
+                await admitted;
+                order.push("durable");
+                await yieldMaintenanceBuild(signal);
+                order.push("native-resumed");
+            }, true);
+            await scheduler.waitForBuild(() => build);
+        },
+    );
+    scheduler.request("native-corpus", "wiki", "generation", async () => {
+        order.push("same-corpus");
+    });
+    scheduler.request("short-corpus", "wiki", "generation", async () => {
+        const build = builds(async () => {
+            order.push("short");
+        }, false);
+        shortAdmitted();
+        await scheduler.waitForBuild(() => build);
+    });
+    try {
+        const status = await scheduler.drain(5000);
+        expect(status.settled).toBe(true);
+        expect(order).toEqual([
+            "native-start",
+            "durable",
+            "short",
+            "native-resumed",
+            "same-corpus",
+        ]);
+    } finally {
+        await scheduler.close();
+    }
+});
+
+test("automatic build waits retain the native and total admission bounds", async () => {
+    const scheduler = new MaintenanceScheduler(
+        () => false,
+        "manual",
+        undefined,
+        2,
+        true,
+    );
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let filled!: () => void;
+    const capacity = new Promise<void>((resolve) => {
+        filled = resolve;
+    });
+    let native = 0;
+    let entered = 0;
+    for (let index = 0; index < 44; index++) {
+        const family = index < 8 ? "topics" : "wiki";
+        scheduler.request(`corpus-${index}`, family, "generation", async () => {
+            if (family === "topics") native++;
+            if (++entered === 32) filled();
+            await scheduler.waitForBuild(() => gate);
+        });
+    }
+    const drain = scheduler.drain(20000);
+    try {
+        await capacity;
+        await delay(300);
+        expect(entered).toBe(32);
+        expect(native).toBe(2);
+        expect(scheduler.status().running).toHaveLength(32);
+        const status = scheduler.status();
+        expect(
+            status.pending.filter((key) => !status.running.includes(key)),
+        ).toHaveLength(12);
+        release();
+        expect((await drain).settled).toBe(true);
+    } finally {
+        release();
+        await scheduler.close();
+        await drain;
+    }
+});
 
 describe("coalesced maintenance execution", () => {
     test("quiet-period requests coalesce without delaying explicit drains", async () => {

@@ -16,6 +16,10 @@ import type {
 } from "./viewTypes.js";
 import { validateViewDraft } from "./viewValidation.js";
 import {
+    scheduleMaintenanceModel,
+    type MaintenanceModelScheduler,
+} from "./maintenanceConcurrency.js";
+import {
     createViewInventorySchema,
     createViewInventoryCheckSchema,
     createInventoryConstructionSchema,
@@ -128,6 +132,7 @@ export function createConfiguredViewSynthesisAdapter(
     endpoint?: string,
     informationalOutputTokens = 4000,
     injectedModel?: ChatModel,
+    modelScheduler?: MaintenanceModelScheduler,
 ): ViewSynthesisAdapter {
     let model = injectedModel;
     let informationalModel = injectedModel;
@@ -147,17 +152,23 @@ export function createConfiguredViewSynthesisAdapter(
             undefined,
             ["memory-views"],
         );
-        const result = await model.complete(
-            [
-                {
-                    role: "system",
-                    content: `${instructions}\nAim for approximately 12000 tokens in the final JSON only, excluding reasoning. Preserve required evidence even when that needs a longer answer.`,
-                },
-                { role: "user", content: JSON.stringify(input) },
-            ],
-            undefined,
-            schema,
-            undefined,
+        const completionModel = model;
+        const result = await scheduleMaintenanceModel(
+            modelScheduler,
+            () =>
+                completionModel.complete(
+                    [
+                        {
+                            role: "system",
+                            content: `${instructions}\nAim for approximately 12000 tokens in the final JSON only, excluding reasoning. Preserve required evidence even when that needs a longer answer.`,
+                        },
+                        { role: "user", content: JSON.stringify(input) },
+                    ],
+                    undefined,
+                    schema,
+                    undefined,
+                    signal,
+                ),
             signal,
         );
         if (!result.success) throw new Error(result.message);
@@ -526,11 +537,17 @@ ${informationalGroupingRules}\n${editorialRules}${input.definition.projectSummar
                         ? projectSummarySchema
                         : informationalSchema
                 )(fragments.map((_, position) => `f${position}`));
-                const result = await informationalModel.complete(
-                    messages,
-                    undefined,
-                    responseSchema,
-                    undefined,
+                const completionModel = informationalModel;
+                const result = await scheduleMaintenanceModel(
+                    modelScheduler,
+                    () =>
+                        completionModel.complete(
+                            messages,
+                            undefined,
+                            responseSchema,
+                            undefined,
+                            signal,
+                        ),
                     signal,
                 );
                 signal.throwIfAborted();

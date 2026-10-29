@@ -158,6 +158,8 @@ class MockIndexedCorpus extends FakeSemanticCorpusIndex {
     public static messageTime: string | undefined;
     public static fragmentRequests: IndexedFragmentRequest[] = [];
     public static subjects = ["acquisition"];
+    public static subjectOffsets: number[] = [];
+    public static graphSubjects = false;
     public static initiatives: string[] = [];
     public static subjectDetails: Record<string, Partial<IndexedSubject>> = {};
     public static languageSearches = 0;
@@ -170,6 +172,7 @@ class MockIndexedCorpus extends FakeSemanticCorpusIndex {
         return super.search(query, limit, tags);
     }
     public async listSubjects(offset = 0, limit = 48) {
+        MockIndexedCorpus.subjectOffsets.push(offset);
         const next = offset + limit;
         return {
             total: MockIndexedCorpus.subjects.length,
@@ -187,6 +190,20 @@ class MockIndexedCorpus extends FakeSemanticCorpusIndex {
             ...(next < MockIndexedCorpus.subjects.length
                 ? { nextContinuationToken: String(next) }
                 : {}),
+        };
+    }
+    public override async getKnowledgeGraph() {
+        if (!MockIndexedCorpus.graphSubjects) return super.getKnowledgeGraph();
+        return {
+            entities: [],
+            relationships: [],
+            topics: MockIndexedCorpus.subjects.map((name) => ({
+                name,
+                sourceIds: this.documents.map(
+                    (document) => document.source.sourceId,
+                ),
+                mentionCount: 1,
+            })),
         };
     }
     public async readFragments(request: IndexedFragmentRequest) {
@@ -375,6 +392,8 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         MockIndexedCorpus.messageTime = undefined;
         MockIndexedCorpus.fragmentRequests = [];
         MockIndexedCorpus.subjects = ["acquisition"];
+        MockIndexedCorpus.subjectOffsets = [];
+        MockIndexedCorpus.graphSubjects = false;
         MockIndexedCorpus.initiatives = [];
         MockIndexedCorpus.subjectDetails = {};
         generated = 0;
@@ -1852,6 +1871,53 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             service.retryViewBuild({ corpusId, jobId: retried.jobId }),
         ).rejects.toThrow("no retryable targets");
         expect(generated).toBe(calls);
+    });
+
+    test("descriptor removal preserves out-of-page subjects and advances the 48-subject cursor", async () => {
+        maintenanceMode = "manual";
+        await service.close();
+        service = open();
+        MockIndexedCorpus.subjects = Array.from(
+            { length: 97 },
+            (_, index) => `subject${index}`,
+        );
+        MockIndexedCorpus.graphSubjects = true;
+        const { corpusId } = await service.createCorpus("Descriptor paging");
+        await update(corpusId, "pause");
+        await add(corpusId, "source", MockIndexedCorpus.subjects.join(" "));
+        await service.close();
+        const store = new TypedViewStore(root);
+        const family = await store.getWikiFamily(corpusId);
+        family.descriptors = [
+            {
+                viewId: "obsolete",
+                query: "removedsubject",
+                sourceIds: ["source"],
+            },
+            { viewId: "last-valid", query: "subject96", sourceIds: ["source"] },
+        ];
+        await store.saveWikiFamily(corpusId, family);
+        service = open();
+        for (const [index, operation] of [
+            "resume",
+            "update",
+            "update",
+        ].entries()) {
+            await update(corpusId, operation as "resume" | "update");
+            const retained = await store.getWikiFamily(corpusId);
+            expect(
+                retained.descriptors.some(
+                    (descriptor) => descriptor.viewId === "obsolete",
+                ),
+            ).toBe(false);
+            expect(
+                retained.descriptors.some(
+                    (descriptor) => descriptor.viewId === "last-valid",
+                ),
+            ).toBe(true);
+            expect(retained.cursor).toBe([48, 96, 0][index]);
+        }
+        expect(MockIndexedCorpus.subjectOffsets).toEqual([0, 48, 96]);
     });
 
     test("lexical descriptors reconcile before builds and survive alias edits and cold restart without duplicate IDs", async () => {

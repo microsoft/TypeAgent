@@ -13,6 +13,7 @@ import {
     configuredSourceSynopsisModel,
     sourceSynopsisRecipe,
     synopsisInputHash,
+    sourceSynopsisSchema,
     type SourceSynopsisModel,
 } from "../src/sourceSynopsis.js";
 import type {
@@ -30,6 +31,36 @@ interface PromptEvidence {
     end: number;
     excerpt: string;
 }
+
+test("synopsis structured output binds exact evidence IDs and host text bounds", () => {
+    const output = sourceSynopsisSchema([
+        "first-supplied-id",
+        "second-supplied-id",
+    ]);
+    expect(output.strict).toBe(true);
+    expect(output.schema).toMatchObject({
+        properties: {
+            preview: { minLength: 1, maxLength: 320 },
+            overview: { minLength: 1, maxLength: 6000 },
+            evidence: {
+                minItems: 1,
+                maxItems: 32,
+                items: {
+                    additionalProperties: false,
+                    properties: {
+                        id: {
+                            enum: ["first-supplied-id", "second-supplied-id"],
+                        },
+                    },
+                    required: ["id"],
+                },
+            },
+        },
+    });
+    expect(() => sourceSynopsisSchema([])).toThrow(
+        "requires supplied evidence",
+    );
+});
 
 interface SynopsisPrompt {
     text: string;
@@ -185,6 +216,9 @@ describe("source synopsis orchestration", () => {
                 expect(body).not.toHaveProperty("max_output_tokens");
                 expect(body.messages[0].content).toContain(
                     "approximately 2000 tokens in the final JSON response, excluding reasoning",
+                );
+                expect(body.messages[0].content).toContain(
+                    "Use shorter complete sentences rather than unfinished clauses or whitespace padding",
                 );
                 const output = {
                     preview: content,
@@ -787,7 +821,7 @@ describe("source synopsis orchestration", () => {
     });
 
     test("one semantic fingerprint ignores index timestamps/generations but includes recipe, role, title and eligibility", () => {
-        expect(sourceSynopsisRecipe).toBe("source-synopsis-v6");
+        expect(sourceSynopsisRecipe).toBe("source-synopsis-v7");
         const hash = synopsisInputHash(source, revision, "model", true);
         const legacyV3Hash = createHash("sha256")
             .update(

@@ -60,6 +60,77 @@ import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { createMaintenanceBuildScheduler } from "../src/maintenanceConcurrency.js";
+
+test.each([false, true])(
+    "native checkpoint yielding drains lookahead workers before releasing the slot (fullTransactions=%s)",
+    async (fullTransactions) => {
+        const schedule = createMaintenanceBuildScheduler(1, false, true);
+        let both!: () => void;
+        const started = new Promise<void>((resolve) => {
+            both = resolve;
+        });
+        let release!: () => void;
+        const slow = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        let calls = 0;
+        let active = 0;
+        let durable = 0;
+        let shortRan = false;
+        const native = model(async (request) => {
+            const ordinal = ++calls;
+            active++;
+            if (ordinal === 2) both();
+            await started;
+            if (ordinal === 2) await slow;
+            active--;
+            return {
+                success: true,
+                data: answer(request, () => "defer_passing_mention"),
+            };
+        });
+        const value = snapshot(4);
+        const job = schedule(
+            () =>
+                curateTopicsWithDecision(
+                    value,
+                    (node) => node.citations,
+                    noAuthoring,
+                    new AbortController().signal,
+                    {
+                        model: native,
+                        batchSize: 1,
+                        lookahead: 2,
+                        concurrency: 2,
+                        fullTransactions,
+                    },
+                    async (curation) => {
+                        durable = curation.deferred.length;
+                    },
+                ),
+            true,
+        );
+        await started;
+        const short = schedule(async () => {
+            expect(active).toBe(0);
+            expect(calls).toBe(2);
+            expect(durable).toBe(2);
+            shortRan = true;
+        }, false);
+        try {
+            await new Promise((resolve) => setImmediate(resolve));
+            expect(shortRan).toBe(false);
+        } finally {
+            release();
+        }
+        const [result] = await Promise.all([job, short]);
+        expect(result.deferred).toHaveLength(4);
+        expect(calls).toBe(4);
+        expect(shortRan).toBe(true);
+    },
+    5000,
+);
 
 function snapshot(count = 3): TopicSnapshot {
     const occurrences = Array.from({ length: count }, (_, index) =>

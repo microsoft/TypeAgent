@@ -83,6 +83,14 @@ import type {
 } from "./knowledgeTypes.js";
 import { knowledgeLimits } from "./knowledgeTypes.js";
 import {
+    createMaintenanceModelScheduler,
+    resolveMaintenanceConcurrency,
+    resolveMaintenanceBuildPriority,
+    withMaintenanceExtraction,
+    type MaintenanceConcurrency,
+    type MaintenanceModelScheduler,
+} from "./maintenanceConcurrency.js";
+import {
     planDiscoveryWindows,
     policyAdmittedSlot,
     deriveDiscoveryRouteTerms,
@@ -365,6 +373,7 @@ import {
     nominateWikiPages,
     parseWikiAssessment,
     wikiPageContext,
+    wikiAssessmentKey,
 } from "./wikiAdmission.js";
 import {
     refreshWikiContributionInput,
@@ -652,6 +661,11 @@ interface PreparedEventIndex {
 
 export interface FileMemoryServiceOptions {
     maintenanceMode?: "automatic" | "manual";
+    topicBuildTimeoutMs?: number;
+    maintenanceConcurrency?: MaintenanceConcurrency;
+    maintenanceShortBuildReservation?: boolean;
+    maintenanceShortBuildPriority?: boolean;
+    wikiAssessmentConcurrency?: number;
     ingestionCommitPolicy?: Partial<IngestionCommitPolicy>;
     maintenanceLimits?: {
         maxTargetsPerPass?: number;
@@ -1609,6 +1623,7 @@ export class FileMemoryService
     private readonly ingestionGroups: BoundedIngestionGroup<AcceptedIngestion>;
     private readonly maintenance: MaintenanceScheduler;
     private readonly maintenanceLimits: FileMemoryServiceOptions["maintenanceLimits"];
+    private readonly maintenanceModels: MaintenanceModelScheduler;
     private readonly admissionPolicy: string;
     private readonly preparingIndexes = new Map<
         string,
@@ -1657,6 +1672,16 @@ export class FileMemoryService
         private readonly rootDirectory: string,
         options: FileMemoryServiceOptions = {},
     ) {
+        const maintenanceConcurrency = resolveMaintenanceConcurrency(
+            options.maintenanceConcurrency,
+        );
+        const prioritizeShortBuilds = resolveMaintenanceBuildPriority(
+            options.maintenanceShortBuildReservation,
+            options.maintenanceShortBuildPriority,
+        );
+        this.maintenanceModels = createMaintenanceModelScheduler(
+            maintenanceConcurrency.modelRequests,
+        );
         const commitPolicy = resolveIngestionCommitPolicy(
             options.ingestionCommitPolicy,
         );
@@ -1669,6 +1694,8 @@ export class FileMemoryService
             (corpusId) => this.batchStore.hasActiveImports(corpusId),
             options.maintenanceMode,
             options.maintenanceLimits?.requestBudget,
+            maintenanceConcurrency.builds,
+            prioritizeShortBuilds,
         );
         this.maintenanceLimits = options.maintenanceLimits;
         for (const limit of [
@@ -1745,12 +1772,15 @@ export class FileMemoryService
             createConfiguredViewSynthesisAdapter(
                 options.viewModelEndpoint,
                 Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
+                undefined,
+                this.maintenanceModels,
             );
         this.viewAdapter = adapter;
         this.summarizeTopicConcept = createConfiguredTopicConceptSummarizer(
             options.viewModelEndpoint,
             undefined,
             adapter,
+            this.maintenanceModels,
         );
         this.admissionPolicy = hashContent(
             JSON.stringify([
@@ -1762,25 +1792,10 @@ export class FileMemoryService
         this.viewBuilds = new ViewBuildRunner(
             this.viewAdapter,
             {
-                unchanged: async (input) => {
-                    const current = await this.viewStore.getView({
-                        corpusId: input.corpusId,
-                        viewId: input.definition.viewId,
-                    });
-                    const prior = current?.generation?.input;
-                    if (current && sameViewBuildEvidence(prior, input)) {
-                        await this.enqueueWrite(input.corpusId, () =>
-                            this.recoverInformationalEffect(current),
-                        );
-                        return true;
-                    }
-                    return this.viewStore.hasPendingInformationalInput(
-                        input.corpusId,
-                        input.definition.viewId,
-                        input,
-                        false,
-                    );
-                },
+                unchanged: (input) =>
+                    this.unchangedInformationalInput(input, true),
+                canPrepareWikiAssessment: async (input) =>
+                    !(await this.unchangedInformationalInput(input)),
                 wikiPages: (input) => this.wikiAdmissionPages(input),
                 consolidateWiki: (job, result, signal) =>
                     this.consolidateWiki(job, result, signal),
@@ -1933,6 +1948,11 @@ export class FileMemoryService
             },
             this.wikiBudget,
             this.createTopicGenerator(),
+            options.topicBuildTimeoutMs,
+            maintenanceConcurrency.builds,
+            options.maintenanceShortBuildReservation,
+            options.wikiAssessmentConcurrency,
+            prioritizeShortBuilds,
         );
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
         this.eventIndexFactory = options.eventIndexFactory ?? this.indexFactory;
@@ -8007,6 +8027,32 @@ export class FileMemoryService
         return true;
     }
 
+    private async unchangedInformationalInput(
+        input: ViewBuildSnapshot,
+        recover = false,
+    ): Promise<boolean> {
+        const current = await this.viewStore.getView({
+            corpusId: input.corpusId,
+            viewId: input.definition.viewId,
+        });
+        if (
+            current &&
+            sameViewBuildEvidence(current.generation?.input, input)
+        ) {
+            if (recover)
+                await this.enqueueWrite(input.corpusId, () =>
+                    this.recoverInformationalEffect(current),
+                );
+            return true;
+        }
+        return this.viewStore.hasPendingInformationalInput(
+            input.corpusId,
+            input.definition.viewId,
+            input,
+            false,
+        );
+    }
+
     private async recordWikiAssessment(
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
@@ -8014,74 +8060,86 @@ export class FileMemoryService
         pages: WikiPagePurposeContext[],
         signal: AbortSignal,
     ): Promise<void> {
-        await this.enqueueWrite(job.corpusId, async () => {
-            signal.throwIfAborted();
-            await this.recheckViewInput(result.snapshot);
-            const canonical = pages.find(
-                (page) => page.viewId === assessment.canonicalViewId,
-            );
-            for (const nominated of pages) {
-                const current = (
-                    await this.wikiAdmissionPages(result.snapshot)
-                ).find((page) => page.viewId === nominated.viewId);
-                if (!current || current.revisionId !== nominated.revisionId)
+        await timeSearchStage("wiki.assessment.record", () =>
+            this.enqueueWrite(job.corpusId, async () => {
+                signal.throwIfAborted();
+                await timeSearchStage("wiki.assessment.input.recheck", () =>
+                    this.recheckViewInput(result.snapshot),
+                );
+                const canonical = pages.find(
+                    (page) => page.viewId === assessment.canonicalViewId,
+                );
+                const currentPages = await timeSearchStage(
+                    "wiki.assessment.pages.recheck",
+                    () => this.wikiAdmissionPages(result.snapshot),
+                );
+                const assessmentKey = wikiAssessmentKey(
+                    result.snapshot,
+                    pages,
+                    this.wikiAdmissionContext([]),
+                );
+                if (
+                    assessmentKey !==
+                    wikiAssessmentKey(
+                        result.snapshot,
+                        currentPages,
+                        this.wikiAdmissionContext([]),
+                    )
+                )
                     throw new ViewBuildStaleError(
                         "Wiki purpose canonical page changed during assessment",
                     );
-            }
-            await this.viewStore.updateViewBuild(
-                job.corpusId,
-                job.jobId,
-                (current) => {
-                    const target = current.results.find(
-                        (entry) => entry.viewId === result.viewId,
-                    );
-                    if (!target || current.state !== "running")
-                        throw new ViewBuildStaleError(
-                            "Wiki purpose target is no longer active",
+                await this.viewStore.updateViewBuild(
+                    job.corpusId,
+                    job.jobId,
+                    (current) => {
+                        const target = current.results.find(
+                            (entry) => entry.viewId === result.viewId,
                         );
-                    target.wikiAssessment = {
-                        ...assessment,
-                        ...(canonical
-                            ? { canonicalRevisionId: canonical.revisionId }
-                            : {}),
-                    };
-                    if (result.snapshot.influenceSources)
-                        target.snapshot.influenceSources = structuredClone(
-                            result.snapshot.influenceSources,
-                        );
-                    if (assessment.disposition === "defer") {
-                        target.state = "skipped";
-                        target.reason = `Standalone page deferred for insufficient utility: ${assessment.reason}`;
-                    } else if (assessment.disposition === "covered") {
-                        target.state = "skipped";
-                        target.reason = `Standalone purpose already covered by ${assessment.canonicalViewId}: ${assessment.reason}`;
-                    } else if (assessment.disposition === "ambiguous") {
-                        target.state = "blocked";
-                        target.reason = `User decision required: multiple existing Wiki pages require explicit ambiguity review (${assessment.ambiguousViewIds.join(", ")}): ${assessment.reason}`;
-                    }
-                },
-            );
-            if (assessment.disposition === "defer") {
-                const family = await this.viewStore.getWikiFamily(job.corpusId);
-                const descriptor = family.descriptors.find(
-                    (entry) => entry.viewId === result.viewId,
+                        if (!target || current.state !== "running")
+                            throw new ViewBuildStaleError(
+                                "Wiki purpose target is no longer active",
+                            );
+                        target.wikiAssessment = {
+                            ...assessment,
+                            ...(canonical
+                                ? { canonicalRevisionId: canonical.revisionId }
+                                : {}),
+                        };
+                        if (result.snapshot.influenceSources)
+                            target.snapshot.influenceSources = structuredClone(
+                                result.snapshot.influenceSources,
+                            );
+                        if (assessment.disposition === "defer") {
+                            target.state = "skipped";
+                            target.reason = `Standalone page deferred for insufficient utility: ${assessment.reason}`;
+                        } else if (assessment.disposition === "covered") {
+                            target.state = "skipped";
+                            target.reason = `Standalone purpose already covered by ${assessment.canonicalViewId}: ${assessment.reason}`;
+                        } else if (assessment.disposition === "ambiguous") {
+                            target.state = "blocked";
+                            target.reason = `User decision required: multiple existing Wiki pages require explicit ambiguity review (${assessment.ambiguousViewIds.join(", ")}): ${assessment.reason}`;
+                        }
+                    },
+                    assessment.disposition === "defer"
+                        ? (family) => {
+                              const descriptor = family.descriptors.find(
+                                  (entry) => entry.viewId === result.viewId,
+                              );
+                              if (descriptor)
+                                  descriptor.admission = {
+                                      generation:
+                                          result.snapshot.informationalRetrieval
+                                              ?.indexGeneration,
+                                      policy: this.wikiAdmissionContext([]),
+                                      reason: deferredWikiAdmission,
+                                      assessmentKey,
+                                  };
+                          }
+                        : undefined,
                 );
-                if (descriptor) {
-                    descriptor.admission = {
-                        generation:
-                            result.snapshot.informationalRetrieval
-                                ?.indexGeneration,
-                        policy: this.wikiAdmissionContext(
-                            (await this.viewStore.listViews(job.corpusId))
-                                .views,
-                        ),
-                        reason: deferredWikiAdmission,
-                    };
-                    await this.viewStore.saveWikiFamily(job.corpusId, family);
-                }
-            }
-        });
+            }),
+        );
     }
 
     private async checkpointInformationalFamilies(
@@ -8176,7 +8234,10 @@ export class FileMemoryService
         signal: AbortSignal,
     ): Promise<void> {
         if (!result?.job) return;
-        await this.viewBuilds.wait(result.job.jobId, signal);
+        const jobId = result.job.jobId;
+        await this.maintenance.waitForBuild(() =>
+            this.viewBuilds.wait(jobId, signal),
+        );
         const job = (
             await this.viewStore.listViewBuilds(result.job.corpusId)
         ).find((job) => job.jobId === result.job!.jobId);
@@ -8648,11 +8709,34 @@ export class FileMemoryService
         generation: string | undefined,
     ): boolean {
         return (
+            !descriptor.admission?.assessmentKey &&
             (automatic ||
                 descriptor.admission?.reason === deferredWikiAdmission) &&
             descriptor.admission?.policy === policy &&
             descriptor.admission.generation === generation
         );
+    }
+
+    private async retainedScopedWikiAssessment(
+        input: ViewBuildSnapshot,
+        descriptor: WikiFamilyState["descriptors"][number],
+    ): Promise<boolean> {
+        const key = descriptor.admission?.assessmentKey;
+        if (
+            !key ||
+            key !==
+                wikiAssessmentKey(
+                    input,
+                    await this.wikiAdmissionPages(input),
+                    this.wikiAdmissionContext([]),
+                )
+        )
+            return false;
+        recordSearchTiming("wiki.assessment.retained", 0, {
+            retained: true,
+            fingerprint: key,
+        });
+        return true;
     }
 
     private async prepareWikiTargets(
@@ -8738,6 +8822,14 @@ export class FileMemoryService
                             policy,
                             reason: "Retained admission decision or unchanged indexed evidence",
                         };
+                    continue;
+                }
+                if (
+                    !rebuild &&
+                    !current &&
+                    kind === "wiki" &&
+                    (await this.retainedScopedWikiAssessment(input, descriptor))
+                ) {
                     continue;
                 }
                 targets.push(target);
@@ -9139,6 +9231,7 @@ export class FileMemoryService
     private createTopicGenerator() {
         return createConfiguredTopicGenerator({
             endpoint: this.wikiModelEndpoint,
+            modelScheduler: this.maintenanceModels,
             mode: this.decisionTopics
                 ? {
                       kind: "decision",
@@ -9149,7 +9242,9 @@ export class FileMemoryService
                               );
                           return {
                               ...this.decisionTopicExecution,
-                              model: configuredTopicDecisionModel(),
+                              model: configuredTopicDecisionModel(
+                                  this.maintenanceModels,
+                              ),
                               ...(this.onTopicDecisionReceipt
                                   ? { onReceipt: this.onTopicDecisionReceipt }
                                   : {}),
@@ -13151,6 +13246,7 @@ export class FileMemoryService
             try {
                 this.synopsisModel = configuredSourceSynopsisModel(
                     this.wikiModelEndpoint,
+                    this.maintenanceModels,
                 );
             } catch (error) {
                 this.synopsisModelFailure = safeError(error);
@@ -14998,30 +15094,32 @@ export class FileMemoryService
             signal.throwIfAborted();
             await mkdir(directory, { recursive: true });
             const index = this.indexFactory(view.corpusId, directory);
-            await index.rebuild(
-                [
-                    {
-                        source: {
-                            corpusId: view.corpusId,
-                            sourceId: view.viewId,
-                            sourceType: "markdown",
-                            title: view.content.title,
-                            activeRevisionId: view.revisionId,
+            await withMaintenanceExtraction(this.maintenanceModels, () =>
+                index.rebuild(
+                    [
+                        {
+                            source: {
+                                corpusId: view.corpusId,
+                                sourceId: view.viewId,
+                                sourceType: "markdown",
+                                title: view.content.title,
+                                activeRevisionId: view.revisionId,
+                            },
+                            revision: {
+                                revisionId: view.revisionId,
+                                sourceId: view.viewId,
+                                contentHash: viewHash(content),
+                                mimeType: "text/markdown",
+                                pipelineVersion,
+                                state: "ready",
+                            },
+                            content,
+                            pipeline: { mode: "content" },
                         },
-                        revision: {
-                            revisionId: view.revisionId,
-                            sourceId: view.viewId,
-                            contentHash: viewHash(content),
-                            mimeType: "text/markdown",
-                            pipelineVersion,
-                            state: "ready",
-                        },
-                        content,
-                        pipeline: { mode: "content" },
-                    },
-                ],
-                signal,
-                async () => {},
+                    ],
+                    signal,
+                    async () => {},
+                ),
             );
             signal.throwIfAborted();
             await stampIndexSchema(directory, "views", true);

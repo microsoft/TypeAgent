@@ -29,6 +29,7 @@ import {
     executeMemoryCase,
     judgePrompt,
     officialJudgeTemplates,
+    preflightRetainedKnowledge,
 } from "./longmemeval-runner.mjs";
 
 const datasetSha256 =
@@ -48,6 +49,14 @@ export async function createBenchmarkMemoryService(
     const { createDurableMemoryService } = await load(productFactory);
     if (onReceipt) return createDurableMemoryService(rootDirectory, onReceipt);
     return createDurableMemoryService(rootDirectory);
+}
+
+export async function createRetainedKnowledgeReader(load, rootDirectory) {
+    const { TypedViewStore } = await load(
+        "packages\\memory\\service\\dist\\viewStore.js",
+    );
+    const store = new TypedViewStore(rootDirectory);
+    return (corpusId) => store.getKnowledgeState(corpusId);
 }
 
 export function recordBenchmarkArm(state, capabilities, resume) {
@@ -609,6 +618,19 @@ async function runWorker(spec) {
         return { model: actual, label: /^yes/i.test(result.data.trim()) };
     };
     try {
+        if (Object.values(state.cases).some((record) => record?.corpusId)) {
+            const readRetainedKnowledgeStatus =
+                await createRetainedKnowledgeReader(
+                    load,
+                    path.join(spec.runDirectory, "isolated-store"),
+                );
+            await preflightRetainedKnowledge(service, state.cases, {
+                persist,
+                signal,
+                failure: benchmarkFailure,
+                readRetainedKnowledgeStatus,
+            });
+        }
         await service.initialize();
         recordBenchmarkArm(state, await service.getCapabilities(), seeded);
         await persist();

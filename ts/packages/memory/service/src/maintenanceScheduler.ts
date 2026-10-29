@@ -13,6 +13,7 @@ import {
     runWithSearchTiming,
     timeSearchStage,
 } from "@typeagent/knowpro";
+import { resolveMaintenanceConcurrency } from "./maintenanceConcurrency.js";
 
 export interface MaintenanceStatus {
     mode: "automatic" | "manual";
@@ -37,10 +38,13 @@ interface Work {
 export class MaintenanceScheduler {
     private readonly pending = new Map<string, Work>();
     private readonly running = new Map<string, Promise<void>>();
+    private readonly activeCorpora = new Set<string>();
     private readonly failures = new Map<string, string>();
     private readonly reportedFailures = new Map<string, string>();
     private readonly parked = new Map<string, string>();
     private readonly context = new AsyncLocalStorage<AbortSignal>();
+    private readonly workKey = new AsyncLocalStorage<string>();
+    private readonly waitingBuilds = new Set<string>();
     private readonly shutdown = new AbortController();
     private timer: ReturnType<typeof setTimeout> | undefined;
     private holds = 0;
@@ -52,9 +56,12 @@ export class MaintenanceScheduler {
         private readonly blocked: (corpusId: string) => boolean,
         private readonly mode: "automatic" | "manual" = "automatic",
         private readonly budget?: RequestBudgetLimits,
+        private readonly concurrency = 1,
+        private readonly prioritizeShortBuilds = true,
     ) {
         if (mode !== "automatic" && mode !== "manual")
             throw new Error("Unsupported maintenance execution mode");
+        resolveMaintenanceConcurrency({ builds: concurrency });
     }
 
     public get signal(): AbortSignal {
@@ -119,11 +126,14 @@ export class MaintenanceScheduler {
     public wake(): void {
         if (
             this.timer ||
-            this.running.size ||
+            this.running.size - this.waitingBuilds.size >= this.concurrency ||
+            this.running.size >= 32 ||
             ![...this.pending].some(
                 ([key, work]) =>
                     !this.parked.has(key) &&
                     !this.failures.has(key) &&
+                    !this.activeCorpora.has(work.corpusId) &&
+                    this.canAdmitBuildWait(key) &&
                     !this.isDeferred(work.corpusId),
             )
         )
@@ -134,6 +144,8 @@ export class MaintenanceScheduler {
                     ([key, work]) =>
                         !this.parked.has(key) &&
                         !this.failures.has(key) &&
+                        !this.activeCorpora.has(work.corpusId) &&
+                        this.canAdmitBuildWait(key) &&
                         !this.isDeferred(work.corpusId),
                 )
                 .map(([, work]) => work.readyAt),
@@ -173,11 +185,35 @@ export class MaintenanceScheduler {
         this.parked.set(`${corpusId}:${family}`, reason);
     }
 
+    public async waitForBuild<T>(work: () => Promise<T>): Promise<T> {
+        const key = this.workKey.getStore();
+        if (!this.prioritizeShortBuilds || !key) return work();
+        this.waitingBuilds.add(key);
+        this.wake();
+        try {
+            return await work();
+        } finally {
+            this.waitingBuilds.delete(key);
+        }
+    }
+
+    private canAdmitBuildWait(key: string): boolean {
+        return (
+            !this.prioritizeShortBuilds ||
+            !key.endsWith(":topics") ||
+            [...this.waitingBuilds].filter((waiting) =>
+                waiting.endsWith(":topics"),
+            ).length < this.concurrency
+        );
+    }
+
     private dispatch(): void {
         const next = [...this.pending].find(
             ([key, work]) =>
                 !this.failures.has(key) &&
                 !this.parked.has(key) &&
+                !this.activeCorpora.has(work.corpusId) &&
+                this.canAdmitBuildWait(key) &&
                 (this.draining || work.readyAt <= performance.now()) &&
                 !this.isDeferred(work.corpusId),
         );
@@ -186,46 +222,49 @@ export class MaintenanceScheduler {
             return;
         }
         const [key, work] = next;
+        this.activeCorpora.add(work.corpusId);
         const signal = this.drainSignal
             ? AbortSignal.any([this.shutdown.signal, this.drainSignal])
             : this.shutdown.signal;
         const task = Promise.resolve()
             .then(() =>
-                this.context.run(signal, () =>
-                    runWithSearchTiming(
-                        undefined,
-                        "memory.maintenance",
-                        async () => {
-                            signal.throwIfAborted();
-                            recordSearchTiming(
-                                "maintenance.queue.wait",
-                                performance.now() - work.queuedAt,
-                                {
-                                    pending: this.pending.size,
-                                    coalesced: this.coalesced,
-                                },
-                            );
-                            const execute = () =>
-                                timeSearchStage("maintenance.work", () =>
-                                    work.execute(signal),
+                this.workKey.run(key, () =>
+                    this.context.run(signal, () =>
+                        runWithSearchTiming(
+                            undefined,
+                            "memory.maintenance",
+                            async () => {
+                                signal.throwIfAborted();
+                                recordSearchTiming(
+                                    "maintenance.queue.wait",
+                                    performance.now() - work.queuedAt,
+                                    {
+                                        pending: this.pending.size,
+                                        coalesced: this.coalesced,
+                                    },
                                 );
-                            await (this.budget
-                                ? runWithRequestBudget(
-                                      new RequestBudget(this.budget),
-                                      execute,
-                                  )
-                                : execute());
-                            if (
-                                this.pending.get(key) === work &&
-                                !this.parked.has(key) &&
-                                !this.isDeferred(work.corpusId)
-                            )
-                                this.pending.delete(key);
-                        },
-                        {
-                            corpusId: work.corpusId,
-                            indexGeneration: work.generation,
-                        },
+                                const execute = () =>
+                                    timeSearchStage("maintenance.work", () =>
+                                        work.execute(signal),
+                                    );
+                                await (this.budget
+                                    ? runWithRequestBudget(
+                                          new RequestBudget(this.budget),
+                                          execute,
+                                      )
+                                    : execute());
+                                if (
+                                    this.pending.get(key) === work &&
+                                    !this.parked.has(key) &&
+                                    !this.isDeferred(work.corpusId)
+                                )
+                                    this.pending.delete(key);
+                            },
+                            {
+                                corpusId: work.corpusId,
+                                indexGeneration: work.generation,
+                            },
+                        ),
                     ),
                 ),
             )
@@ -237,9 +276,11 @@ export class MaintenanceScheduler {
             })
             .finally(() => {
                 this.running.delete(key);
+                this.activeCorpora.delete(work.corpusId);
                 this.wake();
             });
         this.running.set(key, task);
+        this.wake();
     }
 
     public status(): MaintenanceStatus {
