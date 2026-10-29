@@ -64,6 +64,11 @@ capacities follow the provider's published limits; explicitly configured
 overrides remain authoritative. Document-scoped query translation uses its own
 model and applies cache decoration after its scoped schema is installed, without
 changing the ingestion/extraction model.
+Hosts that customize built-in document settings can use `indexSettingsFactory`;
+their extraction model, validators and embedding batches are retained while
+serving roles and decorators are applied. The ordinary agent-server host uses
+this path. Opaque `indexFactory` implementations still reject query experiments,
+and supplying both factories is invalid.
 
 For browser SSE previews, use the same environment switches in the service and
 browser gateway. The gateway omits the preview RPC when disabled. Direct clients

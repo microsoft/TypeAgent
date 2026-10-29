@@ -3,7 +3,10 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { openai } from "@typeagent/aiclient";
-import { createDocMemorySettings } from "@typeagent/conversation-memory";
+import {
+    createDocMemorySettings,
+    type DocMemorySettings,
+} from "@typeagent/conversation-memory";
 import {
     memoryPerformanceExperiments,
     type MemoryPerformanceExperiment,
@@ -700,6 +703,7 @@ export interface FileMemoryServiceOptions {
     topicCuration?: TopicCurationSettings;
     onTopicDecisionReceipt?: (receipt: TopicDecisionReceipt) => void;
     indexFactory?: CorpusIndexFactory;
+    indexSettingsFactory?: () => DocMemorySettings;
     eventIndexFactory?: CorpusIndexFactory;
     capabilities?: MemoryServiceCapabilities;
     /** Opt-in rehearsal envelope only; never enables product behavior. */
@@ -2191,6 +2195,10 @@ export class FileMemoryService
     private createIndexFactory(
         options: FileMemoryServiceOptions,
     ): CorpusIndexFactory {
+        if (options.indexFactory && options.indexSettingsFactory)
+            throw new Error(
+                "Supply either indexFactory or indexSettingsFactory, not both",
+            );
         if (
             this.experiments.has("fast-models") &&
             !this.fastQueryModelEndpoint?.trim()
@@ -2206,26 +2214,36 @@ export class FileMemoryService
             throw new Error(
                 "Query-model experiments require the built-in corpus index factory",
             );
-        const queryModel = this.experiments.has("fast-models")
-            ? openai.createChatModel(this.fastQueryModelEndpoint)
-            : this.experiments.has("translation-cache")
-              ? openai.createChatModelDefault("conversation-memory")
-              : undefined;
+        const queryExperiments =
+            this.experiments.has("fast-models") ||
+            this.experiments.has("translation-cache");
+        let queryModel: DocMemorySettings["languageModel"] | undefined =
+            this.experiments.has("fast-models")
+                ? openai.createChatModel(this.fastQueryModelEndpoint)
+                : undefined;
         if (options.indexFactory) return options.indexFactory;
-        if (!queryModel) return createKnowProCorpusIndex;
+        if (!queryExperiments && !options.indexSettingsFactory)
+            return createKnowProCorpusIndex;
         return (corpusId, directory) =>
             createKnowProCorpusIndex(corpusId, directory, () => {
-                const settings = createDocMemorySettings();
+                const settings =
+                    options.indexSettingsFactory?.() ??
+                    createDocMemorySettings();
+                if (!queryExperiments) return settings;
+                queryModel ??=
+                    settings.queryLanguageModel ?? settings.languageModel;
                 settings.queryLanguageModel = queryModel;
-                if (this.experiments.has("translation-cache"))
+                if (this.experiments.has("translation-cache")) {
+                    const wrap = settings.wrapQueryTranslator;
                     settings.wrapQueryTranslator = (translator) =>
                         this.translationCache.wrap(
                             corpusId,
                             this.experiments.has("fast-models")
                                 ? this.fastQueryModelEndpoint!
                                 : "service-default",
-                            translator,
+                            wrap ? wrap(translator) : translator,
                         );
+                }
                 return settings;
             });
     }
