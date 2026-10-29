@@ -137,6 +137,7 @@ export interface WikiFamilyState {
             policy: string;
             reason: string;
             assessmentKey?: string;
+            assessmentJobId?: string;
         };
     }>;
 }

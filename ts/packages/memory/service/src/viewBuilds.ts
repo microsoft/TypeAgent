@@ -133,7 +133,6 @@ export class ViewBuildRunner {
     private readonly purged = new Set<string>();
     private reservations = 0;
     private readonly tasks = new Map<string, Promise<void>>();
-    private readonly corpusTails = new Map<string, Promise<void>>();
     private readonly limit: ReturnType<typeof createMaintenanceBuildScheduler>;
     private readonly topicTimeoutMs: number;
     public constructor(
@@ -199,30 +198,27 @@ export class ViewBuildRunner {
         const queuedAt = isSearchTimingEnabled()
             ? performance.now()
             : undefined;
-        const previous =
-            this.corpusTails.get(job.corpusId) ?? Promise.resolve();
-        const task = previous.then(() =>
-            this.limit(
-                () =>
-                    runWithSearchTiming(
-                        job.jobId,
-                        "memory.build",
-                        () => {
-                            if (queuedAt !== undefined)
-                                recordSearchTiming(
-                                    "build.queue.wait",
-                                    performance.now() - queuedAt,
-                                );
-                            return timeSearchStage("build.job.total", () =>
-                                this.run(job, controller.signal),
+        const task = this.limit(
+            () =>
+                runWithSearchTiming(
+                    job.jobId,
+                    "memory.build",
+                    () => {
+                        if (queuedAt !== undefined)
+                            recordSearchTiming(
+                                "build.queue.wait",
+                                performance.now() - queuedAt,
                             );
-                        },
-                        { corpusId: job.corpusId, buildId: job.jobId },
-                    ),
-                job.results.some(
-                    (result) => result.snapshot.pipeline === "topics-v1",
+                        return timeSearchStage("build.job.total", () =>
+                            this.run(job, controller.signal),
+                        );
+                    },
+                    { corpusId: job.corpusId, buildId: job.jobId },
                 ),
+            job.results.some(
+                (result) => result.snapshot.pipeline === "topics-v1",
             ),
+            job.corpusId,
         );
         const settled = task
             .catch((error: unknown) => {
@@ -237,10 +233,7 @@ export class ViewBuildRunner {
             .finally(() => {
                 this.controllers.delete(job.jobId);
                 this.tasks.delete(job.jobId);
-                if (this.corpusTails.get(job.corpusId) === settled)
-                    this.corpusTails.delete(job.corpusId);
             });
-        this.corpusTails.set(job.corpusId, settled);
         this.tasks.set(job.jobId, settled);
     }
 

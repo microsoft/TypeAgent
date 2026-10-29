@@ -1397,6 +1397,47 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         },
     );
 
+    test("a bounded scan revisits a deferral when a later candidate publishes nominated context", async () => {
+        await service.close();
+        maintenanceMode = "manual";
+        maintenanceLimits = {
+            maxCandidatesPerPass: 1,
+            maxTargetsPerPass: 2,
+            maxPassesPerGeneration: 4,
+        };
+        rehearsalBudget = false;
+        const assessed: string[] = [];
+        adapter.assessWikiSubject = async (input) => {
+            const query = input.definition.wiki!.query;
+            assessed.push(query);
+            return {
+                disposition: query === "capacity" ? "distinct" : "defer",
+                purpose: "Independent selected subject",
+                reason: "Only selected indexed evidence",
+                canonicalViewId: "",
+                sharedFragmentIds: [],
+                essentialDistinctions: [],
+                ambiguousViewIds: [],
+            };
+        };
+        MockIndexedCorpus.subjects = ["acquisition", "capacity"];
+        service = open();
+        const { corpusId } = await service.createCorpus(
+            "Changed nominated context",
+        );
+        await add(
+            corpusId,
+            "source",
+            "acquisition review is pending. capacity approval is withheld.",
+        );
+        expect((await service.drainMaintenance(10_000)).settled).toBe(true);
+        expect(assessed).toEqual(["acquisition", "capacity", "acquisition"]);
+        expect(generated).toBe(1);
+        const family = await new TypedViewStore(root).getWikiFamily(corpusId);
+        expect(family.dirty).toBe(false);
+        expect(family.candidateReadCursor).toBeUndefined();
+    });
+
     test("an admission failure leaves its bounded candidate retryable across reopen", async () => {
         await service.close();
         maintenanceMode = "manual";

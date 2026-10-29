@@ -134,6 +134,21 @@ export function createConfiguredViewSynthesisAdapter(
     injectedModel?: ChatModel,
     modelScheduler?: MaintenanceModelScheduler,
 ): ViewSynthesisAdapter {
+    const modelIdentity = injectedModel
+        ? "host-injected"
+        : openai.hasChatModelEndpoint(endpoint)
+          ? viewHash(
+                openai
+                    .getChatModelPool(endpoint)
+                    .members.map(({ settings }) => ({
+                        provider: settings.provider,
+                        modelName: settings.modelName,
+                        endpoint: settings.endpoint,
+                        wireApi: settings.wireApi,
+                        requestConstraints: settings.requestConstraints,
+                    })),
+            )
+          : "unconfigured";
     let model = injectedModel;
     let informationalModel = injectedModel;
     async function complete(
@@ -179,7 +194,7 @@ export function createConfiguredViewSynthesisAdapter(
         );
     }
     return {
-        identity: `configured:${endpoint ?? "default"}:evidence-first-v11`,
+        identity: `configured:${endpoint ?? "default"}:evidence-first-v11:${modelIdentity}`,
         async discoverCorpusQuestions(input, signal, reserveRepair) {
             const instructions = `${corpusDiscoveryRules}\nAt most ${input.maxProposals} proposals.`;
             const raw = await complete(

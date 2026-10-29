@@ -27,6 +27,7 @@ import type {
 
 export const sourceSynopsisRecipe = "source-synopsis-v7";
 const selectionSchema = "source-synopsis-evidence-selection-v1";
+const maximumEvidenceChoices = 250;
 
 export interface SourceSynopsisModel {
     identity: string;
@@ -43,9 +44,13 @@ export function configuredSourceSynopsisModel(
     modelScheduler?: MaintenanceModelScheduler,
 ): SourceSynopsisModel {
     const settings = openai.getChatModelSettings(endpoint);
-    if (settings.wireApi === "messages")
+    if (settings.provider !== "azure" && settings.provider !== "openai")
         throw new Error(
-            "Source synopsis requires strict structured outputs; the messages wire API does not enforce JSON schemas",
+            `Source synopsis requires strict structured outputs; the ${settings.provider} provider does not enforce JSON schemas`,
+        );
+    if (settings.wireApi === "messages" || settings.wireApi === "responses")
+        throw new Error(
+            `Source synopsis requires strict structured outputs; the ${settings.wireApi} wire API does not enforce JSON schemas`,
         );
     if (!settings.requestConstraints)
         throw new Error(
@@ -148,6 +153,11 @@ export function sourceSynopsisSchema(
 ): StructuredOutputJsonSchema {
     if (!ids.length)
         throw new Error("Synopsis schema requires supplied evidence IDs");
+    const choices = [...new Set(ids)];
+    if (choices.length > maximumEvidenceChoices)
+        throw new Error(
+            "Synopsis schema exceeds provider evidence enum capacity",
+        );
     const list = { type: "array", items: { type: "string" } };
     return {
         name: "source_synopsis_selection",
@@ -169,7 +179,7 @@ export function sourceSynopsisSchema(
                         type: "object",
                         additionalProperties: false,
                         properties: {
-                            id: { type: "string", enum: [...new Set(ids)] },
+                            id: { type: "string", enum: choices },
                         },
                         required: ["id"],
                     },
@@ -192,6 +202,8 @@ function selectionFits(
     prompt: string,
     evidence: SuppliedEvidence[],
 ): boolean {
+    if (new Set(evidence.map(({ id }) => id)).size > maximumEvidenceChoices)
+        return false;
     return model.fits(
         prompt,
         sourceSynopsisSchema(evidence.map(({ id }) => id)),

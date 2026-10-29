@@ -54,6 +54,7 @@ const buildLease = new AsyncLocalStorage<BuildLease>();
 
 interface WaitingBuild {
     long: boolean;
+    eligible: () => boolean;
     admit: () => void;
 }
 
@@ -81,9 +82,14 @@ function createMaintenanceAdmission(capacity: number, priority: boolean) {
     let shortBurst = 0;
     function dispatch() {
         while (active < capacity && waiting.length) {
-            const native = waiting.findIndex((entry) => entry.long);
-            const short = waiting.findIndex((entry) => !entry.long);
-            let index = 0;
+            const native = waiting.findIndex(
+                (entry) => entry.long && entry.eligible(),
+            );
+            const short = waiting.findIndex(
+                (entry) => !entry.long && entry.eligible(),
+            );
+            let index = waiting.findIndex((entry) => entry.eligible());
+            if (index < 0) return;
             if (priority && short >= 0)
                 index = native < 0 || shortBurst < 3 ? short : native;
             const [entry] = waiting.splice(index, 1);
@@ -92,7 +98,12 @@ function createMaintenanceAdmission(capacity: number, priority: boolean) {
             entry.admit();
         }
     }
-    function acquire(long: boolean, signal?: AbortSignal): Promise<() => void> {
+    function acquire(
+        long: boolean,
+        signal?: AbortSignal,
+        eligible = () => true,
+        onAdmit?: () => void,
+    ): Promise<() => void> {
         signal?.throwIfAborted();
         return new Promise((resolve, reject) => {
             const abort = () => {
@@ -105,7 +116,9 @@ function createMaintenanceAdmission(capacity: number, priority: boolean) {
             };
             const entry: WaitingBuild = {
                 long,
+                eligible,
                 admit: () => {
+                    onAdmit?.();
                     signal?.removeEventListener("abort", abort);
                     let released = false;
                     resolve(() => {
@@ -123,7 +136,9 @@ function createMaintenanceAdmission(capacity: number, priority: boolean) {
     }
     return {
         acquire,
-        hasShortWaiter: () => waiting.some((entry) => !entry.long),
+        hasShortWaiter: () =>
+            waiting.some((entry) => !entry.long && entry.eligible()),
+        wake: dispatch,
     };
 }
 
@@ -137,30 +152,51 @@ export function createMaintenanceBuildScheduler(
         prioritizeShortBuilds,
     );
     const { builds } = resolveMaintenanceConcurrency({ builds: concurrency });
-    const { acquire, hasShortWaiter } = createMaintenanceAdmission(
+    const { acquire, hasShortWaiter, wake } = createMaintenanceAdmission(
         builds,
         priority,
     );
-    async function run<T>(work: () => Promise<T>, long: boolean): Promise<T> {
+    const corpora = new Map<string, object>();
+    async function run<T>(
+        work: () => Promise<T>,
+        long: boolean,
+        corpusId?: string,
+    ): Promise<T> {
+        const owner = {};
+        const eligible = () =>
+            corpusId === undefined ||
+            !corpora.has(corpusId) ||
+            corpora.get(corpusId) === owner;
+        const claim = () => {
+            if (corpusId !== undefined) corpora.set(corpusId, owner);
+        };
+        const acquireSlot = (signal?: AbortSignal) =>
+            acquire(long, signal, eligible, claim);
         const lease: BuildLease = {
             long,
-            release: await acquire(long),
-            acquire: (signal) => acquire(long, signal),
+            release: await acquireSlot(),
+            acquire: acquireSlot,
             shouldYield: () => priority && hasShortWaiter(),
         };
         try {
             return await buildLease.run(lease, work);
         } finally {
-            lease.release?.();
+            if (corpusId !== undefined) corpora.delete(corpusId);
+            if (lease.release) lease.release();
+            else wake();
         }
     }
     const native = createLimiter(
         reserveShortSlot ? Math.max(1, builds - 1) : builds,
     );
-    return <T>(work: () => Promise<T>, long: boolean): Promise<T> =>
+    return <T>(
+        work: () => Promise<T>,
+        long: boolean,
+        corpusId?: string,
+    ): Promise<T> =>
         reserveShortSlot && long
-            ? native(() => run(work, long))
-            : run(work, long);
+            ? native(() => run(work, long, corpusId))
+            : run(work, long, corpusId);
 }
 
 const extractionScheduler = new AsyncLocalStorage<MaintenanceModelScheduler>();

@@ -6,6 +6,8 @@ import {
     yieldMaintenanceBuild,
 } from "../src/maintenanceConcurrency.js";
 import { runOrderedTopicBatches } from "../src/topicCurationScheduler.js";
+import { ViewBuildRunner } from "../src/viewBuilds.js";
+import type { ViewBuildJob, ViewBuildSnapshot } from "../src/viewTypes.js";
 
 function gate() {
     let resolve!: () => void;
@@ -15,6 +17,178 @@ function gate() {
     return { promise, resolve };
 }
 const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+test.each([1, 2])(
+    "FIFO keeps corpus submission order without reserving blocked slots at capacity %s",
+    async (capacity) => {
+        const schedule = createMaintenanceBuildScheduler(
+            capacity,
+            false,
+            false,
+        );
+        const release = gate();
+        const entered: string[] = [];
+        const a1 = schedule(
+            async () => {
+                entered.push("a1");
+                await release.promise;
+            },
+            false,
+            "a",
+        );
+        const a2 = schedule(
+            async () => {
+                entered.push("a2");
+            },
+            false,
+            "a",
+        );
+        const b1 = schedule(
+            async () => {
+                entered.push("b1");
+            },
+            false,
+            "b",
+        );
+        await turn();
+        expect(entered).toEqual(capacity === 1 ? ["a1"] : ["a1", "b1"]);
+        release.resolve();
+        await Promise.all([a1, a2, b1]);
+        expect(entered).toEqual(
+            capacity === 1 ? ["a1", "a2", "b1"] : ["a1", "b1", "a2"],
+        );
+    },
+);
+
+test("native checkpoint yields retain corpus ownership until the continuation finishes", async () => {
+    const schedule = createMaintenanceBuildScheduler(1, false, true);
+    const checkpoint = gate();
+    const entered: string[] = [];
+    const a1 = schedule(
+        async () => {
+            entered.push("a1");
+            await checkpoint.promise;
+            await yieldMaintenanceBuild(new AbortController().signal);
+            entered.push("resumed");
+        },
+        true,
+        "a",
+    );
+    const a2 = schedule(
+        async () => {
+            entered.push("a2");
+        },
+        false,
+        "a",
+    );
+    const b1 = schedule(
+        async () => {
+            entered.push("b1");
+        },
+        false,
+        "b",
+    );
+    checkpoint.resolve();
+    await Promise.all([a1, a2, b1]);
+    expect(entered).toEqual(["a1", "b1", "resumed", "a2"]);
+});
+
+test("the build runner enqueues same-corpus work before later FIFO submissions", async () => {
+    const jobs = new Map<string, ViewBuildJob>();
+    for (const [jobId, corpusId] of [
+        ["a1", "a"],
+        ["a2", "a"],
+        ["b1", "b"],
+    ]) {
+        const snapshot: ViewBuildSnapshot = {
+            corpusId,
+            actor: "test",
+            expectedVersion: 0,
+            bounds: {},
+            inputs: [],
+            definition: {
+                viewId: jobId,
+                kind: "wiki",
+                selector: { kind: "sources", sources: [] },
+            },
+            pipeline: "informational-wiki-v1",
+            model: "offline",
+            fingerprint: jobId,
+        };
+        jobs.set(jobId, {
+            jobId,
+            corpusId,
+            fingerprint: jobId,
+            actor: "test",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            state: "running",
+            publication: false,
+            request: {
+                corpusId,
+                expectedHead: null,
+                targets: [
+                    { definition: snapshot.definition, expectedVersion: 0 },
+                ],
+            },
+            results: [
+                { viewId: jobId, snapshot, state: "pending", reason: "queued" },
+            ],
+        });
+    }
+    const release = gate();
+    const entered: string[] = [];
+    const seen = new Set<string>();
+    const runner = new ViewBuildRunner(
+        {
+            identity: "offline",
+            generate: async () => {
+                throw new Error("Unchanged target must not generate");
+            },
+            validate: async () => {
+                throw new Error("Unchanged target must not validate");
+            },
+        },
+        {
+            update: async (_corpusId, jobId, update) => {
+                if (!seen.has(jobId)) {
+                    seen.add(jobId);
+                    entered.push(jobId);
+                    if (jobId === "a1") await release.promise;
+                }
+                const job = jobs.get(jobId)!;
+                update(job);
+                return job;
+            },
+            unchanged: async () => true,
+            current: async () => undefined,
+            materialize: async () => {
+                throw new Error("Unchanged target must not materialize");
+            },
+        },
+        undefined,
+        undefined,
+        undefined,
+        1,
+        false,
+        1,
+        false,
+    );
+    try {
+        for (const job of jobs.values()) runner.start(job);
+        await turn();
+        release.resolve();
+        await Promise.all(
+            [...jobs.keys()].map((jobId) =>
+                runner.wait(jobId, new AbortController().signal),
+            ),
+        );
+        expect(entered).toEqual(["a1", "a2", "b1"]);
+    } finally {
+        release.resolve();
+        await runner.close();
+    }
+});
 
 test.each([false, true])(
     "priority=%s uses every slot without preempting active work",

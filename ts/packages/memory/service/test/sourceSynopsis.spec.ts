@@ -24,6 +24,7 @@ import type {
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { originalFixtureRoot } from "./wikiConsolidationFixtures.js";
 import { TypedViewStore } from "../src/viewStore.js";
+import { createConfiguredViewSynthesisAdapter } from "../src/viewSynthesis.js";
 
 interface PromptEvidence {
     id: string;
@@ -60,6 +61,14 @@ test("synopsis structured output binds exact evidence IDs and host text bounds",
     expect(() => sourceSynopsisSchema([])).toThrow(
         "requires supplied evidence",
     );
+    const ids = Array.from({ length: 251 }, (_, index) =>
+        createHash("sha256").update(String(index)).digest("hex"),
+    );
+    expect(() => sourceSynopsisSchema(ids.slice(0, 250))).not.toThrow();
+    expect(() => sourceSynopsisSchema(ids)).toThrow(
+        "provider evidence enum capacity",
+    );
+    expect(() => sourceSynopsisSchema(Array(251).fill(ids[0]))).not.toThrow();
 });
 
 interface SynopsisPrompt {
@@ -174,41 +183,145 @@ const revision: SourceRevision = {
 };
 
 describe("source synopsis orchestration", () => {
-    test("configured synopsis rejects messages providers before inference instead of silently ignoring schemas", () => {
+    test.each(["ollama", "copilot"])(
+        "configured synopsis rejects schema-unsupported native %s providers before inference",
+        (provider) => {
+            const originalConfig = getRuntimeConfig();
+            const originalCompatibility = process.env.OLLAMA_USE_OAI_ENDPOINT;
+            try {
+                if (provider === "ollama")
+                    process.env.OLLAMA_USE_OAI_ENDPOINT = "0";
+                setRuntimeConfig(
+                    buildConfig(flatten({ modelProvider: provider })),
+                );
+                expect(() =>
+                    configuredSourceSynopsisModel(`${provider}:synthetic`),
+                ).toThrow(`${provider} provider does not enforce JSON schemas`);
+            } finally {
+                setRuntimeConfig(originalConfig);
+                if (originalCompatibility === undefined)
+                    delete process.env.OLLAMA_USE_OAI_ENDPOINT;
+                else
+                    process.env.OLLAMA_USE_OAI_ENDPOINT = originalCompatibility;
+            }
+        },
+    );
+
+    test.each(["messages", "responses"])(
+        "configured synopsis rejects %s providers before inference instead of silently ignoring schemas",
+        (wireApi) => {
+            const originalConfig = getRuntimeConfig();
+            try {
+                setRuntimeConfig(
+                    buildConfig(
+                        flatten({
+                            modelProvider: "azure",
+                            azureOpenAI: {
+                                deployments: {
+                                    synopsis_test: [
+                                        {
+                                            endpoint:
+                                                "https://synthetic.invalid/synopsis",
+                                            region: "eastus",
+                                            auth: "synthetic-key",
+                                            wireApi,
+                                        },
+                                    ],
+                                },
+                            },
+                            modelRequestConstraints: {
+                                "azure:chat:synopsis_test": {
+                                    contextTokens: 10000,
+                                    outputTokens: 4000,
+                                },
+                            },
+                        }),
+                    ),
+                );
+                expect(() =>
+                    configuredSourceSynopsisModel("azure:synopsis_test"),
+                ).toThrow(`${wireApi} wire API does not enforce JSON schemas`);
+            } finally {
+                setRuntimeConfig(originalConfig);
+            }
+        },
+    );
+
+    test("assessment identity fingerprints effective endpoint configuration but not credentials", () => {
         const originalConfig = getRuntimeConfig();
-        try {
+        const identity = (endpoint: string, auth: string) => {
             setRuntimeConfig(
                 buildConfig(
                     flatten({
                         modelProvider: "azure",
                         azureOpenAI: {
                             deployments: {
-                                synopsis_test: [
+                                identity_test: [
                                     {
-                                        endpoint:
-                                            "https://synthetic.invalid/synopsis",
+                                        endpoint,
                                         region: "eastus",
-                                        auth: "synthetic-key",
-                                        wireApi: "messages",
+                                        auth,
                                     },
                                 ],
-                            },
-                        },
-                        modelRequestConstraints: {
-                            "azure:chat:synopsis_test": {
-                                contextTokens: 10000,
-                                outputTokens: 4000,
                             },
                         },
                     }),
                 ),
             );
-            expect(() =>
-                configuredSourceSynopsisModel("azure:synopsis_test"),
-            ).toThrow("messages wire API does not enforce JSON schemas");
+            return createConfiguredViewSynthesisAdapter("azure:identity_test")
+                .identity;
+        };
+        try {
+            const first = identity(
+                "https://synthetic.invalid/first",
+                "synthetic-key-one",
+            );
+            expect(
+                identity(
+                    "https://synthetic.invalid/first",
+                    "synthetic-key-two",
+                ),
+            ).toBe(first);
+            expect(
+                identity(
+                    "https://synthetic.invalid/second",
+                    "synthetic-key-two",
+                ),
+            ).not.toBe(first);
         } finally {
             setRuntimeConfig(originalConfig);
         }
+    });
+
+    test("selection and composition split evidence before provider enum capacity is exceeded", async () => {
+        const content = Array.from(
+            { length: 320 },
+            (_, index) => `Observation ${index} remains limited.\n`,
+        ).join("");
+        const model = new DeterministicModel();
+        const compositions: number[] = [];
+        model.fits = (prompt) => {
+            const input = readPrompt(prompt);
+            return !!input.summaries || input.evidence.length <= 32;
+        };
+        model.complete = async (prompt) => {
+            const input = readPrompt(prompt);
+            const supplied = input.summaries
+                ? input.summaries.flatMap((summary) => summary.evidence)
+                : input.evidence;
+            const count = new Set(supplied.map(({ id }) => id)).size;
+            expect(count).toBeLessThanOrEqual(250);
+            if (input.summaries) compositions.push(count);
+            return selection(supplied.slice(0, 32).map(({ id }) => ({ id })));
+        };
+        await generateSourceSynopsis(
+            source,
+            revision,
+            content,
+            model,
+            new AbortController().signal,
+        );
+        expect(compositions.some((count) => count >= 200)).toBe(true);
     });
 
     test("configured synopsis guides final response length without capping reasoning or returned content", async () => {

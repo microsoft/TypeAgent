@@ -7293,9 +7293,20 @@ export class FileMemoryService
         input: ViewBuildSnapshot,
     ): Promise<WikiPagePurposeContext[]> {
         const family = await this.viewStore.getWikiFamily(input.corpusId);
-        const published = await this.viewStore.listPublishedViews(
-            input.corpusId,
+        return nominateWikiPages(
+            input,
+            await this.wikiAdmissionViews(input.corpusId),
+            new Map(
+                family.descriptors.map((descriptor) => [
+                    descriptor.viewId,
+                    descriptor.identity,
+                ]),
+            ),
         );
+    }
+
+    private async wikiAdmissionViews(corpusId: string): Promise<ViewVersion[]> {
+        const published = await this.viewStore.listPublishedViews(corpusId);
         const views: ViewVersion[] = [];
         for (const entry of published) {
             if (
@@ -7310,16 +7321,7 @@ export class FileMemoryService
             )
                 views.push(entry.view);
         }
-        return nominateWikiPages(
-            input,
-            views,
-            new Map(
-                family.descriptors.map((descriptor) => [
-                    descriptor.viewId,
-                    descriptor.identity,
-                ]),
-            ),
-        );
+        return views;
     }
 
     private async readWikiRedirect(
@@ -8135,6 +8137,7 @@ export class FileMemoryService
                                       policy: this.wikiAdmissionContext([]),
                                       reason: deferredWikiAdmission,
                                       assessmentKey,
+                                      assessmentJobId: job.jobId,
                                   };
                           }
                         : undefined,
@@ -8163,6 +8166,10 @@ export class FileMemoryService
                 kind,
             );
             family.dirty ||= job.state !== "complete";
+            family.dirty ||= await this.refreshWikiCandidateVisits(
+                job.corpusId,
+                family,
+            );
             if (!family.dirty) delete family.candidateReadCursor;
             delete family.error;
             await this.viewStore.saveWikiFamily(job.corpusId, family, kind);
@@ -8756,6 +8763,67 @@ export class FileMemoryService
         return true;
     }
 
+    private async refreshWikiCandidateVisits(
+        corpusId: string,
+        family: WikiFamilyState,
+    ): Promise<boolean> {
+        const cursor = family.candidateReadCursor;
+        if (!cursor) return false;
+        const visited = new Set(cursor.visitedViewIds);
+        const deferred = family.descriptors.filter(
+            (descriptor) =>
+                visited.has(descriptor.viewId) &&
+                descriptor.admission?.assessmentKey,
+        );
+        if (!deferred.length) return false;
+        const jobs = (await this.viewStore.listViewBuilds(corpusId)).sort(
+            (a, b) => b.createdAt.localeCompare(a.createdAt),
+        );
+        const views = await this.wikiAdmissionViews(corpusId);
+        const identities = new Map(
+            family.descriptors.map((descriptor) => [
+                descriptor.viewId,
+                descriptor.identity,
+            ]),
+        );
+        const invalid = new Set<string>();
+        for (const descriptor of deferred) {
+            const receipt = descriptor.admission!;
+            const job = jobs.find((job) =>
+                receipt.assessmentJobId
+                    ? job.jobId === receipt.assessmentJobId
+                    : job.results.some(
+                          (result) =>
+                              result.viewId === descriptor.viewId &&
+                              result.wikiAssessment?.disposition === "defer",
+                      ),
+            );
+            const result = job?.results.find(
+                (result) => result.viewId === descriptor.viewId,
+            );
+            if (!result) {
+                delete descriptor.admission;
+                invalid.add(descriptor.viewId);
+                recordSearchTiming("wiki.assessment.receipt.missing", 0, {
+                    fingerprint: receipt.assessmentKey,
+                });
+            } else if (
+                receipt.assessmentKey !==
+                wikiAssessmentKey(
+                    result.snapshot,
+                    nominateWikiPages(result.snapshot, views, identities),
+                    this.wikiAdmissionContext([]),
+                )
+            ) {
+                invalid.add(descriptor.viewId);
+            }
+        }
+        cursor.visitedViewIds = cursor.visitedViewIds.filter(
+            (viewId) => !invalid.has(viewId),
+        );
+        return invalid.size > 0;
+    }
+
     private wikiTargetCandidates(
         family: WikiFamilyState,
         views: ViewVersion[],
@@ -8813,6 +8881,7 @@ export class FileMemoryService
         const generation = (await this.getCorpusRuntime(corpusId)).manifest
             .indexGeneration;
         const policy = this.wikiAdmissionContext(views);
+        await this.refreshWikiCandidateVisits(corpusId, family);
         const { targetLimit, candidateLimit, descriptors, recordRead } =
             this.wikiTargetCandidates(family, views, automatic, generation);
         let inspected = 0;
