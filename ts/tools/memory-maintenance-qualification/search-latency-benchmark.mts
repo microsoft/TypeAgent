@@ -335,6 +335,9 @@ async function main() {
     const { FileMemoryService } = await import(
         "../../packages/memory/service/dist/fileMemoryService.js"
     );
+    const { TypedViewStore } = await import(
+        "../../packages/memory/service/dist/viewStore.js"
+    );
     const { createMemoryHubQueryFunctions } = await import(
         "../../packages/agents/browser/dist/agent/memoryHubQuery.mjs"
     );
@@ -344,6 +347,11 @@ async function main() {
     loadConfigSync();
     initRuntimeConfigFromProcessEnv();
     process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+    const offlineViews = new TypedViewStore(memory);
+    for (const corpusId of new Set(cases.map((test) => test.corpusId)))
+        await offlineViews.updateKnowledgeState(corpusId, (state) => {
+            state.discovery.policy = "off";
+        });
     const service = new FileMemoryService(memory, {
         understanding: true,
         maintenanceMode: "manual",
@@ -387,6 +395,7 @@ async function main() {
             .digest("hex"),
         maintenanceMode: "manual",
         discoveryPolicy: "off",
+        discoveryDisabledOnExistingCopy: true,
         sourceSynopses: false,
         originalStoreUntouched: true,
         browserTransportIncluded: false,
@@ -526,9 +535,7 @@ async function main() {
                         : {}),
                 });
                 return {
-                    status: result.answer
-                        ? "answer-returned"
-                        : "no-answer-returned",
+                    status: result.answer?.status ?? "no-answer-returned",
                     evidenceCount: result.citations.length,
                     warningCount: result.warnings.length,
                     plannedModules: result.modules.filter(
