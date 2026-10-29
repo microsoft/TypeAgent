@@ -9,6 +9,11 @@ import {
     EmbeddingRole,
 } from "./embeddingIdentity.js";
 import type { RequestConstraintReceipt } from "./requestConstraints.js";
+import { otel } from "@typeagent/telemetry";
+
+export function isRetryableModelFailure(value: unknown): boolean {
+    return otel.readTelemetryErrorClassification(value)?.retryable === true;
+}
 
 /**
  * Translation settings for Chat models

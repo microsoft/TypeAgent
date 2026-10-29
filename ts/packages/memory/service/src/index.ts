@@ -5,6 +5,7 @@ export * from "./agentEdition.js";
 export * from "./agentSessionTypes.js";
 export * from "./batchImport.js";
 export * from "./fileMemoryService.js";
+export * from "./memoryPerformanceExperiments.js";
 export type { MaintenanceStatus } from "./maintenanceScheduler.js";
 export * from "./knowProCorpusIndex.js";
 export * from "./procedureMarkdown.js";

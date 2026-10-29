@@ -38,6 +38,38 @@ isolation; this is the existing local single-principal service boundary.
 Enable `TYPEAGENT_MEMORY_SEARCH_TRACE=1` for redacted rich-stage timing,
 reader-call counts and response-byte/module counts, not prompt/source text.
 
+### Serving performance experiments
+
+These are opt-in experiments, not recommended production defaults. Set
+`TYPEAGENT_MEMORY_PERF_EXPERIMENTS` to a comma-separated switch list, or pass
+`performanceExperiments` to `FileMemoryService`. Unknown names fail explicitly.
+`p2` expands to the first five switches below; `p3` expands to the last four.
+
+| Switch                | Behavior                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fast-models`         | Separate fast query translation and initial reading; refinement and ingestion extraction retain their existing models. Requires an explicitly configured `TYPEAGENT_MEMORY_FAST_MODEL` or `fastQueryModelEndpoint`. Injected reader models retain precedence. Custom index factories are rejected rather than silently ignoring translation experiments. |
+| `brief-reader`        | A 700-token soft initial target with unchanged structured output and grounding requirements.                                                                                                                                                                                                                                                             |
+| `source-preview`      | An optional model-free, provisional lexical source phase before semantic retrieval. At most six 600-character fragments; not a validated answer or a usable follow-on/module handle.                                                                                                                                                                     |
+| `refinement-fallback` | Revalidate and retain an initial explanation only after an explicitly retryable model failure/deadline. Return `refinementFailed: true`, incomplete/partial status and warnings. Privacy, cancellation, scope and malformed-output errors still fail.                                                                                                    |
+| `translation-cache`   | Completed successes only, keyed by corpus, fixed model, schema, exact question and full prompt context. Five-minute expiry; at most 128 entries / 1 MiB payload / 64 KiB per entry. Relative-date questions bypass caching; privacy changes and close purge it. Concurrent callers retain independent cancellation.                                      |
+| `evidence-leases`     | Tolerate unrelated index-version changes for at most 120 seconds from original preparation, only after complete exact-evidence revalidation. Later phases cannot renew the lease. Forget, clear, suppression and changed references remain immediate. This is not whole-index MVCC.                                                                      |
+| `graph-parallel`      | Existing graph projections plus ordered support queries at concurrency two. All siblings settle before a failed batch leaves scope.                                                                                                                                                                                                                      |
+| `foreground-priority` | Defer new background maintenance for a shared maximum ten seconds, with a one-second cooldown under sustained requests. Does not cancel running work or defer explicit writes.                                                                                                                                                                           |
+| `lazy-collections`    | Single-flight per-collection recovery on first access, with pending removal/clear recovery still eager. Unopened collections join completion-paced background warmup rather than all loading during discovery.                                                                                                                                           |
+
+For browser SSE previews, use the same environment switches in the service and
+browser gateway. The gateway omits the preview RPC when disabled. Direct clients
+may explicitly request `phase: "preview"` only from an enabled host; provisional
+results have `provisional: true`, no answer and no prepared evidence handle.
+
+The [latency runner](../../../tools/memory-maintenance-qualification/search-latency-benchmark.mts)
+accepts `--experiments`, `--fast-model`, `--paths`, `--understanding-rounds`
+and optional `--retain-answers`. Private answers are saved outside measurement
+intervals; repeated questions overestimate general translation-cache hit rates.
+The [local experiment tool](../../../tools/memory-maintenance-qualification/serving-local-experiments.mts)
+compares eager/lazy startup and fixture JSON parsing versus a local worker with
+full-result cloning. It prohibits network calls and does not ship a storage worker.
+
 ## Scoped knowledge graphs and read inventories
 
 `queryKnowledgeGraph` reads bounded entity, raw-topic or maintained-hierarchy

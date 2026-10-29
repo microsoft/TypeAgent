@@ -29,7 +29,7 @@ export const understandingRequestSchema = z
     .strictObject({
         requestId: z.string().uuid().optional(),
         evidenceSnapshotId: z.string().uuid().optional(),
-        phase: z.enum(["retrieve", "initial", "refine"]).optional(),
+        phase: z.enum(["preview", "retrieve", "initial", "refine"]).optional(),
         corpusId: identifierSchema,
         question: z.string().trim().min(1).max(2000),
         retrievalPolicy: z.enum(["sourcesOnly", "sourcesAndViews"]).optional(),
@@ -87,6 +87,8 @@ const date = z.strictObject({
     label: z.string().max(180),
 });
 export const understandingResultSchema = z.strictObject({
+    provisional: z.boolean().optional(),
+    refinementFailed: z.boolean().optional(),
     previousAnswer: z
         .strictObject({
             text: z.string().max(12000),

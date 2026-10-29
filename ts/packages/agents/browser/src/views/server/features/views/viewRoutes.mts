@@ -12,6 +12,7 @@ import type {
     UnderstandingRequest,
     UnderstandingResult,
 } from "@typeagent/memory-service";
+import { memoryPerformanceExperiments } from "@typeagent/memory-service";
 import {
     understandingRequestSchema,
     understandingResultSchema,
@@ -21,6 +22,7 @@ export async function* understandingStages(
     input: UnderstandingRequest,
     invoke: (request: ViewRequest) => Promise<unknown>,
     signal?: AbortSignal,
+    preview = false,
 ): AsyncGenerator<UnderstandingResult> {
     const read = async (params: UnderstandingRequest) => {
         signal?.throwIfAborted();
@@ -35,6 +37,8 @@ export async function* understandingStages(
         signal?.throwIfAborted();
         return result;
     };
+    if (preview && !input.evidenceSnapshotId)
+        yield await read({ ...input, phase: "preview" });
     const sources = await read({ ...input, phase: "retrieve" });
     yield sources;
     if (!sources.evidenceSnapshotId)
@@ -61,6 +65,7 @@ export function registerViewRoutes(
     sse: SSEManager,
     invoke: (request: ViewRequest) => Promise<unknown>,
 ) {
+    const preview = memoryPerformanceExperiments().has("source-preview");
     app.post("/api/views/understand", async (req, res) => {
         let request: UnderstandingRequest;
         try {
@@ -103,6 +108,7 @@ export function registerViewRoutes(
                 request,
                 invoke,
                 controller.signal,
+                preview,
             )) {
                 if (disconnected) break;
                 res.write(

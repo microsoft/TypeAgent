@@ -533,11 +533,15 @@ export function mountMemoryHubUnderstanding(
                         (performance.now() - started) /
                         1000
                     ).toFixed(1);
-                    status.textContent = response.answer
-                        ? response.refinementPending
-                            ? `Initial explanation ready in ${elapsed}s. Checking additional evidence…`
-                            : `Grounded explanation ready in ${elapsed}s. Supporting visuals load independently.`
-                        : `Sources ready in ${elapsed}s. Preparing the explanation…`;
+                    status.textContent = response.provisional
+                        ? `Provisional source matches ready in ${elapsed}s. Interpreting the question…`
+                        : response.refinementFailed
+                          ? `Initial explanation retained after ${elapsed}s; additional evidence reading is unavailable. Retry the question to try again.`
+                          : response.answer
+                            ? response.refinementPending
+                                ? `Initial explanation ready in ${elapsed}s. Checking additional evidence…`
+                                : `Grounded explanation ready in ${elapsed}s. Supporting visuals load independently.`
+                            : `Sources ready in ${elapsed}s. Preparing the explanation…`;
                     if (response.warnings.length)
                         status.append(
                             node("small", response.warnings.join(" · ")),

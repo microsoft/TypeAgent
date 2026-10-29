@@ -10,6 +10,7 @@ import {
     currentSearchAbortSignal,
 } from "@typeagent/knowpro";
 import { ImmutableReadCache } from "./immutableReadCache.js";
+import { boundedSupportMap } from "./memoryPerformanceExperiments.js";
 import type { IntegratedAnswerReader } from "./integratedAnswer.js";
 import type { AnswerEvidence, MemoryAnswerRequest } from "./types.js";
 import {
@@ -18,7 +19,10 @@ import {
     understandingModules,
     wantsExplanation,
 } from "./understandingEvidence.js";
-import { readUnderstanding } from "./understandingReader.js";
+import {
+    readUnderstanding,
+    UnderstandingReaderUnavailable,
+} from "./understandingReader.js";
 import { UnderstandingStore } from "./understandingStore.js";
 import type {
     UnderstandingCandidates,
@@ -41,6 +45,7 @@ interface Snapshot {
     candidates: UnderstandingCandidates;
     reader?: UnderstandingReaderResult;
     indexVersion?: string;
+    leaseExpiresAt?: number | undefined;
 }
 
 export function assertUnderstandingBytes(
@@ -131,6 +136,10 @@ export class MemoryUnderstanding {
             8 * 1024 * 1024,
         );
     private readonly store: UnderstandingStore<Snapshot>;
+    private readonly initialSnapshots: UnderstandingStore<{
+        corpusId: string;
+        snapshotId: string;
+    }>;
     private active = 0;
     private readonly now: () => number;
 
@@ -140,10 +149,12 @@ export class MemoryUnderstanding {
     ) {
         this.now = options.now ?? Date.now;
         this.store = new UnderstandingStore(this.now);
+        this.initialSnapshots = new UnderstandingStore(this.now);
     }
 
     invalidate(corpusId?: string): void {
         this.store.invalidate(corpusId);
+        this.initialSnapshots.invalidate(corpusId);
         this.moduleResults.invalidate(corpusId);
         for (const operation of this.operations.values())
             if (!corpusId || operation.corpusId === corpusId)
@@ -155,6 +166,7 @@ export class MemoryUnderstanding {
         this.invalidate();
         this.moduleResults.close();
         this.store.close();
+        this.initialSnapshots.close();
     }
 
     cancel(request: { corpusId: string; requestId: string }): boolean {
@@ -221,6 +233,7 @@ export class MemoryUnderstanding {
                 snapshot.request,
                 snapshot.influence,
                 snapshot.indexVersion,
+                snapshot.leaseExpiresAt,
             );
         if (!(await this.host.validate(snapshot.request, snapshot.influence)))
             return false;
@@ -289,6 +302,40 @@ export class MemoryUnderstanding {
             this.parent(input),
         );
         const question = retrievalQuestion(input.question.trim(), parent);
+        if (input.phase === "preview") {
+            if (!this.host.preview)
+                throw new Error(
+                    "Provisional source previews are disabled by this host",
+                );
+            const evidence = await this.host.preview({
+                corpusId: input.corpusId,
+                question,
+                ...(input.knowledgeCheckpointId
+                    ? { knowledgeCheckpointId: input.knowledgeCheckpointId }
+                    : {}),
+            });
+            signal.throwIfAborted();
+            return {
+                schemaVersion: 1,
+                provisional: true,
+                snapshotId: randomUUID(),
+                turnId: randomUUID(),
+                corpusId: input.corpusId,
+                question: input.question.trim(),
+                expiresAt: new Date(this.now()).toISOString(),
+                citations: understandingCitations(
+                    evidence.map((source, index) => ({
+                        id: `preview-${index}`,
+                        kind: "source",
+                        source,
+                    })),
+                ),
+                modules: [],
+                warnings: [
+                    "Provisional lexical matches only; semantic and temporal interpretation is still pending. These are not a validated answer.",
+                ],
+            };
+        }
         const snapshot: Snapshot = {
             corpusId: input.corpusId,
             input: structuredClone(input),
@@ -324,10 +371,41 @@ export class MemoryUnderstanding {
                 warnings: [],
             },
         };
-        const answer = await this.host.answer(
-            snapshot.request,
-            this.reader(snapshot, parent),
-        );
+        let answer;
+        try {
+            answer = await this.host.answer(
+                snapshot.request,
+                this.reader(snapshot, parent),
+            );
+        } catch (error) {
+            signal.throwIfAborted();
+            if (
+                input.phase !== "refine" ||
+                !this.options.refinementFallback ||
+                !(error instanceof UnderstandingReaderUnavailable)
+            )
+                throw error;
+            const initial = this.initialSnapshots.get(
+                input.evidenceSnapshotId!,
+            );
+            const previous = await this.checked(
+                initial.snapshotId,
+                input.corpusId,
+            );
+            signal.throwIfAborted();
+            const retained = structuredClone(previous.result);
+            retained.refinementPending = false;
+            retained.refinementFailed = true;
+            if (retained.answer?.status === "answered")
+                retained.answer.status = "partial";
+            retained.warnings.push(
+                "Additional evidence reading was temporarily unavailable. Showing the revalidated initial explanation; refinement is incomplete. Retry the question to try again.",
+            );
+            recordSearchTiming("understanding.refinementFallback", 0, {
+                retained: true,
+            });
+            return retained;
+        }
         signal.throwIfAborted();
         if (!answer.readerContext?.integratedAnswer)
             throw new Error(
@@ -337,6 +415,16 @@ export class MemoryUnderstanding {
         if (!snapshot.evidence.length)
             snapshot.evidence = diagnostics.suppliedEvidence;
         snapshot.indexVersion = answer.indexVersion;
+        const lease = answer.evidenceSnapshotId
+            ? this.host.evidenceLeaseExpiresAt?.(answer.evidenceSnapshotId)
+            : undefined;
+        snapshot.leaseExpiresAt =
+            parent?.leaseExpiresAt === undefined
+                ? lease
+                : Math.min(
+                      parent.leaseExpiresAt,
+                      lease ?? parent.leaseExpiresAt,
+                  );
         snapshot.influence = mergeInfluence([
             snapshot.influence,
             diagnostics.influencingEvidence ?? [],
@@ -392,6 +480,20 @@ export class MemoryUnderstanding {
         result.expiresAt = new Date(
             this.store.put(result.snapshotId, snapshot, epoch),
         ).toISOString();
+        if (
+            this.options.refinementFallback &&
+            input.phase === "initial" &&
+            result.refinementPending &&
+            result.evidenceSnapshotId
+        )
+            this.initialSnapshots.put(
+                result.evidenceSnapshotId,
+                {
+                    corpusId: input.corpusId,
+                    snapshotId: result.snapshotId,
+                },
+                epoch,
+            );
         return structuredClone(result);
     }
 
@@ -427,6 +529,12 @@ export class MemoryUnderstanding {
             const reader = await timeSearchStage("understanding.reader", () =>
                 readUnderstanding({
                     ...this.options,
+                    endpoint: allowRefinement
+                        ? (this.options.initialEndpoint ??
+                          this.options.endpoint)
+                        : this.options.endpoint,
+                    brief:
+                        allowRefinement && this.options.briefInitial === true,
                     question: snapshot.input.question,
                     evidence,
                     candidates: snapshot.candidates,
@@ -557,35 +665,44 @@ export class MemoryUnderstanding {
             result.reason = "Supported concept reads are unavailable";
             return;
         }
+        const querySupport = this.host.queryGraphSupport.bind(this.host);
+        const validateSupport = this.host.validateSupport.bind(this.host);
         const signal = snapshot.reader?.moduleSignals.find(
             (item) => item.kind === "concepts",
         );
         const candidates = snapshot.candidates.entities.filter(
             (item) => !signal || signal.candidateIds.includes(item.id),
         );
-        const concepts: typeof candidates = [];
-        for (const entity of candidates) {
-            currentSearchAbortSignal()?.throwIfAborted();
-            const page = await this.host.queryGraphSupport({
-                corpusId: snapshot.corpusId,
-                generation: entity.generation,
-                nodeId: entity.nodeId,
-                pageSize: 4,
-            });
-            const support = page.items.filter(
-                (item) =>
-                    item.kind === "document" &&
-                    item.corpusId === snapshot.corpusId &&
-                    (!snapshot.request.sourceIds ||
-                        snapshot.request.sourceIds.includes(item.sourceId)),
-            );
-            if (
-                page.generation === entity.generation &&
-                support.length &&
-                (await this.host.validateSupport(support))
-            )
-                concepts.push(entity);
-        }
+        const supported = await boundedSupportMap(
+            candidates,
+            this.options.parallelGraphSupport ? 2 : 1,
+            async (entity) => {
+                currentSearchAbortSignal()?.throwIfAborted();
+                const page = await querySupport({
+                    corpusId: snapshot.corpusId,
+                    generation: entity.generation,
+                    nodeId: entity.nodeId,
+                    pageSize: 4,
+                });
+                const support = page.items.filter(
+                    (item) =>
+                        item.kind === "document" &&
+                        item.corpusId === snapshot.corpusId &&
+                        (!snapshot.request.sourceIds ||
+                            snapshot.request.sourceIds.includes(item.sourceId)),
+                );
+                if (
+                    page.generation === entity.generation &&
+                    support.length &&
+                    (await validateSupport(support))
+                )
+                    return entity;
+                return undefined;
+            },
+        );
+        const concepts = supported.filter(
+            (item): item is (typeof candidates)[number] => item !== undefined,
+        );
         if (!concepts.length) {
             result.reason =
                 "No accessible original support within the bounded entity preview";
@@ -628,6 +745,8 @@ export class MemoryUnderstanding {
             result.reason = "Supported graph reads are unavailable";
             return;
         }
+        const querySupport = this.host.queryGraphSupport.bind(this.host);
+        const validateSupport = this.host.validateSupport.bind(this.host);
         const signal = snapshot.reader?.moduleSignals.find(
             (item) => item.kind === "relationships",
         );
@@ -663,31 +782,36 @@ export class MemoryUnderstanding {
             result.reason = `Graph is ${graph.state}; ask again`;
             return;
         }
-        const support: NonNullable<UnderstandingModuleResult["support"]> = [];
-        for (const edge of graph.edges.filter(
-            (edge) => edge.supportCount > 0,
-        )) {
-            currentSearchAbortSignal()?.throwIfAborted();
-            const page = await this.host.queryGraphSupport({
-                corpusId: snapshot.corpusId,
-                generation: graph.generation,
-                edgeId: edge.id,
-                pageSize: 4,
-            });
-            const items = page.items.filter(
-                (item) =>
-                    item.kind === "document" &&
-                    item.corpusId === snapshot.corpusId &&
-                    (!snapshot.request.sourceIds ||
-                        snapshot.request.sourceIds.includes(item.sourceId)),
-            );
-            if (
-                page.generation === graph.generation &&
-                items.length &&
-                (await this.host.validateSupport(items))
-            )
-                support.push({ edgeId: edge.id, items });
-        }
+        const supported = await boundedSupportMap(
+            graph.edges.filter((edge) => edge.supportCount > 0),
+            this.options.parallelGraphSupport ? 2 : 1,
+            async (edge) => {
+                currentSearchAbortSignal()?.throwIfAborted();
+                const page = await querySupport({
+                    corpusId: snapshot.corpusId,
+                    generation: graph.generation,
+                    edgeId: edge.id,
+                    pageSize: 4,
+                });
+                const items = page.items.filter(
+                    (item) =>
+                        item.kind === "document" &&
+                        item.corpusId === snapshot.corpusId &&
+                        (!snapshot.request.sourceIds ||
+                            snapshot.request.sourceIds.includes(item.sourceId)),
+                );
+                if (
+                    page.generation === graph.generation &&
+                    items.length &&
+                    (await validateSupport(items))
+                )
+                    return { edgeId: edge.id, items };
+                return undefined;
+            },
+        );
+        const support = supported.filter(
+            (item): item is NonNullable<typeof item> => item !== undefined,
+        );
         graph.edges = graph.edges.filter((edge) =>
             support.some((item) => item.edgeId === edge.id),
         );

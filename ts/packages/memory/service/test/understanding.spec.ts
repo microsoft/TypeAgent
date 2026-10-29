@@ -15,6 +15,7 @@ import {
 import {
     parseUnderstanding,
     readUnderstanding,
+    UnderstandingReaderUnavailable,
 } from "../src/understandingReader.js";
 import { UnderstandingStore } from "../src/understandingStore.js";
 import type { AnswerEvidence, MemoryEvidence } from "../src/types.js";
@@ -95,6 +96,83 @@ function graph(): MemoryGraphQueryResult {
     };
 }
 describe("Understanding operation cancellation", () => {
+    test("opt-in transient refinement recovery retains only revalidated initial content", async () => {
+        const { engine: original, host, model } = fixture();
+        original.close();
+        const answer = host.answer;
+        const id = "00000000-0000-4000-8000-000000000002";
+        const engine = new MemoryUnderstanding(host, {
+            model,
+            refinementFallback: true,
+        });
+        host.answer = async (...args) => ({
+            ...(await answer(...args)),
+            evidenceSnapshotId: id,
+            refinementPending: true,
+        });
+        const initial = await engine.understand({
+            ...request,
+            phase: "initial",
+        });
+        host.answer = async () => {
+            throw new UnderstandingReaderUnavailable(
+                new Error("offline transient"),
+            );
+        };
+        const retained = await engine.understand({
+            ...request,
+            phase: "refine",
+            evidenceSnapshotId: id,
+        });
+        expect(retained.snapshotId).toBe(initial.snapshotId);
+        expect(retained.answer?.summary).toEqual(initial.answer?.summary);
+        expect(retained.answer?.status).toBe("partial");
+        expect(retained.refinementPending).toBe(false);
+        expect(retained.refinementFailed).toBe(true);
+        expect(retained.warnings.join(" ")).toContain(
+            "refinement is incomplete",
+        );
+        host.validate = async () => false;
+        await expect(
+            engine.understand({
+                ...request,
+                phase: "refine",
+                evidenceSnapshotId: id,
+            }),
+        ).rejects.toThrow("changed or was forgotten");
+        engine.close();
+    });
+
+    test("generic errors and malformed model output never become successful refinement fallbacks", async () => {
+        const { engine: original, host, model } = fixture();
+        original.close();
+        const engine = new MemoryUnderstanding(host, {
+            model,
+            refinementFallback: true,
+        });
+        host.answer = async () => {
+            throw new Error("scope mismatch");
+        };
+        await expect(
+            engine.understand({
+                ...request,
+                phase: "refine",
+                evidenceSnapshotId: "00000000-0000-4000-8000-000000000002",
+            }),
+        ).rejects.toThrow("scope mismatch");
+        engine.close();
+        model.complete = async () => ({ success: true, data: "invalid JSON" });
+        await expect(
+            readUnderstanding({
+                question: request.question,
+                evidence: [{ id: "s0", kind: "source", source: source() }],
+                candidates: empty,
+                allowRefinement: false,
+                model,
+            }),
+        ).rejects.not.toBeInstanceOf(UnderstandingReaderUnavailable);
+    });
+
     test("cancel reaches the active reader and does not cross collection scope", async () => {
         const { engine, model } = fixture();
         const original = model.complete;
@@ -217,6 +295,32 @@ describe("strict understanding reader", () => {
     const evidence: AnswerEvidence[] = [
         { id: "s0", kind: "source", source: source() },
     ];
+    test("brief initial reading preserves strict output and injected-model precedence", async () => {
+        let instructions = "";
+        const model: ChatModel = {
+            completionSettings: {},
+            complete: async (prompt) => {
+                instructions = JSON.stringify(prompt);
+                return { success: true, data: JSON.stringify(response()) };
+            },
+        };
+        expect(
+            (
+                await readUnderstanding({
+                    question: request.question,
+                    evidence,
+                    candidates: empty,
+                    allowRefinement: true,
+                    brief: true,
+                    model,
+                    endpoint: "unconfigured-must-not-be-used",
+                })
+            ).summary.evidenceIds,
+        ).toEqual(["s0"]);
+        expect(instructions).toContain("at most 700 output tokens");
+        expect(instructions).toContain("Preserve uncertainty");
+        expect(instructions).toContain("retrievalQueries");
+    });
     test("uses the production factory and structured schema without rejected completion limits", async () => {
         const runtimeConfig = getRuntimeConfig();
         const fetch = globalThis.fetch;

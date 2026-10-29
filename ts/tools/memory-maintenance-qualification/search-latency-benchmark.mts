@@ -47,6 +47,7 @@ export interface ProviderCall {
     observationError?: string;
 }
 interface Outcome {
+    answer?: unknown;
     status: string;
     evidenceCount: number;
     warningCount: number;
@@ -296,6 +297,14 @@ async function main() {
             out: { type: "string" },
             cases: { type: "string" },
             rounds: { type: "string", default: "3" },
+            experiments: { type: "string", default: "" },
+            "fast-model": { type: "string" },
+            "retain-answers": { type: "boolean", default: false },
+            "understanding-rounds": { type: "string", default: "2" },
+            paths: {
+                type: "string",
+                default: "search-and-ask,find-control,understand",
+            },
             "allow-model-calls": { type: "boolean", default: false },
         },
     });
@@ -308,6 +317,21 @@ async function main() {
         "Required: --store, --out, --cases",
     );
     const rounds = Number(values.rounds);
+    const understandingRounds = Number(values["understanding-rounds"]);
+    assert(
+        Number.isInteger(understandingRounds) &&
+            understandingRounds >= 0 &&
+            understandingRounds <= 3,
+        "Understanding rounds must be 0..3",
+    );
+    const paths = new Set(values.paths.split(","));
+    assert(
+        paths.size &&
+            [...paths].every((item) =>
+                ["search-and-ask", "find-control", "understand"].includes(item),
+            ),
+        "Unknown benchmark path",
+    );
     assert(
         Number.isInteger(rounds) && rounds >= 1 && rounds <= 5,
         "Rounds must be 1..5",
@@ -361,6 +385,10 @@ async function main() {
             state.discovery.policy = "off";
         });
     const service = new FileMemoryService(memory, {
+        performanceExperiments: values.experiments,
+        ...(values["fast-model"]
+            ? { fastQueryModelEndpoint: values["fast-model"] }
+            : {}),
         understanding: true,
         maintenanceMode: "manual",
         discoveryPolicy: "off",
@@ -385,6 +413,11 @@ async function main() {
         "packages/memory/service/dist/integratedAnswer.js",
         "packages/memory/service/dist/fileMemoryService.js",
         "packages/memory/service/dist/understanding.js",
+        "packages/memory/service/dist/understandingReader.js",
+        "packages/memory/service/dist/memoryPerformanceExperiments.js",
+        "packages/memory/service/dist/translationCache.js",
+        "packages/memory/service/dist/maintenanceScheduler.js",
+        "packages/memory/service/dist/knowProCorpusIndex.js",
         "packages/knowPro/dist/searchTiming.js",
     ])
         compiledDigests[path] = createHash("sha256")
@@ -394,6 +427,10 @@ async function main() {
         schemaVersion: 1,
         startedAt,
         gitRevision: execFileSync("git", ["rev-parse", "HEAD"], {
+            cwd: root,
+            encoding: "utf8",
+        }).trim(),
+        gitStatus: execFileSync("git", ["status", "--porcelain"], {
             cwd: root,
             encoding: "utf8",
         }).trim(),
@@ -407,9 +444,16 @@ async function main() {
         sourceSynopses: false,
         originalStoreUntouched: true,
         browserTransportIncluded: false,
-        ordering:
-            "Search/ask: rotated case order per round; then warm Find; then two warm Understanding rounds with immediate follow-ons",
+        ordering: `Selected paths: rotated Search/Ask rounds, then Find, then ${understandingRounds} Understanding rounds with immediate follow-ons`,
+        runnerSha256: createHash("sha256")
+            .update(await readFile(fileURLToPath(import.meta.url)))
+            .digest("hex"),
         rounds,
+        understandingRounds,
+        paths: [...paths],
+        performanceExperiments: values.experiments,
+        fastQueryModelEndpoint: values["fast-model"],
+        privateAnswersRetained: values["retain-answers"],
         uniquePrimaryQueries: cases.length,
     };
     async function save(finished = false) {
@@ -516,6 +560,17 @@ async function main() {
             await Promise.all(pending);
         }
         samples.push(sample);
+        if (values["retain-answers"] && outcome?.answer !== undefined)
+            await appendFile(
+                resolve(output, "answers.jsonl"),
+                JSON.stringify({
+                    batchId: sample.batchId,
+                    caseId: test.id,
+                    variant,
+                    round,
+                    answer: outcome.answer,
+                }) + "\n",
+            );
         await appendFile(
             resolve(output, "samples.jsonl"),
             JSON.stringify(sample) + "\n",
@@ -543,6 +598,7 @@ async function main() {
                         : {}),
                 });
                 return {
+                    answer: result,
                     status: answerOutcomeStatus(result.answer),
                     evidenceCount: result.citations.length,
                     warningCount: result.warnings.length,
@@ -557,7 +613,11 @@ async function main() {
     }
     try {
         await save();
-        for (let round = 1; round <= rounds; round++) {
+        for (
+            let round = 1;
+            paths.has("search-and-ask") && round <= rounds;
+            round++
+        ) {
             const offset = ((round - 1) * 5) % cases.length;
             for (const test of [
                 ...cases.slice(offset),
@@ -572,6 +632,7 @@ async function main() {
                     });
                     assert(!result.errors.length, "Hub returned errors");
                     return {
+                        answer: result,
                         status: answerOutcomeStatus(result.answer),
                         evidenceCount: result.matches.length,
                         warningCount: result.warnings.length,
@@ -579,7 +640,7 @@ async function main() {
                 });
             }
         }
-        for (const test of cases)
+        for (const test of paths.has("find-control") ? cases : [])
             await measure(test, "find-control", 1, async () => {
                 const result = await hub.memoryHubSearch({
                     query: test.question,
@@ -594,7 +655,11 @@ async function main() {
                     warningCount: result.warnings.length,
                 };
             });
-        for (let round = 1; round <= 2; round++)
+        for (
+            let round = 1;
+            paths.has("understand") && round <= understandingRounds;
+            round++
+        )
             for (const test of cases.filter((item) => item.understand)) {
                 const parent = await understand(test, round);
                 if (test.followOn) {

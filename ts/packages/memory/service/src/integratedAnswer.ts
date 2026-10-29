@@ -42,6 +42,8 @@ export interface IntegratedAnswerHost {
 }
 
 export interface IntegratedAnswerOptions {
+    initialEndpoint?: string | undefined;
+    initialOutputTokens?: number;
     outputTokens?: number;
     endpoint?: string;
     model?: ChatModel;
@@ -59,6 +61,7 @@ export interface IntegratedAnswerOptions {
 }
 
 export interface IntegratedAnswerSeed {
+    leaseExpiresAt?: number | undefined;
     prepareOnly: boolean;
     original: MemorySearchResult;
     views: AnswerViewEvidence[];
@@ -466,7 +469,20 @@ async function initialResponse(
     if (seed && options.resumeRefinement) return seed.response;
     const read = options.reader ?? readIntegratedEvidence;
     return timeSearchStage("answer.reader.initial", () =>
-        read(request, evidence, options, true),
+        read(
+            request,
+            evidence,
+            {
+                ...options,
+                ...(options.initialEndpoint
+                    ? { endpoint: options.initialEndpoint }
+                    : {}),
+                ...(options.initialOutputTokens
+                    ? { outputTokens: options.initialOutputTokens }
+                    : {}),
+            },
+            true,
+        ),
     );
 }
 

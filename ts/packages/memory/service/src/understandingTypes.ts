@@ -27,7 +27,7 @@ export type UnderstandingModuleKind =
 export interface UnderstandingRequest {
     requestId?: string | undefined;
     evidenceSnapshotId?: string | undefined;
-    phase?: "retrieve" | "initial" | "refine" | undefined;
+    phase?: "preview" | "retrieve" | "initial" | "refine" | undefined;
     corpusId: string;
     question: string;
     retrievalPolicy?: MemoryAnswerRequest["retrievalPolicy"];
@@ -113,6 +113,8 @@ export interface UnderstandingModule {
 }
 
 export interface UnderstandingResult {
+    provisional?: boolean;
+    refinementFailed?: boolean;
     previousAnswer?: { text: string; evidenceIds: string[] };
     evidenceSnapshotId?: string;
     refinementPending?: boolean;
@@ -165,7 +167,10 @@ export interface UnderstandingHost extends MemoryGraphService {
         request: MemoryAnswerRequest,
         evidence: AnswerEvidence[],
         indexVersion: string | undefined,
+        leaseExpiresAt?: number | undefined,
     ): Promise<boolean>;
+    evidenceLeaseExpiresAt?(id: string): number | undefined;
+    preview?(request: MemoryAnswerRequest): Promise<MemoryEvidence[]>;
     indexVersion?(corpusId: string): Promise<string>;
     answer(
         request: MemoryAnswerRequest,
@@ -179,6 +184,10 @@ export interface UnderstandingHost extends MemoryGraphService {
 }
 
 export interface UnderstandingOptions {
+    initialEndpoint?: string | undefined;
+    briefInitial?: boolean;
+    parallelGraphSupport?: boolean;
+    refinementFallback?: boolean;
     model?: ChatModel | undefined;
     endpoint?: string | undefined;
     now?: () => number;
