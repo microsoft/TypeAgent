@@ -1208,16 +1208,19 @@ function updateExploreNavigation(view: HubRoute["webView"]): void {
     }
 }
 
+function isOperationsRoute(route: HubRoute): boolean {
+    return (
+        route.page === "activity" &&
+        (!route.activityTab || route.activityTab === "jobs")
+    );
+}
+
 function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
     if (visiblePage !== "understanding") understandingPanel.hide();
     inboxPanel.close();
     if (visiblePage !== "views") draftViewsPanel.hide();
     if (visiblePage !== "questions") questionsPanel.hide();
-    if (
-        visiblePage !== "activity" ||
-        (route.activityTab && route.activityTab !== "jobs")
-    )
-        viewActivityPanel.hide();
+    if (!isOperationsRoute(route)) viewActivityPanel.hide();
     if (visiblePage !== "settings") webMaintenancePanel.hide();
     if (visiblePage !== "explore" || route.webView !== "analytics")
         webExplorePanel.hide();
@@ -1230,11 +1233,7 @@ function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
     if (visiblePage !== "explore" || route.webView) explorePanel.hide();
     el("hubExplore").hidden = !!route.webView;
     updateExploreNavigation(route.webView);
-    if (
-        visiblePage === "activity" &&
-        (!route.activityTab || route.activityTab === "jobs")
-    )
-        runbookImportsPanel.showActivity();
+    if (isOperationsRoute(route)) runbookImportsPanel.showActivity();
     else runbookImportsPanel.hideActivity();
     if (visiblePage === "activity")
         activityTabController.select(route.activityTab ?? "jobs");
@@ -1419,6 +1418,18 @@ async function showReadingPage(
     }
 }
 
+async function showActivityPage(route: HubRoute): Promise<void> {
+    if (isOperationsRoute(route))
+        await viewActivityPanel.show(
+            route.activityKind === "view-build" &&
+                route.objectId &&
+                route.corpusId
+                ? { corpusId: route.corpusId, jobId: route.objectId }
+                : undefined,
+        );
+    if (route.activityTab === "changes") await changesPanel.refresh();
+}
+
 async function applyRoute(): Promise<void> {
     const version = ++routeVersion;
     manager.cancelSourceSelection();
@@ -1462,15 +1473,7 @@ async function applyRoute(): Promise<void> {
                         : route.webTopic,
             });
     } else if (route.page === "activity") {
-        if (!route.activityTab || route.activityTab === "jobs")
-            await viewActivityPanel.show(
-                route.activityKind === "view-build" &&
-                    route.objectId &&
-                    route.corpusId
-                    ? { corpusId: route.corpusId, jobId: route.objectId }
-                    : undefined,
-            );
-        if (route.activityTab === "changes") await changesPanel.refresh();
+        await showActivityPage(route);
     } else if (route.page === "settings") {
         viewPreferencesPanel.show();
         await webMaintenancePanel.show();

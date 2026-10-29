@@ -718,14 +718,13 @@ export function mountMemoryHubSearch(
             );
         }
     }
-    function renderInsights() {
-        insights.replaceChildren();
-        function sidecard(title: string) {
-            const card = node("section", undefined, "phase2-sidecard");
-            card.append(node("h3", title));
-            insights.append(card);
-            return card;
-        }
+    function sidecard(title: string) {
+        const card = node("section", undefined, "phase2-sidecard");
+        card.append(node("h3", title));
+        insights.append(card);
+        return card;
+    }
+    function renderScopeInsights() {
         const scopeCard = sidecard("Search scope");
         scopeCard.append(
             node(
@@ -750,6 +749,11 @@ export function mountMemoryHubSearch(
                 node("small", `${evidence.corpusName} · ${evidence.kind}`),
             );
         }
+        return scopeCard;
+    }
+    function renderInsights() {
+        insights.replaceChildren();
+        const scopeCard = renderScopeInsights();
         if (
             !result ||
             !("insights" in result) ||
@@ -854,9 +858,13 @@ export function mountMemoryHubSearch(
     }
     function renderResult() {
         resultLayout.hidden = !result;
-        resultPager.hidden = !result || result.matches.length <= pageSize;
-        layout.hidden = !result?.matches.length;
-        const hasWeb = result?.matches.some(isMemoryHubWebEvidence) ?? false;
+        if (!result) {
+            resultPager.hidden = layout.hidden = true;
+            return;
+        }
+        resultPager.hidden = result.matches.length <= pageSize;
+        layout.hidden = !result.matches.length;
+        const hasWeb = result.matches.some(isMemoryHubWebEvidence);
         const webMode =
             preferredMode === "timeline" || preferredMode === "domain";
         const mode = webMode && !hasWeb ? "list" : preferredMode;
@@ -871,7 +879,6 @@ export function mountMemoryHubSearch(
                 ? "Web evidence grouped by actual capture dates or URI domains. Other memory evidence remains in List; missing metadata is marked unavailable."
                 : ""
             : "";
-        if (!result) return;
         const messages = [
             ...result.warnings,
             ...(webMode && !hasWeb
@@ -895,6 +902,12 @@ export function mountMemoryHubSearch(
         status.textContent = `${result.matches.length} returned evidence results (bounded, not a full total)${result.resolvedIntent ? ` · ${result.resolvedIntent === "ask" ? "Answer and sources" : "Find sources"}${submitted?.intent === "auto" ? " (chosen automatically)" : ""}` : ""} · reciprocal-rank fusion · ${submitted?.corpusId ? "selected corpus" : "All memory"} · submitted query: ${result.query}${searchElapsedMs === undefined ? "" : ` · Ready in ${(searchElapsedMs / 1000).toFixed(1)}s`}`;
         renderAnswer();
         renderInsights();
+        renderResultPage(result, mode);
+    }
+    function renderResultPage(
+        result: MemoryHubSearchResult,
+        mode: MemoryHubViewMode,
+    ) {
         const pageCount = Math.max(
             1,
             Math.ceil(result.matches.length / pageSize),
