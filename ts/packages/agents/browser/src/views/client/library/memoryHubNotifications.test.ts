@@ -7,9 +7,22 @@ import {
 } from "./memoryHubNotifications";
 import { parseRoute, routeHash } from "./memoryHubModel";
 
-test("Notifications supports a direct Hub route", () => {
-    expect(parseRoute("#/notifications").page).toBe("notifications");
-    expect(routeHash({ page: "notifications" })).toBe("#/notifications");
+test("Notifications is an Activity tab with a compatible old entry point", () => {
+    const route = {
+        page: "activity" as const,
+        activityTab: "notifications" as const,
+    };
+    expect(parseRoute("#/notifications")).toEqual(route);
+    expect(parseRoute("#/activity/notifications")).toEqual(route);
+    expect(routeHash(route)).toBe("#/activity/notifications");
+    for (const activityTab of ["jobs", "web", "changes"] as const) {
+        expect(
+            parseRoute(routeHash({ page: "activity", activityTab })),
+        ).toEqual({
+            page: "activity",
+            activityTab,
+        });
+    }
 });
 
 test("current notices are deduplicated, replaced, and cleared by healthy results", () => {

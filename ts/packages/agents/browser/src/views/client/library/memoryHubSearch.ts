@@ -29,6 +29,8 @@ import {
 } from "./memoryHubUi";
 import { renderMarkdownInto } from "./utils/markdownView";
 import { hubNotifications } from "./memoryHubNotifications";
+import type { UnderstandingRequest } from "@typeagent/memory-service";
+import { toSourceUnderstandingRequest } from "./memoryHubUnderstanding";
 
 export type MemoryHubSearchOptions = {
     scope: () => string | undefined;
@@ -37,10 +39,7 @@ export type MemoryHubSearchOptions = {
     onError: (error: unknown) => void;
     onQueryChanged?: (query: string) => void;
     onNotify?: (message: string) => void;
-    onUnderstand?: (
-        request: MemoryHubSearchRequest,
-        evidenceSnapshotId?: string,
-    ) => void;
+    onUnderstand?: (request: UnderstandingRequest) => void;
 };
 const RECENT_KEY = "memoryHub.recentQueries";
 
@@ -224,6 +223,7 @@ export function mountMemoryHubSearch(
     intent.name = "intent";
     intent.setAttribute("aria-label", "Search intent");
     for (const [value, label] of [
+        ["auto", "Automatic (recommended)"],
         ["find", "Find sources"],
         ["ask", "Ask for an answer"],
     ]) {
@@ -240,6 +240,7 @@ export function mountMemoryHubSearch(
     filtersSummary.append(icon("fa-sliders"), "Filters");
     const filterFields = node("div", undefined, "phase2-controls");
     filterFields.append(
+        field("Response mode", intent),
         sourceTypesField,
         field("Tags", tags),
         field("From (UTC)", from),
@@ -250,17 +251,7 @@ export function mountMemoryHubSearch(
         field("Require ready knowledge checkpoint", checkpoint),
     );
     filters.append(filtersSummary, filterFields, dateNote);
-    form.append(queryLabel, intent, submit, filters);
-    const understand = action("Understand", () => {
-        try {
-            const request = readRequest();
-            options.onUnderstand?.(request, preparedId(request));
-        } catch (error) {
-            report(error, status);
-        }
-    });
-    understand.hidden = true;
-    form.append(understand);
+    form.append(queryLabel, submit, filters);
     const recent = node("div", undefined, "phase2-controls");
     recent.setAttribute("aria-label", "Recent queries");
     const status = node(
@@ -275,6 +266,17 @@ export function mountMemoryHubSearch(
     layout.setAttribute("aria-label", "Search result view");
     const layoutNote = node("p", undefined, "phase2-layout-note");
     const results = node("div", undefined, "phase2-results");
+    const resultPager = node(
+        "nav",
+        undefined,
+        "phase2-controls phase2-result-pager",
+    );
+    resultPager.setAttribute("aria-label", "Search result pages");
+    const pageStatus = node("span");
+    pageStatus.setAttribute("role", "status");
+    const previousPage = action("Previous page", () => changePage(-1));
+    const nextPage = action("Next page", () => changePage(1));
+    resultPager.append(previousPage, pageStatus, nextPage);
     const insights = node("aside", undefined, "phase2-search-insights");
     insights.setAttribute("aria-label", "Search insights");
     const preferenceStatus = node("p");
@@ -335,6 +337,7 @@ export function mountMemoryHubSearch(
         layoutNote,
         preferenceStatus,
         results,
+        resultPager,
     );
     const resultLayout = node("div", undefined, "phase2-result-layout");
     resultLayout.append(reading, insights);
@@ -343,6 +346,24 @@ export function mountMemoryHubSearch(
     let result: MemoryHubSearchResult | undefined;
     let submitted: MemoryHubSearchRequest | undefined;
     let searchElapsedMs: number | undefined;
+    let resultPage = 0;
+    let understandingEnabled = false;
+    const pageSize = 25;
+
+    function changePage(delta: number) {
+        if (!result) return;
+        resultPage = Math.max(
+            0,
+            Math.min(
+                Math.ceil(result.matches.length / pageSize) - 1,
+                resultPage + delta,
+            ),
+        );
+        renderResult();
+        evidenceHeading.tabIndex = -1;
+        evidenceHeading.focus({ preventScroll: true });
+        evidenceHeading.scrollIntoView?.({ block: "start" });
+    }
     function preparedId(request: MemoryHubSearchRequest): string | undefined {
         const scope = (value: MemoryHubSearchRequest) => {
             const {
@@ -592,6 +613,28 @@ export function mountMemoryHubSearch(
             node("p", "Evidence, not instructions.", "phase2-evidence-note"),
             citation(evidence, "Preview exact cited evidence"),
         );
+        if (
+            understandingEnabled &&
+            options.onUnderstand &&
+            evidence.kind === "source" &&
+            evidence.revisionId &&
+            evidence.corpusId !== "fixedBrowserMemory"
+        ) {
+            const explain = action("Explain this", () => {
+                try {
+                    options.onUnderstand?.(
+                        toSourceUnderstandingRequest(
+                            evidence,
+                            submitted?.query ?? query.value.trim(),
+                        ),
+                    );
+                } catch (error) {
+                    report(error, status);
+                }
+            });
+            explain.className = "phase2-explain-source";
+            card.append(explain);
+        }
         if (evidence.synopsis) {
             card.append(
                 node(
@@ -676,13 +719,43 @@ export function mountMemoryHubSearch(
         }
     }
     function renderInsights() {
-        insights.replaceChildren(node("h3", "Search insights"));
+        insights.replaceChildren();
+        function sidecard(title: string) {
+            const card = node("section", undefined, "phase2-sidecard");
+            card.append(node("h3", title));
+            insights.append(card);
+            return card;
+        }
+        const scopeCard = sidecard("Search scope");
+        scopeCard.append(
+            node(
+                "strong",
+                submitted?.corpusId
+                    ? (result?.matches.find(
+                          (item) => item.corpusId === submitted?.corpusId,
+                      )?.corpusName ?? "Selected collection")
+                    : "All memory",
+            ),
+            node(
+                "p",
+                `${result?.matches.length ?? 0} returned evidence results. Bounded selection, not a corpus total.`,
+            ),
+        );
+        const sources = sidecard("Sources & evidence");
+        for (const evidence of result?.matches.slice(0, 3) ?? []) {
+            const item = citation(evidence);
+            item.className = "phase2-context-item";
+            sources.append(
+                item,
+                node("small", `${evidence.corpusName} · ${evidence.kind}`),
+            );
+        }
         if (
             !result ||
             !("insights" in result) ||
             result.insights === undefined
         ) {
-            insights.append(
+            sidecard("Related context").append(
                 node(
                     "p",
                     "Insights unavailable: this search provider did not return typed query metadata. Topics and entities are not inferred from snippets.",
@@ -701,7 +774,7 @@ export function mountMemoryHubSearch(
                     "Search insights scope does not match the submitted query. Browser-memory insights cannot stand in for All memory or a named corpus.",
                 );
             if (value.status !== "available") {
-                insights.append(
+                sidecard("Related context").append(
                     node(
                         "p",
                         `Insights ${value.status}: ${value.message ?? "No typed query insights are available for this scope."}`,
@@ -716,7 +789,7 @@ export function mountMemoryHubSearch(
                 throw new Error(
                     "Web query insights require actual returned web evidence; nonweb evidence is not a Browser web lens.",
                 );
-            insights.append(
+            scopeCard.append(
                 node(
                     "p",
                     value.provider === "canonical"
@@ -725,31 +798,33 @@ export function mountMemoryHubSearch(
                 ),
             );
             if (value.message)
-                insights.append(
+                scopeCard.append(
                     node("p", value.message, "phase2-insight-notice"),
                 );
-            insights.append(node("h4", "Top Topics"));
-            const topics = node("div", undefined, "phase2-controls");
+            const topicCard = sidecard("Top Topics");
+            const topics = node("div", undefined, "phase2-context-list");
             for (const topic of value.topTopics)
                 topics.append(
-                    action(topic, () => {
-                        void show(topic);
-                    }),
+                    Object.assign(
+                        action(topic, () => {
+                            void show(topic);
+                        }),
+                        { className: "phase2-context-item" },
+                    ),
                 );
             if (!value.topTopics.length)
                 topics.append(
                     node("p", "No topics returned in typed query metadata."),
                 );
-            insights.append(topics, node("h4", "Related Entities"));
-            // Same card styles as the Explore view (memoryKnowledgeCollection.css).
-            const entities = node("div", undefined, "knowledge-collection");
-            const grid = node("div", undefined, "knowledge-cards");
+            topicCard.append(topics);
+            const entities = sidecard("Related Entities");
+            const grid = node("div", undefined, "phase2-context-list");
             for (const entity of value.relatedEntities) {
-                const card = node("article", undefined, "knowledge-item");
+                const card = node("div", undefined, "phase2-context-entity");
                 const title = action(entity.name, () => {
                     void show(entity.name);
                 });
-                title.className = "knowledge-item-title";
+                title.className = "phase2-context-item";
                 const meta = [
                     entity.type,
                     preferences?.showConfidenceScores &&
@@ -759,7 +834,7 @@ export function mountMemoryHubSearch(
                 ]
                     .filter(Boolean)
                     .join(" · ");
-                card.append(title, node("p", meta, "knowledge-item-meta"));
+                card.append(title, node("small", meta));
                 grid.append(card);
             }
             if (!value.relatedEntities.length)
@@ -771,7 +846,6 @@ export function mountMemoryHubSearch(
                     ),
                 );
             entities.append(grid);
-            insights.append(entities);
         } catch (error) {
             const message = node("p");
             insights.append(message);
@@ -780,6 +854,7 @@ export function mountMemoryHubSearch(
     }
     function renderResult() {
         resultLayout.hidden = !result;
+        resultPager.hidden = !result || result.matches.length <= pageSize;
         layout.hidden = !result?.matches.length;
         const hasWeb = result?.matches.some(isMemoryHubWebEvidence) ?? false;
         const webMode =
@@ -817,13 +892,23 @@ export function mountMemoryHubSearch(
             context: `Query: ${result.query} · ${submitted?.corpusId ?? "All memory"}`,
             messages,
         });
-        status.textContent = `${result.matches.length} returned evidence results (bounded, not a full total) · reciprocal-rank fusion · ${submitted?.corpusId ? "selected corpus" : "All memory"} · submitted query: ${result.query}${searchElapsedMs === undefined ? "" : ` · Ready in ${(searchElapsedMs / 1000).toFixed(1)}s`}`;
+        status.textContent = `${result.matches.length} returned evidence results (bounded, not a full total)${result.resolvedIntent ? ` · ${result.resolvedIntent === "ask" ? "Answer and sources" : "Find sources"}${submitted?.intent === "auto" ? " (chosen automatically)" : ""}` : ""} · reciprocal-rank fusion · ${submitted?.corpusId ? "selected corpus" : "All memory"} · submitted query: ${result.query}${searchElapsedMs === undefined ? "" : ` · Ready in ${(searchElapsedMs / 1000).toFixed(1)}s`}`;
         renderAnswer();
         renderInsights();
+        const pageCount = Math.max(
+            1,
+            Math.ceil(result.matches.length / pageSize),
+        );
+        resultPage = Math.min(resultPage, pageCount - 1);
+        const start = resultPage * pageSize;
+        const pageMatches = result.matches.slice(start, start + pageSize);
+        pageStatus.textContent = `Page ${resultPage + 1} of ${pageCount} · ${start + 1}-${start + pageMatches.length} of ${result.matches.length} returned`;
+        previousPage.disabled = resultPage === 0;
+        nextPage.disabled = resultPage === pageCount - 1;
         results.replaceChildren(
             ...(mode === "timeline" || mode === "domain"
-                ? renderMemoryHubWebGroups(result.matches, mode, evidenceCard)
-                : result.matches.map(evidenceCard)),
+                ? renderMemoryHubWebGroups(pageMatches, mode, evidenceCard)
+                : pageMatches.map(evidenceCard)),
         );
         if (!result.matches.length)
             results.append(
@@ -850,8 +935,15 @@ export function mountMemoryHubSearch(
             query: text,
             corpusId: options.scope(),
             limit: 50,
-            generateAnswer: intent.value === "ask",
-            prepareUnderstanding: !understand.hidden,
+            intent:
+                intent.value === "find"
+                    ? "find"
+                    : intent.value === "ask"
+                      ? "ask"
+                      : "auto",
+            ...(intent.value === "find" || intent.value === "ask"
+                ? { generateAnswer: intent.value === "ask" }
+                : {}),
             ...(retrieval.value === "sourcesOnly" ||
             retrieval.value === "sourcesAndViews"
                 ? { retrievalPolicy: retrieval.value }
@@ -890,6 +982,7 @@ export function mountMemoryHubSearch(
         submitted = request;
         searchElapsedMs = undefined;
         result = undefined;
+        resultPage = 0;
         results.replaceChildren();
         insights.replaceChildren();
         renderResult();
@@ -897,9 +990,12 @@ export function mountMemoryHubSearch(
         hubNotifications.clear("search");
         hubNotifications.clear("search-completion");
         const started = performance.now();
-        status.textContent = request.generateAnswer
-            ? "Finding evidence and preparing an answer…"
-            : "Finding sources without generating an answer…";
+        status.textContent =
+            request.intent === "auto"
+                ? "Choosing the best response, then finding supporting memory…"
+                : request.generateAnswer || request.intent === "ask"
+                  ? "Finding evidence and preparing an answer…"
+                  : "Finding sources without generating an answer…";
         submit.disabled = true;
         const stopWatching = watchSlowRequest(status, () => {
             searchVersion++;
@@ -915,6 +1011,14 @@ export function mountMemoryHubSearch(
                 request.corpusId !== options.scope()
             )
                 return;
+            if (
+                request.intent === "auto" &&
+                response.resolvedIntent !== "find" &&
+                response.resolvedIntent !== "ask"
+            )
+                throw new Error(
+                    "This host does not support automatic response selection. Choose Find or Ask under Filters, or restart the updated service.",
+                );
             result = response;
             searchElapsedMs = performance.now() - started;
             saveRecent(request.query);
@@ -974,7 +1078,8 @@ export function mountMemoryHubSearch(
     return {
         show,
         setUnderstandingEnabled(enabled: boolean) {
-            understand.hidden = !enabled || !options.onUnderstand;
+            understandingEnabled = enabled && !!options.onUnderstand;
+            if (result) renderResult();
         },
         inspect(evidence: MemoryHubEvidence, focus: HTMLElement, owner = root) {
             owner.append(dialog);
@@ -984,6 +1089,7 @@ export function mountMemoryHubSearch(
             searchVersion++;
             evidenceVersion++;
             result = undefined;
+            resultPage = 0;
             results.replaceChildren();
             insights.replaceChildren();
             renderResult();

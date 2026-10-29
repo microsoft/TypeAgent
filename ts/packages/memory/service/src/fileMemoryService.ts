@@ -10652,6 +10652,29 @@ export class FileMemoryService
         if (!options.understanding) return undefined;
         return new MemoryUnderstanding(
             {
+                validateSource: (corpusId, selected) => {
+                    validateIdentifier("source ID", selected.sourceId);
+                    validateIdentifier("revision ID", selected.revisionId);
+                    return this.enqueueDocumentRead(
+                        corpusId,
+                        async (runtime) => {
+                            const source = runtime.manifest.sources.find(
+                                (source) =>
+                                    source.sourceId === selected.sourceId,
+                            );
+                            return (
+                                source?.activeRevisionId ===
+                                    selected.revisionId &&
+                                source.revisions.some(
+                                    (revision) =>
+                                        revision.revisionId ===
+                                            selected.revisionId &&
+                                        revision.state === "ready",
+                                )
+                            );
+                        },
+                    );
+                },
                 indexVersion: async (corpusId) => {
                     const corpus = await this.getCorpus(corpusId);
                     if (!corpus)

@@ -397,29 +397,23 @@ test("topic hierarchy and co-occurrence remain explicitly distinct", async () =>
     expect(onRouteChanged).toHaveBeenCalledWith("topics");
 });
 
-test("event filters preserve conversation, producer and authority semantics", async () => {
+test("simplified graph controls apply evidence changes without event filters or an Apply button", async () => {
     await mounted.show({ view: "entities" });
-    host.querySelector<HTMLInputElement>(
-        'input[aria-label="Conversation ID"]',
-    )!.value = "conversation-1";
-    host.querySelector<HTMLInputElement>(
-        'input[aria-label="Event producer ID"]',
-    )!.value = "producer-1";
-    select("Event authority").value = "verified-observation";
+    expect(host.textContent).not.toContain("Event filters");
+    expect(host.textContent).not.toContain("Apply graph filters");
+    expect(host.querySelector('[aria-label="Conversation ID"]')).toBeNull();
     select("Graph evidence kinds").value = "event";
-    button("Apply graph filters").click();
+    select("Graph evidence kinds").dispatchEvent(new Event("change"));
     await settle();
     expect(invoke).toHaveBeenLastCalledWith(
         "memoryHubGraph",
         expect.objectContaining({
             evidenceKinds: ["event"],
-            eventFilter: {
-                conversationIds: ["conversation-1"],
-                producerIds: ["producer-1"],
-                authorities: ["verified-observation"],
-            },
         }),
     );
+    expect(
+        invoke.mock.calls[invoke.mock.calls.length - 1][1],
+    ).not.toHaveProperty("eventFilter");
 });
 
 test("keeps actual collection failures and omitted collections visible without coverage status", async () => {

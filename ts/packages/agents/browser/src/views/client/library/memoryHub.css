@@ -312,8 +312,8 @@ body[data-memory-hub] {
 
 /* Top bar */
 .hub-top {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(0, 640px) minmax(120px, 1fr);
   align-items: center;
   gap: 10px;
   padding: 10px 16px;
@@ -342,6 +342,8 @@ body[data-memory-hub] {
   align-items: center;
   gap: 8px;
   max-width: 640px;
+  width: 100%;
+  box-sizing: border-box;
   padding: 0 10px 0 12px;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
@@ -702,6 +704,13 @@ body[data-memory-hub] {
 #page-activity[data-activity-tab="changes"] #hubViewActivity {
   display: none;
 }
+#page-activity:not([data-activity-tab="notifications"]) #hubNotifications,
+#page-activity[data-activity-tab="notifications"] #hubActivity,
+#page-activity[data-activity-tab="notifications"] #hubChanges,
+#page-activity[data-activity-tab="notifications"] #hubRunbookActivity,
+#page-activity[data-activity-tab="notifications"] #hubViewActivity {
+  display: none;
+}
 .hub-filters {
   margin-bottom: 12px;
 }
@@ -740,6 +749,7 @@ body[data-memory-hub] {
   position: relative;
   flex-shrink: 0;
   text-decoration: none;
+  justify-self: end;
 }
 #hubNotificationsLink[aria-current="page"] {
   background: var(--accent-soft-hover);
@@ -1116,9 +1126,16 @@ textarea:focus-visible {
     max-width: 130px;
   }
   .hub-omni {
-    flex-basis: 100%;
-    order: 5;
-    max-width: none;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: center;
+  }
+  .hub-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  #hubNotificationsLink {
+    grid-column: 2;
+    grid-row: 1;
   }
 }
 

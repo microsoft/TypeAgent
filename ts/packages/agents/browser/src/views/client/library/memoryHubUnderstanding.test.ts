@@ -148,6 +148,60 @@ test("explanation-first layout keeps uncertainty in the reading flow and source 
     });
 });
 
+test("exact-document explanation works from All memory and preserves source scope for follow-ons and new questions", async () => {
+    scope = undefined;
+    invoke.mockResolvedValue(result());
+    const request = {
+        corpusId: "corpus",
+        question: result().question,
+        source: { sourceId: "source", revisionId: "r1" },
+        retrievalPolicy: "sourcesOnly" as const,
+        selection: {
+            mode: "only" as const,
+            modules: ["explanation", "sources"] as (
+                | "explanation"
+                | "sources"
+            )[],
+        },
+    };
+    await mounted.show(request);
+    expect(onError).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("Grounded explanation ready");
+    expect(scope).toBeUndefined();
+    const forms = host.querySelectorAll("form");
+    const follow = forms[1].querySelector("textarea")!;
+    follow.value = "Was it verified?";
+    forms[1].dispatchEvent(new Event("submit", { cancelable: true }));
+    await settle();
+    expect(stream).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+            source: request.source,
+            corpusId: "corpus",
+            parentSnapshotId: "snapshot",
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
+    );
+    forms[0].querySelector("input")!.value = "Explain its risks";
+    forms[0].dispatchEvent(new Event("submit", { cancelable: true }));
+    await settle();
+    expect(stream).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+            source: request.source,
+            corpusId: "corpus",
+            question: "Explain its risks",
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
+    );
+    const count = stream.mock.calls.length;
+    await mounted.show({
+        ...request,
+        source: { sourceId: "another", revisionId: "r2" },
+    });
+    expect(stream).toHaveBeenCalledTimes(count + 1);
+});
+
 test("ready prose and exact source cards do not wait for timeline; late modules preserve composer, prose and focus", async () => {
     const module = deferred<UnderstandingModuleResult>();
     invoke.mockImplementation((method) =>

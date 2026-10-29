@@ -12,10 +12,7 @@ import type {
 import { invokeView, invokeMemory } from "./viewClient";
 import { mountMemoryManagement } from "./memoryManagement";
 import { mountMemoryHubSearch } from "./memoryHubSearch";
-import {
-    mountMemoryHubUnderstanding,
-    toUnderstandingRequest,
-} from "./memoryHubUnderstanding";
+import { mountMemoryHubUnderstanding } from "./memoryHubUnderstanding";
 import type { UnderstandingRequest } from "@typeagent/memory-service";
 import { mountMemoryHubExplore } from "./memoryHubExplore";
 import { mountMemoryHubGraph } from "./memoryHubGraph";
@@ -53,6 +50,7 @@ import {
     parseRoute,
     readHidden,
     routeHash,
+    type HubActivityTab,
     type HubRoute,
 } from "./memoryHubModel";
 
@@ -105,9 +103,9 @@ let webMaintenancePanel: ReturnType<typeof mountMemoryHubWebMaintenance>;
 let viewPreferencesPanel: ReturnType<typeof mountMemoryHubViewPreferences>;
 let webExplorePanel: ReturnType<typeof mountMemoryHubWebExplore>;
 let pendingSearchQuery: string | undefined;
+let activityTabController: { select: (name: HubActivityTab) => void };
 
 function invalidateDiscovery(): void {
-    hubNotifications.clear();
     searchPanel.scopeChanged();
     understandingPanel.scopeChanged();
     explorePanel.scopeChanged();
@@ -217,6 +215,8 @@ function rememberUnderstanding(request: UnderstandingRequest): void {
     for (const [key, value] of [
         ["understandingPolicy", request.retrievalPolicy],
         ["understandingCheckpoint", request.knowledgeCheckpointId],
+        ["understandingSource", request.source?.sourceId],
+        ["understandingRevision", request.source?.revisionId],
     ] as const) {
         if (value) url.searchParams.set(key, value);
         else url.searchParams.delete(key);
@@ -228,6 +228,12 @@ function restoredUnderstanding(): UnderstandingRequest {
     const url = new URL(location.href);
     const policy = url.searchParams.get("understandingPolicy");
     const checkpoint = url.searchParams.get("understandingCheckpoint");
+    const sourceId = url.searchParams.get("understandingSource");
+    const revisionId = url.searchParams.get("understandingRevision");
+    if (!!sourceId !== !!revisionId)
+        throw new Error(
+            "Document explanation links need both an exact source and revision.",
+        );
     return {
         corpusId: url.searchParams.get("understandingCorpus") ?? scope,
         question: url.searchParams.get("query") ?? "",
@@ -235,6 +241,16 @@ function restoredUnderstanding(): UnderstandingRequest {
             ? { retrievalPolicy: policy }
             : {}),
         ...(checkpoint ? { knowledgeCheckpointId: checkpoint } : {}),
+        ...(sourceId && revisionId
+            ? {
+                  source: { sourceId, revisionId },
+                  retrievalPolicy: "sourcesOnly" as const,
+                  selection: {
+                      mode: "only" as const,
+                      modules: ["explanation", "sources"] as const,
+                  },
+              }
+            : {}),
     };
 }
 
@@ -263,8 +279,7 @@ function mountPhaseTwo(): void {
                 severity: "info",
                 messages: [message],
             }),
-        onUnderstand: (request, evidenceSnapshotId) => {
-            const value = toUnderstandingRequest(request, evidenceSnapshotId);
+        onUnderstand: (value) => {
             rememberUnderstanding(value);
             if (parseRoute(location.hash).page === "understanding")
                 void understandingPanel.show(value);
@@ -939,18 +954,19 @@ function restyleActivityPanel(): void {
     );
 }
 
-function mountPageTabs(
+function mountPageTabs<T extends string>(
     pageId: string,
     attribute: string,
     label: string,
-    tabs: ReadonlyArray<readonly [string, string, string]>,
-): void {
+    tabs: ReadonlyArray<readonly [T, string, string]>,
+    onSelect?: (name: T) => void,
+): { select: (name: T) => void } {
     const page = el(pageId);
     const nav = document.createElement("nav");
     nav.className = "hub-tabs";
     nav.setAttribute("role", "tablist");
     nav.setAttribute("aria-label", label);
-    const select = (name: string) => {
+    const select = (name: T) => {
         page.dataset[attribute] = name;
         for (const tab of nav.querySelectorAll("button"))
             tab.setAttribute(
@@ -960,7 +976,10 @@ function mountPageTabs(
     };
     for (const [name, text, glyph] of tabs) {
         const tab = setTabLabel(
-            button(text, () => select(name)),
+            button(text, () => {
+                select(name);
+                onSelect?.(name);
+            }),
             glyph,
             text,
         );
@@ -970,14 +989,22 @@ function mountPageTabs(
     }
     page.querySelector(".hub-page-head")!.after(nav);
     select(tabs[0][0]);
+    return { select };
 }
 
 function mountPageTabSets(): void {
-    mountPageTabs("page-activity", "activityTab", "Activity views", [
-        ["jobs", "Operations", "fa-list-check"],
-        ["web", "Web history", "fa-clock-rotate-left"],
-        ["changes", "Changes", "fa-code-compare"],
-    ]);
+    activityTabController = mountPageTabs<HubActivityTab>(
+        "page-activity",
+        "activityTab",
+        "Activity views",
+        [
+            ["jobs", "Operations", "fa-list-check"],
+            ["web", "Web history", "fa-clock-rotate-left"],
+            ["changes", "Changes", "fa-code-compare"],
+            ["notifications", "Notifications", "fa-bell"],
+        ],
+        (activityTab) => open({ page: "activity", activityTab }),
+    );
     mountPageTabs("page-settings", "settingsTab", "Settings groups", [
         ["sources", "Sources", "fa-book-open"],
         ["general", "Appearance & connection", "fa-gear"],
@@ -1181,28 +1208,16 @@ function updateExploreNavigation(view: HubRoute["webView"]): void {
     }
 }
 
-function updateExploreScope(
-    route: HubRoute,
-    visiblePage: (typeof pages)[number],
-): void {
-    if (visiblePage !== "explore") return;
-    const badge = el("exploreScopeBadge");
-    const browserOnly = route.webView === "analytics";
-    badge.classList.toggle("warn", browserOnly);
-    badge.title = browserOnly
-        ? "This view always reads TypeAgent Browser Memory and ignores the scope selector."
-        : "";
-    badge.textContent = browserOnly
-        ? "Browser memory only"
-        : `Scope: ${snapshot.corpora.find((corpus) => corpus.corpusId === scope)?.name ?? "All memory"}`;
-}
-
 function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
     if (visiblePage !== "understanding") understandingPanel.hide();
     inboxPanel.close();
     if (visiblePage !== "views") draftViewsPanel.hide();
     if (visiblePage !== "questions") questionsPanel.hide();
-    if (visiblePage !== "activity") viewActivityPanel.hide();
+    if (
+        visiblePage !== "activity" ||
+        (route.activityTab && route.activityTab !== "jobs")
+    )
+        viewActivityPanel.hide();
     if (visiblePage !== "settings") webMaintenancePanel.hide();
     if (visiblePage !== "explore" || route.webView !== "analytics")
         webExplorePanel.hide();
@@ -1215,21 +1230,28 @@ function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
     if (visiblePage !== "explore" || route.webView) explorePanel.hide();
     el("hubExplore").hidden = !!route.webView;
     updateExploreNavigation(route.webView);
-    if (visiblePage === "activity") runbookImportsPanel.showActivity();
+    if (
+        visiblePage === "activity" &&
+        (!route.activityTab || route.activityTab === "jobs")
+    )
+        runbookImportsPanel.showActivity();
     else runbookImportsPanel.hideActivity();
+    if (visiblePage === "activity")
+        activityTabController.select(route.activityTab ?? "jobs");
     for (const page of pages)
         el(`page-${page}`).classList.toggle("hidden", page !== visiblePage);
     for (const link of document.querySelectorAll<HTMLAnchorElement>(
         "#hubRail a, #hubNotificationsLink",
     )) {
-        if (
-            link.hash ===
-            `#/${route.page === "understanding" ? "search" : route.page}`
-        )
-            link.setAttribute("aria-current", "page");
+        const current =
+            link.id === "hubNotificationsLink"
+                ? route.page === "activity" &&
+                  route.activityTab === "notifications"
+                : link.hash ===
+                  `#/${route.page === "understanding" ? "search" : route.page}`;
+        if (current) link.setAttribute("aria-current", "page");
         else link.removeAttribute("aria-current");
     }
-    updateExploreScope(route, visiblePage);
     el("hubDrawer").classList.add("hidden");
     el("hubActivity").append(
         document.querySelector<HTMLElement>(".activity-panel")!,
@@ -1317,6 +1339,8 @@ async function showManagedRoute(
     item: MemoryHubInboxItem | undefined,
     version: number,
 ): Promise<void> {
+    if (route.page === "activity" && route.activityTab === "notifications")
+        return;
     if (
         route.webView !== "analytics" &&
         !route.corpusId &&
@@ -1438,14 +1462,15 @@ async function applyRoute(): Promise<void> {
                         : route.webTopic,
             });
     } else if (route.page === "activity") {
-        await viewActivityPanel.show(
-            route.activityKind === "view-build" &&
-                route.objectId &&
-                route.corpusId
-                ? { corpusId: route.corpusId, jobId: route.objectId }
-                : undefined,
-        );
-        await changesPanel.refresh();
+        if (!route.activityTab || route.activityTab === "jobs")
+            await viewActivityPanel.show(
+                route.activityKind === "view-build" &&
+                    route.objectId &&
+                    route.corpusId
+                    ? { corpusId: route.corpusId, jobId: route.objectId }
+                    : undefined,
+            );
+        if (route.activityTab === "changes") await changesPanel.refresh();
     } else if (route.page === "settings") {
         viewPreferencesPanel.show();
         await webMaintenancePanel.show();
@@ -1658,6 +1683,7 @@ export async function mountMemoryHub(): Promise<void> {
     el("hubRefresh").addEventListener("click", () => {
         if (!discardChanges()) return;
         void hubAction(async () => {
+            hubNotifications.clear();
             invalidateDiscovery();
             await refreshSnapshot(parseRoute(location.hash).page !== "inbox");
             await applyRoute();
@@ -1671,6 +1697,7 @@ export async function mountMemoryHub(): Promise<void> {
         scope = el<HTMLSelectElement>("hubCorpus").value;
         manager.clearBuildSelection();
         localStorage.setItem(SCOPE_KEY, scope);
+        hubNotifications.clear();
         invalidateDiscovery();
 
         draftViewsPanel.scopeChanged();

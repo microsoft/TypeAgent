@@ -30,6 +30,7 @@ export interface UnderstandingRequest {
     phase?: "preview" | "retrieve" | "initial" | "refine" | undefined;
     corpusId: string;
     question: string;
+    source?: { sourceId: string; revisionId: string } | undefined;
     retrievalPolicy?: MemoryAnswerRequest["retrievalPolicy"];
     knowledgeCheckpointId?: string | undefined;
     parentSnapshotId?: string | undefined;
@@ -163,6 +164,10 @@ export interface MemoryUnderstandingService {
 }
 
 export interface UnderstandingHost extends MemoryGraphService {
+    validateSource?(
+        corpusId: string,
+        source: NonNullable<UnderstandingRequest["source"]>,
+    ): Promise<boolean>;
     validateSnapshot?(
         request: MemoryAnswerRequest,
         evidence: AnswerEvidence[],

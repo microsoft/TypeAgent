@@ -33,11 +33,10 @@
         />
         <kbd aria-hidden="true">/</kbd>
       </form>
-      <span class="hub-spacer"></span>
       <a
         id="hubNotificationsLink"
         class="icon-btn"
-        href="#/notifications"
+        href="#/activity/notifications"
         aria-label="Notifications"
         title="Notifications"
       >
@@ -51,6 +50,10 @@
           ><span class="hub-nav-label">Inbox</span>
           <span id="inboxBadge" class="hub-badge"></span
         ></a>
+        <a href="#/search" title="Search &amp; Explain"
+          ><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i
+          ><span class="hub-nav-label">Search &amp; Explain</span></a
+        >
         <a href="#/library" title="Sources (Alt+2)"
           ><i class="fa-solid fa-book-open" aria-hidden="true"></i
           ><span class="hub-nav-label">Sources</span></a
@@ -158,7 +161,6 @@
         <section id="page-explore" class="hub-page hidden">
           <div class="hub-page-head">
             <h2>Explore</h2>
-            <span id="exploreScopeBadge" class="hub-chip"></span>
           </div>
           <nav
             id="hubExploreNavigation"
@@ -186,6 +188,7 @@
           <div id="hubChanges"></div>
           <div id="hubRunbookActivity"></div>
           <div id="hubViewActivity"></div>
+          <div id="hubNotifications"></div>
         </section>
         <section id="page-settings" class="hub-page hidden">
           <div class="hub-page-head"><h2>Settings</h2></div>
@@ -230,10 +233,6 @@
             >
           </section>
           <div id="hubSettings"></div>
-        </section>
-        <section id="page-notifications" class="hub-page hidden">
-          <div class="hub-page-head"><h2>Notifications</h2></div>
-          <div id="hubNotifications"></div>
         </section>
       </main>
     </div>

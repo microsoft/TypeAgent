@@ -12,10 +12,16 @@ export const pages = [
     "questions",
     "explore",
     "activity",
-    "notifications",
     "settings",
 ] as const;
 export type HubPage = (typeof pages)[number];
+export const activityTabs = [
+    "jobs",
+    "web",
+    "changes",
+    "notifications",
+] as const;
+export type HubActivityTab = (typeof activityTabs)[number];
 export type HubRoute = {
     page: HubPage;
     corpusId?: string;
@@ -25,6 +31,7 @@ export type HubRoute = {
     viewItemKey?: string;
     questionSlotId?: string;
     activityKind?: "view-build";
+    activityTab?: HubActivityTab;
     webView?: "analytics" | "entities" | "topics";
     webEntity?: string;
     webTopic?: string;
@@ -69,7 +76,13 @@ export function parseRoute(hash: string): HubRoute {
                 return "";
             }
         });
+    if (parts[0] === "notifications")
+        return { page: "activity", activityTab: "notifications" };
     const page = pages.find((value) => value === parts[0]) ?? "inbox";
+    if (page === "activity" && parts.length === 2) {
+        const activityTab = activityTabs.find((value) => value === parts[1]);
+        if (activityTab) return { page, activityTab };
+    }
     if (page === "explore" && parts[1] === "web") {
         const webView = (["analytics", "entities", "topics"] as const).find(
             (value) => value === parts[2],
@@ -103,6 +116,8 @@ export function parseRoute(hash: string): HubRoute {
 }
 
 export function routeHash(route: HubRoute): string {
+    if (route.page === "activity" && route.activityTab)
+        return `#/activity/${route.activityTab}`;
     if (route.page === "explore" && route.webView) {
         const selection =
             route.webView === "entities"

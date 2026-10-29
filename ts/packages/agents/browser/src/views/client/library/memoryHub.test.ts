@@ -647,6 +647,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
             }
             if (method === "memoryHubSearch")
                 return {
+                    resolvedIntent: "ask",
                     query: params.query,
                     matches: [searchEvidence],
                     warnings: [],
@@ -793,6 +794,9 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         expect(value(id).closest(".hub-top")).toBeNull();
     }
     expect(value("hubNotificationsLink").closest(".hub-top")).not.toBeNull();
+    expect(document.querySelector('a[href="#/search"]')?.textContent).toContain(
+        "Search & Explain",
+    );
     expect(value("hubStatus").getAttribute("href")).toBe("#/activity");
     expect(value("hubStatus").getAttribute("aria-live")).toBe("polite");
     value("page-settings")
@@ -810,10 +814,6 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         .click();
     expect(document.getElementById("hubRunbooks")).toBeNull();
     expect(document.getElementById("hubLegacyGuides")).toBeNull();
-    value("page-activity")
-        .querySelector<HTMLButtonElement>('[data-page-tab="web"]')!
-        .click();
-    expect(value("page-activity").dataset.activityTab).toBe("web");
     history.replaceState({}, "", location.href);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     jest.advanceTimersByTime(1);
@@ -824,6 +824,15 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         "source",
     );
     expect(document.activeElement?.isConnected).toBe(true);
+    history.replaceState({}, "", "#/activity");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
+    value("page-activity")
+        .querySelector<HTMLButtonElement>('[data-page-tab="web"]')!
+        .click();
+    await settle();
+    expect(location.hash).toBe("#/activity/web");
+    expect(value("page-activity").dataset.activityTab).toBe("web");
     history.replaceState({}, "", "#/library/a/source");
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     await settle();
@@ -1006,9 +1015,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         window.dispatchEvent(new HashChangeEvent("hashchange"));
         await settle();
         expect(showGraph).toHaveBeenLastCalledWith({ view, selection });
-        expect(value("exploreScopeBadge").textContent).toBe(
-            "Scope: All memory",
-        );
+        expect(document.getElementById("exploreScopeBadge")).toBeNull();
         expect(value("hubExplore").hidden).toBe(true);
         expect(
             document
@@ -1026,7 +1033,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     await settle();
     expect(showWeb).toHaveBeenLastCalledWith({ view: "analytics" });
-    expect(value("exploreScopeBadge").textContent).toBe("Browser memory only");
+    expect(document.getElementById("exploreScopeBadge")).toBeNull();
     expect(
         viewInvoke.mock.calls.filter(
             ([method]) => method === "memoryHubExplore",
@@ -1058,6 +1065,11 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     await settle();
     value("forgetSourceButton").click();
     await settle();
+    hubNotifications.set("ordinary-operation", {
+        title: "Existing operation",
+        page: "activity",
+        messages: ["Current operation notice"],
+    });
     value("confirmForgetButton").click();
     await settle();
     jest.advanceTimersByTime(1);
@@ -1070,12 +1082,12 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     expect(value("hubNotifications").textContent).toContain(
         'Forgot source "Source".',
     );
+    expect(hubNotifications.has("ordinary-operation")).toBe(true);
     history.replaceState({}, "", "#/notifications");
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     await settle();
-    expect(value("page-notifications").classList.contains("hidden")).toBe(
-        false,
-    );
+    expect(value("page-activity").classList.contains("hidden")).toBe(false);
+    expect(value("page-activity").dataset.activityTab).toBe("notifications");
     expect(value("hubNotificationsLink").getAttribute("aria-current")).toBe(
         "page",
     );

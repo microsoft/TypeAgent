@@ -11,6 +11,7 @@ import { invokeView } from "./viewClient";
 import { updateMemoryHubViewPreferences } from "./memoryHubViewPreferences";
 
 jest.mock("./memoryHubPhase2.css", () => ({}));
+jest.mock("./memoryHubUnderstanding.css", () => ({}));
 jest.mock("./memoryHubViewPreferences.css", () => ({}));
 jest.mock("./viewClient", () => ({ invokeView: jest.fn() }));
 const invoke = invokeView as jest.Mock;
@@ -76,6 +77,7 @@ function result(
         query: "worker",
         matches,
         ranking: "reciprocal-rank-fusion",
+        resolvedIntent: "ask",
         warnings: [],
         errors: [],
         answer: {
@@ -96,6 +98,137 @@ function button(text: string): HTMLButtonElement {
 function field<T extends HTMLElement>(name: string): T {
     return host.querySelector<T>(`[name="${name}"]`)!;
 }
+test.each([26, 49, 50])(
+    "paginates %i returned results in exact groups of 25 and resets on a new search",
+    async (count) => {
+        const matches = Array.from({ length: count }, (_, index) => ({
+            ...source,
+            id: `cite-${index}`,
+            objectId: `source-${index}`,
+            title: `Document ${index}`,
+        }));
+        invoke.mockResolvedValue(result(matches));
+        await mounted.show("worker");
+        expect(host.querySelectorAll(".phase2-results > article")).toHaveLength(
+            25,
+        );
+        expect(
+            host.querySelector(".phase2-results")!.textContent,
+        ).not.toContain("Document 25");
+        expect(button("Previous page").disabled).toBe(true);
+        button("Next page").click();
+        expect(host.querySelectorAll(".phase2-results > article")).toHaveLength(
+            count - 25,
+        );
+        expect(
+            host.querySelector(".phase2-result-pager")!.textContent,
+        ).toContain(`26-${count} of ${count} returned`);
+        expect(button("Next page").disabled).toBe(true);
+        expect(host.querySelector(".phase2-results h3")!.textContent).toBe(
+            "Document 25",
+        );
+        const card = host.querySelector(".phase2-results article")!;
+        (card.querySelector("button") as HTMLButtonElement).click();
+        await settle();
+        expect(invoke).toHaveBeenLastCalledWith(
+            "memoryHubEvidence",
+            expect.objectContaining({
+                objectId: "source-25",
+                revisionId: "r3",
+            }),
+        );
+        button("Close evidence").click();
+        await mounted.show("another query");
+        expect(host.querySelector(".phase2-results h3")!.textContent).toBe(
+            "Document 0",
+        );
+        expect(button("Previous page").disabled).toBe(true);
+    },
+);
+
+test.each(["Timeline", "Domain"])(
+    "%s grouping paginates the same bounded evidence selection",
+    async (mode) => {
+        const matches = Array.from({ length: 26 }, (_, index) => ({
+            ...source,
+            id: `web-${index}`,
+            sourceType: "web" as const,
+            title: `Web document ${index}`,
+            canonicalUri: "https://example.invalid/page",
+            eventTime: "2026-10-01T00:00:00Z",
+        }));
+        invoke.mockResolvedValue(result(matches));
+        await mounted.show("worker");
+        button(mode).click();
+        expect(host.querySelectorAll(".phase2-results article")).toHaveLength(
+            25,
+        );
+        button("Next page").click();
+        expect(host.querySelectorAll(".phase2-results article")).toHaveLength(
+            1,
+        );
+        expect(host.querySelector(".phase2-results")!.textContent).toContain(
+            "Web document 25",
+        );
+    },
+);
+
+test("manual response modes stay under Filters and the automatically chosen mode is visible", async () => {
+    expect(field("intent").closest(".hub-filters")).not.toBeNull();
+    invoke.mockResolvedValue({ ...result([source]), resolvedIntent: "ask" });
+    await mounted.show("worker");
+    expect(host.textContent).toContain(
+        "Answer and sources (chosen automatically)",
+    );
+    field<HTMLSelectElement>("intent").value = "find";
+    await mounted.show("find worker docs");
+    expect(invoke).toHaveBeenLastCalledWith(
+        "memoryHubSearch",
+        expect.objectContaining({ intent: "find" }),
+    );
+    expect(
+        invoke.mock.calls[invoke.mock.calls.length - 1][1].generateAnswer,
+    ).toBe(false);
+});
+
+test("an older host cannot silently downgrade Auto into a source-only success", async () => {
+    const { resolvedIntent: _intent, ...legacy } = result();
+    invoke.mockResolvedValue(legacy);
+    await mounted.show("worker");
+    expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+            message: expect.stringContaining("does not support automatic"),
+        }),
+    );
+    expect(host.querySelectorAll(".phase2-results article")).toHaveLength(0);
+});
+
+test("only eligible exact document evidence offers Explain this", async () => {
+    mounted.dispose();
+    mounted = mountMemoryHubSearch(host, {
+        scope: () => scope,
+        onError,
+        onOpenSource: onSource,
+        onUnderstand: jest.fn(),
+    });
+    mounted.setUnderstandingEnabled(true);
+    invoke.mockResolvedValue(
+        result([
+            source,
+            derivedView,
+            conversation,
+            { ...source, id: "missing", revisionId: undefined },
+            { ...source, id: "browser", corpusId: "fixedBrowserMemory" },
+        ]),
+    );
+    await mounted.show("worker");
+    expect(
+        [...host.querySelectorAll("button")].filter(
+            (item) => item.textContent === "Explain this",
+        ),
+    ).toHaveLength(1);
+});
+
 test("answer and supporting evidence stay together while typed insights use the supporting rail", async () => {
     invoke.mockResolvedValue(result([source]));
     await mounted.show("worker");
@@ -149,7 +282,7 @@ test("Ask forwards explicit retrieval/checkpoint policy and shows exact derived 
         "candidate candidate (not independent source evidence)",
     );
 });
-test("Find defaults to retrieval and only forwards prepared evidence for an unchanged scope", async () => {
+test("Auto is default and Explain this uses the exact document, never a collection-wide prepared search", async () => {
     mounted.dispose();
     host.replaceChildren();
     const onUnderstand = jest.fn();
@@ -169,21 +302,30 @@ test("Find defaults to retrieval and only forwards prepared evidence for an unch
     expect(invoke).toHaveBeenCalledWith(
         "memoryHubSearch",
         expect.objectContaining({
-            generateAnswer: false,
-            prepareUnderstanding: true,
+            intent: "auto",
         }),
     );
-    button("Understand").click();
+    expect(host.querySelector("form")!.textContent).not.toContain("Understand");
+    button("Explain this").click();
     expect(onUnderstand).toHaveBeenLastCalledWith(
-        expect.objectContaining({ query: "worker" }),
-        "prepared",
+        expect.objectContaining({
+            corpusId: "a",
+            question: "worker",
+            source: { sourceId: "source", revisionId: "r3" },
+            retrievalPolicy: "sourcesOnly",
+        }),
     );
     field<HTMLInputElement>("tags").value = "different";
-    button("Understand").click();
+    button("Explain this").click();
     expect(onUnderstand).toHaveBeenLastCalledWith(
-        expect.objectContaining({ tags: ["different"] }),
-        undefined,
+        expect.objectContaining({
+            source: { sourceId: "source", revisionId: "r3" },
+        }),
     );
+    expect(onUnderstand.mock.calls[0][0]).not.toHaveProperty(
+        "evidenceSnapshotId",
+    );
+    expect(scope).toBeUndefined();
 });
 
 test("empty search hides recent and result controls, and source-type disclosure preserves multiselect filters", async () => {
@@ -492,7 +634,7 @@ test("submitted filters include corpus, types, tags, inclusive dates and convers
             dateFrom: "2026-10-01T00:00:00.000Z",
             dateTo: "2026-10-02T23:59:59.999Z",
             conversationScope: "current",
-            generateAnswer: true,
+            intent: "ask",
         }),
     );
     expect(host.textContent).toContain("Unknown dates are excluded");
@@ -891,7 +1033,7 @@ test("snippets and the answer render as Markdown, not raw text", async () => {
     expect(host.querySelector("strong")!.textContent).toBe("bold");
 });
 
-test("related entities are cards like the Explore view", async () => {
+test("related entities use compact mock-aligned sidecards", async () => {
     scope = "a";
     invoke.mockResolvedValueOnce({
         ...result([source]),
@@ -910,18 +1052,16 @@ test("related entities are cards like the Explore view", async () => {
     const insights = host.querySelector(".phase2-search-insights")!;
     expect(insights.querySelector("ul")).toBeNull();
     const cards = insights.querySelectorAll(
-        ".knowledge-collection .knowledge-cards article.knowledge-item",
+        ".phase2-sidecard .phase2-context-entity",
     );
     expect(cards).toHaveLength(2);
-    expect(cards[0].querySelector(".knowledge-item-title")!.textContent).toBe(
+    expect(cards[0].querySelector(".phase2-context-item")!.textContent).toBe(
         "Worker",
     );
-    expect(cards[0].querySelector(".knowledge-item-meta")!.textContent).toBe(
+    expect(cards[0].querySelector("small")!.textContent).toBe(
         "service · confidence 87%",
     );
-    expect(cards[1].querySelector(".knowledge-item-meta")!.textContent).toBe(
-        "system",
-    );
+    expect(cards[1].querySelector("small")!.textContent).toBe("system");
 });
 
 test("canonical typed insights navigate queries without losing named scope or filters and confidence is preference-driven", async () => {

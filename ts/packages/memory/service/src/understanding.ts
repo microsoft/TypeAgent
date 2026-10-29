@@ -73,6 +73,20 @@ function validateRequest(request: UnderstandingRequest): void {
         throw new Error(
             "Understanding parent snapshot and turn must be supplied together",
         );
+    const source = request.source;
+    if (
+        source !== undefined &&
+        (!source ||
+            typeof source.sourceId !== "string" ||
+            !source.sourceId.trim() ||
+            typeof source.revisionId !== "string" ||
+            !source.revisionId.trim())
+    )
+        throw new Error(
+            "Document explanation needs an exact source and revision",
+        );
+    if (source && request.retrievalPolicy === "sourcesAndViews")
+        throw new Error("Document explanations require sources-only retrieval");
     const selection = request.selection;
     if (
         selection?.mode === "only" &&
@@ -131,6 +145,12 @@ function answerRequest(
     return {
         corpusId: input.corpusId,
         question,
+        ...(input.source
+            ? {
+                  sourceIds: [input.source.sourceId],
+                  retrievalPolicy: "sourcesOnly" as const,
+              }
+            : {}),
         ...(input.evidenceSnapshotId
             ? { evidenceSnapshotId: input.evidenceSnapshotId }
             : {}),
@@ -250,7 +270,40 @@ export class MemoryUnderstanding {
         return snapshot;
     }
 
+    private async checkSource(input: UnderstandingRequest): Promise<void> {
+        if (!input.source) return;
+        if (!this.host.validateSource)
+            throw new Error(
+                "Document-scoped explanation is not supported by this host",
+            );
+        if (!(await this.host.validateSource(input.corpusId, input.source)))
+            throw new Error(
+                "The exact document revision is unavailable or changed. Search again before explaining it.",
+            );
+    }
+
+    private checkSourceEvidence(
+        input: UnderstandingRequest,
+        evidence: AnswerEvidence[],
+    ): void {
+        const selected = input.source;
+        if (
+            selected &&
+            evidence.some(
+                (item) =>
+                    item.kind !== "source" ||
+                    item.source.corpusId !== input.corpusId ||
+                    item.source.sourceId !== selected.sourceId ||
+                    item.source.revisionId !== selected.revisionId,
+            )
+        )
+            throw new Error(
+                "Document explanation received evidence outside its exact source revision",
+            );
+    }
+
     private async current(snapshot: Snapshot): Promise<boolean> {
+        await this.checkSource(snapshot.input);
         if (this.host.validateSnapshot)
             return this.host.validateSnapshot(
                 snapshot.request,
@@ -279,7 +332,9 @@ export class MemoryUnderstanding {
             parent.result.turnId !== request.parentTurnId ||
             parent.input.knowledgeCheckpointId !==
                 request.knowledgeCheckpointId ||
-            parent.input.retrievalPolicy !== request.retrievalPolicy
+            parent.input.retrievalPolicy !== request.retrievalPolicy ||
+            parent.input.source?.sourceId !== request.source?.sourceId ||
+            parent.input.source?.revisionId !== request.source?.revisionId
         )
             throw new Error(
                 "Follow-on turn or scope does not match its parent",
@@ -325,13 +380,15 @@ export class MemoryUnderstanding {
             throw new Error(
                 "Provisional source previews are disabled by this host",
             );
-        const evidence = await this.host.preview({
-            corpusId: input.corpusId,
-            question,
-            ...(input.knowledgeCheckpointId
-                ? { knowledgeCheckpointId: input.knowledgeCheckpointId }
-                : {}),
-        });
+        const evidence = await this.host.preview(
+            answerRequest(input, question),
+        );
+        const previewEvidence = evidence.map((source, index) => ({
+            kind: "source" as const,
+            id: `preview-${index}`,
+            source,
+        }));
+        this.checkSourceEvidence(input, previewEvidence);
         signal.throwIfAborted();
         return {
             schemaVersion: 1,
@@ -341,13 +398,7 @@ export class MemoryUnderstanding {
             corpusId: input.corpusId,
             question: input.question.trim(),
             expiresAt: new Date(this.now()).toISOString(),
-            citations: understandingCitations(
-                evidence.map((source, index) => ({
-                    id: `preview-${index}`,
-                    kind: "source",
-                    source,
-                })),
-            ),
+            citations: understandingCitations(previewEvidence),
             modules: [],
             warnings: [
                 "Provisional lexical matches only; semantic and temporal interpretation is still pending. These are not a validated answer.",
@@ -369,6 +420,13 @@ export class MemoryUnderstanding {
             throw error;
         const initial = this.initialSnapshots.get(input.evidenceSnapshotId!);
         const previous = await this.checked(initial.snapshotId, input.corpusId);
+        if (
+            previous.input.source?.sourceId !== input.source?.sourceId ||
+            previous.input.source?.revisionId !== input.source?.revisionId
+        )
+            throw new Error(
+                "Refinement source scope does not match the initial explanation",
+            );
         signal.throwIfAborted();
         const retained = structuredClone(previous.result);
         retained.refinementPending = false;
@@ -388,6 +446,7 @@ export class MemoryUnderstanding {
         input: UnderstandingRequest,
         signal: AbortSignal,
     ): Promise<UnderstandingResult> {
+        await this.checkSource(input);
         const epoch = this.store.version;
         const parent = await timeSearchStage("understanding.parent", () =>
             this.parent(input),
@@ -448,6 +507,7 @@ export class MemoryUnderstanding {
             diagnostics.refinement?.initialEvidence ?? [],
             diagnostics.suppliedEvidence,
         ]);
+        this.checkSourceEvidence(input, snapshot.influence);
         if (
             !(await timeSearchStage("understanding.influenceValidation", () =>
                 this.current(snapshot),
@@ -527,6 +587,7 @@ export class MemoryUnderstanding {
         parent?: Snapshot,
     ): IntegratedAnswerReader {
         return async (request, evidence, _options, allowRefinement) => {
+            this.checkSourceEvidence(snapshot.input, evidence);
             snapshot.request = request;
             snapshot.evidence = evidence;
             snapshot.candidates = await timeSearchStage(

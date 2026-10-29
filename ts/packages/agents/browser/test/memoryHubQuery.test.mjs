@@ -17,7 +17,10 @@ import {
 import { createMemoryHubExploreFunctions } from "../dist/agent/memoryHubExplore.mjs";
 import { createMemoryHubKnowledgeFunctions } from "../dist/agent/memoryHubKnowledge.mjs";
 import { browserCorpusName } from "../dist/agent/browserMemoryService.mjs";
-import { citedAnswer } from "../dist/agent/memoryHubAnswer.mjs";
+import {
+    citedAnswer,
+    createMemoryHubIntentResolver,
+} from "../dist/agent/memoryHubAnswer.mjs";
 import {
     conversationCorpusName,
     conversationProducerId,
@@ -41,6 +44,110 @@ before(() => {
 after(() => {
     setRuntimeConfig(savedConfig);
     setActiveModelProvider(savedProvider);
+});
+
+test("the decision model uses a typed Luna request and classifies without corpus data", async () => {
+    const savedFetch = globalThis.fetch;
+    let payload;
+    globalThis.fetch = async (_url, init) => {
+        payload = JSON.parse(init.body);
+        return new Response(
+            JSON.stringify({
+                choices: [
+                    {
+                        message: { content: '{"intent":"ask"}' },
+                        finish_reason: "stop",
+                    },
+                ],
+                usage: {
+                    prompt_tokens: 100,
+                    completion_tokens: 5,
+                    total_tokens: 105,
+                },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+        );
+    };
+    try {
+        const resolve = createMemoryHubIntentResolver();
+        assert.equal(await resolve("Why did the pilot move?"), "ask");
+        assert.equal(payload.reasoning_effort, "low");
+        assert.ok(JSON.stringify(payload).includes("Why did the pilot move?"));
+    } finally {
+        globalThis.fetch = savedFetch;
+    }
+});
+
+test("Auto resolves before retrieval and preserves legacy search and answer behavior", async () => {
+    const { service, calls, synthesize } = fixture();
+    service.getSource = async () => ({ activeRevisionId: "r1" });
+    const decisions = [];
+    const query = createMemoryHubQueryFunctions(
+        () => service,
+        () => undefined,
+        synthesize,
+        async (question) => {
+            decisions.push(question);
+            return question.startsWith("find") ? "find" : "ask";
+        },
+    );
+    const found = await query.memoryHubSearch({
+        query: "find worker docs",
+        intent: "auto",
+    });
+    assert.equal(found.resolvedIntent, "find");
+    assert.equal(found.answer, undefined);
+    const asked = await query.memoryHubSearch({
+        query: "What should I check?",
+        intent: "auto",
+    });
+    assert.equal(asked.resolvedIntent, "ask");
+    assert.equal(asked.answer.mode, "synthesized");
+    assert.deepEqual(decisions, ["find worker docs", "What should I check?"]);
+    assert.ok(calls.some(([kind]) => kind === "search"));
+    await query.memoryHubSearch({ query: "manual", intent: "find" });
+    await query.memoryHubSearch({ query: "legacy", generateAnswer: false });
+    assert.equal(decisions.length, 2);
+});
+
+test("Auto failures never become successful source-only searches", async () => {
+    const { service, calls, synthesize } = fixture();
+    const unavailable = createMemoryHubQueryFunctions(
+        () => service,
+        () => undefined,
+        synthesize,
+    );
+    await assert.rejects(
+        () => unavailable.memoryHubSearch({ query: "worker", intent: "auto" }),
+        /unavailable/,
+    );
+    for (const resolver of [
+        async () => {
+            throw new Error("Classifier offline");
+        },
+        async () => "invalid",
+    ]) {
+        const query = createMemoryHubQueryFunctions(
+            () => service,
+            () => undefined,
+            synthesize,
+            resolver,
+        );
+        await assert.rejects(
+            () => query.memoryHubSearch({ query: "worker", intent: "auto" }),
+            /offline|invalid/,
+        );
+    }
+    await assert.rejects(
+        () =>
+            unavailable.memoryHubSearch({
+                query: "worker",
+                intent: "find",
+                generateAnswer: true,
+            }),
+        /conflicts/,
+    );
+    assert.equal(calls.length, 0);
 });
 
 test("source-plus-informational-view answer preserves derivative lineage through the normal browser workflow", async () => {

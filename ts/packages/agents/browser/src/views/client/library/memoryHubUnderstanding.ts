@@ -47,6 +47,27 @@ export function toUnderstandingRequest(
     };
 }
 
+export function toSourceUnderstandingRequest(
+    source: MemoryHubEvidence,
+    question: string,
+): UnderstandingRequest {
+    if (
+        source.kind !== "source" ||
+        !source.revisionId ||
+        source.corpusId === "fixedBrowserMemory"
+    )
+        throw new Error(
+            "This evidence does not support an exact document explanation.",
+        );
+    return {
+        corpusId: source.corpusId,
+        question,
+        source: { sourceId: source.objectId, revisionId: source.revisionId },
+        retrievalPolicy: "sourcesOnly",
+        selection: { mode: "only", modules: ["explanation", "sources"] },
+    };
+}
+
 function node<K extends keyof HTMLElementTagNameMap>(
     tag: K,
     text?: string,
@@ -149,10 +170,14 @@ export function mountMemoryHubUnderstanding(
     rail.setAttribute("aria-label", "Sources and related context");
     main.append(prose, follow, modules);
     grid.append(main, rail);
-    root.append(form, status, grid);
+    const documentScope = node("p", undefined, "understanding-document-scope");
+    documentScope.hidden = true;
+    root.append(form, documentScope, status, grid);
     host.append(root);
     let result: UnderstandingResult | undefined;
     let input: UnderstandingRequest | undefined;
+    let operationScope: string | undefined;
+    let operationCorpus: string | undefined;
     let version = 0;
     let controller = new AbortController();
     let busy = false;
@@ -170,7 +195,12 @@ export function mountMemoryHubUnderstanding(
         options.onError(error);
     }
     function valid(token: number, scope: string) {
-        return !disposed && token === version && scope === options.scope();
+        return (
+            !disposed &&
+            token === version &&
+            scope === operationCorpus &&
+            operationScope === options.scope()
+        );
     }
     function openCitation(citation: UnderstandingCitation, focus: HTMLElement) {
         if (result)
@@ -570,7 +600,7 @@ export function mountMemoryHubUnderstanding(
             );
             return;
         }
-        if (request.corpusId !== options.scope()) {
+        if (request.corpusId !== options.scope() && !request.source) {
             report(
                 new Error(
                     "Collection changed. Start a new understanding in the selected collection.",
@@ -584,6 +614,21 @@ export function mountMemoryHubUnderstanding(
         moduleVersions.clear();
         moduleSlots.clear();
         controller = new AbortController();
+        operationScope = options.scope();
+        operationCorpus = request.corpusId;
+        if (
+            input?.source?.sourceId !== request.source?.sourceId ||
+            input?.source?.revisionId !== request.source?.revisionId
+        ) {
+            result = undefined;
+            render();
+            follow.hidden = true;
+        }
+        input = request;
+        documentScope.hidden = !request.source;
+        documentScope.textContent = request.source
+            ? "Explaining one document at its exact captured revision. Follow-up questions stay within this document."
+            : "";
         const token = ++version;
         busy = true;
         submit.disabled = followSubmit.disabled = true;
@@ -649,8 +694,11 @@ export function mountMemoryHubUnderstanding(
     form.addEventListener("submit", (event) => {
         event.preventDefault();
         void run({
-            corpusId: options.scope() ?? "",
+            corpusId: input?.source ? input.corpusId : (options.scope() ?? ""),
             question: question.value.trim(),
+            ...(input?.source
+                ? { source: input.source, selection: input.selection }
+                : {}),
             ...(input?.retrievalPolicy
                 ? { retrievalPolicy: input.retrievalPolicy }
                 : {}),
@@ -685,7 +733,9 @@ export function mountMemoryHubUnderstanding(
                             input?.evidenceSnapshotId) ||
                     request.knowledgeCheckpointId !==
                         input?.knowledgeCheckpointId ||
-                    request.retrievalPolicy !== input?.retrievalPolicy)
+                    request.retrievalPolicy !== input?.retrievalPolicy ||
+                    request.source?.sourceId !== input?.source?.sourceId ||
+                    request.source?.revisionId !== input?.source?.revisionId)
             )
                 await run(request);
         },
@@ -713,6 +763,8 @@ export function mountMemoryHubUnderstanding(
             moduleControllers.clear();
             result = undefined;
             input = undefined;
+            documentScope.hidden = true;
+            documentScope.textContent = "";
             prose.replaceChildren();
             rail.replaceChildren();
             modules.replaceChildren();

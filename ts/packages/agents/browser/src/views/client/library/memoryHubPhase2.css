@@ -65,6 +65,7 @@
 }
 .memory-phase2 .phase2-results {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .memory-phase2 .phase2-results.grid {
@@ -163,18 +164,69 @@
   min-width: 0;
 }
 .memory-search .phase2-search-insights {
-  padding: 20px;
+  display: grid;
+  gap: 16px;
   margin: 0;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
   font-size: 13px;
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
 .memory-search .phase2-search-insights h3 {
-  margin-block: 0 16px;
-  font-size: 15px;
+  margin-block: 0 12px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.memory-search > form > .hub-filters {
+  margin-bottom: 0;
+  align-self: end;
+}
+.memory-search .phase2-sidecard {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.memory-search .phase2-sidecard p {
+  color: var(--muted);
+}
+.memory-search .phase2-context-item {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.memory-search .phase2-context-list {
+  display: grid;
+  gap: 8px;
+}
+.memory-search .phase2-sidecard small {
+  display: block;
+  margin: 4px 0 12px;
+  color: var(--muted);
+}
+.memory-search .phase2-explain-source {
+  margin-inline-start: 8px;
+}
+.memory-search .phase2-results article,
+.memory-search .phase2-group-results,
+.memory-search .markdown-preview {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.memory-search .markdown-preview pre,
+.memory-search .markdown-preview table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.memory-search .phase2-result-pager {
+  justify-content: space-between;
 }
 .memory-search .phase2-answer {
   padding: clamp(18px, 3vw, 28px);
