@@ -85,7 +85,7 @@ test.each(["chat_completions", "responses", "messages"] as const)(
                 expect(inspected.estimatedInputTokens).toBe(
                     countTokens(inspected.serializedRequest),
                 );
-                if (wireApi === "chat_completions") {
+                if (wireApi !== "messages") {
                     expect(inspected.serializedRequest).toContain(
                         "Schema counts too",
                     );
