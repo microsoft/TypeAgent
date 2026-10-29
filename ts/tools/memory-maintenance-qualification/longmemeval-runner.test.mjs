@@ -443,6 +443,44 @@ test("benchmark failure diagnostics retain filesystem codes and frame locations 
     );
 });
 
+test("publication failures still close the service and restore the observer", async () => {
+    for (const failAt of [1, 2]) {
+        const state = { outcome: "PARTIAL_BOUNDED_WORK" };
+        const attempt = {};
+        const failure = new Error("Controlled publication failure");
+        let writes = 0;
+        let closed = false;
+        let restored = false;
+        const persist = createBenchmarkStateWriter(
+            "unit-state",
+            state,
+            async () => {
+                if (++writes === failAt) throw failure;
+            },
+        );
+        await assert.rejects(
+            closeBenchmarkService(
+                {
+                    close: async () => {
+                        closed = true;
+                    },
+                },
+                state,
+                attempt,
+                persist,
+                (error) => ({ name: error.name }),
+                () => {
+                    restored = true;
+                },
+            ),
+            (error) => error === failure,
+        );
+        assert.equal(closed, true);
+        assert.equal(restored, true);
+        assert.equal(attempt.supportedClose, "COMPLETE");
+    }
+});
+
 test("bounded outcome is durable before close waits, and close failures remain failures", async () => {
     const state = { outcome: "PARTIAL_BOUNDED_WORK" };
     const attempt = {};

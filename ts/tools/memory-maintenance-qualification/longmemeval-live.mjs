@@ -314,18 +314,26 @@ export async function closeBenchmarkService(
     attempt,
     persist,
     failure,
+    restoreObserver = () => {},
 ) {
     attempt.outcome = state.outcome;
     attempt.closeStartedEpochMs = Date.now();
-    await persist();
     try {
-        await service.close();
-        attempt.supportedClose = "COMPLETE";
-    } catch (error) {
-        attempt.supportedClose = failure(error);
-        state.outcome = "FAILED_SUPPORTED_CLOSE";
+        try {
+            await persist();
+        } finally {
+            try {
+                await service.close();
+                attempt.supportedClose = "COMPLETE";
+            } catch (error) {
+                attempt.supportedClose = failure(error);
+                state.outcome = "FAILED_SUPPORTED_CLOSE";
+            }
+        }
+        await persist();
+    } finally {
+        restoreObserver();
     }
-    await persist();
 }
 
 export function selectConstructionCases(construction, selection) {
@@ -775,8 +783,8 @@ async function runWorker(spec) {
             attempt,
             persist,
             safeFailure,
+            restoreObserver,
         );
-        restoreObserver();
         attempt.finishedEpochMs = Date.now();
         attempt.elapsedMs = attempt.finishedEpochMs - attempt.startedEpochMs;
         attempt.outcome = state.outcome;

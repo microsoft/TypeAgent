@@ -123,7 +123,7 @@ export interface WikiFamilyState {
     candidateReadCursor?: {
         generation: string | undefined;
         policy: string;
-        afterViewId: string;
+        visitedViewIds: string[];
     };
     descriptors: Array<{
         viewId: string;

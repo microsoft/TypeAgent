@@ -65,6 +65,11 @@ type WikiPreparation =
     | { value: PreparedWikiAssessment | undefined; error?: never }
     | { value?: never; error: unknown };
 
+interface WikiPreparationTask {
+    controller: AbortController;
+    work: Promise<WikiPreparation>;
+}
+
 interface ViewBuildRuntimeScope {
     corpusId: string;
     sources: Set<string>;
@@ -424,10 +429,11 @@ export class ViewBuildRunner {
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
         signal: AbortSignal,
-        assessmentPreparation?: Promise<WikiPreparation>,
+        assessmentPreparation?: WikiPreparationTask,
     ): Promise<boolean> {
         const timeoutMs = this.targetTimeout(result.snapshot);
-        const controller = new AbortController();
+        const controller =
+            assessmentPreparation?.controller ?? new AbortController();
         const jobSignal = signal;
         const cancel = () => controller.abort(jobSignal.reason);
         signal.addEventListener("abort", cancel, { once: true });
@@ -543,7 +549,7 @@ export class ViewBuildRunner {
                         job,
                         result,
                         signal,
-                        assessmentPreparation,
+                        assessmentPreparation?.work,
                     ),
                 ))
             )
@@ -881,7 +887,7 @@ export class ViewBuildRunner {
     private async run(job: ViewBuildJob, signal: AbortSignal): Promise<void> {
         const controller = new AbortController();
         const preparationSignal = AbortSignal.any([signal, controller.signal]);
-        const prepared = new Map<string, Promise<WikiPreparation>>();
+        const prepared = new Map<string, WikiPreparationTask>();
         const preparationLimit = createLimiter(this.wikiAssessmentConcurrency);
         const prepare = (offset: number) => {
             if (
@@ -902,10 +908,15 @@ export class ViewBuildRunner {
                     prepared.has(result.viewId)
                 )
                     continue;
-                prepared.set(
-                    result.viewId,
-                    preparationLimit(async () => {
-                        preparationSignal.throwIfAborted();
+                const targetController = new AbortController();
+                const targetSignal = AbortSignal.any([
+                    preparationSignal,
+                    targetController.signal,
+                ]);
+                prepared.set(result.viewId, {
+                    controller: targetController,
+                    work: preparationLimit(async () => {
+                        targetSignal.throwIfAborted();
                         if (
                             this.owner.canPrepareWikiAssessment &&
                             !(await this.owner.canPrepareWikiAssessment(
@@ -916,13 +927,13 @@ export class ViewBuildRunner {
                         return this.prepareWikiAssessment(
                             job,
                             result,
-                            preparationSignal,
+                            targetSignal,
                         );
                     }).then(
                         (value): WikiPreparation => ({ value }),
                         (error: unknown): WikiPreparation => ({ error }),
                     ),
-                );
+                });
             }
         };
         try {
@@ -957,7 +968,7 @@ export class ViewBuildRunner {
             }
         } finally {
             controller.abort(new Error("Wiki preparation window closed"));
-            await Promise.all(prepared.values());
+            await Promise.all([...prepared.values()].map(({ work }) => work));
         }
         if (this.purged.has(job.jobId)) return;
         await this.owner.update(job.corpusId, job.jobId, (current) => {

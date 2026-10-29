@@ -8163,6 +8163,7 @@ export class FileMemoryService
                 kind,
             );
             family.dirty ||= job.state !== "complete";
+            if (!family.dirty) delete family.candidateReadCursor;
             delete family.error;
             await this.viewStore.saveWikiFamily(job.corpusId, family, kind);
         }
@@ -8574,9 +8575,7 @@ export class FileMemoryService
         if (descriptors.length !== family.descriptors.length) {
             family.descriptors = descriptors;
             family.cursor = 0;
-            delete family.candidateReadCursor;
         }
-        const descriptorCount = family.descriptors.length;
         discoverInformationalDescriptors(
             family,
             kind === "projects"
@@ -8585,8 +8584,6 @@ export class FileMemoryService
             snapshot.views,
             kind,
         );
-        if (family.descriptors.length !== descriptorCount)
-            delete family.candidateReadCursor;
         const familyVersion = viewHash(
             await this.viewStore.getWikiFamily(corpusId, kind),
         );
@@ -8611,17 +8608,7 @@ export class FileMemoryService
         if (this.deferBatchMaintenance(corpusId, automatic))
             return this.viewStore.recordViewMaintenance(plan);
         const nextFamily = structuredClone(family);
-        const admittedIds = new Set(
-            targets.map((target) => target.definition.viewId),
-        );
-        nextFamily.descriptors = [
-            ...nextFamily.descriptors.filter(
-                (descriptor) => !admittedIds.has(descriptor.viewId),
-            ),
-            ...nextFamily.descriptors.filter((descriptor) =>
-                admittedIds.has(descriptor.viewId),
-            ),
-        ];
+        this.stageWikiFamilyAdmission(nextFamily, targets, automatic);
         nextFamily.cursor = Number(page.nextContinuationToken ?? 0);
         if (runtime.manifest.indexGeneration)
             nextFamily.indexVersion = runtime.manifest.indexGeneration;
@@ -8642,6 +8629,7 @@ export class FileMemoryService
                 nextFamily.error = `${decisions[0].reason}; ${decisions.length} targets require decisions; independent maintenance continues`;
         }
         if (!targets.length) {
+            if (!nextFamily.dirty) delete nextFamily.candidateReadCursor;
             await this.viewStore.saveWikiFamily(corpusId, nextFamily, kind);
             if (nextFamily.dirty && !nextFamily.error)
                 this.scheduleWikiMaintenance(corpusId, kind);
@@ -8669,6 +8657,26 @@ export class FileMemoryService
         } finally {
             reservation.release();
         }
+    }
+
+    private stageWikiFamilyAdmission(
+        family: WikiFamilyState,
+        targets: ViewBuildTarget[],
+        automatic: boolean,
+    ): void {
+        const admittedIds = new Set(
+            targets.map((target) => target.definition.viewId),
+        );
+        if (automatic && family.candidateReadCursor)
+            family.candidateReadCursor.visitedViewIds.push(...admittedIds);
+        family.descriptors = [
+            ...family.descriptors.filter(
+                (descriptor) => !admittedIds.has(descriptor.viewId),
+            ),
+            ...family.descriptors.filter((descriptor) =>
+                admittedIds.has(descriptor.viewId),
+            ),
+        ];
     }
 
     private async applyInformationalFamilyOperation(
@@ -8753,7 +8761,6 @@ export class FileMemoryService
         views: ViewVersion[],
         automatic: boolean,
         generation: string | undefined,
-        policy: string,
     ): {
         targetLimit: number;
         candidateLimit: number;
@@ -8762,9 +8769,20 @@ export class FileMemoryService
     } {
         const limits = automatic ? this.maintenanceLimits : undefined;
         const candidateLimit = limits?.maxCandidatesPerPass ?? Infinity;
-        const cursor = Number.isFinite(candidateLimit)
-            ? family.candidateReadCursor
-            : undefined;
+        let cursor: WikiFamilyState["candidateReadCursor"];
+        if (Number.isFinite(candidateLimit)) {
+            cursor = family.candidateReadCursor;
+            if (
+                cursor?.generation !== generation ||
+                cursor?.policy !== this.admissionPolicy ||
+                !cursor?.visitedViewIds
+            )
+                family.candidateReadCursor = cursor = {
+                    generation,
+                    policy: this.admissionPolicy,
+                    visitedViewIds: [],
+                };
+        }
         return {
             targetLimit: limits?.maxTargetsPerPass ?? 12,
             candidateLimit,
@@ -8772,17 +8790,10 @@ export class FileMemoryService
                 family.descriptors,
                 views,
                 Boolean(limits),
-                cursor?.generation === generation && cursor?.policy === policy
-                    ? cursor.afterViewId
-                    : undefined,
+                cursor ? new Set(cursor.visitedViewIds) : undefined,
             ),
             recordRead(viewId) {
-                if (Number.isFinite(candidateLimit))
-                    family.candidateReadCursor = {
-                        generation,
-                        policy,
-                        afterViewId: viewId,
-                    };
+                cursor?.visitedViewIds.push(viewId);
             },
         };
     }
@@ -8803,13 +8814,7 @@ export class FileMemoryService
             .indexGeneration;
         const policy = this.wikiAdmissionContext(views);
         const { targetLimit, candidateLimit, descriptors, recordRead } =
-            this.wikiTargetCandidates(
-                family,
-                views,
-                automatic,
-                generation,
-                policy,
-            );
+            this.wikiTargetCandidates(family, views, automatic, generation);
         let inspected = 0;
         for (const descriptor of descriptors) {
             if (targets.length === targetLimit) break;
@@ -8853,7 +8858,6 @@ export class FileMemoryService
             );
             if (!target) continue;
             inspected++;
-            recordRead(descriptor.viewId);
             try {
                 const input = await this.inspectWikiTarget(
                     corpusId,
@@ -8871,6 +8875,7 @@ export class FileMemoryService
                             policy,
                             reason: "Retained admission decision or unchanged indexed evidence",
                         };
+                    recordRead(descriptor.viewId);
                     continue;
                 }
                 if (
@@ -8879,6 +8884,7 @@ export class FileMemoryService
                     kind === "wiki" &&
                     (await this.retainedScopedWikiAssessment(input, descriptor))
                 ) {
+                    recordRead(descriptor.viewId);
                     continue;
                 }
                 targets.push(target);
@@ -8904,6 +8910,7 @@ export class FileMemoryService
                         policy,
                         reason: `Technical target rejection: ${safeError(error)}`,
                     };
+                recordRead(descriptor.viewId);
             }
         }
         return { targets, snapshots };

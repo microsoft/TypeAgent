@@ -1300,9 +1300,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         expect(generated).toBe(0);
         const family = await new TypedViewStore(root).getWikiFamily(corpusId);
         expect(family.automaticPasses?.count).toBe(2);
-        expect(family.candidateReadCursor?.afterViewId).toBe(
-            family.descriptors[1].viewId,
-        );
+        expect(family.candidateReadCursor).toBeUndefined();
         await service.close();
         service = open();
         expect((await service.drainMaintenance(10_000)).settled).toBe(true);
@@ -1317,6 +1315,155 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             (await new TypedViewStore(root).getWikiFamily(corpusId))
                 .candidateReadCursor,
         ).toBeUndefined();
+    });
+
+    test.each(["paged discovery", "canonical publication"])(
+        "bounded reads reach every candidate across %s",
+        async (change) => {
+            await service.close();
+            maintenanceMode = "manual";
+            maintenanceLimits = {
+                maxCandidatesPerPass: 1,
+                maxTargetsPerPass: 2,
+                maxPassesPerGeneration: 3,
+            };
+            rehearsalBudget = false;
+            const assessed: string[] = [];
+            adapter.assessWikiSubject = async (input) => {
+                const query = input.definition.wiki!.query;
+                assessed.push(query);
+                return {
+                    disposition:
+                        change === "canonical publication" &&
+                        query === "acquisition"
+                            ? "distinct"
+                            : "defer",
+                    purpose: "Independent selected subject",
+                    reason: "Only selected indexed evidence",
+                    canonicalViewId: "",
+                    sharedFragmentIds: [],
+                    essentialDistinctions: [],
+                    ambiguousViewIds: [],
+                };
+            };
+            MockIndexedCorpus.subjects = [
+                "acquisition",
+                "capacity",
+                "incident",
+            ];
+            MockIndexedCorpus.graphSubjects = true;
+            const clock = (import.meta as ImportMeta & { jest: typeof jest })
+                .jest;
+            const list = MockIndexedCorpus.prototype.listSubjects;
+            const paging =
+                change === "paged discovery"
+                    ? clock
+                          .spyOn(MockIndexedCorpus.prototype, "listSubjects")
+                          .mockImplementation(function (
+                              this: MockIndexedCorpus,
+                              offset = 0,
+                          ) {
+                              return list.call(this, offset, 1);
+                          })
+                    : undefined;
+            service = open();
+            try {
+                const { corpusId } = await service.createCorpus(
+                    "Changing bounded scan",
+                );
+                await add(
+                    corpusId,
+                    "source",
+                    "acquisition review is pending. capacity approval is withheld. incident follow-up is pending.",
+                );
+                expect((await service.drainMaintenance(10_000)).settled).toBe(
+                    true,
+                );
+                expect(assessed).toEqual([
+                    "acquisition",
+                    "capacity",
+                    "incident",
+                ]);
+                expect(generated).toBe(
+                    change === "canonical publication" ? 1 : 0,
+                );
+                expect(
+                    (await new TypedViewStore(root).getWikiFamily(corpusId))
+                        .automaticPasses?.count,
+                ).toBe(3);
+            } finally {
+                paging?.mockRestore();
+            }
+        },
+    );
+
+    test("an admission failure leaves its bounded candidate retryable across reopen", async () => {
+        await service.close();
+        maintenanceMode = "manual";
+        maintenanceLimits = {
+            maxCandidatesPerPass: 1,
+            maxTargetsPerPass: 2,
+            maxPassesPerGeneration: 4,
+        };
+        rehearsalBudget = false;
+        const assessed: string[] = [];
+        adapter.assessWikiSubject = async (input) => {
+            assessed.push(input.definition.wiki!.query);
+            return {
+                disposition: "defer",
+                purpose: "Only limited evidence",
+                reason: "Insufficient evidence for an article",
+                canonicalViewId: "",
+                sharedFragmentIds: [],
+                essentialDistinctions: [],
+                ambiguousViewIds: [],
+            };
+        };
+        MockIndexedCorpus.subjects = ["acquisition", "capacity"];
+        const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+        const original = TypedViewStore.prototype.admitViewBuild;
+        let admissions = 0;
+        const admission = clock
+            .spyOn(TypedViewStore.prototype, "admitViewBuild")
+            .mockImplementation(async function (
+                this: TypedViewStore,
+                ...args: Parameters<typeof original>
+            ) {
+                if (++admissions === 2)
+                    throw new Error("Controlled admission failure");
+                return original.apply(this, args);
+            });
+        service = open();
+        try {
+            const { corpusId } = await service.createCorpus(
+                "Retry bounded admission",
+            );
+            await add(
+                corpusId,
+                "source",
+                "acquisition review is pending. capacity approval is withheld.",
+            );
+            const status = await service.drainMaintenance(10_000);
+            expect(status.failures.map((entry) => entry.error)).toContain(
+                "Controlled admission failure",
+            );
+            expect(assessed).toEqual(["acquisition"]);
+            const family = await new TypedViewStore(root).getWikiFamily(
+                corpusId,
+            );
+            expect(family.candidateReadCursor?.visitedViewIds).toEqual([
+                family.descriptors.find(
+                    (entry) => entry.query === "acquisition",
+                )!.viewId,
+            ]);
+            admission.mockRestore();
+            await service.close();
+            service = open();
+            expect((await service.drainMaintenance(10_000)).settled).toBe(true);
+            expect(assessed).toEqual(["acquisition", "capacity"]);
+        } finally {
+            admission.mockRestore();
+        }
     });
 
     test("automatic candidate budgets retain deferred work across restart without hiding source facts", async () => {

@@ -3,6 +3,7 @@
 
 import { ViewBuildRunner, ViewBuildStaleError } from "../src/viewBuilds.js";
 import { setTimeout as delay } from "node:timers/promises";
+import { createMaintenanceModelScheduler } from "../src/maintenanceConcurrency.js";
 import type {
     ViewBuildJob,
     ViewBuildSnapshot,
@@ -21,9 +22,12 @@ test.each([
     { lanes: 4, mode: "slow-cancelled-lookup" },
     { lanes: 4, mode: "slow-cancelled-provider" },
     { lanes: 4, mode: "slow-cancelled-preflight" },
+    { lanes: 4, mode: "target-deadline" },
 ])(
     "Wiki assessment preparation: $lanes lanes, $mode",
     async ({ lanes, mode }) => {
+        const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+        if (mode === "target-deadline") clock.useFakeTimers();
         const snapshots: ViewBuildSnapshot[] = Array.from(
             { length: 8 },
             (_, index) => ({
@@ -113,6 +117,9 @@ test.each([
             essentialDistinctions: [],
             ambiguousViewIds: [],
         };
+        const model = createMaintenanceModelScheduler(
+            mode === "target-deadline" ? 1 : lanes,
+        );
         const runner = new ViewBuildRunner(
             {
                 identity: "offline",
@@ -122,23 +129,37 @@ test.each([
                 validate: async () => {
                     throw new Error("Deferred target must not validate prose");
                 },
-                assessWikiSubject: async (_input, _pages, signal) => {
-                    calls++;
-                    peak = Math.max(peak, ++active);
-                    try {
-                        if (mode === "slow-cancelled-provider") {
-                            await slowCancellation();
+                assessWikiSubject: async (input, _pages, signal) =>
+                    model(async () => {
+                        calls++;
+                        peak = Math.max(peak, ++active);
+                        try {
+                            if (
+                                mode === "target-deadline" &&
+                                input.definition.viewId === "candidate-0"
+                            ) {
+                                await new Promise<void>((_resolve, reject) => {
+                                    signal.addEventListener(
+                                        "abort",
+                                        () => reject(signal.reason),
+                                        { once: true },
+                                    );
+                                    enteredSlow();
+                                });
+                            }
+                            if (mode === "slow-cancelled-provider") {
+                                await slowCancellation();
+                                return assessment;
+                            }
+                            if (mode === "cancelled") runner.cancelAll();
+                            await delay(10, undefined, { signal });
+                            if (mode === "failed")
+                                throw new Error("Assessment provider failed");
                             return assessment;
+                        } finally {
+                            active--;
                         }
-                        if (mode === "cancelled") runner.cancelAll();
-                        await delay(10, undefined, { signal });
-                        if (mode === "failed")
-                            throw new Error("Assessment provider failed");
-                        return assessment;
-                    } finally {
-                        active--;
-                    }
-                },
+                    }, signal),
             },
             {
                 update: async (_corpusId, _jobId, update) => {
@@ -201,6 +222,10 @@ test.each([
         );
         try {
             runner.start(job);
+            if (mode === "target-deadline") {
+                await entered;
+                await clock.advanceTimersByTimeAsync(3_000_001);
+            }
             if (mode.startsWith("slow-cancelled")) {
                 await entered;
                 let closed = false;
@@ -214,6 +239,21 @@ test.each([
             }
             await runner.wait(job.jobId, new AbortController().signal);
             expect(active).toBe(0);
+            if (mode === "target-deadline") {
+                expect(job.state).toBe("partial");
+                expect(job.results[0].state).toBe("failed");
+                expect(job.results[0].reason).toContain(
+                    "exceeded 3000 second limit",
+                );
+                expect(applied).toEqual(
+                    snapshots
+                        .slice(1)
+                        .map((snapshot) => snapshot.definition.viewId),
+                );
+                expect(calls).toBe(8);
+                expect(peak).toBe(1);
+                return;
+            }
             if (mode.includes("cancelled")) {
                 expect(job.state).toBe("cancelled");
                 expect(applied).toEqual([]);
@@ -241,6 +281,7 @@ test.each([
         } finally {
             releaseSlow();
             await runner.close();
+            if (mode === "target-deadline") clock.useRealTimers();
         }
     },
 );
