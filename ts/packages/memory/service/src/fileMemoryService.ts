@@ -2217,7 +2217,7 @@ export class FileMemoryService
         const queryExperiments =
             this.experiments.has("fast-models") ||
             this.experiments.has("translation-cache");
-        let queryModel: DocMemorySettings["languageModel"] | undefined =
+        let queryModel: DocMemorySettings["queryLanguageModel"] =
             this.experiments.has("fast-models")
                 ? openai.createChatModel(this.fastQueryModelEndpoint)
                 : undefined;
