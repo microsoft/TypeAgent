@@ -4,10 +4,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+    answerOutcomeStatus,
     intervalUnionMs,
     readCases,
     summarize,
 } from "./search-latency-benchmark.mts";
+
+test("delivery labels do not invent a semantic outcome for integrated answers", () => {
+    assert.equal(answerOutcomeStatus({}), "answer-returned");
+    assert.equal(answerOutcomeStatus(undefined), "no-answer-returned");
+    for (const status of [
+        "answered",
+        "partial",
+        "needsClarification",
+        "noAnswer",
+    ])
+        assert.equal(answerOutcomeStatus({ status }), status);
+});
 
 test("overlapping provider intervals are counted once without mutating inputs", () => {
     const intervals: [number, number][] = [

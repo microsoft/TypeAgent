@@ -72,6 +72,14 @@ export interface Sample {
     observationErrors: string[];
 }
 
+export function answerOutcomeStatus(
+    answer: { status?: string } | undefined,
+): string {
+    return (
+        answer?.status ?? (answer ? "answer-returned" : "no-answer-returned")
+    );
+}
+
 function record(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -535,7 +543,7 @@ async function main() {
                         : {}),
                 });
                 return {
-                    status: result.answer?.status ?? "no-answer-returned",
+                    status: answerOutcomeStatus(result.answer),
                     evidenceCount: result.citations.length,
                     warningCount: result.warnings.length,
                     plannedModules: result.modules.filter(
@@ -564,7 +572,7 @@ async function main() {
                     });
                     assert(!result.errors.length, "Hub returned errors");
                     return {
-                        status: result.answer?.status ?? "no-answer",
+                        status: answerOutcomeStatus(result.answer),
                         evidenceCount: result.matches.length,
                         warningCount: result.warnings.length,
                     };
