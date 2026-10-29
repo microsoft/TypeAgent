@@ -9780,16 +9780,7 @@ export class FileMemoryService
     public async buildViews(request: ViewBuildRequest): Promise<ViewBuildJob> {
         validateBuildRequest(request);
         await this.requireViews(request.corpusId);
-        if (
-            !this.informationalWikiEnabled &&
-            request.targets.some(
-                (target) =>
-                    target.definition.wiki || target.definition.projectSummary,
-            )
-        )
-            throw new Error(
-                "Informational views are explicitly disabled by this host",
-            );
+        this.assertViewBuildSupported(request);
         const existing = (await this.listViewBuilds(request.corpusId)).find(
             (job) =>
                 viewHash(job.request) === viewHash(request) &&
@@ -9805,30 +9796,47 @@ export class FileMemoryService
                 ),
         );
         if (existing) return existing;
-        const admitted = await this.enqueueWrite(request.corpusId, async () => {
-            const reservation = this.viewBuilds.reserve();
-            try {
-                const snapshots: ViewBuildSnapshot[] = [];
-                for (const target of request.targets)
-                    snapshots.push(
-                        await this.snapshotViewTarget(
-                            request.corpusId,
-                            target,
-                            request.bounds,
-                            request.publication,
-                        ),
-                    );
-                const admitted = await this.viewStore.admitViewBuild(
-                    request,
-                    snapshots,
-                );
-                if (admitted.admitted) reservation.start(admitted.job);
-                return admitted;
-            } finally {
-                reservation.release();
-            }
-        });
+        const admitted = await this.enqueueWrite(request.corpusId, () =>
+            this.admitViewBuild(request),
+        );
         return admitted.job;
+    }
+
+    private assertViewBuildSupported(request: ViewBuildRequest): void {
+        if (
+            !this.informationalWikiEnabled &&
+            request.targets.some(
+                (target) =>
+                    target.definition.wiki || target.definition.projectSummary,
+            )
+        )
+            throw new Error(
+                "Informational views are explicitly disabled by this host",
+            );
+    }
+
+    private async admitViewBuild(request: ViewBuildRequest) {
+        const reservation = this.viewBuilds.reserve();
+        try {
+            const snapshots: ViewBuildSnapshot[] = [];
+            for (const target of request.targets)
+                snapshots.push(
+                    await this.snapshotViewTarget(
+                        request.corpusId,
+                        target,
+                        request.bounds,
+                        request.publication,
+                    ),
+                );
+            const admitted = await this.viewStore.admitViewBuild(
+                request,
+                snapshots,
+            );
+            if (admitted.admitted) reservation.start(admitted.job);
+            return admitted;
+        } finally {
+            reservation.release();
+        }
     }
 
     private resolveMaintenanceTarget(
@@ -10191,37 +10199,46 @@ export class FileMemoryService
             )
         )
             return this.rebuildTopics(job.corpusId);
-        const targets: ViewBuildTarget[] = [];
-        for (const result of job.results.filter(
-            (result) => !["draft", "merged", "skipped"].includes(result.state),
-        )) {
-            const contributionConflict =
-                await this.viewStore.pendingWikiContributionConflict(
-                    result.snapshot,
-                );
-            if (
-                contributionConflict &&
-                (await this.informationalVersionEligible(
-                    contributionConflict.human,
-                ))
-            )
-                throw new Error(
-                    `Resolve canonical Wiki edit conflict ${contributionConflict.conflictId} before retrying this contribution`,
-                );
-            const view = await this.getView({
-                corpusId: job.corpusId,
-                viewId: result.viewId,
-            });
-            targets.push({
-                definition: result.snapshot.definition,
-                expectedVersion: view?.version ?? 0,
-            });
-        }
-        if (!targets.length) throw new Error("Build has no retryable targets");
-        return this.buildViews({
-            ...job.request,
-            expectedHead: (await this.listViews(job.corpusId)).head,
-            targets,
+        return this.enqueueWrite(job.corpusId, async () => {
+            const targets: ViewBuildTarget[] = [];
+            for (const result of job.results.filter(
+                (result) =>
+                    !["draft", "merged", "skipped"].includes(result.state),
+            )) {
+                const contributionConflict =
+                    await this.viewStore.pendingWikiContributionConflict(
+                        result.snapshot,
+                    );
+                if (
+                    contributionConflict &&
+                    (await this.informationalVersionEligible(
+                        contributionConflict.human,
+                    ))
+                )
+                    throw new Error(
+                        `Resolve canonical Wiki edit conflict ${contributionConflict.conflictId} before retrying this contribution`,
+                    );
+                const view = await this.getView({
+                    corpusId: job.corpusId,
+                    viewId: result.viewId,
+                });
+                targets.push({
+                    definition: result.snapshot.definition,
+                    expectedVersion: view?.version ?? 0,
+                });
+            }
+            if (!targets.length)
+                throw new Error("Build has no retryable targets");
+            const retryRequest = {
+                ...job.request,
+                expectedHead: (await this.viewStore.listViews(job.corpusId))
+                    .head,
+                targets,
+            };
+            validateBuildRequest(retryRequest);
+            this.assertViewBuildSupported(retryRequest);
+            const admitted = await this.admitViewBuild(retryRequest);
+            return admitted.job;
         });
     }
 
