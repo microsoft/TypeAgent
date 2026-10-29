@@ -35,6 +35,30 @@ test("rich understanding is opt-in and rejects invalid settings", () => {
     ).toThrow("TYPEAGENT_MEMORY_UNDERSTANDING");
 });
 
+test("short-job priority is explicitly configurable and conflicts with reservation", () => {
+    for (const [raw, enabled] of [
+        ["true", true],
+        ["false", false],
+    ] as const)
+        expect(
+            getConfiguredMemoryViewOptions({
+                TYPEAGENT_MEMORY_SHORT_BUILD_PRIORITY: raw,
+            }).maintenanceShortBuildPriority,
+        ).toBe(enabled);
+    expect(() =>
+        getConfiguredMemoryViewOptions({
+            TYPEAGENT_MEMORY_SHORT_BUILD_PRIORITY: "maybe",
+        }),
+    ).toThrow("TYPEAGENT_MEMORY_SHORT_BUILD_PRIORITY");
+    expect(
+        () =>
+            new FileMemoryService("unused", {
+                maintenanceShortBuildPriority: true,
+                maintenanceShortBuildReservation: true,
+            }),
+    ).toThrow("cannot both be enabled");
+});
+
 test("topic experiments are opt-in and reject invalid host settings", () => {
     expect(getConfiguredMemoryViewOptions({})).not.toHaveProperty(
         "topicCuration",

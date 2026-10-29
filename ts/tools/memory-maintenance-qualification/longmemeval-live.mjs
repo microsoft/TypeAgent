@@ -29,6 +29,7 @@ import {
     executeMemoryCase,
     judgePrompt,
     officialJudgeTemplates,
+    preflightRetainedKnowledge,
 } from "./longmemeval-runner.mjs";
 
 const datasetSha256 =
@@ -48,6 +49,14 @@ export async function createBenchmarkMemoryService(
     const { createDurableMemoryService } = await load(productFactory);
     if (onReceipt) return createDurableMemoryService(rootDirectory, onReceipt);
     return createDurableMemoryService(rootDirectory);
+}
+
+export async function createRetainedKnowledgeReader(load, rootDirectory) {
+    const { TypedViewStore } = await load(
+        "packages\\memory\\service\\dist\\viewStore.js",
+    );
+    const store = new TypedViewStore(rootDirectory);
+    return (corpusId) => store.getKnowledgeState(corpusId);
 }
 
 export function recordBenchmarkArm(state, capabilities, resume) {
@@ -207,10 +216,42 @@ export function benchmarkFailure(error) {
     };
 }
 
-async function engineIdentity() {
+export function recordBenchmarkAttemptFailure(
+    state,
+    attempt,
+    error,
+    signal,
+    activeQuestionId,
+) {
+    const bounded = signal.aborted || error.name === "TimeoutError";
+    state.outcome = bounded ? "PARTIAL_BOUNDED_WORK" : "FAILED_REAL_BENCHMARK";
+    attempt.error = benchmarkFailure(error);
+    const record =
+        activeQuestionId === undefined
+            ? undefined
+            : state.cases[activeQuestionId];
+    if (record && record.status !== "complete") {
+        record.status = bounded ? "interrupted" : "failed";
+        record.error = benchmarkFailure(error);
+    }
+}
+
+export function createBenchmarkStateWriter(file, state, write = writeJson) {
+    let tail = Promise.resolve();
+    return () => {
+        const snapshot = structuredClone(state);
+        tail = tail.then(() => write(file, snapshot));
+        return tail;
+    };
+}
+
+export async function engineIdentity(
+    readSource = (file) => readFile(new URL(file, import.meta.url)),
+) {
     const files = [
         "longmemeval-live.mjs",
         "longmemeval-runner.mjs",
+        "knowledge-observer.mjs",
         "quality-adapters.mjs",
         "live-resume.mjs",
     ];
@@ -219,7 +260,7 @@ async function engineIdentity() {
             await Promise.all(
                 files.map(async (file) => [
                     file,
-                    digest(await readFile(new URL(file, import.meta.url))),
+                    digest(await readSource(file)),
                 ]),
             ),
         ),
@@ -273,18 +314,26 @@ export async function closeBenchmarkService(
     attempt,
     persist,
     failure,
+    restoreObserver = () => {},
 ) {
     attempt.outcome = state.outcome;
     attempt.closeStartedEpochMs = Date.now();
-    await persist();
     try {
-        await service.close();
-        attempt.supportedClose = "COMPLETE";
-    } catch (error) {
-        attempt.supportedClose = failure(error);
-        state.outcome = "FAILED_SUPPORTED_CLOSE";
+        try {
+            await persist();
+        } finally {
+            try {
+                await service.close();
+                attempt.supportedClose = "COMPLETE";
+            } catch (error) {
+                attempt.supportedClose = failure(error);
+                state.outcome = "FAILED_SUPPORTED_CLOSE";
+            }
+        }
+        await persist();
+    } finally {
+        restoreObserver();
     }
-    await persist();
 }
 
 export function selectConstructionCases(construction, selection) {
@@ -524,7 +573,7 @@ async function runWorker(spec) {
     );
     const { state, statePath, seeded, compiledDigest } =
         await loadBenchmarkWorkerState(spec, prepared.manifest.sha256);
-    const persist = () => writeJson(statePath, state);
+    const persist = createBenchmarkStateWriter(statePath, state);
     const attempt = {
         startedEpochMs: spec.spawnedEpochMs,
         workerPid: process.pid,
@@ -608,7 +657,21 @@ async function runWorker(spec) {
         const actual = observedJudgeModel(state.providerRequests, firstRequest);
         return { model: actual, label: /^yes/i.test(result.data.trim()) };
     };
+    let activeQuestionId;
     try {
+        if (Object.values(state.cases).some((record) => record?.corpusId)) {
+            const readRetainedKnowledgeStatus =
+                await createRetainedKnowledgeReader(
+                    load,
+                    path.join(spec.runDirectory, "isolated-store"),
+                );
+            await preflightRetainedKnowledge(service, state.cases, {
+                persist,
+                signal,
+                failure: benchmarkFailure,
+                readRetainedKnowledgeStatus,
+            });
+        }
         await service.initialize();
         recordBenchmarkArm(state, await service.getCapabilities(), seeded);
         await persist();
@@ -637,6 +700,7 @@ async function runWorker(spec) {
         );
         let completedThisBatch = 0;
         for (const construction of constructionCases) {
+            activeQuestionId = undefined;
             signal.throwIfAborted();
             if (
                 await acknowledgeStopAfterQuestion(
@@ -654,6 +718,7 @@ async function runWorker(spec) {
                 "A real benchmark failure requires review before retry",
             );
             state.currentQuestionId = id;
+            activeQuestionId = id;
             const name = `LongMemEval ${state.runId} ${id}`;
             const matches = (await service.listCorpora()).filter(
                 (corpus) => corpus.name === name,
@@ -699,16 +764,13 @@ async function runWorker(spec) {
         }
         state.outcome = completedOutcome(constructionCases, state, selection);
     } catch (error) {
-        const bounded = signal.aborted || error.name === "TimeoutError";
-        state.outcome = bounded
-            ? "PARTIAL_BOUNDED_WORK"
-            : "FAILED_REAL_BENCHMARK";
-        attempt.error = benchmarkFailure(error);
-        const record = state.cases[state.currentQuestionId];
-        if (record && record.status !== "complete") {
-            record.status = bounded ? "interrupted" : "failed";
-            record.error = benchmarkFailure(error);
-        }
+        recordBenchmarkAttemptFailure(
+            state,
+            attempt,
+            error,
+            signal,
+            activeQuestionId,
+        );
     } finally {
         state.scorecard = benchmarkScorecard(
             prepared,
@@ -721,8 +783,8 @@ async function runWorker(spec) {
             attempt,
             persist,
             safeFailure,
+            restoreObserver,
         );
-        restoreObserver();
         attempt.finishedEpochMs = Date.now();
         attempt.elapsedMs = attempt.finishedEpochMs - attempt.startedEpochMs;
         attempt.outcome = state.outcome;

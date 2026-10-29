@@ -14,6 +14,14 @@ import { emptyProjectBrief } from "./projectBrief.js";
 import { validateProjectSelector } from "./informationalProject.js";
 import { emptySchemaView } from "./schemaView.js";
 
+export function resolveTopicBuildTimeout(value = 3_000_000): number {
+    if (!Number.isSafeInteger(value) || value < 1 || value > 3_600_000)
+        throw new Error(
+            "Topic build timeout must be 1 to 3600000 milliseconds",
+        );
+    return value;
+}
+
 export function parseViewDraftCapability(
     value: string | undefined,
     setting = "TYPEAGENT_MEMORY_VIEW_DRAFTS",

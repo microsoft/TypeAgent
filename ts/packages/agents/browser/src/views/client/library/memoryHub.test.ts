@@ -18,6 +18,7 @@ jest.mock("./viewClient", () => ({
     invokeView: jest.fn(),
 }));
 jest.mock("./memoryHubPhase2.css", () => ({}));
+jest.mock("./memoryHubUnderstanding.css", () => ({}));
 jest.mock("./memoryKnowledgeCollection.css", () => ({}));
 jest.mock("./memoryHubImports.css", () => ({}));
 jest.mock("./memoryHubRunbookImports.css", () => ({}));
@@ -630,6 +631,8 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     let initialSnapshotPending = true;
     viewInvoke.mockImplementation(
         async (method: string, params: { query?: string } = {}) => {
+            if (method === "memoryViewCapabilities")
+                return { features: { memoryUnderstanding: false } };
             if (method === "memoryHubSnapshot") {
                 if (initialSnapshotPending) {
                     initialSnapshotPending = false;

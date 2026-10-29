@@ -13,6 +13,7 @@ import {
     splitDocPartTextForEmbedding,
 } from "@typeagent/conversation-memory";
 import * as kp from "@typeagent/knowpro";
+import { maintenanceExtractionModel } from "./maintenanceConcurrency.js";
 import { isInitiativeSubject } from "./initiativeDiscovery.js";
 import { indexedTopicOccurrence } from "./topicIncidence.js";
 import {
@@ -644,6 +645,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
 
     private createSettings(): DocMemorySettings {
         const settings = this.settingsFactory?.() ?? createDocMemorySettings();
+        maintenanceExtractionModel(settings.languageModel);
         settings.conversationSettings.messageTextIndexSettings.splitText ??=
             splitDocPartTextForEmbedding;
         return settings;
