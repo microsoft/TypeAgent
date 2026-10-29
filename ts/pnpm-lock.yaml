@@ -6063,6 +6063,9 @@ importers:
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../utils/commonUtils
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../config
