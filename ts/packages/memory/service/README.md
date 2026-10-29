@@ -57,6 +57,14 @@ These are opt-in experiments, not recommended production defaults. Set
 | `foreground-priority` | Defer new background maintenance for a shared maximum ten seconds, with a one-second cooldown under sustained requests. Does not cancel running work or defer explicit writes.                                                                                                                                                                           |
 | `lazy-collections`    | Single-flight per-collection recovery on first access, with pending removal/clear recovery still eager. Unopened collections join completion-paced background warmup rather than all loading during discovery.                                                                                                                                           |
 
+Fast model deployments also need verified `modelRequestConstraints` context,
+input and full output capacities for uncapped request admission. A soft reader
+target is not a provider-output reservation. The shipped `gpt_5_4_mini`
+capacities follow the provider's published limits; explicitly configured
+overrides remain authoritative. Document-scoped query translation uses its own
+model and applies cache decoration after its scoped schema is installed, without
+changing the ingestion/extraction model.
+
 For browser SSE previews, use the same environment switches in the service and
 browser gateway. The gateway omits the preview RPC when disabled. Direct clients
 may explicitly request `phase: "preview"` only from an enabled host; provisional

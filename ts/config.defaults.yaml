@@ -38,6 +38,14 @@ azureOpenAI:
   maxRetryAttempts: 3
   responseFormat: true
 
+# Full provider capacities for uncapped admission, not generation-token limits.
+# https://developers.openai.com/api/docs/models/gpt-5.4-mini
+modelRequestConstraints:
+  azure:chat:gpt_5_4_mini:
+    contextTokens: 400000
+    inputTokens: 272000
+    outputTokens: 128000
+
 reasoning:
   timeoutMs: 1200000
   copilotModel: gpt-6-sol

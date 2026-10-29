@@ -296,6 +296,7 @@ function benchmarkOptions() {
             store: { type: "string" },
             out: { type: "string" },
             cases: { type: "string" },
+            "case-ids": { type: "string" },
             rounds: { type: "string", default: "3" },
             experiments: { type: "string", default: "" },
             "fast-model": { type: "string" },
@@ -359,7 +360,17 @@ async function main() {
         "Output must not be inside the source store",
     );
     const manifestBytes = await readFile(values.cases);
-    const cases = readCases(JSON.parse(manifestBytes.toString("utf8")));
+    const allCases = readCases(JSON.parse(manifestBytes.toString("utf8")));
+    const requestedIds = new Set(
+        values["case-ids"]?.split(",").filter(Boolean),
+    );
+    const cases = requestedIds.size
+        ? allCases.filter((item) => requestedIds.has(item.id))
+        : allCases;
+    assert(
+        !requestedIds.size || cases.length === requestedIds.size,
+        "Unknown selected case ID",
+    );
     assert(cases.length, "No cases");
     await mkdir(dirname(output), { recursive: true });
     await mkdir(output);
@@ -470,6 +481,7 @@ async function main() {
         fastQueryModelEndpoint: values["fast-model"],
         privateAnswersRetained: values["retain-answers"],
         uniquePrimaryQueries: cases.length,
+        selectedCaseIds: cases.map((item) => item.id),
     };
     async function save(finished = false) {
         const variants = [...new Set(samples.map((sample) => sample.variant))];
@@ -541,6 +553,7 @@ async function main() {
         const start = performance.now();
         const cpu = process.cpuUsage();
         let outcome: Outcome | undefined;
+        let failure: unknown;
         try {
             outcome = await context.run(
                 { sample, pending, signal: controller.signal },
@@ -562,6 +575,7 @@ async function main() {
                     : { plannedModules: outcome.plannedModules }),
             };
         } catch (error) {
+            failure = error;
             sample.errorName =
                 error instanceof Error ? error.name : "UnknownError";
             console.error(
@@ -575,6 +589,25 @@ async function main() {
             await Promise.all(pending);
         }
         samples.push(sample);
+        if (values["retain-answers"] && failure !== undefined)
+            await appendFile(
+                resolve(output, "failures.jsonl"),
+                JSON.stringify({
+                    batchId: sample.batchId,
+                    caseId: test.id,
+                    variant,
+                    round,
+                    errorName: sample.errorName,
+                    message:
+                        failure instanceof Error
+                            ? failure.message.slice(0, 8192)
+                            : "Non-Error failure",
+                    stack:
+                        failure instanceof Error
+                            ? failure.stack?.slice(0, 8192)
+                            : undefined,
+                }) + "\n",
+            );
         if (values["retain-answers"] && outcome?.answer !== undefined)
             await appendFile(
                 resolve(output, "answers.jsonl"),
@@ -645,7 +678,10 @@ async function main() {
                         limit: 50,
                         generateAnswer: true,
                     });
-                    assert(!result.errors.length, "Hub returned errors");
+                    assert(
+                        !result.errors.length,
+                        JSON.stringify(result.errors),
+                    );
                     return {
                         answer: result,
                         status: answerOutcomeStatus(result.answer),

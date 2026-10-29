@@ -4,7 +4,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { openai } from "@typeagent/aiclient";
 import { createDocMemorySettings } from "@typeagent/conversation-memory";
-import { createSearchQueryTranslator } from "@typeagent/knowpro";
 import {
     memoryPerformanceExperiments,
     type MemoryPerformanceExperiment,
@@ -2217,18 +2216,16 @@ export class FileMemoryService
         return (corpusId, directory) =>
             createKnowProCorpusIndex(corpusId, directory, () => {
                 const settings = createDocMemorySettings();
-                const translator = createSearchQueryTranslator(queryModel);
-                settings.queryTranslator = this.experiments.has(
-                    "translation-cache",
-                )
-                    ? this.translationCache.wrap(
-                          corpusId,
-                          this.experiments.has("fast-models")
-                              ? this.fastQueryModelEndpoint!
-                              : "service-default",
-                          translator,
-                      )
-                    : translator;
+                settings.queryLanguageModel = queryModel;
+                if (this.experiments.has("translation-cache"))
+                    settings.wrapQueryTranslator = (translator) =>
+                        this.translationCache.wrap(
+                            corpusId,
+                            this.experiments.has("fast-models")
+                                ? this.fastQueryModelEndpoint!
+                                : "service-default",
+                            translator,
+                        );
                 return settings;
             });
     }
