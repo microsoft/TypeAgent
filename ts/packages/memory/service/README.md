@@ -213,9 +213,13 @@ disabled families, deadlines and failed builds remain explicit.
 Completed discovery receipts are not made partial by an obsolete deferral
 reason. Successful low-utility wiki skips remain complete build outcomes;
 their admission receipts prevent unchanged utility deferrals from cycling
-through every checkpoint pass. New index generations, model/admission policy,
-or page revisions invalidate those receipts; explicit rebuild also bypasses
-them. Blocked editorial assessments remain failures. Configured wiki assessment
+through every checkpoint pass. Versioned dependency keys include actual candidate
+evidence, model/admission policy and all nominated canonical-page context.
+Unrelated publication or an index-generation label alone does not reopen a
+scoped deferral; changed evidence, eligibility, policy or nominated context does.
+Legacy receipts retain conservative invalidation, and explicit rebuild bypasses
+retention. Assessment and family receipts share one atomic history commit.
+Blocked editorial assessments remain failures. Configured wiki assessment
 allows one logged evidence-contract repair against the unchanged supplied
 fragments and pages, then validates again without a success-shaped fallback.
 On structured-output-capable models, topic summary schemas restrict numeric
@@ -373,6 +377,67 @@ Hosts can use `TYPEAGENT_MEMORY_DECISION_CONCURRENCY`,
 and `TYPEAGENT_MEMORY_DECISION_MAX_QUESTIONS`. Invalid values fail explicitly.
 Settings are part of the view/model identity and benchmark processing policy.
 Default execution remains serial with 24-focal transactions until qualified.
+
+`FileMemoryServiceOptions.maintenanceConcurrency` separately controls
+cross-corpus maintenance. `builds` defaults to 1 and accepts 1..8; `modelRequests`
+defaults to 24 and accepts 1..24. Hosts can opt in through
+`TYPEAGENT_MEMORY_VIEW_BUILD_CONCURRENCY` and
+`TYPEAGENT_MEMORY_MAINTENANCE_MODEL_CONCURRENCY`. Invalid settings fail explicitly.
+Automatic maintenance and view builds preserve per-corpus ordering while
+allowing independent corpora to use the configured build slots. Same-corpus
+jobs wait before taking a slot. The default configured view, topic, source
+synopsis and Decision models share the service's model-request pool. Default
+derived-view indexing also schedules extraction completions through this pool
+within maintenance scope; foreground extraction and embeddings are not included.
+Custom injected adapters and index/settings factories remain responsible for
+their own request scheduling.
+
+Foreground reads may use an older committed generation while maintenance runs.
+Retrying a failed View build selects its history head and target versions inside
+the admission writer rather than reusing that foreground inventory head.
+Explicit build requests still enforce the caller's `expectedHead`.
+
+`topicBuildTimeoutMs` (`TYPEAGENT_MEMORY_TOPIC_BUILD_TIMEOUT_MS`) retains the
+3,000,000 ms topic-target default and accepts integers from 1 to 3,600,000.
+The deadline includes time paused at checkpoints; yielding does not reset it.
+
+Scheduling options:
+
+| Option                             | Environment                                    | Default and behavior                                                                                               |
+| ---------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `maintenanceShortBuildPriority`    | `TYPEAGENT_MEMORY_SHORT_BUILD_PRIORITY`        | `true` unless reservation is explicitly enabled; work-conserving short priority with safe native checkpoint yields |
+| `maintenanceShortBuildReservation` | `TYPEAGENT_MEMORY_SHORT_BUILD_RESERVATION`     | `false`; reserves one build slot from native topic jobs when there is more than one slot                           |
+| `wikiAssessmentConcurrency`        | `TYPEAGENT_MEMORY_WIKI_ASSESSMENT_CONCURRENCY` | `1`, integer 1..4; prepares Wiki purpose assessments concurrently, then applies guarded results in target order    |
+
+Priority uses all build slots for native work when short work is absent. Jobs
+containing any `topics-v1` target are native-class; other jobs are short-class,
+not guaranteed short-duration. FIFO holds within each class. When native work
+is queued, at most three consecutive short admissions precede a native admission.
+Same-corpus jobs cannot overtake their corpus tail.
+
+Native jobs lend their slot only after successful durable checkpoints with
+started model workers joined: initial incidence, Decision lookahead windows,
+drained generative curation checkpoints and final summary boundaries. Partial
+raw-summary worker checkpoints do not yield. Paused jobs resume their existing
+continuation without inference retries or additional checkpoints. Existing
+deadlines include paused time; cancellation removes a queued continuation.
+There is no forced preemption or wall-clock wait guarantee.
+
+Automatic callbacks waiting on builds retain corpus exclusion, budgets and
+shutdown tracking but no outer execution slot. Automatic native waits are
+bounded by the build count; total tracked callbacks are bounded to 32. The
+inner build/model caps remain unchanged. Set priority to `false` for legacy FIFO.
+Explicit reservation with priority unspecified selects reservation instead;
+explicitly enabling both fails. Deterministic local comparisons qualify this
+candidate default, not production campaign throughput or model quality.
+
+Short-slot reservation can reduce native-only throughput substantially; it is
+not a work-conserving default and requires workload qualification. Wiki preparation
+revalidates canonical context and recomputes stale speculation once. Existing
+contribution resumptions and unchanged inputs do not need speculative model calls.
+When an explicit informational request budget is configured, preparation remains
+serial so each target retains its existing budget. Cancellation drains tracked
+preparations; neither option increases the shared model-request cap.
 
 Context mode grows a deterministic prefix until the complete initial request
 hits logical input, question/choice or native admission limits. It can include
@@ -1032,6 +1097,14 @@ provider output capacity against the context window; explicit opt-in request
 budgets remain enforced locally. Required evidence, character bounds and
 governing qualifications are still validated, and overlong or invalid fields
 are rejected rather than silently shortened.
+
+Recipe `source-synopsis-v7` supplies strict JSON schemas for selection and
+composition, including preview/overview bounds, required qualifications and
+evidence IDs restricted to the supplied set. Request packing includes schema
+overhead. Host validation still rejects unsupported IDs or invalid fields;
+there is no truncation, fallback summary or additional automatic retry.
+Models configured without structured response formatting retain host validation
+but cannot receive the same provider-side enforcement.
 
 Recipe `source-synopsis-v3` resolves exact evidence quotes to retained UTF-16
 coordinates in the host. Models may omit offsets instead of computing character
@@ -1885,11 +1958,18 @@ for schemas, automatic-family behavior, compatibility and qualification limits.
 Configured-model quality remains separately gated.
 
 `TypedViewStore` persists artifact state under each corpus's `views` directory.
-The authoritative snapshot is `state.json` in the private bare
+The authoritative state manifest is `state.json` in the private bare
 `views/view-history.git` tree referenced by `refs/heads/typeagent-history`.
 Per-view tree entries use `view-<encoded-id>.json`; builds, generated bases,
 conflicts, publication/maintenance state, family state and Topics share the
-snapshot. Per-revision indexes remain outside Git under
+same commit. Versioned, content-addressed payload trees reuse unchanged large
+topic/build inputs and record bodies rather than serializing them on every
+receipt update. Legacy snapshots remain readable and migrate on a subsequent
+commit; do not downgrade a migrated store to an older client. Readers reconstruct
+and validate referenced payloads, and corruption fails explicitly. Privacy
+replacement removes the entire old object database, including unreachable
+payloads, rather than leaving a second store outside that boundary.
+Per-revision indexes remain outside Git under
 `views/view-search-index/<view-id-hash>/<revision-id-hash>`.
 
 Source replacement marks dependent drafts stale without modifying historical revisions. Forget/clear quarantines history, creates a sanitized baseline, replaces the entire old Git object database (including unreachable blobs), and removes affected View search indexes before reopening reads. Interrupted privacy cleanup rejects reads until restart recovery finishes. No procedure state, settings or index is persisted or migrated by this service.

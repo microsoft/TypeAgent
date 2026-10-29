@@ -7,6 +7,7 @@ import {
     reusableWikiAssessment,
     wikiPurposeRules,
     WikiAssessmentRejection,
+    wikiAssessmentKey,
 } from "../src/wikiAdmission.js";
 import { hydrateInformational } from "../src/informationalWiki.js";
 import { ViewBuildRunner } from "../src/viewBuilds.js";
@@ -120,6 +121,41 @@ function covered(): WikiSubjectAssessment {
         ],
     };
 }
+
+test("assessment dependencies ignore unrelated publication but retain all nominated context", () => {
+    const frozen = input();
+    const canonical = page();
+    const contexts = nominateWikiPages(frozen, [canonical], new Map());
+    const key = wikiAssessmentKey(frozen, contexts, "policy");
+    const unrelated = page("unrelated");
+    unrelated.definition.wiki!.query = "unrelated astronomy";
+    unrelated.content.title = "Astronomy";
+    unrelated.content.citations = unrelated.content.citations.map(
+        (citation) => ({
+            ...citation,
+            sourceId: "unrelated-source",
+        }),
+    );
+    expect(
+        wikiAssessmentKey(
+            frozen,
+            nominateWikiPages(frozen, [canonical, unrelated], new Map()),
+            "policy",
+        ),
+    ).toBe(key);
+    expect(wikiAssessmentKey(frozen, contexts, "new-policy")).not.toBe(key);
+    const changed = structuredClone(frozen);
+    changed.inputs[0].content += " New useful evidence.";
+    expect(wikiAssessmentKey(changed, contexts, "policy")).not.toBe(key);
+    const updatedPages = structuredClone(contexts);
+    updatedPages[0].revisionId = "new-revision";
+    expect(wikiAssessmentKey(frozen, updatedPages, "policy")).not.toBe(key);
+    expect(wikiAssessmentKey(frozen, [], "policy")).not.toBe(key);
+    const restart = JSON.parse(JSON.stringify({ frozen, contexts }));
+    expect(wikiAssessmentKey(restart.frozen, restart.contexts, "policy")).toBe(
+        key,
+    );
+});
 
 test("canonical coverage checks mandatory distinctions without suppressing unrelated retrieval context", () => {
     const frozen = input();

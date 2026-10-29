@@ -36,6 +36,11 @@ import {
 } from "./topicDecision.js";
 import { redactRunbookText } from "./runbookRedaction.js";
 import {
+    scheduleMaintenanceModel,
+    yieldMaintenanceBuild,
+    type MaintenanceModelScheduler,
+} from "./maintenanceConcurrency.js";
+import {
     editorialRules,
     editorialCheckRules,
     consequentialEditorialEvidence,
@@ -66,6 +71,7 @@ export interface ConfiguredTopicGeneratorOptions {
     endpoint?: string | undefined;
     model?: ChatModel | undefined;
     mode?: TopicGenerationMode | undefined;
+    modelScheduler?: MaintenanceModelScheduler | undefined;
 }
 
 function validateTopicGeneratorOptions(
@@ -76,10 +82,13 @@ function validateTopicGeneratorOptions(
         typeof options !== "object" ||
         Array.isArray(options) ||
         Object.keys(options).some(
-            (key) => !["endpoint", "model", "mode"].includes(key),
+            (key) =>
+                !["endpoint", "model", "mode", "modelScheduler"].includes(key),
         ) ||
         (options.endpoint !== undefined &&
             typeof options.endpoint !== "string") ||
+        (options.modelScheduler !== undefined &&
+            typeof options.modelScheduler !== "function") ||
         (options.model !== undefined &&
             (!options.model || typeof options.model.complete !== "function"))
     )
@@ -382,6 +391,7 @@ export function summaryEvidence(
 export function createTopicCompletion(
     endpoint?: string,
     injectedModel?: ChatModel,
+    modelScheduler?: MaintenanceModelScheduler,
 ) {
     let model = injectedModel;
     function configuredModel() {
@@ -442,13 +452,18 @@ export function createTopicCompletion(
         const result = await timeSearchStage(
             stage,
             () =>
-                model.complete(
-                    prompt,
-                    (value) => {
-                        usage = value;
-                    },
-                    outputSchema,
-                    undefined,
+                scheduleMaintenanceModel(
+                    modelScheduler,
+                    () =>
+                        model.complete(
+                            prompt,
+                            (value) => {
+                                usage = value;
+                            },
+                            outputSchema,
+                            undefined,
+                            signal,
+                        ),
                     signal,
                 ),
             {
@@ -522,10 +537,15 @@ export function createConfiguredTopicConceptSummarizer(
     endpoint?: string,
     injectedModel?: ChatModel,
     adapter?: ViewSynthesisAdapter,
+    modelScheduler?: MaintenanceModelScheduler,
 ): TopicConceptSummarizer {
     if (adapter?.generateTopicSummary)
         return adapter.generateTopicSummary.bind(adapter);
-    const complete = createTopicCompletion(endpoint, injectedModel);
+    const complete = createTopicCompletion(
+        endpoint,
+        injectedModel,
+        modelScheduler,
+    );
     return async (concept, signal) => {
         const candidate: Pick<
             TopicNode,
@@ -641,7 +661,10 @@ async function generateCuratedTopicSnapshot(
         "Cross-batch reconciliation retrieves corpus-wide lexical candidates; only evidence-grounded model decisions merge concepts. Synonyms outside candidate retrieval may remain separate.",
     );
     validateTopicSnapshot(snapshot);
-    if (checkpoint) await checkpoint(structuredClone(snapshot));
+    if (checkpoint) {
+        await checkpoint(structuredClone(snapshot));
+        await yieldMaintenanceBuild(signal);
+    }
 }
 
 export function createConfiguredTopicGenerator(
@@ -652,14 +675,18 @@ export function createConfiguredTopicGenerator(
             "Topic generator requires named options; migrate positional arguments",
         );
     const mode = configuredTopicMode(options);
-    const { endpoint, model: injectedModel } = options;
+    const { endpoint, model: injectedModel, modelScheduler } = options;
     const curated = mode.kind !== "raw";
     const decision = mode.kind === "decision" ? mode.createOptions : undefined;
     const settings = mode.kind === "generative" ? mode.settings : undefined;
-    const defaultComplete = createTopicCompletion(endpoint, injectedModel);
+    const defaultComplete = createTopicCompletion(
+        endpoint,
+        injectedModel,
+        modelScheduler,
+    );
     return async (input, signal, checkpoint) => {
         const complete = decision
-            ? createTopicCompletion(endpoint, injectedModel)
+            ? createTopicCompletion(endpoint, injectedModel, modelScheduler)
             : defaultComplete;
         const decisionOptions = decision?.(input);
         const snapshot = timeSearchStage("topic.snapshot.construct", () =>
@@ -878,7 +905,10 @@ export function createConfiguredTopicGenerator(
             );
             signal.throwIfAborted();
             if (failure) throw failure.error;
-            if (checkpoint) await checkpoint(structuredClone(snapshot));
+            if (checkpoint) {
+                await checkpoint(structuredClone(snapshot));
+                await yieldMaintenanceBuild(signal);
+            }
         }
         const labels = (snapshot.curation?.concepts ?? snapshot.nodes).map(
             ({ id, label, scope }) => ({
