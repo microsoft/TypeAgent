@@ -1010,6 +1010,10 @@ test(
                     headers: { Origin: base },
                 });
                 assert.equal(response.status, 200);
+                assert.equal(
+                    response.headers.get("content-type"),
+                    "text/event-stream; charset=utf-8",
+                );
                 const reader = response.body.getReader();
                 try {
                     await reader.read();
@@ -1020,6 +1024,7 @@ test(
                             phase: "processing",
                             current: 1,
                             total: 2,
+                            message: "March\u2013April",
                         },
                         timestamp: new Date().toISOString(),
                     });
@@ -1028,6 +1033,7 @@ test(
                     );
                     assert.match(event, /"type":"importProgress"/);
                     assert.match(event, /"importId":"job-1"/);
+                    assert.match(event, /March\u2013April/);
                     const completed = await invoke({
                         method: "importWebsiteDataWithProgress",
                         params: {
