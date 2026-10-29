@@ -553,6 +553,73 @@ export const searchRequestSchema = z.object({
     dateTo: z.string().datetime({ offset: true }).optional(),
 });
 
+const temporalValueSchema = z.strictObject({
+    raw: z.string().max(8192),
+    kind: z.enum(["instant", "floating", "calendar"]),
+    precision: z.enum([
+        "year",
+        "month",
+        "day",
+        "minute",
+        "second",
+        "millisecond",
+    ]),
+    localDateTime: z.string().max(8192),
+    instantUtc: z.string().max(8192).optional(),
+    offsetMinutes: z.number().finite().optional(),
+});
+const temporalDateEvidenceSchema = z.strictObject({
+    id: z.string(),
+    role: z.enum(["messageTime", "eventTime"]),
+    locator: z.string(),
+    value: temporalValueSchema,
+    quote: z.string().optional(),
+    chunkOrdinal: z.number().int().nonnegative().optional(),
+});
+const messageTemporalContextSchema = z.strictObject({
+    version: z.literal(1),
+    sourceRevisionId: z.string(),
+    contextHash: z.string(),
+    sourceContextHash: z.string().optional(),
+    ownerId: z.string(),
+    role: z.string().optional(),
+    partOrdinal: z.number().int().nonnegative().optional(),
+    sourceSpan: z.strictObject({
+        start: z.number().int().nonnegative(),
+        end: z.number().int().nonnegative(),
+    }),
+    messageTime: temporalValueSchema.optional(),
+    inheritedDateEvidence: temporalDateEvidenceSchema.array(),
+    discoveredDateEvidence: temporalDateEvidenceSchema.array().optional(),
+    rejectedDateAnchors: z
+        .strictObject({
+            chunkOrdinal: z.number().int().nonnegative(),
+            anchorOrdinal: z.number().int().nonnegative(),
+            reason: z.enum([
+                "empty-quote",
+                "quote-not-found",
+                "ambiguous-quote",
+                "date-not-in-quote",
+                "invalid-date",
+            ]),
+        })
+        .array()
+        .optional(),
+    eventMentions: z
+        .strictObject({
+            chunkOrdinal: z.number().int().nonnegative().optional(),
+            text: z.string(),
+            start: z.number().int().nonnegative(),
+            end: z.number().int().nonnegative(),
+            role: z.literal("eventTime"),
+            value: temporalValueSchema.optional(),
+            anchorId: z.string().optional(),
+            resolution: z.enum(["resolved", "missing-anchor", "ambiguous"]),
+        })
+        .array()
+        .optional(),
+});
+
 export const searchResultSchema = z.object({
     query: z.string(),
     matches: z.array(
@@ -570,6 +637,7 @@ export const searchResultSchema = z.object({
             synopsis: sourceSynopsisPreviewSchema.optional(),
             capturedAt: z.string().optional(),
             indexedAt: z.string(),
+            temporalContext: messageTemporalContextSchema.optional(),
         }),
     ),
     warnings: z.array(z.string()),
@@ -594,24 +662,7 @@ export const answerRequestSchema = z.strictObject({
     temporalContext: z
         .strictObject({
             referenceTime: z
-                .union([
-                    z.string().min(1).max(8192),
-                    z.strictObject({
-                        raw: z.string().max(8192),
-                        kind: z.enum(["instant", "floating", "calendar"]),
-                        precision: z.enum([
-                            "year",
-                            "month",
-                            "day",
-                            "minute",
-                            "second",
-                            "millisecond",
-                        ]),
-                        localDateTime: z.string().max(8192),
-                        instantUtc: z.string().max(8192).optional(),
-                        offsetMinutes: z.number().finite().optional(),
-                    }),
-                ])
+                .union([z.string().min(1).max(8192), temporalValueSchema])
                 .optional(),
             availabilityPolicy: z
                 .enum(["supplied-history", "as-of"])
