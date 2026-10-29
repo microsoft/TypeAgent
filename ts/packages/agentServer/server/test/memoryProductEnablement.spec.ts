@@ -14,55 +14,56 @@ import {
 import { waitForMemoryJob } from "@typeagent/memory-service";
 import { createDurableMemoryService } from "../src/durableMemoryService.js";
 
-test("ordinary host supports translation caching without replacing native extraction settings", async () => {
+test("ordinary host supports translation caching with native index settings", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "host-query-serving-"));
     const originalConfig = getRuntimeConfig();
     const originalMode = getActiveModelProvider();
     const originalEnvironment = process.env;
     const originalFetch = globalThis.fetch;
-    process.env = { ...originalEnvironment };
-    for (const key of Object.keys(process.env))
-        if (/^MEMORY.*WIKI/.test(key)) delete process.env[key];
-    process.env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS = "translation-cache";
-    setActiveModelProvider(undefined);
-    setRuntimeConfig(
-        buildConfig(
-            flatten({
-                modelProvider: "azure",
-                azureOpenAI: {
-                    defaultChat: {
-                        endpoint: "https://synthetic.invalid/query-serving",
-                        auth: "synthetic-key",
-                    },
-                    deployments: {
-                        gpt_6_luna: [
-                            {
-                                endpoint:
-                                    "https://synthetic.invalid/extraction",
-                                auth: "synthetic-key",
-                            },
-                        ],
-                    },
-                },
-                embedding: { provider: "none" },
-                modelRequestConstraints: {
-                    "azure:chat:": {
-                        contextTokens: 128000,
-                        outputTokens: 8000,
-                    },
-                    "azure:chat:gpt_6_luna": {
-                        contextTokens: 128000,
-                        outputTokens: 8000,
-                    },
-                },
-            }),
-        ),
-    );
-    globalThis.fetch = async () => {
-        throw new Error("Network calls are forbidden in host construction");
-    };
     let service: ReturnType<typeof createDurableMemoryService> | undefined;
     try {
+        process.env = { ...originalEnvironment };
+        for (const key of Object.keys(process.env))
+            if (/^MEMORY.*WIKI/.test(key)) delete process.env[key];
+        process.env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS = "translation-cache";
+        setActiveModelProvider(undefined);
+        setRuntimeConfig(
+            buildConfig(
+                flatten({
+                    modelProvider: "azure",
+                    azureOpenAI: {
+                        defaultChat: {
+                            endpoint: "https://synthetic.invalid/query-serving",
+                            auth: "synthetic-key",
+                        },
+                        deployments: {
+                            gpt_6_luna: [
+                                {
+                                    endpoint:
+                                        "https://synthetic.invalid/extraction",
+                                    region: "eastus",
+                                    auth: "synthetic-key",
+                                },
+                            ],
+                        },
+                    },
+                    embedding: { provider: "none" },
+                    modelRequestConstraints: {
+                        "azure:chat:": {
+                            contextTokens: 128000,
+                            outputTokens: 8000,
+                        },
+                        "azure:chat:gpt_6_luna": {
+                            contextTokens: 128000,
+                            outputTokens: 8000,
+                        },
+                    },
+                }),
+            ),
+        );
+        globalThis.fetch = async () => {
+            throw new Error("Network calls are forbidden in host construction");
+        };
         service = createDurableMemoryService(root);
         expect((await service.getCapabilities()).derivedViews).toBeDefined();
         const { corpusId } = await service.createCorpus("Serving settings");
