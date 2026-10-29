@@ -66,7 +66,7 @@ node dist/cli.js
 npm start -- -m opus
 
 # Use a specific model ID
-npm start -- -m claude-sonnet-4-5-20250929
+npm start -- -m claude-sonnet-5-5
 
 # Enable debug mode with timing information
 npm start -- --debug
@@ -258,7 +258,7 @@ The wrapper reuses the `CacheClient` from the `coderWrapper` package, which:
 
 ### Model Selection
 
-- `sonnet`: Claude Sonnet 4.5 (default) - `claude-sonnet-4-5-20250929`
+- `sonnet`: Claude Sonnet 5.5 (default) - `claude-sonnet-5-5`
 - `opus`: Claude Opus 4.5 - `claude-opus-4-5-20251101`
 - Or provide any custom model ID
 
