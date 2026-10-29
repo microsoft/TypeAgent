@@ -28,6 +28,7 @@ import {
     watchSlowRequest,
 } from "./memoryHubUi";
 import { renderMarkdownInto } from "./utils/markdownView";
+import { hubNotifications } from "./memoryHubNotifications";
 
 export type MemoryHubSearchOptions = {
     scope: () => string | undefined;
@@ -268,9 +269,6 @@ export function mountMemoryHubSearch(
         "phase2-status",
     );
     status.setAttribute("role", "status");
-    const warning = node("div", undefined, "phase2-warning");
-    warning.hidden = true;
-    warning.setAttribute("role", "status");
     const answer = node("section", undefined, "phase2-answer");
     answer.hidden = true;
     const layout = node("div", undefined, "phase2-controls");
@@ -340,7 +338,7 @@ export function mountMemoryHubSearch(
     );
     const resultLayout = node("div", undefined, "phase2-result-layout");
     resultLayout.append(reading, insights);
-    root.append(form, recent, status, warning, resultLayout, dialog);
+    root.append(form, recent, status, resultLayout, dialog);
     host.append(root);
     let result: MemoryHubSearchResult | undefined;
     let submitted: MemoryHubSearchRequest | undefined;
@@ -376,7 +374,11 @@ export function mountMemoryHubSearch(
             preferences.defaultViewMode !== value.defaultViewMode;
         preferences = value;
         if (defaultChanged) preferredMode = value.defaultViewMode;
-        preferenceStatus.textContent = value.notices.join(" ");
+        hubNotifications.set("view-preferences", {
+            title: "View preferences",
+            page: "settings",
+            messages: value.notices,
+        });
         renderResult();
     }
     const unsubscribePreferences = subscribeMemoryHubViewPreferences(
@@ -792,20 +794,29 @@ export function mountMemoryHubSearch(
         layoutNote.textContent = webMode
             ? hasWeb
                 ? "Web evidence grouped by actual capture dates or URI domains. Other memory evidence remains in List; missing metadata is marked unavailable."
-                : "The preferred web view requires web evidence. Using List for this result."
+                : ""
             : "";
         if (!result) return;
         const messages = [
             ...result.warnings,
+            ...(webMode && !hasWeb
+                ? [
+                      "The preferred web view requires web evidence. Using List for this result.",
+                  ]
+                : []),
             ...result.errors.map(
                 (error) =>
                     `${error.corpusId} · ${error.operation}: ${error.message}`,
             ),
         ];
-        warning.hidden = messages.length === 0;
-        warning.textContent = messages.length
-            ? `${result.errors.length ? "Partial or degraded results" : "Search limits and notices"}:\n${messages.join("\n")}`
-            : "";
+        hubNotifications.set("search", {
+            title: result.errors.length
+                ? "Search and Ask: partial results"
+                : "Search and Ask",
+            page: "search",
+            context: `Query: ${result.query} · ${submitted?.corpusId ?? "All memory"}`,
+            messages,
+        });
         status.textContent = `${result.matches.length} returned evidence results (bounded, not a full total) · reciprocal-rank fusion · ${submitted?.corpusId ? "selected corpus" : "All memory"} · submitted query: ${result.query}${searchElapsedMs === undefined ? "" : ` · Ready in ${(searchElapsedMs / 1000).toFixed(1)}s`}`;
         renderAnswer();
         renderInsights();
@@ -883,7 +894,8 @@ export function mountMemoryHubSearch(
         insights.replaceChildren();
         renderResult();
         answer.hidden = true;
-        warning.hidden = true;
+        hubNotifications.clear("search");
+        hubNotifications.clear("search-completion");
         const started = performance.now();
         status.textContent = request.generateAnswer
             ? "Finding evidence and preparing an answer…"
@@ -976,7 +988,8 @@ export function mountMemoryHubSearch(
             insights.replaceChildren();
             renderResult();
             answer.hidden = true;
-            warning.hidden = true;
+            hubNotifications.clear("search");
+            hubNotifications.clear("search-completion");
             submit.disabled = false;
             status.textContent =
                 "Scope changed. Search again to load evidence for this scope.";

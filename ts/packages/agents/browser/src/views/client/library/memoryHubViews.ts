@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import type {
     ViewBuildJob,
     ViewMergeConflict,
@@ -251,9 +252,6 @@ export function mountMemoryHubViews(
     const status = rbNode("p");
     status.setAttribute("role", "status");
     const total = rbNode("span", "Loading...", "hub-list-total");
-    const familyNotice = rbNode("div", undefined, "hub-notice");
-    familyNotice.setAttribute("role", "alert");
-    familyNotice.hidden = true;
     const loading = viewLoadingStatus("Loading views...");
     loading.hidden = true;
     const listLoading = viewLoadingStatus("Loading views...");
@@ -519,8 +517,14 @@ export function mountMemoryHubViews(
                 "Projects",
             ),
         ]);
-        familyNotice.textContent = familyStatus.join(" ");
-        familyNotice.hidden = !familyStatus.length;
+        hubNotifications.set("views", {
+            title: "Views",
+            page: "views",
+            context: corpusId
+                ? (corpusNames.get(corpusId) ?? corpusId)
+                : "All memory",
+            messages: familyStatus,
+        });
         renderDrafts();
         if (jobs[0]) setLatest(jobs[0]);
         else clearReceipt();
@@ -1414,6 +1418,15 @@ export function mountMemoryHubViews(
     function setLatest(
         job: Pick<ViewBuildJob, "corpusId" | "state" | "jobId">,
     ) {
+        hubNotifications.set("view-build", {
+            title: "View builds",
+            page: "activity",
+            context: corpusNames.get(job.corpusId) ?? job.corpusId,
+            severity: ["failed", "interrupted"].includes(job.state)
+                ? "warning"
+                : "info",
+            messages: [`Build ${job.jobId}: ${job.state}`],
+        });
         latestJob = job;
         latestBuild.hidden = false;
         setIconButton(
@@ -1429,6 +1442,7 @@ export function mountMemoryHubViews(
         );
     }
     function clearReceipt() {
+        hubNotifications.clear("view-build");
         latestJob = undefined;
         latestBuild.hidden = true;
         receipt.replaceChildren();
@@ -1787,7 +1801,6 @@ export function mountMemoryHubViews(
         total.title = `Showing ${inventory.length} loaded views.`;
         cardHead.append(rbNode("h2", "Views"), total);
         card.append(cardHead);
-        if (!familyNotice.hidden) card.append(familyNotice);
         const pagination = pager.controls("views", () => {
             void action(refresh);
         });
@@ -2825,6 +2838,7 @@ export function mountMemoryHubViews(
             }),
         scopeChanged() {
             if (disposed) return;
+            hubNotifications.clear("views");
             sequence++;
             pager.reset();
             clearTimeout(searchTimer);

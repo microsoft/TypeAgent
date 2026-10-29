@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import type {
     MemoryGraphNode,
     MemoryGraphQueryRequest,
@@ -58,8 +59,6 @@ export function mountMemoryHubGraph(
     });
     const status = graphText("p");
     status.setAttribute("role", "status");
-    const warning = graphText("div");
-    warning.setAttribute("role", "status");
     const toolbar = graphText("div", undefined, "hub-graph-toolbar");
     toolbar.setAttribute("role", "group");
     toolbar.setAttribute("aria-label", "Graph controls");
@@ -67,7 +66,7 @@ export function mountMemoryHubGraph(
     const canvas = graphText("div", undefined, "hub-scoped-graph-canvas");
     canvas.setAttribute("aria-label", "Memory graph visualization");
     viewport.append(toolbar, canvas);
-    root.append(status, warning, viewport);
+    root.append(status, viewport);
     host.append(root);
     const details = mountGraphDetails(host, options);
     let version = 0;
@@ -226,8 +225,12 @@ export function mountMemoryHubGraph(
             messages.push(
                 `${data.omittedCorpora} corpora omitted by node budget.`,
             );
-        warning.textContent = messages.join("\n");
-        warning.hidden = !messages.length;
+        hubNotifications.set("graph", {
+            title: "Memory graph",
+            page: "explore",
+            context: options.scope() ?? "All memory",
+            messages,
+        });
     }
     async function load(
         focus: Partial<
@@ -238,8 +241,7 @@ export function mountMemoryHubGraph(
         release();
         root.hidden = false;
         root.setAttribute("aria-busy", "true");
-        warning.replaceChildren();
-        warning.hidden = true;
+        hubNotifications.clear("graph");
         controls.showMode(kind !== "entities");
         status.hidden = false;
         status.textContent = "Loading scoped memory graph...";
@@ -271,12 +273,8 @@ export function mountMemoryHubGraph(
         } catch (error) {
             if (ticket === version && !disposed) {
                 release();
-                status.textContent =
-                    "Graph could not be loaded. Retry with Refresh graph.";
+                status.textContent = `Graph could not be loaded: ${error instanceof Error ? error.message : String(error)}. Retry with Refresh graph.`;
                 status.hidden = false;
-                warning.textContent =
-                    error instanceof Error ? error.message : String(error);
-                warning.hidden = false;
                 options.onError(error);
             }
         } finally {
@@ -321,7 +319,10 @@ export function mountMemoryHubGraph(
             }
         },
         hide,
-        scopeChanged: hide,
+        scopeChanged() {
+            hubNotifications.clear("graph");
+            hide();
+        },
         dispose() {
             disposed = true;
             hide();

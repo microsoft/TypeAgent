@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -782,7 +783,31 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     expect(sourceTabs.querySelectorAll('i[aria-hidden="true"]')).toHaveLength(
         7,
     );
-    expect(value("page-settings").dataset.settingsTab).toBe("graph");
+    expect(value("page-settings").dataset.settingsTab).toBe("sources");
+    for (const id of ["hubCorpus", "hubAdd", "hubRefresh"]) {
+        expect(value(id).closest("#hubSourceSettings")).not.toBeNull();
+        expect(value(id).closest(".hub-top")).toBeNull();
+    }
+    for (const id of ["hubTheme", "hubStatus"]) {
+        expect(value(id).closest("#hubGeneralSettings")).not.toBeNull();
+        expect(value(id).closest(".hub-top")).toBeNull();
+    }
+    expect(value("hubNotificationsLink").closest(".hub-top")).not.toBeNull();
+    expect(value("hubStatus").getAttribute("href")).toBe("#/activity");
+    expect(value("hubStatus").getAttribute("aria-live")).toBe("polite");
+    value("page-settings")
+        .querySelector<HTMLButtonElement>('[data-page-tab="general"]')!
+        .click();
+    expect(value("page-settings").dataset.settingsTab).toBe("general");
+    const initialTheme = value("hubTheme").getAttribute("aria-label");
+    value("hubTheme").click();
+    expect(value("hubTheme").getAttribute("aria-label")).not.toBe(initialTheme);
+    expect(
+        value("hubTheme").querySelector("[data-theme-label]")!.textContent,
+    ).toBe(value("hubTheme").getAttribute("aria-label"));
+    value("page-settings")
+        .querySelector<HTMLButtonElement>('[data-page-tab="sources"]')!
+        .click();
     expect(document.getElementById("hubRunbooks")).toBeNull();
     expect(document.getElementById("hubLegacyGuides")).toBeNull();
     value("page-activity")
@@ -907,8 +932,14 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     viewInvoke.mockImplementation(beforeInboxRefresh);
     const selector = value<HTMLSelectElement>("hubCorpus");
     selector.value = "a";
+    hubNotifications.set("scope-check", {
+        title: "Previous scope",
+        page: "search",
+        messages: ["Stale scope notice"],
+    });
     selector.dispatchEvent(new Event("change"));
     await settle();
+    expect(hubNotifications.has("scope-check")).toBe(false);
     const currentView = viewInvoke.getMockImplementation()!;
     viewInvoke.mockImplementation((method: string, params: unknown) =>
         method === "memoryHubSnapshot"
@@ -1035,9 +1066,30 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     expect(location.hash).toBe("#/library");
     expect(value("hubDrawer").classList.contains("hidden")).toBe(true);
     expect(value("sourceCount").textContent).toBe("0 total");
-    expect(document.querySelector(".alert-success")?.textContent).toBe(
+    expect(document.querySelector(".alert-success")).toBeNull();
+    expect(value("hubNotifications").textContent).toContain(
         'Forgot source "Source".',
     );
+    history.replaceState({}, "", "#/notifications");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
+    expect(value("page-notifications").classList.contains("hidden")).toBe(
+        false,
+    );
+    expect(value("hubNotificationsLink").getAttribute("aria-current")).toBe(
+        "page",
+    );
+    expect(value("hubNotifications").textContent).toContain(
+        'Forgot source "Source".',
+    );
+    hubNotifications.set("refresh-check", {
+        title: "Before refresh",
+        page: "settings",
+        messages: ["Stale refresh notice"],
+    });
+    value("hubRefresh").click();
+    await settle();
+    expect(hubNotifications.has("refresh-check")).toBe(false);
     const beforeQuestions = invoke.getMockImplementation()!;
     const selectedQuestion = { ...question(), corpusId: "a" };
     invoke.mockImplementation((method: string, params: unknown) => {

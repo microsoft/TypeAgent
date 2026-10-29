@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import type {
     UnderstandingCitation,
     UnderstandingClaim,
@@ -578,6 +579,7 @@ export function mountMemoryHubUnderstanding(
             return;
         }
         controller.abort();
+        hubNotifications.clear("understanding");
         moduleControllers.clear();
         moduleVersions.clear();
         moduleSlots.clear();
@@ -609,10 +611,12 @@ export function mountMemoryHubUnderstanding(
                                 ? `Initial explanation ready in ${elapsed}s. Checking additional evidence…`
                                 : `Grounded explanation ready in ${elapsed}s. Supporting visuals load independently.`
                             : `Sources ready in ${elapsed}s. Preparing the explanation…`;
-                    if (response.warnings.length)
-                        status.append(
-                            node("small", response.warnings.join(" · ")),
-                        );
+                    hubNotifications.set("understanding", {
+                        title: "Understanding",
+                        page: "understanding",
+                        context: response.question,
+                        messages: response.warnings,
+                    });
                     render();
                 },
                 controller.signal,
@@ -702,6 +706,7 @@ export function mountMemoryHubUnderstanding(
                 }
         },
         scopeChanged() {
+            hubNotifications.clear("understanding");
             this.hide();
             moduleVersions.clear();
             moduleSlots.clear();

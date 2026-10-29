@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import type {
     MemoryHubEvidence,
     MemoryHubSearchResult,
@@ -278,11 +279,14 @@ test("healthy bounded retrieval notices are not failed retrieval, and explicit d
         warnings: ["Bounded evidence selection"],
     });
     await mounted.show("worker");
-    expect(host.querySelector(".phase2-warning")!.textContent).toContain(
-        "Search limits and notices",
-    );
-    expect(host.querySelector(".phase2-warning")!.textContent).not.toContain(
-        "degraded",
+    expect(host.querySelector(".phase2-warning")).toBeNull();
+    expect(hubNotifications.list()).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                title: "Search and Ask",
+                messages: ["Bounded evidence selection"],
+            }),
+        ]),
     );
     expect(host.querySelector(".phase2-results")!.textContent).toContain(
         "Explicit conversation decision",
@@ -560,11 +564,17 @@ test("partial results and unavailable exact revisions remain explicit", async ()
         errors: [{ corpusId: "b", operation: "search", message: "offline" }],
     });
     await mounted.show("worker");
-    expect(host.querySelector(".phase2-warning")!.textContent).toContain(
-        "Partial or degraded",
-    );
-    expect(host.querySelector(".phase2-warning")!.textContent).toContain(
-        "offline",
+    expect(host.querySelector(".phase2-warning")).toBeNull();
+    expect(hubNotifications.list()).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                title: "Search and Ask: partial results",
+                messages: [
+                    "Conversation dates unavailable",
+                    "b · search: offline",
+                ],
+            }),
+        ]),
     );
     const count = invoke.mock.calls.length;
     button(source.title).click();
@@ -607,9 +617,13 @@ test("noAnswer status and bounded evidence counts do not claim successful synthe
     expect(host.querySelector(".phase2-status")!.textContent).toContain(
         "bounded, not a full total",
     );
-    expect(host.querySelector(".phase2-warning")!.textContent).toContain(
-        "Only responding providers",
-    );
+    expect(host.textContent).not.toContain("Only responding providers");
+    expect(
+        hubNotifications
+            .list()
+            .flatMap((entry) => entry.messages)
+            .join(" "),
+    ).toContain("Only responding providers");
     expect(host.querySelectorAll(".phase2-results article")).toHaveLength(1);
 });
 
@@ -804,7 +818,13 @@ test("web-only defaults are gated for nonweb results and restored for real web r
     expect(button("Timeline").hidden).toBe(true);
     expect(button("Domain").hidden).toBe(true);
     expect(button("List").getAttribute("aria-pressed")).toBe("true");
-    expect(host.textContent).toContain("requires web evidence");
+    expect(host.textContent).not.toContain("requires web evidence");
+    expect(
+        hubNotifications
+            .list()
+            .flatMap((entry) => entry.messages)
+            .join(" "),
+    ).toContain("requires web evidence");
     field<HTMLInputElement>("tags").value = "ops";
     invoke.mockResolvedValueOnce(result([{ ...web, corpusId: "named" }]));
     await mounted.show("web worker");
@@ -1051,9 +1071,13 @@ test.each(["unsupported", "unavailable"])(
         expect(
             host.querySelector(".phase2-search-insights")!.textContent,
         ).toContain("Knowledge unavailable");
-        expect(host.querySelector(".phase2-warning")!.textContent).toContain(
-            "Search offline",
-        );
+        expect(host.querySelector(".phase2-warning")).toBeNull();
+        expect(
+            hubNotifications
+                .list()
+                .flatMap((entry) => entry.messages)
+                .join(" "),
+        ).toContain("Search offline");
         expect(host.querySelectorAll(".phase2-results article")).toHaveLength(
             1,
         );

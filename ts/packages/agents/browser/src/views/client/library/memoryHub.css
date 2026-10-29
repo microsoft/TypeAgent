@@ -713,6 +713,67 @@ body[data-memory-hub] {
   > :not(.memory-view-preferences) {
   display: none;
 }
+#page-settings:not([data-settings-tab="sources"]) #hubSourceSettings,
+#page-settings:not([data-settings-tab="general"]) #hubGeneralSettings,
+#page-settings[data-settings-tab="sources"] #hubSettings,
+#page-settings[data-settings-tab="general"] #hubSettings {
+  display: none;
+}
+.hub-settings-section {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+.hub-settings-section h3,
+.hub-settings-section p {
+  margin: 0;
+}
+.hub-settings-section select {
+  max-width: 100%;
+}
+.hub-settings-section button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+#hubNotificationsLink {
+  position: relative;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+#hubNotificationsLink.active {
+  background: var(--accent-soft-hover);
+  color: var(--primary-dark);
+}
+#hubNotificationsLink .hub-badge {
+  position: absolute;
+  top: -6px;
+  right: -7px;
+}
+#hubNotificationsLink .hub-badge[hidden] {
+  display: none;
+}
+.hub-notifications {
+  display: grid;
+  gap: 12px;
+}
+.hub-notification {
+  border-inline-start: 3px solid var(--warn-border);
+  overflow-wrap: anywhere;
+}
+.hub-notification[data-severity="info"] {
+  border-inline-start-color: var(--primary);
+}
+.hub-notification h3 {
+  margin: 0;
+}
+.hub-notification ul {
+  margin-bottom: 0;
+  padding-left: 20px;
+}
+.hub-notification li {
+  white-space: pre-wrap;
+}
 .hub-filters > summary {
   display: inline-flex;
   align-items: center;

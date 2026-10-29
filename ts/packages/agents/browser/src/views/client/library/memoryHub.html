@@ -22,9 +22,6 @@
   <body data-memory-hub="true">
     <header class="hub-top">
       <h1><i class="fa-solid fa-brain" aria-hidden="true"></i>Memory</h1>
-      <select id="hubCorpus" aria-label="Scope" title="Scope">
-        <option value="">All memory</option>
-      </select>
       <form id="hubAskForm" class="hub-omni" role="search">
         <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
         <input
@@ -37,28 +34,15 @@
         <kbd aria-hidden="true">/</kbd>
       </form>
       <span class="hub-spacer"></span>
-      <button id="hubAdd" class="primary" type="button">
-        <i class="fa-solid fa-plus" aria-hidden="true"></i>Add
-      </button>
-      <button
-        id="hubRefresh"
+      <a
+        id="hubNotificationsLink"
         class="icon-btn"
-        type="button"
-        aria-label="Refresh"
-        title="Refresh"
+        href="#/notifications"
+        aria-label="Notifications"
+        title="Notifications"
       >
-        <i class="fa-solid fa-rotate" aria-hidden="true"></i>
-      </button>
-      <button
-        id="hubTheme"
-        class="icon-btn"
-        type="button"
-        aria-label="Theme: Light"
-        title="Theme: Light"
-      >
-        <i class="fa-solid fa-sun" aria-hidden="true"></i>
-      </button>
-      <a id="hubStatus" href="#/activity" role="status">Connecting</a>
+        <i class="fa-solid fa-bell" aria-hidden="true"></i>
+      </a>
     </header>
     <div class="hub-layout">
       <nav id="hubRail" aria-label="Memory pages">
@@ -205,7 +189,51 @@
         </section>
         <section id="page-settings" class="hub-page hidden">
           <div class="hub-page-head"><h2>Settings</h2></div>
+          <section id="hubSourceSettings" class="card hub-settings-section">
+            <h3>Sources</h3>
+            <label for="hubCorpus">Memory scope</label>
+            <select id="hubCorpus" aria-label="Scope" title="Memory scope">
+              <option value="">All memory</option>
+            </select>
+            <p class="hub-muted">
+              Choose the memory collection used across the Hub. Import new
+              content or refresh the Hub to reload the current data.
+            </p>
+            <div class="hub-controls">
+              <button id="hubAdd" class="primary" type="button">
+                <i class="fa-solid fa-plus" aria-hidden="true"></i>Add
+              </button>
+              <button id="hubRefresh" type="button" aria-label="Refresh Hub">
+                <i class="fa-solid fa-rotate" aria-hidden="true"></i>Refresh Hub
+              </button>
+            </div>
+          </section>
+          <section id="hubGeneralSettings" class="card hub-settings-section">
+            <h3>Appearance</h3>
+            <p class="hub-muted">Choose a light, dark or system theme.</p>
+            <button
+              id="hubTheme"
+              type="button"
+              aria-label="Theme: Light"
+              title="Theme: Light"
+            >
+              <i class="fa-solid fa-sun" aria-hidden="true"></i>
+              <span data-theme-label>Theme: Light</span>
+            </button>
+            <h3>Connection</h3>
+            <p class="hub-muted">
+              Current memory service status. Open Activity for operation
+              details.
+            </p>
+            <a id="hubStatus" href="#/activity" aria-live="polite"
+              >Connecting</a
+            >
+          </section>
           <div id="hubSettings"></div>
+        </section>
+        <section id="page-notifications" class="hub-page hidden">
+          <div class="hub-page-head"><h2>Notifications</h2></div>
+          <div id="hubNotifications"></div>
         </section>
       </main>
     </div>

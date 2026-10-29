@@ -33,7 +33,10 @@ import { mountMemoryHubRunbookImports } from "./memoryHubRunbookImports";
 import { mountMemoryHubWebMaintenance } from "./memoryHubWebMaintenance";
 import { mountMemoryHubViewPreferences } from "./memoryHubViewPreferences";
 import { mountMemoryHubWebExplore } from "./memoryHubWebExplore";
-import { notificationManager } from "./knowledgeUtilities";
+import {
+    hubNotifications,
+    mountMemoryHubNotifications,
+} from "./memoryHubNotifications";
 import { migrateLegacyMemoryLocation } from "./memoryHubMigration";
 import { mountThemeToggle } from "./memoryHubTheme";
 import {
@@ -104,6 +107,7 @@ let webExplorePanel: ReturnType<typeof mountMemoryHubWebExplore>;
 let pendingSearchQuery: string | undefined;
 
 function invalidateDiscovery(): void {
+    hubNotifications.clear();
     searchPanel.scopeChanged();
     understandingPanel.scopeChanged();
     explorePanel.scopeChanged();
@@ -252,7 +256,13 @@ function mountPhaseTwo(): void {
         onOpenView: (corpusId, objectId, viewRevisionId) =>
             open({ page: "views", corpusId, objectId, viewRevisionId }),
         onQueryChanged: synchronizeQuery,
-        onNotify: (message) => notificationManager.showInfo(message),
+        onNotify: (message) =>
+            hubNotifications.set("search-completion", {
+                title: "Search and Ask",
+                page: "search",
+                severity: "info",
+                messages: [message],
+            }),
         onUnderstand: (request, evidenceSnapshotId) => {
             const value = toUnderstandingRequest(request, evidenceSnapshotId);
             rememberUnderstanding(value);
@@ -355,11 +365,11 @@ function mountPhaseTwo(): void {
                 corpusId: result.corpusId,
                 objectId: result.sourceId,
             });
-            if (result.warnings.length) {
-                el("hubDegraded").textContent =
-                    `Capture completed with warnings:\n${result.warnings.join("\n")}`;
-                el("hubDegraded").classList.remove("hidden");
-            }
+            hubNotifications.set("capture", {
+                title: "Capture",
+                page: "library",
+                messages: result.warnings,
+            });
         },
     });
     for (const [id, launch] of [
@@ -623,16 +633,20 @@ function renderErrors(): void {
         (error) =>
             `${snapshot.corpora.find((corpus) => corpus.corpusId === error.corpusId)?.name ?? (error.corpusId === "*" ? "All memory" : error.corpusId)} · ${error.operation}: ${error.message}`,
     );
-    if (scope && !namedScopeAvailable())
-        messages.push(
-            "Selected corpus is unavailable. Choose another scope; it has not been broadened to All memory.",
-        );
-    banner.classList.toggle("hidden", messages.length === 0);
-    banner.textContent = messages.length
-        ? "Degraded results (not an empty-success response):\n" +
-          messages.join("\n")
+    hubNotifications.set("snapshot", {
+        title: "Memory service",
+        page: "settings",
+        messages,
+    });
+    const unavailable = snapshotAvailable && !!scope && !namedScopeAvailable();
+    banner.classList.toggle("hidden", !unavailable);
+    banner.textContent = unavailable
+        ? "Selected corpus is unavailable. Choose another scope in Settings > Sources; it has not been broadened to All memory."
         : "";
-    el("hubStatus").textContent = messages.length ? "Degraded" : "Connected";
+    el("hubStatus").textContent =
+        messages.length || unavailable || hubNotifications.has("sources")
+            ? "Degraded"
+            : "Connected";
 }
 
 async function refreshSnapshot(refreshQuestions = true): Promise<void> {
@@ -692,7 +706,8 @@ async function refreshSnapshot(refreshQuestions = true): Promise<void> {
     select.value = scope;
     renderAddTargets();
     renderInbox();
-    renderErrors();
+    if (snapshotAvailable) renderErrors();
+    else if (result.errors.length) el("hubStatus").textContent = "Degraded";
     if (!refreshQuestions) return;
     if (questionsPanel && parseRoute(location.hash).page === "questions")
         await questionsPanel.refresh();
@@ -769,7 +784,7 @@ async function loadManagement(): Promise<void> {
     browserWide.title =
         "Web activity is browser-wide. The activity API supports these filters and linked-source filtering, not corpus scoping.";
     document.querySelector(".activity-panel h2")!.after(browserWide);
-    el("hubSettings").append(el("reindexCorpusButton"));
+    el("hubSourceSettings").append(el("reindexCorpusButton"));
     el("hubMain").prepend(el("errorBanner"));
     const typeSelect = document.createElement("select");
     typeSelect.id = "hubSourceType";
@@ -818,12 +833,15 @@ async function loadManagement(): Promise<void> {
                 corpusId: scope || undefined,
                 sourceTypes: type ? [type] : undefined,
             });
-            if (result.errors.length) {
-                el("hubDegraded").textContent =
-                    `Degraded source results:\n${result.errors.map((error) => `${error.corpusId}: ${error.message}`).join("\n")}`;
-                el("hubDegraded").classList.remove("hidden");
-                el("hubStatus").textContent = "Degraded";
-            }
+            hubNotifications.set("sources", {
+                title: "Sources",
+                page: "library",
+                context: scope || "All memory",
+                messages: result.errors.map(
+                    (error) => `${error.corpusId}: ${error.message}`,
+                ),
+            });
+            renderErrors();
             return result;
         },
 
@@ -839,6 +857,8 @@ async function loadManagement(): Promise<void> {
         status: (indexing) => {
             if (
                 snapshotAvailable &&
+                !hubNotifications.has("snapshot") &&
+                !hubNotifications.has("sources") &&
                 el("hubDegraded").classList.contains("hidden") &&
                 el("hubError").classList.contains("hidden")
             )
@@ -864,7 +884,12 @@ async function loadManagement(): Promise<void> {
             await draftViewsPanel.buildFromSources(corpusId, sources);
         },
         sourceForgotten: (corpusId, sourceId, title) => {
-            notificationManager.showSuccess(`Forgot source "${title}".`);
+            hubNotifications.set("source-operation", {
+                title: "Sources",
+                page: "library",
+                severity: "info",
+                messages: [`Forgot source "${title}".`],
+            });
             const route = parseRoute(location.hash);
             if (
                 route.page === "library" &&
@@ -954,6 +979,8 @@ function mountPageTabSets(): void {
         ["changes", "Changes", "fa-code-compare"],
     ]);
     mountPageTabs("page-settings", "settingsTab", "Settings groups", [
+        ["sources", "Sources", "fa-book-open"],
+        ["general", "Appearance & connection", "fa-gear"],
         ["graph", "Browser graph", "fa-diagram-project"],
         ["view", "View", "fa-sliders"],
     ]);
@@ -1193,7 +1220,7 @@ function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
     for (const page of pages)
         el(`page-${page}`).classList.toggle("hidden", page !== visiblePage);
     for (const link of document.querySelectorAll<HTMLAnchorElement>(
-        "#hubRail a",
+        "#hubRail a, #hubNotificationsLink",
     )) {
         if (
             link.hash ===
@@ -1434,6 +1461,11 @@ async function applyRoute(): Promise<void> {
 }
 
 export async function mountMemoryHub(): Promise<void> {
+    hubNotifications.clear();
+    mountMemoryHubNotifications(
+        el("hubNotifications"),
+        el<HTMLAnchorElement>("hubNotificationsLink"),
+    );
     const migrated = migrateLegacyMemoryLocation(location.href);
     if (migrated.href !== location.href) {
         history.replaceState(history.state, "", migrated.href);

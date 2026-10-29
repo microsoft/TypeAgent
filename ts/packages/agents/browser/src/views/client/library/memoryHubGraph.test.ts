@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import { mountMemoryHubGraph } from "./memoryHubGraph";
 import { invokeView } from "./viewClient";
 import type { MemoryHubGraphResult } from "@typeagent/browser-control-rpc/viewRpc";
@@ -438,8 +439,14 @@ test("keeps actual collection failures and omitted collections visible without c
     });
     await mounted.show({ view: "entities" });
     expect(host.textContent).toContain("No nodes in the available projection.");
-    expect(host.textContent).toContain("b: Unavailable");
-    expect(host.textContent).toContain("2 corpora omitted");
+    expect(host.textContent).not.toContain("b: Unavailable");
+    expect(host.textContent).not.toContain("2 corpora omitted");
+    const notices = hubNotifications
+        .list()
+        .flatMap((entry) => entry.messages)
+        .join(" ");
+    expect(notices).toContain("b: Unavailable");
+    expect(notices).toContain("2 corpora omitted");
 });
 
 test.each(["entities", "topics"] as const)(

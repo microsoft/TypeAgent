@@ -12,6 +12,7 @@ export const pages = [
     "questions",
     "explore",
     "activity",
+    "notifications",
     "settings",
 ] as const;
 export type HubPage = (typeof pages)[number];

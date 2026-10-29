@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import { inventoryFixture } from "./memoryHubInventoryTestData";
 
 import { mountMemoryHubQuestions } from "./memoryHubQuestions";
@@ -726,9 +727,15 @@ test("question maintenance errors remain explicit alongside the complete invento
     );
     const { panel } = setup();
     await panel.show();
-    expect(document.body.textContent).toContain(
+    expect(document.body.textContent).not.toContain(
         "Question maintenance failed: Source evaluation failed",
     );
+    expect(
+        hubNotifications
+            .list()
+            .flatMap((entry) => entry.messages)
+            .join(" "),
+    ).toContain("Question maintenance failed: Source evaluation failed");
     expect(document.querySelector(".hub-list-total")!.textContent).toBe(
         "1 total",
     );

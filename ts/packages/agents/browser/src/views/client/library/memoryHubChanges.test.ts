@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import type { MemoryHubChangeReceipt } from "@typeagent/browser-control-rpc/viewRpc";
 import { mountMemoryHubChanges } from "./memoryHubChanges";
 import { invokeView } from "./viewClient";
@@ -123,9 +124,10 @@ test("healthy empty history differs from partial history and unavailable service
     });
     await mounted.refresh();
     expect(host.textContent).toContain("not a successful empty history");
-    expect(host.querySelector(".phase2-warning")!.textContent).toContain(
-        "not supported",
-    );
+    expect(host.querySelector(".phase2-warning")).toBeNull();
+    expect(
+        hubNotifications.list().flatMap((entry) => entry.messages),
+    ).toContain("b · changes: not supported");
     invoke.mockRejectedValueOnce(new Error("offline"));
     await mounted.refresh();
     expect(host.querySelector(".phase2-status")!.textContent).toContain(

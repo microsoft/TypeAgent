@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import { inventoryFixture } from "./memoryHubInventoryTestData";
 
 import { mountMemoryHubViews } from "./memoryHubViews";
@@ -366,9 +367,13 @@ describe("Memory Center preview-first views", () => {
             "85 total",
         );
         expect(card.querySelectorAll(".hub-view-card")).toHaveLength(1);
-        expect(card.querySelector('[role="alert"]')!.textContent).toContain(
-            "Wiki retry needed: Maintenance unavailable",
-        );
+        expect(card.querySelector('[role="alert"]')).toBeNull();
+        expect(
+            hubNotifications
+                .list()
+                .flatMap((entry) => entry.messages)
+                .join(" "),
+        ).toContain("Wiki retry needed: Maintenance unavailable");
         expect(card.lastElementChild!.getAttribute("aria-label")).toBe(
             "views pages",
         );
