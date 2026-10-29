@@ -410,18 +410,23 @@ export class ViewBuildRunner {
         return { inventory, inventoryAudit };
     }
 
+    private targetTimeout(input: ViewBuildSnapshot): number {
+        return (
+            (input.pipeline === "topics-v1"
+                ? this.topicTimeoutMs
+                : informationalPipeline(input.pipeline)
+                  ? this.informationalLimits?.elapsedMs
+                  : undefined) ?? 3_000_000
+        );
+    }
+
     private async target(
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
         signal: AbortSignal,
         assessmentPreparation?: Promise<WikiPreparation>,
     ): Promise<boolean> {
-        const timeoutMs =
-            (result.snapshot.pipeline === "topics-v1"
-                ? this.topicTimeoutMs
-                : informationalPipeline(result.snapshot.pipeline)
-                  ? this.informationalLimits?.elapsedMs
-                  : undefined) ?? 3_000_000;
+        const timeoutMs = this.targetTimeout(result.snapshot);
         const controller = new AbortController();
         const jobSignal = signal;
         const cancel = () => controller.abort(jobSignal.reason);

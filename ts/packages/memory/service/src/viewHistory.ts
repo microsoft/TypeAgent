@@ -260,20 +260,17 @@ export class ViewHistory<T> {
             const entries = [];
             const blobsStarted = performance.now();
             const previousPayloads = previousByPath.get(viewStatePayloadPath);
-            const payloads =
-                Object.prototype.hasOwnProperty.call(views, "state.json") ||
-                Object.prototype.hasOwnProperty.call(
-                    views,
-                    viewStatePayloadPath,
-                )
-                    ? undefined
-                    : await writeViewStatePayloads(
-                          this.options(),
-                          state,
-                          previousPayloads?.type === "tree"
-                              ? previousPayloads
-                              : undefined,
-                      );
+            const payloads = ["state.json", viewStatePayloadPath].some((name) =>
+                Object.prototype.hasOwnProperty.call(views, name),
+            )
+                ? undefined
+                : await writeViewStatePayloads(
+                      this.options(),
+                      state,
+                      previousPayloads?.type === "tree"
+                          ? previousPayloads
+                          : undefined,
+                  );
             if (payloads) entries.push(payloads);
             const stateText = payloads ? undefined : JSON.stringify(state);
             let viewBytes = 0;

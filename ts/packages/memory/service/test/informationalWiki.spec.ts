@@ -389,6 +389,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 : {}),
         });
     beforeEach(async () => {
+        delete adapter.assessWikiSubject;
         MockIndexedCorpus.messageTime = undefined;
         MockIndexedCorpus.fragmentRequests = [];
         MockIndexedCorpus.subjects = ["acquisition"];
@@ -1874,6 +1875,15 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
     });
 
     test("descriptor removal preserves out-of-page subjects and advances the 48-subject cursor", async () => {
+        adapter.assessWikiSubject = async () => ({
+            disposition: "defer",
+            purpose: "Descriptor paging subject",
+            reason: "Subject is only a passing mention",
+            canonicalViewId: "",
+            sharedFragmentIds: [],
+            essentialDistinctions: [],
+            ambiguousViewIds: [],
+        });
         maintenanceMode = "manual";
         await service.close();
         service = open();
@@ -1918,6 +1928,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             expect(retained.cursor).toBe([48, 96, 0][index]);
         }
         expect(MockIndexedCorpus.subjectOffsets).toEqual([0, 48, 96]);
+        expect(generated).toBe(0);
     });
 
     test("lexical descriptors reconcile before builds and survive alias edits and cold restart without duplicate IDs", async () => {
