@@ -5,14 +5,41 @@ import { randomUUID } from "node:crypto";
 import {
     openai,
     type ChatModel,
+    type CompleteUsageStatsCallback,
     type StructuredOutputJsonSchema,
 } from "@typeagent/aiclient";
 import { recordSearchTiming, timeSearchStage } from "@typeagent/knowpro";
 import type { ViewBuildSnapshot, ViewSynthesisAdapter } from "./viewTypes.js";
-import type { TopicConcept, TopicNode, TopicSnapshot } from "./topicTypes.js";
+import type {
+    TopicConcept,
+    TopicCuration,
+    TopicNode,
+    TopicSnapshot,
+} from "./topicTypes.js";
 import { initialTopicNodes, validateTopicSnapshot } from "./topicSnapshot.js";
-import { curateTopics } from "./topicCuration.js";
+import {
+    curateTopics,
+    topicCurationPolicy,
+    validateTopicCurationSettings,
+    type TopicCurationSettings,
+    type TopicCurationCall,
+    type TopicCurationCompletion,
+} from "./topicCuration.js";
+import { viewHash } from "./viewMerge.js";
+import { TopicEvidenceIndex } from "./topicIndexes.js";
+import { curateTopicsWithDecision } from "./topicDecisionCuration.js";
+import { maintainTopicClusters } from "./topicClusterMaintenance.js";
+import {
+    topicDecisionRecipe,
+    type TopicDecisionOptions,
+    observeTopicDecisionWork,
+} from "./topicDecision.js";
 import { redactRunbookText } from "./runbookRedaction.js";
+import {
+    scheduleMaintenanceModel,
+    yieldMaintenanceBuild,
+    type MaintenanceModelScheduler,
+} from "./maintenanceConcurrency.js";
 import {
     editorialRules,
     editorialCheckRules,
@@ -31,6 +58,101 @@ export type TopicGenerator = (
     signal: AbortSignal,
     checkpoint?: TopicGenerationCheckpoint,
 ) => Promise<TopicSnapshot>;
+
+export type TopicGenerationMode =
+    | { kind: "raw" }
+    | { kind: "generative"; settings?: TopicCurationSettings | undefined }
+    | {
+          kind: "decision";
+          createOptions: (input: ViewBuildSnapshot) => TopicDecisionOptions;
+      };
+
+export interface ConfiguredTopicGeneratorOptions {
+    endpoint?: string | undefined;
+    model?: ChatModel | undefined;
+    mode?: TopicGenerationMode | undefined;
+    modelScheduler?: MaintenanceModelScheduler | undefined;
+}
+
+function validateTopicGeneratorOptions(
+    options: ConfiguredTopicGeneratorOptions,
+): void {
+    if (
+        !options ||
+        typeof options !== "object" ||
+        Array.isArray(options) ||
+        Object.keys(options).some(
+            (key) =>
+                !["endpoint", "model", "mode", "modelScheduler"].includes(key),
+        ) ||
+        (options.endpoint !== undefined &&
+            typeof options.endpoint !== "string") ||
+        (options.modelScheduler !== undefined &&
+            typeof options.modelScheduler !== "function") ||
+        (options.model !== undefined &&
+            (!options.model || typeof options.model.complete !== "function"))
+    )
+        throw new Error(
+            "Topic generator requires named options; migrate positional arguments",
+        );
+}
+
+function configuredGenerativeSettings(
+    settings: TopicCurationSettings | undefined,
+): TopicCurationSettings | undefined {
+    if (settings === undefined) return undefined;
+    if (
+        !settings ||
+        typeof settings !== "object" ||
+        Array.isArray(settings) ||
+        Object.keys(settings).some(
+            (key) =>
+                ![
+                    "inputTokenTarget",
+                    "concurrency",
+                    "priorContextFraction",
+                ].includes(key),
+        )
+    )
+        throw new Error("Invalid generative topic settings");
+    validateTopicCurationSettings(settings);
+    return { ...settings };
+}
+
+function configuredTopicMode(
+    options: ConfiguredTopicGeneratorOptions,
+): TopicGenerationMode {
+    validateTopicGeneratorOptions(options);
+    const mode =
+        options.mode === undefined ? { kind: "raw" as const } : options.mode;
+    if (!mode || typeof mode !== "object" || Array.isArray(mode))
+        throw new Error("Invalid topic generation mode");
+    const fields =
+        mode.kind === "raw"
+            ? ["kind"]
+            : mode.kind === "generative"
+              ? ["kind", "settings"]
+              : ["kind", "createOptions"];
+    if (Object.keys(mode).some((key) => !fields.includes(key)))
+        throw new Error("Invalid topic generation mode fields");
+    switch (mode.kind) {
+        case "raw":
+            return { kind: "raw" };
+        case "generative":
+            return {
+                kind: "generative",
+                settings: configuredGenerativeSettings(mode.settings),
+            };
+        case "decision":
+            if (typeof mode.createOptions !== "function")
+                throw new Error(
+                    "Decision topic mode requires an options factory",
+                );
+            return { kind: "decision", createOptions: mode.createOptions };
+        default:
+            throw new Error("Invalid topic generation mode");
+    }
+}
 
 export type TopicConceptSummarizer = (
     concept: TopicConcept,
@@ -258,112 +380,172 @@ function generationError(error: unknown): string {
     ).slice(0, 500);
 }
 
-function summaryEvidence(
+export function summaryEvidence(
     snapshot: TopicSnapshot,
     node: TopicNode,
+    index?: TopicEvidenceIndex,
 ): TopicNode["citations"] {
-    const membership = new Set(node.occurrenceIds);
-    const sourceRevisions = new Set(
-        snapshot.occurrences
-            .filter((entry) => membership.has(entry.id))
-            .map((entry) => `${entry.sourceId}\n${entry.revisionId}`),
-    );
-    const context = [
-        ...new Map(
-            snapshot.occurrences
-                .filter((entry) =>
-                    sourceRevisions.has(
-                        `${entry.sourceId}\n${entry.revisionId}`,
-                    ),
-                )
-                .flatMap((entry) => entry.citations)
-                .map((citation) => [JSON.stringify(citation), citation]),
-        ).values(),
-    ];
-    const priority = (text: string) =>
-        /Governing tail exception:/i.test(text)
-            ? 3
-            : /governing|withdraw|invalid|correct|supersed|retract/i.test(text)
-              ? 2
-              : /qualification|caveat|only|cohort|not applicable|held lease/i.test(
-                      text,
-                  )
-                ? 1
-                : 0;
-    const own = node.citations.slice(0, 2);
-    const ranked = [...context].sort(
-        (a, b) => priority(b.excerpt) - priority(a.excerpt),
-    );
-    const evidence = [
-        ...new Map(
-            [...own, ...ranked, ...context.slice(-2)].map((citation) => [
-                JSON.stringify(citation),
-                citation,
-            ]),
-        ).values(),
-    ].slice(0, 8);
-    if (context.length > evidence.length)
-        node.limits.push(
-            "Summary uses bounded original-source context, including nominated qualifications; full incidence remains maintained.",
-        );
-    return evidence;
+    return (index ?? new TopicEvidenceIndex(snapshot)).evidenceFor(node);
 }
 
-function createTopicCompletion(endpoint?: string, injectedModel?: ChatModel) {
+export function createTopicCompletion(
+    endpoint?: string,
+    injectedModel?: ChatModel,
+    modelScheduler?: MaintenanceModelScheduler,
+) {
     let model = injectedModel;
-    return async function complete(
+    function configuredModel() {
+        return (model ??= openai.createChatModel(
+            endpoint,
+            { temperature: 0, response_format: { type: "json_object" } },
+            undefined,
+            ["memory-views"],
+        ));
+    }
+    function messages(instructions: string, payload: unknown) {
+        return [
+            { role: "system" as const, content: instructions },
+            { role: "user" as const, content: JSON.stringify(payload) },
+        ];
+    }
+    return Object.assign(complete, {
+        inspectRequest:
+            injectedModel && !injectedModel.inspectRequest
+                ? undefined
+                : inspectRequest,
+    });
+    function inspectRequest(
+        instructions: string,
+        payload: unknown,
+        schema?: StructuredOutputJsonSchema,
+    ) {
+        const model = configuredModel();
+        if (!model.inspectRequest)
+            throw new Error(
+                "Configured topic model does not support request inspection",
+            );
+        return model.inspectRequest(
+            messages(instructions, payload),
+            model.completionSettings.response_format?.type === "json_object"
+                ? schema
+                : undefined,
+        );
+    }
+    async function complete(
         instructions: string,
         payload: unknown,
         signal: AbortSignal,
         stage: string,
         ordinal?: number,
         schema?: StructuredOutputJsonSchema,
+        call?: TopicCurationCall,
     ): Promise<unknown> {
         signal.throwIfAborted();
-        model ??= openai.createChatModel(
-            endpoint,
-            {
-                temperature: 0,
-                response_format: { type: "json_object" },
-            },
-            undefined,
-            ["memory-views"],
-        );
+        const model = configuredModel();
+        const prompt = messages(instructions, payload);
+        const outputSchema =
+            model.completionSettings.response_format?.type === "json_object"
+                ? schema
+                : undefined;
+        const request = model.inspectRequest?.(prompt, outputSchema);
+        let usage: Parameters<CompleteUsageStatsCallback>[0] | undefined;
         const result = await timeSearchStage(
             stage,
             () =>
-                model!.complete(
-                    [
-                        {
-                            role: "system",
-                            content: instructions,
-                        },
-                        { role: "user", content: JSON.stringify(payload) },
-                    ],
-                    undefined,
-                    model!.completionSettings.response_format?.type ===
-                        "json_object"
-                        ? schema
-                        : undefined,
-                    undefined,
+                scheduleMaintenanceModel(
+                    modelScheduler,
+                    () =>
+                        model.complete(
+                            prompt,
+                            (value) => {
+                                usage = value;
+                            },
+                            outputSchema,
+                            undefined,
+                            signal,
+                        ),
                     signal,
                 ),
-            { ordinal },
+            {
+                ordinal,
+                callKind: call?.kind,
+                requestHash: request
+                    ? viewHash(request.serializedRequest)
+                    : undefined,
+                serializedBytes: request
+                    ? Buffer.byteLength(request.serializedRequest)
+                    : undefined,
+                inputTokens: request?.estimatedInputTokens,
+                tokenizer: request?.tokenizer,
+                outputReservation: request?.constraints.outputTokens,
+                constraintAccounting: request?.constraints.tokenAccounting,
+                providerAttemptBreakdown: "unavailable",
+            },
         );
         signal.throwIfAborted();
         if (!result.success) throw new Error(result.message);
-        return JSON.parse(result.data);
-    };
+        recordSearchTiming(`${stage}.response`, 0, {
+            ordinal,
+            callKind: call?.kind,
+            outputBytes: Buffer.byteLength(result.data),
+            promptTokens: usage?.prompt_tokens,
+            completionTokens: usage?.completion_tokens,
+        });
+        return timeSearchStage(
+            `${stage}.parse`,
+            () => JSON.parse(result.data),
+            {
+                ordinal,
+                callKind: call?.kind,
+            },
+        );
+    }
+}
+
+export function bindTopicCompletion(
+    complete: ReturnType<typeof createTopicCompletion>,
+    signal: AbortSignal,
+    kind: TopicCurationCall["kind"] = "normal",
+): TopicCurationCompletion {
+    return Object.assign(
+        (
+            instructions: string,
+            payload: unknown,
+            schema?: StructuredOutputJsonSchema,
+            call?: TopicCurationCall,
+        ) => {
+            const callKind = call?.kind ?? kind;
+            return complete(
+                instructions,
+                payload,
+                call?.signal ?? signal,
+                callKind === "normal" ||
+                    callKind === "contract-repair" ||
+                    callKind === "omission-repair"
+                    ? "topic.curation.model"
+                    : `topic.${callKind}.model`,
+                call?.ordinal,
+                schema,
+                call ?? { kind, signal },
+            );
+        },
+        { inspectRequest: complete.inspectRequest },
+    );
 }
 
 export function createConfiguredTopicConceptSummarizer(
     endpoint?: string,
     injectedModel?: ChatModel,
     adapter?: ViewSynthesisAdapter,
+    modelScheduler?: MaintenanceModelScheduler,
 ): TopicConceptSummarizer {
     if (adapter?.generateTopicSummary)
         return adapter.generateTopicSummary.bind(adapter);
-    const complete = createTopicCompletion(endpoint, injectedModel);
+    const complete = createTopicCompletion(
+        endpoint,
+        injectedModel,
+        modelScheduler,
+    );
     return async (concept, signal) => {
         const candidate: Pick<
             TopicNode,
@@ -410,48 +592,118 @@ export function createConfiguredTopicConceptSummarizer(
     };
 }
 
+async function generateCuratedTopicSnapshot(
+    snapshot: TopicSnapshot,
+    input: ViewBuildSnapshot,
+    signal: AbortSignal,
+    complete: ReturnType<typeof createTopicCompletion>,
+    checkpoint?: TopicGenerationCheckpoint,
+    decision?: TopicDecisionOptions,
+    settings?: TopicCurationSettings,
+): Promise<void> {
+    snapshot.recipe += `:${decision ? topicDecisionRecipe : topicCurationPolicy(true, settings)}`;
+    const evidenceIndex = new TopicEvidenceIndex(snapshot);
+    const evidenceFor = (node: TopicNode) =>
+        summaryEvidence(snapshot, node, evidenceIndex);
+    const completion = bindTopicCompletion(
+        complete,
+        signal,
+        decision ? "adjudication" : "normal",
+    );
+    const save = checkpoint
+        ? async (curation: TopicCuration) => {
+              snapshot.curationProgress = curation;
+              await checkpoint(structuredClone(snapshot));
+          }
+        : undefined;
+    let curation = decision
+        ? await curateTopicsWithDecision(
+              snapshot,
+              evidenceFor,
+              completion,
+              signal,
+              decision,
+              save,
+              input.topicInput?.reusableCuration,
+          )
+        : await curateTopics(
+              snapshot,
+              evidenceFor,
+              completion,
+              signal,
+              true,
+              save,
+              input.topicInput?.reusableCuration,
+              {
+                  ...settings,
+                  ...(complete.inspectRequest
+                      ? { inspectRequest: complete.inspectRequest }
+                      : {}),
+              },
+          );
+    if (input.topicInput?.maintainClusters && decision?.clusterValidation)
+        curation = await maintainTopicClusters(
+            snapshot,
+            curation,
+            bindTopicCompletion(complete, signal, "maintenance"),
+            signal,
+            decision,
+            save,
+        );
+    snapshot.curation = curation;
+    delete snapshot.curationProgress;
+    if (snapshot.curation.pending?.length)
+        snapshot.limits.push(
+            `${snapshot.curation.pending.length} topic assignments require further cluster resolution. Build completion does not certify pending assignments; original source evidence remains available.`,
+        );
+    snapshot.limits.push(
+        "Raw occurrences remain complete and independently addressable; deferred topics are not deleted. Concept summaries are generated only on explicit detail requests and do not block readiness.",
+        "Cross-batch reconciliation retrieves corpus-wide lexical candidates; only evidence-grounded model decisions merge concepts. Synonyms outside candidate retrieval may remain separate.",
+    );
+    validateTopicSnapshot(snapshot);
+    if (checkpoint) {
+        await checkpoint(structuredClone(snapshot));
+        await yieldMaintenanceBuild(signal);
+    }
+}
+
 export function createConfiguredTopicGenerator(
-    endpoint?: string,
-    injectedModel?: ChatModel,
-    curated = false,
+    options: ConfiguredTopicGeneratorOptions = {},
 ): TopicGenerator {
-    const complete = createTopicCompletion(endpoint, injectedModel);
+    if (arguments.length > 1)
+        throw new Error(
+            "Topic generator requires named options; migrate positional arguments",
+        );
+    const mode = configuredTopicMode(options);
+    const { endpoint, model: injectedModel, modelScheduler } = options;
+    const curated = mode.kind !== "raw";
+    const decision = mode.kind === "decision" ? mode.createOptions : undefined;
+    const settings = mode.kind === "generative" ? mode.settings : undefined;
+    const defaultComplete = createTopicCompletion(
+        endpoint,
+        injectedModel,
+        modelScheduler,
+    );
     return async (input, signal, checkpoint) => {
+        const complete = decision
+            ? createTopicCompletion(endpoint, injectedModel, modelScheduler)
+            : defaultComplete;
+        const decisionOptions = decision?.(input);
         const snapshot = timeSearchStage("topic.snapshot.construct", () =>
             createTopicSnapshot(input, input.model),
         );
         if (curated) {
-            snapshot.recipe += ":curated-lazy-v6";
-            snapshot.curation = await curateTopics(
+            await generateCuratedTopicSnapshot(
                 snapshot,
-                (node) => summaryEvidence(snapshot, node),
-                (instructions, payload, schema) =>
-                    complete(
-                        instructions,
-                        payload,
-                        signal,
-                        "topic.curation.model",
-                        undefined,
-                        schema,
-                    ),
+                input,
                 signal,
-                true,
-                checkpoint
-                    ? async (curation) => {
-                          snapshot.curationProgress = curation;
-                          await checkpoint(structuredClone(snapshot));
-                      }
-                    : undefined,
-                input.topicInput?.reusableCuration,
+                complete,
+                checkpoint,
+                decisionOptions,
+                settings,
             );
-            delete snapshot.curationProgress;
-            snapshot.limits.push(
-                "Raw occurrences remain complete and independently addressable; deferred topics are not deleted. Concept summaries are generated only on explicit detail requests and do not block readiness.",
-                "Cross-batch reconciliation retrieves corpus-wide lexical candidates; only evidence-grounded model decisions merge concepts. Synonyms outside candidate retrieval may remain separate.",
-            );
-            validateTopicSnapshot(snapshot);
-            if (checkpoint) await checkpoint(structuredClone(snapshot));
         } else {
+            const evidenceIndex = new TopicEvidenceIndex(snapshot);
             recordSearchTiming("topic.snapshot.counts", 0, {
                 nodes: snapshot.nodes.length,
                 occurrences: snapshot.occurrences.length,
@@ -483,10 +735,11 @@ export function createConfiguredTopicGenerator(
                     const node = snapshot.nodes[ordinal - 1];
                     if (node.summaryState === "ready") continue;
                     const baseLimitCount = node.limits.length;
-                    const evidence = summaryEvidence(snapshot, node).slice(
-                        0,
-                        8,
-                    );
+                    const evidence = summaryEvidence(
+                        snapshot,
+                        node,
+                        evidenceIndex,
+                    ).slice(0, 8);
                     const contextKey = deduplicateIdenticalContexts
                         ? JSON.stringify([
                               node.label.trim().toLocaleLowerCase(),
@@ -652,7 +905,10 @@ export function createConfiguredTopicGenerator(
             );
             signal.throwIfAborted();
             if (failure) throw failure.error;
-            if (checkpoint) await checkpoint(structuredClone(snapshot));
+            if (checkpoint) {
+                await checkpoint(structuredClone(snapshot));
+                await yieldMaintenanceBuild(signal);
+            }
         }
         const labels = (snapshot.curation?.concepts ?? snapshot.nodes).map(
             ({ id, label, scope }) => ({
@@ -668,14 +924,36 @@ export function createConfiguredTopicGenerator(
                 const batch = labels.slice(offset, offset + 200);
                 const suppliedIds = new Set(batch.map((node) => node.id));
                 const schema = organizationSchema([...suppliedIds]);
-                const raw = await complete(
-                    organizationInstructions,
-                    batch,
-                    signal,
-                    "topic.organization.model",
-                    undefined,
-                    schema,
-                );
+                const organize = (instructions: string, repair = false) => {
+                    const work = () =>
+                        complete(
+                            instructions,
+                            batch,
+                            signal,
+                            repair
+                                ? "topic.organization.repair.model"
+                                : "topic.organization.model",
+                            undefined,
+                            schema,
+                            { kind: "organization", signal },
+                        );
+                    return decisionOptions
+                        ? observeTopicDecisionWork(
+                              decisionOptions,
+                              "organization",
+                              repair
+                                  ? "bounded-contract-repair"
+                                  : "unchanged-organization",
+                              JSON.stringify({
+                                  instructions,
+                                  payload: batch,
+                                  schema,
+                              }),
+                              work,
+                          )
+                        : work();
+                };
+                const raw = await organize(organizationInstructions);
                 let organization: Pick<TopicSnapshot, "parents" | "related">;
                 try {
                     organization = checkedOrganization(
@@ -691,13 +969,9 @@ export function createConfiguredTopicGenerator(
                         `Topic organization requires contract repair: ${error.message}`,
                     );
                     organization = checkedOrganization(
-                        await complete(
+                        await organize(
                             `${organizationInstructions}\nRepair the rejected organization: ${error.message}. Use only the exact supplied IDs. Do not create self-links or parent cycles. Return the complete replacement edge set; prior invalid edges are discarded.`,
-                            batch,
-                            signal,
-                            "topic.organization.repair.model",
-                            undefined,
-                            schema,
+                            true,
                         ),
                         snapshot,
                         suppliedIds,

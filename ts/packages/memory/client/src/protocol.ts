@@ -578,6 +578,10 @@ export const searchResultSchema = z.object({
 });
 
 export const answerRequestSchema = z.strictObject({
+    evidenceSnapshotId: z.string().uuid().optional(),
+    prepareOnly: z.boolean().optional(),
+    deferRefinement: z.boolean().optional(),
+    resumeRefinement: z.boolean().optional(),
     corpusId: identifierSchema,
     question: z.string().min(1),
     limit: z.number().int().positive().max(100).optional(),
@@ -672,7 +676,7 @@ export const indexedSelectionDiagnosticsSchema = z.strictObject({
     responseChars: z.number().int().nonnegative().optional(),
     limited: z.boolean(),
 });
-export const integratedAnswerDiagnosticsSchema = z.strictObject({
+const baseIntegratedAnswerDiagnosticsSchema = z.strictObject({
     sourceSelection: indexedSelectionDiagnosticsSchema.optional(),
     retrievalPolicy: z.enum(["default", "sourcesOnly", "sourcesAndViews"]),
     retrievalMode: z.enum(["sourcesOnly", "sourcesAndViews", "degraded"]),
@@ -704,7 +708,23 @@ export const integratedAnswerDiagnosticsSchema = z.strictObject({
     warnings: z.string().array().max(1000),
     reconstructionCount: z.number().int().min(0).max(1),
 });
+export const integratedAnswerDiagnosticsSchema =
+    baseIntegratedAnswerDiagnosticsSchema.extend({
+        influencingEvidence:
+            baseIntegratedAnswerDiagnosticsSchema.shape.suppliedEvidence.optional(),
+        refinement: z
+            .strictObject({
+                queries: z.string().array().max(2),
+                initialEvidence:
+                    baseIntegratedAnswerDiagnosticsSchema.shape
+                        .suppliedEvidence,
+                selections: indexedSelectionDiagnosticsSchema.array().max(2),
+            })
+            .optional(),
+    });
 export const answerResultSchema = z.object({
+    evidenceSnapshotId: z.string().uuid().optional(),
+    refinementPending: z.boolean().optional(),
     question: z.string(),
     answer: z.string(),
     mode: z.enum(["synthesized", "extractive"]),
@@ -801,6 +821,7 @@ export const capabilitiesSchema = z.object({
         management: z.boolean(),
         groundedAnswer: z.boolean(),
         scopedKnowledgeGraphs: z.boolean().optional(),
+        memoryUnderstanding: z.boolean().optional(),
         sourceSynopses: z.boolean().optional(),
         agentSessionImportTypes: z
             .enum(["agent-session-jsonl", "copilot-session-jsonl"])

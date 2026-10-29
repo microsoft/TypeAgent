@@ -106,6 +106,19 @@ azureOpenAI:
     # shape TypeAgent has always spoken — existing configs are unchanged.
     # Supported values: chat_completions (default) | responses |
     # messages.
+    # Generic v1 URLs require the exact wire model/deployment name in `model`.
+    # This deployment appears as GPT_6_1_TERRA in model selection/completions.
+    gpt_6_1_terra:
+      endpoints:
+        - endpoint: https://my-resource-sweden.services.ai.azure.com/openai/v1/responses
+          capacity: 850
+          model: gpt-6.1-terra
+          wireApi: responses
+        - endpoint: https://my-resource-eastus.services.ai.azure.com/openai/v1/responses
+          capacity: 150
+          model: gpt-6.1-terra
+          wireApi: responses
+
     gpt_5_codex:
       endpoints:
         - endpoint: https://my-resource.cognitiveservices.azure.com/openai/responses?api-version=2025-04-01-preview
@@ -178,6 +191,9 @@ openAI:
 #     - gpt-5.4-mini
 #     - gpt-5-mini
 #     - gpt-5.4
+#   # GPT-6/6.1 Luna, Sol, and Terra requests first try the matching GPT-5.6
+#   # tier when unavailable. This is Copilot model-availability fallback,
+#   # not retry-on-any-error. Azure routing pools do not switch model families.
 #   # Optional: connect to an already-running Copilot CLI server over TCP
 #   # instead of spawning a CLI child per host. Eliminates the one-time
 #   # (multi-second) CLI startup latency. Format: "host:port" / "port".

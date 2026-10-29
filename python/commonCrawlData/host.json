@@ -1,5 +1,11 @@
 {
   "version": "2.0",
+  "extensions": {
+    "durableTask": {
+      "maxConcurrentActivityFunctions": 1,
+      "maxConcurrentOrchestratorFunctions": 1
+    }
+  },
   "logging": {
     "applicationInsights": {
       "samplingSettings": {

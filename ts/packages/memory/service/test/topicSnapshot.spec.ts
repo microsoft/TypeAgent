@@ -94,6 +94,14 @@ function snapshot(
 }
 
 describe("complete scoped topic snapshots", () => {
+    test("raw evidence validation does not scan all occurrences for every node", () => {
+        const value = snapshot();
+        const filter = import.meta.jest.spyOn(value.occurrences, "filter");
+        validateTopicSnapshot(value);
+        expect(filter).not.toHaveBeenCalled();
+        filter.mockRestore();
+    });
+
     test("same-name nominations within one original block do not prove equivalence", () => {
         const block = {
             sourceId: "source",

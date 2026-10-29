@@ -57,7 +57,7 @@ Generate a well-formatted markdown document:`;
 export class ThoughtsProcessor {
     private model: string;
 
-    constructor(model: string = "copilot:gpt-5.6-sol") {
+    constructor(model: string = "copilot:gpt-6.1-sol") {
         this.model = model;
     }
 

@@ -30,6 +30,7 @@ import { maintenanceManifest } from "./viewMaintenance.js";
 import {
     viewReadProjection,
     viewReadProjectionEntry,
+    viewReadProjectionVersion,
     type ViewInventoryBuild,
     type ViewReadProjection,
 } from "./viewReadProjection.js";
@@ -119,6 +120,11 @@ export interface WikiFamilyState {
         policy: string;
         count: number;
     };
+    candidateReadCursor?: {
+        generation: string | undefined;
+        policy: string;
+        visitedViewIds: string[];
+    };
     descriptors: Array<{
         viewId: string;
         query: string;
@@ -130,6 +136,8 @@ export interface WikiFamilyState {
             generation: string | undefined;
             policy: string;
             reason: string;
+            assessmentKey?: string;
+            assessmentJobId?: string;
         };
     }>;
 }
@@ -172,7 +180,7 @@ function timestamp(): string {
     return new Date().toISOString();
 }
 
-function freezeSnapshot(value: unknown): void {
+export function freezeSnapshot(value: unknown): void {
     if (!value || typeof value !== "object" || Object.isFrozen(value)) return;
     for (const child of Object.values(value)) freezeSnapshot(child);
     Object.freeze(value);
@@ -246,6 +254,16 @@ export class TypedViewStore {
         active: boolean;
         snapshot: Promise<HistorySnapshot<ViewStoreState>>;
     }>();
+    private readonly committedRead = new AsyncLocalStorage<{
+        corpusId: string;
+        head: string | null;
+        active: boolean;
+    }>();
+
+    private committedScope() {
+        const scope = this.committedRead.getStore();
+        return scope?.active ? scope : undefined;
+    }
 
     public constructor(
         private readonly rootDirectory: string,
@@ -268,13 +286,27 @@ export class TypedViewStore {
         operation: () => Promise<T>,
         validateHead = true,
     ): Promise<T> {
+        const full = this.readOperation.getStore();
+        if (full?.active && full.corpusId === corpusId) return operation();
         const existing = this.inventoryRead.getStore();
         if (existing?.active && existing.corpusId === corpusId)
             return operation();
         const history = this.history(corpusId);
-        const { head, value } = await history.readEntry<ViewReadProjection>(
-            viewReadProjectionEntry,
-        );
+        const committed = this.committedScope();
+        const committedHead =
+            committed?.corpusId === corpusId ? committed.head : undefined;
+        await history.assertReadable();
+        const { head, value } =
+            committedHead === null
+                ? { head: null, value: undefined }
+                : committedHead === undefined
+                  ? await history.readEntry<ViewReadProjection>(
+                        viewReadProjectionEntry,
+                    )
+                  : await history.readEntry<ViewReadProjection>(
+                        viewReadProjectionEntry,
+                        committedHead,
+                    );
         let projection = value;
         if (!projection) {
             const state: ViewStoreState = head
@@ -329,7 +361,7 @@ export class TypedViewStore {
         const { head, value } = await history.readEntry<ViewReadProjection>(
             viewReadProjectionEntry,
         );
-        if (!head || value) return;
+        if (!head || value?.version === viewReadProjectionVersion) return;
         const { state } = await history.read(head);
         await history.commit(
             head,
@@ -372,10 +404,23 @@ export class TypedViewStore {
         if (existing?.active && existing.corpusId === corpusId)
             return operation();
         const history = this.history(corpusId);
+        const committed = this.committedScope();
         const scope = {
             corpusId,
             active: true,
-            snapshot: history.read().then((snapshot) => {
+            snapshot: (committed?.corpusId === corpusId &&
+            committed.head === null
+                ? Promise.resolve<HistorySnapshot<ViewStoreState>>({
+                      head: null,
+                      state: { views: {} },
+                      stateBytes: 0,
+                  })
+                : history.read(
+                      committed?.corpusId === corpusId
+                          ? (committed.head ?? undefined)
+                          : undefined,
+                  )
+            ).then((snapshot) => {
                 freezeSnapshot(snapshot);
                 return snapshot;
             }),
@@ -384,7 +429,9 @@ export class TypedViewStore {
             try {
                 await scope.snapshot;
                 const result = await operation();
-                await history.assertHead((await scope.snapshot).head);
+                if (committed?.corpusId === corpusId)
+                    await history.assertReadable();
+                else await history.assertHead((await scope.snapshot).head);
                 return result;
             } finally {
                 scope.active = false;
@@ -392,11 +439,51 @@ export class TypedViewStore {
         });
     }
 
+    public async withCommittedSnapshot<T>(
+        corpusId: string,
+        head: string | null,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        const existing = this.committedScope();
+        if (existing?.corpusId === corpusId) return operation();
+        const history = this.history(corpusId);
+        const scope = { corpusId, head, active: true };
+        try {
+            return await this.committedRead.run(scope, () =>
+                this.withInventorySnapshot(
+                    corpusId,
+                    async () => {
+                        const result = await operation();
+                        await history.assertReadable();
+                        return result;
+                    },
+                    false,
+                ),
+            );
+        } finally {
+            scope.active = false;
+        }
+    }
+
+    public withWritableState<T>(operation: () => Promise<T>): Promise<T> {
+        return this.committedRead.exit(() =>
+            this.readOperation.exit(() => this.inventoryRead.exit(operation)),
+        );
+    }
+
     private async readSnapshot(corpusId: string) {
         const scope = this.readOperation.getStore();
         const history = this.history(corpusId);
-        if (!scope?.active || scope.corpusId !== corpusId)
-            return history.read();
+        if (!scope?.active || scope.corpusId !== corpusId) {
+            const committed = this.committedScope();
+            if (committed?.corpusId === corpusId && committed.head === null)
+                return { head: null, state: { views: {} }, stateBytes: 0 };
+            return history.read(
+                committed?.corpusId === corpusId
+                    ? (committed.head ?? undefined)
+                    : undefined,
+            );
+        }
         await history.assertReadable();
         return scope.snapshot;
     }
@@ -431,6 +518,9 @@ export class TypedViewStore {
     }
 
     public getCommittedHead(corpusId: string): Promise<string | null> {
+        const committed = this.committedScope();
+        if (committed?.corpusId === corpusId)
+            return Promise.resolve(committed.head);
         return this.history(corpusId).readHead();
     }
 
@@ -440,9 +530,9 @@ export class TypedViewStore {
         family: TopicFamilyState;
         building: boolean;
     }> {
-        const { head, state } = await this.history(corpusId).read();
+        const { head, state } = await this.readSnapshot(corpusId);
         if (state.topics) validateTopicSnapshot(state.topics);
-        return {
+        return structuredClone({
             head,
             ...(state.topics ? { snapshot: state.topics } : {}),
             family: state.topicFamily ?? { enabled: true, dirty: true },
@@ -456,7 +546,7 @@ export class TypedViewStore {
                             result.topicGeneration === state.topics?.generation,
                     ),
             ),
-        };
+        });
     }
 
     public async queryTopics(
@@ -464,9 +554,9 @@ export class TypedViewStore {
         eligibleFingerprint?: string,
     ): Promise<TopicQueryPage> {
         const started = performance.now();
-        const { head, state, stateBytes } = await this.history(
+        const { head, state, stateBytes } = await this.readSnapshot(
             request.corpusId,
-        ).read();
+        );
         if (state.topics) validateTopicSnapshot(state.topics);
         const withheld =
             state.topics &&
@@ -550,7 +640,9 @@ export class TypedViewStore {
             throw new Error("Topic summary changed supplied concept evidence");
         concept.summary = output.summary;
         concept.summaryState = "ready";
-        concept.citations = structuredClone(output.citations);
+        if (concept.validation)
+            concept.summaryCitations = structuredClone(output.citations);
+        else concept.citations = structuredClone(output.citations);
         validateTopicSnapshot(snapshot);
         await this.commitBuildState(
             corpusId,
@@ -954,8 +1046,8 @@ export class TypedViewStore {
         jobId: string,
     ): Promise<ViewBuildJob | undefined> {
         assertViewIdentifier("build job ID", jobId);
-        const { state } = await this.history(corpusId).read();
-        return state.builds?.[jobId];
+        const { state } = await this.readSnapshot(corpusId);
+        return structuredClone(state.builds?.[jobId]);
     }
 
     public async admitViewBuild(
@@ -1079,17 +1171,24 @@ export class TypedViewStore {
         corpusId: string,
         receiptId: string,
     ): Promise<ViewMaintenanceResult | undefined> {
-        const { state } = await this.history(corpusId).read();
+        const { state } = await this.readSnapshot(corpusId);
         const receipt = state.maintenanceReceipts?.[receiptId];
         if (!receipt) return undefined;
         if (!receipt.jobId)
-            return { receiptId: receipt.receiptId, plan: receipt.plan };
+            return structuredClone({
+                receiptId: receipt.receiptId,
+                plan: receipt.plan,
+            });
         const job = state.builds?.[receipt.jobId];
         if (!job)
             throw new Error(
                 "Maintenance receipt references a missing build job",
             );
-        return { receiptId: receipt.receiptId, plan: receipt.plan, job };
+        return structuredClone({
+            receiptId: receipt.receiptId,
+            plan: receipt.plan,
+            job,
+        });
     }
 
     public async updateViewMaintenance(
@@ -1144,6 +1243,7 @@ export class TypedViewStore {
         corpusId: string,
         jobId: string,
         update: (job: ViewBuildJob) => void,
+        updateWikiFamily?: (family: WikiFamilyState) => void,
     ): Promise<ViewBuildJob> {
         const { head, state } = await this.history(corpusId).read();
         const job = state.builds?.[jobId];
@@ -1152,6 +1252,15 @@ export class TypedViewStore {
                 "View build was removed or forgotten; cannot persist a result",
             );
         update(job);
+        if (updateWikiFamily) {
+            state.wikiFamily ??= {
+                enabled: true,
+                dirty: true,
+                cursor: 0,
+                descriptors: [],
+            };
+            updateWikiFamily(state.wikiFamily);
+        }
         job.updatedAt = timestamp();
         await this.commitBuildState(
             corpusId,
@@ -1185,6 +1294,7 @@ export class TypedViewStore {
             ) {
                 family.dirty = true;
                 family.cursor = 0;
+                delete family.candidateReadCursor;
                 delete family.error;
             }
         }
@@ -1228,6 +1338,7 @@ export class TypedViewStore {
         if (scope?.active && scope.corpusId === corpusId) {
             const legacy = scope.projection.conflicts?.[conflictId];
             if (legacy) return structuredClone(legacy);
+            if (!scope.head) return undefined;
             return (
                 await this.history(corpusId).readEntry<ViewMergeConflict>(
                     `conflict-${encodeURIComponent(conflictId)}.json`,
@@ -1243,7 +1354,7 @@ export class TypedViewStore {
     public async pendingWikiContributionConflict(
         input: ViewBuildSnapshot,
     ): Promise<ViewMergeConflict | undefined> {
-        const { state } = await this.history(input.corpusId).read();
+        const { state } = await this.readSnapshot(input.corpusId);
         for (const result of Object.values(state.builds ?? {}).flatMap(
             (job) => job.results,
         )) {
@@ -1260,7 +1371,7 @@ export class TypedViewStore {
                 viewVersions(state, conflict.viewId).at(-1)?.revisionId ===
                     conflict.expectedRevisionId
             )
-                return conflict;
+                return structuredClone(conflict);
         }
         return undefined;
     }
@@ -1271,7 +1382,7 @@ export class TypedViewStore {
         input: ViewBuildSnapshot,
         includeParkedFailures = true,
     ): Promise<boolean> {
-        const { state } = await this.history(corpusId).read();
+        const { state } = await this.readSnapshot(corpusId);
         const pendingConflict = Object.values(state.conflicts ?? {}).some(
             (conflict) =>
                 conflict.state === "pending" &&
@@ -1806,14 +1917,18 @@ export class TypedViewStore {
     ): Promise<ViewHistoryEntry[]> {
         assertViewIdentifier("view ID", request.viewId);
         const scope = this.readOperation.getStore();
+        const committed = this.committedScope();
         const head =
             scope?.active && scope.corpusId === request.corpusId
                 ? (await scope.snapshot).head
-                : undefined;
+                : committed?.corpusId === request.corpusId
+                  ? committed.head
+                  : undefined;
+        if (head === null) return [];
         const commits = (
             await this.history(request.corpusId).historyForRecord<
                 ViewVersion[]
-            >(request.viewId, head)
+            >(request.viewId, head, committed?.corpusId !== request.corpusId)
         ).reverse();
         const seen = new Set<string>();
         const entries = commits.flatMap(({ commitId, record }) => {
@@ -2013,6 +2128,7 @@ export class TypedViewStore {
             );
             family.dirty = true;
             family.cursor = 0;
+            delete family.candidateReadCursor;
             delete family.indexVersion;
             delete family.error;
         }
@@ -2174,7 +2290,9 @@ export class TypedViewStore {
 
     public async getViewIndexCleanup(corpusId: string): Promise<string[]> {
         return (
-            (await this.history(corpusId).read()).state.viewIndexCleanup ?? []
+            structuredClone(
+                (await this.readSnapshot(corpusId)).state.viewIndexCleanup,
+            ) ?? []
         );
     }
 
@@ -2253,18 +2371,21 @@ export class TypedViewStore {
     }
 
     public async listPublishedViews(corpusId: string) {
-        const { state } = await this.history(corpusId).read();
-        return Object.entries(state.views).map(([viewId, versions]) => {
-            const publication = this.publicationStatus(state, viewId);
-            return {
-                current: versions[versions.length - 1],
-                view: versions.find(
-                    (version) =>
-                        version.revisionId === publication.publishedRevisionId,
-                ),
-                publication,
-            };
-        });
+        const { state } = await this.readSnapshot(corpusId);
+        return structuredClone(
+            Object.entries(state.views).map(([viewId, versions]) => {
+                const publication = this.publicationStatus(state, viewId);
+                return {
+                    current: versions[versions.length - 1],
+                    view: versions.find(
+                        (version) =>
+                            version.revisionId ===
+                            publication.publishedRevisionId,
+                    ),
+                    publication,
+                };
+            }),
+        );
     }
 
     private publicationStatus(

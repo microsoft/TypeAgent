@@ -149,6 +149,49 @@ test("inventory paging preserves the selected corpus, generation and limits", as
     assert.equal(calls.length, 1);
 });
 
+test("graph responses omit inventory diagnostics but retain graph and topic evidence identity", async () => {
+    const { service, hub } = fixture();
+    const query = service.queryKnowledgeGraph;
+    const originals = [];
+    service.queryKnowledgeGraph = async (request) => {
+        const graph = await query(request);
+        graph.state = "building";
+        graph.coverage.topics = {
+            state: "building",
+            generation: "topics-g1",
+        };
+        graph.coverage.reasons = ["Rebuild topics to populate the hierarchy."];
+        graph.nextContinuationToken = "unused-inventory-page";
+        originals.push(graph);
+        return graph;
+    };
+    const result = await hub.memoryHubGraph({ kind: "hierarchy" });
+    for (const { graph } of result.corpora) {
+        assert.deepEqual(Object.keys(graph).sort(), [
+            "edges",
+            "generation",
+            "nodes",
+            "topicGeneration",
+        ]);
+        assert.equal(graph.topicGeneration, "topics-g1");
+        assert.equal(graph.nodes[0].label, "Casey");
+        assert.ok(graph.generation.endsWith("-generation"));
+    }
+    assert.ok(originals.every((graph) => graph.coverage.reasons.length === 1));
+    const compactBytes = Buffer.byteLength(JSON.stringify(result.corpora));
+    const originalBytes = Buffer.byteLength(
+        JSON.stringify(
+            result.corpora.map((corpus, index) => ({
+                ...corpus,
+                graph: originals[index],
+            })),
+        ),
+    );
+    assert.ok(compactBytes < originalBytes);
+    assert.equal(result.presetLayout.elements.length, 2);
+    assert.deepEqual(result.errors, []);
+});
+
 test("selected corpus never silently broadens graph or support scope", async () => {
     const { hub, calls } = fixture();
     const graph = await hub.memoryHubGraph({

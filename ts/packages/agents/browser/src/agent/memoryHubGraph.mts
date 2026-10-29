@@ -158,10 +158,21 @@ export function createMemoryHubGraphFunctions(
                         Math.floor(maxEdges / selected.length),
                     ),
                 };
+                const graph = await timed(query.call(service, input));
                 result.corpora.push({
                     corpusId: corpus.corpusId,
                     corpusName: corpus.name,
-                    graph: await timed(query.call(service, input)),
+                    graph: {
+                        generation: graph.generation,
+                        nodes: graph.nodes,
+                        edges: graph.edges,
+                        ...(graph.coverage.topics?.generation
+                            ? {
+                                  topicGeneration:
+                                      graph.coverage.topics.generation,
+                              }
+                            : {}),
+                    },
                 });
             } catch (error) {
                 const message =

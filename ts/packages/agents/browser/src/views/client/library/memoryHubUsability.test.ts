@@ -204,7 +204,7 @@ test("question detail passes the audit and hides raw JSON until Advanced is open
     expect(audit(document.body, 250)).toEqual([]);
     const advanced = [
         ...document.querySelectorAll(
-            '[aria-label="Question inspector"] > details',
+            '[aria-label="Question inspector"] .hub-question-content > details',
         ),
     ].find(
         (details) =>

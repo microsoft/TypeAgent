@@ -181,7 +181,7 @@ describe("snapshot-safe indexed reads", () => {
         return gate;
     }
 
-    test("reindex prepares without blocking reads and publication waits for readers", async () => {
+    test("reindex publishes without awaiting readers and retains their old generation", async () => {
         const preparation = blockRebuild();
         const reindex = service.reindexCorpus(corpusId);
         await within(preparation.entered.promise);
@@ -190,21 +190,55 @@ describe("snapshot-safe indexed reads", () => {
         const reader = block("documents");
         const first = documentSearch();
         await within(reader.entered.promise);
-        let published = false;
-        void reindex.then(() => {
-            published = true;
-        });
         preparation.resume.resolve();
-        await new Promise<void>((resolve) => setImmediate(resolve));
-        expect(published).toBe(false);
+        const publication = await within(reindex);
+        expect(await readdir(oldDirectory!)).not.toHaveLength(0);
+        const laterResult = await within(documentSearch());
+        expect(searchedDirectories.documents.at(-1)).not.toBe(oldDirectory);
         reader.resume.resolve();
         const firstResult = await first;
-        const publication = await reindex;
-        const laterResult = await documentSearch();
         expect(firstResult.indexVersion).toBe(publication.indexVersion);
-        expect(searchedDirectories.documents.at(-1)).not.toBe(oldDirectory);
         expect(laterResult.indexVersion).toBe(publication.indexVersion);
         expect(laterResult.matches).toHaveLength(1);
+        await service.drainMaintenance(5000);
+        await expect(readdir(oldDirectory!)).rejects.toThrow();
+    });
+
+    test("a held source read retains its complete old source/index pair while replacement becomes visible", async () => {
+        const reader = block("documents");
+        const first = documentSearch();
+        await within(reader.entered.promise);
+        const oldDirectory = searchedDirectories.documents.at(-1)!;
+        const replacement = await within(
+            service.ingestDocument({
+                corpusId,
+                source: {
+                    sourceId: "source",
+                    sourceType: "text",
+                    title: "Zephyr replacement",
+                    text: "Zephyr replacement deployment",
+                },
+            }),
+        );
+        await within(waitForJob(service, replacement.jobId));
+        const newer = await within(documentSearch());
+        expect(newer.matches[0].revisionId).toBe(replacement.revisionId);
+        expect(newer.matches[0].snippet).toContain("replacement");
+        expect(await readdir(oldDirectory)).not.toHaveLength(0);
+        reader.resume.resolve();
+        const older = await first;
+        expect(older.matches[0].revisionId).not.toBe(replacement.revisionId);
+        expect(older.matches[0].snippet).toBe("Zephyr deployment evidence");
+    });
+
+    test("publication reclaims its previously committed generation even without an older active reader", async () => {
+        await documentSearch();
+        const oldDirectory = searchedDirectories.documents.at(-1)!;
+        await service.reindexCorpus(corpusId);
+        expect((await service.drainMaintenance(5000)).settled).toBe(true);
+        await expect(readdir(oldDirectory)).rejects.toThrow();
+        expect((await documentSearch()).matches).toHaveLength(1);
+        expect(searchedDirectories.documents.at(-1)).not.toBe(oldDirectory);
     });
 
     test("failed reindex preserves the healthy generation", async () => {
@@ -384,24 +418,80 @@ describe("snapshot-safe indexed reads", () => {
         expect((await documentSearch()).matches).toHaveLength(1);
     });
 
-    test("forget never changes an in-flight snapshot or resurrects removed evidence", async () => {
-        const preview = await service.previewForgetSource(corpusId, "source");
-        const reader = block("documents");
-        const first = documentSearch();
-        await within(reader.entered.promise);
-        const forgotten = service.forgetSource({
-            corpusId,
-            sourceId: "source",
-            confirmationToken: preview.confirmationToken,
+    test("a detached cross-collection read cannot reuse an expired parent snapshot", async () => {
+        const other = (await service.createCorpus("Nested read")).corpusId;
+        const entered = deferred();
+        const resume = deferred();
+        releases.push(resume.resolve);
+        let child!: ReturnType<FileMemoryService["getSource"]>;
+        await service["readCommitted"](corpusId, async () => {
+            child = service["readCommitted"](other, async () => {
+                entered.resolve();
+                await resume.promise;
+                return service.getSource(corpusId, "source");
+            });
+            await within(entered.promise);
         });
-        reader.resume.resolve();
-        expect((await first).matches).toHaveLength(1);
-        await forgotten;
-        expect((await documentSearch()).matches).toEqual([]);
-        await expect(
-            service.getSourceKnowledge(corpusId, "source"),
-        ).rejects.toThrow("Unknown source");
+        try {
+            const replacement = await service.ingestDocument({
+                corpusId,
+                source: {
+                    sourceId: "source",
+                    sourceType: "text",
+                    title: "Replacement",
+                    text: "Zephyr replacement evidence",
+                },
+            });
+            await waitForJob(service, replacement.jobId);
+            resume.resolve();
+            expect(await within(child)).toMatchObject({
+                activeRevisionId: replacement.revisionId,
+            });
+        } finally {
+            resume.resolve();
+            await child;
+        }
     });
+
+    test.each(["forget", "clear", "suppress"] as const)(
+        "%s revokes an in-flight reader without waiting for it",
+        async (operation) => {
+            const preview = await service.previewForgetSource(
+                corpusId,
+                "source",
+            );
+            const reader = block("documents");
+            const first = documentSearch();
+            const rejected = expect(first).rejects.toThrow(/remov|clear/i);
+            await within(reader.entered.promise);
+            const forgotten =
+                operation === "clear"
+                    ? service.clearCorpus(corpusId)
+                    : operation === "suppress"
+                      ? service.suppressSourceKnowledge({
+                            corpusId,
+                            sourceId: "source",
+                            kind: "entity",
+                            name: "Zephyr",
+                        })
+                      : service.forgetSource({
+                            corpusId,
+                            sourceId: "source",
+                            confirmationToken: preview.confirmationToken,
+                        });
+            await within(forgotten.then(() => undefined));
+            reader.resume.resolve();
+            await rejected;
+            if (operation === "suppress") {
+                expect((await documentSearch()).matches).toHaveLength(1);
+                return;
+            }
+            expect((await documentSearch()).matches).toEqual([]);
+            await expect(
+                service.getSourceKnowledge(corpusId, "source"),
+            ).rejects.toThrow("Unknown source");
+        },
+    );
 
     test("failed initialization is not cached and can be retried", async () => {
         await service.close();

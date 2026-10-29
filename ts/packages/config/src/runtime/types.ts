@@ -68,6 +68,8 @@ export function wireApiFromString(s: string | undefined): WireApi | undefined {
 export interface DeploymentEndpoint {
     /** Full chat/completions/embeddings/images URL. */
     readonly endpoint: string;
+    /** Wire model/deployment name for URLs that do not identify a deployment. */
+    readonly model?: string | undefined;
     /** Authentication for this endpoint; falls back to `defaultAuth`. */
     readonly auth: AuthMode;
     /**

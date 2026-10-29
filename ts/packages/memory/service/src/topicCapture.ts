@@ -60,6 +60,7 @@ export async function captureTopicBuild(options: {
     indexGeneration?: string;
     suppressions: SourceKnowledgeSuppression[];
     model: string;
+    curationRecipe?: string;
     current?: TopicSnapshot;
     eventOccurrences?: TopicOccurrence[];
     influenceEvents?: TopicEventReference[];
@@ -105,7 +106,8 @@ export async function captureTopicBuild(options: {
     );
     const reusableCuration =
         current?.corpusId === corpusId &&
-        current.recipe === `${model}:editorial-v1:curated-lazy-v6` &&
+        current.recipe ===
+            `${model}:editorial-v1:${options.curationRecipe ?? "curated-lazy-v6"}` &&
         current.inputFingerprint === fingerprint &&
         viewHash(current.occurrences) === viewHash(occurrences) &&
         current.nodes.every((node) => node.authorship === "generated")

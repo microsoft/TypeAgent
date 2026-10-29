@@ -22,16 +22,16 @@ export const inventoryPageRequestSchema = z.strictObject({
     query: z.string().max(1000).optional(),
     viewId: id.optional(),
 });
+const viewKindSchema = z.enum([
+    "wiki",
+    "projectBrief",
+    "timeline",
+    "schemaView",
+    "troubleshootingGuide",
+]);
 export const viewSummaryRequestSchema = inventoryPageRequestSchema.extend({
-    kind: z
-        .enum([
-            "wiki",
-            "projectBrief",
-            "timeline",
-            "schemaView",
-            "troubleshootingGuide",
-        ])
-        .optional(),
+    kind: viewKindSchema.optional(),
+    excludeKinds: viewKindSchema.array().max(5).optional(),
 });
 export const questionSummaryRequestSchema = inventoryPageRequestSchema.extend({
     viewId: id.optional(),
@@ -68,13 +68,7 @@ export const viewSummarySchema = viewVersionSchema
     })
     .extend({
         content: z.strictObject({
-            kind: z.enum([
-                "wiki",
-                "projectBrief",
-                "timeline",
-                "schemaView",
-                "troubleshootingGuide",
-            ]),
+            kind: viewKindSchema,
             title: z.string(),
         }),
         maintained: z.boolean(),
@@ -145,6 +139,9 @@ export const viewBuildSummarySchema = viewBuildJobSchema
             })
             .extend({
                 current: z.boolean(),
+                conflictState: z
+                    .enum(["pending", "resolved", "missing"])
+                    .optional(),
                 snapshot: result.shape.snapshot
                     .pick({ pipeline: true })
                     .extend({

@@ -11,7 +11,13 @@ import type {
     ViewBuildJob,
     ViewPublishRequest,
     ViewSynthesisOutput,
+    ViewMergeConflict,
 } from "../src/viewTypes.js";
+import {
+    viewReadProjection,
+    viewReadProjectionEntry,
+    type ViewReadProjection,
+} from "../src/viewReadProjection.js";
 import type { IndexedDocument } from "../src/types.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { inventoryTestAnswer } from "./viewInventoryTestModel.js";
@@ -238,6 +244,126 @@ describe("detached view index preparation", () => {
             (error: unknown) => ({ value: undefined, error }),
         );
     }
+
+    test("foreground surfaces read the committed head while an exclusive publication is held", async () => {
+        await service.search({ corpusId, query: "pressure" });
+        const policy = await service.getViewPublicationPolicy(corpusId);
+        const snapshot = await service.listViews(corpusId);
+        const entered = deferred();
+        const resume = deferred();
+        releases.push(resume.resolve);
+        const original = TypedViewStore.prototype.updateViewPublicationPolicy;
+        const spy = jest
+            .spyOn(TypedViewStore.prototype, "updateViewPublicationPolicy")
+            .mockImplementation(async function (
+                this: InstanceType<typeof TypedViewStore>,
+                input,
+            ) {
+                const result = await original.call(this, input);
+                entered.resolve();
+                await resume.promise;
+                return result;
+            });
+        const write = service.updateViewPublicationPolicy({
+            corpusId,
+            expectedHead: snapshot.head,
+            expectedRevision: policy.revision,
+            autoPublish: !policy.autoPublish,
+        });
+        try {
+            await entered.promise;
+            const read = <T>(name: string, operation: Promise<T>) =>
+                within(operation).catch((error: unknown) => {
+                    throw new Error(`Blocked read: ${name}: ${String(error)}`);
+                });
+            const values = await Promise.all([
+                read("policy", service.getViewPublicationPolicy(corpusId)),
+                read("views", service.listViews(corpusId)),
+                read("view", service.getView(request)),
+                read("questions", service.listQuestions(corpusId)),
+                read("builds", service.listViewBuilds(corpusId)),
+                read(
+                    "source",
+                    service.getSourceContent({
+                        corpusId,
+                        sourceId: "evidence",
+                    }),
+                ),
+                read("search", service.search({ corpusId, query: "pressure" })),
+                read("changes", service.listChanges({ corpusId })),
+                read("events", service.listEvents({ corpusId })),
+                read(
+                    "event search",
+                    service.searchEvents({ corpusId, query: "pressure" }),
+                ),
+                read("history", service.getViewHistory(request)),
+            ]);
+            expect(values[0]).toEqual(policy);
+            expect(values[1].head).toBe(snapshot.head);
+            expect(values[2]).toBeDefined();
+            expect(values[5].content).toContain("Inspect pressure");
+            expect(values[10].length).toBeGreaterThan(0);
+        } finally {
+            resume.resolve();
+            await write;
+            spy.mockRestore();
+        }
+        expect(
+            (await service.getViewPublicationPolicy(corpusId)).autoPublish,
+        ).toBe(!policy.autoPublish);
+    });
+
+    test("archive retains the committed view index until publication, then reclaims it", async () => {
+        expect((await publish()).value?.indexState).toBe("ready");
+        const query = {
+            corpusId,
+            query: "pressure",
+            freshness: "current" as const,
+        };
+        expect(await service.searchViews(query)).toHaveLength(1);
+        const snapshot = await service.listViews(corpusId);
+        if (!snapshot.head) throw new Error("Published view head is missing");
+        const view = snapshot.views[0];
+        const directory = service["viewIndexDirectory"](view);
+        const entered = deferred();
+        const resume = deferred();
+        releases.push(resume.resolve);
+        let hold = true;
+        const original = TypedViewStore.prototype.getCommittedHead;
+        const spy = jest
+            .spyOn(TypedViewStore.prototype, "getCommittedHead")
+            .mockImplementation(async function (
+                this: InstanceType<typeof TypedViewStore>,
+                id,
+            ) {
+                const head = await original.call(this, id);
+                if (hold && id === corpusId && head !== snapshot.head) {
+                    hold = false;
+                    entered.resolve();
+                    await resume.promise;
+                }
+                return head;
+            });
+        const archiving = service.archiveView({
+            corpusId,
+            viewId: view.viewId,
+            expectedVersion: view.version,
+            expectedHead: snapshot.head,
+        });
+        try {
+            await within(entered.promise);
+            expect(await within(service.searchViews(query))).toHaveLength(1);
+            expect(await readdir(directory)).not.toHaveLength(0);
+        } finally {
+            resume.resolve();
+            await archiving;
+            spy.mockRestore();
+        }
+        expect(await service.searchViews(query)).toHaveLength(0);
+        expect((await service.drainMaintenance(5000)).settled).toBe(true);
+        await expect(readdir(directory)).rejects.toThrow();
+    });
+
     async function edit() {
         const snapshot = await service.listViews(corpusId);
         const current = snapshot.views[0];
@@ -280,41 +406,108 @@ describe("detached view index preparation", () => {
         });
     }
 
-    test("legacy view history receives one committed read projection on restart", async () => {
-        await service.close();
-        const history = new ViewHistory(
-            path.join(root, corpusId, "views"),
-            () => ({ views: {} }),
-        );
-        const { head, state } = await history.read();
-        const legacyHead = await history.commit(
-            head,
-            state,
-            {},
-            "fixture",
-            "Legacy state without read entries",
-        );
-        expect(
-            (await new TypedViewStore(root).getViewVersions(request)).map(
-                (version) => version.revisionId,
-            ),
-        ).toContain(request.revisionId);
-        service = open();
-        expect(await service.getView(request)).toBeDefined();
-        const projection = await history.readEntry<{
-            views: Array<{ viewId: string }>;
-        }>("view-read-projection.json");
-        expect(projection.head).not.toBe(legacyHead);
-        expect(projection.value?.views.map((view) => view.viewId)).toEqual([
-            "guide",
-        ]);
-        await service.close();
-        service = open();
-        expect(await service.getView(request)).toBeDefined();
-        expect(
-            (await history.readEntry("view-read-projection.json")).head,
-        ).toBe(projection.head);
-    });
+    test.each(["missing", "unversioned"])(
+        "%s legacy view history receives one committed read projection on restart",
+        async (legacy) => {
+            await service.close();
+            const history = new ViewHistory(
+                path.join(root, corpusId, "views"),
+                () => ({ views: {} }),
+            );
+            const { head, state } = await history.read();
+            const oldProjection = {
+                ...(
+                    await history.readEntry<ViewReadProjection>(
+                        viewReadProjectionEntry,
+                    )
+                ).value,
+            };
+            delete oldProjection.version;
+            const legacyHead = await history.commit(
+                head,
+                state,
+                legacy === "missing"
+                    ? {}
+                    : {
+                          [viewReadProjectionEntry]:
+                              JSON.stringify(oldProjection),
+                      },
+                "fixture",
+                "Legacy state without read entries",
+            );
+            if (legacy === "missing")
+                expect(
+                    (
+                        await new TypedViewStore(root).getViewVersions(request)
+                    ).map((version) => version.revisionId),
+                ).toContain(request.revisionId);
+            service = open();
+            expect(await service.getView(request)).toBeDefined();
+            expect(
+                (await new TypedViewStore(root).getViewVersions(request)).map(
+                    (version) => version.revisionId,
+                ),
+            ).toContain(request.revisionId);
+            const projection = await history.readEntry<{
+                views: Array<{ viewId: string }>;
+            }>("view-read-projection.json");
+            expect(projection.head).not.toBe(legacyHead);
+            expect(projection.value?.views.map((view) => view.viewId)).toEqual([
+                "guide",
+            ]);
+            await service.close();
+            service = open();
+            expect(await service.getView(request)).toBeDefined();
+            expect(
+                (await history.readEntry("view-read-projection.json")).head,
+            ).toBe(projection.head);
+        },
+    );
+
+    test.each(["pending", "resolved", "missing"] as const)(
+        "build projections expose %s conflict status without conflict evidence",
+        async (state) => {
+            const job = (await service.listViewBuilds(corpusId))[0];
+            const human = (await service.listViews(corpusId)).views[0];
+            const conflictId = "conflict";
+            job.results[0].conflictId = conflictId;
+            job.results[0].state = "conflicted";
+            const conflict: ViewMergeConflict = {
+                conflictId,
+                identity: "fixture",
+                corpusId,
+                viewId: human.viewId,
+                jobId: job.jobId,
+                createdAt: job.createdAt,
+                actor: "fixture",
+                state: state === "missing" ? "pending" : state,
+                expectedRevisionId: human.revisionId,
+                input: job.results[0].snapshot,
+                human,
+                candidate: {
+                    content: human.content,
+                    relationships: [],
+                    outcome: "diagnosticOnly",
+                    missingEvidence: [],
+                },
+                targets: [],
+                reason: "Fixture conflict",
+                event: { kind: "viewMergeConflict", editIds: [], evidence: [] },
+            };
+            const projection = viewReadProjection({
+                views: { [human.viewId]: [human] },
+                builds: { [job.jobId]: job },
+                ...(state === "missing"
+                    ? {}
+                    : { conflicts: { [conflictId]: conflict } }),
+            });
+            expect(projection.builds[0].results[0].conflictState).toBe(state);
+            expect(JSON.stringify(projection.builds)).not.toContain(
+                human.content.title,
+            );
+            expect(projection.conflicts).toBeUndefined();
+        },
+    );
 
     test("detail and inventory reads do not wait for the delayed full-history adapter", async () => {
         const entered = deferred();
@@ -526,7 +719,9 @@ describe("detached view index preparation", () => {
             expect(finished).toBe(false);
             if (kind === "close") expect(repeatedCloseFinished).toBe(false);
             if (kind !== "close" && kind !== "source")
-                await within(service.listViews(corpusId));
+                await expect(
+                    within(service.listViews(corpusId)),
+                ).rejects.toThrow("removal");
             pending.resume.resolve();
             await within(removal);
             await repeatedClose;
@@ -599,10 +794,12 @@ describe("detached view index preparation", () => {
         expect((await service.retryViewIndex(request)).indexState).toBe(
             "ready",
         );
+        const built = directories.length;
         request = await publicationRequest();
         expect((await service.retryViewIndex(request)).indexState).toBe(
             "ready",
         );
+        expect(directories).toHaveLength(built);
         expect(await stagedFiles()).toEqual([]);
     });
 

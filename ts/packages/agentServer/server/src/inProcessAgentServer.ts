@@ -94,6 +94,14 @@ export async function createInProcessAgentServer(
             ? createDurableMemoryService(path.join(instanceDir, "memory"))
             : undefined;
     const memoryService = injectedMemoryService ?? ownedMemoryService!;
+    if (ownedMemoryService) {
+        try {
+            await ownedMemoryService.initialize();
+        } catch (error) {
+            await ownedMemoryService.close();
+            throw error;
+        }
+    }
     const { skillCatalog, skillAcquirer } = await createLocalSkillServices(
         instanceDir,
         options.skillAcquisition,

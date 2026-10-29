@@ -157,7 +157,7 @@ export async function getLookupSettings(
         fastModelName = lookupConfig.fastModelName;
         rewriteFocus = lookupConfig.rewriteFocus;
     }
-    fastModelName ??= "GPT_35_TURBO";
+    fastModelName ??= "GPT_6_LUNA";
     const fastModel =
         openai.createLocalChatModel(fastModelName, undefined, [
             "chatResponseHandler",
@@ -170,9 +170,9 @@ export async function getLookupSettings(
         "make it more concise and readable, with better formatting (e.g. use line breaks, bullet points as needed)";
 
     return {
-        fastMode, // If fastMode is on, we use GPT_35
+        fastMode,
         answerGenModel: fastMode ? fastModel : generalModel,
-        entityGenModel: fastMode ? fastModel : generalModel, // If entities need to be manually found from answers. Use GPT-4
+        entityGenModel: fastMode ? fastModel : generalModel,
         maxSearchResults: 3,
         lookupOptions: {
             maxCharsPerChunk,
@@ -241,7 +241,7 @@ async function ensureGroundingAgent(
     config: bingWithGrounding.ApiSettings,
 ): Promise<string> {
     return agents.ensureAgent(project, {
-        model: "gpt-4.1",
+        model: "gpt-6-luna",
         name: groundingAgentName,
         description:
             "Answers user questions using Grounding with Bing and cites its sources.",

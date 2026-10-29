@@ -12,6 +12,114 @@ import {
     getBrowserViewDestination,
 } from "@typeagent/browser-control-rpc/viewRoutes";
 import { validateViewRequest } from "../dist/views/server/features/views/viewValidation.mjs";
+import { understandingStages } from "../dist/views/server/features/views/viewRoutes.mjs";
+
+test("progressive understanding yields before subsequent reads and carries prepared handles across refinement", async () => {
+    const calls = [];
+    const id = "00000000-0000-4000-8000-000000000001";
+    const input = { corpusId: "corpus", question: "Explain the gallery" };
+    const stages = understandingStages(input, async ({ params }) => {
+        calls.push(params);
+        return {
+            ...input,
+            schemaVersion: 1,
+            snapshotId: id,
+            turnId: id,
+            evidenceSnapshotId: id,
+            expiresAt: "2099-01-01T00:00:00.000Z",
+            citations: [],
+            modules: [],
+            warnings: [],
+            refinementPending: params.phase === "initial",
+        };
+    });
+    assert.equal((await stages.next()).done, false);
+    assert.deepEqual(
+        calls.map((item) => item.phase),
+        ["retrieve"],
+    );
+    assert.equal((await stages.next()).value.refinementPending, true);
+    assert.equal(calls[1].evidenceSnapshotId, id);
+    assert.equal((await stages.next()).done, false);
+    assert.equal(calls[2].phase, "refine");
+    assert.equal(calls[2].evidenceSnapshotId, id);
+    assert.equal((await stages.next()).done, true);
+});
+
+test("closing the progressive iterator prevents scheduling another model phase", async () => {
+    let calls = 0;
+    const id = "00000000-0000-4000-8000-000000000001";
+    const input = { corpusId: "corpus", question: "Explain" };
+    const stages = understandingStages(input, async () => {
+        calls++;
+        return {
+            ...input,
+            schemaVersion: 1,
+            snapshotId: id,
+            turnId: id,
+            evidenceSnapshotId: id,
+            expiresAt: "2099-01-01T00:00:00.000Z",
+            citations: [],
+            modules: [],
+            warnings: [],
+        };
+    });
+    await stages.next();
+    await stages.return();
+    assert.equal(calls, 1);
+});
+
+test("understanding crosses the strict gateway without silently broadening scope", () => {
+    for (const [method, params] of [
+        [
+            "memoryHubUnderstand",
+            {
+                corpusId: "corpus",
+                question: "Explain the migration",
+                selection: {
+                    mode: "only",
+                    modules: ["relationships", "concepts"],
+                },
+            },
+        ],
+        [
+            "memoryHubUnderstandingModule",
+            {
+                corpusId: "corpus",
+                snapshotId: "00000000-0000-4000-8000-000000000001",
+                kind: "concepts",
+            },
+        ],
+    ])
+        assert.equal(validateViewRequest({ method, params }).method, method);
+    for (const params of [
+        { question: "Explain the migration" },
+        {
+            corpusId: "corpus",
+            question: "Explain the migration",
+            tags: ["hidden-filter"],
+        },
+        { corpusId: "corpus", question: "Explain", conversationScope: "all" },
+        {
+            corpusId: "corpus",
+            question: "Explain",
+            parentSnapshotId: "00000000-0000-4000-8000-000000000001",
+        },
+    ])
+        assert.throws(() =>
+            validateViewRequest({ method: "memoryHubUnderstand", params }),
+        );
+    assert.throws(() =>
+        validateViewRequest({
+            method: "memoryHubUnderstandingModule",
+            params: {
+                corpusId: "corpus",
+                snapshotId: "00000000-0000-4000-8000-000000000001",
+                kind: "arbitraryHtml",
+            },
+        }),
+    );
+});
 
 test("topic browse/rebuild and maintenance cross strict gateway with honest bounds", () => {
     for (const [method, params] of [

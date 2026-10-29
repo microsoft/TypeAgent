@@ -12,6 +12,7 @@ export * from "./revisionAssetStore.js";
 export * from "./rpcFacade.js";
 export * from "./types.js";
 export * from "./graphTypes.js";
+export * from "./understandingTypes.js";
 export * from "./sourceSynopsis.js";
 export * from "./wikiBudget.js";
 export * from "./viewHostOptions.js";
@@ -24,6 +25,11 @@ export type {
     WikiConsolidationScope,
 } from "./wikiConsolidation.js";
 export * from "./topicGeneration.js";
+export * from "./topicDecision.js";
+export * from "./topicDecisionCuration.js";
+export * from "./topicLookup.js";
+export type { TopicCurationSettings } from "./topicCuration.js";
+export * from "./topicDecisionWave.js";
 export * from "./topicIncidence.js";
 export * from "./topicSnapshot.js";
 export * from "./schemaView.js";

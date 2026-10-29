@@ -31,6 +31,8 @@ import {
     knowledgeCheckpointRequestSchema,
     knowledgeCheckpointReadSchema,
     knowledgeCheckpointWaitSchema,
+    understandingRequestSchema,
+    understandingModuleRequestSchema,
 } from "@typeagent/memory-client";
 import type {
     ViewMethod,
@@ -94,6 +96,10 @@ function protocolInput(schema: {
 
 // Each entry is an explicitly exposed domain operation, never a browser-control method.
 const schemas: Record<ViewMethod, z.ZodType> = {
+    memoryHubUnderstand: protocolInput(understandingRequestSchema),
+    memoryHubUnderstandingModule: protocolInput(
+        understandingModuleRequestSchema,
+    ),
     memoryHubGraph: protocolInput({
         safeParse(value: unknown) {
             if (!value || typeof value !== "object" || Array.isArray(value))
@@ -175,6 +181,8 @@ const schemas: Record<ViewMethod, z.ZodType> = {
             .optional(),
     }),
     memoryHubSearch: z.strictObject({
+        evidenceSnapshotId: z.string().uuid().optional(),
+        prepareUnderstanding: boolean,
         query: text,
         corpusId: optionalText,
         limit: z.number().int().min(1).max(100).optional(),

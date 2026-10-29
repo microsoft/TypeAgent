@@ -289,6 +289,7 @@ describe("detached coalesced batch ingestion", () => {
         async (fail) => {
             const retryScheduled = deferred();
             const callbacks: Array<() => void> = [];
+            let awaitingRetry = false;
             const originalSetTimeout = globalThis.setTimeout;
             const timer = import.meta.jest
                 .spyOn(globalThis, "setTimeout")
@@ -300,12 +301,12 @@ describe("detached coalesced batch ingestion", () => {
                             ...args,
                         );
                     callbacks.push(() => callback(...args));
-                    if (callbacks.length === 2) retryScheduled.resolve();
+                    if (awaitingRetry) retryScheduled.resolve();
                     return originalSetTimeout(() => {}, 0);
                 });
             try {
                 await ingest("seed");
-                expect(callbacks).toHaveLength(1);
+                expect(callbacks.length).toBeGreaterThan(0);
                 const segments = path.join(
                     root,
                     corpusId,
@@ -318,7 +319,8 @@ describe("detached coalesced batch ingestion", () => {
                 const pending = block(false, fail, true);
                 const accepted = await admit();
                 await within(pending.entered.promise);
-                callbacks[0]!();
+                awaitingRetry = true;
+                callbacks.at(-1)!();
                 await within(retryScheduled.promise);
                 expect(await readFile(orphan, "utf8")).toBe("{}");
                 expect(

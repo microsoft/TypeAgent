@@ -3,12 +3,12 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=8d57030d6f9e6533f13a242bc4f02a06b38dd22223a9d86ba0e1abff7ad08890 -->
-<!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
+<!-- AUTOGEN:DOCS:HASH:sha256=34a99469cadb9b87b44370bb6211a03c5035082ed6c3e0a98fa375089ed92030 -->
+<!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# powershell-typeagent — AI-generated documentation
+# @typeagent/powershell-typeagent — AI-generated documentation
 
-> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
+> 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
@@ -30,15 +30,21 @@ The `powershell-typeagent` package provides a structured set of actions for inte
 
 - **Archive Management**: Actions like `compress` and `expand` allow users to create and extract compressed files.
 
-The package also includes features for analyzing PowerShell scripts using the Claude AI model and executing scripts in a controlled, sandboxed environment to ensure security and proper resource management.
+Import analysis uses a model to extract recipe metadata while preserving the original script content. Analysis does not certify safety or authorize execution. Dynamic flows execute only after trusted user authorization, with TypeAgent's current Windows user privileges and subject to operating-system policy. This is not an arbitrary-code sandbox.
+
+## Execution authorization
+
+The goal is to keep useful PowerShell scripts available without allowing the agent to execute them silently. Approved code can use Git, native programs, installed modules, .NET, files and networking under the current user's OS rights. The approved-local path does not use AppContainer, forced ConstrainedLanguage, a command allowlist or a one-process limit.
+
+Before execution, a dedicated trusted approval interface shows a summary and offers **Review script and details** for the full root script, arguments and execution context. Cancel is the default. Opening the full review is optional; TypeAgent requires authorization, not proof that every line was read. Missing approval, cancellation or an unavailable broker prevents execution. Model responses and recipe fields cannot grant approval.
+
+Only direct-user calls can remember an exact invocation for the current session and connection. Reasoning calls, tests, drafts and repairs require fresh consent. SHA-256 and invocation checks bind authorization to the code, definition, arguments, working directory and timeout. Changing these inputs requires new authorization; restarting or using `@powershell revoke` clears remembered approvals.
+
+The broker retains private request transport, bounded output, timeouts and cleanup of its owned process tree. These are execution-management controls, not containment of approved code. Root-script hashes do not verify every loaded file, module or executable, and approval does not establish that code is harmless. Reviewed built-in actions and separate shell/MCP tools have their own policies. The restricted broker protocol remains for compatibility, not as a selectable flow execution mode.
 
 ## Setup
 
-To use the `powershell-typeagent` package, you need to configure the following environment variable:
-
-- `TYPEAGENT_NO_SAMPLES`: This variable determines whether sample data is included in the agent's responses. Set it to `true` to disable sample data or `false` to enable it.
-
-Ensure this environment variable is set in your environment before running the agent. If additional setup steps are required, refer to the hand-written README for further details.
+Dynamic execution requires Windows, the packaged execution broker and an interactive client that supports trusted security approval. No execution feature flags are required. The obsolete `powershell.dynamicExecution.enabled` and `powershell.brokerExecution.enabled` settings are ignored, including explicit false values. Removing these settings makes execution available for approval, not automatically approved. See the hand-written README for the execution contract and client behavior.
 
 ## Key Files
 
@@ -52,9 +58,11 @@ The `powershell-typeagent` package is organized into several key files, each wit
 
 - **[actionHandler.mts](./src/actionHandler.mts)**: Implements the logic for handling various PowerShell actions, including script execution, workflow management, and file system interactions.
 
-- **[scriptAnalyzer.mts](./src/analysis/scriptAnalyzer.mts)**: Provides functionality for analyzing PowerShell scripts using the Claude AI model, ensuring that scripts are optimized and secure.
+- **[scriptAnalyzer.mts](./src/analysis/scriptAnalyzer.mts)**: Extracts recipe metadata from imported scripts and rejects analysis that changes their content. It does not assess script safety or grant execution approval.
 
-- **[powershellRunner.mts](./src/execution/powershellRunner.mts)**: Manages the execution of PowerShell scripts, including sandboxing, parameter handling, and output processing.
+- **[powershellRunner.mts](./src/execution/powershellRunner.mts)**: Requires authorization for dynamic flows, checks the approved snapshot immediately before launch, and delegates execution to the Windows broker. Reviewed built-in actions use a separate path.
+
+- **[scriptApproval.mts](./src/execution/scriptApproval.mts)**: Owns session-local approval records, exact-invocation checks, single-use launch permits, script review and revocation.
 
 - **Namespace Schemas**: The `./src/namespaces/` directory contains schema files for specific namespaces, such as `archives`, `data`, `files`, `network`, `processes`, `services`, and `system`. These schemas define actions for specialized operations like file compression, data manipulation, and network interactions.
 
@@ -93,8 +101,8 @@ By following these steps, you can extend the `powershell-typeagent` package to s
 ### Entry points
 
 - `./agent/manifest` → [./src/manifest.json](./src/manifest.json)
-- `./agent/handlers` → `./dist/actionHandler.mjs` _(not found on disk)_
-- `./recipe` → `./dist/types/scriptRecipe.js` _(not found on disk)_
+- `./agent/handlers` → `./dist/actionHandler.mjs` _(generated by the package build)_
+- `./recipe` → `./dist/types/scriptRecipe.js` _(generated by the package build)_
 
 ### Dependencies
 
@@ -104,8 +112,9 @@ Workspace:
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-flows](../../../packages/agent-flows/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 
-External: `@anthropic-ai/claude-agent-sdk`, `debug`
+External: `debug`
 
 ### Used by
 
@@ -123,7 +132,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`
 - [./src/namespaces/services/servicesSchema.agr](./src/namespaces/services/servicesSchema.agr)
 - [./src/namespaces/system/systemSchema.agr](./src/namespaces/system/systemSchema.agr)
 - [./src/schema/allActionsSchema.ts](./src/schema/allActionsSchema.ts)
-- _…and 15 more under `./src/`._
+- _…and 28 more under `./src/`._
 
 ### Agent surface
 
@@ -132,12 +141,13 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`
 
 ### Environment variables
 
-_1 environment variable referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_2 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `TYPEAGENT_NO_SAMPLES`
+- `TYPEAGENT_POWERSHELL_BROKER`
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter powershell-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `b788032289fd1cc6a2236a343460079b3bb3cf9a` on `2026-10-19T17:39:22.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/powershell-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

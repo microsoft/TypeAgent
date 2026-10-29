@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import {
@@ -16,6 +17,7 @@ import {
     acquisitionToolNames,
     inventoryToolNames,
     knowledgeToolNames,
+    understandingToolNames,
 } from "@typeagent/memory-client";
 import type {
     DocumentIngestRequest,
@@ -34,9 +36,15 @@ import type {
     MemoryServiceCapabilities,
     MemorySource,
     SourceReplaceRequest,
+    UnderstandingResult,
+    UnderstandingModuleRequest,
+    UnderstandingModuleResult,
 } from "@typeagent/memory-service";
 import { MemoryMcpServer } from "../src/memoryMcpServer.js";
 import { MemoryServiceHost } from "../src/memoryServiceHost.js";
+import { MemoryAppSessions } from "../src/memoryAppSessions.js";
+
+const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
 
 class PairedTransport implements Transport {
     public peer?: PairedTransport;
@@ -387,7 +395,193 @@ class WaitingMemoryService extends FakeMemoryService {
     }
 }
 
-describe("host-only memory capability forwarding", () => {});
+class PreviewMemoryService extends FakeMemoryService {
+    public async understandingModule(
+        request: UnderstandingModuleRequest,
+    ): Promise<UnderstandingModuleResult> {
+        return { schemaVersion: 1, ...request, status: "ready", citations: [] };
+    }
+
+    public async understand(): Promise<UnderstandingResult> {
+        return {
+            schemaVersion: 1,
+            snapshotId: "00000000-0000-4000-8000-000000000001",
+            turnId: "00000000-0000-4000-8000-000000000002",
+            corpusId: "corpus-1",
+            question: "What is remembered?",
+            expiresAt: "2099-01-01T00:00:00Z",
+            answer: {
+                status: "answered",
+                title: "Remembered context",
+                summary: {
+                    text: "A grounded explanation.",
+                    evidenceIds: ["s0"],
+                    role: "memory",
+                },
+                sections: [],
+                unknowns: [],
+                followUps: [],
+            },
+            citations: [],
+            modules: [],
+            warnings: [],
+        };
+    }
+}
+
+describe("opt-in HTTP Memory Apps sessions", () => {
+    test.each([false, true])(
+        "typed native clients keep their ordinary envelope with Apps=%s",
+        async (previews) => {
+            const service = new PreviewMemoryService();
+            const host = await MemoryServiceHost.start(service, { previews });
+            const client = await McpMemoryServiceClient.create({
+                kind: "http",
+                url: host.endpoint,
+                headers: { authorization: `Bearer ${host.bearerToken}` },
+            });
+            try {
+                const direct = new InProcessMemoryServiceClient(service);
+                const request = {
+                    corpusId: "corpus-1",
+                    question: "What is remembered?",
+                };
+                const result = await client.understand(request);
+                expect(result).toEqual(await direct.understand(request));
+                const module = {
+                    corpusId: request.corpusId,
+                    snapshotId: result.snapshotId,
+                    kind: "sources" as const,
+                };
+                expect(await client.understandingModule(module)).toEqual(
+                    await direct.understandingModule(module),
+                );
+            } finally {
+                await client.close();
+                await host.close();
+            }
+        },
+    );
+    test("keeps initialize capabilities per connection and preserves bearer authentication", async () => {
+        const host = await MemoryServiceHost.start(new PreviewMemoryService(), {
+            previews: true,
+        });
+        const clients: Client[] = [];
+        try {
+            for (const html of [true, false]) {
+                const capabilities = {
+                    roots: {},
+                    ...(html
+                        ? {
+                              extensions: {
+                                  "io.modelcontextprotocol/ui": {
+                                      mimeTypes: ["text/html;profile=mcp-app"],
+                                  },
+                              },
+                          }
+                        : {}),
+                };
+                const client = new Client(
+                    { name: `preview-${html}`, version: "1" },
+                    {
+                        capabilities,
+                    },
+                );
+                clients.push(client);
+                await client.connect(
+                    new StreamableHTTPClientTransport(new URL(host.endpoint), {
+                        requestInit: {
+                            headers: {
+                                authorization: `Bearer ${host.bearerToken}`,
+                            },
+                        },
+                    }) as Transport,
+                );
+            }
+            for (const [index, client] of clients.entries()) {
+                const result = await client.callTool({
+                    name: "memory_preview",
+                    arguments: {
+                        corpusId: "corpus-1",
+                        question: "What is remembered?",
+                    },
+                });
+                expect(result.isError).not.toBe(true);
+                expect(!!result._meta?.["typeagent.memory.preview"]).toBe(
+                    index === 0,
+                );
+            }
+            expect(
+                (
+                    await clients[0].readResource({
+                        uri: "ui://typeagent-memory/preview-v1.html",
+                    })
+                ).contents[0].mimeType,
+            ).toBe("text/html;profile=mcp-app");
+            expect((await fetch(host.endpoint)).status).toBe(401);
+            const missing = await fetch(host.endpoint, {
+                headers: {
+                    authorization: `Bearer ${host.bearerToken}`,
+                    "mcp-session-id": "unknown",
+                    accept: "text/event-stream",
+                },
+            });
+            expect(missing.status).toBe(404);
+        } finally {
+            await Promise.all(clients.map((client) => client.close()));
+            await host.close();
+        }
+    });
+
+    test("expires sessions absolutely and releases active servers", async () => {
+        clock.useFakeTimers({
+            doNotFake: ["nextTick", "setImmediate", "performance"],
+        });
+        const active = new Set<MemoryMcpServer>();
+        const onError = clock.fn();
+        const sessions = new MemoryAppSessions(
+            new PreviewMemoryService(),
+            active,
+            onError,
+        );
+        const request = new Request("http://localhost/mcp", {
+            method: "POST",
+            headers: {
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+            },
+        });
+        try {
+            const response = await sessions.handle(request, {
+                jsonrpc: "2.0",
+                id: 1,
+                method: "initialize",
+                params: {
+                    protocolVersion: "2025-11-25",
+                    capabilities: {},
+                    clientInfo: { name: "expiry-test", version: "1" },
+                },
+            });
+            await response.text();
+            const id = response.headers.get("mcp-session-id");
+            expect(id).toBeTruthy();
+            expect(active.size).toBe(1);
+            await clock.advanceTimersByTimeAsync(15 * 60_000);
+            expect(active.size).toBe(0);
+            expect(onError).not.toHaveBeenCalled();
+            const expired = await sessions.handle(
+                new Request("http://localhost/mcp", {
+                    headers: { "mcp-session-id": id! },
+                }),
+                undefined,
+            );
+            expect(expired.status).toBe(404);
+        } finally {
+            await Promise.all([...active].map((server) => server.close()));
+            clock.useRealTimers();
+        }
+    });
+});
 
 describe("MemoryMcpServer", () => {
     let server: MemoryMcpServer;
@@ -416,6 +610,7 @@ describe("MemoryMcpServer", () => {
             [
                 ...Object.values(agentSessionToolNames),
                 ...Object.values(memoryToolNames),
+                ...Object.values(understandingToolNames),
                 ...Object.values(topicToolNames),
                 ...Object.values(viewToolNames),
                 ...Object.values(schemaViewToolNames),

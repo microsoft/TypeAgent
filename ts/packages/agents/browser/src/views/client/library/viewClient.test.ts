@@ -6,7 +6,9 @@ import {
     invokeView,
     onViewEvent,
     connectViewEvents,
+    streamUnderstanding,
 } from "./viewClient";
+import { TextDecoder } from "node:util";
 import { ViewService } from "./knowledgeUtilities";
 
 class FakeEventSource extends EventTarget {
@@ -33,6 +35,7 @@ beforeEach(() => {
     Object.assign(globalThis, {
         fetch: fetchMock,
         EventSource: FakeEventSource,
+        TextDecoder,
     });
     fetchMock.mockReset();
 });
@@ -68,6 +71,7 @@ test("HTTP and transport errors are explicit", async () => {
             error: "View agent disconnected",
         }),
     });
+
     await expect(invokeView("getLibraryStats")).rejects.toThrow(
         "View agent disconnected",
     );
@@ -77,6 +81,70 @@ test("HTTP and transport errors are explicit", async () => {
     );
 });
 
+function respondStream(parts: string[]) {
+    let cursor = 0;
+    const reader = {
+        read: async () =>
+            cursor < parts.length
+                ? {
+                      done: false,
+                      value: new Uint8Array(Buffer.from(parts[cursor++])),
+                  }
+                : { done: true, value: undefined },
+        cancel: jest.fn().mockResolvedValue(undefined),
+        releaseLock: jest.fn(),
+    };
+    fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: { getReader: () => reader },
+    });
+    return reader;
+}
+
+test("understanding SSE delivers partial frames and requires explicit completion", async () => {
+    const request = { corpusId: "corpus", question: "Explain the gallery" };
+    const value = { ...request, schemaVersion: 1, snapshotId: "snapshot" };
+    const frame = `data: ${JSON.stringify({ type: "result", data: value })}\n\n`;
+    const reader = respondStream([
+        ": keepalive\n\n",
+        frame.slice(0, 25),
+        frame.slice(25),
+        'data: {"type":"complete"}\n\n',
+    ]);
+    const received = jest.fn();
+    await streamUnderstanding(request, received, new AbortController().signal);
+    expect(received).toHaveBeenCalledWith(value);
+    expect(reader.cancel).toHaveBeenCalledTimes(1);
+    expect(reader.releaseLock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/views/understand");
+});
+
+test("understanding SSE rejects premature EOF, wrong scope, and explicit server errors", async () => {
+    const request = { corpusId: "corpus", question: "Explain" };
+    for (const [parts, message] of [
+        [[], "before completion"],
+        [
+            [
+                `data: ${JSON.stringify({ type: "result", data: { corpusId: "other", question: "Explain" } })}\n\n`,
+            ],
+            "scope",
+        ],
+        [
+            ['data: {"type":"error","error":"Evidence was forgotten"}\n\n'],
+            "forgotten",
+        ],
+    ] as const) {
+        respondStream([...parts]);
+        await expect(
+            streamUnderstanding(
+                request,
+                jest.fn(),
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow(message);
+    }
+});
 test("automation operations use the HTTP API with typed parameters", async () => {
     respond({ items: [], providers: [] });
     await expect(invokeView("listAutomations")).resolves.toEqual({

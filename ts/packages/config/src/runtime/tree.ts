@@ -66,6 +66,7 @@ function endpointToYaml(
     deploymentDefaultCapacity?: number,
 ): ConfigTree {
     const out: ConfigTree = { endpoint: ep.endpoint };
+    if (ep.model !== undefined) out.model = ep.model;
     if (!authEquals(ep.auth, sectionDefaultAuth)) {
         out.auth = authToYaml(ep.auth);
     }
@@ -661,11 +662,14 @@ function readEndpointEntry(
     region?: string;
     tpm?: number;
     wireApi?: WireApi;
+    model?: string;
 } {
     const obj = asObject(node, where);
     const out: ReturnType<typeof readEndpointEntry> = {
         endpoint: asString(obj.endpoint, `${where}.endpoint`),
     };
+    if (obj.model !== undefined)
+        out.model = asString(obj.model, `${where}.model`);
     if (obj.auth !== undefined) out.auth = readAuth(obj.auth, `${where}.auth`);
     if (obj.region !== undefined)
         out.region = asString(obj.region, `${where}.region`);
@@ -849,6 +853,7 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
                 if (
                     capacity !== undefined ||
                     ep.tpm !== undefined ||
+                    ep.model !== undefined ||
                     priority !== defPriority ||
                     (ep.wireApi !== undefined &&
                         ep.wireApi !== DEFAULT_WIRE_API)
@@ -860,6 +865,7 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
                     };
                     if (capacity !== undefined) o.capacity = capacity;
                     if (ep.tpm !== undefined) o.tpm = ep.tpm;
+                    if (ep.model !== undefined) o.model = ep.model;
                     o.priority = priority;
                     if (
                         ep.wireApi !== undefined &&
@@ -876,7 +882,11 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
                         (o) =>
                             "{" +
                             Object.entries(o)
-                                .map(([k, v]) => `${k}:${v}`)
+                                .map(([k, v]) =>
+                                    k === "model"
+                                        ? `${k}:${JSON.stringify(v)}`
+                                        : `${k}:${v}`,
+                                )
                                 .join(",") +
                             "}",
                     )

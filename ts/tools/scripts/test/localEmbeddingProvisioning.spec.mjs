@@ -62,6 +62,28 @@ test("fresh install selects pinned lightweight MiniLM with offline inference", (
     );
     assert.equal(config.embedding, undefined);
     assert.equal(config.embeddingModels["local-embeddinggemma"], undefined);
+    assert.equal(config.copilot.defaultModel, "gpt-6-luna");
+});
+
+test("Copilot provisioning preserves an explicit chat-model override", (t) => {
+    const { config } = generated(t, ["--copilot-model", "gpt-6.1-sol"]);
+    assert.equal(config.copilot.defaultModel, "gpt-6.1-sol");
+});
+
+test("switching to Copilot defaults to Luna 6 unless explicitly overridden", (t) => {
+    for (const override of [undefined, "gpt-6.1-sol"]) {
+        const { out } = generated(t);
+        const result = cli("setModelProvider.mjs", [
+            "--provider",
+            "copilot",
+            "--config",
+            out,
+            ...(override ? ["--copilot-model", override] : []),
+        ]);
+        assert.equal(result.status, 0, result.stderr);
+        const config = yaml.load(fs.readFileSync(out, "utf8"));
+        assert.equal(config.copilot.defaultModel, override ?? "gpt-6-luna");
+    }
 });
 
 test("Gemma is an explicit pinned text+image CPU/FP32 profile, not MiniLM", (t) => {

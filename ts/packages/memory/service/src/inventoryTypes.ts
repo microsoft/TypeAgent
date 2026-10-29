@@ -7,6 +7,7 @@ import type {
     ViewBuildJob,
     ViewBuildTargetResult,
     ViewBuildSnapshot,
+    ViewMergeConflict,
     ViewDefinition,
     ViewPublicationStatus,
     ViewSnapshot,
@@ -22,6 +23,7 @@ export interface InventoryPageRequest {
 }
 export interface ViewSummaryRequest extends InventoryPageRequest {
     kind?: ViewDefinition["kind"];
+    excludeKinds?: ViewDefinition["kind"][];
 }
 export interface QuestionSummaryRequest extends InventoryPageRequest {
     viewId?: string;
@@ -70,6 +72,7 @@ export interface ViewBuildResultSummary
         "viewId" | "state" | "reason" | "revisionId" | "conflictId"
     > {
     current: boolean;
+    conflictState?: ViewMergeConflict["state"] | "missing";
     snapshot: Pick<ViewBuildSnapshot, "pipeline"> & {
         definition: Pick<ViewDefinition, "kind">;
     };

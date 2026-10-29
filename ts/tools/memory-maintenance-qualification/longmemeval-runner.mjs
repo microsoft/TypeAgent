@@ -7,6 +7,12 @@ import {
     reconcileLiveSource,
     validateLiveResumeSources,
 } from "./live-resume.mjs";
+import {
+    abortableObservation,
+    checkpointObservation,
+    createCheckpointObserver,
+    knowledgeWaitOutcome,
+} from "./knowledge-observer.mjs";
 
 export const officialJudgeSha256 =
     "ecce9c4c79dc89d99534ac17b383a5cbb5b9f0c69ee98adaf0684742e3d95251";
@@ -108,39 +114,159 @@ async function prepareKnowledge(service, construction, record, controls) {
         });
         await controls.persist();
     }
+    const failure =
+        controls.failure ??
+        ((error) => ({
+            name: error.name,
+            message: error.message,
+        }));
+    const observer = service.getKnowledgeCheckpoint
+        ? createCheckpointObserver(service, record, { ...controls, failure })
+        : undefined;
+    const waitController = new AbortController();
+    const waitSignal = AbortSignal.any([
+        controls.signal,
+        waitController.signal,
+    ]);
+    const observed = observer?.done.then(
+        () => undefined,
+        (error) => {
+            waitController.abort(error);
+            return error;
+        },
+    );
+    const wait = (record.knowledgeWait = {
+        startedEpochMs: Date.now(),
+        outcome: "running",
+    });
+    let executionError;
     try {
-        record.knowledgeCheckpoint = await service.waitForKnowledgeCheckpoint({
-            corpusId: record.corpusId,
-            checkpointId: record.knowledgeCheckpoint.checkpointId,
-            timeoutMs,
-        });
-    } catch (error) {
-        if (service.getKnowledgeCheckpoint) {
-            try {
-                const checkpoint = await service.getKnowledgeCheckpoint({
+        let waitError;
+        try {
+            const checkpoint = await abortableObservation(
+                service.waitForKnowledgeCheckpoint({
                     corpusId: record.corpusId,
                     checkpointId: record.knowledgeCheckpoint.checkpointId,
-                });
-                if (checkpoint) record.knowledgeCheckpoint = checkpoint;
-                await controls.persist();
+                    timeoutMs,
+                }),
+                waitSignal,
+            );
+            wait.outcome = "returned";
+            wait.returnedState = checkpoint.state;
+            if (!observer) {
+                record.knowledgeCheckpoint = checkpoint;
+                record.knowledgeObservation = {
+                    ...checkpointObservation(checkpoint),
+                    status: "current",
+                    active: false,
+                    source: "wait-return",
+                };
+            }
+        } catch (error) {
+            waitError = error;
+            wait.outcome = knowledgeWaitOutcome(error, waitSignal);
+            wait.error = failure(error);
+        }
+        wait.finishedEpochMs = Date.now();
+        if (observer) {
+            try {
+                await observer.refresh();
             } catch (statusError) {
+                if (!waitError) throw statusError;
                 throw new AggregateError(
-                    [error, statusError],
+                    [waitError, statusError],
                     "Knowledge wait failed and checkpoint status could not be retained",
                 );
             }
         }
+        await controls.persist();
+        if (waitError) throw waitError;
+        if (record.knowledgeCheckpoint.state !== "ready") {
+            const error = new Error(
+                `Knowledge is not ready: ${record.knowledgeCheckpoint.state}; ${record.knowledgeCheckpoint.reasons.join("; ")}`,
+            );
+            error.name = "KnowledgeNotReadyError";
+            error.code = "EKNOWLEDGENOTREADY";
+            throw error;
+        }
+    } catch (error) {
+        executionError = error;
         throw error;
+    } finally {
+        if (observer) {
+            await Promise.allSettled([observer.stop()]);
+            const observationError = await observed;
+            if (observationError && !executionError) throw observationError;
+        }
     }
-    await controls.persist();
-    if (record.knowledgeCheckpoint.state !== "ready") {
-        const error = new Error(
-            `Knowledge is not ready: ${record.knowledgeCheckpoint.state}; ${record.knowledgeCheckpoint.reasons.join("; ")}`,
-        );
-        error.name = "KnowledgeNotReadyError";
-        error.code = "EKNOWLEDGENOTREADY";
-        throw error;
+}
+
+export async function preflightRetainedKnowledge(service, records, controls) {
+    const retained = Object.values(records).filter(
+        (record) => record?.corpusId,
+    );
+    async function inspect(record) {
+        controls.signal.throwIfAborted();
+        const report = (record.retainedKnowledgePreflight ??= {
+            attempts: [],
+        });
+        const attempt = { startedEpochMs: Date.now(), status: "reading" };
+        report.attempts.push(attempt);
+        try {
+            const status = await (controls.readRetainedKnowledgeStatus
+                ? controls.readRetainedKnowledgeStatus(record.corpusId)
+                : service.getKnowledgeStatus(record.corpusId));
+            controls.signal.throwIfAborted();
+            attempt.failedReceipts = structuredClone(
+                status.discovery.receipts.filter(
+                    (receipt) => receipt.state === "failed",
+                ),
+            );
+            attempt.interruptedReceipts = structuredClone(
+                status.discovery.receipts.filter(
+                    (receipt) => receipt.state === "running",
+                ),
+            );
+            attempt.discoveryError = status.discovery.error;
+            attempt.status =
+                attempt.failedReceipts.length ||
+                attempt.interruptedReceipts.length ||
+                attempt.discoveryError
+                    ? "blocked"
+                    : "clear";
+            attempt.observedEpochMs = Date.now();
+        } catch (error) {
+            attempt.status = "unknown";
+            attempt.error = controls.failure(error);
+            try {
+                await controls.persist();
+            } catch (persistError) {
+                attempt.persistenceError = controls.failure(persistError);
+                throw new AggregateError(
+                    [error, persistError],
+                    "Retained preflight status and persistence failed",
+                );
+            }
+            throw error;
+        }
+        await controls.persist();
     }
+    const errors = [];
+    let next = 0;
+    await Promise.all(
+        Array.from({ length: Math.min(2, retained.length) }, async () => {
+            while (next < retained.length) {
+                const record = retained[next++];
+                try {
+                    await inspect(record);
+                } catch (error) {
+                    errors.push(error);
+                }
+            }
+        }),
+    );
+    if (errors.length)
+        throw new AggregateError(errors, "Retained knowledge preflight failed");
 }
 
 export async function executeMemoryCase(
@@ -312,7 +438,18 @@ export function benchmarkScorecard(prepared, records, events) {
         (record) => record.status === "complete",
     );
     const answerTimes = completed.map((record) => record.answerMilliseconds);
-    const usages = events.filter((event) => event.usage);
+    const usages = events
+        .filter((event) => event.usage)
+        .map(({ usage }) => {
+            const prompt = usage.prompt_tokens ?? usage.input_tokens ?? 0;
+            const completion =
+                usage.completion_tokens ?? usage.output_tokens ?? 0;
+            return {
+                prompt,
+                completion,
+                total: usage.total_tokens ?? prompt + completion,
+            };
+        });
     return {
         protocol:
             "Official reference answers and pinned judge prompts; actual configured judge model, not assumed official GPT-4o",
@@ -365,18 +502,12 @@ export function benchmarkScorecard(prepared, records, events) {
         ],
         observedRequests: events.length,
         requestsWithUsage: usages.length,
-        knownPromptTokens: usages.reduce(
-            (sum, event) => sum + (event.usage.prompt_tokens ?? 0),
-            0,
-        ),
+        knownPromptTokens: usages.reduce((sum, usage) => sum + usage.prompt, 0),
         knownCompletionTokens: usages.reduce(
-            (sum, event) => sum + (event.usage.completion_tokens ?? 0),
+            (sum, usage) => sum + usage.completion,
             0,
         ),
-        knownTotalTokens: usages.reduce(
-            (sum, event) => sum + (event.usage.total_tokens ?? 0),
-            0,
-        ),
+        knownTotalTokens: usages.reduce((sum, usage) => sum + usage.total, 0),
         dollarCost: null,
         costQualification:
             "Observed provider usage only; no verified token pricing configured; interrupted requests may lack usage",

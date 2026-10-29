@@ -3,6 +3,7 @@
 
 import type { AgentEdition } from "./agentEdition.js";
 import type { MemoryGraphService } from "./graphTypes.js";
+import type { MemoryUnderstandingService } from "./understandingTypes.js";
 import type {
     AgentMemorySearchRequest,
     AgentMemorySearchResult,
@@ -422,6 +423,7 @@ export type AnswerEvidence =
       });
 
 export interface IntegratedAnswerDiagnostics {
+    influencingEvidence?: AnswerEvidence[];
     sourceSelection?: IndexedSelectionDiagnostics;
     refinement?: {
         queries: string[];
@@ -440,6 +442,10 @@ export interface IntegratedAnswerDiagnostics {
 }
 
 export interface MemoryAnswerRequest {
+    evidenceSnapshotId?: string;
+    prepareOnly?: boolean;
+    deferRefinement?: boolean;
+    resumeRefinement?: boolean;
     knowledgeCheckpointId?: string;
     includeDiagnostics?: boolean;
     temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
@@ -460,6 +466,8 @@ export interface MemoryAnswerRequest {
 }
 
 export interface MemoryAnswerResult {
+    evidenceSnapshotId?: string;
+    refinementPending?: boolean;
     question: string;
     answer: string;
     mode: AnswerMode;
@@ -667,6 +675,7 @@ export interface MemoryServiceCapabilities {
         management: boolean;
         groundedAnswer: boolean;
         scopedKnowledgeGraphs?: boolean;
+        memoryUnderstanding?: boolean;
         sourceSynopses?: boolean;
         agentSessionImportTypes?: AgentSessionImportRequest["importType"][];
     };
@@ -709,7 +718,9 @@ export interface ProcedureVersion {
     previousVersion?: number;
 }
 
-export interface MemoryService extends MemoryGraphService {
+export interface MemoryService
+    extends MemoryGraphService,
+        MemoryUnderstandingService {
     initialize?(): Promise<void>;
     close?(): Promise<void>;
     deferMaintenance?(): () => void;

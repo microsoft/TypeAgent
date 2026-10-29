@@ -144,7 +144,9 @@ async function settle() {
 }
 function click(host: HTMLElement, label: string) {
     const button = [...host.querySelectorAll("button")].find(
-        (button) => button.textContent === label,
+        (button) =>
+            button.textContent === label ||
+            button.getAttribute("aria-label") === label,
     );
     if (!button) throw new Error(`Missing project control: ${label}`);
     button.click();
@@ -276,6 +278,97 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
         panel.dispose();
         jest.restoreAllMocks();
     });
+    test.each([
+        { summary: content.summary, coverageNote: "Selected evidence only" },
+        { summary: undefined, coverageNote: "Selected evidence only" },
+        { summary: undefined, coverageNote: undefined },
+    ])(
+        "brief sidecard separates overview and metadata without losing sections or evidence: %o",
+        async (overview) => {
+            const original = invoke.getMockImplementation()!;
+            const briefContent: ProjectBriefContent = {
+                ...content,
+                ...overview,
+                status: "partial",
+            };
+            invoke.mockImplementation(
+                inventoryFixture((method, params) =>
+                    method === "memoryListViews"
+                        ? Promise.resolve({
+                              head,
+                              views: [
+                                  {
+                                      ...view,
+                                      content: briefContent,
+                                      createdAt: "2026-10-27T19:08:34.209Z",
+                                  },
+                              ],
+                          })
+                        : original(method, params),
+                ),
+            );
+            await panel.refresh();
+            click(host, "Payments reliability");
+            await settle();
+            const article = host.querySelector(".hub-view-document")!;
+            const flow = article.querySelector(".hub-view-reading-flow")!;
+            const sidecard = flow.querySelector(
+                'aside[aria-label="About this brief"]',
+            )!;
+            expect(sidecard.querySelector("h3")!.textContent).toBe(
+                overview.summary ? "Synopsis" : "About this brief",
+            );
+            expect(
+                sidecard.querySelector(".hub-view-infobox-label")!.textContent,
+            ).toBe("Brief overview");
+            expect(
+                sidecard.querySelector(".hub-view-lead")?.textContent.trim(),
+            ).toBe(overview.summary);
+            expect(sidecard.querySelector(".hub-view-note")?.textContent).toBe(
+                overview.coverageNote
+                    ? "Coverage: Selected evidence only"
+                    : undefined,
+            );
+            expect(sidecard.textContent).toContain("Version 1");
+            expect(sidecard.textContent).toContain("Completeness: partial");
+            expect(sidecard.querySelector("time")!.dateTime).toBe(
+                "2026-10-27T19:08:34.209Z",
+            );
+            expect(
+                [...flow.querySelectorAll(".hub-view-section")].map(
+                    (section) => ({
+                        heading: section.querySelector("h3")!.textContent,
+                        body: section
+                            .querySelector(".markdown-preview")!
+                            .textContent.trim(),
+                    }),
+                ),
+            ).toEqual(
+                content.sections.map((section) => ({
+                    heading: section.heading,
+                    body: section.body,
+                })),
+            );
+            expect(sidecard.querySelector(".hub-view-section")).toBeNull();
+            expect(
+                article.querySelector(":scope > details > summary")!
+                    .textContent,
+            ).toBe("Sources (1)");
+            expect(
+                article.querySelector(
+                    'button[aria-label="Open exact evidence status"]',
+                ),
+            ).not.toBeNull();
+            click(host, "Edit");
+            expect(
+                host.querySelector(
+                    '[aria-label="Project brief fixed template"]',
+                ),
+            ).not.toBeNull();
+            expect(errors).toEqual([]);
+        },
+    );
+
     test("kind picker builds indexed project summaries and fixed-template edits retain the query selector", async () => {
         await panel.refresh();
         click(host, "Build views");
@@ -399,7 +492,8 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
         });
         await settle();
         expect(host.textContent).not.toContain("Do not leak across scope");
-        expect(host.textContent).toContain("across your collections");
+        expect(host.textContent).toContain("Collection: Payments");
+        expect(host.querySelectorAll(".hub-view-card")).toHaveLength(1);
         expect(host.querySelector('[aria-label="View kind"]')).toBeNull();
     });
     test("older capabilities do not advertise or open an unsupported project kind", async () => {

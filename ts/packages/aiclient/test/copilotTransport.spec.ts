@@ -286,15 +286,38 @@ describe("selectCopilotModel", () => {
         expect(selected?.id).toBe("gpt-6-luna");
     });
 
-    test.each(["luna", "sol"])(
-        "uses GPT-5.6 %s before generic fallbacks when GPT-6 is unavailable",
-        (tier) => {
+    test.each([
+        ["gpt-6-luna", "luna"],
+        ["gpt-6-sol", "sol"],
+        ["gpt-6.1-sol", "sol"],
+        ["gpt-6.1-terra", "terra"],
+    ])(
+        "uses GPT-5.6 %s tier before generic fallbacks when unavailable",
+        (requested, tier) => {
             const selected = selectCopilotModel(
-                `gpt-6-${tier}`,
+                requested,
                 ["gpt-5.4-mini"],
                 [makeModel("gpt-5.4-mini"), makeModel(`gpt-5.6-${tier}`)],
             );
             expect(selected?.id).toBe(`gpt-5.6-${tier}`);
+        },
+    );
+
+    test.each(["gpt-6.1-sol", "gpt-6.1-terra"])(
+        "prefers the exact requested %s over the GPT-5.6 tier",
+        (requested) => {
+            const tier = requested.split("-").pop();
+            expect(
+                selectCopilotModel(
+                    requested,
+                    ["gpt-5.4-mini"],
+                    [
+                        makeModel(`gpt-5.6-${tier}`),
+                        makeModel(requested),
+                        makeModel("gpt-5.4-mini"),
+                    ],
+                )?.id,
+            ).toBe(requested);
         },
     );
 

@@ -5,6 +5,7 @@ import type { ViewBuildJob, ViewVersion } from "@typeagent/memory-service";
 import { viewMaintenanceDefinitionSchema } from "@typeagent/memory-client/view-protocol";
 import { invokeMemory } from "./viewClient";
 import { rbButton, rbNode } from "./memoryHubDocumentUi";
+import { setTabLabel } from "./memoryHubUi";
 
 export function createMaintenancePanel(
     view: ViewVersion,
@@ -193,49 +194,63 @@ export function createMaintenancePanel(
                 await options.saved();
             }),
         ),
-        rbButton("Preview maintenance", () =>
-            options.action(async () => {
-                if (!options.isCurrent()) return;
-                requireSaved();
-                const plan = await invokeMemory("memoryPlanViewMaintenance", {
-                    corpusId: view.corpusId,
-                    viewIds: [view.viewId],
-                });
-                if (!options.isCurrent()) return;
-                result.textContent = JSON.stringify(plan, null, 2);
-                summary.textContent = `Preview ready: ${plan.targets.length} explicit target(s). Inspect the exact plan before running.`;
-            }),
+        setTabLabel(
+            rbButton("Preview maintenance", () =>
+                options.action(async () => {
+                    if (!options.isCurrent()) return;
+                    requireSaved();
+                    const plan = await invokeMemory(
+                        "memoryPlanViewMaintenance",
+                        {
+                            corpusId: view.corpusId,
+                            viewIds: [view.viewId],
+                        },
+                    );
+                    if (!options.isCurrent()) return;
+                    result.textContent = JSON.stringify(plan, null, 2);
+                    summary.textContent = `Preview ready: ${plan.targets.length} explicit target(s). Inspect the exact plan before running.`;
+                }),
+            ),
+            "fa-screwdriver-wrench",
+            "Preview maintenance",
         ),
-        rbButton("Run manual maintenance", () =>
-            options.action(async () => {
-                if (!options.isCurrent()) return;
-                requireSaved();
-                const plan = await invokeMemory("memoryPlanViewMaintenance", {
-                    corpusId: view.corpusId,
-                    viewIds: [view.viewId],
-                });
-                if (!options.isCurrent()) return;
-                const receipt = await invokeMemory("memoryMaintainViews", {
-                    corpusId: view.corpusId,
-                    expectedHead: plan.expectedHead,
-                    targets: plan.targets.map(
-                        ({ viewId, expectedVersion }) => ({
-                            viewId,
-                            expectedVersion,
-                        }),
-                    ),
-                });
-                if (!options.isCurrent()) return;
-                result.textContent = JSON.stringify(
-                    { receiptId: receipt.receiptId, plan: receipt.plan },
-                    null,
-                    2,
-                );
-                if (receipt.job) options.onBuild(receipt.job);
-                summary.textContent = receipt.job
-                    ? `Update started: ${receipt.job.state}. Results are recorded per target.`
-                    : "Maintenance receipt recorded. No build job was started; inspect the exact receipt.";
-            }),
+        setTabLabel(
+            rbButton("Run manual maintenance", () =>
+                options.action(async () => {
+                    if (!options.isCurrent()) return;
+                    requireSaved();
+                    const plan = await invokeMemory(
+                        "memoryPlanViewMaintenance",
+                        {
+                            corpusId: view.corpusId,
+                            viewIds: [view.viewId],
+                        },
+                    );
+                    if (!options.isCurrent()) return;
+                    const receipt = await invokeMemory("memoryMaintainViews", {
+                        corpusId: view.corpusId,
+                        expectedHead: plan.expectedHead,
+                        targets: plan.targets.map(
+                            ({ viewId, expectedVersion }) => ({
+                                viewId,
+                                expectedVersion,
+                            }),
+                        ),
+                    });
+                    if (!options.isCurrent()) return;
+                    result.textContent = JSON.stringify(
+                        { receiptId: receipt.receiptId, plan: receipt.plan },
+                        null,
+                        2,
+                    );
+                    if (receipt.job) options.onBuild(receipt.job);
+                    summary.textContent = receipt.job
+                        ? `Update started: ${receipt.job.state}. Results are recorded per target.`
+                        : "Maintenance receipt recorded. No build job was started; inspect the exact receipt.";
+                }),
+            ),
+            "fa-screwdriver-wrench",
+            "Run manual maintenance",
         ),
         manifest,
         summary,
