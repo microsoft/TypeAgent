@@ -4425,7 +4425,12 @@ export class FileMemoryService
             features: {
                 ...capabilities.features,
                 scopedKnowledgeGraphs: true,
-                ...(this.understanding ? { memoryUnderstanding: true } : {}),
+                ...(this.understanding
+                    ? {
+                          memoryUnderstanding: true,
+                          memoryDocumentUnderstanding: true,
+                      }
+                    : {}),
                 sourceSynopses: this.sourceSynopsesEnabled,
                 agentSessionImportTypes: this.agentSessionImportsEnabled
                     ? ["agent-session-jsonl", "copilot-session-jsonl"]

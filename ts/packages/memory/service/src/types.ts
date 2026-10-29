@@ -676,6 +676,7 @@ export interface MemoryServiceCapabilities {
         groundedAnswer: boolean;
         scopedKnowledgeGraphs?: boolean;
         memoryUnderstanding?: boolean;
+        memoryDocumentUnderstanding?: boolean;
         sourceSynopses?: boolean;
         agentSessionImportTypes?: AgentSessionImportRequest["importType"][];
     };

@@ -83,6 +83,7 @@ let manager: ReturnType<typeof mountMemoryManagement>;
 let searchPanel: ReturnType<typeof mountMemoryHubSearch>;
 let understandingPanel: ReturnType<typeof mountMemoryHubUnderstanding>;
 let pendingUnderstanding: UnderstandingRequest | undefined;
+let documentUnderstandingCapability: Promise<boolean>;
 let explorePanel: ReturnType<typeof mountMemoryHubExplore>;
 let graphPanel: ReturnType<typeof mountMemoryHubGraph>;
 let changesPanel: ReturnType<typeof mountMemoryHubChanges>;
@@ -302,13 +303,16 @@ function mountPhaseTwo(): void {
         onGraph: (nodeId) =>
             open({ page: "explore", webView: "entities", webEntity: nodeId }),
     });
-    void invokeView("memoryViewCapabilities", {})
-        .then((capabilities) => {
-            searchPanel.setUnderstandingEnabled(
-                capabilities.features.memoryUnderstanding === true,
-            );
-        })
-        .catch(onError);
+    documentUnderstandingCapability = invokeView(
+        "memoryViewCapabilities",
+        {},
+    ).then((capabilities) => {
+        const enabled =
+            capabilities.features.memoryDocumentUnderstanding === true;
+        searchPanel.setUnderstandingEnabled(enabled);
+        return enabled;
+    });
+    void documentUnderstandingCapability.catch(onError);
     explorePanel = mountMemoryHubExplore(el("hubExplore"), {
         scope: selectedScope,
         onOpenSource,
@@ -1406,10 +1410,19 @@ function restoreFocus(visiblePage: (typeof pages)[number]): void {
 
 async function showReadingPage(
     page: "search" | "understanding",
+    version: number,
 ): Promise<void> {
     if (page === "understanding") {
         const request = pendingUnderstanding ?? restoredUnderstanding();
         pendingUnderstanding = undefined;
+        const supported = request.source
+            ? await documentUnderstandingCapability
+            : true;
+        if (version !== routeVersion) return;
+        if (!supported)
+            throw new Error(
+                "This host does not support exact-document explanations. Update the service before explaining this source.",
+            );
         await understandingPanel.show(request);
     } else {
         const query = pendingSearchQuery;
@@ -1451,7 +1464,7 @@ async function applyRoute(): Promise<void> {
     await showManagedRoute(route, item, version);
     if (version !== routeVersion) return;
     if (route.page === "understanding" || route.page === "search") {
-        await showReadingPage(route.page);
+        await showReadingPage(route.page, version);
     } else if (route.page === "explore") {
         if (!route.webView) await explorePanel.show();
         else if (route.webView === "analytics")

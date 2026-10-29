@@ -633,7 +633,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     viewInvoke.mockImplementation(
         async (method: string, params: { query?: string } = {}) => {
             if (method === "memoryViewCapabilities")
-                return { features: { memoryUnderstanding: false } };
+                return { features: { memoryUnderstanding: true } };
             if (method === "memoryHubSnapshot") {
                 if (initialSnapshotPending) {
                     initialSnapshotPending = false;
