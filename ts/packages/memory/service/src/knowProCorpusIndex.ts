@@ -645,11 +645,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
 
     private createSettings(): DocMemorySettings {
         const settings = this.settingsFactory?.() ?? createDocMemorySettings();
-        if (!this.settingsFactory)
-            settings.conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
-                kp.createKnowledgeExtractor(
-                    maintenanceExtractionModel(settings.languageModel),
-                );
+        maintenanceExtractionModel(settings.languageModel);
         settings.conversationSettings.messageTextIndexSettings.splitText ??=
             splitDocPartTextForEmbedding;
         return settings;

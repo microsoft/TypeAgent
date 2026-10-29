@@ -852,7 +852,8 @@ export class ViewBuildRunner {
             );
         const input = structuredClone(result.snapshot);
         signal.throwIfAborted();
-        const pages = await abortable(this.owner.wikiPages(input), signal);
+        const pages = await this.owner.wikiPages(input);
+        signal.throwIfAborted();
         const sources = [
             ...new Map(
                 [
@@ -867,14 +868,13 @@ export class ViewBuildRunner {
         input.influenceSources = sources;
         const scope = this.controllers.get(job.jobId);
         for (const source of sources) scope?.sources.add(source.sourceId);
-        const assessment = parseWikiAssessment(
-            await abortable(
-                this.adapter.assessWikiSubject(input, pages, signal),
-                signal,
-            ),
+        const value = await this.adapter.assessWikiSubject(
+            input,
             pages,
+            signal,
         );
         signal.throwIfAborted();
+        const assessment = parseWikiAssessment(value, pages);
         return { assessment, pages, input };
     }
 
@@ -908,11 +908,8 @@ export class ViewBuildRunner {
                         preparationSignal.throwIfAborted();
                         if (
                             this.owner.canPrepareWikiAssessment &&
-                            !(await abortable(
-                                this.owner.canPrepareWikiAssessment(
-                                    result.snapshot,
-                                ),
-                                preparationSignal,
+                            !(await this.owner.canPrepareWikiAssessment(
+                                result.snapshot,
                             ))
                         )
                             return undefined;

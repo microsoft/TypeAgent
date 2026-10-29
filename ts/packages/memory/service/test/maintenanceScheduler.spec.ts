@@ -8,6 +8,122 @@ import {
     yieldMaintenanceBuild,
 } from "../src/maintenanceConcurrency.js";
 
+test("a passive callback reacquires capacity before continuing after its build returns", async () => {
+    const scheduler = new MaintenanceScheduler(() => false, "manual");
+    let finishBuild!: () => void;
+    const build = new Promise<void>((resolve) => {
+        finishBuild = resolve;
+    });
+    let finishBorrower!: () => void;
+    const borrowed = new Promise<void>((resolve) => {
+        finishBorrower = resolve;
+    });
+    let borrowerStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+        borrowerStarted = resolve;
+    });
+    const order: string[] = [];
+    scheduler.request("first", "wiki", "v1", async () => {
+        await scheduler.waitForBuild(() => build);
+        order.push("first-resumed");
+    });
+    scheduler.request("second", "wiki", "v1", async () => {
+        order.push("borrower-started");
+        borrowerStarted();
+        await borrowed;
+        order.push("borrower-finished");
+    });
+    const draining = scheduler.drain(5000);
+    try {
+        await started;
+        finishBuild();
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(order).toEqual(["borrower-started"]);
+        finishBorrower();
+        expect((await draining).settled).toBe(true);
+        expect(order).toEqual([
+            "borrower-started",
+            "borrower-finished",
+            "first-resumed",
+        ]);
+    } finally {
+        finishBuild();
+        finishBorrower();
+        await scheduler.close();
+        await draining;
+    }
+});
+
+test("shutdown cancels a callback waiting to reacquire capacity", async () => {
+    const scheduler = new MaintenanceScheduler(() => false, "manual");
+    let finishBuild!: () => void;
+    const build = new Promise<void>((resolve) => {
+        finishBuild = resolve;
+    });
+    let borrowerStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+        borrowerStarted = resolve;
+    });
+    let resumed = false;
+    scheduler.request("first", "wiki", "v1", async () => {
+        await scheduler.waitForBuild(() => build);
+        resumed = true;
+    });
+    scheduler.request("second", "wiki", "v1", async (signal) => {
+        borrowerStarted();
+        await delay(10_000, undefined, { signal });
+    });
+    const draining = scheduler.drain(5000);
+    try {
+        await started;
+        finishBuild();
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(resumed).toBe(false);
+        await scheduler.close();
+        expect(resumed).toBe(false);
+        expect((await draining).failures.length).toBeGreaterThan(0);
+    } finally {
+        finishBuild();
+        await scheduler.close();
+        await draining;
+    }
+});
+
+test("a pending dispatch timer rechecks capacity after a passive callback resumes", async () => {
+    const scheduler = new MaintenanceScheduler(() => false, "manual");
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        finish = resolve;
+    });
+    let resumed!: () => void;
+    const ready = new Promise<void>((resolve) => {
+        resumed = resolve;
+    });
+    let secondStarted = false;
+    scheduler.request("first", "wiki", "v1", async () => {
+        await scheduler.waitForBuild(async () => {
+            scheduler.request("second", "wiki", "v1", async () => {
+                secondStarted = true;
+            });
+        });
+        resumed();
+        await gate;
+    });
+    const draining = scheduler.drain(5000);
+    try {
+        await ready;
+        await delay(350);
+        expect(secondStarted).toBe(false);
+        finish();
+        expect((await draining).settled).toBe(true);
+        expect(secondStarted).toBe(true);
+    } finally {
+        finish();
+        await scheduler.close();
+        await draining;
+    }
+});
+
 test("automatic native waits let independent short work reach the build queue without releasing corpus exclusion", async () => {
     const scheduler = new MaintenanceScheduler(
         () => false,

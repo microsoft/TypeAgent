@@ -1214,13 +1214,11 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             view.content.sections.map((section) => section.body).join(" "),
         ).not.toContain("gardening");
         expect(
-            (
-                await service.getViewPublication({
-                    corpusId,
-                    viewId: view.viewId,
-                })
-            )?.indexState,
-        ).toBe("ready");
+            await service.getViewPublication({
+                corpusId,
+                viewId: view.viewId,
+            }),
+        ).toEqual(expect.objectContaining({ indexState: "ready" }));
         const editedContent = structuredClone(view.content);
         editedContent.title = "Human project title";
         const status = editedContent.sections.find(
@@ -1262,6 +1260,63 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 ?.definition.projectSummary?.excludedSourceIds,
         ).toEqual(["irrelevant"]);
         expect(edited.edits?.length).toBeGreaterThan(0);
+    });
+
+    test("bounded automatic reads advance past scoped deferrals without repeating or exceeding the read budget", async () => {
+        await service.close();
+        maintenanceMode = "manual";
+        maintenanceLimits = {
+            maxCandidatesPerPass: 1,
+            maxTargetsPerPass: 2,
+            maxPassesPerGeneration: 4,
+        };
+        rehearsalBudget = false;
+        const assessed: string[] = [];
+        adapter.assessWikiSubject = async (input) => {
+            assessed.push(input.definition.wiki!.query);
+            return {
+                disposition: "defer",
+                purpose: "Only limited evidence",
+                reason: "Insufficient evidence for an article",
+                canonicalViewId: "",
+                sharedFragmentIds: [],
+                essentialDistinctions: [],
+                ambiguousViewIds: [],
+            };
+        };
+        service = open();
+        MockIndexedCorpus.subjects = ["acquisition", "capacity"];
+        const { corpusId } = await service.createCorpus(
+            "Bounded scoped deferrals",
+        );
+        await add(
+            corpusId,
+            "source",
+            "acquisition review is pending. capacity approval is withheld.",
+        );
+        const status = await service.drainMaintenance(10_000);
+        expect(status.settled).toBe(true);
+        expect(assessed).toEqual(["acquisition", "capacity"]);
+        expect(generated).toBe(0);
+        const family = await new TypedViewStore(root).getWikiFamily(corpusId);
+        expect(family.automaticPasses?.count).toBe(2);
+        expect(family.candidateReadCursor?.afterViewId).toBe(
+            family.descriptors[1].viewId,
+        );
+        await service.close();
+        service = open();
+        expect((await service.drainMaintenance(10_000)).settled).toBe(true);
+        expect(assessed).toHaveLength(2);
+        const preview = await service.previewForgetSource(corpusId, "source");
+        await service.forgetSource({
+            corpusId,
+            sourceId: "source",
+            confirmationToken: preview.confirmationToken,
+        });
+        expect(
+            (await new TypedViewStore(root).getWikiFamily(corpusId))
+                .candidateReadCursor,
+        ).toBeUndefined();
     });
 
     test("automatic candidate budgets retain deferred work across restart without hiding source facts", async () => {

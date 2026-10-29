@@ -216,10 +216,42 @@ export function benchmarkFailure(error) {
     };
 }
 
-async function engineIdentity() {
+export function recordBenchmarkAttemptFailure(
+    state,
+    attempt,
+    error,
+    signal,
+    activeQuestionId,
+) {
+    const bounded = signal.aborted || error.name === "TimeoutError";
+    state.outcome = bounded ? "PARTIAL_BOUNDED_WORK" : "FAILED_REAL_BENCHMARK";
+    attempt.error = benchmarkFailure(error);
+    const record =
+        activeQuestionId === undefined
+            ? undefined
+            : state.cases[activeQuestionId];
+    if (record && record.status !== "complete") {
+        record.status = bounded ? "interrupted" : "failed";
+        record.error = benchmarkFailure(error);
+    }
+}
+
+export function createBenchmarkStateWriter(file, state, write = writeJson) {
+    let tail = Promise.resolve();
+    return () => {
+        const snapshot = structuredClone(state);
+        tail = tail.then(() => write(file, snapshot));
+        return tail;
+    };
+}
+
+export async function engineIdentity(
+    readSource = (file) => readFile(new URL(file, import.meta.url)),
+) {
     const files = [
         "longmemeval-live.mjs",
         "longmemeval-runner.mjs",
+        "knowledge-observer.mjs",
         "quality-adapters.mjs",
         "live-resume.mjs",
     ];
@@ -228,7 +260,7 @@ async function engineIdentity() {
             await Promise.all(
                 files.map(async (file) => [
                     file,
-                    digest(await readFile(new URL(file, import.meta.url))),
+                    digest(await readSource(file)),
                 ]),
             ),
         ),
@@ -533,7 +565,7 @@ async function runWorker(spec) {
     );
     const { state, statePath, seeded, compiledDigest } =
         await loadBenchmarkWorkerState(spec, prepared.manifest.sha256);
-    const persist = () => writeJson(statePath, state);
+    const persist = createBenchmarkStateWriter(statePath, state);
     const attempt = {
         startedEpochMs: spec.spawnedEpochMs,
         workerPid: process.pid,
@@ -617,6 +649,7 @@ async function runWorker(spec) {
         const actual = observedJudgeModel(state.providerRequests, firstRequest);
         return { model: actual, label: /^yes/i.test(result.data.trim()) };
     };
+    let activeQuestionId;
     try {
         if (Object.values(state.cases).some((record) => record?.corpusId)) {
             const readRetainedKnowledgeStatus =
@@ -659,6 +692,7 @@ async function runWorker(spec) {
         );
         let completedThisBatch = 0;
         for (const construction of constructionCases) {
+            activeQuestionId = undefined;
             signal.throwIfAborted();
             if (
                 await acknowledgeStopAfterQuestion(
@@ -676,6 +710,7 @@ async function runWorker(spec) {
                 "A real benchmark failure requires review before retry",
             );
             state.currentQuestionId = id;
+            activeQuestionId = id;
             const name = `LongMemEval ${state.runId} ${id}`;
             const matches = (await service.listCorpora()).filter(
                 (corpus) => corpus.name === name,
@@ -721,16 +756,13 @@ async function runWorker(spec) {
         }
         state.outcome = completedOutcome(constructionCases, state, selection);
     } catch (error) {
-        const bounded = signal.aborted || error.name === "TimeoutError";
-        state.outcome = bounded
-            ? "PARTIAL_BOUNDED_WORK"
-            : "FAILED_REAL_BENCHMARK";
-        attempt.error = benchmarkFailure(error);
-        const record = state.cases[state.currentQuestionId];
-        if (record && record.status !== "complete") {
-            record.status = bounded ? "interrupted" : "failed";
-            record.error = benchmarkFailure(error);
-        }
+        recordBenchmarkAttemptFailure(
+            state,
+            attempt,
+            error,
+            signal,
+            activeQuestionId,
+        );
     } finally {
         state.scorecard = benchmarkScorecard(
             prepared,

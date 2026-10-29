@@ -174,6 +174,43 @@ const revision: SourceRevision = {
 };
 
 describe("source synopsis orchestration", () => {
+    test("configured synopsis rejects messages providers before inference instead of silently ignoring schemas", () => {
+        const originalConfig = getRuntimeConfig();
+        try {
+            setRuntimeConfig(
+                buildConfig(
+                    flatten({
+                        modelProvider: "azure",
+                        azureOpenAI: {
+                            deployments: {
+                                synopsis_test: [
+                                    {
+                                        endpoint:
+                                            "https://synthetic.invalid/synopsis",
+                                        region: "eastus",
+                                        auth: "synthetic-key",
+                                        wireApi: "messages",
+                                    },
+                                ],
+                            },
+                        },
+                        modelRequestConstraints: {
+                            "azure:chat:synopsis_test": {
+                                contextTokens: 10000,
+                                outputTokens: 4000,
+                            },
+                        },
+                    }),
+                ),
+            );
+            expect(() =>
+                configuredSourceSynopsisModel("azure:synopsis_test"),
+            ).toThrow("messages wire API does not enforce JSON schemas");
+        } finally {
+            setRuntimeConfig(originalConfig);
+        }
+    });
+
     test("configured synopsis guides final response length without capping reasoning or returned content", async () => {
         const originalConfig = getRuntimeConfig();
         const originalFetch = globalThis.fetch;

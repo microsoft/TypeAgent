@@ -9,6 +9,65 @@ import {
     createMaintenanceBuildScheduler,
 } from "../src/maintenanceConcurrency.js";
 import type { ChatModel } from "@typeagent/aiclient";
+import { createDocMemorySettings } from "@typeagent/conversation-memory";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { createKnowProCorpusIndex } from "../src/knowProCorpusIndex.js";
+
+test("settings-factory extraction shares admission while preserving the extractor, validator and batch settings", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "memory-factory-pool-"));
+    let active = 0;
+    let peak = 0;
+    const settings = createDocMemorySettings(64, undefined, {
+        completionSettings: {},
+        complete: async () => {
+            peak = Math.max(peak, ++active);
+            await new Promise((resolve) => setImmediate(resolve));
+            active--;
+            return {
+                success: true,
+                data: JSON.stringify({
+                    entities: [],
+                    actions: [],
+                    inverseActions: [],
+                    topics: [],
+                }),
+            };
+        },
+    });
+    const extraction = settings.conversationSettings.semanticRefIndexSettings;
+    const extractor = extraction.knowledgeExtractor;
+    const validator = () => true;
+    extraction.knowledgeValidator = validator;
+    extraction.batchSize = 8;
+    const index = createKnowProCorpusIndex("corpus", root, () => settings);
+    try {
+        await index.initialize();
+        await index.initialize();
+        expect(extraction.knowledgeExtractor).toBe(extractor);
+        expect(extraction.knowledgeValidator).toBe(validator);
+        expect(extraction.batchSize).toBe(8);
+        if (!extractor) throw new Error("Missing factory extractor");
+        const schedule = createMaintenanceModelScheduler(1);
+        const results = await withMaintenanceExtraction(schedule, () =>
+            Promise.all([
+                extractor.extractWithRetry("First source", 0),
+                extractor.extractWithRetry("Second source", 0),
+            ]),
+        );
+        expect(results.every((result) => result.success)).toBe(true);
+        expect(peak).toBe(1);
+        peak = 0;
+        await Promise.all([
+            extractor.extractWithRetry("Foreground first", 0),
+            extractor.extractWithRetry("Foreground second", 0),
+        ]);
+        expect(peak).toBe(2);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
 
 test("one maintenance model pool bounds independent callers and rejects queued cancellation", async () => {
     const schedule = createMaintenanceModelScheduler(2);
@@ -36,6 +95,8 @@ test("one maintenance model pool bounds independent callers and rejects queued c
         expect(entered).toEqual(["wiki", "decision"]);
         expect(maximum).toBe(2);
         controller.abort(new Error("cancelled request"));
+        await rejected;
+        expect(entered).toEqual(["wiki", "decision"]);
     } finally {
         release();
     }
@@ -48,6 +109,33 @@ test("one maintenance model pool bounds independent callers and rejects queued c
     await rejected;
     expect(entered).not.toContain("cancelled");
     expect(maximum).toBe(2);
+});
+
+test("aborting an active model request retains its permit until the operation settles", async () => {
+    const schedule = createMaintenanceModelScheduler(1);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const controller = new AbortController();
+    const entered: string[] = [];
+    const first = schedule(async () => {
+        entered.push("active");
+        await gate;
+    }, controller.signal);
+    const next = schedule(async () => {
+        entered.push("next");
+    });
+    try {
+        await new Promise((resolve) => setImmediate(resolve));
+        controller.abort(new Error("Active request cancelled"));
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(entered).toEqual(["active"]);
+    } finally {
+        release();
+        await Promise.all([first, next]);
+    }
+    expect(entered).toEqual(["active", "next"]);
 });
 
 test("maintenance concurrency retains serial build defaults and validates both bounds", () => {

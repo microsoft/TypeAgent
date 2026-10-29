@@ -6368,6 +6368,7 @@ export class FileMemoryService
         );
         family.dirty = true;
         family.cursor = 0;
+        delete family.candidateReadCursor;
         await this.viewStore.saveWikiFamily(request.corpusId, family, kind);
         this.scheduleWikiMaintenance(request.corpusId, kind);
     }
@@ -8379,6 +8380,7 @@ export class FileMemoryService
         if (family.indexVersion !== indexGeneration) {
             family.dirty = true;
             family.cursor = 0;
+            delete family.candidateReadCursor;
             delete family.error;
         }
         if (
@@ -8387,6 +8389,7 @@ export class FileMemoryService
         ) {
             family.dirty = true;
             family.cursor = 0;
+            delete family.candidateReadCursor;
             delete family.error;
         }
         if (JSON.stringify(family) !== before)
@@ -8531,6 +8534,7 @@ export class FileMemoryService
         if (!eligible.length) {
             family.dirty = false;
             family.cursor = 0;
+            delete family.candidateReadCursor;
             family.descriptors = [];
             await this.viewStore.saveWikiFamily(corpusId, family, kind);
             return this.viewStore.recordViewMaintenance(plan);
@@ -8570,7 +8574,9 @@ export class FileMemoryService
         if (descriptors.length !== family.descriptors.length) {
             family.descriptors = descriptors;
             family.cursor = 0;
+            delete family.candidateReadCursor;
         }
+        const descriptorCount = family.descriptors.length;
         discoverInformationalDescriptors(
             family,
             kind === "projects"
@@ -8579,6 +8585,8 @@ export class FileMemoryService
             snapshot.views,
             kind,
         );
+        if (family.descriptors.length !== descriptorCount)
+            delete family.candidateReadCursor;
         const familyVersion = viewHash(
             await this.viewStore.getWikiFamily(corpusId, kind),
         );
@@ -8681,6 +8689,7 @@ export class FileMemoryService
         if (request.operation === "rebuild") {
             family.dirty = true;
             family.cursor = 0;
+            delete family.candidateReadCursor;
         }
         await this.viewStore.saveWikiFamily(
             request.corpusId,
@@ -8739,6 +8748,45 @@ export class FileMemoryService
         return true;
     }
 
+    private wikiTargetCandidates(
+        family: WikiFamilyState,
+        views: ViewVersion[],
+        automatic: boolean,
+        generation: string | undefined,
+        policy: string,
+    ): {
+        targetLimit: number;
+        candidateLimit: number;
+        descriptors: ReadonlyArray<WikiFamilyState["descriptors"][number]>;
+        recordRead: (viewId: string) => void;
+    } {
+        const limits = automatic ? this.maintenanceLimits : undefined;
+        const candidateLimit = limits?.maxCandidatesPerPass ?? Infinity;
+        const cursor = Number.isFinite(candidateLimit)
+            ? family.candidateReadCursor
+            : undefined;
+        return {
+            targetLimit: limits?.maxTargetsPerPass ?? 12,
+            candidateLimit,
+            descriptors: rankWikiCandidates(
+                family.descriptors,
+                views,
+                Boolean(limits),
+                cursor?.generation === generation && cursor?.policy === policy
+                    ? cursor.afterViewId
+                    : undefined,
+            ),
+            recordRead(viewId) {
+                if (Number.isFinite(candidateLimit))
+                    family.candidateReadCursor = {
+                        generation,
+                        policy,
+                        afterViewId: viewId,
+                    };
+            },
+        };
+    }
+
     private async prepareWikiTargets(
         corpusId: string,
         family: WikiFamilyState,
@@ -8754,14 +8802,14 @@ export class FileMemoryService
         const generation = (await this.getCorpusRuntime(corpusId)).manifest
             .indexGeneration;
         const policy = this.wikiAdmissionContext(views);
-        const limits = automatic ? this.maintenanceLimits : undefined;
-        const targetLimit = limits?.maxTargetsPerPass ?? 12;
-        const candidateLimit = limits?.maxCandidatesPerPass ?? Infinity;
-        const descriptors = rankWikiCandidates(
-            family.descriptors,
-            views,
-            Boolean(limits),
-        );
+        const { targetLimit, candidateLimit, descriptors, recordRead } =
+            this.wikiTargetCandidates(
+                family,
+                views,
+                automatic,
+                generation,
+                policy,
+            );
         let inspected = 0;
         for (const descriptor of descriptors) {
             if (targets.length === targetLimit) break;
@@ -8805,6 +8853,7 @@ export class FileMemoryService
             );
             if (!target) continue;
             inspected++;
+            recordRead(descriptor.viewId);
             try {
                 const input = await this.inspectWikiTarget(
                     corpusId,
@@ -9622,16 +9671,7 @@ export class FileMemoryService
     public async buildViews(request: ViewBuildRequest): Promise<ViewBuildJob> {
         validateBuildRequest(request);
         await this.requireViews(request.corpusId);
-        if (
-            !this.informationalWikiEnabled &&
-            request.targets.some(
-                (target) =>
-                    target.definition.wiki || target.definition.projectSummary,
-            )
-        )
-            throw new Error(
-                "Informational views are explicitly disabled by this host",
-            );
+        this.assertViewBuildEnabled(request);
         const existing = (await this.listViewBuilds(request.corpusId)).find(
             (job) =>
                 viewHash(job.request) === viewHash(request) &&
@@ -9647,30 +9687,50 @@ export class FileMemoryService
                 ),
         );
         if (existing) return existing;
-        const admitted = await this.enqueueWrite(request.corpusId, async () => {
-            const reservation = this.viewBuilds.reserve();
-            try {
-                const snapshots: ViewBuildSnapshot[] = [];
-                for (const target of request.targets)
-                    snapshots.push(
-                        await this.snapshotViewTarget(
-                            request.corpusId,
-                            target,
-                            request.bounds,
-                            request.publication,
-                        ),
-                    );
-                const admitted = await this.viewStore.admitViewBuild(
-                    request,
-                    snapshots,
+        return this.enqueueWrite(request.corpusId, () =>
+            this.admitViewBuild(request),
+        );
+    }
+
+    private assertViewBuildEnabled(request: ViewBuildRequest): void {
+        if (
+            !this.informationalWikiEnabled &&
+            request.targets.some(
+                (target) =>
+                    target.definition.wiki || target.definition.projectSummary,
+            )
+        )
+            throw new Error(
+                "Informational views are explicitly disabled by this host",
+            );
+    }
+
+    private async admitViewBuild(
+        request: ViewBuildRequest,
+    ): Promise<ViewBuildJob> {
+        validateBuildRequest(request);
+        this.assertViewBuildEnabled(request);
+        const reservation = this.viewBuilds.reserve();
+        try {
+            const snapshots: ViewBuildSnapshot[] = [];
+            for (const target of request.targets)
+                snapshots.push(
+                    await this.snapshotViewTarget(
+                        request.corpusId,
+                        target,
+                        request.bounds,
+                        request.publication,
+                    ),
                 );
-                if (admitted.admitted) reservation.start(admitted.job);
-                return admitted;
-            } finally {
-                reservation.release();
-            }
-        });
-        return admitted.job;
+            const admitted = await this.viewStore.admitViewBuild(
+                request,
+                snapshots,
+            );
+            if (admitted.admitted) reservation.start(admitted.job);
+            return admitted.job;
+        } finally {
+            reservation.release();
+        }
     }
 
     private resolveMaintenanceTarget(
@@ -9903,6 +9963,7 @@ export class FileMemoryService
             const family = await this.viewStore.getWikiFamily(corpusId, kind);
             family.dirty = true;
             family.cursor = 0;
+            delete family.candidateReadCursor;
             await this.viewStore.saveWikiFamily(corpusId, family, kind);
             if (family.enabled && !family.error)
                 this.scheduleWikiMaintenance(corpusId, kind);
@@ -10033,37 +10094,41 @@ export class FileMemoryService
             )
         )
             return this.rebuildTopics(job.corpusId);
-        const targets: ViewBuildTarget[] = [];
-        for (const result of job.results.filter(
-            (result) => !["draft", "merged", "skipped"].includes(result.state),
-        )) {
-            const contributionConflict =
-                await this.viewStore.pendingWikiContributionConflict(
-                    result.snapshot,
-                );
-            if (
-                contributionConflict &&
-                (await this.informationalVersionEligible(
-                    contributionConflict.human,
-                ))
-            )
-                throw new Error(
-                    `Resolve canonical Wiki edit conflict ${contributionConflict.conflictId} before retrying this contribution`,
-                );
-            const view = await this.getView({
-                corpusId: job.corpusId,
-                viewId: result.viewId,
+        return this.enqueueWrite(job.corpusId, async () => {
+            const targets: ViewBuildTarget[] = [];
+            for (const result of job.results.filter(
+                (result) =>
+                    !["draft", "merged", "skipped"].includes(result.state),
+            )) {
+                const contributionConflict =
+                    await this.viewStore.pendingWikiContributionConflict(
+                        result.snapshot,
+                    );
+                if (
+                    contributionConflict &&
+                    (await this.informationalVersionEligible(
+                        contributionConflict.human,
+                    ))
+                )
+                    throw new Error(
+                        `Resolve canonical Wiki edit conflict ${contributionConflict.conflictId} before retrying this contribution`,
+                    );
+                const view = await this.getView({
+                    corpusId: job.corpusId,
+                    viewId: result.viewId,
+                });
+                targets.push({
+                    definition: result.snapshot.definition,
+                    expectedVersion: view?.version ?? 0,
+                });
+            }
+            if (!targets.length)
+                throw new Error("Build has no retryable targets");
+            return this.admitViewBuild({
+                ...job.request,
+                expectedHead: (await this.listViews(job.corpusId)).head,
+                targets,
             });
-            targets.push({
-                definition: result.snapshot.definition,
-                expectedVersion: view?.version ?? 0,
-            });
-        }
-        if (!targets.length) throw new Error("Build has no retryable targets");
-        return this.buildViews({
-            ...job.request,
-            expectedHead: (await this.listViews(job.corpusId)).head,
-            targets,
         });
     }
 

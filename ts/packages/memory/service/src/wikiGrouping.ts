@@ -123,19 +123,26 @@ export function rankWikiCandidates(
     descriptors: readonly WikiDescriptor[],
     views: readonly ViewVersion[],
     enabled: boolean,
+    afterViewId?: string,
 ): readonly WikiDescriptor[] {
-    if (!enabled) return descriptors;
     const existing = new Set(views.map((view) => view.viewId));
-    return [...descriptors].sort(
-        (left, right) =>
-            Number(existing.has(right.viewId)) -
-                Number(existing.has(left.viewId)) ||
-            (right.salience ?? right.postingCount ?? 1) -
-                (left.salience ?? left.postingCount ?? 1) ||
-            right.sourceIds.length - left.sourceIds.length ||
-            (right.postingCount ?? 1) - (left.postingCount ?? 1) ||
-            left.query.localeCompare(right.query),
-    );
+    const ranked = enabled
+        ? [...descriptors].sort(
+              (left, right) =>
+                  Number(existing.has(right.viewId)) -
+                      Number(existing.has(left.viewId)) ||
+                  (right.salience ?? right.postingCount ?? 1) -
+                      (left.salience ?? left.postingCount ?? 1) ||
+                  right.sourceIds.length - left.sourceIds.length ||
+                  (right.postingCount ?? 1) - (left.postingCount ?? 1) ||
+                  left.query.localeCompare(right.query),
+          )
+        : descriptors;
+    const previous =
+        afterViewId === undefined
+            ? -1
+            : ranked.findIndex((entry) => entry.viewId === afterViewId);
+    return ranked.slice(previous + 1);
 }
 
 function viewRetrieval(view: ViewVersion, kind: "wiki" | "projects") {

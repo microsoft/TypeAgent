@@ -18,6 +18,9 @@ test.each([
     { lanes: 4, mode: "cancelled" },
     { lanes: 4, mode: "failed" },
     { lanes: 4, mode: "budgeted" },
+    { lanes: 4, mode: "slow-cancelled-lookup" },
+    { lanes: 4, mode: "slow-cancelled-provider" },
+    { lanes: 4, mode: "slow-cancelled-preflight" },
 ])(
     "Wiki assessment preparation: $lanes lanes, $mode",
     async ({ lanes, mode }) => {
@@ -87,6 +90,19 @@ test.each([
         let peak = 0;
         let rejectedStale = false;
         let calls = 0;
+        let releaseSlow!: () => void;
+        const slow = new Promise<void>((resolve) => {
+            releaseSlow = resolve;
+        });
+        let enteredSlow!: () => void;
+        const entered = new Promise<void>((resolve) => {
+            enteredSlow = resolve;
+        });
+        const slowCancellation = async () => {
+            runner.cancelAll();
+            enteredSlow();
+            await slow;
+        };
         const applied: string[] = [];
         const assessment: WikiSubjectAssessment = {
             disposition: "defer",
@@ -110,6 +126,10 @@ test.each([
                     calls++;
                     peak = Math.max(peak, ++active);
                     try {
+                        if (mode === "slow-cancelled-provider") {
+                            await slowCancellation();
+                            return assessment;
+                        }
                         if (mode === "cancelled") runner.cancelAll();
                         await delay(10, undefined, { signal });
                         if (mode === "failed")
@@ -127,13 +147,21 @@ test.each([
                 },
                 current: async () => undefined,
                 unchanged: async () => mode === "unchanged",
-                canPrepareWikiAssessment: async () => mode !== "unchanged",
+                canPrepareWikiAssessment: async () => {
+                    if (mode === "slow-cancelled-preflight")
+                        await slowCancellation();
+                    return mode !== "unchanged";
+                },
                 resumeWikiContribution: async (_job, result) => {
                     if (mode !== "resume") return false;
                     result.state = "skipped";
                     return true;
                 },
-                wikiPages: async () => [],
+                wikiPages: async () => {
+                    if (mode === "slow-cancelled-lookup")
+                        await slowCancellation();
+                    return [];
+                },
                 recordWikiAssessment: async (_job, result) => {
                     if (
                         mode === "stale" &&
@@ -173,9 +201,20 @@ test.each([
         );
         try {
             runner.start(job);
+            if (mode.startsWith("slow-cancelled")) {
+                await entered;
+                let closed = false;
+                const closing = runner.close().then(() => {
+                    closed = true;
+                });
+                await new Promise((resolve) => setImmediate(resolve));
+                expect(closed).toBe(false);
+                releaseSlow();
+                await closing;
+            }
             await runner.wait(job.jobId, new AbortController().signal);
             expect(active).toBe(0);
-            if (mode === "cancelled") {
+            if (mode.includes("cancelled")) {
                 expect(job.state).toBe("cancelled");
                 expect(applied).toEqual([]);
                 return;
@@ -200,6 +239,7 @@ test.each([
             expect(peak).toBe(mode === "budgeted" ? 1 : lanes);
             expect(calls).toBe(mode === "stale" ? 9 : 8);
         } finally {
+            releaseSlow();
             await runner.close();
         }
     },

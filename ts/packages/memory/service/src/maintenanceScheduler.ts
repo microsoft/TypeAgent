@@ -45,6 +45,7 @@ export class MaintenanceScheduler {
     private readonly context = new AsyncLocalStorage<AbortSignal>();
     private readonly workKey = new AsyncLocalStorage<string>();
     private readonly waitingBuilds = new Set<string>();
+    private readonly resumptions = new Map<string, () => void>();
     private readonly shutdown = new AbortController();
     private timer: ReturnType<typeof setTimeout> | undefined;
     private holds = 0;
@@ -124,6 +125,14 @@ export class MaintenanceScheduler {
     }
 
     public wake(): void {
+        while (
+            this.running.size - this.waitingBuilds.size < this.concurrency &&
+            this.resumptions.size
+        ) {
+            const [key, resume] = this.resumptions.entries().next().value!;
+            this.resumptions.delete(key);
+            resume();
+        }
         if (
             this.timer ||
             this.running.size - this.waitingBuilds.size >= this.concurrency ||
@@ -187,14 +196,41 @@ export class MaintenanceScheduler {
 
     public async waitForBuild<T>(work: () => Promise<T>): Promise<T> {
         const key = this.workKey.getStore();
-        if (!this.prioritizeShortBuilds || !key) return work();
+        if (!this.prioritizeShortBuilds || !key || this.waitingBuilds.has(key))
+            return work();
+        const signal = this.signal;
         this.waitingBuilds.add(key);
         this.wake();
         try {
             return await work();
         } finally {
-            this.waitingBuilds.delete(key);
+            try {
+                await this.resume(key, signal);
+                signal.throwIfAborted();
+            } finally {
+                this.waitingBuilds.delete(key);
+                this.wake();
+            }
         }
+    }
+
+    private resume(key: string, signal: AbortSignal): Promise<void> {
+        signal.throwIfAborted();
+        return new Promise((resolve, reject) => {
+            const abort = () => {
+                this.resumptions.delete(key);
+                signal.removeEventListener("abort", abort);
+                reject(signal.reason);
+                this.wake();
+            };
+            this.resumptions.set(key, () => {
+                signal.removeEventListener("abort", abort);
+                this.waitingBuilds.delete(key);
+                resolve();
+            });
+            signal.addEventListener("abort", abort, { once: true });
+            this.wake();
+        });
     }
 
     private canAdmitBuildWait(key: string): boolean {
@@ -208,6 +244,11 @@ export class MaintenanceScheduler {
     }
 
     private dispatch(): void {
+        if (
+            this.running.size - this.waitingBuilds.size >= this.concurrency ||
+            this.running.size >= 32
+        )
+            return;
         const next = [...this.pending].find(
             ([key, work]) =>
                 !this.failures.has(key) &&

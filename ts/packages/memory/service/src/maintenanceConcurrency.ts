@@ -75,21 +75,12 @@ export async function yieldMaintenanceBuild(
     });
 }
 
-export function createMaintenanceBuildScheduler(
-    concurrency: number,
-    reserveShortSlot = false,
-    prioritizeShortBuilds?: boolean,
-) {
-    const priority = resolveMaintenanceBuildPriority(
-        reserveShortSlot,
-        prioritizeShortBuilds,
-    );
-    const { builds } = resolveMaintenanceConcurrency({ builds: concurrency });
+function createMaintenanceAdmission(capacity: number, priority: boolean) {
     const waiting: WaitingBuild[] = [];
     let active = 0;
     let shortBurst = 0;
     function dispatch() {
-        while (active < builds && waiting.length) {
+        while (active < capacity && waiting.length) {
             const native = waiting.findIndex((entry) => entry.long);
             const short = waiting.findIndex((entry) => !entry.long);
             let index = 0;
@@ -130,12 +121,32 @@ export function createMaintenanceBuildScheduler(
             dispatch();
         });
     }
+    return {
+        acquire,
+        hasShortWaiter: () => waiting.some((entry) => !entry.long),
+    };
+}
+
+export function createMaintenanceBuildScheduler(
+    concurrency: number,
+    reserveShortSlot = false,
+    prioritizeShortBuilds?: boolean,
+) {
+    const priority = resolveMaintenanceBuildPriority(
+        reserveShortSlot,
+        prioritizeShortBuilds,
+    );
+    const { builds } = resolveMaintenanceConcurrency({ builds: concurrency });
+    const { acquire, hasShortWaiter } = createMaintenanceAdmission(
+        builds,
+        priority,
+    );
     async function run<T>(work: () => Promise<T>, long: boolean): Promise<T> {
         const lease: BuildLease = {
             long,
             release: await acquire(long),
             acquire: (signal) => acquire(long, signal),
-            shouldYield: () => priority && waiting.some((entry) => !entry.long),
+            shouldYield: () => priority && hasShortWaiter(),
         };
         try {
             return await buildLease.run(lease, work);
@@ -153,6 +164,7 @@ export function createMaintenanceBuildScheduler(
 }
 
 const extractionScheduler = new AsyncLocalStorage<MaintenanceModelScheduler>();
+const extractionModels = new WeakSet<ChatModel>();
 
 export function withMaintenanceExtraction<T>(
     scheduler: MaintenanceModelScheduler,
@@ -162,18 +174,17 @@ export function withMaintenanceExtraction<T>(
 }
 
 export function maintenanceExtractionModel(model: ChatModel): ChatModel {
-    return new Proxy(model, {
-        get(target, property) {
-            if (property === "complete")
-                return (...args: Parameters<ChatModel["complete"]>) => {
-                    const schedule = extractionScheduler.getStore();
-                    return schedule
-                        ? schedule(() => target.complete(...args), args[4])
-                        : target.complete(...args);
-                };
-            return Reflect.get(target, property, target);
-        },
-    });
+    if (extractionModels.has(model)) return model;
+    const complete = model.complete.bind(model);
+    // Translators can retain the original model in a closure, so decorate it in place.
+    model.complete = (...args: Parameters<ChatModel["complete"]>) => {
+        const schedule = extractionScheduler.getStore();
+        return schedule
+            ? schedule(() => complete(...args), args[4])
+            : complete(...args);
+    };
+    extractionModels.add(model);
+    return model;
 }
 
 export function createMaintenanceModelScheduler(
@@ -182,18 +193,21 @@ export function createMaintenanceModelScheduler(
     const { modelRequests } = resolveMaintenanceConcurrency({
         modelRequests: concurrency,
     });
-    const limit = createLimiter(modelRequests);
+    const { acquire } = createMaintenanceAdmission(modelRequests, false);
     return async (work, signal) => {
         signal?.throwIfAborted();
         const queued = performance.now();
-        return limit(async () => {
+        const release = await acquire(false, signal);
+        try {
             signal?.throwIfAborted();
             recordSearchTiming(
                 "maintenance.model.queue",
                 performance.now() - queued,
             );
-            return work();
-        });
+            return await work();
+        } finally {
+            release();
+        }
     };
 }
 

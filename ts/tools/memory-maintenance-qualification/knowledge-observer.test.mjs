@@ -55,6 +55,47 @@ function fixture() {
     };
 }
 
+test("explicit refresh remains authoritative after terminal polling stops", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1000 });
+    const f = fixture();
+    f.transition("ready");
+    const observer = createCheckpointObserver(f.service, f.record, f.controls);
+    await observer.done;
+    f.transition("superseded");
+    t.mock.timers.tick(120000);
+    await flush();
+    assert.equal(f.reads(), 1);
+    await observer.refresh();
+    assert.equal(f.reads(), 2);
+    assert.equal(f.record.knowledgeCheckpoint.state, "superseded");
+    assert.equal(
+        f.record.knowledgeObservation.requiredCheckpointSatisfied,
+        false,
+    );
+    await observer.stop();
+});
+
+test("shutdown joins an explicit refresh started after a terminal observation", async () => {
+    const f = fixture();
+    f.transition("ready");
+    const observer = createCheckpointObserver(f.service, f.record, f.controls);
+    await observer.done;
+    const pending = Promise.withResolvers();
+    f.service.getKnowledgeCheckpoint = () => pending.promise;
+    const refreshing = observer.refresh();
+    await flush();
+    let closed = false;
+    const closing = observer.stop().then(() => {
+        closed = true;
+    });
+    await flush();
+    assert.equal(closed, false);
+    pending.resolve({ ...f.record.knowledgeCheckpoint, state: "superseded" });
+    await Promise.all([refreshing, closing]);
+    assert.equal(closed, true);
+    assert.equal(f.record.knowledgeCheckpoint.state, "ready");
+});
+
 test("periodic authoritative refresh reports a late terminal transition and independent family debt within 30 seconds", async (t) => {
     t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1000 });
     const f = fixture();

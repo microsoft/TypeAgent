@@ -43,6 +43,10 @@ export function configuredSourceSynopsisModel(
     modelScheduler?: MaintenanceModelScheduler,
 ): SourceSynopsisModel {
     const settings = openai.getChatModelSettings(endpoint);
+    if (settings.wireApi === "messages")
+        throw new Error(
+            "Source synopsis requires strict structured outputs; the messages wire API does not enforce JSON schemas",
+        );
     if (!settings.requestConstraints)
         throw new Error(
             "Source synopsis requires configured model request constraints",

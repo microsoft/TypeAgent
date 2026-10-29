@@ -116,7 +116,7 @@ export function createCheckpointObserver(service, record, controls) {
     signal.addEventListener("abort", abort, { once: true });
 
     const read = async () => {
-        if (stopped || settled) return;
+        if (stopped || signal.aborted) return;
         let checkpoint;
         let summary;
         let observedEpochMs;
@@ -168,7 +168,8 @@ export function createCheckpointObserver(service, record, controls) {
             observedEpochMs,
             staleAfterEpochMs: observedEpochMs + 60000,
             familyObservedEpochMs: summary ? Date.now() : null,
-            active: ["pending", "running"].includes(checkpoint.state),
+            active:
+                !settled && ["pending", "running"].includes(checkpoint.state),
         });
         try {
             await controls.persist();
@@ -214,8 +215,13 @@ export function createCheckpointObserver(service, record, controls) {
         done: completion.promise,
         refresh,
         stop() {
+            stopped = true;
+            clearTimeout(timer);
+            report.active = false;
             controller.abort(new Error("Knowledge observation stopped"));
-            return completion.promise;
+            return Promise.all([tail, completion.promise]).then(
+                () => undefined,
+            );
         },
     };
 }

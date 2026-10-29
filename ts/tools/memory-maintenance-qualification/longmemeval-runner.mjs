@@ -205,50 +205,66 @@ export async function preflightRetainedKnowledge(service, records, controls) {
     const retained = Object.values(records).filter(
         (record) => record?.corpusId,
     );
-    const outcomes = await Promise.allSettled(
-        retained.map(async (record) => {
+    async function inspect(record) {
+        controls.signal.throwIfAborted();
+        const report = (record.retainedKnowledgePreflight ??= {
+            attempts: [],
+        });
+        const attempt = { startedEpochMs: Date.now(), status: "reading" };
+        report.attempts.push(attempt);
+        try {
+            const status = await (controls.readRetainedKnowledgeStatus
+                ? controls.readRetainedKnowledgeStatus(record.corpusId)
+                : service.getKnowledgeStatus(record.corpusId));
             controls.signal.throwIfAborted();
-            const report = (record.retainedKnowledgePreflight ??= {
-                attempts: [],
-            });
-            const attempt = { startedEpochMs: Date.now(), status: "reading" };
-            report.attempts.push(attempt);
+            attempt.failedReceipts = structuredClone(
+                status.discovery.receipts.filter(
+                    (receipt) => receipt.state === "failed",
+                ),
+            );
+            attempt.interruptedReceipts = structuredClone(
+                status.discovery.receipts.filter(
+                    (receipt) => receipt.state === "running",
+                ),
+            );
+            attempt.discoveryError = status.discovery.error;
+            attempt.status =
+                attempt.failedReceipts.length ||
+                attempt.interruptedReceipts.length ||
+                attempt.discoveryError
+                    ? "blocked"
+                    : "clear";
+            attempt.observedEpochMs = Date.now();
+        } catch (error) {
+            attempt.status = "unknown";
+            attempt.error = controls.failure(error);
             try {
-                const status = await (controls.readRetainedKnowledgeStatus
-                    ? controls.readRetainedKnowledgeStatus(record.corpusId)
-                    : service.getKnowledgeStatus(record.corpusId));
-                controls.signal.throwIfAborted();
-                attempt.failedReceipts = structuredClone(
-                    status.discovery.receipts.filter(
-                        (receipt) => receipt.state === "failed",
-                    ),
+                await controls.persist();
+            } catch (persistError) {
+                attempt.persistenceError = controls.failure(persistError);
+                throw new AggregateError(
+                    [error, persistError],
+                    "Retained preflight status and persistence failed",
                 );
-                attempt.discoveryError = status.discovery.error;
-                attempt.status =
-                    attempt.failedReceipts.length || attempt.discoveryError
-                        ? "blocked"
-                        : "clear";
-                attempt.observedEpochMs = Date.now();
-            } catch (error) {
-                attempt.status = "unknown";
-                attempt.error = controls.failure(error);
-                try {
-                    await controls.persist();
-                } catch (persistError) {
-                    attempt.persistenceError = controls.failure(persistError);
-                    throw new AggregateError(
-                        [error, persistError],
-                        "Retained preflight status and persistence failed",
-                    );
-                }
-                throw error;
             }
-            await controls.persist();
+            throw error;
+        }
+        await controls.persist();
+    }
+    const errors = [];
+    let next = 0;
+    await Promise.all(
+        Array.from({ length: Math.min(2, retained.length) }, async () => {
+            while (next < retained.length) {
+                const record = retained[next++];
+                try {
+                    await inspect(record);
+                } catch (error) {
+                    errors.push(error);
+                }
+            }
         }),
     );
-    const errors = outcomes
-        .filter((outcome) => outcome.status === "rejected")
-        .map((outcome) => outcome.reason);
     if (errors.length)
         throw new AggregateError(errors, "Retained knowledge preflight failed");
 }

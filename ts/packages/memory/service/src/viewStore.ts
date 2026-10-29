@@ -120,6 +120,11 @@ export interface WikiFamilyState {
         policy: string;
         count: number;
     };
+    candidateReadCursor?: {
+        generation: string | undefined;
+        policy: string;
+        afterViewId: string;
+    };
     descriptors: Array<{
         viewId: string;
         query: string;
@@ -1288,6 +1293,7 @@ export class TypedViewStore {
             ) {
                 family.dirty = true;
                 family.cursor = 0;
+                delete family.candidateReadCursor;
                 delete family.error;
             }
         }
@@ -2121,6 +2127,7 @@ export class TypedViewStore {
             );
             family.dirty = true;
             family.cursor = 0;
+            delete family.candidateReadCursor;
             delete family.indexVersion;
             delete family.error;
         }
