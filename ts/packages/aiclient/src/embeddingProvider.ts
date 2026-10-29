@@ -133,8 +133,13 @@ function createConfiguredHostedModel(
         expectedDimensions,
     };
     const target = endpoint ?? config?.deployment;
-    // Catalog size validates output; it is not a dimension-reduction request.
-    const requestedDimensions = named ? dimensions : expectedDimensions;
+    // Ada and unknown catalog models only validate size; embedding-3 models
+    // also support requesting that size from the endpoint.
+    const supportsDimensions =
+        config?.model === "text-embedding-3-large" ||
+        config?.model === "text-embedding-3-small";
+    const requestedDimensions =
+        !named || supportsDimensions ? expectedDimensions : dimensions;
     return target !== undefined
         ? createEmbeddingModel(target, requestedDimensions, options)
         : createEmbeddingModel(undefined, requestedDimensions, options);
