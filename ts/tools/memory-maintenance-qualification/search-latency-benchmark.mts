@@ -86,10 +86,19 @@ interface BenchmarkContext {
 
 export function modelResponseDiagnostic(value: unknown) {
     assert(record(value), "Invalid chat response for private diagnostics");
-    assert(Array.isArray(value.choices), "Missing chat response choices");
+    assert(
+        Array.isArray(value.choices) ||
+            Array.isArray(value.output) ||
+            typeof value.output_text === "string",
+        "Missing chat response output",
+    );
     const text = JSON.stringify({
         model: value.model,
-        choices: value.choices,
+        ...(Array.isArray(value.choices) ? { choices: value.choices } : {}),
+        ...(Array.isArray(value.output) ? { output: value.output } : {}),
+        ...(typeof value.output_text === "string"
+            ? { output_text: value.output_text }
+            : {}),
     });
     const limit = 64 * 1024;
     return { text: text.slice(0, limit), truncated: text.length > limit };
@@ -196,27 +205,27 @@ function timing(line: string): Span {
     };
 }
 
-function providerUsage(value: unknown): Partial<ProviderCall> {
+export function providerUsage(value: unknown): Partial<ProviderCall> {
     assert(record(value), "Provider response was not a JSON object");
     const result: Partial<ProviderCall> = {};
     if (typeof value.model === "string") result.model = value.model;
     if (!record(value.usage)) return result;
     const usage = value.usage;
-    if (typeof usage.prompt_tokens === "number")
-        result.inputTokens = usage.prompt_tokens;
-    if (typeof usage.completion_tokens === "number")
-        result.outputTokens = usage.completion_tokens;
+    const inputTokens = usage.prompt_tokens ?? usage.input_tokens;
+    const outputTokens = usage.completion_tokens ?? usage.output_tokens;
+    const outputDetails =
+        usage.completion_tokens_details ?? usage.output_tokens_details;
+    const inputDetails =
+        usage.prompt_tokens_details ?? usage.input_tokens_details;
+    if (typeof inputTokens === "number") result.inputTokens = inputTokens;
+    if (typeof outputTokens === "number") result.outputTokens = outputTokens;
     if (
-        record(usage.completion_tokens_details) &&
-        typeof usage.completion_tokens_details.reasoning_tokens === "number"
+        record(outputDetails) &&
+        typeof outputDetails.reasoning_tokens === "number"
     )
-        result.reasoningTokens =
-            usage.completion_tokens_details.reasoning_tokens;
-    if (
-        record(usage.prompt_tokens_details) &&
-        typeof usage.prompt_tokens_details.cached_tokens === "number"
-    )
-        result.cachedTokens = usage.prompt_tokens_details.cached_tokens;
+        result.reasoningTokens = outputDetails.reasoning_tokens;
+    if (record(inputDetails) && typeof inputDetails.cached_tokens === "number")
+        result.cachedTokens = inputDetails.cached_tokens;
     return result;
 }
 
@@ -248,7 +257,7 @@ function observe(
         const url = new URL(
             input instanceof Request ? input.url : String(input),
         );
-        const kind = /\/chat\/completions$/.test(url.pathname)
+        const kind = /\/(?:chat\/completions|responses)$/.test(url.pathname)
             ? "chat"
             : /\/embeddings$/.test(url.pathname)
               ? "embeddings"
@@ -319,8 +328,9 @@ function observe(
     };
 }
 
-function benchmarkOptions() {
+export function benchmarkOptions(args = process.argv.slice(2)) {
     const { values } = parseArgs({
+        args,
         options: {
             store: { type: "string" },
             out: { type: "string" },
@@ -330,6 +340,7 @@ function benchmarkOptions() {
             experiments: { type: "string", default: "" },
             "fast-model": { type: "string" },
             "initial-reader-model": { type: "string" },
+            "answer-model": { type: "string" },
             "retain-answers": { type: "boolean", default: false },
             "retain-model-responses": { type: "boolean", default: false },
             "understanding-rounds": { type: "string", default: "2" },
@@ -348,6 +359,15 @@ function benchmarkOptions() {
         values.store && values.out && values.cases,
         "Required: --store, --out, --cases",
     );
+    for (const flag of [
+        "fast-model",
+        "initial-reader-model",
+        "answer-model",
+    ] as const)
+        assert(
+            values[flag] === undefined || values[flag].trim(),
+            `--${flag} must not be empty`,
+        );
     const rounds = Number(values.rounds);
     const understandingRounds = Number(values["understanding-rounds"]);
     assert(
@@ -450,11 +470,17 @@ async function main() {
         ...(values["initial-reader-model"]
             ? { initialReaderModelEndpoint: values["initial-reader-model"] }
             : {}),
+        ...(values["answer-model"]
+            ? { viewModelEndpoint: values["answer-model"] }
+            : {}),
         understanding: true,
         maintenanceMode: "manual",
         discoveryPolicy: "off",
         sourceSynopses: false,
     });
+    if (values["answer-model"])
+        process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT =
+            values["answer-model"];
     const hub = createMemoryHubQueryFunctions(
         () => service,
         () => undefined,
@@ -467,6 +493,7 @@ async function main() {
     const startedAt = new Date().toISOString();
     const compiledDigests: Record<string, string> = {};
     for (const path of [
+        "packages/aiclient/dist/wireApiProvider/responsesWireApiProvider.js",
         "packages/memory/service/dist/integratedAnswer.js",
         "packages/memory/service/dist/integratedAnswerReader.js",
         "packages/memory/service/dist/indexedAnswer.js",
@@ -496,6 +523,9 @@ async function main() {
             encoding: "utf8",
         }).trim(),
         compiledDigests,
+        configDefaultsSha256: createHash("sha256")
+            .update(await readFile(resolve(root, "config.defaults.yaml")))
+            .digest("hex"),
         manifestSha256: createHash("sha256")
             .update(manifestBytes)
             .digest("hex"),
@@ -515,6 +545,7 @@ async function main() {
         performanceExperiments: values.experiments,
         fastQueryModelEndpoint: values["fast-model"],
         initialReaderModelEndpoint: values["initial-reader-model"],
+        answerModelEndpoint: values["answer-model"],
         privateAnswersRetained: values["retain-answers"],
         privateModelResponsesRetained: values["retain-model-responses"],
         uniquePrimaryQueries: cases.length,

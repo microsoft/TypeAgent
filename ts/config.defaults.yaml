@@ -45,6 +45,11 @@ modelRequestConstraints:
     contextTokens: 400000
     inputTokens: 272000
     outputTokens: 128000
+  # https://developers.openai.com/api/docs/models/gpt-6.1-terra
+  azure:chat:gpt_6_1_terra:
+    contextTokens: 1050000
+    inputTokens: 922000
+    outputTokens: 128000
 
 reasoning:
   timeoutMs: 1200000

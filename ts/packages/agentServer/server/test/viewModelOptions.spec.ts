@@ -67,3 +67,45 @@ test("explicit Views use only their own configured model endpoint", () => {
         ),
     ).toThrow("not available");
 });
+
+test("the native host configures initial reading independently of deeper answers", () => {
+    const checked: string[] = [];
+    expect(
+        getConfiguredViewModelOptions(
+            {
+                TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT: " gpt_6_luna ",
+                TYPEAGENT_MEMORY_INITIAL_READER_MODEL_ENDPOINT:
+                    " gpt_6_1_terra ",
+                TYPEAGENT_MEMORY_FAST_MODEL: "gpt_5_4_mini",
+            },
+            (endpoint) => {
+                checked.push(endpoint);
+                return true;
+            },
+        ),
+    ).toEqual({
+        viewModelEndpoint: "gpt_6_luna",
+        initialReaderModelEndpoint: "gpt_6_1_terra",
+    });
+    expect(checked).toEqual(["gpt_6_luna", "gpt_6_1_terra"]);
+    expect(
+        getConfiguredViewModelOptions(
+            {
+                TYPEAGENT_MEMORY_INITIAL_READER_MODEL_ENDPOINT: "gpt_6_luna",
+            },
+            () => true,
+        ),
+    ).toEqual({ initialReaderModelEndpoint: "gpt_6_luna" });
+});
+
+test.each(["", " ", "missing"])(
+    "an unavailable or empty explicit initial reader rejects: %j",
+    (endpoint) => {
+        expect(() =>
+            getConfiguredViewModelOptions(
+                { TYPEAGENT_MEMORY_INITIAL_READER_MODEL_ENDPOINT: endpoint },
+                () => false,
+            ),
+        ).toThrow("initial reader model endpoint is not available");
+    },
+);

@@ -480,6 +480,66 @@ describe("MessagesWireApiProvider", () => {
 describe("ResponsesWireApiProvider", () => {
     const adapter = adapterFor("responses");
 
+    test("preserves reader JSON schemas through Responses text.format", () => {
+        const jsonSchema = {
+            name: "memory_answer",
+            strict: true as const,
+            schema: {
+                type: "object" as const,
+                properties: { answer: { type: "string" as const } },
+                required: ["answer"],
+                additionalProperties: false,
+            },
+        };
+        for (const stream of [false, true])
+            expect(
+                adapter.buildRequestBody(
+                    makeRequest({
+                        jsonSchema,
+                        stream,
+                        completionSettings: {
+                            response_format: { type: "json_object" },
+                        },
+                    }),
+                ),
+            ).toMatchObject({
+                text: { format: { ...jsonSchema, type: "json_schema" } },
+            });
+        expect(() =>
+            adapter.buildRequestBody(
+                makeRequest({
+                    jsonSchema,
+                    disableResponseFormat: true,
+                }),
+            ),
+        ).toThrow("Json schema not supported");
+    });
+
+    test("preserves JSON-object requests without adding an unrequested format", () => {
+        expect(
+            adapter.buildRequestBody(
+                makeRequest({
+                    completionSettings: {
+                        response_format: { type: "json_object" },
+                    },
+                }),
+            ),
+        ).toMatchObject({ text: { format: { type: "json_object" } } });
+        expect(adapter.buildRequestBody(makeRequest())).not.toHaveProperty(
+            "text",
+        );
+        expect(
+            adapter.buildRequestBody(
+                makeRequest({
+                    disableResponseFormat: true,
+                    completionSettings: {
+                        response_format: { type: "json_object" },
+                    },
+                }),
+            ),
+        ).not.toHaveProperty("text");
+    });
+
     test("buildRequestBody uses input array + instructions without optional output caps", () => {
         const req = makeRequest({
             defaultParams: { model: "gpt-5-codex" },

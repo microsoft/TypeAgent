@@ -70,6 +70,11 @@ For independent role experiments, `initialReaderModelEndpoint` overrides only
 initial Search/Ask and Understanding reading, not query translation, extraction
 or deeper refinement. Injected reader models still take precedence. For example,
 retain fast query translation while selecting the ordinary reader endpoint.
+The native agent-server host accepts
+`TYPEAGENT_MEMORY_INITIAL_READER_MODEL_ENDPOINT` for this override and validates
+that it names a configured endpoint. Its existing
+`TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT` selects the deeper answer/View model
+independently. Neither setting changes the fast query model or ingestion model.
 Hosts that customize built-in document settings can use `indexSettingsFactory`;
 their extraction model, validators and embedding batches are retained while
 serving roles and decorators are applied. The ordinary agent-server host uses
@@ -89,10 +94,20 @@ failures are not silently accepted or converted into a successful answer.
 `memory.reader.statusRepair` records the exceptional extra model call.
 
 The [latency runner](../../../tools/memory-maintenance-qualification/search-latency-benchmark.mts)
-accepts `--experiments`, `--fast-model`, `--initial-reader-model`, `--paths`, `--understanding-rounds`
+accepts `--experiments`, `--fast-model`, `--initial-reader-model`, `--answer-model`, `--paths`, `--understanding-rounds`
 and optional `--retain-answers`. Opt-in `--retain-model-responses` also saves
 private model output, bounded to 65,536 characters per chat response, in
 `provider-responses.jsonl`; it never records request headers or prompts.
+`--answer-model` sets the service's existing `viewModelEndpoint` and the Hub
+synthesizer endpoint. Set both reader flags to compare all answer stages using
+one model while keeping query translation fixed. Ingestion/View maintenance
+is disabled in these benchmark runs, not a separately measured model role.
+Provider timing, usage and private diagnostics support Chat Completions and
+Responses API endpoints.
+Responses API reader requests preserve JSON schemas through `text.format`,
+including strict output requirements; plain JSON-object requests retain JSON
+mode. Configured Terra deployments have provider-capacity metadata for existing
+request admission, without imposing a new generation-token cap.
 Private files are written outside measurement intervals; do not publish them.
 Repeated questions overestimate general translation-cache hit rates.
 The [local experiment tool](../../../tools/memory-maintenance-qualification/serving-local-experiments.mts)
