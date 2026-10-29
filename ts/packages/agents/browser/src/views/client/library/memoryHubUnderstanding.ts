@@ -14,6 +14,7 @@ import type {
     MemoryHubSearchRequest,
 } from "@typeagent/browser-control-rpc/viewRpc";
 import { invokeView, streamUnderstanding } from "./viewClient";
+import { renderMarkdownInto } from "./utils/markdownView";
 import "./memoryHubUnderstanding.css";
 
 export function toUnderstandingRequest(
@@ -120,13 +121,16 @@ export function mountMemoryHubUnderstanding(
     const status = node("p");
     status.setAttribute("role", "status");
     const grid = node("div", undefined, "understanding-grid");
-    const main = node("div");
+    const main = node("div", undefined, "understanding-reading");
     const prose = node("article", undefined, "understanding-prose");
     const modules = node("div", undefined, "understanding-modules");
     const follow = node("section", undefined, "understanding-follow");
     follow.append(
-        node("h3", "Keep going"),
-        node("p", "Ask a follow-on grounded again in this collection."),
+        node("h3", "Keep going, without starting over"),
+        node(
+            "p",
+            "Keep this question in context. Each answer checks the evidence again.",
+        ),
     );
     const followForm = node("form");
     const draft = node("textarea");
@@ -134,6 +138,7 @@ export function mountMemoryHubUnderstanding(
     draft.maxLength = 2000;
     draft.setAttribute("aria-label", "Ask a follow-on question");
     const followSubmit = node("button", "Ask more");
+    followSubmit.className = "primary";
     followSubmit.type = "submit";
     followForm.append(draft, followSubmit);
     const suggestions = node("div", undefined, "understanding-suggestions");
@@ -187,14 +192,50 @@ export function mountMemoryHubUnderstanding(
         return control;
     }
     function claim(value: UnderstandingClaim): HTMLElement {
-        const paragraph = node("p", value.text);
-        for (const id of value.evidenceIds) paragraph.append(" ", cite(id));
+        const paragraph = node(
+            "div",
+            undefined,
+            "understanding-claim markdown-preview md-snippet",
+        );
+        renderMarkdownInto(paragraph, value.text);
+        const citations = node("span", undefined, "understanding-citations");
+        for (const id of value.evidenceIds) citations.append(" ", cite(id));
+        paragraph.append(citations);
         return paragraph;
     }
     function sourceRail() {
-        rail.replaceChildren(node("h3", "Sources"));
+        const scope = node(
+            "section",
+            undefined,
+            "understanding-card understanding-scope",
+        );
+        const count =
+            result?.citations.filter((item) => item.kind === "source").length ??
+            0;
+        scope.append(
+            node("small", "Source scope", "understanding-eyebrow"),
+            node("h3", "One selected collection"),
+            node(
+                "p",
+                `${count} returned source passage${count === 1 ? "" : "s"}`,
+            ),
+            node(
+                "p",
+                "Retained evidence, not a live audit. Missing evidence is not proof of absence.",
+            ),
+        );
+        const sources = node(
+            "section",
+            undefined,
+            "understanding-card understanding-sources",
+        );
+        sources.append(
+            node("h3", "Sources"),
+            node("p", "Inspect the originals behind this explanation."),
+        );
+        rail.replaceChildren(scope, sources);
         for (const citation of result?.citations ?? []) {
-            const card = node("section", undefined, "understanding-card");
+            const card = node("section", undefined, "understanding-source");
             const title =
                 citation.kind === "source"
                     ? citation.source.title
@@ -202,8 +243,19 @@ export function mountMemoryHubUnderstanding(
                       ? "User assertion"
                       : "Maintained interpretation";
             const open = button(title, () => openCitation(citation, open));
+            open.className = "understanding-source-title";
+            const details = node("details");
+            details.append(node("summary", "Matched passage and provenance"));
             card.append(
+                node(
+                    "small",
+                    `${citation.id} · ${citation.kind === "source" ? "Original source" : "Maintained knowledge"}`,
+                    "understanding-eyebrow",
+                ),
                 open,
+                details,
+            );
+            details.append(
                 node(
                     "small",
                     citation.kind === "source"
@@ -212,33 +264,48 @@ export function mountMemoryHubUnderstanding(
                 ),
             );
             if (citation.kind === "source")
-                card.append(node("p", citation.source.snippet));
-            rail.append(card);
+                details.append(node("p", citation.source.snippet));
+            sources.append(card);
         }
         if (!result?.citations.length)
-            rail.append(node("p", "No supporting sources returned."));
-        const notes = result?.answer?.unknowns ?? [];
-        if (notes.length) {
-            const card = node("section", undefined, "understanding-card");
-            card.append(node("h3", "Still unknown"));
-            const list = node("ul");
-            for (const text of notes) list.append(node("li", text));
-            card.append(list);
-            rail.append(card);
-        }
+            sources.append(node("p", "No supporting sources returned."));
     }
     function render() {
         prose.replaceChildren();
         const answer = result?.answer;
         if (answer) {
+            const labels = {
+                answered: "Grounded explanation",
+                partial: "Partial explanation",
+                noAnswer: "No grounded answer",
+                needsClarification: "Clarification needed",
+            };
+            const badge = node(
+                "span",
+                labels[answer.status],
+                "understanding-badge",
+            );
+            badge.dataset.status = answer.status;
             prose.append(
+                badge,
                 node("h2", answer.title),
-                node("small", answer.status),
                 claim(answer.summary),
             );
             for (const section of answer.sections) {
                 prose.append(node("h3", section.title));
                 for (const value of section.claims) prose.append(claim(value));
+            }
+            if (answer.unknowns.length) {
+                const unknowns = node(
+                    "section",
+                    undefined,
+                    "understanding-unknowns",
+                );
+                const list = node("ul");
+                for (const text of answer.unknowns)
+                    list.append(node("li", text));
+                unknowns.append(node("h3", "Still unknown"), list);
+                prose.append(unknowns);
             }
         } else if (result?.previousAnswer) {
             prose.append(node("h2", "Previous grounded answer"));

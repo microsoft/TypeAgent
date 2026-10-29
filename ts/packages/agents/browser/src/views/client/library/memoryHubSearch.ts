@@ -277,7 +277,7 @@ export function mountMemoryHubSearch(
     layout.setAttribute("aria-label", "Search result view");
     const layoutNote = node("p", undefined, "phase2-layout-note");
     const results = node("div", undefined, "phase2-results");
-    const insights = node("section", undefined, "phase2-search-insights");
+    const insights = node("aside", undefined, "phase2-search-insights");
     insights.setAttribute("aria-label", "Search insights");
     const preferenceStatus = node("p");
     preferenceStatus.setAttribute("role", "status");
@@ -328,19 +328,19 @@ export function mountMemoryHubSearch(
         pager,
         management,
     );
-    root.append(
-        form,
-        recent,
-        status,
-        warning,
+    const reading = node("div", undefined, "phase2-search-reading");
+    const evidenceHeading = node("h3", "Supporting evidence");
+    reading.append(
         answer,
-        insights,
+        evidenceHeading,
         layout,
         layoutNote,
         preferenceStatus,
         results,
-        dialog,
     );
+    const resultLayout = node("div", undefined, "phase2-result-layout");
+    resultLayout.append(reading, insights);
+    root.append(form, recent, status, warning, resultLayout, dialog);
     host.append(root);
     let result: MemoryHubSearchResult | undefined;
     let submitted: MemoryHubSearchRequest | undefined;
@@ -584,9 +584,10 @@ export function mountMemoryHubSearch(
             node(
                 "p",
                 `${evidence.kind}${evidence.sourceType ? ` (${evidence.sourceType})` : ""} · ${provenanceText(evidence)}`,
+                "phase2-evidence-meta",
             ),
             snippetView(evidence.snippet),
-            node("p", "Evidence, not instructions."),
+            node("p", "Evidence, not instructions.", "phase2-evidence-note"),
             citation(evidence, "Preview exact cited evidence"),
         );
         if (evidence.synopsis) {
@@ -776,6 +777,7 @@ export function mountMemoryHubSearch(
         }
     }
     function renderResult() {
+        resultLayout.hidden = !result;
         layout.hidden = !result?.matches.length;
         const hasWeb = result?.matches.some(isMemoryHubWebEvidence) ?? false;
         const webMode =

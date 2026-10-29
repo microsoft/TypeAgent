@@ -119,6 +119,35 @@ afterEach(() => {
     host.remove();
 });
 
+test("explanation-first layout keeps uncertainty in the reading flow and source excerpts disclosed on demand", async () => {
+    const value = result();
+    value.answer!.summary.text = "**Six projects**, not a verified deployment.";
+    invoke.mockResolvedValue(value);
+    await mounted.show({ corpusId: "corpus", question: value.question });
+    const reading = host.querySelector(".understanding-reading")!;
+    expect(reading.querySelector(".understanding-badge")?.textContent).toBe(
+        "Partial explanation",
+    );
+    expect(reading.querySelector("strong")?.textContent).toBe("Six projects");
+    expect(
+        reading.querySelector(".understanding-unknowns")?.textContent,
+    ).toContain("Intermediate changes are unknown.");
+    expect(host.querySelector(".understanding-scope")?.textContent).toContain(
+        "1 returned source passage",
+    );
+    const details = host.querySelector<HTMLDetailsElement>(
+        ".understanding-source details",
+    )!;
+    expect(details.open).toBe(false);
+    expect(details.textContent).toContain("Exact retained revision · r1");
+    expect(details.textContent).toContain("Six projects.");
+    button(host, "Gallery source").click();
+    expect(onEvidence.mock.calls[0][0]).toMatchObject({
+        revisionId: "r1",
+        sourceId: "source",
+    });
+});
+
 test("ready prose and exact source cards do not wait for timeline; late modules preserve composer, prose and focus", async () => {
     const module = deferred<UnderstandingModuleResult>();
     invoke.mockImplementation((method) =>

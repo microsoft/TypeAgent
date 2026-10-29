@@ -95,6 +95,22 @@ function button(text: string): HTMLButtonElement {
 function field<T extends HTMLElement>(name: string): T {
     return host.querySelector<T>(`[name="${name}"]`)!;
 }
+test("answer and supporting evidence stay together while typed insights use the supporting rail", async () => {
+    invoke.mockResolvedValue(result([source]));
+    await mounted.show("worker");
+    const reading = host.querySelector(".phase2-search-reading")!;
+    expect(reading.querySelector(".phase2-answer")).not.toBeNull();
+    expect(reading.querySelector(".phase2-results")).not.toBeNull();
+    expect(
+        host
+            .querySelector(".phase2-result-layout > aside")
+            ?.getAttribute("aria-label"),
+    ).toBe("Search insights");
+    expect(
+        reading.querySelector(".phase2-evidence-meta")?.textContent,
+    ).toContain("Captured source revision");
+});
+
 test("Ask forwards explicit retrieval/checkpoint policy and shows exact derived and user assertion references", async () => {
     field<HTMLSelectElement>("intent").value = "ask";
     const reference = {
