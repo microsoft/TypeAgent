@@ -9,6 +9,10 @@ import {
     indexedEvidenceGroundingInstructions,
 } from "./indexedAnswer.js";
 import type { AnswerEvidence } from "./types.js";
+import {
+    ReaderStatusMismatch,
+    readWithStatusRepair,
+} from "./readerStatusRepair.js";
 import type {
     UnderstandingCandidates,
     UnderstandingClaim,
@@ -156,7 +160,9 @@ export function parseUnderstanding(
                 claims.some((item) => !item.evidenceIds.length))) ||
         (!factual && (summary.evidenceIds.length || sections.length))
     )
-        throw new Error("Understanding status and factual claims disagree");
+        throw new ReaderStatusMismatch(
+            "Understanding status and factual claims disagree",
+        );
     return {
         schemaVersion: 1,
         status: value.status,
@@ -177,7 +183,7 @@ export function parseUnderstanding(
 }
 
 function outputSchema(evidence: AnswerEvidence[], allowRefinement: boolean) {
-    const string = { type: "string" };
+    const string = { type: "string", minLength: 1, maxLength: 500 };
     const ids = {
         type: "array",
         maxItems: 32,
@@ -195,7 +201,7 @@ function outputSchema(evidence: AnswerEvidence[], allowRefinement: boolean) {
         maxItems,
     });
     const cited = object({
-        text: string,
+        text: { type: "string", minLength: 1, maxLength: 3000 },
         evidenceIds: ids,
         role: { type: "string", enum: ["memory"] },
     });
@@ -205,9 +211,15 @@ function outputSchema(evidence: AnswerEvidence[], allowRefinement: boolean) {
             type: "string",
             enum: ["answered", "partial", "noAnswer", "needsClarification"],
         },
-        title: string,
+        title: { ...string, maxLength: 160 },
         summary: cited,
-        sections: list(object({ title: string, claims: list(cited, 12) }), 4),
+        sections: list(
+            object({
+                title: { ...string, maxLength: 160 },
+                claims: list(cited, 12),
+            }),
+            4,
+        ),
         unknowns: list(string, 8),
         moduleSignals: list(
             object({
@@ -219,13 +231,16 @@ function outputSchema(evidence: AnswerEvidence[], allowRefinement: boolean) {
                     type: "string",
                     enum: ["evolution", "relatedEntity", "usefulContext"],
                 },
-                evidenceIds: ids,
+                evidenceIds: { ...ids, maxItems: 16 },
                 candidateIds: list(string, 12),
             }),
             3,
         ),
-        followUps: list(string, 3),
-        retrievalQueries: list(string, allowRefinement ? 2 : 0),
+        followUps: list({ ...string, maxLength: 240 }, 3),
+        retrievalQueries: list(
+            { ...string, maxLength: 240 },
+            allowRefinement ? 2 : 0,
+        ),
     });
 }
 
@@ -291,38 +306,51 @@ export async function readUnderstanding(input: {
         strict: true as const,
         schema: outputSchema(input.evidence, input.allowRefinement),
     };
-    if (JSON.stringify({ messages, jsonSchema }).length > 32_000)
-        throw new Error(
-            "Understanding serialized request exceeds 32000 characters",
-        );
     const model = input.model ?? createIndexedAnswerModel(input.endpoint);
     const timeout = AbortSignal.timeout(90_000);
     const caller = currentSearchAbortSignal();
-    let result: Awaited<ReturnType<ChatModel["complete"]>>;
-    try {
-        result = await model.complete(
-            messages,
-            undefined,
-            jsonSchema,
-            undefined,
-            AbortSignal.any([timeout, ...(caller ? [caller] : [])]),
-        );
-    } catch (error) {
-        caller?.throwIfAborted();
-        if (timeout.aborted || isRetryableModelFailure(error))
-            throw new UnderstandingReaderUnavailable(error);
-        throw error;
-    }
-    caller?.throwIfAborted();
-    if (!result.success) {
-        if (isRetryableModelFailure(result))
-            throw new UnderstandingReaderUnavailable(result);
-        throw new Error(result.message);
-    }
-    return parseUnderstanding(
-        result.data,
-        input.evidence,
-        input.candidates,
-        input.allowRefinement,
+    const signal = AbortSignal.any([timeout, ...(caller ? [caller] : [])]);
+    return readWithStatusRepair(
+        async (feedback) => {
+            const prompt: PromptSection[] = feedback
+                ? [...messages, { role: "system", content: feedback }]
+                : messages;
+            if (
+                JSON.stringify({ messages: prompt, jsonSchema }).length > 32_000
+            )
+                throw new Error(
+                    "Understanding serialized request exceeds 32000 characters",
+                );
+            let result: Awaited<ReturnType<ChatModel["complete"]>>;
+            try {
+                result = await model.complete(
+                    prompt,
+                    undefined,
+                    jsonSchema,
+                    undefined,
+                    signal,
+                );
+            } catch (error) {
+                caller?.throwIfAborted();
+                if (timeout.aborted || isRetryableModelFailure(error))
+                    throw new UnderstandingReaderUnavailable(error);
+                throw error;
+            }
+            caller?.throwIfAborted();
+            if (!result.success) {
+                if (isRetryableModelFailure(result))
+                    throw new UnderstandingReaderUnavailable(result);
+                throw new Error(result.message);
+            }
+            return result.data;
+        },
+        (data) =>
+            parseUnderstanding(
+                data,
+                input.evidence,
+                input.candidates,
+                input.allowRefinement,
+            ),
+        caller,
     );
 }

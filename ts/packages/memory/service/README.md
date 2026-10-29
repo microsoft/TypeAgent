@@ -64,6 +64,12 @@ capacities follow the provider's published limits; explicitly configured
 overrides remain authoritative. Document-scoped query translation uses its own
 model and applies cache decoration after its scoped schema is installed, without
 changing the ingestion/extraction model.
+Fast query models retain the default JSON-output mode; selecting a faster model
+does not remove that safeguard.
+For independent role experiments, `initialReaderModelEndpoint` overrides only
+initial Search/Ask and Understanding reading, not query translation, extraction
+or deeper refinement. Injected reader models still take precedence. For example,
+retain fast query translation while selecting the ordinary reader endpoint.
 Hosts that customize built-in document settings can use `indexSettingsFactory`;
 their extraction model, validators and embedding batches are retained while
 serving roles and decorators are applied. The ordinary agent-server host uses
@@ -75,10 +81,20 @@ browser gateway. The gateway omits the preview RPC when disabled. Direct clients
 may explicitly request `phase: "preview"` only from an enabled host; provisional
 results have `provisional: true`, no answer and no prepared evidence handle.
 
+Both readers allow one same-model regeneration when the returned status conflicts
+with its factual citations/sections. The same evidence, cancellation/deadline and
+serialized request limits still apply. The regenerated response is fully parsed
+and revalidated; invalid references, malformed JSON, privacy changes and other
+failures are not silently accepted or converted into a successful answer.
+`memory.reader.statusRepair` records the exceptional extra model call.
+
 The [latency runner](../../../tools/memory-maintenance-qualification/search-latency-benchmark.mts)
-accepts `--experiments`, `--fast-model`, `--paths`, `--understanding-rounds`
-and optional `--retain-answers`. Private answers are saved outside measurement
-intervals; repeated questions overestimate general translation-cache hit rates.
+accepts `--experiments`, `--fast-model`, `--initial-reader-model`, `--paths`, `--understanding-rounds`
+and optional `--retain-answers`. Opt-in `--retain-model-responses` also saves
+private model output, bounded to 65,536 characters per chat response, in
+`provider-responses.jsonl`; it never records request headers or prompts.
+Private files are written outside measurement intervals; do not publish them.
+Repeated questions overestimate general translation-cache hit rates.
 The [local experiment tool](../../../tools/memory-maintenance-qualification/serving-local-experiments.mts)
 compares eager/lazy startup and fixture JSON parsing versus a local worker with
 full-result cloning. It prohibits network calls and does not ship a storage worker.

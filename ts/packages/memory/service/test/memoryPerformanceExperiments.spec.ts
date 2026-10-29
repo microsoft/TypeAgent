@@ -5,6 +5,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+    configFromEnvRecord,
+    getRuntimeConfig,
+    setRuntimeConfig,
+} from "@typeagent/aiclient";
+import {
+    createDocMemorySettings,
+    type DocMemorySettings,
+} from "@typeagent/conversation-memory";
+import {
     runWithSearchCancellation,
     type SearchQueryTranslator,
 } from "@typeagent/knowpro";
@@ -29,12 +38,82 @@ function deferred() {
 }
 
 describe("bounded serving experiments", () => {
+    test("the actual fast-query factory retains JSON output mode on the wire", async () => {
+        const root = await mkdtemp(path.join(os.tmpdir(), "fast-query-json-"));
+        const originalConfig = getRuntimeConfig();
+        const originalFetch = globalThis.fetch;
+        let service: FileMemoryService | undefined;
+        let settings: DocMemorySettings | undefined;
+        let body: Record<string, unknown> | undefined;
+        try {
+            setRuntimeConfig(
+                configFromEnvRecord({
+                    TYPEAGENT_MODEL_PROVIDER: "azure",
+                    TYPEAGENT_EMBEDDING_PROVIDER: "none",
+                    AZURE_OPENAI_API_KEY: "offline-fixture",
+                    AZURE_OPENAI_RESPONSE_FORMAT: "1",
+                    AZURE_OPENAI_ENDPOINT_GPT_6_LUNA_EASTUS:
+                        "https://example.test/openai/deployments/extraction/chat/completions",
+                    AZURE_OPENAI_ENDPOINT_GPT_5_4_MINI_EASTUS:
+                        "https://example.test/openai/deployments/query/chat/completions",
+                }),
+            );
+            globalThis.fetch = async (url, init) => {
+                expect(String(url)).toContain("/deployments/query/");
+                body = JSON.parse(String(init?.body)) as Record<
+                    string,
+                    unknown
+                >;
+                return new Response(
+                    JSON.stringify({
+                        choices: [{ message: { content: "{}" } }],
+                    }),
+                    { status: 200 },
+                );
+            };
+            service = new FileMemoryService(root, {
+                maintenanceMode: "manual",
+                informationalViews: false,
+                sourceSynopses: false,
+                performanceExperiments: "fast-models",
+                fastQueryModelEndpoint: "gpt_5_4_mini",
+                indexSettingsFactory: () => {
+                    settings = createDocMemorySettings();
+                    return settings;
+                },
+            });
+            const { corpusId } = await service.createCorpus("Fast query JSON");
+            await service.search({ corpusId, query: "recorded gallery" });
+            if (!settings?.queryLanguageModel)
+                throw new Error("Fast query model was not installed");
+            expect(settings.queryLanguageModel).not.toBe(
+                settings.languageModel,
+            );
+            expect(
+                (await settings.queryLanguageModel.complete("Return JSON."))
+                    .success,
+            ).toBe(true);
+            expect(body?.response_format).toEqual({ type: "json_object" });
+        } finally {
+            await service?.close();
+            globalThis.fetch = originalFetch;
+            setRuntimeConfig(originalConfig);
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+
     test("presets are explicit and unknown switches fail closed", () => {
         expect(memoryPerformanceExperiments("").size).toBe(0);
         expect(memoryPerformanceExperiments("p2").size).toBe(5);
         expect(memoryPerformanceExperiments("p3").size).toBe(4);
         expect(memoryPerformanceExperiments("p2,p3").size).toBe(9);
         expect(() => memoryPerformanceExperiments("typo")).toThrow("Unknown");
+        expect(
+            () =>
+                new FileMemoryService("unused", {
+                    initialReaderModelEndpoint: " ",
+                }),
+        ).toThrow("initialReaderModelEndpoint");
         expect(
             () =>
                 new FileMemoryService("unused", {

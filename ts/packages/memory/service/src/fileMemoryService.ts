@@ -665,6 +665,7 @@ interface PreparedEventIndex {
 export interface FileMemoryServiceOptions {
     performanceExperiments?: string;
     fastQueryModelEndpoint?: string;
+    initialReaderModelEndpoint?: string;
     maintenanceMode?: "automatic" | "manual";
     ingestionCommitPolicy?: Partial<IngestionCommitPolicy>;
     maintenanceLimits?: {
@@ -1318,6 +1319,7 @@ export class FileMemoryService
     private readonly experiments: ReadonlySet<MemoryPerformanceExperiment>;
     private readonly translationCache = new TranslationCache();
     private readonly fastQueryModelEndpoint: string | undefined;
+    private readonly initialReaderModelEndpoint: string | undefined;
     private readonly collectionInitializations = new Map<
         string,
         {
@@ -1704,6 +1706,16 @@ export class FileMemoryService
         this.fastQueryModelEndpoint =
             options.fastQueryModelEndpoint ??
             process.env.TYPEAGENT_MEMORY_FAST_MODEL;
+        if (
+            options.initialReaderModelEndpoint !== undefined &&
+            !options.initialReaderModelEndpoint.trim()
+        )
+            throw new Error("initialReaderModelEndpoint must not be empty");
+        this.initialReaderModelEndpoint =
+            options.initialReaderModelEndpoint ??
+            (this.experiments.has("fast-models")
+                ? this.fastQueryModelEndpoint
+                : undefined);
         this.indexFactory = this.createIndexFactory(options);
         const commitPolicy = resolveIngestionCommitPolicy(
             options.ingestionCommitPolicy,
@@ -2219,7 +2231,7 @@ export class FileMemoryService
             this.experiments.has("translation-cache");
         let queryModel: DocMemorySettings["queryLanguageModel"] =
             this.experiments.has("fast-models")
-                ? openai.createChatModel(this.fastQueryModelEndpoint)
+                ? openai.createJsonChatModel(this.fastQueryModelEndpoint)
                 : undefined;
         if (options.indexFactory) return options.indexFactory;
         if (!queryExperiments && !options.indexSettingsFactory)
@@ -10696,8 +10708,8 @@ export class FileMemoryService
             {
                 model: options.indexedAnswerModel,
                 endpoint: options.viewModelEndpoint,
-                ...(this.experiments.has("fast-models")
-                    ? { initialEndpoint: this.fastQueryModelEndpoint }
+                ...(this.initialReaderModelEndpoint
+                    ? { initialEndpoint: this.initialReaderModelEndpoint }
                     : {}),
                 briefInitial: this.experiments.has("brief-reader"),
                 parallelGraphSupport: this.experiments.has("graph-parallel"),
@@ -11009,8 +11021,11 @@ export class FileMemoryService
                         ...(this.indexedAnswerModel
                             ? { model: this.indexedAnswerModel }
                             : {}),
-                        ...(this.experiments.has("fast-models")
-                            ? { initialEndpoint: this.fastQueryModelEndpoint }
+                        ...(this.initialReaderModelEndpoint
+                            ? {
+                                  initialEndpoint:
+                                      this.initialReaderModelEndpoint,
+                              }
                             : {}),
                         ...(this.experiments.has("brief-reader")
                             ? { initialOutputTokens: 700 }

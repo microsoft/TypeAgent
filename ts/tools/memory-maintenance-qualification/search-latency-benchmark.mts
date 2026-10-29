@@ -73,6 +73,28 @@ export interface Sample {
     observationErrors: string[];
 }
 
+interface BenchmarkContext {
+    sample: Sample;
+    pending: Promise<void>[];
+    signal: AbortSignal;
+    modelResponses: {
+        providerIndex: number;
+        text: string;
+        truncated: boolean;
+    }[];
+}
+
+export function modelResponseDiagnostic(value: unknown) {
+    assert(record(value), "Invalid chat response for private diagnostics");
+    assert(Array.isArray(value.choices), "Missing chat response choices");
+    const text = JSON.stringify({
+        model: value.model,
+        choices: value.choices,
+    });
+    const limit = 64 * 1024;
+    return { text: text.slice(0, limit), truncated: text.length > limit };
+}
+
 export function answerOutcomeStatus(
     answer: { status?: string } | undefined,
 ): string {
@@ -199,11 +221,8 @@ function providerUsage(value: unknown): Partial<ProviderCall> {
 }
 
 function observe(
-    context: AsyncLocalStorage<{
-        sample: Sample;
-        pending: Promise<void>[];
-        signal: AbortSignal;
-    }>,
+    context: AsyncLocalStorage<BenchmarkContext>,
+    retainModelResponses: boolean,
 ) {
     const warn = console.warn;
     const fetch = globalThis.fetch;
@@ -263,6 +282,7 @@ function observe(
                 elapsedMs: 0,
                 status: response.status,
             };
+            const providerIndex = active.sample.providers.length;
             active.sample.providers.push(call);
             active.pending.push(
                 response
@@ -270,6 +290,15 @@ function observe(
                     .json()
                     .then((body: unknown) => {
                         Object.assign(call, providerUsage(body));
+                        if (
+                            retainModelResponses &&
+                            kind === "chat" &&
+                            response.ok
+                        )
+                            active.modelResponses.push({
+                                providerIndex,
+                                ...modelResponseDiagnostic(body),
+                            });
                     })
                     .catch((error: unknown) => {
                         call.observationError =
@@ -300,7 +329,9 @@ function benchmarkOptions() {
             rounds: { type: "string", default: "3" },
             experiments: { type: "string", default: "" },
             "fast-model": { type: "string" },
+            "initial-reader-model": { type: "string" },
             "retain-answers": { type: "boolean", default: false },
+            "retain-model-responses": { type: "boolean", default: false },
             "understanding-rounds": { type: "string", default: "2" },
             paths: {
                 type: "string",
@@ -374,6 +405,7 @@ async function main() {
     assert(cases.length, "No cases");
     await mkdir(dirname(output), { recursive: true });
     await mkdir(output);
+    await writeFile(resolve(output, "cases.json"), manifestBytes);
     const memory = resolve(output, "store");
     await cp(source, memory, {
         recursive: true,
@@ -415,6 +447,9 @@ async function main() {
         ...(values["fast-model"]
             ? { fastQueryModelEndpoint: values["fast-model"] }
             : {}),
+        ...(values["initial-reader-model"]
+            ? { initialReaderModelEndpoint: values["initial-reader-model"] }
+            : {}),
         understanding: true,
         maintenanceMode: "manual",
         discoveryPolicy: "off",
@@ -425,18 +460,17 @@ async function main() {
         () => undefined,
         createMemoryHubSynthesizer(),
     );
-    const context = new AsyncLocalStorage<{
-        sample: Sample;
-        pending: Promise<void>[];
-        signal: AbortSignal;
-    }>();
-    const restore = observe(context);
+    const context = new AsyncLocalStorage<BenchmarkContext>();
+    const restore = observe(context, values["retain-model-responses"]);
     const samples: Sample[] = [];
     const seen = new Set<string>();
     const startedAt = new Date().toISOString();
     const compiledDigests: Record<string, string> = {};
     for (const path of [
         "packages/memory/service/dist/integratedAnswer.js",
+        "packages/memory/service/dist/integratedAnswerReader.js",
+        "packages/memory/service/dist/indexedAnswer.js",
+        "packages/memory/service/dist/readerStatusRepair.js",
         "packages/memory/service/dist/fileMemoryService.js",
         "packages/memory/service/dist/understanding.js",
         "packages/memory/service/dist/understandingReader.js",
@@ -444,6 +478,7 @@ async function main() {
         "packages/memory/service/dist/translationCache.js",
         "packages/memory/service/dist/maintenanceScheduler.js",
         "packages/memory/service/dist/knowProCorpusIndex.js",
+        "packages/memory/conversation/dist/docMemory.js",
         "packages/knowPro/dist/searchTiming.js",
     ])
         compiledDigests[path] = createHash("sha256")
@@ -479,7 +514,9 @@ async function main() {
         paths: [...paths],
         performanceExperiments: values.experiments,
         fastQueryModelEndpoint: values["fast-model"],
+        initialReaderModelEndpoint: values["initial-reader-model"],
         privateAnswersRetained: values["retain-answers"],
+        privateModelResponsesRetained: values["retain-model-responses"],
         uniquePrimaryQueries: cases.length,
         selectedCaseIds: cases.map((item) => item.id),
     };
@@ -548,6 +585,7 @@ async function main() {
         };
         seen.add(test.corpusId);
         const pending: Promise<void>[] = [];
+        const modelResponses: BenchmarkContext["modelResponses"] = [];
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 180_000);
         const start = performance.now();
@@ -556,7 +594,7 @@ async function main() {
         let failure: unknown;
         try {
             outcome = await context.run(
-                { sample, pending, signal: controller.signal },
+                { sample, pending, signal: controller.signal, modelResponses },
                 () =>
                     runWithSearchTiming(
                         sample.batchId,
@@ -589,6 +627,21 @@ async function main() {
             await Promise.all(pending);
         }
         samples.push(sample);
+        if (values["retain-model-responses"] && modelResponses.length)
+            await appendFile(
+                resolve(output, "provider-responses.jsonl"),
+                modelResponses
+                    .map((response) =>
+                        JSON.stringify({
+                            batchId: sample.batchId,
+                            caseId: test.id,
+                            variant,
+                            round,
+                            ...response,
+                        }),
+                    )
+                    .join("\n") + "\n",
+            );
         if (values["retain-answers"] && failure !== undefined)
             await appendFile(
                 resolve(output, "failures.jsonl"),

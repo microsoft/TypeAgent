@@ -8,6 +8,8 @@ import {
     type ChatModel,
 } from "@typeagent/aiclient";
 import { answerIntegratedEvidence } from "../src/integratedAnswer.js";
+import { readIntegratedEvidence } from "../src/integratedAnswerReader.js";
+import { runWithSearchCancellation } from "@typeagent/knowpro";
 import {
     MemoryUnderstanding,
     assertUnderstandingBytes,
@@ -295,6 +297,127 @@ describe("strict understanding reader", () => {
     const evidence: AnswerEvidence[] = [
         { id: "s0", kind: "source", source: source() },
     ];
+    test.each(["integrated", "understanding"])(
+        "%s regenerates one inconsistent abstention with unchanged evidence",
+        async (kind) => {
+            const prompts: string[] = [];
+            const model: ChatModel = {
+                completionSettings: {},
+                complete: async (prompt) => {
+                    prompts.push(JSON.stringify(prompt));
+                    const ids = prompts.length === 1 ? ["s0"] : [];
+                    const data =
+                        kind === "integrated"
+                            ? {
+                                  status: "noAnswer",
+                                  answer: "The requested measurement is not recorded.",
+                                  evidenceIds: ids,
+                                  retrievalQueries: [],
+                              }
+                            : {
+                                  ...response(ids),
+                                  status: "noAnswer",
+                              };
+                    return { success: true, data: JSON.stringify(data) };
+                },
+            };
+            const result =
+                kind === "integrated"
+                    ? await readIntegratedEvidence(request, evidence, {
+                          model,
+                      })
+                    : await readUnderstanding({
+                          question: request.question,
+                          evidence,
+                          candidates: empty,
+                          allowRefinement: true,
+                          model,
+                      });
+            expect(result.status).toBe("noAnswer");
+            expect(prompts).toHaveLength(2);
+            expect(prompts[1]).toContain("Regenerate from the same");
+            expect(prompts[1]).toContain("User reported six gallery projects");
+            expect(prompts[0]).toContain("Match every requested event");
+        },
+    );
+    test.each(["status", "unknown citation", "malformed JSON", "cancelled"])(
+        "integrated repair is bounded and does not recover %s by weakening validation",
+        async (failure) => {
+            let calls = 0;
+            const controller = new AbortController();
+            const model: ChatModel = {
+                completionSettings: {},
+                complete: async () => {
+                    calls++;
+                    if (failure === "cancelled")
+                        controller.abort(new Error("reader cancelled"));
+                    return {
+                        success: true,
+                        data:
+                            failure === "malformed JSON"
+                                ? "{"
+                                : JSON.stringify({
+                                      status: "noAnswer",
+                                      answer: "Not established.",
+                                      evidenceIds: [
+                                          failure === "unknown citation"
+                                              ? "unknown"
+                                              : "s0",
+                                      ],
+                                      retrievalQueries: [],
+                                  }),
+                    };
+                },
+            };
+            await expect(
+                runWithSearchCancellation(controller.signal, () =>
+                    readIntegratedEvidence(request, evidence, { model }),
+                ),
+            ).rejects.toThrow();
+            expect(calls).toBe(failure === "status" ? 2 : 1);
+        },
+    );
+    test("repair feedback cannot exceed the serialized reader request budget", async () => {
+        let initialChars = 0;
+        const valid: ChatModel = {
+            completionSettings: {},
+            complete: async (messages, _options, jsonSchema) => {
+                initialChars = JSON.stringify({ messages, jsonSchema }).length;
+                return {
+                    success: true,
+                    data: JSON.stringify({
+                        status: "answered",
+                        answer: "Six projects.",
+                        evidenceIds: ["s0"],
+                        retrievalQueries: [],
+                    }),
+                };
+            },
+        };
+        await readIntegratedEvidence(request, evidence, { model: valid });
+        let calls = 0;
+        await expect(
+            readIntegratedEvidence(request, evidence, {
+                maxRequestChars: initialChars,
+                model: {
+                    completionSettings: {},
+                    complete: async () => {
+                        calls++;
+                        return {
+                            success: true,
+                            data: JSON.stringify({
+                                status: "noAnswer",
+                                answer: "Not established.",
+                                evidenceIds: ["s0"],
+                                retrievalQueries: [],
+                            }),
+                        };
+                    },
+                },
+            }),
+        ).rejects.toThrow("serialized request budget");
+        expect(calls).toBe(1);
+    });
     test("brief initial reading preserves strict output and injected-model precedence", async () => {
         let instructions = "";
         const model: ChatModel = {

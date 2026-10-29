@@ -6,9 +6,29 @@ import test from "node:test";
 import {
     answerOutcomeStatus,
     intervalUnionMs,
+    modelResponseDiagnostic,
     readCases,
     summarize,
 } from "./search-latency-benchmark.mts";
+
+test("private response diagnostics retain bounded model output, not unrelated fields", () => {
+    const result = modelResponseDiagnostic({
+        model: "test-model",
+        choices: [{ message: { content: "x".repeat(70 * 1024) } }],
+        unrelated: "not retained",
+    });
+    assert.equal(result.text.length, 64 * 1024);
+    assert.equal(result.truncated, true);
+    assert(!result.text.includes("not retained"));
+    const short = modelResponseDiagnostic({
+        model: "test-model",
+        choices: [{ message: { content: '{"status":"noAnswer"}' } }],
+    });
+    assert.equal(short.truncated, false);
+    assert.equal(JSON.parse(short.text).model, "test-model");
+    assert.throws(() => modelResponseDiagnostic(null));
+    assert.throws(() => modelResponseDiagnostic({}));
+});
 
 test("delivery labels do not invent a semantic outcome for integrated answers", () => {
     assert.equal(answerOutcomeStatus({}), "answer-returned");

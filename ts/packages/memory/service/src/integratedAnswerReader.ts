@@ -10,6 +10,10 @@ import {
     indexedRetrievalQueries,
 } from "./indexedAnswer.js";
 import { normalizeQueryTemporalContext } from "./temporalContext.js";
+import {
+    ReaderStatusMismatch,
+    readWithStatusRepair,
+} from "./readerStatusRepair.js";
 import type { AnswerEvidence, MemoryAnswerRequest } from "./types.js";
 
 export interface IntegratedReaderResponse {
@@ -67,7 +71,9 @@ function parseReaderResponse(
         return id;
     });
     if ((value.status === "answered") !== evidenceIds.length > 0)
-        throw new Error("Integrated answer status and references disagree");
+        throw new ReaderStatusMismatch(
+            "Integrated answer status and references disagree",
+        );
     const retrievalQueries = indexedRetrievalQueries(
         "retrievalQueries" in value ? value.retrievalQueries : [],
         value.status,
@@ -124,7 +130,7 @@ export async function readIntegratedEvidence(
                     items: { type: "string", minLength: 1, maxLength: 240 },
                     maxItems: 2,
                 },
-                answer: { type: "string" },
+                answer: { type: "string", minLength: 1, maxLength: 12000 },
                 evidenceIds: {
                     type: "array",
                     items: {
@@ -137,21 +143,32 @@ export async function readIntegratedEvidence(
         },
     } satisfies NonNullable<Parameters<ChatModel["complete"]>[2]>;
     const maxRequestChars = options.maxRequestChars ?? 32000;
-    if (
-        !Number.isFinite(maxRequestChars) ||
-        maxRequestChars < 0 ||
-        JSON.stringify({ messages, jsonSchema }).length > maxRequestChars
-    )
-        throw new Error(
-            "Complete integrated reader request exceeds the serialized request budget",
-        );
-    const result = await model.complete(
-        messages,
-        undefined,
-        jsonSchema,
-        undefined,
-        currentSearchAbortSignal(),
+    const signal = currentSearchAbortSignal();
+    return readWithStatusRepair(
+        async (feedback) => {
+            const prompt = feedback
+                ? [...messages, { role: "system" as const, content: feedback }]
+                : messages;
+            if (
+                !Number.isFinite(maxRequestChars) ||
+                maxRequestChars < 0 ||
+                JSON.stringify({ messages: prompt, jsonSchema }).length >
+                    maxRequestChars
+            )
+                throw new Error(
+                    "Complete integrated reader request exceeds the serialized request budget",
+                );
+            const result = await model.complete(
+                prompt,
+                undefined,
+                jsonSchema,
+                undefined,
+                signal,
+            );
+            if (!result.success) throw new Error(result.message);
+            return result.data;
+        },
+        (data) => parseReaderResponse(data, evidence),
+        signal,
     );
-    if (!result.success) throw new Error(result.message);
-    return parseReaderResponse(result.data, evidence);
 }
