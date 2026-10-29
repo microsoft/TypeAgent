@@ -12,13 +12,13 @@ import type {
 } from "../src/graphTypes.js";
 import { indexedTopicOccurrence } from "../src/topicIncidence.js";
 import { createTopicSnapshot } from "../src/topicGeneration.js";
-import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { FakeIndexedCorpusIndex } from "./fakeIndexedCorpusIndex.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { ViewHistory } from "../src/viewHistory.js";
 
 let graphReads = 0;
 let documentGraphReads = 0;
-class GraphIndex extends FakeSemanticCorpusIndex {
+class GraphIndex extends FakeIndexedCorpusIndex {
     public async readKnowledgeGraph(
         sourceIds: ReadonlySet<string>,
         _kind?: string,
@@ -111,6 +111,7 @@ describe("bounded corpus graph service", () => {
     let ignoreAbort: boolean;
     const open = () =>
         new FileMemoryService(directory, {
+            understanding: true,
             indexFactory: (_id, directory) => new GraphIndex(directory),
             eventIndexFactory: (_id, directory) => {
                 class EventIndex extends GraphIndex {
@@ -250,6 +251,50 @@ describe("bounded corpus graph service", () => {
             `Graph did not become ready: ${JSON.stringify(last?.coverage)}`,
         );
     }
+    test("understanding validates focused graph snapshots without reusing query-bound generations for different limits", async () => {
+        const corpusId = await corpus();
+        await document(corpusId);
+        const graph = await ready({
+            corpusId,
+            kind: "entities",
+            search: "Zephyr",
+            maxNodes: 3,
+            maxEdges: 2,
+            evidenceKinds: ["document"],
+        });
+        const node = graph.nodes.find((node) => node.label === "Zephyr")!;
+        expect(node).toBeDefined();
+        const result = await service.understand({
+            corpusId,
+            question: "Show related systems",
+            focus: { nodeId: node.id, generation: graph.generation },
+            selection: {
+                mode: "only",
+                modules: ["relationships", "concepts"],
+            },
+        });
+        const relationships = await service.understandingModule({
+            corpusId,
+            snapshotId: result.snapshotId,
+            kind: "relationships",
+        });
+        expect(relationships.status).toBe("ready");
+        expect(relationships.graph?.edges).toHaveLength(1);
+        expect(relationships.graph?.generation).not.toBe(graph.generation);
+        expect(relationships.support?.[0].items[0]).toMatchObject({
+            kind: "document",
+            sourceId: "document",
+        });
+        const concepts = await service.understandingModule({
+            corpusId,
+            snapshotId: result.snapshotId,
+            kind: "concepts",
+        });
+        expect(concepts.status).toBe("ready");
+        expect(concepts.concepts?.some((item) => item.nodeId === node.id)).toBe(
+            true,
+        );
+    });
     test("twenty warm graph and support reads reuse projections without loading full view state and honor privacy gates", async () => {
         expect(
             (await service.getCapabilities()).features.scopedKnowledgeGraphs,

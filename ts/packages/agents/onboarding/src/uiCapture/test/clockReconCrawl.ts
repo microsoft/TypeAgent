@@ -18,10 +18,10 @@ try {
     process.stderr.write(`[recon] could not load env from ${envPath}: ${e}\n`);
 }
 
-// GPT-5 reasoning + vision calls take time on big prompts; bump the
+// Reasoning + vision calls take time on big prompts; bump the
 // suffixed timeout (aiclient's empty-string default short-circuits the
 // fallback to the unsuffixed var).
-process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_5 = "300000";
+process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_6_1_TERRA = "300000";
 process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_v = "180000";
 process.env.AZURE_OPENAI_MAX_TIMEOUT = "300000";
 process.env.OPENAI_MAX_TIMEOUT = "300000";

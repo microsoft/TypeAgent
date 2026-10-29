@@ -801,6 +801,7 @@ export const capabilitiesSchema = z.object({
         management: z.boolean(),
         groundedAnswer: z.boolean(),
         scopedKnowledgeGraphs: z.boolean().optional(),
+        memoryUnderstanding: z.boolean().optional(),
         sourceSynopses: z.boolean().optional(),
         agentSessionImportTypes: z
             .enum(["agent-session-jsonl", "copilot-session-jsonl"])

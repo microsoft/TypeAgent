@@ -11,6 +11,7 @@ import type {
 } from "./topicTypes.js";
 import { assertViewIdentifier } from "./viewContent.js";
 import { parseIndexedLocator } from "./indexedFragments.js";
+import { TopicEvidenceIndex, topicSourceKey } from "./topicLookup.js";
 import {
     validateTopicCuration,
     validateTopicCurationProgress,
@@ -70,7 +71,8 @@ export function initialTopicNodes(
 
 function validateOccurrence(
     occurrence: TopicOccurrence,
-    snapshot: TopicSnapshot,
+    eventIds: ReadonlySet<string>,
+    sourceRevisions: ReadonlySet<string>,
 ): void {
     if (
         occurrence.evidence &&
@@ -111,14 +113,8 @@ function validateOccurrence(
     }
     if (
         occurrence.evidence
-            ? !snapshot.influenceEvents?.some(
-                  (event) => event.eventId === occurrence.evidence?.eventId,
-              )
-            : !snapshot.influenceSources.some(
-                  (source) =>
-                      source.sourceId === occurrence.sourceId &&
-                      source.revisionId === occurrence.revisionId,
-              )
+            ? !eventIds.has(occurrence.evidence.eventId)
+            : !sourceRevisions.has(topicSourceKey(occurrence))
     )
         throw new Error(
             "Topic occurrence absent from captured source influence",
@@ -143,6 +139,7 @@ function validateNode(
     snapshot: TopicSnapshot,
     occurrences: Map<string, TopicOccurrence>,
     represented: Set<string>,
+    evidenceIndex: TopicEvidenceIndex,
 ): void {
     validateNodeMetadata(node);
     if (
@@ -164,23 +161,7 @@ function validateNode(
     });
     if (!selected.length || (node.summary && !node.citations.length))
         throw new Error("Topic summary requires original incidence evidence");
-    const sourceRevisions = new Set(
-        selected.map((entry) => `${entry.sourceId}\n${entry.revisionId}`),
-    );
-    const evidence = new Set(
-        snapshot.occurrences
-            .filter((entry) =>
-                sourceRevisions.has(`${entry.sourceId}\n${entry.revisionId}`),
-            )
-            .flatMap((entry) =>
-                entry.citations.map((citation) => JSON.stringify(citation)),
-            ),
-    );
-    if (
-        node.citations.some(
-            (citation) => !evidence.has(JSON.stringify(citation)),
-        )
-    )
+    if (!evidenceIndex.ownsExactEvidence([node.id], node.citations))
         throw new Error("Topic summary cites unsupplied original evidence");
 }
 
@@ -248,16 +229,20 @@ export function validateTopicSnapshot(snapshot: TopicSnapshot): void {
     )
         throw new Error("Duplicate topic or occurrence identity");
     const represented = new Set<string>();
+    const sourceRevisions = new Set(
+        snapshot.influenceSources.map(topicSourceKey),
+    );
     for (const occurrence of occurrences.values())
-        validateOccurrence(occurrence, snapshot);
+        validateOccurrence(occurrence, eventIds, sourceRevisions);
+    const evidenceIndex = new TopicEvidenceIndex(snapshot);
     for (const node of nodes.values())
-        validateNode(node, snapshot, occurrences, represented);
+        validateNode(node, snapshot, occurrences, represented, evidenceIndex);
     if (represented.size !== occurrences.size)
         throw new Error(
             "Topic snapshot truncated maintained occurrence membership",
         );
-    validateTopicCuration(snapshot);
-    validateTopicCurationProgress(snapshot);
+    validateTopicCuration(snapshot, evidenceIndex);
+    validateTopicCurationProgress(snapshot, evidenceIndex);
     validateEdges(
         snapshot,
         new Set([
@@ -447,6 +432,7 @@ function queryCuratedTopics(
     if (offset > concepts.length)
         throw new Error("Curated topic continuation exceeds query");
     const page = concepts.slice(offset, offset + (request.pageSize ?? 50));
+    const pending = pendingTopicAssignments(snapshot, request);
     return {
         ...empty,
         concepts: page.map((concept) => ({
@@ -459,10 +445,25 @@ function queryCuratedTopics(
             omittedCitations: Math.max(0, concept.citations.length - 8),
         })),
         totalConcepts: snapshot.curation?.concepts.length ?? 0,
+        ...(snapshot.curation?.pending
+            ? {
+                  pendingAssignments: pending.slice(0, request.pageSize ?? 50),
+                  pendingCount: snapshot.curation.pending.length,
+                  omittedPendingAssignments: Math.max(
+                      0,
+                      pending.length - (request.pageSize ?? 50),
+                  ),
+              }
+            : {}),
         matchingNodes: concepts.length,
         omittedNodes: snapshot.nodes.length,
         limits: [
             ...empty.limits,
+            ...(snapshot.curation?.pending?.length
+                ? [
+                      `${snapshot.curation.pending.length} topic assignments remain pending; raw evidence is available but these assignments are not validated concepts.`,
+                  ]
+                : []),
             ...(snapshot.curation
                 ? []
                 : [
@@ -481,6 +482,25 @@ function queryCuratedTopics(
               }
             : {}),
     };
+}
+
+function pendingTopicAssignments(
+    snapshot: TopicSnapshot,
+    request: TopicQueryRequest,
+) {
+    if (!snapshot.curation?.pending?.length) return [];
+    const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
+    return (snapshot.curation?.pending ?? []).filter((entry) => {
+        if (request.topicId && request.topicId !== entry.nodeId) return false;
+        const node = nodes.get(entry.nodeId);
+        return (
+            !request.search ||
+            (node !== undefined &&
+                `${node.label} ${node.scope}`
+                    .toLocaleLowerCase()
+                    .includes(request.search.toLocaleLowerCase()))
+        );
+    });
 }
 
 export function queryTopicSnapshot(

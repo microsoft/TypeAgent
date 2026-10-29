@@ -26,7 +26,13 @@ import {
     rbNode,
     rbMarkdown,
 } from "./memoryHubDocumentUi";
-import { icon, menuButton, setIconButton, type MenuItem } from "./memoryHubUi";
+import {
+    icon,
+    menuButton,
+    setIconButton,
+    setTabLabel,
+    type MenuItem,
+} from "./memoryHubUi";
 import { mountFlyout } from "./memoryHubFlyout";
 import { viewRevisionTime, viewSheet } from "./memoryHubViewUi";
 import {
@@ -70,6 +76,53 @@ function appendArticleCoverage(
         );
 }
 
+function appendArticleIntroduction(
+    article: HTMLElement,
+    view: ViewVersion,
+    meta: HTMLElement,
+): HTMLElement {
+    const hasInfobox =
+        view.content.kind === "wiki" || view.content.kind === "projectBrief";
+    const overviewLabel =
+        view.content.kind === "projectBrief"
+            ? "About this brief"
+            : "About this article";
+    const flow = hasInfobox
+        ? rbNode("div", undefined, "hub-view-reading-flow")
+        : article;
+    const overview = hasInfobox
+        ? rbNode("aside", undefined, "hub-view-infobox")
+        : article;
+    if (hasInfobox) {
+        overview.setAttribute("aria-label", overviewLabel);
+        overview.append(
+            rbNode("h3", view.content.summary ? "Synopsis" : overviewLabel),
+            rbNode(
+                "p",
+                view.content.kind === "projectBrief"
+                    ? "Brief overview"
+                    : "Article overview",
+                "hub-view-infobox-label",
+            ),
+        );
+    } else {
+        overview.append(meta);
+        appendArticleCoverage(overview, view.content);
+    }
+    if (view.content.summary) {
+        const lead = rbMarkdown(view.content.summary);
+        lead.classList.add("hub-view-lead");
+        overview.append(lead);
+    }
+    if (hasInfobox) {
+        appendArticleCoverage(overview, view.content);
+        overview.append(meta);
+        flow.append(overview);
+        article.append(flow);
+    }
+    return flow;
+}
+
 const viewKindLabels: Record<ViewKind, string> = {
     wiki: "Knowledge wiki",
     timeline: "Evidence-linked timeline",
@@ -77,6 +130,22 @@ const viewKindLabels: Record<ViewKind, string> = {
     troubleshootingGuide: "Troubleshooting guide",
     schemaView: "Schema-defined questions",
 };
+
+const viewKindIcons: Record<ViewKind, string> = {
+    wiki: "fa-book-open",
+    timeline: "fa-timeline",
+    projectBrief: "fa-diagram-project",
+    troubleshootingGuide: "fa-screwdriver-wrench",
+    schemaView: "fa-table-list",
+};
+
+const viewTypeTabs: { kind?: ViewKind; label: string }[] = [
+    { label: "All" },
+    { kind: "wiki", label: "Knowledge Wiki" },
+    { kind: "projectBrief", label: "Project Brief" },
+    { kind: "timeline", label: "Timeline" },
+    { kind: "troubleshootingGuide", label: "Troubleshooting Guide" },
+];
 
 function publicationDescription(
     publication: ViewPublicationStatus | undefined,
@@ -152,7 +221,10 @@ function publicationChoice(label: string, inherit: boolean): HTMLSelectElement {
 function viewLoadingStatus(label: string): HTMLParagraphElement {
     const status = rbNode("p", label, "hub-view-loading");
     status.setAttribute("role", "status");
-    status.prepend(icon("fa-spinner fa-spin"), document.createTextNode(" "));
+    status.prepend(
+        icon("fa-solid fa-spinner fa-spin"),
+        document.createTextNode(" "),
+    );
     return status;
 }
 
@@ -178,31 +250,28 @@ export function mountMemoryHubViews(
     root.setAttribute("aria-label", "Derived views");
     const status = rbNode("p");
     status.setAttribute("role", "status");
+    const total = rbNode("span", "Loading...", "hub-list-total");
+    const familyNotice = rbNode("div", undefined, "hub-notice");
+    familyNotice.setAttribute("role", "alert");
+    familyNotice.hidden = true;
     const loading = viewLoadingStatus("Loading views...");
     loading.hidden = true;
+    const listLoading = viewLoadingStatus("Loading views...");
+    listLoading.classList.add("hub-view-list-loading");
+    listLoading.hidden = true;
     const controls = rbNode("div", undefined, "hub-view-controls");
     const receipt = rbNode("div", undefined, "hub-view-build-receipt");
     let flyout: ReturnType<typeof mountFlyout> | undefined;
     let latestJob:
         | Pick<ViewBuildJob, "corpusId" | "state" | "jobId">
         | undefined;
-    const latestBuild = rbIconButton("fa-list-check", "Latest build", () =>
+    const latestBuild = rbIconButton("fa-bell", "Latest build", () =>
         openLatestBuild(),
     );
     latestBuild.hidden = true;
     const drafts = rbNode("div");
     const comparison = rbNode("div");
-    root.append(
-        rbNode("h3", "Views"),
-        rbNode(
-            "p",
-            "Read reusable documents built from your memory. Choose a view to preview it, or build new views from ready evidence.",
-        ),
-        loading,
-        status,
-        drafts,
-        comparison,
-    );
+    root.append(loading, status, drafts, comparison);
     host.append(root);
     let snapshot: ViewSnapshot = { head: null, views: [] };
     let inventory: ViewSummary[] = [];
@@ -216,12 +285,17 @@ export function mountMemoryHubViews(
         views: {},
     };
     const publications = new Map<string, ViewPublicationStatus>();
-    const pendingConflicts = new Map<string, ViewMergeConflict>();
+    const pendingConflicts = new Map<string, string>();
     let sequence = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let dirty = false;
     let busy = false;
     let refreshPending = false;
+    type InventoryState = "loading" | "ready" | "error";
+    let inventoryState: InventoryState = "ready";
+    let inventoryElements:
+        | { card: HTMLElement; list: HTMLElement; pager: HTMLElement }
+        | undefined;
     let disposed = false;
     let detailRequest:
         | { key: string; sequence: number; work: Promise<void> }
@@ -295,12 +369,37 @@ export function mountMemoryHubViews(
         }
     }
 
+    function setInventoryState(state: InventoryState): void {
+        inventoryState = state;
+        listLoading.hidden = state !== "loading";
+        if (!inventoryElements) return;
+        inventoryElements.card.setAttribute(
+            "aria-busy",
+            String(state === "loading"),
+        );
+        inventoryElements.list.hidden = state !== "ready";
+        inventoryElements.pager.hidden = state !== "ready";
+    }
+
     async function refresh(): Promise<void> {
         const current = ++sequence;
-        loading.hidden = false;
+        loading.hidden = !!(
+            inventoryElements &&
+            drafts.contains(inventoryElements.card) &&
+            !drafts.hidden
+        );
+        setInventoryState("loading");
         status.textContent = "";
+        total.textContent = "Loading...";
         try {
             await refreshInventory(current);
+            if (current === sequence) setInventoryState("ready");
+        } catch (error) {
+            if (current === sequence) {
+                total.textContent = "Unavailable";
+                setInventoryState("error");
+            }
+            throw error;
         } finally {
             if (current === sequence) loading.hidden = true;
         }
@@ -350,6 +449,7 @@ export function mountMemoryHubViews(
                     ...(route
                         ? { viewId: route.viewId, pageSize: 1 }
                         : {
+                              excludeKinds: ["schemaView"],
                               ...(searchQuery ? { query: searchQuery } : {}),
                               ...(selectedKind ? { kind: selectedKind } : {}),
                           }),
@@ -395,7 +495,13 @@ export function mountMemoryHubViews(
                 void action(refresh);
             }),
             ...(maintenance.length
-                ? [menuButton("Maintain collection", maintenance, "fa-gear")]
+                ? [
+                      menuButton(
+                          "Maintain collection",
+                          maintenance,
+                          "fa-screwdriver-wrench",
+                      ),
+                  ]
                 : []),
             latestBuild,
         );
@@ -413,8 +519,9 @@ export function mountMemoryHubViews(
                 "Projects",
             ),
         ]);
+        familyNotice.textContent = familyStatus.join(" ");
+        familyNotice.hidden = !familyStatus.length;
         renderDrafts();
-        status.textContent += familyStatus.join(" ");
         if (jobs[0]) setLatest(jobs[0]);
         else clearReceipt();
 
@@ -423,9 +530,9 @@ export function mountMemoryHubViews(
             family: ViewSnapshot["wikiFamily"],
             label = "Wiki",
         ): string[] {
-            if (!family) return [];
+            if (!family?.error) return [];
             return [
-                `${corpusNames.get(corpusId) ?? corpusId}: ${label} ${family.enabled ? "automatic" : "paused"}; ${family.pending ? "bounded work pending" : "up to date"}${family.error ? `; retry needed: ${family.error}` : ""}.`,
+                `${corpusNames.get(corpusId) ?? corpusId}: ${label} retry needed: ${family.error}.`,
             ];
         }
 
@@ -435,17 +542,11 @@ export function mountMemoryHubViews(
             derivedViews?: { informationalWiki?: true };
         }): MenuItem[] {
             if (!capabilities.derivedViews?.informationalWiki) return [];
-            const glyphs = {
-                update: "fa-arrows-rotate",
-                rebuild: "fa-rotate-right",
-                pause: "fa-pause",
-                resume: "fa-play",
-            } as const;
             return (["wiki", "projects"] as const).flatMap((family) =>
                 (["update", "rebuild", "pause", "resume"] as const).map(
                     (operation): MenuItem => ({
                         label: `${operation[0].toUpperCase()}${operation.slice(1)} ${family === "wiki" ? "Wiki" : "Projects"}`,
-                        icon: glyphs[operation],
+                        icon: "fa-screwdriver-wrench",
                         action: () => {
                             void action(async () => {
                                 const corpusId = options.scope();
@@ -474,9 +575,6 @@ export function mountMemoryHubViews(
                 ),
             );
         }
-        status.textContent = pager.total
-            ? `Showing ${inventory.length} of ${pager.total} saved views${corpusId ? "" : " across your collections"}.`
-            : "No views yet. Wiki pages and Projects are discovered automatically from indexed evidence. Update a collection family or build a timeline or guide.";
         if (route && !dirty) await renderRoute(route, current);
     }
 
@@ -486,38 +584,54 @@ export function mountMemoryHubViews(
     ): Promise<void> {
         const references = new Map<
             string,
-            { corpusId: string; conflictId: string }
+            {
+                corpusId: string;
+                conflictId: string;
+                state: ViewBuildSummary["results"][number]["conflictState"];
+            }
         >();
+        const seen = new Set<string>();
         const ordered = [...jobs].sort((left, right) =>
             (right.createdAt ?? "").localeCompare(left.createdAt ?? ""),
         );
         for (const job of ordered)
             for (const result of job.results) {
                 const key = publicationKey(job.corpusId, result.viewId);
-                if (result.conflictId && !references.has(key))
+                if (result.conflictId && !seen.has(key)) {
+                    seen.add(key);
+                    if (result.conflictState === "resolved") continue;
                     references.set(key, {
                         corpusId: job.corpusId,
                         conflictId: result.conflictId,
+                        state: result.conflictState,
                     });
+                }
             }
         const conflicts = await Promise.all(
             [...references].map(async ([key, input]) => {
-                const conflict = await invokeMemory(
-                    "memoryGetViewConflict",
-                    input,
-                );
+                if (input.state === "pending")
+                    return { key, conflictId: input.conflictId };
+                const conflict = await invokeMemory("memoryGetViewConflict", {
+                    corpusId: input.corpusId,
+                    conflictId: input.conflictId,
+                });
                 if (!conflict)
                     throw new Error(
                         "A conflict referenced by a build receipt is unavailable; refresh Activity or inspect view history",
                     );
-                return { key, conflict };
+                return {
+                    key,
+                    conflictId:
+                        conflict.state === "pending"
+                            ? conflict.conflictId
+                            : undefined,
+                };
             }),
         );
         if (disposed || current !== sequence) return;
         pendingConflicts.clear();
-        for (const { key, conflict } of conflicts)
-            if (conflict.state === "pending")
-                pendingConflicts.set(key, conflict);
+        for (const { key, conflictId } of conflicts)
+            if (conflictId) pendingConflicts.set(key, conflictId);
     }
 
     async function ensureReaderCapabilities(current: number): Promise<boolean> {
@@ -613,7 +727,7 @@ export function mountMemoryHubViews(
             comparison
                 .querySelector(".hub-view-actions")
                 ?.replaceChildren(
-                    rbButton("Back to views", backToViews),
+                    rbIconButton("fa-arrow-left", "Back to views", backToViews),
                     rbNode("p", "Structured page (read-only)"),
                 );
             return;
@@ -641,7 +755,7 @@ export function mountMemoryHubViews(
         comparison.querySelector(".hub-view-actions")?.replaceChildren(
             revisionLabel,
             rbNode("p", `Revision: ${view.revisionId}`),
-            rbButton("Back to views", backToViews),
+            rbIconButton("fa-arrow-left", "Back to views", backToViews),
             rbButton("Open current view", () => {
                 void showView(
                     view.corpusId,
@@ -707,7 +821,7 @@ export function mountMemoryHubViews(
         drafts.hidden = controls.hidden = true;
         comparison.setAttribute("aria-busy", "true");
         comparison.replaceChildren(
-            rbButton("Back to views", backToViews),
+            rbIconButton("fa-arrow-left", "Back to views", backToViews),
             viewLoadingStatus("Loading view details..."),
         );
         const work = renderRoute(target, current)
@@ -723,6 +837,7 @@ export function mountMemoryHubViews(
             })
             .finally(() => {
                 if (disposed || current !== sequence) return;
+                comparison.querySelector(".hub-view-loading")?.remove();
                 comparison.setAttribute("aria-busy", "false");
                 detailRequest = undefined;
             });
@@ -1305,7 +1420,7 @@ export function mountMemoryHubViews(
             latestBuild,
             job.state === "running"
                 ? "fa-solid fa-circle-notch fa-spin"
-                : "fa-list-check",
+                : "fa-bell",
             `Latest build: ${job.state}`,
         );
         latestBuild.classList.toggle(
@@ -1554,17 +1669,36 @@ export function mountMemoryHubViews(
 
     function renderDrafts(): void {
         if (dirty) return;
+        const previousTabs = drafts.querySelector<HTMLElement>(".hub-tabs");
+        const restoreTabFocus = previousTabs?.contains(document.activeElement);
+        const tabScroll = previousTabs?.scrollLeft ?? 0;
         const search = document.createElement("input");
         search.type = "search";
         search.setAttribute("aria-label", "Find views");
         search.placeholder = "Find views";
         search.value = searchQuery;
-        const kind = document.createElement("select");
-        kind.setAttribute("aria-label", "Filter view type");
-        kind.append(new Option("All view types", ""));
-        for (const value of supportedKinds)
-            kind.append(new Option(viewKindLabels[value], value));
-        kind.value = selectedKind ?? "";
+        const kinds = rbNode("div", undefined, "hub-tabs");
+        kinds.setAttribute("role", "group");
+        kinds.setAttribute("aria-label", "Filter view type");
+        for (const { kind: value, label } of viewTypeTabs) {
+            if (value && !supportedKinds.includes(value)) continue;
+            const tab = setTabLabel(
+                rbButton(label, () => {
+                    selectedKind = value;
+                    for (const other of kinds.querySelectorAll("button"))
+                        other.setAttribute(
+                            "aria-pressed",
+                            String(other === tab),
+                        );
+                    render();
+                    reload();
+                }),
+                value ? viewKindIcons[value] : "fa-layer-group",
+                label,
+            );
+            tab.setAttribute("aria-pressed", String(value === selectedKind));
+            kinds.append(tab);
+        }
         const list = rbNode("div", undefined, "hub-view-list");
         // Kind plus one publication chip; version and index detail belong to
         // the view's own page.
@@ -1586,7 +1720,7 @@ export function mountMemoryHubViews(
             const matches = inventory.filter(
                 (view) =>
                     supportedKinds.some((kind) => view.content.kind === kind) &&
-                    (!kind.value || view.content.kind === kind.value) &&
+                    (!selectedKind || view.content.kind === selectedKind) &&
                     view.content.title
                         .toLowerCase()
                         .includes(search.value.toLowerCase()),
@@ -1625,6 +1759,13 @@ export function mountMemoryHubViews(
         };
         const reload = () => {
             pager.reset();
+            if (busy) {
+                sequence++;
+                refreshPending = true;
+                setInventoryState("loading");
+                total.textContent = "Loading...";
+                return;
+            }
             void action(refresh);
         };
         search.oninput = () => {
@@ -1633,24 +1774,32 @@ export function mountMemoryHubViews(
             clearTimeout(searchTimer);
             searchTimer = setTimeout(reload, 250);
         };
-        kind.onchange = () => {
-            selectedKind = supportedKinds.find((value) => value === kind.value);
-            reload();
-        };
         const toolbar = rbNode("div", undefined, "hub-view-toolbar");
         toolbar.append(
             search,
-            kind,
             rbNode("span", undefined, "hub-spacer"),
             controls,
         );
-        drafts.replaceChildren(
-            toolbar,
-            list,
-            pager.controls("views", () => {
-                void action(refresh);
-            }),
-        );
+        const card = rbNode("section", undefined, "card hub-list-card");
+        card.setAttribute("aria-label", "Views list");
+        const cardHead = rbNode("div", undefined, "section-heading");
+        total.textContent = `${pager.total} total`;
+        total.title = `Showing ${inventory.length} loaded views.`;
+        cardHead.append(rbNode("h2", "Views"), total);
+        card.append(cardHead);
+        if (!familyNotice.hidden) card.append(familyNotice);
+        const pagination = pager.controls("views", () => {
+            void action(refresh);
+        });
+        card.append(toolbar, listLoading, list, pagination);
+        inventoryElements = { card, list, pager: pagination };
+        setInventoryState(inventoryState);
+        drafts.replaceChildren(kinds, card);
+        kinds.scrollLeft = tabScroll;
+        if (restoreTabFocus)
+            kinds
+                .querySelector<HTMLButtonElement>('[aria-pressed="true"]')
+                ?.focus({ preventScroll: true });
         render();
     }
 
@@ -1671,7 +1820,7 @@ export function mountMemoryHubViews(
     function appendEditorialControls(
         view: ViewVersion,
         article: HTMLElement,
-        more: HTMLElement,
+        more: MenuItem[],
     ): void {
         if (view.relatedArticles?.length) {
             const related = rbNode("nav", undefined, "hub-related");
@@ -1698,8 +1847,10 @@ export function mountMemoryHubViews(
         )
             return;
         for (const target of protectedTargets)
-            more.append(
-                rbButton(`Unlock generated updates: ${target}`, () => {
+            more.push({
+                label: `Unlock generated updates: ${target}`,
+                icon: "fa-lock-open",
+                action: () => {
                     void action(async () => {
                         if (!discardChanges()) return;
                         await invokeMemory("memorySaveViewDraft", {
@@ -1737,8 +1888,8 @@ export function mountMemoryHubViews(
                         await changed();
                         await refresh();
                     });
-                }),
-            );
+                },
+            });
     }
 
     function citationKey(citation: ViewCitation) {
@@ -1785,13 +1936,8 @@ export function mountMemoryHubViews(
             ...articleCompleteness(view.content),
         );
         meta.append(metaChips, ...viewRevisionTime(view.createdAt));
-        article.append(title, meta);
-        appendArticleCoverage(article, view.content);
-        if (view.content.summary) {
-            const lead = rbMarkdown(view.content.summary);
-            lead.classList.add("hub-view-lead");
-            article.append(lead);
-        }
+        article.append(title);
+        const readingFlow = appendArticleIntroduction(article, view, meta);
         if (view.content.kind === "schemaView") {
             const questions = rbNode(
                 "a",
@@ -1844,7 +1990,7 @@ export function mountMemoryHubViews(
                         else window.location.hash = destination;
                     }),
                 );
-            article.append(contents);
+            readingFlow.append(contents);
         }
         for (const section of view.content.sections) {
             const page = rbNode("section", undefined, "hub-view-section");
@@ -1888,7 +2034,7 @@ export function mountMemoryHubViews(
                 );
                 page.append(evidence);
             }
-            article.append(page);
+            readingFlow.append(page);
         }
         if (view.content.citations.length) {
             const citations = rbNode("details");
@@ -1901,8 +2047,11 @@ export function mountMemoryHubViews(
             article.append(citations);
         }
         const actions = rbNode("div", undefined, "hub-view-actions");
-        const back = rbButton("Back to views", backToViews);
-        back.prepend(icon("fa-arrow-left"));
+        const back = rbIconButton(
+            "fa-arrow-left",
+            "Back to views",
+            backToViews,
+        );
         actions.append(
             back,
             rbNode("p", "Checking publication and conflicts..."),
@@ -1911,115 +2060,119 @@ export function mountMemoryHubViews(
         title.focus();
         function enableActions() {
             actions.replaceChildren();
-            const more = rbNode("details", undefined, "hub-view-more-actions");
-            const moreSummary = rbNode("summary");
-            moreSummary.append(
-                icon("fa-ellipsis"),
-                rbNode("span", "More actions", "hub-visually-hidden"),
-            );
-            more.append(moreSummary);
+            const more: MenuItem[] = [];
             appendEditorialControls(view, article, more);
-            more.addEventListener("keydown", (event) => {
-                if (event.key !== "Escape" || !more.open) return;
-                event.preventDefault();
-                more.open = false;
-                moreSummary.focus();
-            });
             const pendingConflict = pendingConflicts.get(
                 publicationKey(view.corpusId, view.viewId),
             );
             if (pendingConflict)
-                more.append(
-                    rbButton("Review pending conflict", () => {
+                more.push({
+                    label: "Review pending conflict",
+                    icon: "fa-code-compare",
+                    action: () => {
                         void action(() =>
-                            showConflict(
-                                view.corpusId,
-                                pendingConflict.conflictId,
-                            ),
+                            showConflict(view.corpusId, pendingConflict),
                         );
-                    }),
-                );
-            const editButton = rbButton("Edit", () => showEditor(view));
+                    },
+                });
+            const editButton = rbIconButton("fa-pen", "Edit", () =>
+                showEditor(view),
+            );
             editButton.classList.add("primary");
-            editButton.prepend(icon("fa-pen"));
             actions.append(
                 back,
                 rbNode("span", undefined, "hub-spacer"),
                 editButton,
             );
-            more.append(
-                rbButton("Rebuild from evidence", () => {
-                    exactInitialSources.clear();
-                    void action(() =>
-                        openBuilder(
-                            view.corpusId,
-                            view.definition.selector.sources.map(
-                                (source) => source.sourceId,
+            more.push(
+                {
+                    label: "Rebuild from evidence",
+                    icon: "fa-arrows-rotate",
+                    action: () => {
+                        exactInitialSources.clear();
+                        void action(() =>
+                            openBuilder(
+                                view.corpusId,
+                                view.definition.selector.sources.map(
+                                    (source) => source.sourceId,
+                                ),
+                                view,
                             ),
-                            view,
-                        ),
-                    );
-                }),
-                rbButton("Publication and search", () => {
-                    void action(async () => {
-                        const current = sequence;
-                        const savedPolicy = await invokeMemory(
-                            "memoryGetViewPublicationPolicy",
-                            { corpusId: view.corpusId },
                         );
-                        if (disposed || current !== sequence) return;
-                        policies.set(view.corpusId, savedPolicy);
-                        const sheet = viewSheet(
-                            root,
-                            "Publication and search",
-                            () => !busy && discardChanges(),
-                        );
-                        sheet.body.append(publicationPanel(view));
-                    });
-                }),
-                rbButton("History", () => {
-                    void action(async () => {
-                        const history = await invokeMemory(
-                            "memoryViewHistory",
-                            {
-                                corpusId: view.corpusId,
-                                viewId: view.viewId,
-                            },
-                        );
-                        if (disposed) return;
-                        const sheet = viewSheet(root, "View history");
-                        for (const entry of history)
-                            sheet.body.append(
-                                rbNode(
-                                    "h3",
-                                    `Version ${entry.version.version} (${entry.version.state}) @ ${entry.version.revisionId}`,
-                                ),
-                                rbMarkdown(
-                                    viewContentToText(entry.version.content),
-                                ),
-                                rbIconButton(
-                                    "fa-arrow-up-right-from-square",
-                                    "Open exact revision",
-                                    () => {
-                                        sheet.close();
-                                        void showView(
-                                            view.corpusId,
-                                            view.viewId,
-                                            entry.version.revisionId,
-                                        );
-                                    },
-                                ),
+                    },
+                },
+                {
+                    label: "Publication and search",
+                    icon: "fa-magnifying-glass",
+                    action: () => {
+                        void action(async () => {
+                            const current = sequence;
+                            const savedPolicy = await invokeMemory(
+                                "memoryGetViewPublicationPolicy",
+                                { corpusId: view.corpusId },
                             );
-                    });
-                }),
+                            if (disposed || current !== sequence) return;
+                            policies.set(view.corpusId, savedPolicy);
+                            const sheet = viewSheet(
+                                root,
+                                "Publication and search",
+                                () => !busy && discardChanges(),
+                            );
+                            sheet.body.append(publicationPanel(view));
+                        });
+                    },
+                },
+                {
+                    label: "History",
+                    icon: "fa-clock-rotate-left",
+                    action: () => {
+                        void action(async () => {
+                            const history = await invokeMemory(
+                                "memoryViewHistory",
+                                {
+                                    corpusId: view.corpusId,
+                                    viewId: view.viewId,
+                                },
+                            );
+                            if (disposed) return;
+                            const sheet = viewSheet(root, "View history");
+                            for (const entry of history)
+                                sheet.body.append(
+                                    rbNode(
+                                        "h3",
+                                        `Version ${entry.version.version} (${entry.version.state}) @ ${entry.version.revisionId}`,
+                                    ),
+                                    rbMarkdown(
+                                        viewContentToText(
+                                            entry.version.content,
+                                        ),
+                                    ),
+                                    rbIconButton(
+                                        "fa-arrow-up-right-from-square",
+                                        "Open exact revision",
+                                        () => {
+                                            sheet.close();
+                                            void showView(
+                                                view.corpusId,
+                                                view.viewId,
+                                                entry.version.revisionId,
+                                            );
+                                        },
+                                    ),
+                                );
+                        });
+                    },
+                },
             );
             if (
                 maintenanceSupported &&
                 view.state !== "archived" &&
                 !view.definition.wiki
             )
-                more.append(
-                    rbButton("Update view", () => {
+                more.push({
+                    label: "Update view",
+                    icon: "fa-screwdriver-wrench",
+                    action: () => {
                         if (!discardChanges()) return;
                         const sheet = viewSheet(
                             root,
@@ -2055,9 +2208,9 @@ export function mountMemoryHubViews(
                             },
                         );
                         sheet.body.append(panel);
-                    }),
-                );
-            actions.append(more);
+                    },
+                });
+            actions.append(menuButton("More actions", more));
         }
         if (actionsReady) enableActions();
         return enableActions;

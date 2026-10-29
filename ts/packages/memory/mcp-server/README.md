@@ -31,6 +31,44 @@ for refresh behavior.
 
 ## Tool details
 
+### Opt-in understanding and MCP Apps
+
+Enable `TYPEAGENT_MEMORY_UNDERSTANDING=true` on the backing service for typed
+`memory_understand` / `memory_understanding_module` operations. They retain
+the ordinary `structuredContent.result` envelope and do not require Apps.
+Unsupported/disabled services fail explicitly.
+
+Separately set `TYPEAGENT_MEMORY_PREVIEWS=true` to register `memory_preview`,
+app-visible `memory_preview_expand`, and
+`ui://typeagent-memory/preview-v1.html`. Capable hosts receive a compact,
+trusted HTML renderer using the official MCP Apps bridge; other hosts receive
+useful Markdown without UI metadata. No embedded chat, direct network,
+arbitrary model HTML or private content is packaged into the reusable resource.
+Existing `memory_search`, `memory_answer` and generic result construction are unchanged.
+
+Preview budgets are enforced on serialized UTF-8 data: 8 KiB model-facing
+wrapper, 32 KiB initial UI model, 64 KiB expansion and 400 KiB renderer.
+The original 200 KiB renderer target was raised because the compatible official
+bridge and its validation dependencies exceed it. Whole claims/sections are
+omitted explicitly rather than sliced. Expansion is bounded to six timeline
+entries or eight graph nodes/ten edges.
+
+The official Apps SDK is pinned to 1.3.2 to retain the workspace MCP SDK 1.26
+pin. SDK 1.26 strips the newer initialize `extensions` field during validation:
+a narrow transport observer retains only the UI MIME capability before normal
+SDK processing. Remove this compatibility observer when the workspace SDK
+upgrade preserves that field. It does not replace the official browser bridge.
+
+With previews enabled, HTTP uses standard SDK session IDs in a bounded pool
+(64 sessions, absolute 15-minute expiry) so initialize capabilities survive
+subsequent requests without leaking between clients. Bearer authentication
+still runs before session dispatch; unknown/expired sessions return 404.
+Previews disabled retains the existing stateless HTTP path. Snapshot access
+uses the backing service's principal, not the UI visibility annotation.
+Actual VS Code/Copilot-host validation remains a separate rollout gate.
+
+### Existing operations
+
 Knowledge preparation uses `memory_knowledge_status`,
 `memory_knowledge_discovery_update`, `memory_knowledge_checkpoint_create`,
 `memory_knowledge_checkpoint_get` and `memory_knowledge_checkpoint_wait`.

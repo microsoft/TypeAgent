@@ -118,6 +118,7 @@ function makeEndpoint(
     priority?: number,
     tpm?: number,
     wireApi?: WireApi,
+    model?: string,
 ): DeploymentEndpoint {
     const ep: DeploymentEndpoint = {
         endpoint,
@@ -127,6 +128,7 @@ function makeEndpoint(
         priority: priority ?? defaultPriority(mode),
         ...(capacity !== undefined ? { capacity } : {}),
         ...(tpm !== undefined ? { tpm } : {}),
+        ...(model !== undefined ? { model } : {}),
         // Collapse explicit default so omit and wireApi:chat_completions
         // project identically (back-compat flat env).
         ...(wireApi !== undefined && wireApi !== DEFAULT_WIRE_API
@@ -368,6 +370,7 @@ function popServiceDefault(
 }
 
 interface PartialEndpoint {
+    model?: string;
     endpoint?: string;
     auth?: AuthMode;
     region?: Region;
@@ -380,6 +383,7 @@ interface PartialEndpoint {
 
 /** Per-suffix overrides parsed from `AZURE_OPENAI_POOL_<DEPLOYMENT>` JSON. */
 interface PoolOverride {
+    model?: string;
     suffix: string;
     region?: Region;
     mode?: DeploymentMode;
@@ -423,6 +427,7 @@ function parsePoolOverride(
         ) {
             const o = e as Record<string, unknown>;
             const ov: PoolOverride = { suffix: o.suffix as string };
+            if (typeof o.model === "string") ov.model = o.model;
             if (typeof o.region === "string" && isRegion(o.region))
                 ov.region = o.region as Region;
             if (o.mode === "PTU" || o.mode === "PAYG") ov.mode = o.mode;
@@ -515,6 +520,7 @@ function collectDeployments(
                 if (ov.capacity !== undefined) partial.capacity = ov.capacity;
                 if (ov.priority !== undefined) partial.priority = ov.priority;
                 if (ov.tpm !== undefined) partial.tpm = ov.tpm;
+                if (ov.model !== undefined) partial.model = ov.model;
                 if (ov.wireApi !== undefined) partial.wireApi = ov.wireApi;
             }
         }
@@ -567,6 +573,7 @@ function collectDeployments(
                     partial.priority,
                     partial.tpm,
                     partial.wireApi,
+                    partial.model,
                 ),
             );
         }

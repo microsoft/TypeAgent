@@ -6,6 +6,7 @@ import test from "node:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { observeProvider } from "./live-stages.mjs";
 import {
     benchmarkScorecard,
     digest,
@@ -26,6 +27,7 @@ import {
     createBenchmarkMemoryService,
     recordBenchmarkArm,
     recordKnowledgeAllowance,
+    continuedBenchmarkState,
     main,
 } from "./longmemeval-live.mjs";
 
@@ -34,6 +36,26 @@ test("explicit readiness allowances remain within the product API bound", () => 
     assert.equal(benchmarkKnowledgeTimeout("60"), 3600000);
     for (const value of ["0", "61", "1.5", "unlimited", "not-a-number"])
         assert.throws(() => benchmarkKnowledgeTimeout(value));
+});
+
+test("the production factory forwards diagnostic receipts without replacing inference", async () => {
+    const receipts = [];
+    const callback = (receipt) => receipts.push(receipt);
+    const service = {};
+    const result = await createBenchmarkMemoryService(
+        async () => ({
+            createDurableMemoryService(root, sink) {
+                assert.equal(root, "isolated-store");
+                assert.equal(sink, callback);
+                sink({ stage: "packing", durationMs: 1 });
+                return service;
+            },
+        }),
+        "isolated-store",
+        callback,
+    );
+    assert.equal(result, service);
+    assert.deepEqual(receipts, [{ stage: "packing", durationMs: 1 }]);
 });
 
 test("readiness allowance identity defaults legacy state and rejects changed resumes", () => {
@@ -50,6 +72,104 @@ test("readiness allowance identity defaults legacy state and rejects changed res
         () => recordKnowledgeAllowance(extended),
         /Knowledge readiness allowance changed/,
     );
+});
+
+test("an explicit warm continuation gets new accounting without mutating its interrupted parent", () => {
+    const prior = {
+        runId: "parent",
+        outcome: "PARTIAL_BOUNDED_WORK",
+        knowledgeTimeoutMs: 600000,
+        arm: { knowledgeTimeoutMs: 600000 },
+        engineHash: "old",
+        cases: {
+            case1: {
+                status: "interrupted",
+                operations: [{ state: "complete" }],
+                mappings: { source: { sourceId: "s", revisionId: "r" } },
+                knowledgeCheckpoint: { state: "cancelled" },
+                error: { category: "timeout" },
+            },
+        },
+        providerRequests: [{ model: "parent-model" }],
+        roleCalls: [{}],
+        attempts: [{}],
+        scorecard: { scored: 0 },
+    };
+    const frozen = structuredClone(prior);
+    const state = continuedBenchmarkState(prior, "child", 1800000, "new", {
+        parentRunDirectory: path.resolve("parent"),
+        parentStateSha256: "a".repeat(64),
+    });
+    assert.deepEqual(prior, frozen);
+    assert.equal(state.runId, "child");
+    assert.equal(state.knowledgeTimeoutMs, 1800000);
+    assert.equal(state.arm.knowledgeTimeoutMs, 1800000);
+    assert.equal(state.cases.case1.knowledgeCheckpoint, undefined);
+    assert.equal(state.cases.case1.error, undefined);
+    assert.deepEqual(
+        state.cases.case1.operations,
+        prior.cases.case1.operations,
+    );
+    assert.deepEqual(state.cases.case1.mappings, prior.cases.case1.mappings);
+    assert.deepEqual(state.providerRequests, []);
+    assert.deepEqual(state.attempts, []);
+    assert.equal(state.scorecard, undefined);
+    assert.equal(state.continuation.reusedCompletedImports, 1);
+    assert.equal(state.continuation.previousKnowledgeTimeoutMs, 600000);
+    assert.equal(state.engineHash, "new");
+    assert.throws(
+        () => continuedBenchmarkState(prior, "child", 600000, "new", {}),
+        /larger readiness allowance/,
+    );
+    assert.throws(
+        () =>
+            continuedBenchmarkState(
+                { ...prior, outcome: "FAILED_REAL_BENCHMARK" },
+                "child",
+                1800000,
+                "new",
+                {},
+            ),
+        /bounded interruption/,
+    );
+    const answered = structuredClone(prior);
+    answered.cases.case1.hypothesis = "Retained answer";
+    assert.throws(
+        () => continuedBenchmarkState(answered, "child", 1800000, "new", {}),
+        /existing hypothesis/,
+    );
+});
+
+test("provider timing identifies Decision packets even without a reported response model", async () => {
+    const original = globalThis.fetch;
+    const events = [];
+    let restore;
+    try {
+        globalThis.fetch = async () =>
+            new Response(JSON.stringify({ answers: {} }), {
+                headers: { "content-type": "application/json" },
+            });
+        restore = observeProvider(events, () => "knowledge:pilot");
+        await fetch(
+            "https://example.invalid/providers/microsoft/v1/systemone",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    model: "decision-1",
+                    questions: { disposition_n0: {}, salience_n0: {} },
+                }),
+            },
+        );
+        assert.equal(events[0].type, "decision");
+        assert.equal(events[0].requestedModel, "decision-1");
+        assert.equal(events[0].decisionQuestionCount, 2);
+        assert.equal(events[0].model, undefined);
+        assert.equal(events[0].role, "knowledge:pilot");
+        assert.ok(events[0].durationMs >= 0);
+    } finally {
+        restore?.();
+        globalThis.fetch = original;
+    }
 });
 
 test("the live benchmark uses the product durable-memory factory without feature overrides", async () => {
@@ -205,7 +325,7 @@ test("question-count bounds are rejected before creating or opening a run", asyn
 });
 
 test("invocation work allowance is bounded before opening a run", async () => {
-    for (const value of ["0", "-1", "1.5", "31", "NaN"]) {
+    for (const value of ["0", "-1", "1.5", "61", "NaN"]) {
         await assert.rejects(
             main(["--authorized-live-benchmark", `--work-minutes=${value}`]),
             /Invocation work minutes/,
@@ -216,8 +336,9 @@ test("invocation work allowance is bounded before opening a run", async () => {
 test("unlimited evaluation is explicit while normal invocation budgets remain unchanged", () => {
     assert.equal(benchmarkInvocationAllowance("unlimited"), null);
     assert.equal(benchmarkInvocationAllowance("30"), 35 * 60000);
+    assert.equal(benchmarkInvocationAllowance("60"), 65 * 60000);
     assert.equal(benchmarkInvocationAllowance("1"), 6 * 60000);
-    for (const value of ["Infinity", "", "null", "0", "-1", "31"]) {
+    for (const value of ["Infinity", "", "null", "0", "-1", "61"]) {
         assert.throws(
             () => benchmarkInvocationAllowance(value),
             /Invocation work minutes/,
@@ -759,6 +880,16 @@ test("partial scorecards report observed denominators but never a full-suite sco
                 total_tokens: 12,
             },
         },
+        { usage: { input_tokens: 20, output_tokens: 3 } },
+        {
+            usage: {
+                prompt_tokens: 5,
+                completion_tokens: 0,
+                input_tokens: 999,
+                output_tokens: 999,
+                total_tokens: 5,
+            },
+        },
         { status: 500 },
     ]);
     assert.deepEqual(result.total, {
@@ -772,7 +903,9 @@ test("partial scorecards report observed denominators but never a full-suite sco
 
     assert.equal(result.abstention.scored, 0);
     assert.equal(result.abstention.observedAccuracy, null);
-    assert.equal(result.knownTotalTokens, 12);
+    assert.equal(result.knownPromptTokens, 35);
+    assert.equal(result.knownCompletionTokens, 5);
+    assert.equal(result.knownTotalTokens, 40);
     assert.equal(result.dollarCost, null);
     assert.equal(result.answerLatencyMs.p95, 100);
 });

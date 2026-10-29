@@ -20,6 +20,7 @@ import {
     type CopilotModelEndpointProvider,
 } from "./copilotModels.js";
 import { RequestAdmissionError } from "./requestBudget.js";
+import { checkSerializedRequestConstraints } from "./requestConstraints.js";
 import { context, trace, SpanStatusCode, type Span } from "@opentelemetry/api";
 import { TokenCounter } from "./tokenCounter.js";
 
@@ -92,6 +93,7 @@ export interface DecisionModel {
         | "override"
         | "config"
         | "default";
+    checkRequest?(request: DecisionRequest): void;
     decide(
         request: DecisionRequest,
         options?: { signal?: AbortSignal; timeoutMs?: number },
@@ -149,6 +151,32 @@ export function createDecisionModel(options?: {
             model,
             configGeneration,
             providerSource,
+            checkRequest(request) {
+                validateDecisionRequest(request);
+                if (provider === "azure") {
+                    const serialized = JSON.stringify({ model, ...request });
+                    if (
+                        config.azureOpenAI.maxPromptChars !== undefined &&
+                        serialized.length > config.azureOpenAI.maxPromptChars
+                    )
+                        throw new RequestAdmissionError(
+                            "Decision request exceeds configured character limit",
+                        );
+                    for (const member of pool!.members)
+                        checkSerializedRequestConstraints(
+                            serialized,
+                            member.settings.requestConstraints,
+                        );
+                } else
+                    checkSerializedRequestConstraints(
+                        JSON.stringify(
+                            buildCopilotDecisionRequest(model, request),
+                        ),
+                        config.modelRequestConstraints?.get(
+                            `copilot:decision:${model}`.toLowerCase(),
+                        ),
+                    );
+            },
             async decide(request, options) {
                 if (options?.signal?.aborted) return failure("cancelled");
                 const timeoutMs =

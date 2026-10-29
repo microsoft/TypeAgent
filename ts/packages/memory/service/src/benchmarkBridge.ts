@@ -14,6 +14,8 @@ import { FileMemoryService } from "./fileMemoryService.js";
 import { batchImportRequestByteLimit } from "./batchImport.js";
 import { waitForMemoryJob } from "./rpcFacade.js";
 import type { MemoryService, MemoryEventSender } from "./types.js";
+import { getConfiguredMemoryViewOptions } from "./viewHostOptions.js";
+import { configuredTopicDecisionIdentity } from "./topicDecision.js";
 export { writeRunbookJson as writeBenchmarkJson } from "./durableRunbookJson.js";
 
 export class BenchmarkResponseError extends Error {
@@ -344,12 +346,24 @@ export async function createBenchmarkRuntime(store: string) {
         maxBytes: batchImportRequestByteLimit,
         admissionWaitMs: 250,
     };
+    const viewOptions = getConfiguredMemoryViewOptions();
     const service = new FileMemoryService(resolve(store), {
+        ...viewOptions,
         maintenanceMode: mode,
         ingestionCommitPolicy,
     });
     try {
         const bridge = configuredBenchmarkBridge(service, {
+            decisionTopics: viewOptions.decisionTopics ?? false,
+            ...(viewOptions.decisionTopics
+                ? {
+                      topicDecisionIdentity: configuredTopicDecisionIdentity(
+                          undefined,
+                          "v2",
+                          viewOptions.decisionTopicExecution,
+                      ),
+                  }
+                : {}),
             maintenanceMode: mode,
             ingestionCommitPolicy,
             queryEmbeddingReuse: "request-local-v1",

@@ -123,6 +123,7 @@ afterEach(() => {
 
 test("overview retains counts and corpus-qualified provenance without plotting a combined graph", async () => {
     await mounted.show();
+    expect(host.querySelector('[aria-label="Refresh overview"]')).toBeNull();
     expect(invoke).toHaveBeenCalledWith("memoryHubExplore", {
         corpusId: "a",
         maxNodes: 6,

@@ -120,6 +120,55 @@ function fixture(
 }
 
 describe("bounded source-plus-view answering", () => {
+    test("prioritizes focused refinement passages before applying the shared source limit", async () => {
+        const initial = source("initial", "The gallery is being discussed.");
+        const generic = source("generic", "General JS background.");
+        const fact = source(
+            "quantity",
+            "The JS script was reduced from 140 lines to 95 lines.",
+        );
+        const { host } = fixture([initial], []);
+        const refinement = "JS reduced lines";
+        host.searchOriginal = async (input) => ({
+            query: input.question,
+            matches:
+                input.question === refinement ? [generic, fact] : [initial],
+            warnings: [],
+            capabilitiesUsed: ["originals"],
+            indexVersion: "index1",
+        });
+        let reads = 0;
+        const result = await answerIntegratedEvidence(request, host, {
+            maxSourceFragments: 1,
+            reader: async (_request, evidence, _options, allowRefinement) => {
+                reads++;
+                if (allowRefinement)
+                    return {
+                        status: "noAnswer",
+                        answer: "The quantity is missing.",
+                        evidenceIds: [],
+                        retrievalQueries: [refinement],
+                    };
+                const selected = evidence.find(
+                    (item) =>
+                        item.kind === "source" &&
+                        item.source.sourceId === fact.sourceId,
+                );
+                if (!selected)
+                    throw new Error("Focused refinement evidence was lost");
+                return {
+                    status: "answered",
+                    answer: fact.snippet,
+                    evidenceIds: [selected.id],
+                };
+            },
+        });
+        expect(reads).toBe(2);
+        expect(result.answer).toBe(fact.snippet);
+        expect(result.citations.map((item) => item.sourceId)).toEqual([
+            fact.sourceId,
+        ]);
+    });
     test("revalidates evidence that prompted refinement even after replacement", async () => {
         const initial = source(
             "initial",

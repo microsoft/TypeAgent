@@ -290,6 +290,19 @@ import {
     createConfiguredTopicConceptSummarizer,
     type TopicConceptSummarizer,
 } from "./topicGeneration.js";
+import {
+    topicCurationPolicy,
+    validateTopicCurationSettings,
+    type TopicCurationSettings,
+} from "./topicCuration.js";
+import {
+    configuredTopicDecisionModel,
+    configuredTopicDecisionIdentity,
+    type TopicDecisionReceipt,
+    type TopicDecisionExecutionOptions,
+    resolveTopicDecisionExecution,
+    topicDecisionRecipe,
+} from "./topicDecision.js";
 import { validateTopicQuery } from "./topicSnapshot.js";
 import {
     applyTopicFamilyOperation,
@@ -316,7 +329,16 @@ import {
     answerIndexedEvidence,
     mergeIndexedAnswerEvidence,
 } from "./indexedAnswer.js";
-import { answerIntegratedEvidence } from "./integratedAnswer.js";
+import {
+    answerIntegratedEvidence,
+    type IntegratedAnswerReader,
+} from "./integratedAnswer.js";
+import { MemoryUnderstanding } from "./understanding.js";
+import type {
+    UnderstandingRequest,
+    UnderstandingModuleRequest,
+} from "./understandingTypes.js";
+import type { MemoryGraphSupport } from "./graphTypes.js";
 import type {
     AnswerEvidence,
     AnswerSourceReference,
@@ -494,6 +516,8 @@ function knowledgeMaintenanceResult(
     };
 }
 
+class SchemaMaintenanceBlockedError extends Error {}
+
 interface StoredRevision extends SourceRevision {
     content: string;
     synopsis?: SourceSynopsis & { attempts: number };
@@ -625,6 +649,7 @@ export interface FileMemoryServiceOptions {
     sourceSynopses?: boolean;
     sourceSynopsisModel?: SourceSynopsisModel;
     indexedAnswerModel?: ChatModel;
+    understanding?: boolean;
     /** Derived Views are enabled unless explicitly disabled by the host. */
     viewDrafts?: boolean;
     /** Informational views follow Views enablement unless explicitly disabled. */
@@ -634,11 +659,46 @@ export interface FileMemoryServiceOptions {
     viewModelEndpoint?: string;
     /** Disable to retain raw-topic summaries instead of lazy curated concepts. */
     curatedTopics?: boolean;
+    /** Experimental Decision curation; the generative pipeline remains the default. */
+    decisionTopics?: boolean;
+    decisionTopicExecution?: TopicDecisionExecutionOptions;
+    /** Opt-in generative curation settings, independent of native Decision execution. */
+    topicCuration?: TopicCurationSettings;
+    onTopicDecisionReceipt?: (receipt: TopicDecisionReceipt) => void;
     indexFactory?: CorpusIndexFactory;
     eventIndexFactory?: CorpusIndexFactory;
     capabilities?: MemoryServiceCapabilities;
     /** Opt-in rehearsal envelope only; never enables product behavior. */
     informationalBudget?: RequestBudgetLimits;
+}
+
+function decisionTopicsEnabled(options: FileMemoryServiceOptions): boolean {
+    const enabled = options.decisionTopics ?? false;
+    if (enabled && options.curatedTopics === false)
+        throw new Error("Decision topic curation requires curated topics");
+    if (enabled && options.viewSynthesisAdapter?.generateTopics)
+        throw new Error(
+            "Decision topic curation cannot override a custom topic generator",
+        );
+    return enabled;
+}
+
+function configuredTopicCuration(
+    options: FileMemoryServiceOptions,
+    decisionTopics: boolean,
+    curatedTopics: boolean,
+): TopicCurationSettings | undefined {
+    if (!options.topicCuration) return undefined;
+    validateTopicCurationSettings(options.topicCuration);
+    if (
+        decisionTopics ||
+        !curatedTopics ||
+        options.viewSynthesisAdapter?.generateTopics
+    )
+        throw new Error(
+            "Generative topic settings require generative curated topics without a custom generator",
+        );
+    return { ...options.topicCuration };
 }
 
 function now(): string {
@@ -1197,6 +1257,15 @@ export class FileMemoryService
     private readonly viewPublicationCheckpoint: FileMemoryServiceOptions["viewPublicationCheckpoint"];
     private readonly viewAdapter: ViewSynthesisAdapter;
     private readonly curatedTopics: boolean;
+    private readonly decisionTopics: boolean;
+    private readonly topicCuration: TopicCurationSettings | undefined;
+    private readonly topicPolicy: string;
+    private readonly decisionTopicExecution: ReturnType<
+        typeof resolveTopicDecisionExecution
+    >;
+    private readonly onTopicDecisionReceipt:
+        | ((receipt: TopicDecisionReceipt) => void)
+        | undefined;
     private readonly summarizeTopicConcept: TopicConceptSummarizer;
     private readonly topicSummaryWork = new Map<
         string,
@@ -1299,6 +1368,7 @@ export class FileMemoryService
     private readonly wikiBudget: RequestBudgetLimits | undefined;
     private readonly wikiModelEndpoint: string | undefined;
     private readonly indexedAnswerModel: ChatModel | undefined;
+    private readonly understanding: MemoryUnderstanding | undefined;
     private readonly sourceSynopsesEnabled: boolean;
     private synopsisModel: SourceSynopsisModel | undefined;
     private synopsisModelFailure: string | undefined;
@@ -1372,7 +1442,22 @@ export class FileMemoryService
         this.viewDrafts = options.viewDrafts !== false;
         this.wikiModelEndpoint = options.viewModelEndpoint;
         this.curatedTopics = options.curatedTopics ?? true;
+        this.decisionTopics = decisionTopicsEnabled(options);
+        this.topicCuration = configuredTopicCuration(
+            options,
+            this.decisionTopics,
+            this.curatedTopics,
+        );
+        this.topicPolicy = topicCurationPolicy(
+            this.curatedTopics,
+            this.topicCuration,
+        );
+        this.decisionTopicExecution = resolveTopicDecisionExecution(
+            options.decisionTopicExecution,
+        );
+        this.onTopicDecisionReceipt = options.onTopicDecisionReceipt;
         this.indexedAnswerModel = options.indexedAnswerModel;
+        this.understanding = this.createUnderstanding(options);
         this.sourceSynopsesEnabled =
             options.sourceSynopses ?? options.informationalViews !== false;
         this.synopsisModel = options.sourceSynopsisModel;
@@ -1571,11 +1656,7 @@ export class FileMemoryService
                     }),
             },
             this.wikiBudget,
-            createConfiguredTopicGenerator(
-                options.viewModelEndpoint,
-                undefined,
-                this.curatedTopics,
-            ),
+            this.createTopicGenerator(),
         );
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
         this.eventIndexFactory = options.eventIndexFactory ?? this.indexFactory;
@@ -1932,6 +2013,11 @@ export class FileMemoryService
                     error: synopsis.reason ?? "Source synopsis failed",
                 });
             }
+        for (const [corpusId, failure] of this.schemaMaintenanceFailures)
+            status.failures.push({
+                key: `${corpusId}:schema`,
+                error: failure.message,
+            });
         status.settled &&= status.failures.length === 0;
         return status;
     }
@@ -2085,6 +2171,7 @@ export class FileMemoryService
     public async clearCorpus(corpusId: string): Promise<number> {
         await this.initialize();
         validateIdentifier("corpus ID", corpusId);
+        this.understanding?.invalidate(corpusId);
         await this.batchStore.purge(corpusId);
         this.viewBuilds.forget(corpusId);
         for (const work of this.topicSummaryWork.values())
@@ -2167,6 +2254,7 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<void> {
+        this.understanding?.invalidate(corpusId);
         const removedSources = runtime.manifest.pendingCorpusClear;
         await this.acquisition.suppress(corpusId, {
             sourceIds: removedSources?.map((source) => source.sourceId) ?? [],
@@ -3729,6 +3817,7 @@ export class FileMemoryService
             features: {
                 ...capabilities.features,
                 scopedKnowledgeGraphs: true,
+                ...(this.understanding ? { memoryUnderstanding: true } : {}),
                 sourceSynopses: this.sourceSynopsesEnabled,
                 agentSessionImportTypes: this.agentSessionImportsEnabled
                     ? ["agent-session-jsonl", "copilot-session-jsonl"]
@@ -5513,7 +5602,7 @@ export class FileMemoryService
                 ),
             );
             if (failure)
-                throw new Error(
+                throw new SchemaMaintenanceBlockedError(
                     `Question reconciliation for ${failure.viewId} needs an explicit retry or changed evidence; automatic retries are stopped`,
                 );
             await this.maintainViews({
@@ -5528,7 +5617,7 @@ export class FileMemoryService
             return;
         }
         if (blocked)
-            throw new Error(
+            throw new SchemaMaintenanceBlockedError(
                 `Question reconciliation blocked: ${blocked.reason}`,
             );
     }
@@ -8573,9 +8662,46 @@ export class FileMemoryService
             this.topicSources(runtime),
             runtime.manifest.indexGeneration,
             runtime.manifest.knowledgeSuppressions ?? [],
-            `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-lazy-v6" : "raw-v1"}`,
+            this.topicModelIdentity(),
             this.topicEvents(runtime),
         );
+    }
+
+    private createTopicGenerator() {
+        return createConfiguredTopicGenerator({
+            endpoint: this.wikiModelEndpoint,
+            mode: this.decisionTopics
+                ? {
+                      kind: "decision",
+                      createOptions: (input) => {
+                          if (input.model !== this.topicModelIdentity())
+                              throw new ViewBuildStaleError(
+                                  "Decision topic configuration changed",
+                              );
+                          return {
+                              ...this.decisionTopicExecution,
+                              model: configuredTopicDecisionModel(),
+                              ...(this.onTopicDecisionReceipt
+                                  ? { onReceipt: this.onTopicDecisionReceipt }
+                                  : {}),
+                          };
+                      },
+                  }
+                : this.curatedTopics
+                  ? { kind: "generative", settings: this.topicCuration }
+                  : { kind: "raw" },
+        });
+    }
+
+    private topicModelIdentity(): string {
+        const policy = this.decisionTopics
+            ? configuredTopicDecisionIdentity(
+                  this.wikiModelEndpoint,
+                  "v2",
+                  this.decisionTopicExecution,
+              )
+            : this.topicPolicy;
+        return `${this.viewAdapter.identity}:topics-${policy}`;
     }
 
     public async queryTopics(
@@ -8739,7 +8865,12 @@ export class FileMemoryService
             index: runtime.index,
             sources: this.topicSources(runtime),
             suppressions: runtime.manifest.knowledgeSuppressions ?? [],
-            model: `${this.viewAdapter.identity}:topics-${this.curatedTopics ? "curated-lazy-v6" : "raw-v1"}`,
+            model: this.topicModelIdentity(),
+            curationRecipe: this.decisionTopics
+                ? topicDecisionRecipe
+                : this.curatedTopics
+                  ? this.topicPolicy
+                  : "curated-lazy-v6",
             eventOccurrences,
             influenceEvents: this.topicEvents(runtime),
             ...(runtime.manifest.indexGeneration
@@ -8747,6 +8878,12 @@ export class FileMemoryService
                 : {}),
             ...(state.snapshot ? { current: state.snapshot } : {}),
         });
+        if (
+            request.operation === "rebuild" &&
+            this.decisionTopicExecution.clusterValidation &&
+            input.topicInput
+        )
+            input.topicInput.maintainClusters = true;
         if (this.deferBatchMaintenance(request.corpusId, automatic))
             return this.viewStore.recordViewMaintenance(plan);
         const reservation = this.viewBuilds.reserve();
@@ -9773,8 +9910,78 @@ export class FileMemoryService
         return true;
     }
 
+    private createUnderstanding(
+        options: FileMemoryServiceOptions,
+    ): MemoryUnderstanding | undefined {
+        if (!options.understanding) return undefined;
+        return new MemoryUnderstanding(
+            {
+                indexVersion: async (corpusId) => {
+                    const corpus = await this.getCorpus(corpusId);
+                    if (!corpus)
+                        throw new Error(
+                            "Understanding collection is unavailable",
+                        );
+                    return corpus.indexVersion;
+                },
+                answer: (request, reader) =>
+                    this.answerRequest(request, reader),
+                validate: (request, evidence) =>
+                    this.validateAnswerEvidence(request, evidence),
+                queryKnowledgeGraph: (request) =>
+                    this.queryKnowledgeGraph(request),
+                queryGraphSupport: (request) => this.queryGraphSupport(request),
+                validateSupport: (items) =>
+                    this.validateUnderstandingSupport(items),
+            },
+            {
+                model: options.indexedAnswerModel,
+                endpoint: options.viewModelEndpoint,
+            },
+        );
+    }
+
+    public async understand(request: UnderstandingRequest) {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        if (!this.understanding)
+            throw new Error("Memory understanding is disabled by this host");
+        const corpus = await this.getCorpusRuntime(request.corpusId);
+        if (!corpus.index.readFragments)
+            throw new Error(
+                "Understanding requires an indexed document collection",
+            );
+        return this.understanding.understand(request);
+    }
+
+    public async understandingModule(request: UnderstandingModuleRequest) {
+        await this.initialize();
+        if (!this.understanding)
+            throw new Error("Memory understanding is disabled by this host");
+        return this.understanding.module(request);
+    }
+
+    private async validateUnderstandingSupport(
+        items: MemoryGraphSupport[],
+    ): Promise<boolean> {
+        for (const item of items) {
+            if (item.kind !== "document") return false;
+            const source = await this.getSource(item.corpusId, item.sourceId);
+            if (!source || source.activeRevisionId !== item.revisionId)
+                return false;
+        }
+        return true;
+    }
+
     public async answer(
         request: MemoryAnswerRequest,
+    ): Promise<MemoryAnswerResult> {
+        return this.answerRequest(request);
+    }
+
+    private async answerRequest(
+        request: MemoryAnswerRequest,
+        reader?: IntegratedAnswerReader,
     ): Promise<MemoryAnswerResult> {
         const question = request.question.trim();
         if (question.length === 0) {
@@ -9850,6 +10057,7 @@ export class FileMemoryService
                             this.validateAnswerEvidence(input, evidence),
                     },
                     {
+                        ...(reader ? { reader, maxEvidenceChars: 16000 } : {}),
                         ...(this.wikiModelEndpoint
                             ? { endpoint: this.wikiModelEndpoint }
                             : {}),
@@ -14309,6 +14517,9 @@ export class FileMemoryService
                                 view.viewId === request.viewId) &&
                             (!request.kind ||
                                 view.content.kind === request.kind) &&
+                            !request.excludeKinds?.includes(
+                                view.content.kind,
+                            ) &&
                             view.content.title.toLowerCase().includes(query),
                     )
                     .sort((a, b) => a.viewId.localeCompare(b.viewId));
@@ -14385,6 +14596,7 @@ export class FileMemoryService
 
     private async closeService(): Promise<void> {
         this.closed = true;
+        this.understanding?.close();
         for (const work of this.topicSummaryWork.values())
             work.controller.abort(new Error("Memory service is closing"));
         for (const controller of this.eventIndexControllers.values())
@@ -14439,7 +14651,8 @@ export class FileMemoryService
         for (const failure of this.wikiMaintenanceFailures.values())
             throw failure;
         for (const failure of this.schemaMaintenanceFailures.values())
-            throw failure;
+            if (!(failure instanceof SchemaMaintenanceBlockedError))
+                throw failure;
     }
     private closePromise: Promise<void> | undefined;
     private readonly viewIndexCleanup = new Map<string, Promise<void>>();
@@ -14464,6 +14677,7 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<SourceForgetResult> {
+        this.understanding?.invalidate(corpusId);
         const removal = runtime.manifest.authorizedSourceRemoval;
         if (!removal)
             throw new Error("No authorized source removal to recover");

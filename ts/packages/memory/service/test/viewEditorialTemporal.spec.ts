@@ -166,17 +166,22 @@ class EditorialIndex extends FakeSemanticCorpusIndex {
 }
 
 async function settled(service: FileMemoryService, corpusId: string) {
+    const maintenance = await service.drainMaintenance();
+    if (
+        maintenance.reason ||
+        maintenance.pending.length ||
+        maintenance.running.length
+    )
+        throw new Error(
+            `Offline editorial maintenance did not drain: ${JSON.stringify(maintenance)}`,
+        );
     for (let attempt = 0; attempt < 1000; attempt++) {
         const snapshot = await service.listViews(corpusId);
         const running = (await service.listViewBuilds(corpusId)).some(
             (job) => job.state === "running",
         );
-        if (
-            !running &&
-            !snapshot.wikiFamily?.pending &&
-            !snapshot.projectFamily?.pending
-        )
-            return snapshot;
+        // Family pending also includes conflicts awaiting a human decision.
+        if (!running) return snapshot;
         await new Promise((resolve) => setTimeout(resolve, 20));
     }
 
@@ -345,6 +350,7 @@ test("actual P0 revisions automate correction/withdrawal around human edits and 
     const open = () =>
         new FileMemoryService(root, {
             sourceSynopses: false,
+            discoveryPolicy: "off",
             indexFactory: (_id, directory) => new EditorialIndex(directory),
             eventIndexFactory: (_id, directory) =>
                 new FakeSemanticCorpusIndex(directory),

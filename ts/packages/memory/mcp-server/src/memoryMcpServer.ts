@@ -71,6 +71,10 @@ import { z } from "zod";
 import { registerViewTools } from "./viewTools.js";
 import { registerGraphTools } from "./graphTools.js";
 import { registerAgentSessionTools } from "./agentSessionTools.js";
+import { registerUnderstandingTools } from "./understandingTools.js";
+import { registerMemoryPreview } from "./memoryPreview.js";
+import { parseViewDraftCapability } from "@typeagent/memory-service";
+import { observeMemoryUiCapability } from "./memoryUiCapability.js";
 
 const corpusCreateInputSchema = z.object({
     name: z.string().min(1),
@@ -109,15 +113,34 @@ function toolError(error: unknown): CallToolResult {
     };
 }
 
+export function memoryPreviewsEnabled(): boolean {
+    const raw = process.env.TYPEAGENT_MEMORY_PREVIEWS;
+    return (
+        raw !== undefined &&
+        parseViewDraftCapability(raw, "TYPEAGENT_MEMORY_PREVIEWS")
+    );
+}
+
 export class MemoryMcpServer {
     public readonly server: McpServer;
+    private supportsUi = () => false;
 
-    public constructor(private readonly service: MemoryService) {
+    public constructor(
+        private readonly service: MemoryService,
+        options: { previews?: boolean } = {},
+    ) {
         this.server = new McpServer({
             name: "typeagent-memory",
             version: "0.0.1",
         });
         this.registerTools();
+        registerUnderstandingTools(this.server, service, (operation) =>
+            this.run(operation),
+        );
+        if (options.previews ?? memoryPreviewsEnabled())
+            registerMemoryPreview(this.server, service, () =>
+                this.supportsUi(),
+            );
         registerGraphTools(this.server, service, (operation) =>
             this.run(operation),
         );
@@ -133,6 +156,7 @@ export class MemoryMcpServer {
     public async start(transport: Transport = new StdioServerTransport()) {
         await this.service.initialize?.();
         await this.server.connect(transport);
+        this.supportsUi = observeMemoryUiCapability(transport);
     }
 
     public async close(): Promise<void> {

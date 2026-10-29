@@ -117,7 +117,7 @@ describe("BrowserReasoningAgent Copilot provider", () => {
         expect(client.stopped).toBe(true);
     });
 
-    it("uses GPT-5.6 Sol with only WebFlow browser tools", async () => {
+    it("uses GPT-6.1 Sol with only WebFlow browser tools", async () => {
         let client: TestClient;
         const session = new TestSession(async () => {
             const getPageText = client.config?.tools?.find(
@@ -139,7 +139,7 @@ describe("BrowserReasoningAgent Copilot provider", () => {
 
         const trace = await agent.executeGoal({ goal: "Read the page" });
 
-        expect(client.config?.model).toBe("gpt-5.6-sol");
+        expect(client.config?.model).toBe("gpt-6.1-sol");
         expect(client.config?.availableTools).toEqual(
             client.config?.tools?.map((tool) => `custom:${tool.name}`),
         );

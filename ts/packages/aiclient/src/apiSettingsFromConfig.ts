@@ -106,6 +106,28 @@ export function getDeployment(
     return config.azureOpenAI.deployments.get(deploymentName);
 }
 
+function getDefaultDeploymentEndpoint(
+    config: Config,
+    modelType: ModelType,
+): DeploymentEndpoint | undefined {
+    const ao = config.azureOpenAI;
+    switch (modelType) {
+        case ModelType.Chat:
+            return ao.defaultChat;
+        case ModelType.Embedding:
+            return (
+                ao.defaultEmbedding ??
+                pickHighestCapacityEndpoint(ao.deployments.get("embedding"))
+            );
+        case ModelType.Image:
+            return ao.defaultImage;
+        case ModelType.Video:
+            return ao.defaultVideo;
+        case ModelType.Decision:
+            return undefined;
+    }
+}
+
 /**
  * Build `AzureApiSettings` from a typed `Config` for the named
  * deployment + model type. When `deploymentName` is omitted, falls
@@ -139,27 +161,7 @@ export function azureApiSettingsFromConfig(
     }
 
     if (endpoint === undefined) {
-        // Service-default fallback paths.
-        switch (modelType) {
-            case ModelType.Chat:
-                endpoint = ao.defaultChat;
-                break;
-            case ModelType.Embedding:
-                endpoint =
-                    ao.defaultEmbedding ??
-                    pickHighestCapacityEndpoint(
-                        ao.deployments.get("embedding"),
-                    );
-                break;
-            case ModelType.Image:
-                endpoint = ao.defaultImage;
-                break;
-            case ModelType.Video:
-                endpoint = ao.defaultVideo;
-                break;
-            case ModelType.Decision:
-                break;
-        }
+        endpoint = getDefaultDeploymentEndpoint(config, modelType);
     }
 
     if (endpoint === undefined) {
@@ -179,6 +181,7 @@ export function azureApiSettingsFromConfig(
         modelType,
         apiKey: auth.apiKey,
         endpoint: endpoint.endpoint,
+        ...(endpoint.model !== undefined ? { modelName: endpoint.model } : {}),
         supportsResponseFormat: ao.responseFormat,
         maxConcurrency: ao.maxConcurrency,
         timeout: ao.maxTimeoutMs,

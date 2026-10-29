@@ -22,6 +22,8 @@ import {
     acquisitionProgressSchema,
     projectAcquisitionProgress,
     safeAcquisitionOperation,
+    viewBuildSummarySchema,
+    viewSummaryRequestSchema,
 } from "../dist/index.js";
 
 const view = JSON.parse(
@@ -33,6 +35,66 @@ const base = {
     expectedHead: null,
     expectedVersion: 1,
 };
+test("view inventory queries accept bounded kind exclusions without changing default discovery", () => {
+    const request = {
+        corpusId: "corpus",
+        pageSize: 1,
+        excludeKinds: ["schemaView"],
+    };
+    assert.deepEqual(viewSummaryRequestSchema.parse(request), request);
+    assert.deepEqual(viewSummaryRequestSchema.parse({ corpusId: "corpus" }), {
+        corpusId: "corpus",
+    });
+    assert.equal(
+        viewSummaryRequestSchema.safeParse({
+            ...request,
+            excludeKinds: ["unknown"],
+        }).success,
+        false,
+    );
+    assert.equal(
+        viewSummaryRequestSchema.safeParse({
+            ...request,
+            excludeKinds: Array(6).fill("schemaView"),
+        }).success,
+        false,
+    );
+});
+test("build summaries preserve lightweight conflict state and accept legacy responses", () => {
+    const summary = {
+        jobId: "00000000-0000-4000-8000-000000000001",
+        corpusId: "corpus",
+        createdAt: "2026-10-27T00:00:00Z",
+        updatedAt: "2026-10-27T00:00:00Z",
+        state: "partial",
+        maintenance: false,
+        results: [
+            {
+                viewId: "guide",
+                state: "conflicted",
+                reason: "Review overlap",
+                conflictId: "00000000-0000-4000-8000-000000000002",
+                current: true,
+                snapshot: {
+                    pipeline: "informational-wiki-v1",
+                    definition: { kind: "wiki" },
+                },
+            },
+        ],
+    };
+    assert.equal(
+        viewBuildSummarySchema.parse(summary).results[0].conflictState,
+        undefined,
+    );
+    for (const conflictState of ["pending", "resolved", "missing"]) {
+        const current = structuredClone(summary);
+        current.results[0].conflictState = conflictState;
+        assert.equal(
+            viewBuildSummarySchema.parse(current).results[0].conflictState,
+            conflictState,
+        );
+    }
+});
 test("generic view protocol preserves scoped local chronology without a timezone", () => {
     const local = structuredClone(view);
     const details = local.content.sections[0].details;

@@ -24,10 +24,12 @@ export function invokeView<M extends EmptyViewMethod>(
 export function invokeView<M extends ViewMethod>(
     method: M,
     params: Parameters<ViewInvokeFunctions[M]>[0],
+    options?: { signal?: AbortSignal },
 ): Promise<ViewResult<M>>;
 export async function invokeView<M extends ViewMethod>(
     method: M,
     params?: Parameters<ViewInvokeFunctions[M]>[0],
+    options?: { signal?: AbortSignal },
 ): Promise<ViewResult<M>> {
     let response: Response;
     try {
@@ -35,8 +37,10 @@ export async function invokeView<M extends ViewMethod>(
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ method, params: params ?? {} }),
+            ...(options?.signal ? { signal: options.signal } : {}),
         });
     } catch (error) {
+        if (options?.signal?.aborted) throw error;
         throw new Error(
             `Browser view service is unavailable: ${String(error)}`,
         );
