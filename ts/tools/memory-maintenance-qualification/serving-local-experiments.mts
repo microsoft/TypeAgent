@@ -210,8 +210,9 @@ try {
             2,
         ) + "\n",
     );
-    console.log(
-        JSON.stringify({ initialization, parsing, workerStartupMs }, null, 2),
+    process.stdout.write(
+        JSON.stringify({ initialization, parsing, workerStartupMs }, null, 2) +
+            "\n",
     );
 } finally {
     globalThis.fetch = fetch;

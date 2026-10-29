@@ -290,7 +290,7 @@ function observe(
     };
 }
 
-async function main() {
+function benchmarkOptions() {
     const { values } = parseArgs({
         options: {
             store: { type: "string" },
@@ -336,6 +336,21 @@ async function main() {
         Number.isInteger(rounds) && rounds >= 1 && rounds <= 5,
         "Rounds must be 1..5",
     );
+    return {
+        values: {
+            ...values,
+            store: values.store,
+            out: values.out,
+            cases: values.cases,
+        },
+        rounds,
+        understandingRounds,
+        paths,
+    };
+}
+
+async function main() {
+    const { values, rounds, understandingRounds, paths } = benchmarkOptions();
     const source = resolve(values.store);
     const output = resolve(values.out);
     const nested = relative(source, output);

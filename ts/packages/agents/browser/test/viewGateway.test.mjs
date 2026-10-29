@@ -14,6 +14,41 @@ import {
 import { validateViewRequest } from "../dist/views/server/features/views/viewValidation.mjs";
 import { understandingStages } from "../dist/views/server/features/views/viewRoutes.mjs";
 
+test("opt-in lexical preview yields before semantic retrieval without replacing its prepared handle", async () => {
+    const phases = [];
+    const id = "00000000-0000-4000-8000-000000000001";
+    const input = { corpusId: "corpus", question: "Explain the gallery" };
+    const stages = understandingStages(
+        input,
+        async ({ params }) => {
+            phases.push(params.phase);
+            return {
+                ...input,
+                schemaVersion: 1,
+                snapshotId: id,
+                turnId: id,
+                expiresAt: "2099-01-01T00:00:00.000Z",
+                citations: [],
+                modules: [],
+                warnings: [],
+                ...(params.phase === "preview"
+                    ? { provisional: true }
+                    : { evidenceSnapshotId: id }),
+            };
+        },
+        undefined,
+        true,
+    );
+    const preview = (await stages.next()).value;
+    assert.equal(preview.provisional, true);
+    assert.equal(preview.evidenceSnapshotId, undefined);
+    assert.deepEqual(phases, ["preview"]);
+    await stages.next();
+    await stages.next();
+    assert.deepEqual(phases, ["preview", "retrieve", "initial"]);
+    assert.equal((await stages.next()).done, true);
+});
+
 test("progressive understanding yields before subsequent reads and carries prepared handles across refinement", async () => {
     const calls = [];
     const id = "00000000-0000-4000-8000-000000000001";

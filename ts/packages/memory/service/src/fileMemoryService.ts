@@ -1701,21 +1701,7 @@ export class FileMemoryService
         this.fastQueryModelEndpoint =
             options.fastQueryModelEndpoint ??
             process.env.TYPEAGENT_MEMORY_FAST_MODEL;
-        if (
-            this.experiments.has("fast-models") &&
-            !this.fastQueryModelEndpoint?.trim()
-        )
-            throw new Error(
-                "fast-models requires an explicitly configured fastQueryModelEndpoint or TYPEAGENT_MEMORY_FAST_MODEL",
-            );
-        if (
-            options.indexFactory &&
-            (this.experiments.has("fast-models") ||
-                this.experiments.has("translation-cache"))
-        )
-            throw new Error(
-                "Query-model experiments require the built-in corpus index factory",
-            );
+        this.indexFactory = this.createIndexFactory(options);
         const commitPolicy = resolveIngestionCommitPolicy(
             options.ingestionCommitPolicy,
         );
@@ -1993,33 +1979,6 @@ export class FileMemoryService
             this.wikiBudget,
             this.createTopicGenerator(),
         );
-        const queryModel = this.experiments.has("fast-models")
-            ? openai.createChatModel(this.fastQueryModelEndpoint)
-            : this.experiments.has("translation-cache")
-              ? openai.createChatModelDefault("conversation-memory")
-              : undefined;
-        this.indexFactory =
-            options.indexFactory ??
-            (queryModel
-                ? (corpusId, directory) =>
-                      createKnowProCorpusIndex(corpusId, directory, () => {
-                          const settings = createDocMemorySettings();
-                          const translator =
-                              createSearchQueryTranslator(queryModel);
-                          settings.queryTranslator = this.experiments.has(
-                              "translation-cache",
-                          )
-                              ? this.translationCache.wrap(
-                                    corpusId,
-                                    this.experiments.has("fast-models")
-                                        ? this.fastQueryModelEndpoint!
-                                        : "service-default",
-                                    translator,
-                                )
-                              : translator;
-                          return settings;
-                      })
-                : createKnowProCorpusIndex);
         this.viewIndexes = new ViewIndexPool(this.indexFactory);
         this.viewWarmup = new IndexWarmupScheduler(
             (corpusId) => this.viewWarmupJobs(corpusId),
@@ -2228,6 +2187,50 @@ export class FileMemoryService
                     options.viewModelEndpoint,
                 )),
         );
+    }
+
+    private createIndexFactory(
+        options: FileMemoryServiceOptions,
+    ): CorpusIndexFactory {
+        if (
+            this.experiments.has("fast-models") &&
+            !this.fastQueryModelEndpoint?.trim()
+        )
+            throw new Error(
+                "fast-models requires an explicitly configured fastQueryModelEndpoint or TYPEAGENT_MEMORY_FAST_MODEL",
+            );
+        if (
+            options.indexFactory &&
+            (this.experiments.has("fast-models") ||
+                this.experiments.has("translation-cache"))
+        )
+            throw new Error(
+                "Query-model experiments require the built-in corpus index factory",
+            );
+        const queryModel = this.experiments.has("fast-models")
+            ? openai.createChatModel(this.fastQueryModelEndpoint)
+            : this.experiments.has("translation-cache")
+              ? openai.createChatModelDefault("conversation-memory")
+              : undefined;
+        if (options.indexFactory) return options.indexFactory;
+        if (!queryModel) return createKnowProCorpusIndex;
+        return (corpusId, directory) =>
+            createKnowProCorpusIndex(corpusId, directory, () => {
+                const settings = createDocMemorySettings();
+                const translator = createSearchQueryTranslator(queryModel);
+                settings.queryTranslator = this.experiments.has(
+                    "translation-cache",
+                )
+                    ? this.translationCache.wrap(
+                          corpusId,
+                          this.experiments.has("fast-models")
+                              ? this.fastQueryModelEndpoint!
+                              : "service-default",
+                          translator,
+                      )
+                    : translator;
+                return settings;
+            });
     }
 
     private withEligibleAgentSessionSources(

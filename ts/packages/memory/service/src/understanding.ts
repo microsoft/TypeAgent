@@ -124,6 +124,29 @@ function retrievalQuestion(question: string, parent?: Snapshot): string {
         : question;
 }
 
+function answerRequest(
+    input: UnderstandingRequest,
+    question: string,
+): MemoryAnswerRequest {
+    return {
+        corpusId: input.corpusId,
+        question,
+        ...(input.evidenceSnapshotId
+            ? { evidenceSnapshotId: input.evidenceSnapshotId }
+            : {}),
+        ...(input.phase === "retrieve" ? { prepareOnly: true } : {}),
+        ...(input.phase === "initial" ? { deferRefinement: true } : {}),
+        ...(input.phase === "refine" ? { resumeRefinement: true } : {}),
+        ...(input.knowledgeCheckpointId
+            ? { knowledgeCheckpointId: input.knowledgeCheckpointId }
+            : {}),
+        ...(input.retrievalPolicy
+            ? { retrievalPolicy: input.retrievalPolicy }
+            : {}),
+        includeDiagnostics: true,
+    };
+}
+
 export class MemoryUnderstanding {
     private readonly operations = new Map<
         string,
@@ -293,6 +316,74 @@ export class MemoryUnderstanding {
         }
     }
 
+    private async preview(
+        input: UnderstandingRequest,
+        question: string,
+        signal: AbortSignal,
+    ): Promise<UnderstandingResult> {
+        if (!this.host.preview)
+            throw new Error(
+                "Provisional source previews are disabled by this host",
+            );
+        const evidence = await this.host.preview({
+            corpusId: input.corpusId,
+            question,
+            ...(input.knowledgeCheckpointId
+                ? { knowledgeCheckpointId: input.knowledgeCheckpointId }
+                : {}),
+        });
+        signal.throwIfAborted();
+        return {
+            schemaVersion: 1,
+            provisional: true,
+            snapshotId: randomUUID(),
+            turnId: randomUUID(),
+            corpusId: input.corpusId,
+            question: input.question.trim(),
+            expiresAt: new Date(this.now()).toISOString(),
+            citations: understandingCitations(
+                evidence.map((source, index) => ({
+                    id: `preview-${index}`,
+                    kind: "source",
+                    source,
+                })),
+            ),
+            modules: [],
+            warnings: [
+                "Provisional lexical matches only; semantic and temporal interpretation is still pending. These are not a validated answer.",
+            ],
+        };
+    }
+
+    private async retainInitial(
+        input: UnderstandingRequest,
+        error: unknown,
+        signal: AbortSignal,
+    ): Promise<UnderstandingResult> {
+        signal.throwIfAborted();
+        if (
+            input.phase !== "refine" ||
+            !this.options.refinementFallback ||
+            !(error instanceof UnderstandingReaderUnavailable)
+        )
+            throw error;
+        const initial = this.initialSnapshots.get(input.evidenceSnapshotId!);
+        const previous = await this.checked(initial.snapshotId, input.corpusId);
+        signal.throwIfAborted();
+        const retained = structuredClone(previous.result);
+        retained.refinementPending = false;
+        retained.refinementFailed = true;
+        if (retained.answer?.status === "answered")
+            retained.answer.status = "partial";
+        retained.warnings.push(
+            "Additional evidence reading was temporarily unavailable. Showing the revalidated initial explanation; refinement is incomplete. Retry the question to try again.",
+        );
+        recordSearchTiming("understanding.refinementFallback", 0, {
+            retained: true,
+        });
+        return retained;
+    }
+
     private async prepare(
         input: UnderstandingRequest,
         signal: AbortSignal,
@@ -302,60 +393,12 @@ export class MemoryUnderstanding {
             this.parent(input),
         );
         const question = retrievalQuestion(input.question.trim(), parent);
-        if (input.phase === "preview") {
-            if (!this.host.preview)
-                throw new Error(
-                    "Provisional source previews are disabled by this host",
-                );
-            const evidence = await this.host.preview({
-                corpusId: input.corpusId,
-                question,
-                ...(input.knowledgeCheckpointId
-                    ? { knowledgeCheckpointId: input.knowledgeCheckpointId }
-                    : {}),
-            });
-            signal.throwIfAborted();
-            return {
-                schemaVersion: 1,
-                provisional: true,
-                snapshotId: randomUUID(),
-                turnId: randomUUID(),
-                corpusId: input.corpusId,
-                question: input.question.trim(),
-                expiresAt: new Date(this.now()).toISOString(),
-                citations: understandingCitations(
-                    evidence.map((source, index) => ({
-                        id: `preview-${index}`,
-                        kind: "source",
-                        source,
-                    })),
-                ),
-                modules: [],
-                warnings: [
-                    "Provisional lexical matches only; semantic and temporal interpretation is still pending. These are not a validated answer.",
-                ],
-            };
-        }
+        if (input.phase === "preview")
+            return this.preview(input, question, signal);
         const snapshot: Snapshot = {
             corpusId: input.corpusId,
             input: structuredClone(input),
-            request: {
-                corpusId: input.corpusId,
-                question,
-                ...(input.evidenceSnapshotId
-                    ? { evidenceSnapshotId: input.evidenceSnapshotId }
-                    : {}),
-                ...(input.phase === "retrieve" ? { prepareOnly: true } : {}),
-                ...(input.phase === "initial" ? { deferRefinement: true } : {}),
-                ...(input.phase === "refine" ? { resumeRefinement: true } : {}),
-                ...(input.knowledgeCheckpointId
-                    ? { knowledgeCheckpointId: input.knowledgeCheckpointId }
-                    : {}),
-                ...(input.retrievalPolicy
-                    ? { retrievalPolicy: input.retrievalPolicy }
-                    : {}),
-                includeDiagnostics: true,
-            },
+            request: answerRequest(input, question),
             evidence: [],
             influence: parent?.influence ?? [],
             candidates: { dates: [], entities: [], warnings: [] },
@@ -378,33 +421,7 @@ export class MemoryUnderstanding {
                 this.reader(snapshot, parent),
             );
         } catch (error) {
-            signal.throwIfAborted();
-            if (
-                input.phase !== "refine" ||
-                !this.options.refinementFallback ||
-                !(error instanceof UnderstandingReaderUnavailable)
-            )
-                throw error;
-            const initial = this.initialSnapshots.get(
-                input.evidenceSnapshotId!,
-            );
-            const previous = await this.checked(
-                initial.snapshotId,
-                input.corpusId,
-            );
-            signal.throwIfAborted();
-            const retained = structuredClone(previous.result);
-            retained.refinementPending = false;
-            retained.refinementFailed = true;
-            if (retained.answer?.status === "answered")
-                retained.answer.status = "partial";
-            retained.warnings.push(
-                "Additional evidence reading was temporarily unavailable. Showing the revalidated initial explanation; refinement is incomplete. Retry the question to try again.",
-            );
-            recordSearchTiming("understanding.refinementFallback", 0, {
-                retained: true,
-            });
-            return retained;
+            return this.retainInitial(input, error, signal);
         }
         signal.throwIfAborted();
         if (!answer.readerContext?.integratedAnswer)
