@@ -59,7 +59,7 @@
     "@lezer/common": "^1.5.2",
     "@lezer/highlight": "^1.2.3",
     "@milkdown/crepe": "^7.3.6",
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-flows": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
