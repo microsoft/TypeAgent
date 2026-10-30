@@ -30,9 +30,13 @@ import {
 import { renderMarkdownInto } from "./utils/markdownView";
 import { hubNotifications } from "./memoryHubNotifications";
 import type { UnderstandingRequest } from "@typeagent/memory-service";
-import { toSourceUnderstandingRequest } from "./memoryHubUnderstanding";
+import {
+    mountMemoryHubUnderstanding,
+    toSourceUnderstandingRequest,
+} from "./memoryHubUnderstanding";
 
 export type MemoryHubSearchOptions = {
+    queryInput: HTMLInputElement | HTMLTextAreaElement;
     scope: () => string | undefined;
     onOpenSource: (corpusId: string, sourceId: string) => void;
     onOpenView?: (corpusId: string, viewId: string, revisionId: string) => void;
@@ -92,13 +96,25 @@ function exactRequest(evidence: MemoryHubEvidence): MemoryHubEvidenceRequest {
         kind: evidence.kind,
         objectId: evidence.objectId,
         ...(evidence.revisionId ? { revisionId: evidence.revisionId } : {}),
-        ...(evidence.kind === "source" &&
-        /^(?:chars:\d+-\d+|indexed:\d+:[0-9a-f]{64}:\d+-\d+)$/.test(
-            evidence.locator ?? "",
-        )
+        ...(evidence.kind === "source" && sourceRange(evidence.locator)
             ? { locator: evidence.locator }
             : {}),
     };
+}
+function sourceRange(locator?: string): string | undefined {
+    return /^(?:chars:\d+-\d+|indexed:\d+:[0-9a-f]{64}:\d+-\d+)$/.test(
+        locator ?? "",
+    )
+        ? locator
+        : undefined;
+}
+function overlayProvenance(
+    evidence: MemoryHubEvidence,
+    locator = evidence.locator,
+) {
+    const retained =
+        evidence.kind === "source" ? sourceRange(evidence.locator) : locator;
+    return `${provenanceText(evidence)} · ${evidence.objectId}${evidence.revisionId ? ` @ ${evidence.revisionId}` : ""}${retained ? ` · ${retained}` : ""}`;
 }
 function provenanceText(evidence: MemoryHubEvidence): string {
     const identity =
@@ -123,13 +139,7 @@ export function mountMemoryHubSearch(
     const root = node("section", undefined, "memory-phase2 memory-search");
     root.setAttribute("aria-label", "Ask or Explain");
     const form = node("form", undefined, "phase2-controls");
-    const query = node("input");
-    query.type = "search";
-    query.required = true;
-    query.name = "query";
-    query.placeholder = "Ask or Explain";
-    const queryLabel = node("label", "Ask or Explain", "phase2-query");
-    queryLabel.append(query);
+    const query = options.queryInput;
     const types = node("select");
     types.multiple = true;
     types.name = "sourceTypes";
@@ -212,11 +222,7 @@ export function mountMemoryHubSearch(
         value.append(control);
         return value;
     }
-    const submit = setIconButton(
-        node("button"),
-        "fa-arrow-right",
-        "Ask or Explain",
-    );
+    const submit = node("button", "Apply filters");
     submit.type = "submit";
     submit.classList.add("primary");
     const intent = node("select");
@@ -238,6 +244,7 @@ export function mountMemoryHubSearch(
     const filters = node("details", undefined, "hub-filters");
     const filtersSummary = node("summary");
     filtersSummary.append(icon("fa-sliders"), "Filters");
+    const filterPanel = node("div", undefined, "phase2-filter-panel");
     const filterFields = node("div", undefined, "phase2-controls");
     filterFields.append(
         field("Response mode", intent),
@@ -250,10 +257,35 @@ export function mountMemoryHubSearch(
         field("Answer retrieval", retrieval),
         field("Require ready knowledge checkpoint", checkpoint),
     );
-    filters.append(filtersSummary, filterFields, dateNote);
-    form.append(queryLabel, submit, filters);
-    const recent = node("div", undefined, "phase2-controls");
-    recent.setAttribute("aria-label", "Recent queries");
+    filterPanel.append(filterFields, dateNote, submit);
+    filters.append(filtersSummary, filterPanel);
+    const historyDialog = node("dialog", undefined, "phase2-history-dialog");
+    historyDialog.setAttribute("aria-label", "Query history");
+    const historyHeading = node("div", undefined, "phase2-dialog-heading");
+    const historyClose = iconButton("fa-xmark", "Close history", () =>
+        historyDialog.close(),
+    );
+    historyHeading.append(node("h2", "Past queries"), historyClose);
+    const historyLinks = node("div", undefined, "phase2-context-list");
+    historyDialog.append(
+        historyHeading,
+        node(
+            "p",
+            "Previous queries on this device. Choose one to run it again.",
+        ),
+        historyLinks,
+    );
+    const historyButton = action("History", () => {
+        renderRecent();
+        historyDialog.showModal();
+    });
+    historyButton.prepend(icon("fa-clock"), " ");
+    historyButton.className = "phase2-text-action";
+    historyButton.setAttribute("aria-haspopup", "dialog");
+    historyDialog.addEventListener("close", () => historyButton.focus());
+    form.append(historyButton, filters);
+    const recent = node("section", undefined, "phase2-sidecard");
+    recent.setAttribute("aria-label", "Past queries");
     const status = node(
         "div",
         "Enter a question or describe what you want to find.",
@@ -285,16 +317,25 @@ export function mountMemoryHubSearch(
     let preferences: MemoryHubViewPreferences | undefined;
     const viewButtons = new Map<MemoryHubViewMode, HTMLButtonElement>();
     for (const mode of ["list", "grid", "timeline", "domain"] as const) {
-        const button = action(mode[0].toUpperCase() + mode.slice(1), () => {
+        const label = mode[0].toUpperCase() + mode.slice(1);
+        const button = action(label, () => {
             preferredMode = mode;
             renderResult();
         });
+        if (mode === "list" || mode === "grid")
+            setIconButton(
+                button,
+                mode === "list" ? "fa-list" : "fa-grip",
+                `${label} view`,
+            );
         viewButtons.set(mode, button);
         layout.append(button);
     }
-    const dialog = node("dialog");
+    const dialog = node("dialog", undefined, "phase2-source-dialog");
     dialog.setAttribute("aria-label", "Exact cited evidence");
     const dialogTitle = node("h2");
+    const dialogHeading = node("div", undefined, "phase2-dialog-heading");
+    const dialogMode = node("p", undefined, "phase2-dialog-mode");
     const evidenceDescription = node("p");
     const evidenceMeta = node("p");
     const evidenceStatus = node("p");
@@ -316,24 +357,50 @@ export function mountMemoryHubSearch(
     const pager = node("div", undefined, "phase2-controls");
     const management = node("div", undefined, "phase2-controls");
     const close = action("Close evidence", () => dialog.close());
-    dialog.append(
-        close,
-        dialogTitle,
+    setIconButton(close, "fa-xmark", "Close evidence");
+    dialogHeading.append(dialogTitle, close);
+    const provenance = node("details", undefined, "phase2-provenance");
+    provenance.append(
+        node("summary", "Source details and provenance"),
         evidenceDescription,
         evidenceMeta,
+        management,
+    );
+    const preview = node("div", undefined, "phase2-source-preview");
+    const previewCaption = node("p");
+    preview.append(
+        previewCaption,
         evidenceStatus,
         sourceToggle,
         originalView,
         original,
         pager,
-        management,
+    );
+    const explanation = node("div", undefined, "phase2-source-explanation");
+    explanation.append(
+        node(
+            "p",
+            "Based only on this captured source revision.",
+            "phase2-dialog-intro",
+        ),
+    );
+    explanation.hidden = true;
+    const overlayActions = node("div", undefined, "phase2-overlay-actions");
+    dialog.append(
+        dialogMode,
+        dialogHeading,
+        preview,
+        explanation,
+        provenance,
+        overlayActions,
     );
     const reading = node("div", undefined, "phase2-search-reading");
     const evidenceHeading = node("h3", "Supporting evidence");
+    const evidenceTools = node("div", undefined, "phase2-evidence-heading");
+    evidenceTools.append(evidenceHeading, layout);
     reading.append(
         answer,
-        evidenceHeading,
-        layout,
+        evidenceTools,
         layoutNote,
         preferenceStatus,
         results,
@@ -341,7 +408,7 @@ export function mountMemoryHubSearch(
     );
     const resultLayout = node("div", undefined, "phase2-result-layout");
     resultLayout.append(reading, insights);
-    root.append(form, recent, status, resultLayout, dialog);
+    root.append(form, status, resultLayout, dialog, historyDialog);
     host.append(root);
     let result: MemoryHubSearchResult | undefined;
     let submitted: MemoryHubSearchRequest | undefined;
@@ -386,6 +453,93 @@ export function mountMemoryHubSearch(
     let offsets = [0];
     let pageIndex = 0;
     let returnFocus: HTMLElement | undefined;
+    const explanationPanel = mountMemoryHubUnderstanding(explanation, {
+        presentation: "overlay",
+        scope: options.scope,
+        onError: options.onError,
+        onQueryChanged: () => {},
+        onResults: () => dialog.close(),
+        onEvidence: (value, focus) => openEvidence(value, focus),
+        onGraph: () => openFullExplanation(),
+    });
+    function canExplain(evidence: MemoryHubEvidence) {
+        return (
+            understandingEnabled &&
+            evidence.kind === "source" &&
+            !!evidence.revisionId &&
+            evidence.corpusId !== "fixedBrowserMemory"
+        );
+    }
+    function explanationRequest() {
+        if (!selectedEvidence)
+            throw new Error("No source is selected for explanation.");
+        return toSourceUnderstandingRequest(
+            selectedEvidence,
+            submitted?.query ?? query.value.trim(),
+        );
+    }
+    function openFullExplanation() {
+        const request = explanationRequest();
+        dialog.close();
+        options.onUnderstand?.(request);
+    }
+    function renderOverlayActions(explaining: boolean) {
+        overlayActions.replaceChildren();
+        if (!selectedEvidence || !canExplain(selectedEvidence)) return;
+        const switchAction = action(
+            explaining ? "Preview captured source" : "Explain this",
+            () => {
+                if (!selectedEvidence) return;
+                if (explaining) openEvidence(selectedEvidence, switchAction);
+                else openExplanation(selectedEvidence, switchAction);
+            },
+        );
+        switchAction.className = "phase2-link";
+        overlayActions.append(switchAction);
+        if (explaining)
+            overlayActions.append(
+                action("Open full explanation", openFullExplanation),
+            );
+    }
+    function prepareOverlay(
+        evidence: MemoryHubEvidence,
+        focus: HTMLElement,
+        explaining: boolean,
+    ) {
+        evidenceVersion++;
+        if (!dialog.open || !dialog.contains(focus)) returnFocus = focus;
+        selectedEvidence = evidence;
+        dialogTitle.textContent = evidence.title;
+        dialog.setAttribute(
+            "aria-label",
+            explaining ? "Document explanation" : "Exact cited evidence",
+        );
+        dialogMode.textContent = explaining
+            ? "Document explanation"
+            : "Captured revision preview";
+        evidenceMeta.textContent = overlayProvenance(evidence);
+        preview.hidden = explaining;
+        previewCaption.textContent =
+            evidence.kind === "source"
+                ? sourceRange(evidence.locator)
+                    ? "Captured passage from this exact revision."
+                    : "Full captured document. An exact passage location is unavailable."
+                : "Read-only captured evidence.";
+        explanation.hidden = !explaining;
+        provenance.open = false;
+        latestManagement(evidence);
+        renderOverlayActions(explaining);
+        if (!dialog.open) dialog.showModal();
+    }
+    function openExplanation(evidence: MemoryHubEvidence, focus: HTMLElement) {
+        if (!canExplain(evidence)) return;
+        try {
+            prepareOverlay(evidence, focus, true);
+            void explanationPanel.show(explanationRequest());
+        } catch (error) {
+            report(error, evidenceStatus);
+        }
+    }
     function preferenceError(error: unknown) {
         report(error, preferenceStatus);
     }
@@ -408,15 +562,53 @@ export function mountMemoryHubSearch(
     );
 
     function renderRecent() {
-        const queries = recentQueries();
+        const normalize = (value: string) =>
+            value.trim().replace(/\s+/g, " ").toLowerCase();
+        const active = new Set([
+            normalize(submitted?.query ?? ""),
+            normalize(query.value),
+        ]);
+        const queries = recentQueries().filter(
+            (value) => !active.has(normalize(value)),
+        );
         recent.hidden = queries.length === 0;
-        recent.replaceChildren(node("span", "Recent:"));
-        for (const value of queries)
-            recent.append(
-                action(value, () => {
-                    void show(value);
-                }),
-            );
+        recent.replaceChildren(node("h3", "Past queries"));
+        historyLinks.replaceChildren();
+        const links = node("div", undefined, "phase2-context-list");
+        for (const value of queries) {
+            const historyLink = () => {
+                const link = queryLink(value);
+                link.prepend(icon("fa-clock"));
+                return link;
+            };
+            links.append(historyLink());
+            historyLinks.append(historyLink());
+        }
+        if (!queries.length)
+            historyLinks.append(node("p", "No other past queries yet."));
+        recent.append(links);
+    }
+    function queryLink(text: string) {
+        const link = node("a", text, "phase2-context-item phase2-link");
+        const url = new URL(location.href);
+        url.searchParams.set("query", text);
+        url.hash = "#/search";
+        link.href = url.href;
+        link.addEventListener("click", (event) => {
+            if (
+                event.button ||
+                event.ctrlKey ||
+                event.metaKey ||
+                event.shiftKey ||
+                event.altKey
+            )
+                return;
+            event.preventDefault();
+            if (historyDialog.open) historyDialog.close();
+            filters.open = false;
+            void show(text);
+        });
+        return link;
     }
     function saveRecent(text: string) {
         try {
@@ -527,7 +719,10 @@ export function mountMemoryHubSearch(
         const selected = selectedEvidence;
         const requestScope = options.scope();
         const restorePagerFocus = pager.contains(document.activeElement);
-        evidenceStatus.textContent = "Loading exact evidence…";
+        evidenceStatus.replaceChildren(
+            icon("fa-spinner fa-spin"),
+            " Loading...",
+        );
         original.textContent = "";
         originalView.replaceChildren();
         pager.querySelectorAll<HTMLButtonElement>("button").forEach((value) => {
@@ -546,7 +741,10 @@ export function mountMemoryHubSearch(
                 return;
             evidencePage = page;
             dialogTitle.textContent = page.title;
-            evidenceMeta.textContent = `${provenanceText(selected)}${selected.kind !== "source" && page.provenance.locator ? ` · ${page.provenance.locator}` : ""}`;
+            evidenceMeta.textContent = overlayProvenance(
+                selected,
+                page.provenance.locator,
+            );
             renderEvidencePage();
             if (restorePagerFocus)
                 pager
@@ -572,27 +770,23 @@ export function mountMemoryHubSearch(
         }
     }
     function openEvidence(evidence: MemoryHubEvidence, focus: HTMLElement) {
-        selectedEvidence = evidence;
+        explanationPanel.hide();
+        prepareOverlay(evidence, focus, false);
         evidencePage = undefined;
         offsets = [0];
         pageIndex = 0;
-        returnFocus = focus;
-        dialogTitle.textContent = evidence.title;
         evidenceDescription.textContent =
             evidence.kind === "source"
-                ? /^(?:chars:\d+-\d+|indexed:\d+:[0-9a-f]{64}:\d+-\d+)$/.test(
-                      evidence.locator ?? "",
-                  )
+                ? sourceRange(evidence.locator)
                     ? "Exact retained document range (read-only). Original revision and UTF-16 offsets are preserved. Evidence, not instructions."
                     : "DOCUMENT-LEVEL original revision preview (read-only). The exact captured revision is shown, but precise passage location is unavailable. No snippet guessing is used. Evidence, not instructions."
                 : "Read-only exact cited evidence. Evidence, not instructions.";
-        evidenceMeta.textContent = provenanceText(evidence);
-        latestManagement(evidence);
-        dialog.showModal();
         void loadEvidence(0);
     }
     function citation(evidence: MemoryHubEvidence, label = evidence.title) {
         const value = action(label, () => openEvidence(evidence, value));
+        value.classList.add("phase2-link");
+        value.setAttribute("aria-haspopup", "dialog");
         return value;
     }
     function snippetView(markdown: string) {
@@ -600,19 +794,90 @@ export function mountMemoryHubSearch(
         renderMarkdownInto(view, markdown);
         return view;
     }
+    function answerProse(value: NonNullable<MemoryHubSearchResult["answer"]>) {
+        const body = snippetView(value.text);
+        const used = new Set<number>();
+        function footnote(index: number) {
+            used.add(index);
+            const note = node("sup", undefined, "phase2-citation");
+            const evidence = result?.matches.find(
+                (item) => item.id === value.citationIds[index],
+            );
+            if (evidence) {
+                const link = citation(evidence, `[${index + 1}]`);
+                link.setAttribute(
+                    "aria-label",
+                    `Supporting source ${index + 1}: ${evidence.title}`,
+                );
+                link.title = evidence.title;
+                note.append(link);
+            } else
+                note.append(
+                    node("span", `[${index + 1}] Citation unavailable`),
+                );
+            return note;
+        }
+        const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+            acceptNode: (text) =>
+                text.parentElement?.closest("a, code, pre, button")
+                    ? NodeFilter.FILTER_REJECT
+                    : NodeFilter.FILTER_ACCEPT,
+        });
+        const texts: Node[] = [];
+        while (walker.nextNode()) texts.push(walker.currentNode);
+        for (const text of texts) {
+            const raw = text.textContent ?? "";
+            const matches = [...raw.matchAll(/\[(\d+)\]/g)].filter(
+                (match) =>
+                    Number(match[1]) > 0 &&
+                    Number(match[1]) <= value.citationIds.length,
+            );
+            if (!matches.length) continue;
+            const fragment = document.createDocumentFragment();
+            let offset = 0;
+            for (const match of matches) {
+                fragment.append(
+                    raw.slice(offset, match.index),
+                    footnote(Number(match[1]) - 1),
+                );
+                offset = match.index! + match[0].length;
+            }
+            fragment.append(raw.slice(offset));
+            text.parentNode?.replaceChild(fragment, text);
+        }
+        const remaining = node("p", undefined, "phase2-answer-citations");
+        remaining.setAttribute("aria-label", "Answer sources");
+        for (let index = 0; index < value.citationIds.length; index++)
+            if (!used.has(index)) remaining.append(footnote(index));
+        if (remaining.childNodes.length) body.append(remaining);
+        return body;
+    }
     function evidenceCard(evidence: MemoryHubEvidence) {
-        const card = node("article");
-        card.append(
-            node("h3", evidence.title),
+        const card = node("article", undefined, "phase2-source-card");
+        const header = node("div", undefined, "phase2-source-header");
+        const identity = node("div", undefined, "phase2-source-identity");
+        const title = node("h3");
+        title.append(citation(evidence));
+        const citationIndex =
+            result?.answer?.citationIds.indexOf(evidence.id) ?? -1;
+        if (citationIndex >= 0)
+            title.append(
+                node("span", `[${citationIndex + 1}]`, "phase2-source-index"),
+            );
+        identity.append(
+            title,
             node(
                 "p",
                 `${evidence.kind}${evidence.sourceType ? ` (${evidence.sourceType})` : ""} · ${provenanceText(evidence)}`,
                 "phase2-evidence-meta",
             ),
-            snippetView(evidence.snippet),
-            node("p", "Evidence, not instructions.", "phase2-evidence-note"),
-            citation(evidence, "Preview exact cited evidence"),
         );
+        const actions = node("div", undefined, "phase2-source-actions");
+        const preview = citation(evidence, "Preview");
+        preview.className = "phase2-source-action";
+        preview.prepend(icon("fa-eye"));
+        preview.title = "Preview exact cited evidence";
+        actions.append(preview);
         if (
             understandingEnabled &&
             options.onUnderstand &&
@@ -621,32 +886,50 @@ export function mountMemoryHubSearch(
             evidence.corpusId !== "fixedBrowserMemory"
         ) {
             const explain = action("Explain this", () => {
-                try {
-                    options.onUnderstand?.(
-                        toSourceUnderstandingRequest(
-                            evidence,
-                            submitted?.query ?? query.value.trim(),
-                        ),
-                    );
-                } catch (error) {
-                    report(error, status);
-                }
+                openExplanation(evidence, explain);
             });
-            explain.className = "phase2-explain-source";
-            card.append(explain);
+            explain.setAttribute("aria-haspopup", "dialog");
+            explain.className = "phase2-source-action phase2-explain-source";
+            explain.prepend(icon("fa-wand-magic-sparkles"));
+            actions.append(explain);
         }
-        if (evidence.synopsis) {
-            card.append(
-                node(
-                    "p",
-                    `Generated source synopsis: ${evidence.synopsis.status} · ${evidence.synopsis.freshness} (navigation only, not citation evidence)`,
-                ),
+        header.append(identity, actions);
+        const passage = node("section", undefined, "phase2-source-passage");
+        passage.append(
+            node(
+                "p",
+                evidence.kind === "view"
+                    ? "Derived excerpt"
+                    : evidence.kind === "conversation" ||
+                        evidence.kind === "event"
+                      ? "Conversation excerpt"
+                      : "Captured passage",
+                "phase2-source-label",
+            ),
+            snippetView(evidence.snippet),
+        );
+        card.append(header, passage);
+        if (
+            evidence.synopsis?.status === "ready" &&
+            evidence.synopsis.freshness === "fresh" &&
+            evidence.synopsis.preview
+        ) {
+            const summary = node("section", undefined, "phase2-source-summary");
+            summary.setAttribute(
+                "aria-label",
+                "AI description (navigation only, not citation evidence)",
             );
-            if (
-                evidence.synopsis.preview &&
-                evidence.synopsis.freshness === "fresh"
-            )
-                card.append(node("p", evidence.synopsis.preview));
+            const heading = node(
+                "div",
+                undefined,
+                "phase2-source-summary-heading",
+            );
+            heading.append(
+                node("span", "AI description"),
+                node("small", "Navigation only"),
+            );
+            summary.append(heading, node("p", evidence.synopsis.preview));
+            card.append(summary);
         }
         if (evidence.kind === "conversation")
             card.append(
@@ -664,33 +947,21 @@ export function mountMemoryHubSearch(
         answer.hidden = !result?.answer;
         if (!result?.answer) return;
         answer.append(
+            node("p", "Answer + sources", "phase2-answer-eyebrow"),
             node(
                 "h3",
                 result.answer.status === "noAnswer"
                     ? "No grounded answer"
                     : result.answer.mode === "synthesized"
-                      ? "Derived answer"
+                      ? "From your memory"
                       : "Extractive evidence summary",
             ),
-            snippetView(result.answer.text),
+            answerProse(result.answer),
         );
-        const cites = node("div", undefined, "phase2-controls");
-        for (const id of result.answer.citationIds) {
-            const evidence = result.matches.find((value) => value.id === id);
-            cites.append(
-                evidence
-                    ? citation(evidence)
-                    : node("span", "Citation unavailable"),
-            );
-        }
         const followUps = node("div", undefined, "phase2-controls");
         for (const value of result.answer.followUps)
-            followUps.append(
-                action(value, () => {
-                    void show(value);
-                }),
-            );
-        answer.append(cites, followUps);
+            followUps.append(queryLink(value));
+        answer.append(followUps);
         for (const reference of result.answer.derivedReferences ?? []) {
             answer.append(
                 action(
@@ -740,15 +1011,8 @@ export function mountMemoryHubSearch(
                 `${result?.matches.length ?? 0} returned evidence results. Bounded selection, not a corpus total.`,
             ),
         );
-        const sources = sidecard("Sources & evidence");
-        for (const evidence of result?.matches.slice(0, 3) ?? []) {
-            const item = citation(evidence);
-            item.className = "phase2-context-item";
-            sources.append(
-                item,
-                node("small", `${evidence.corpusName} · ${evidence.kind}`),
-            );
-        }
+        renderRecent();
+        insights.append(recent);
         return scopeCard;
     }
     function renderInsights() {
@@ -809,12 +1073,9 @@ export function mountMemoryHubSearch(
             const topics = node("div", undefined, "phase2-context-list");
             for (const topic of value.topTopics)
                 topics.append(
-                    Object.assign(
-                        action(topic, () => {
-                            void show(topic);
-                        }),
-                        { className: "phase2-context-item" },
-                    ),
+                    Object.assign(queryLink(topic), {
+                        className: "phase2-context-item phase2-link",
+                    }),
                 );
             if (!value.topTopics.length)
                 topics.append(
@@ -825,10 +1086,8 @@ export function mountMemoryHubSearch(
             const grid = node("div", undefined, "phase2-context-list");
             for (const entity of value.relatedEntities) {
                 const card = node("div", undefined, "phase2-context-entity");
-                const title = action(entity.name, () => {
-                    void show(entity.name);
-                });
-                title.className = "phase2-context-item";
+                const title = queryLink(entity.name);
+                title.className = "phase2-context-item phase2-link";
                 const meta = [
                     entity.type,
                     preferences?.showConfidenceScores &&
@@ -859,6 +1118,8 @@ export function mountMemoryHubSearch(
     function renderResult() {
         resultLayout.hidden = !result;
         if (!result) {
+            root.insertBefore(recent, resultLayout);
+            renderRecent();
             resultPager.hidden = layout.hidden = true;
             return;
         }
@@ -881,6 +1142,14 @@ export function mountMemoryHubSearch(
             : "";
         const messages = [
             ...result.warnings,
+            ...result.matches.flatMap(({ title, synopsis }) =>
+                synopsis &&
+                (synopsis.status !== "ready" || synopsis.freshness !== "fresh")
+                    ? [
+                          `${title}: generated description ${synopsis.status} · ${synopsis.freshness}. The description is not shown; captured evidence remains available.`,
+                      ]
+                    : [],
+            ),
             ...(webMode && !hasWeb
                 ? [
                       "The preferred web view requires web evidence. Using List for this result.",
@@ -899,7 +1168,7 @@ export function mountMemoryHubSearch(
             context: `Query: ${result.query} · ${submitted?.corpusId ?? "All memory"}`,
             messages,
         });
-        status.textContent = `${result.matches.length} returned evidence results (bounded, not a full total)${result.resolvedIntent ? ` · ${result.resolvedIntent === "ask" ? "Answer and sources" : "Find sources"}${submitted?.intent === "auto" ? " (chosen automatically)" : ""}` : ""} · reciprocal-rank fusion · ${submitted?.corpusId ? "selected corpus" : "All memory"} · submitted query: ${result.query}${searchElapsedMs === undefined ? "" : ` · Ready in ${(searchElapsedMs / 1000).toFixed(1)}s`}`;
+        status.textContent = `${result.matches.length} returned evidence results (bounded, not a full total)${result.resolvedIntent ? ` · ${result.resolvedIntent === "ask" ? "Answer and sources" : "Find sources"}${submitted?.intent === "auto" ? " (chosen automatically)" : ""}` : ""}${searchElapsedMs === undefined ? "" : ` · Ready in ${(searchElapsedMs / 1000).toFixed(1)}s`}`;
         renderAnswer();
         renderInsights();
         renderResultPage(result, mode);
@@ -1071,6 +1340,7 @@ export function mountMemoryHubSearch(
     }
     form.addEventListener("submit", (event) => {
         event.preventDefault();
+        filters.open = false;
         try {
             void search(readRequest());
         } catch (error) {
@@ -1079,9 +1349,23 @@ export function mountMemoryHubSearch(
     });
     dialog.addEventListener("close", () => {
         evidenceVersion++;
+        explanationPanel.hide();
         if (returnFocus?.isConnected) returnFocus.focus();
         else query.focus();
     });
+    const dismissFilters = (event: Event) => {
+        if (event.target instanceof Node && !filters.contains(event.target))
+            filters.open = false;
+    };
+    document.addEventListener("click", dismissFilters);
+    filters.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            filters.open = false;
+            filtersSummary.focus();
+            event.preventDefault();
+        }
+    });
+    query.addEventListener("input", renderRecent);
     renderRecent();
     try {
         applyPreferences(getMemoryHubViewPreferences());
@@ -1100,6 +1384,8 @@ export function mountMemoryHubSearch(
             openEvidence(evidence, focus);
         },
         scopeChanged() {
+            explanationPanel.scopeChanged();
+            if (historyDialog.open) historyDialog.close();
             searchVersion++;
             evidenceVersion++;
             result = undefined;
@@ -1124,6 +1410,11 @@ export function mountMemoryHubSearch(
             searchVersion++;
             evidenceVersion++;
             unsubscribePreferences();
+            query.removeEventListener("input", renderRecent);
+            document.removeEventListener("click", dismissFilters);
+            explanationPanel.dispose();
+            if (historyDialog.open) historyDialog.close();
+            historyDialog.remove();
             if (dialog.open) dialog.close();
             dialog.remove();
             root.remove();

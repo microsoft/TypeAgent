@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { hubNotifications } from "./memoryHubNotifications";
+import { icon } from "./memoryHubUi";
 import type {
     UnderstandingCitation,
     UnderstandingClaim,
@@ -119,6 +120,7 @@ function evidence(
 export function mountMemoryHubUnderstanding(
     host: HTMLElement,
     options: {
+        presentation?: "overlay";
         scope(): string | undefined;
         onError(error: unknown): void;
         onQueryChanged(request: UnderstandingRequest): void;
@@ -132,6 +134,8 @@ export function mountMemoryHubUnderstanding(
     },
 ) {
     const root = node("section", undefined, "memory-understanding");
+    if (options.presentation === "overlay")
+        root.classList.add("understanding-overlay");
     const form = node("form", undefined, "understanding-question");
     const question = node("input");
     question.required = true;
@@ -146,6 +150,9 @@ export function mountMemoryHubUnderstanding(
     const grid = node("div", undefined, "understanding-grid");
     const main = node("div", undefined, "understanding-reading");
     const prose = node("article", undefined, "understanding-prose");
+    const loading = node("p", undefined, "understanding-loading");
+    loading.setAttribute("role", "status");
+    loading.append(icon("fa-solid fa-spinner fa-spin"), "Loading...");
     const modules = node("div", undefined, "understanding-modules");
     const follow = node("section", undefined, "understanding-follow");
     follow.append(
@@ -169,11 +176,14 @@ export function mountMemoryHubUnderstanding(
     follow.hidden = true;
     const rail = node("aside", undefined, "understanding-rail");
     rail.setAttribute("aria-label", "Sources and related context");
-    main.append(prose, follow, modules);
+    main.append(prose);
+    if (options.presentation !== "overlay") main.append(follow);
+    main.append(modules);
     grid.append(main, rail);
     const documentScope = node("p", undefined, "understanding-document-scope");
     documentScope.hidden = true;
-    root.append(form, documentScope, status, grid);
+    if (options.presentation !== "overlay") root.append(form, documentScope);
+    root.append(status, grid);
     host.append(root);
     let result: UnderstandingResult | undefined;
     let input: UnderstandingRequest | undefined;
@@ -345,14 +355,8 @@ export function mountMemoryHubUnderstanding(
             for (const id of result.previousAnswer.evidenceIds)
                 previous.append(" ", cite(id));
             prose.append(previous);
-        } else if (busy && result) {
-            prose.append(
-                node("h2", "Preparing a grounded explanation"),
-                node(
-                    "p",
-                    "Source cards are ready. Review them or draft a follow-on while the explanation is prepared.",
-                ),
-            );
+        } else if (busy) {
+            prose.append(loading);
         }
         sourceRail();
         suggestions.replaceChildren();
@@ -634,6 +638,7 @@ export function mountMemoryHubUnderstanding(
         busy = true;
         submit.disabled = followSubmit.disabled = true;
         status.textContent = "Reading supporting memory…";
+        render();
         const submittedDraft = draft.value;
         try {
             const started = performance.now();
@@ -688,6 +693,7 @@ export function mountMemoryHubUnderstanding(
         } finally {
             if (token === version) {
                 busy = false;
+                loading.remove();
                 submit.disabled = followSubmit.disabled = false;
             }
         }
@@ -727,6 +733,8 @@ export function mountMemoryHubUnderstanding(
             if (
                 request &&
                 (!result ||
+                    !result.answer ||
+                    result.refinementPending ||
                     request.question !== result.question ||
                     request.corpusId !== result.corpusId ||
                     (!!request.evidenceSnapshotId &&
@@ -744,6 +752,7 @@ export function mountMemoryHubUnderstanding(
             controller.abort();
             version++;
             busy = false;
+            loading.remove();
             submit.disabled = followSubmit.disabled = false;
             for (const body of moduleVersions.keys())
                 if (body.getAttribute("aria-busy") === "true") {

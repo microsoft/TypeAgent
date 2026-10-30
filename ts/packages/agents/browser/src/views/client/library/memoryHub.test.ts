@@ -798,6 +798,12 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         "Ask or Explain",
     );
     expect(value("hubAsk").getAttribute("aria-label")).toBe("Ask or Explain");
+    expect(value("hubAsk").tagName).toBe("TEXTAREA");
+    expect(value("hubSearch").querySelector('[name="query"]')).toBeNull();
+    expect(
+        document.querySelector('#hubRail a[href="#/inbox"] i.fa-inbox'),
+    ).not.toBeNull();
+    expect(document.querySelectorAll("#hubRail .hub-nav-icon")).toHaveLength(7);
     for (const id of ["page-search", "page-understanding"])
         expect(value(id).querySelector("h2")?.textContent).toBe(
             "Ask or Explain",
@@ -876,10 +882,31 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     history.replaceState({}, "", "#/library");
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     await settle();
-    value<HTMLInputElement>("hubAsk").value = "worker";
-    value("hubAskForm").dispatchEvent(
-        new Event("submit", { cancelable: true }),
-    );
+    value<HTMLTextAreaElement>("hubAsk").value = "worker";
+    const newline = new KeyboardEvent("keydown", {
+        key: "Enter",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+    });
+    value("hubAsk").dispatchEvent(newline);
+    expect(newline.defaultPrevented).toBe(false);
+    const composing = new KeyboardEvent("keydown", {
+        key: "Enter",
+        isComposing: true,
+        bubbles: true,
+        cancelable: true,
+    });
+    value("hubAsk").dispatchEvent(composing);
+    expect(composing.defaultPrevented).toBe(false);
+    expect(location.hash).toBe("#/library");
+    const submitQuery = new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+    });
+    value("hubAsk").dispatchEvent(submitQuery);
+    expect(submitQuery.defaultPrevented).toBe(true);
     jest.advanceTimersByTime(1);
     await settle();
     await settle();

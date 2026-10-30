@@ -62,6 +62,35 @@
 .understanding-prose:empty {
   display: none;
 }
+.understanding-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.understanding-overlay .understanding-question,
+.understanding-overlay .understanding-document-scope,
+.understanding-overlay .understanding-follow,
+.understanding-overlay .understanding-rail {
+  display: none;
+}
+.understanding-overlay .understanding-grid {
+  display: block;
+}
+.understanding-overlay .understanding-reading,
+.understanding-overlay .understanding-prose {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.understanding-overlay .markdown-preview {
+  max-height: none;
+  overflow: visible;
+}
+.understanding-overlay .understanding-prose h2 {
+  font-size: 20px;
+}
 .understanding-prose h2 {
   margin-block: 18px;
   font-size: clamp(1.5rem, 2.3vw, 1.9rem);

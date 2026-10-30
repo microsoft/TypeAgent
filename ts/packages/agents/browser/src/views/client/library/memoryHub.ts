@@ -202,7 +202,7 @@ function mountRunbookImports(): void {
 }
 
 function synchronizeQuery(query: string): void {
-    el<HTMLInputElement>("hubAsk").value = query;
+    el<HTMLTextAreaElement>("hubAsk").value = query;
     localStorage.setItem("memoryHub.ask", query);
     const url = new URL(location.href);
     url.searchParams.set("query", query);
@@ -266,6 +266,7 @@ function mountPhaseTwo(): void {
         open({ page: "library", corpusId, objectId });
     };
     searchPanel = mountMemoryHubSearch(el("hubSearch"), {
+        queryInput: el<HTMLTextAreaElement>("hubAsk"),
         scope: selectedScope,
         onOpenSource,
         onError,
@@ -295,7 +296,7 @@ function mountPhaseTwo(): void {
         onError,
         onQueryChanged: rememberUnderstanding,
         onResults: () => {
-            pendingSearchQuery = el<HTMLInputElement>("hubAsk").value;
+            pendingSearchQuery = el<HTMLTextAreaElement>("hubAsk").value;
             open({ page: "search" });
         },
         onEvidence: (value, focus, owner) =>
@@ -1664,7 +1665,7 @@ export async function mountMemoryHub(): Promise<void> {
         new URLSearchParams(location.search).get("query") ??
         localStorage.getItem("memoryHub.ask") ??
         "";
-    el<HTMLInputElement>("hubAsk").value = query;
+    el<HTMLTextAreaElement>("hubAsk").value = query;
     mountThemeToggle(el("hubTheme"));
     observeStatus();
     mountPageTabSets();
@@ -1781,7 +1782,7 @@ export async function mountMemoryHub(): Promise<void> {
     }
     el<HTMLFormElement>("hubAskForm").addEventListener("submit", (event) => {
         event.preventDefault();
-        const ask = el<HTMLInputElement>("hubAsk").value;
+        const ask = el<HTMLTextAreaElement>("hubAsk").value;
         if (!ask.trim()) {
             void hubAction(async () => {
                 throw new Error("Enter a query before searching.");
@@ -1795,6 +1796,12 @@ export async function mountMemoryHub(): Promise<void> {
         pendingSearchQuery = ask;
         synchronizeQuery(ask);
         if (alreadySearch) void hubAction(applyRoute);
+    });
+    el<HTMLTextAreaElement>("hubAsk").addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+            event.preventDefault();
+            el<HTMLFormElement>("hubAskForm").requestSubmit();
+        }
     });
     window.addEventListener("hashchange", () => {
         if (reverting) {

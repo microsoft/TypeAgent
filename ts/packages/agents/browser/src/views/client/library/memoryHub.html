@@ -20,17 +20,73 @@
     </script>
   </head>
   <body data-memory-hub="true">
+    <svg
+      class="hub-icon-sprite"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <defs>
+        <symbol id="hub-search-icon" viewBox="0 0 24 24">
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <path d="m16 16 5 5" />
+        </symbol>
+        <symbol id="hub-source-icon" viewBox="0 0 24 24">
+          <path d="M14 3H5v18h14V8l-5-5Zm0 0v5h5M8 12h8m-8 4h6" />
+        </symbol>
+        <symbol id="hub-grid-icon" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </symbol>
+        <symbol id="hub-spark-icon" viewBox="0 0 24 24">
+          <path
+            d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM20 2v4m-2-2h4"
+          />
+        </symbol>
+        <symbol id="hub-memory-icon" viewBox="0 0 24 24">
+          <path
+            d="M9 3a3 3 0 0 0-5 2 3 3 0 0 0-2 5 4 4 0 0 0 1 7 3 3 0 0 0 6 3M15 3a3 3 0 0 1 5 2 3 3 0 0 1 2 5 4 4 0 0 1-1 7 3 3 0 0 1-6 3M9 3v17m6-17v17M5 8l4 2m10-2-4 2M5 16l4-2m10 2-4-2"
+          />
+        </symbol>
+        <symbol id="hub-clock-icon" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="8" />
+          <path d="M12 7v5l3 2" />
+        </symbol>
+        <symbol id="hub-settings-icon" viewBox="0 0 24 24">
+          <path d="M3 6h18M3 12h18M3 18h18" />
+          <circle cx="8" cy="6" r="2" />
+          <circle cx="16" cy="12" r="2" />
+          <circle cx="8" cy="18" r="2" />
+        </symbol>
+      </defs>
+    </svg>
     <header class="hub-top">
-      <h1><i class="fa-solid fa-brain" aria-hidden="true"></i>Memory</h1>
+      <h1 aria-label="Memory">
+        <svg class="hub-nav-icon" aria-hidden="true">
+          <use href="#hub-memory-icon"></use></svg
+        ><span class="hub-brand-label">Memory</span>
+      </h1>
       <form id="hubAskForm" class="hub-omni" role="search">
         <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-        <input
+        <textarea
           id="hubAsk"
-          type="search"
+          name="query"
+          rows="1"
+          maxlength="8192"
           aria-label="Ask or Explain"
           placeholder="Ask or Explain"
-          title="Press / to focus. Enter to submit."
-        />
+          title="Press / to focus. Enter to submit. Shift+Enter adds a line."
+        ></textarea>
+        <button
+          id="hubAskSubmit"
+          type="submit"
+          class="icon-btn"
+          aria-label="Ask or Explain"
+          title="Ask or Explain"
+        >
+          <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+        </button>
         <kbd aria-hidden="true">/</kbd>
       </form>
       <a
@@ -51,32 +107,39 @@
           <span id="inboxBadge" class="hub-badge"></span
         ></a>
         <a href="#/search" title="Ask or Explain"
-          ><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-search-icon"></use></svg
           ><span class="hub-nav-label">Ask or Explain</span></a
         >
         <a href="#/library" title="Sources (Alt+2)"
-          ><i class="fa-solid fa-book-open" aria-hidden="true"></i
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-source-icon"></use></svg
           ><span class="hub-nav-label">Sources</span></a
         >
         <a href="#/views" title="Views (Alt+3)"
-          ><i class="fa-solid fa-list-check" aria-hidden="true"></i
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-grid-icon"></use></svg
           ><span class="hub-nav-label">Views</span></a
         >
         <a href="#/questions" title="Questions"
-          ><i class="fa-solid fa-circle-question" aria-hidden="true"></i
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-spark-icon"></use></svg
           ><span class="hub-nav-label">Questions</span></a
         >
         <a href="#/explore" title="Explore (Alt+4)"
-          ><i class="fa-solid fa-compass" aria-hidden="true"></i
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-memory-icon"></use></svg
           ><span class="hub-nav-label">Explore</span></a
         >
         <a href="#/activity" title="Activity (Alt+5)"
-          ><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-clock-icon"></use></svg
           ><span class="hub-nav-label">Activity</span>
           <span id="activityBadge" class="hub-badge"></span
         ></a>
         <a class="hub-rail-bottom" href="#/settings" title="Settings (Alt+6)"
-          ><i class="fa-solid fa-gear" aria-hidden="true"></i
+          ><svg class="hub-nav-icon" aria-hidden="true">
+            <use href="#hub-settings-icon"></use></svg
           ><span class="hub-nav-label">Settings</span></a
         >
       </nav>
