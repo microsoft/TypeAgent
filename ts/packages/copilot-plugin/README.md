@@ -950,11 +950,28 @@ Use the lifecycle MCP tools in direct, MCP or dev mode. They call the selected
 owner; bypass disables them by default. After learning produces a candidate:
 
 1. Inspect its returned candidate and version, then call `validate_macro`.
-2. In Prepare mode, review it and call `approve_macro`. Drafts cannot run.
-3. Call `run_macro` with the approved `macroId`, declared `inputs`, and an
+2. If it needs changes, call `revise_macro` with the `macroId`, exact draft
+   `version`, and plain-language `feedback`. Check the returned job with
+   `get_macro_learning_job` or `@typeagent recipe status <jobId>`.
+   Once it reaches `needsReview`, inspect and validate
+   the new draft. You can also use
+   `@typeagent recipe revise <macroId> <version> <feedback>`.
+3. Review the final draft and call `approve_macro` with its exact version.
+   Revised drafts always require explicit approval, even under Read-only or All.
+   Drafts cannot run.
+4. Call `run_macro` with the approved `macroId`, declared `inputs`, and an
    optional `version`. The MCP adapter assigns a unique run ID; direct manager
    callers supply their own.
-4. Use `get_macro_run` to inspect sanitized, persisted run evidence.
+5. Use `get_macro_run` to inspect sanitized, persisted run evidence.
+
+For example, feedback can say "Return only the title, not the entire tool
+response." Revisions keep the original recording and immutable draft history,
+accumulate feedback, regenerate grammar, and independently check the compiled
+program before staging it again. The independent verifier sees the correction,
+not the old or new source. Corrections cannot add unrecorded tool effects or
+weaken validation. Unsupported corrections fail explicitly. The previous draft
+cannot be approved once revision starts; after failure, request another correction
+against the still-current draft. Approved macros cannot be revised this way.
 
 `processCommand` does not create or approve macros. The lifecycle tools have no
 `preference` parameter, manual step-draft creation or adapted-candidate submission.
@@ -978,7 +995,7 @@ config changes are read on subsequent calls.
 
 Only `list_macros`, `search_macros`, `inspect_macro`, `get_macro_requirements`,
 `run_macro`, and `get_macro_run` are permitted by this opt-in. Validation,
-approval, disablement, and deletion remain blocked in bypass; use direct, MCP,
+revision, learning-job status, approval, disablement, and deletion remain blocked in bypass; use direct, MCP,
 or dev mode for those lifecycle operations. `@typeagent status` and
 `/typeagent-status` report `Macro tools: discovery and execution only` when
 the bypass opt-in is active.

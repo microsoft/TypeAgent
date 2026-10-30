@@ -118,6 +118,20 @@ export class MacroCatalogAdapter {
         );
     }
 
+    reviseMacro(request: {
+        macroId: string;
+        version: number;
+        feedback: string;
+    }) {
+        return this.call((connection) => connection.reviseMacro(request));
+    }
+
+    getMacroLearningJob(request: { jobId: string }) {
+        return this.call((connection) =>
+            connection.getMacroLearningJob(request.jobId),
+        );
+    }
+
     disableMacro(request: { macroId: string }) {
         return this.call((connection) => connection.disableMacro(request));
     }
@@ -284,6 +298,28 @@ export class TypeAgentMacroMcpServer {
             "Validate a draft macro and return errors, warnings, and execution class.",
             macroRefSchema,
             (request) => adapter.validateMacro(request),
+        );
+        this.server.tool(
+            "revise_macro",
+            "Request changes to the current review draft using plain-language feedback. Returns a learning job, not a published macro. Regenerates and checks a new immutable draft; explicit approval is still required. Does not execute task tools.",
+            {
+                macroId: z.string().min(1),
+                version: z.number().int().positive(),
+                feedback: z.string().trim().min(1).max(16_384),
+            },
+            (request) => adapter.reviseMacro(request),
+        );
+        this.server.tool(
+            "get_macro_learning_job",
+            "Check a macro learning or revision job. Wait for needsReview, then inspect and approve the returned draft version. Failed, cancelled and awaitingAuthor jobs are not ready to publish.",
+            { jobId: z.string().min(1) },
+            {
+                readOnlyHint: true,
+                destructiveHint: false,
+                idempotentHint: true,
+                openWorldHint: false,
+            },
+            (request) => adapter.getMacroLearningJob(request),
         );
         this.server.tool(
             "approve_macro",

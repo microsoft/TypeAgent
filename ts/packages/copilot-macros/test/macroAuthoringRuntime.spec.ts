@@ -324,6 +324,49 @@ describe("portable authoring boundary", () => {
                     "read beta now",
                 ),
             ).toEqual([]);
+            const reviewed = structuredClone(macro);
+            reviewed.version = 2;
+            reviewed.program = artifact;
+            reviewed.learning!.reviewFeedback = [
+                "Return the file contents in uppercase",
+            ];
+            reviewed.learning!.grammarRules = [
+                '<Start> = read $(path:string) now -> { actionName: "run_portable_v3", parameters: { path } };',
+            ];
+            const correctedPlan = structuredClone(plan);
+            correctedPlan.specification.outputRequirements = [
+                "Return the current tool result in uppercase",
+            ];
+            for (const fixture of correctedPlan.fixtures)
+                fixture.expectedOutput = String(
+                    fixture.expectedOutput,
+                ).toUpperCase();
+            verifierQuery.mockResolvedValue(JSON.stringify(correctedPlan));
+            await expect(
+                runtime.buildProgram(reviewed, trace, signal()),
+            ).rejects.toThrow("output");
+            const correctedSource =
+                'async function execute(api: RecipeApi, params: JsonValue): Promise<JsonValue> { const result = await api.tools.call("read", params); if (typeof result !== "string") throw new Error("Expected text"); return result.toUpperCase(); }';
+            sourceQuery.mockResolvedValue(
+                JSON.stringify({ source: correctedSource }),
+            );
+            const corrected = await runtime.buildProgram(
+                reviewed,
+                trace,
+                signal(),
+            );
+            expect(validateRecipeArtifact(corrected)).toEqual([]);
+            expect(corrected.source.text).toBe(correctedSource);
+            expect(verifierQuery.mock.calls[2][0]).toContain(
+                "Return the file contents in uppercase",
+            );
+            expect(verifierQuery.mock.calls[2][0]).not.toContain(source);
+            expect(verifierQuery.mock.calls[2][0]).not.toContain(
+                correctedSource,
+            );
+            expect(sourceQuery.mock.calls[2][0]).not.toContain(
+                "fresh beta body",
+            );
             const numeric = structuredClone(macro);
             numeric.version = 2;
             numeric.inputs = [

@@ -37,6 +37,7 @@ import type {
     RecordingState,
     RecordingToken,
     ReplayToolHost,
+    ReviseMacroRequest,
     RunMacroRequest,
     RunMacroResponse,
     SearchMacrosRequest,
@@ -571,6 +572,20 @@ export class MacroManager {
 
     async approveMacro(request: ApproveMacroRequest): Promise<MacroVersionRef> {
         return this.approveMacroVersion(request, false);
+    }
+
+    async reviseMacro(request: ReviseMacroRequest): Promise<MacroLearningJob> {
+        return this.mutateCatalog(async () => {
+            const current = await this.inspectMacro(request);
+            const latest = await this.getLatestSummary(request.macroId);
+            if (
+                current.state !== "draft" ||
+                latest.state !== "draft" ||
+                latest.version !== request.version
+            )
+                throw new Error("Only the current draft can be revised.");
+            return this.learning.revise(current, request.feedback);
+        });
     }
 
     private async approveMacroVersion(
