@@ -120,7 +120,7 @@ export class SSEManagerImpl implements SSEManager {
      * Setup SSE headers for a response
      */
     static setupSSEHeaders(res: SSEClient): void {
-        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Connection", "keep-alive");
     }

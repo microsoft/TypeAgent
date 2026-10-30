@@ -8,6 +8,8 @@ import {
     type ChatModel,
 } from "@typeagent/aiclient";
 import { answerIntegratedEvidence } from "../src/integratedAnswer.js";
+import { readIntegratedEvidence } from "../src/integratedAnswerReader.js";
+import { runWithSearchCancellation } from "@typeagent/knowpro";
 import {
     MemoryUnderstanding,
     assertUnderstandingBytes,
@@ -15,6 +17,7 @@ import {
 import {
     parseUnderstanding,
     readUnderstanding,
+    UnderstandingReaderUnavailable,
 } from "../src/understandingReader.js";
 import { UnderstandingStore } from "../src/understandingStore.js";
 import type { AnswerEvidence, MemoryEvidence } from "../src/types.js";
@@ -94,6 +97,151 @@ function graph(): MemoryGraphQueryResult {
         },
     };
 }
+describe("Understanding operation cancellation", () => {
+    test("opt-in transient refinement recovery retains only revalidated initial content", async () => {
+        const { engine: original, host, model } = fixture();
+        original.close();
+        const answer = host.answer;
+        const id = "00000000-0000-4000-8000-000000000002";
+        const engine = new MemoryUnderstanding(host, {
+            model,
+            refinementFallback: true,
+        });
+        host.answer = async (...args) => ({
+            ...(await answer(...args)),
+            evidenceSnapshotId: id,
+            refinementPending: true,
+        });
+        const initial = await engine.understand({
+            ...request,
+            phase: "initial",
+        });
+        host.answer = async () => {
+            throw new UnderstandingReaderUnavailable(
+                new Error("offline transient"),
+            );
+        };
+        const retained = await engine.understand({
+            ...request,
+            phase: "refine",
+            evidenceSnapshotId: id,
+        });
+        expect(retained.snapshotId).toBe(initial.snapshotId);
+        expect(retained.answer?.summary).toEqual(initial.answer?.summary);
+        expect(retained.answer?.status).toBe("partial");
+        expect(retained.refinementPending).toBe(false);
+        expect(retained.refinementFailed).toBe(true);
+        expect(retained.warnings.join(" ")).toContain(
+            "refinement is incomplete",
+        );
+        host.validate = async () => false;
+        await expect(
+            engine.understand({
+                ...request,
+                phase: "refine",
+                evidenceSnapshotId: id,
+            }),
+        ).rejects.toThrow("changed or was forgotten");
+        engine.close();
+    });
+
+    test("generic errors and malformed model output never become successful refinement fallbacks", async () => {
+        const { engine: original, host, model } = fixture();
+        original.close();
+        const engine = new MemoryUnderstanding(host, {
+            model,
+            refinementFallback: true,
+        });
+        host.answer = async () => {
+            throw new Error("scope mismatch");
+        };
+        await expect(
+            engine.understand({
+                ...request,
+                phase: "refine",
+                evidenceSnapshotId: "00000000-0000-4000-8000-000000000002",
+            }),
+        ).rejects.toThrow("scope mismatch");
+        engine.close();
+        model.complete = async () => ({ success: true, data: "invalid JSON" });
+        await expect(
+            readUnderstanding({
+                question: request.question,
+                evidence: [{ id: "s0", kind: "source", source: source() }],
+                candidates: empty,
+                allowRefinement: false,
+                model,
+            }),
+        ).rejects.not.toBeInstanceOf(UnderstandingReaderUnavailable);
+    });
+
+    test("cancel reaches the active reader and does not cross collection scope", async () => {
+        const { engine, model } = fixture();
+        const original = model.complete;
+        const requestId = "00000000-0000-4000-8000-000000000001";
+        let entered!: () => void;
+        const started = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        model.complete = async (
+            _prompt,
+            _settings,
+            _schema,
+            _callback,
+            signal,
+        ) => {
+            if (!signal) throw new Error("Reader cancellation signal missing");
+            entered();
+            return new Promise<Awaited<ReturnType<ChatModel["complete"]>>>(
+                (_resolve, reject) => {
+                    signal.addEventListener(
+                        "abort",
+                        () => reject(signal.reason),
+                        { once: true },
+                    );
+                },
+            );
+        };
+        const pending = engine.understand({ ...request, requestId });
+        const rejected = expect(pending).rejects.toThrow("cancelled");
+        await started;
+        await expect(
+            engine.understand({ ...request, requestId }),
+        ).rejects.toThrow("already active");
+        expect(() =>
+            engine.cancel({ corpusId: request.corpusId, requestId: "invalid" }),
+        ).toThrow("UUID");
+        expect(engine.cancel({ corpusId: "other", requestId })).toBe(false);
+        expect(engine.cancel({ corpusId: request.corpusId, requestId })).toBe(
+            true,
+        );
+        await rejected;
+        expect(engine.cancel({ corpusId: request.corpusId, requestId })).toBe(
+            false,
+        );
+        model.complete = original;
+        expect(
+            (await engine.understand({ ...request, requestId })).answer?.status,
+        ).toBe("answered");
+        engine.close();
+    });
+
+    test("batched validation receives all influencing evidence and source-set identity", async () => {
+        const { engine, host } = fixture();
+        let validations = 0;
+        host.validateSnapshot = async (input, evidence, indexVersion) => {
+            validations++;
+            expect(input.corpusId).toBe(request.corpusId);
+            expect(evidence.length).toBeGreaterThan(0);
+            expect(indexVersion).toBe("index1");
+            return true;
+        };
+        await engine.understand(request);
+        expect(validations).toBeGreaterThan(0);
+        engine.close();
+    });
+});
+
 function fixture(originals = [source()]) {
     const calls: {
         evidence: AnswerEvidence[];
@@ -149,6 +297,153 @@ describe("strict understanding reader", () => {
     const evidence: AnswerEvidence[] = [
         { id: "s0", kind: "source", source: source() },
     ];
+    test.each(["integrated", "understanding"])(
+        "%s regenerates one inconsistent abstention with unchanged evidence",
+        async (kind) => {
+            const prompts: string[] = [];
+            const model: ChatModel = {
+                completionSettings: {},
+                complete: async (prompt) => {
+                    prompts.push(JSON.stringify(prompt));
+                    const ids = prompts.length === 1 ? ["s0"] : [];
+                    const data =
+                        kind === "integrated"
+                            ? {
+                                  status: "noAnswer",
+                                  answer: "The requested measurement is not recorded.",
+                                  evidenceIds: ids,
+                                  retrievalQueries: [],
+                              }
+                            : {
+                                  ...response(ids),
+                                  status: "noAnswer",
+                              };
+                    return { success: true, data: JSON.stringify(data) };
+                },
+            };
+            const result =
+                kind === "integrated"
+                    ? await readIntegratedEvidence(request, evidence, {
+                          model,
+                      })
+                    : await readUnderstanding({
+                          question: request.question,
+                          evidence,
+                          candidates: empty,
+                          allowRefinement: true,
+                          model,
+                      });
+            expect(result.status).toBe("noAnswer");
+            expect(prompts).toHaveLength(2);
+            expect(prompts[1]).toContain("Regenerate from the same");
+            expect(prompts[1]).toContain("User reported six gallery projects");
+            expect(prompts[0]).toContain("Match every requested event");
+        },
+    );
+    test.each(["status", "unknown citation", "malformed JSON", "cancelled"])(
+        "integrated repair is bounded and does not recover %s by weakening validation",
+        async (failure) => {
+            let calls = 0;
+            const controller = new AbortController();
+            const model: ChatModel = {
+                completionSettings: {},
+                complete: async () => {
+                    calls++;
+                    if (failure === "cancelled")
+                        controller.abort(new Error("reader cancelled"));
+                    return {
+                        success: true,
+                        data:
+                            failure === "malformed JSON"
+                                ? "{"
+                                : JSON.stringify({
+                                      status: "noAnswer",
+                                      answer: "Not established.",
+                                      evidenceIds: [
+                                          failure === "unknown citation"
+                                              ? "unknown"
+                                              : "s0",
+                                      ],
+                                      retrievalQueries: [],
+                                  }),
+                    };
+                },
+            };
+            await expect(
+                runWithSearchCancellation(controller.signal, () =>
+                    readIntegratedEvidence(request, evidence, { model }),
+                ),
+            ).rejects.toThrow();
+            expect(calls).toBe(failure === "status" ? 2 : 1);
+        },
+    );
+    test("repair feedback cannot exceed the serialized reader request budget", async () => {
+        let initialChars = 0;
+        const valid: ChatModel = {
+            completionSettings: {},
+            complete: async (messages, _options, jsonSchema) => {
+                initialChars = JSON.stringify({ messages, jsonSchema }).length;
+                return {
+                    success: true,
+                    data: JSON.stringify({
+                        status: "answered",
+                        answer: "Six projects.",
+                        evidenceIds: ["s0"],
+                        retrievalQueries: [],
+                    }),
+                };
+            },
+        };
+        await readIntegratedEvidence(request, evidence, { model: valid });
+        let calls = 0;
+        await expect(
+            readIntegratedEvidence(request, evidence, {
+                maxRequestChars: initialChars,
+                model: {
+                    completionSettings: {},
+                    complete: async () => {
+                        calls++;
+                        return {
+                            success: true,
+                            data: JSON.stringify({
+                                status: "noAnswer",
+                                answer: "Not established.",
+                                evidenceIds: ["s0"],
+                                retrievalQueries: [],
+                            }),
+                        };
+                    },
+                },
+            }),
+        ).rejects.toThrow("serialized request budget");
+        expect(calls).toBe(1);
+    });
+    test("brief initial reading preserves strict output and injected-model precedence", async () => {
+        let instructions = "";
+        const model: ChatModel = {
+            completionSettings: {},
+            complete: async (prompt) => {
+                instructions = JSON.stringify(prompt);
+                return { success: true, data: JSON.stringify(response()) };
+            },
+        };
+        expect(
+            (
+                await readUnderstanding({
+                    question: request.question,
+                    evidence,
+                    candidates: empty,
+                    allowRefinement: true,
+                    brief: true,
+                    model,
+                    endpoint: "unconfigured-must-not-be-used",
+                })
+            ).summary.evidenceIds,
+        ).toEqual(["s0"]);
+        expect(instructions).toContain("at most 700 output tokens");
+        expect(instructions).toContain("Preserve uncertainty");
+        expect(instructions).toContain("retrievalQueries");
+    });
     test("uses the production factory and structured schema without rejected completion limits", async () => {
         const runtimeConfig = getRuntimeConfig();
         const fetch = globalThis.fetch;

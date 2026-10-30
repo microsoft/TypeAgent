@@ -14,6 +14,41 @@ import {
 import { validateViewRequest } from "../dist/views/server/features/views/viewValidation.mjs";
 import { understandingStages } from "../dist/views/server/features/views/viewRoutes.mjs";
 
+test("opt-in lexical preview yields before semantic retrieval without replacing its prepared handle", async () => {
+    const phases = [];
+    const id = "00000000-0000-4000-8000-000000000001";
+    const input = { corpusId: "corpus", question: "Explain the gallery" };
+    const stages = understandingStages(
+        input,
+        async ({ params }) => {
+            phases.push(params.phase);
+            return {
+                ...input,
+                schemaVersion: 1,
+                snapshotId: id,
+                turnId: id,
+                expiresAt: "2099-01-01T00:00:00.000Z",
+                citations: [],
+                modules: [],
+                warnings: [],
+                ...(params.phase === "preview"
+                    ? { provisional: true }
+                    : { evidenceSnapshotId: id }),
+            };
+        },
+        undefined,
+        true,
+    );
+    const preview = (await stages.next()).value;
+    assert.equal(preview.provisional, true);
+    assert.equal(preview.evidenceSnapshotId, undefined);
+    assert.deepEqual(phases, ["preview"]);
+    await stages.next();
+    await stages.next();
+    assert.deepEqual(phases, ["preview", "retrieve", "initial"]);
+    assert.equal((await stages.next()).done, true);
+});
+
 test("progressive understanding yields before subsequent reads and carries prepared handles across refinement", async () => {
     const calls = [];
     const id = "00000000-0000-4000-8000-000000000001";
@@ -44,6 +79,52 @@ test("progressive understanding yields before subsequent reads and carries prepa
     assert.equal(calls[2].phase, "refine");
     assert.equal(calls[2].evidenceSnapshotId, id);
     assert.equal((await stages.next()).done, true);
+});
+
+test("disconnect cancellation prevents the next progressive phase", async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    const id = "00000000-0000-4000-8000-000000000001";
+    const input = { corpusId: "corpus", question: "Explain" };
+    const stages = understandingStages(
+        input,
+        async () => {
+            calls++;
+            return {
+                ...input,
+                schemaVersion: 1,
+                snapshotId: id,
+                turnId: id,
+                evidenceSnapshotId: id,
+                expiresAt: "2099-01-01T00:00:00.000Z",
+                citations: [],
+                modules: [],
+                warnings: [],
+            };
+        },
+        controller.signal,
+    );
+    await stages.next();
+    controller.abort(new Error("disconnected"));
+    await assert.rejects(stages.next(), /disconnected/);
+    assert.equal(calls, 1);
+});
+
+test("Understanding cancellation is a strict, collection-scoped operation", () => {
+    const request = {
+        method: "memoryHubCancelUnderstanding",
+        params: {
+            corpusId: "corpus",
+            requestId: "00000000-0000-4000-8000-000000000001",
+        },
+    };
+    assert.deepEqual(validateViewRequest(request), request);
+    assert.throws(() =>
+        validateViewRequest({
+            ...request,
+            params: { ...request.params, requestId: "not-an-id" },
+        }),
+    );
 });
 
 test("closing the progressive iterator prevents scheduling another model phase", async () => {
@@ -964,6 +1045,10 @@ test(
                     headers: { Origin: base },
                 });
                 assert.equal(response.status, 200);
+                assert.equal(
+                    response.headers.get("content-type"),
+                    "text/event-stream; charset=utf-8",
+                );
                 const reader = response.body.getReader();
                 try {
                     await reader.read();
@@ -974,6 +1059,7 @@ test(
                             phase: "processing",
                             current: 1,
                             total: 2,
+                            message: "March\u2013April",
                         },
                         timestamp: new Date().toISOString(),
                     });
@@ -982,6 +1068,7 @@ test(
                     );
                     assert.match(event, /"type":"importProgress"/);
                     assert.match(event, /"importId":"job-1"/);
+                    assert.match(event, /March\u2013April/);
                     const completed = await invoke({
                         method: "importWebsiteDataWithProgress",
                         params: {

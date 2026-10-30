@@ -2185,6 +2185,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             "role",
             "The accountable_role is the service role responsible for approval; accountable role does not mean review owner.",
         );
+        await service.close();
         const store = new TypedViewStore(root);
         const family = await store.getWikiFamily(corpusId);
         family.descriptors = [
@@ -2200,6 +2201,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             },
         ];
         await store.saveWikiFamily(corpusId, family);
+        service = open();
         const resumed = await update(corpusId, "resume");
         expect(resumed.job?.request.targets).toHaveLength(1);
         await update(corpusId, "pause");

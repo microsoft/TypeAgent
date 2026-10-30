@@ -72,6 +72,23 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
         if (cs.reasoning_effort !== undefined) {
             body.reasoning = { effort: cs.reasoning_effort };
         }
+        if (
+            request.jsonSchema !== undefined &&
+            !Array.isArray(request.jsonSchema)
+        ) {
+            if (request.disableResponseFormat)
+                throw new Error(
+                    `Json schema not supported by model '${request.modelName}'`,
+                );
+            body.text = {
+                format: { ...request.jsonSchema, type: "json_schema" },
+            };
+        } else if (
+            cs.response_format?.type === "json_object" &&
+            !request.disableResponseFormat
+        ) {
+            body.text = { format: { type: "json_object" } };
+        }
         if (request.stream) {
             body.stream = true;
         }

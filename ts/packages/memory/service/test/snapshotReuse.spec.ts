@@ -44,6 +44,7 @@ describe("operation-scoped committed view snapshots", () => {
     afterEach(async () => {
         clock.restoreAllMocks();
         ViewHistory.prototype.read = original;
+        store.closeReadCaches();
         await rm(root, { recursive: true, force: true });
     });
 
@@ -140,13 +141,14 @@ describe("operation-scoped committed view snapshots", () => {
             cursor: 7,
             descriptors: [],
         });
+        const head = await store.getCommittedHead("corpus");
         reads = 0;
         entryRead.mockClear();
         resume();
         expect(await late).toBe(7);
         expect(reads).toBe(0);
         expect(entryRead).toHaveBeenCalledTimes(1);
-        expect(entryRead).toHaveBeenCalledWith(viewReadProjectionEntry);
+        expect(entryRead).toHaveBeenCalledWith(viewReadProjectionEntry, head);
     });
 
     test("privacy writes expire reuse and the next read operation is fresh", async () => {
@@ -241,7 +243,7 @@ describe("operation-scoped committed view snapshots", () => {
         await store.withReadSnapshot("corpus", () => store.listViews("corpus"));
     });
 
-    test("actual repeated consolidation nomination reads one projection with historical guard parity", async () => {
+    test("actual repeated consolidation nomination reuses immutable projections with historical guard parity", async () => {
         const readEntry = ViewHistory.prototype.readEntry;
         clock
             .spyOn(ViewHistory.prototype, "readEntry")
@@ -280,6 +282,7 @@ describe("operation-scoped committed view snapshots", () => {
             await changeFamily(service, corpusId, "resume");
             const snapshot = await settleConsolidation(service, corpusId);
             await changeFamily(service, corpusId, "pause");
+            expect((await service.drainMaintenance(15_000)).settled).toBe(true);
             const target = snapshot.views.find(
                 (view) => view.definition.wiki?.query === "lease-budget review",
             )!;
@@ -357,14 +360,14 @@ describe("operation-scoped committed view snapshots", () => {
                     ),
                 ).toBe(true);
                 expect(operation.count).toBe(0);
-                expect(operation.projectionReads).toBe(1);
+                expect(operation.projectionReads).toBe(0);
             }
             const operation = { count: 0, projectionReads: 0 };
             await operationReads.run(operation, () =>
                 service.listViews(corpusId),
             );
             expect(operation.count).toBe(0);
-            expect(operation.projectionReads).toBe(1);
+            expect(operation.projectionReads).toBe(0);
             console.warn(
                 JSON.stringify({
                     snapshotReuse: {

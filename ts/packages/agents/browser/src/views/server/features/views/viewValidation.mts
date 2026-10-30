@@ -96,6 +96,10 @@ function protocolInput(schema: {
 
 // Each entry is an explicitly exposed domain operation, never a browser-control method.
 const schemas: Record<ViewMethod, z.ZodType> = {
+    memoryHubCancelUnderstanding: z.strictObject({
+        corpusId: text,
+        requestId: z.string().uuid(),
+    }),
     memoryHubUnderstand: protocolInput(understandingRequestSchema),
     memoryHubUnderstandingModule: protocolInput(
         understandingModuleRequestSchema,

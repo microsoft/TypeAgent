@@ -1420,9 +1420,9 @@ describe("durable draft builds and explicit edit merge", () => {
         const failed = await wait(await service.buildViews(request));
         expect(failed.state).toBe("failed");
         const read = CorpusAccess.prototype.read;
-        const listViews = service.listViews.bind(service);
+        const listViews = TypedViewStore.prototype.listViews;
         const leases: boolean[] = [];
-        let selectingHead = false;
+        let corpusAccess: CorpusAccess | undefined;
         const mocks = (import.meta as ImportMeta & { jest: typeof jest }).jest;
         const access = mocks
             .spyOn(CorpusAccess.prototype, "read")
@@ -1430,18 +1430,15 @@ describe("durable draft builds and explicit edit merge", () => {
                 this: CorpusAccess,
                 operation: () => Promise<T>,
             ): Promise<T> {
-                if (selectingHead) leases.push(this.isWriting);
+                corpusAccess = this;
                 return (read<T>).call(this, operation);
             });
+        await service.listViews(request.corpusId);
         const snapshots = mocks
-            .spyOn(service, "listViews")
-            .mockImplementation(async (corpusId) => {
-                selectingHead = true;
-                try {
-                    return await listViews(corpusId);
-                } finally {
-                    selectingHead = false;
-                }
+            .spyOn(TypedViewStore.prototype, "listViews")
+            .mockImplementation(function (this: TypedViewStore, corpusId) {
+                leases.push(corpusAccess?.isWriting ?? false);
+                return listViews.call(this, corpusId);
             });
         try {
             const retried = await wait(await service.retryViewBuild(failed));

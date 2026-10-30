@@ -121,6 +121,78 @@ function fixture(
     return { host, model, calls };
 }
 
+describe("parallel answer retrieval", () => {
+    test("views start before originals finish and preserve the prepared evidence", async () => {
+        const { host, model } = fixture();
+        const original = host.searchOriginal;
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        host.searchOriginal = async (input) => {
+            await gate;
+            return original(input);
+        };
+        let viewStarted = false;
+        const views = host.getEligibleViewMatches!;
+        host.getEligibleViewMatches = async (input) => {
+            viewStarted = true;
+            return views(input);
+        };
+        const pending = answerIntegratedEvidence(request, host, {
+            model,
+            prepareOnly: true,
+        });
+        await Promise.resolve();
+        expect(viewStarted).toBe(true);
+        release();
+        const result = await pending;
+        const expected = fixture();
+        const baseline = await answerIntegratedEvidence(
+            request,
+            expected.host,
+            { model: expected.model, prepareOnly: true },
+        );
+        expect(result).toEqual(baseline);
+    });
+
+    test("strict view failure waits for the other branch to settle", async () => {
+        const { host, model } = fixture();
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const original = host.searchOriginal;
+        host.searchOriginal = async (input) => {
+            await gate;
+            return original(input);
+        };
+        host.getEligibleViewMatches = async () => {
+            throw new Error("view failed");
+        };
+        let settled = false;
+        const pending = answerIntegratedEvidence(
+            { ...request, retrievalPolicy: "sourcesAndViews" },
+            host,
+            { model, prepareOnly: true },
+        );
+        const rejected = expect(pending).rejects.toThrow("view failed");
+        void pending.then(
+            () => {
+                settled = true;
+            },
+            () => {
+                settled = true;
+            },
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        release();
+        await rejected;
+    });
+});
+
 describe("bounded source-plus-view answering", () => {
     test("prepared retrieval skips synthesis and is reused without repeating retrieval", async () => {
         const { host, model, calls } = fixture();

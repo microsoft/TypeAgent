@@ -312,6 +312,10 @@ export type MemoryHubFunctions = {
     memoryHubUnderstandingModule(
         params: UnderstandingModuleRequest,
     ): Promise<UnderstandingModuleResult>;
+    memoryHubCancelUnderstanding(params: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<boolean>;
     memoryHubViewUsedBy(
         params: ViewSourceUsageRequest,
     ): Promise<ViewSourceUsagePage>;
@@ -430,6 +434,7 @@ export type ViewMethod = keyof ViewInvokeFunctions;
 export const viewMethods = [
     "memoryHubUnderstand",
     "memoryHubUnderstandingModule",
+    "memoryHubCancelUnderstanding",
     "memoryHubGraph",
     "memoryHubGraphSupport",
     "memoryHubGraphEvent",

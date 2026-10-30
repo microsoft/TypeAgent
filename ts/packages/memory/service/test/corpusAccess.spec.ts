@@ -3,6 +3,25 @@
 
 import { CorpusAccess } from "../src/corpusAccess.js";
 
+test("background reads detach writer identity without releasing the writer", async () => {
+    let committedReads = 0;
+    const access = new CorpusAccess(undefined, {
+        read: async (operation) => {
+            committedReads++;
+            return operation();
+        },
+        publish: async () => {},
+    });
+    await access.write(async () => {
+        expect(access.isWriting).toBe(true);
+        await access.backgroundRead(async () => {
+            expect(access.isWriting).toBe(false);
+        });
+        expect(access.isWriting).toBe(true);
+    });
+    expect(committedReads).toBe(1);
+});
+
 function deferred() {
     let resolve!: () => void;
     const promise = new Promise<void>((finish) => {

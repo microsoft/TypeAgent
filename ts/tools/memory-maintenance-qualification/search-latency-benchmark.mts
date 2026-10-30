@@ -47,6 +47,7 @@ export interface ProviderCall {
     observationError?: string;
 }
 interface Outcome {
+    answer?: unknown;
     status: string;
     evidenceCount: number;
     warningCount: number;
@@ -70,6 +71,37 @@ export interface Sample {
     spans: Span[];
     providers: ProviderCall[];
     observationErrors: string[];
+}
+
+interface BenchmarkContext {
+    sample: Sample;
+    pending: Promise<void>[];
+    signal: AbortSignal;
+    modelResponses: {
+        providerIndex: number;
+        text: string;
+        truncated: boolean;
+    }[];
+}
+
+export function modelResponseDiagnostic(value: unknown) {
+    assert(record(value), "Invalid chat response for private diagnostics");
+    assert(
+        Array.isArray(value.choices) ||
+            Array.isArray(value.output) ||
+            typeof value.output_text === "string",
+        "Missing chat response output",
+    );
+    const text = JSON.stringify({
+        model: value.model,
+        ...(Array.isArray(value.choices) ? { choices: value.choices } : {}),
+        ...(Array.isArray(value.output) ? { output: value.output } : {}),
+        ...(typeof value.output_text === "string"
+            ? { output_text: value.output_text }
+            : {}),
+    });
+    const limit = 64 * 1024;
+    return { text: text.slice(0, limit), truncated: text.length > limit };
 }
 
 export function answerOutcomeStatus(
@@ -173,36 +205,33 @@ function timing(line: string): Span {
     };
 }
 
-function providerUsage(value: unknown): Partial<ProviderCall> {
+export function providerUsage(value: unknown): Partial<ProviderCall> {
     assert(record(value), "Provider response was not a JSON object");
     const result: Partial<ProviderCall> = {};
     if (typeof value.model === "string") result.model = value.model;
     if (!record(value.usage)) return result;
     const usage = value.usage;
-    if (typeof usage.prompt_tokens === "number")
-        result.inputTokens = usage.prompt_tokens;
-    if (typeof usage.completion_tokens === "number")
-        result.outputTokens = usage.completion_tokens;
+    const inputTokens = usage.prompt_tokens ?? usage.input_tokens;
+    const outputTokens = usage.completion_tokens ?? usage.output_tokens;
+    const outputDetails =
+        usage.completion_tokens_details ?? usage.output_tokens_details;
+    const inputDetails =
+        usage.prompt_tokens_details ?? usage.input_tokens_details;
+    if (typeof inputTokens === "number") result.inputTokens = inputTokens;
+    if (typeof outputTokens === "number") result.outputTokens = outputTokens;
     if (
-        record(usage.completion_tokens_details) &&
-        typeof usage.completion_tokens_details.reasoning_tokens === "number"
+        record(outputDetails) &&
+        typeof outputDetails.reasoning_tokens === "number"
     )
-        result.reasoningTokens =
-            usage.completion_tokens_details.reasoning_tokens;
-    if (
-        record(usage.prompt_tokens_details) &&
-        typeof usage.prompt_tokens_details.cached_tokens === "number"
-    )
-        result.cachedTokens = usage.prompt_tokens_details.cached_tokens;
+        result.reasoningTokens = outputDetails.reasoning_tokens;
+    if (record(inputDetails) && typeof inputDetails.cached_tokens === "number")
+        result.cachedTokens = inputDetails.cached_tokens;
     return result;
 }
 
 function observe(
-    context: AsyncLocalStorage<{
-        sample: Sample;
-        pending: Promise<void>[];
-        signal: AbortSignal;
-    }>,
+    context: AsyncLocalStorage<BenchmarkContext>,
+    retainModelResponses: boolean,
 ) {
     const warn = console.warn;
     const fetch = globalThis.fetch;
@@ -228,7 +257,7 @@ function observe(
         const url = new URL(
             input instanceof Request ? input.url : String(input),
         );
-        const kind = /\/chat\/completions$/.test(url.pathname)
+        const kind = /\/(?:chat\/completions|responses)$/.test(url.pathname)
             ? "chat"
             : /\/embeddings$/.test(url.pathname)
               ? "embeddings"
@@ -262,6 +291,7 @@ function observe(
                 elapsedMs: 0,
                 status: response.status,
             };
+            const providerIndex = active.sample.providers.length;
             active.sample.providers.push(call);
             active.pending.push(
                 response
@@ -269,6 +299,15 @@ function observe(
                     .json()
                     .then((body: unknown) => {
                         Object.assign(call, providerUsage(body));
+                        if (
+                            retainModelResponses &&
+                            kind === "chat" &&
+                            response.ok
+                        )
+                            active.modelResponses.push({
+                                providerIndex,
+                                ...modelResponseDiagnostic(body),
+                            });
                     })
                     .catch((error: unknown) => {
                         call.observationError =
@@ -289,13 +328,26 @@ function observe(
     };
 }
 
-async function main() {
+export function benchmarkOptions(args = process.argv.slice(2)) {
     const { values } = parseArgs({
+        args,
         options: {
             store: { type: "string" },
             out: { type: "string" },
             cases: { type: "string" },
+            "case-ids": { type: "string" },
             rounds: { type: "string", default: "3" },
+            experiments: { type: "string", default: "" },
+            "fast-model": { type: "string" },
+            "initial-reader-model": { type: "string" },
+            "answer-model": { type: "string" },
+            "retain-answers": { type: "boolean", default: false },
+            "retain-model-responses": { type: "boolean", default: false },
+            "understanding-rounds": { type: "string", default: "2" },
+            paths: {
+                type: "string",
+                default: "search-and-ask,find-control,understand",
+            },
             "allow-model-calls": { type: "boolean", default: false },
         },
     });
@@ -307,11 +359,50 @@ async function main() {
         values.store && values.out && values.cases,
         "Required: --store, --out, --cases",
     );
+    for (const flag of [
+        "fast-model",
+        "initial-reader-model",
+        "answer-model",
+    ] as const)
+        assert(
+            values[flag] === undefined || values[flag].trim(),
+            `--${flag} must not be empty`,
+        );
     const rounds = Number(values.rounds);
+    const understandingRounds = Number(values["understanding-rounds"]);
+    assert(
+        Number.isInteger(understandingRounds) &&
+            understandingRounds >= 0 &&
+            understandingRounds <= 3,
+        "Understanding rounds must be 0..3",
+    );
+    const paths = new Set(values.paths.split(","));
+    assert(
+        paths.size &&
+            [...paths].every((item) =>
+                ["search-and-ask", "find-control", "understand"].includes(item),
+            ),
+        "Unknown benchmark path",
+    );
     assert(
         Number.isInteger(rounds) && rounds >= 1 && rounds <= 5,
         "Rounds must be 1..5",
     );
+    return {
+        values: {
+            ...values,
+            store: values.store,
+            out: values.out,
+            cases: values.cases,
+        },
+        rounds,
+        understandingRounds,
+        paths,
+    };
+}
+
+async function main() {
+    const { values, rounds, understandingRounds, paths } = benchmarkOptions();
     const source = resolve(values.store);
     const output = resolve(values.out);
     const nested = relative(source, output);
@@ -320,10 +411,21 @@ async function main() {
         "Output must not be inside the source store",
     );
     const manifestBytes = await readFile(values.cases);
-    const cases = readCases(JSON.parse(manifestBytes.toString("utf8")));
+    const allCases = readCases(JSON.parse(manifestBytes.toString("utf8")));
+    const requestedIds = new Set(
+        values["case-ids"]?.split(",").filter(Boolean),
+    );
+    const cases = requestedIds.size
+        ? allCases.filter((item) => requestedIds.has(item.id))
+        : allCases;
+    assert(
+        !requestedIds.size || cases.length === requestedIds.size,
+        "Unknown selected case ID",
+    );
     assert(cases.length, "No cases");
     await mkdir(dirname(output), { recursive: true });
     await mkdir(output);
+    await writeFile(resolve(output, "cases.json"), manifestBytes);
     const memory = resolve(output, "store");
     await cp(source, memory, {
         recursive: true,
@@ -361,30 +463,49 @@ async function main() {
             state.discovery.policy = "off";
         });
     const service = new FileMemoryService(memory, {
+        performanceExperiments: values.experiments,
+        ...(values["fast-model"]
+            ? { fastQueryModelEndpoint: values["fast-model"] }
+            : {}),
+        ...(values["initial-reader-model"]
+            ? { initialReaderModelEndpoint: values["initial-reader-model"] }
+            : {}),
+        ...(values["answer-model"]
+            ? { viewModelEndpoint: values["answer-model"] }
+            : {}),
         understanding: true,
         maintenanceMode: "manual",
         discoveryPolicy: "off",
         sourceSynopses: false,
     });
+    if (values["answer-model"])
+        process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT =
+            values["answer-model"];
     const hub = createMemoryHubQueryFunctions(
         () => service,
         () => undefined,
         createMemoryHubSynthesizer(),
     );
-    const context = new AsyncLocalStorage<{
-        sample: Sample;
-        pending: Promise<void>[];
-        signal: AbortSignal;
-    }>();
-    const restore = observe(context);
+    const context = new AsyncLocalStorage<BenchmarkContext>();
+    const restore = observe(context, values["retain-model-responses"]);
     const samples: Sample[] = [];
     const seen = new Set<string>();
     const startedAt = new Date().toISOString();
     const compiledDigests: Record<string, string> = {};
     for (const path of [
+        "packages/aiclient/dist/wireApiProvider/responsesWireApiProvider.js",
         "packages/memory/service/dist/integratedAnswer.js",
+        "packages/memory/service/dist/integratedAnswerReader.js",
+        "packages/memory/service/dist/indexedAnswer.js",
+        "packages/memory/service/dist/readerStatusRepair.js",
         "packages/memory/service/dist/fileMemoryService.js",
         "packages/memory/service/dist/understanding.js",
+        "packages/memory/service/dist/understandingReader.js",
+        "packages/memory/service/dist/memoryPerformanceExperiments.js",
+        "packages/memory/service/dist/translationCache.js",
+        "packages/memory/service/dist/maintenanceScheduler.js",
+        "packages/memory/service/dist/knowProCorpusIndex.js",
+        "packages/memory/conversation/dist/docMemory.js",
         "packages/knowPro/dist/searchTiming.js",
     ])
         compiledDigests[path] = createHash("sha256")
@@ -397,7 +518,14 @@ async function main() {
             cwd: root,
             encoding: "utf8",
         }).trim(),
+        gitStatus: execFileSync("git", ["status", "--porcelain"], {
+            cwd: root,
+            encoding: "utf8",
+        }).trim(),
         compiledDigests,
+        configDefaultsSha256: createHash("sha256")
+            .update(await readFile(resolve(root, "config.defaults.yaml")))
+            .digest("hex"),
         manifestSha256: createHash("sha256")
             .update(manifestBytes)
             .digest("hex"),
@@ -407,10 +535,21 @@ async function main() {
         sourceSynopses: false,
         originalStoreUntouched: true,
         browserTransportIncluded: false,
-        ordering:
-            "Search/ask: rotated case order per round; then warm Find; then two warm Understanding rounds with immediate follow-ons",
+        ordering: `Selected paths: rotated Search/Ask rounds, then Find, then ${understandingRounds} Understanding rounds with immediate follow-ons`,
+        runnerSha256: createHash("sha256")
+            .update(await readFile(fileURLToPath(import.meta.url)))
+            .digest("hex"),
         rounds,
+        understandingRounds,
+        paths: [...paths],
+        performanceExperiments: values.experiments,
+        fastQueryModelEndpoint: values["fast-model"],
+        initialReaderModelEndpoint: values["initial-reader-model"],
+        answerModelEndpoint: values["answer-model"],
+        privateAnswersRetained: values["retain-answers"],
+        privateModelResponsesRetained: values["retain-model-responses"],
         uniquePrimaryQueries: cases.length,
+        selectedCaseIds: cases.map((item) => item.id),
     };
     async function save(finished = false) {
         const variants = [...new Set(samples.map((sample) => sample.variant))];
@@ -477,14 +616,16 @@ async function main() {
         };
         seen.add(test.corpusId);
         const pending: Promise<void>[] = [];
+        const modelResponses: BenchmarkContext["modelResponses"] = [];
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 180_000);
         const start = performance.now();
         const cpu = process.cpuUsage();
         let outcome: Outcome | undefined;
+        let failure: unknown;
         try {
             outcome = await context.run(
-                { sample, pending, signal: controller.signal },
+                { sample, pending, signal: controller.signal, modelResponses },
                 () =>
                     runWithSearchTiming(
                         sample.batchId,
@@ -503,6 +644,7 @@ async function main() {
                     : { plannedModules: outcome.plannedModules }),
             };
         } catch (error) {
+            failure = error;
             sample.errorName =
                 error instanceof Error ? error.name : "UnknownError";
             console.error(
@@ -516,6 +658,51 @@ async function main() {
             await Promise.all(pending);
         }
         samples.push(sample);
+        if (values["retain-model-responses"] && modelResponses.length)
+            await appendFile(
+                resolve(output, "provider-responses.jsonl"),
+                modelResponses
+                    .map((response) =>
+                        JSON.stringify({
+                            batchId: sample.batchId,
+                            caseId: test.id,
+                            variant,
+                            round,
+                            ...response,
+                        }),
+                    )
+                    .join("\n") + "\n",
+            );
+        if (values["retain-answers"] && failure !== undefined)
+            await appendFile(
+                resolve(output, "failures.jsonl"),
+                JSON.stringify({
+                    batchId: sample.batchId,
+                    caseId: test.id,
+                    variant,
+                    round,
+                    errorName: sample.errorName,
+                    message:
+                        failure instanceof Error
+                            ? failure.message.slice(0, 8192)
+                            : "Non-Error failure",
+                    stack:
+                        failure instanceof Error
+                            ? failure.stack?.slice(0, 8192)
+                            : undefined,
+                }) + "\n",
+            );
+        if (values["retain-answers"] && outcome?.answer !== undefined)
+            await appendFile(
+                resolve(output, "answers.jsonl"),
+                JSON.stringify({
+                    batchId: sample.batchId,
+                    caseId: test.id,
+                    variant,
+                    round,
+                    answer: outcome.answer,
+                }) + "\n",
+            );
         await appendFile(
             resolve(output, "samples.jsonl"),
             JSON.stringify(sample) + "\n",
@@ -543,6 +730,7 @@ async function main() {
                         : {}),
                 });
                 return {
+                    answer: result,
                     status: answerOutcomeStatus(result.answer),
                     evidenceCount: result.citations.length,
                     warningCount: result.warnings.length,
@@ -557,7 +745,11 @@ async function main() {
     }
     try {
         await save();
-        for (let round = 1; round <= rounds; round++) {
+        for (
+            let round = 1;
+            paths.has("search-and-ask") && round <= rounds;
+            round++
+        ) {
             const offset = ((round - 1) * 5) % cases.length;
             for (const test of [
                 ...cases.slice(offset),
@@ -570,8 +762,12 @@ async function main() {
                         limit: 50,
                         generateAnswer: true,
                     });
-                    assert(!result.errors.length, "Hub returned errors");
+                    assert(
+                        !result.errors.length,
+                        JSON.stringify(result.errors),
+                    );
                     return {
+                        answer: result,
                         status: answerOutcomeStatus(result.answer),
                         evidenceCount: result.matches.length,
                         warningCount: result.warnings.length,
@@ -579,7 +775,7 @@ async function main() {
                 });
             }
         }
-        for (const test of cases)
+        for (const test of paths.has("find-control") ? cases : [])
             await measure(test, "find-control", 1, async () => {
                 const result = await hub.memoryHubSearch({
                     query: test.question,
@@ -594,7 +790,11 @@ async function main() {
                     warningCount: result.warnings.length,
                 };
             });
-        for (let round = 1; round <= 2; round++)
+        for (
+            let round = 1;
+            paths.has("understand") && round <= understandingRounds;
+            round++
+        )
             for (const test of cases.filter((item) => item.understand)) {
                 const parent = await understand(test, round);
                 if (test.followOn) {

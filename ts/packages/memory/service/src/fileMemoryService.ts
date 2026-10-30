@@ -2,6 +2,19 @@
 // Licensed under the MIT License.
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { openai } from "@typeagent/aiclient";
+import {
+    createDocMemorySettings,
+    type DocMemorySettings,
+} from "@typeagent/conversation-memory";
+import {
+    memoryPerformanceExperiments,
+    resolveInitialReaderModelEndpoint,
+    type MemoryPerformanceExperiment,
+} from "./memoryPerformanceExperiments.js";
+import { TranslationCache } from "./translationCache.js";
+import { ViewIndexPool } from "./viewIndexPool.js";
+import { IndexWarmupScheduler, type IndexWarmupJob } from "./indexWarmup.js";
 import {
     boundGraphInventory,
     graphIdentity,
@@ -660,6 +673,9 @@ interface PreparedEventIndex {
 }
 
 export interface FileMemoryServiceOptions {
+    performanceExperiments?: string;
+    fastQueryModelEndpoint?: string;
+    initialReaderModelEndpoint?: string;
     maintenanceMode?: "automatic" | "manual";
     topicBuildTimeoutMs?: number;
     maintenanceConcurrency?: MaintenanceConcurrency;
@@ -703,6 +719,7 @@ export interface FileMemoryServiceOptions {
     topicCuration?: TopicCurationSettings;
     onTopicDecisionReceipt?: (receipt: TopicDecisionReceipt) => void;
     indexFactory?: CorpusIndexFactory;
+    indexSettingsFactory?: () => DocMemorySettings;
     eventIndexFactory?: CorpusIndexFactory;
     capabilities?: MemoryServiceCapabilities;
     /** Opt-in rehearsal envelope only; never enables product behavior. */
@@ -1314,6 +1331,22 @@ export class FileMemoryService
     >();
     private readonly viewBuilds: ViewBuildRunner;
     private readonly indexFactory: CorpusIndexFactory;
+    private readonly experiments: ReadonlySet<MemoryPerformanceExperiment>;
+    private readonly translationCache = new TranslationCache();
+    private readonly fastQueryModelEndpoint: string | undefined;
+    private readonly initialReaderModelEndpoint: string | undefined;
+    private readonly collectionInitializations = new Map<
+        string,
+        {
+            initialize: () => Promise<void>;
+            promise?: Promise<void>;
+        }
+    >();
+    private readonly collectionInitializationScope =
+        new AsyncLocalStorage<string>();
+    private readonly viewIndexes: ViewIndexPool;
+    private readonly viewWarmup: IndexWarmupScheduler;
+    private readonly pendingViewWarmup = new Set<string>();
     private readonly eventIndexFactory: CorpusIndexFactory;
     private readonly capabilities: MemoryServiceCapabilities;
     private readonly viewStore: TypedViewStore;
@@ -1329,7 +1362,10 @@ export class FileMemoryService
     private readonly committedCorpora = new Map<string, CommittedCorpus>();
     private readonly committedReaders = new Set<CommittedCorpus>();
     private readonly readScope = new AsyncLocalStorage<
-        Map<string, { snapshot: CommittedCorpus | undefined }>
+        Map<
+            string,
+            { snapshot: CommittedCorpus | undefined; documentReady?: boolean }
+        >
     >();
     private readonly runtimeViews = new WeakMap<CorpusRuntime, CorpusRuntime>();
     private readonly visibility = new Map<string, number>();
@@ -1434,6 +1470,8 @@ export class FileMemoryService
             eventIndex: this.graphEventIndexes.get(corpusId),
             eventVersion,
         });
+        if (this.pendingViewWarmup.delete(corpusId))
+            this.viewWarmup.refresh(corpusId);
         if (
             previous &&
             (previous.head !== head ||
@@ -1455,6 +1493,7 @@ export class FileMemoryService
         corpusId: string,
         operation: () => Promise<T>,
     ): Promise<T> {
+        const enteredAt = performance.now();
         this.assertCorpusReadable(corpusId);
         const inherited = this.readScope.getStore();
         if (this.activeRead(corpusId)) return operation();
@@ -1474,6 +1513,11 @@ export class FileMemoryService
                     corpusId,
                     snapshot.head,
                     async () => {
+                        recordSearchTiming(
+                            "read.entry",
+                            performance.now() - enteredAt,
+                            { corpusId, pinned: true },
+                        );
                         const result = await operation();
                         this.assertCorpusReadable(corpusId);
                         if (
@@ -1672,6 +1716,18 @@ export class FileMemoryService
         private readonly rootDirectory: string,
         options: FileMemoryServiceOptions = {},
     ) {
+        this.experiments = memoryPerformanceExperiments(
+            options.performanceExperiments,
+        );
+        this.fastQueryModelEndpoint =
+            options.fastQueryModelEndpoint ??
+            process.env.TYPEAGENT_MEMORY_FAST_MODEL;
+        this.initialReaderModelEndpoint = resolveInitialReaderModelEndpoint(
+            options.initialReaderModelEndpoint,
+            this.fastQueryModelEndpoint,
+            this.experiments,
+        );
+        this.indexFactory = this.createIndexFactory(options);
         const maintenanceConcurrency = resolveMaintenanceConcurrency(
             options.maintenanceConcurrency,
         );
@@ -1954,7 +2010,16 @@ export class FileMemoryService
             options.wikiAssessmentConcurrency,
             prioritizeShortBuilds,
         );
-        this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
+        this.viewIndexes = new ViewIndexPool(this.indexFactory);
+        this.viewWarmup = new IndexWarmupScheduler(
+            (corpusId) => this.viewWarmupJobs(corpusId),
+            (error, corpusId) =>
+                console.warn("Memory view-index warmup failed", {
+                    corpusId,
+                    errorType:
+                        error instanceof Error ? error.name : "UnknownError",
+                }),
+        );
         this.eventIndexFactory = options.eventIndexFactory ?? this.indexFactory;
         this.capabilities = options.capabilities ?? defaultCapabilities();
         this.assetStore = new RevisionAssetStore(rootDirectory);
@@ -2155,6 +2220,62 @@ export class FileMemoryService
         );
     }
 
+    private createIndexFactory(
+        options: FileMemoryServiceOptions,
+    ): CorpusIndexFactory {
+        if (options.indexFactory && options.indexSettingsFactory)
+            throw new Error(
+                "Supply either indexFactory or indexSettingsFactory, not both",
+            );
+        if (
+            this.experiments.has("fast-models") &&
+            !this.fastQueryModelEndpoint?.trim()
+        )
+            throw new Error(
+                "fast-models requires an explicitly configured fastQueryModelEndpoint or TYPEAGENT_MEMORY_FAST_MODEL",
+            );
+        if (
+            options.indexFactory &&
+            (this.experiments.has("fast-models") ||
+                this.experiments.has("translation-cache"))
+        )
+            throw new Error(
+                "Query-model experiments require the built-in corpus index factory",
+            );
+        const queryExperiments =
+            this.experiments.has("fast-models") ||
+            this.experiments.has("translation-cache");
+        let queryModel: DocMemorySettings["queryLanguageModel"] =
+            this.experiments.has("fast-models")
+                ? openai.createJsonChatModel(this.fastQueryModelEndpoint)
+                : undefined;
+        if (options.indexFactory) return options.indexFactory;
+        if (!queryExperiments && !options.indexSettingsFactory)
+            return createKnowProCorpusIndex;
+        return (corpusId, directory) =>
+            createKnowProCorpusIndex(corpusId, directory, () => {
+                const settings =
+                    options.indexSettingsFactory?.() ??
+                    createDocMemorySettings();
+                if (!queryExperiments) return settings;
+                queryModel ??=
+                    settings.queryLanguageModel ?? settings.languageModel;
+                settings.queryLanguageModel = queryModel;
+                if (this.experiments.has("translation-cache")) {
+                    const wrap = settings.wrapQueryTranslator;
+                    settings.wrapQueryTranslator = (translator) =>
+                        this.translationCache.wrap(
+                            corpusId,
+                            this.experiments.has("fast-models")
+                                ? this.fastQueryModelEndpoint!
+                                : "service-default",
+                            wrap ? wrap(translator) : translator,
+                        );
+                }
+                return settings;
+            });
+    }
+
     private withEligibleAgentSessionSources(
         corpusId: string,
         sources: Array<{ sourceId: string; revisionId: string }>,
@@ -2237,91 +2358,137 @@ export class FileMemoryService
                                     directory.name,
                                 )
                             ) {
-                                await timeSearchStage(
-                                    "service.initialize.collection",
-                                    async () => {
-                                        await timeSearchStage(
-                                            "service.initialize.views",
-                                            async () => {
-                                                await this.cleanManifestStaging(
+                                const initializeCollection = () =>
+                                    timeSearchStage(
+                                        "service.initialize.collection",
+                                        async () => {
+                                            await timeSearchStage(
+                                                "service.initialize.views",
+                                                async () => {
+                                                    await this.cleanManifestStaging(
+                                                        directory.name,
+                                                    );
+                                                    await rm(
+                                                        this.viewIndexStagingDirectory(
+                                                            directory.name,
+                                                        ),
+                                                        {
+                                                            recursive: true,
+                                                            force: true,
+                                                        },
+                                                    );
+                                                    await this.viewStore.recover(
+                                                        directory.name,
+                                                    );
+                                                    await this.cleanArchivedViewIndexes(
+                                                        directory.name,
+                                                    );
+                                                    await this.viewStore.recoverViewBuilds(
+                                                        directory.name,
+                                                    );
+                                                    await this.viewStore.ensureReadProjection(
+                                                        directory.name,
+                                                    );
+                                                },
+                                                { corpusId: directory.name },
+                                            );
+                                            let manifest:
+                                                | Pick<
+                                                      CorpusManifest,
+                                                      | "authorizedSourceRemoval"
+                                                      | "pendingCorpusClear"
+                                                      | "indexGeneration"
+                                                  >
+                                                | undefined =
+                                                await this.readSerializedManifest(
                                                     directory.name,
                                                 );
-                                                await rm(
-                                                    this.viewIndexStagingDirectory(
+                                            if (manifest) {
+                                                await this.agentSessionStore.recover(
+                                                    directory.name,
+                                                );
+                                                if (
+                                                    manifest.pendingCorpusClear
+                                                ) {
+                                                    const runtime =
+                                                        await this.getCorpusRuntime(
+                                                            directory.name,
+                                                            true,
+                                                        );
+                                                    await this.completeCorpusClear(
+                                                        directory.name,
+                                                        runtime,
+                                                    );
+                                                    manifest = runtime.manifest;
+                                                }
+                                                if (
+                                                    manifest.authorizedSourceRemoval
+                                                ) {
+                                                    const runtime =
+                                                        await this.getCorpusRuntime(
+                                                            directory.name,
+                                                            true,
+                                                        );
+                                                    await this.completeAuthorizedSourceRemoval(
+                                                        directory.name,
+                                                        runtime,
+                                                    );
+                                                    manifest = runtime.manifest;
+                                                }
+                                                await this.corpusAccess(
+                                                    directory.name,
+                                                ).write(async () => {});
+                                                this.scheduleSourceSynopses(
+                                                    directory.name,
+                                                );
+                                                const runtime =
+                                                    await timeSearchStage(
+                                                        "service.initialize.runtime",
+                                                        () =>
+                                                            this.getCorpusRuntime(
+                                                                directory.name,
+                                                            ),
+                                                        {
+                                                            corpusId:
+                                                                directory.name,
+                                                        },
+                                                    );
+                                                this.scheduleIndexCollection(
+                                                    directory.name,
+                                                    this.indexDirectory(
                                                         directory.name,
                                                     ),
+                                                );
+                                                await timeSearchStage(
+                                                    "service.initialize.textPurge",
+                                                    () =>
+                                                        this.textStore(
+                                                            directory.name,
+                                                        ).purge(
+                                                            runtime.manifest
+                                                                .sources,
+                                                        ),
                                                     {
-                                                        recursive: true,
-                                                        force: true,
+                                                        corpusId:
+                                                            directory.name,
                                                     },
                                                 );
-                                                await this.viewStore.recover(
-                                                    directory.name,
-                                                );
-                                                await this.cleanArchivedViewIndexes(
-                                                    directory.name,
-                                                );
-                                                await this.viewStore.recoverViewBuilds(
-                                                    directory.name,
-                                                );
-                                                await this.viewStore.ensureReadProjection(
-                                                    directory.name,
-                                                );
-                                            },
-                                            { corpusId: directory.name },
-                                        );
-                                        let manifest:
-                                            | Pick<
-                                                  CorpusManifest,
-                                                  | "authorizedSourceRemoval"
-                                                  | "pendingCorpusClear"
-                                                  | "indexGeneration"
-                                              >
-                                            | undefined =
-                                            await this.readSerializedManifest(
-                                                directory.name,
-                                            );
-                                        if (manifest) {
-                                            await this.agentSessionStore.recover(
-                                                directory.name,
-                                            );
-                                            if (manifest.pendingCorpusClear) {
-                                                const runtime =
-                                                    await this.getCorpusRuntime(
-                                                        directory.name,
-                                                        true,
-                                                    );
-                                                await this.completeCorpusClear(
-                                                    directory.name,
-                                                    runtime,
-                                                );
-                                                manifest = runtime.manifest;
-                                            }
-                                            if (
-                                                manifest.authorizedSourceRemoval
-                                            ) {
-                                                const runtime =
-                                                    await this.getCorpusRuntime(
-                                                        directory.name,
-                                                        true,
-                                                    );
-                                                await this.completeAuthorizedSourceRemoval(
-                                                    directory.name,
-                                                    runtime,
-                                                );
-                                                manifest = runtime.manifest;
-                                            }
-                                            await this.corpusAccess(
-                                                directory.name,
-                                            ).write(async () => {});
-                                            this.scheduleSourceSynopses(
-                                                directory.name,
-                                            );
-                                            const runtime =
                                                 await timeSearchStage(
-                                                    "service.initialize.runtime",
+                                                    "service.initialize.topics",
                                                     () =>
-                                                        this.getCorpusRuntime(
+                                                        this.reconcileTopics(
+                                                            directory.name,
+                                                            runtime,
+                                                        ),
+                                                    {
+                                                        corpusId:
+                                                            directory.name,
+                                                    },
+                                                );
+                                                await timeSearchStage(
+                                                    "service.initialize.knowledge",
+                                                    () =>
+                                                        this.recoverKnowledge(
                                                             directory.name,
                                                         ),
                                                     {
@@ -2329,93 +2496,87 @@ export class FileMemoryService
                                                             directory.name,
                                                     },
                                                 );
-                                            this.scheduleIndexCollection(
-                                                directory.name,
-                                                this.indexDirectory(
+                                                this.knowledge.schedule(
                                                     directory.name,
-                                                ),
-                                            );
-                                            await timeSearchStage(
-                                                "service.initialize.textPurge",
-                                                () =>
-                                                    this.textStore(
-                                                        directory.name,
-                                                    ).purge(
-                                                        runtime.manifest
-                                                            .sources,
-                                                    ),
-                                                { corpusId: directory.name },
-                                            );
-                                            await timeSearchStage(
-                                                "service.initialize.topics",
-                                                () =>
-                                                    this.reconcileTopics(
-                                                        directory.name,
-                                                        runtime,
-                                                    ),
-                                                { corpusId: directory.name },
-                                            );
-                                            await timeSearchStage(
-                                                "service.initialize.knowledge",
-                                                () =>
-                                                    this.recoverKnowledge(
-                                                        directory.name,
-                                                    ),
-                                                { corpusId: directory.name },
-                                            );
-                                            this.knowledge.schedule(
-                                                directory.name,
-                                            );
-                                            await this.corpusAccess(
-                                                directory.name,
-                                            ).write(async () => {});
-                                            if (!this.informationalWikiEnabled)
-                                                return;
-                                            await timeSearchStage(
-                                                "service.initialize.wikiRecovery",
-                                                () =>
-                                                    this.enqueueWrite(
-                                                        directory.name,
-                                                        () =>
-                                                            this.recoverWikiConsolidationsLocked(
-                                                                directory.name,
-                                                            ),
-                                                    ),
-                                                { corpusId: directory.name },
-                                            );
-                                            const views = (
-                                                await this.viewStore.listViews(
+                                                );
+                                                await this.corpusAccess(
                                                     directory.name,
-                                                )
-                                            ).views;
-                                            for (const kind of [
-                                                "projects",
-                                                "wiki",
-                                            ] as const) {
-                                                const family =
-                                                    await this.reconcileInformationalFamily(
-                                                        directory.name,
-                                                        kind,
-                                                        manifest.indexGeneration,
-                                                        views,
-                                                    );
+                                                ).write(async () => {});
                                                 if (
-                                                    family.enabled &&
-                                                    family.dirty &&
-                                                    !family.error
+                                                    !this
+                                                        .informationalWikiEnabled
                                                 )
-                                                    this.scheduleWikiMaintenance(
+                                                    return;
+                                                await timeSearchStage(
+                                                    "service.initialize.wikiRecovery",
+                                                    () =>
+                                                        this.enqueueWrite(
+                                                            directory.name,
+                                                            () =>
+                                                                this.recoverWikiConsolidationsLocked(
+                                                                    directory.name,
+                                                                ),
+                                                        ),
+                                                    {
+                                                        corpusId:
+                                                            directory.name,
+                                                    },
+                                                );
+                                                const views = (
+                                                    await this.viewStore.listViews(
                                                         directory.name,
-                                                        kind,
-                                                    );
+                                                    )
+                                                ).views;
+                                                for (const kind of [
+                                                    "projects",
+                                                    "wiki",
+                                                ] as const) {
+                                                    const family =
+                                                        await this.reconcileInformationalFamily(
+                                                            directory.name,
+                                                            kind,
+                                                            manifest.indexGeneration,
+                                                            views,
+                                                        );
+                                                    if (
+                                                        family.enabled &&
+                                                        family.dirty &&
+                                                        !family.error
+                                                    )
+                                                        this.scheduleWikiMaintenance(
+                                                            directory.name,
+                                                            kind,
+                                                        );
+                                                }
+                                                await this.corpusAccess(
+                                                    directory.name,
+                                                ).write(async () => {});
                                             }
-                                            await this.corpusAccess(
-                                                directory.name,
-                                            ).write(async () => {});
-                                        }
-                                    },
-                                    { corpusId: directory.name },
-                                );
+                                        },
+                                        { corpusId: directory.name },
+                                    );
+                                const manifest = this.experiments.has(
+                                    "lazy-collections",
+                                )
+                                    ? await this.readSerializedManifest(
+                                          directory.name,
+                                      )
+                                    : undefined;
+                                if (
+                                    this.experiments.has("lazy-collections") &&
+                                    manifest &&
+                                    !manifest.pendingCorpusClear &&
+                                    !manifest.authorizedSourceRemoval
+                                ) {
+                                    this.collectionInitializations.set(
+                                        directory.name,
+                                        {
+                                            initialize: initializeCollection,
+                                        },
+                                    );
+                                } else {
+                                    await initializeCollection();
+                                }
                             }
                         }
                         await timeSearchStage(
@@ -4097,9 +4258,11 @@ export class FileMemoryService
     public async search(
         request: MemorySearchRequest,
     ): Promise<MemorySearchResult> {
-        return runWithSearchTiming(request.traceId, "service.documents", () =>
-            timeSearchStage("service.total", () =>
-                this.searchDocuments(request),
+        return this.foregroundRead(() =>
+            runWithSearchTiming(request.traceId, "service.documents", () =>
+                timeSearchStage("service.total", () =>
+                    this.searchDocuments(request),
+                ),
             ),
         );
     }
@@ -6686,6 +6849,7 @@ export class FileMemoryService
         view: ViewVersion,
         signal?: AbortSignal,
     ): Promise<ViewPublicationStatus> {
+        this.pendingViewWarmup.add(view.corpusId);
         signal?.throwIfAborted();
         if (this.closed || this.viewIndexRemovalBarriers.has(view.corpusId))
             throw new ViewBuildStaleError(
@@ -6930,18 +7094,13 @@ export class FileMemoryService
                     if (error instanceof ViewBuildStaleError) continue;
                     throw error;
                 }
+
                 const directory = this.viewIndexDirectory(view);
-                if (
-                    (await classifyIndexSchema(directory, "views", true)) !==
-                        "current" ||
-                    (await readFile(path.join(directory, "ready"), "utf8")) !==
-                        view.revisionId
-                )
-                    throw new Error(
-                        "Published view index is missing or does not match the exact revision; retry indexing",
-                    );
-                const index = this.indexFactory(request.corpusId, directory);
-                await index.initialize();
+                const index = await this.viewIndexes.acquire(
+                    request.corpusId,
+                    directory,
+                    view.revisionId,
+                );
                 const matches =
                     informationalWiki(view.content) && index.readFragments
                         ? (
@@ -6984,6 +7143,100 @@ export class FileMemoryService
                 .sort((a, b) => b.score - a.score)
                 .slice(0, request.limit ?? 20);
         });
+    }
+
+    public async warmViewIndexes(corpusId?: string): Promise<void> {
+        if (this.closed) throw new Error("Memory service is closing");
+        if (!this.viewDrafts) return;
+        if (corpusId === undefined) this.viewWarmup.start();
+        else {
+            validateIdentifier("corpus ID", corpusId);
+            this.viewWarmup.open(corpusId);
+        }
+    }
+
+    private async viewWarmupJobs(corpusId?: string): Promise<IndexWarmupJob[]> {
+        if (this.closed) return [];
+        const corpora = corpusId ? [{ corpusId }] : await this.listCorpora();
+        const jobs: IndexWarmupJob[] = [];
+        for (const corpus of corpora) {
+            if (this.collectionInitializations.has(corpus.corpusId)) {
+                jobs.push({
+                    key: `collection:${corpus.corpusId}`,
+                    corpusId: corpus.corpusId,
+                    run: async () => {
+                        await this.getCorpusRuntime(corpus.corpusId);
+                        this.viewWarmup.refresh(corpus.corpusId);
+                        return true;
+                    },
+                });
+                continue;
+            }
+            const runtime = await this.requireViews(corpus.corpusId);
+            await runtime.access.backgroundRead(async () => {
+                for (const {
+                    current,
+                    view,
+                    publication,
+                } of await this.viewStore.listPublishedViews(corpus.corpusId)) {
+                    if (
+                        !view ||
+                        current.state === "archived" ||
+                        publication.blockedReason ||
+                        publication.indexState !== "ready" ||
+                        publication.indexedRevisionId !== view.revisionId
+                    )
+                        continue;
+                    const identity = {
+                        corpusId: view.corpusId,
+                        viewId: view.viewId,
+                        revisionId: view.revisionId,
+                    };
+                    jobs.push({
+                        key: this.viewIndexDirectory(view),
+                        corpusId: corpus.corpusId,
+                        run: (priority) =>
+                            this.warmPublishedView(identity, priority),
+                    });
+                }
+            });
+        }
+        return jobs;
+    }
+
+    private async warmPublishedView(
+        identity: Pick<ViewVersion, "corpusId" | "viewId" | "revisionId">,
+        priority: boolean,
+    ): Promise<boolean> {
+        return runWithSearchTiming(
+            randomUUID(),
+            "memory.view-warmup",
+            async () => {
+                const runtime = await this.requireViews(identity.corpusId);
+                return runtime.access.backgroundRead(async () => {
+                    const view = await this.viewStore.getView(identity);
+                    if (!view) return false;
+                    const published =
+                        await this.viewStore.getViewPublication(view);
+                    if (
+                        this.closed ||
+                        published.blockedReason ||
+                        published.indexState !== "ready" ||
+                        published.indexedRevisionId !== view.revisionId ||
+                        published.publishedRevisionId !== view.revisionId
+                    )
+                        return false;
+                    await this.assertViewPublicationFresh(view);
+                    return this.viewIndexes.warm(
+                        view.corpusId,
+                        this.viewIndexDirectory(view),
+                        view.revisionId,
+                        priority,
+                    );
+                });
+            },
+            { corpusId: identity.corpusId, background: true },
+        );
     }
 
     private async snapshotInformationalTarget(
@@ -10202,7 +10455,8 @@ export class FileMemoryService
                 throw new Error("Build has no retryable targets");
             return this.admitViewBuild({
                 ...job.request,
-                expectedHead: (await this.listViews(job.corpusId)).head,
+                expectedHead: (await this.viewStore.listViews(job.corpusId))
+                    .head,
                 targets,
             });
         });
@@ -10553,6 +10807,10 @@ export class FileMemoryService
         request: MemoryAnswerRequest,
         evidence: AnswerEvidence[],
     ): Promise<boolean> {
+        if (!this.activeRead(request.corpusId))
+            return this.enqueueDocumentRead(request.corpusId, () =>
+                this.validateAnswerEvidence(request, evidence),
+            );
         if (request.knowledgeCheckpointId) {
             const checkpoint = await this.getKnowledgeCheckpoint({
                 corpusId: request.corpusId,
@@ -10572,47 +10830,57 @@ export class FileMemoryService
             )
                 return false;
         }
+        const checked = new Set<string>();
         for (const item of evidence) {
-            if (item.kind === "source") {
-                const source = await this.expandAnswerSource(
-                    item.source,
-                    request,
-                );
-                if (!source || source.snippet !== item.source.snippet)
-                    return false;
-            } else {
-                const view = await this.viewStore.getView({
-                    corpusId: request.corpusId,
-                    viewId: item.reference.viewId,
-                });
-                if (!view || view.revisionId !== item.reference.revisionId)
-                    return false;
-                try {
-                    await this.assertViewPublicationFresh(view);
-                } catch (error) {
-                    if (error instanceof ViewBuildStaleError) return false;
-                    throw error;
-                }
-                const publication = await this.viewStore.getViewPublication({
-                    corpusId: request.corpusId,
-                    viewId: view.viewId,
-                });
-                if (
-                    publication.publishedRevisionId !== view.revisionId ||
-                    publication.blockedReason ||
-                    publication.indexState !== "ready"
-                )
-                    return false;
-                if (
-                    request.sourceIds &&
-                    this.answerViewSources(view).some(
-                        (sourceId) => !request.sourceIds!.includes(sourceId),
-                    )
-                )
-                    return false;
-            }
+            const identity = JSON.stringify([
+                item.kind,
+                item.kind === "source" ? item.source : item.reference,
+            ]);
+            if (checked.has(identity)) continue;
+            checked.add(identity);
+            if (!(await this.validateAnswerEvidenceItem(request, item)))
+                return false;
         }
         return true;
+    }
+
+    private async validateAnswerEvidenceItem(
+        request: MemoryAnswerRequest,
+        item: AnswerEvidence,
+    ): Promise<boolean> {
+        if (item.kind === "source") {
+            const source = await this.expandAnswerSource(item.source, request);
+            return !!source && source.snippet === item.source.snippet;
+        }
+        const view = await this.viewStore.getView({
+            corpusId: request.corpusId,
+            viewId: item.reference.viewId,
+        });
+        if (!view || view.revisionId !== item.reference.revisionId)
+            return false;
+        try {
+            await this.assertViewPublicationFresh(view);
+        } catch (error) {
+            if (error instanceof ViewBuildStaleError) return false;
+            throw error;
+        }
+        const publication = await this.viewStore.getViewPublication({
+            corpusId: request.corpusId,
+            viewId: view.viewId,
+        });
+        if (
+            publication.publishedRevisionId !== view.revisionId ||
+            publication.blockedReason ||
+            publication.indexState !== "ready"
+        )
+            return false;
+        const sourceIds = request.sourceIds;
+        return (
+            !sourceIds ||
+            !this.answerViewSources(view).some(
+                (sourceId) => !sourceIds.includes(sourceId),
+            )
+        );
     }
 
     private createUnderstanding(
@@ -10633,6 +10901,37 @@ export class FileMemoryService
                     this.answerRequest(request, reader),
                 validate: (request, evidence) =>
                     this.validateAnswerEvidence(request, evidence),
+                evidenceLeaseExpiresAt: (id) =>
+                    this.answerSnapshots.get(id).seed.leaseExpiresAt,
+                ...(this.experiments.has("source-preview")
+                    ? {
+                          preview: (request: MemoryAnswerRequest) =>
+                              this.previewUnderstandingSources(request),
+                      }
+                    : {}),
+                validateSnapshot: (
+                    request,
+                    evidence,
+                    indexVersion,
+                    leaseExpiresAt,
+                ) =>
+                    this.enqueueDocumentRead(request.corpusId, async () => {
+                        if (
+                            !(await this.validateAnswerEvidence(
+                                request,
+                                evidence,
+                            ))
+                        )
+                            return false;
+                        const corpus = await this.getCorpus(request.corpusId);
+                        return (
+                            corpus !== undefined &&
+                            (corpus.indexVersion === indexVersion ||
+                                (this.experiments.has("evidence-leases") &&
+                                    leaseExpiresAt !== undefined &&
+                                    Date.now() < leaseExpiresAt))
+                        );
+                    }),
                 queryKnowledgeGraph: (request) =>
                     this.queryKnowledgeGraph(request),
                 queryGraphSupport: (request) => this.queryGraphSupport(request),
@@ -10642,28 +10941,109 @@ export class FileMemoryService
             {
                 model: options.indexedAnswerModel,
                 endpoint: options.viewModelEndpoint,
+                ...(this.initialReaderModelEndpoint
+                    ? { initialEndpoint: this.initialReaderModelEndpoint }
+                    : {}),
+                briefInitial: this.experiments.has("brief-reader"),
+                parallelGraphSupport: this.experiments.has("graph-parallel"),
+                refinementFallback: this.experiments.has("refinement-fallback"),
             },
         );
     }
 
     public async understand(request: UnderstandingRequest) {
-        await this.initialize();
-        validateIdentifier("corpus ID", request.corpusId);
-        if (!this.understanding)
-            throw new Error("Memory understanding is disabled by this host");
-        const corpus = await this.getCorpusRuntime(request.corpusId);
-        if (!corpus.index.readFragments)
-            throw new Error(
-                "Understanding requires an indexed document collection",
+        return this.foregroundRead(async () => {
+            await this.initialize();
+            validateIdentifier("corpus ID", request.corpusId);
+            if (!this.understanding)
+                throw new Error(
+                    "Memory understanding is disabled by this host",
+                );
+            const corpus = await this.getCorpusRuntime(request.corpusId);
+            if (!corpus.index.readFragments)
+                throw new Error(
+                    "Understanding requires an indexed document collection",
+                );
+            return this.understanding.understand(request);
+        });
+    }
+
+    private async previewUnderstandingSources(
+        request: MemoryAnswerRequest,
+    ): Promise<MemoryEvidence[]> {
+        return this.enqueueDocumentRead(request.corpusId, async (runtime) => {
+            if (!runtime.index.readFragments)
+                throw new Error(
+                    "Source preview requires an indexed document collection",
+                );
+            let sourceIds = request.sourceIds;
+            if (request.knowledgeCheckpointId) {
+                const checkpoint = await this.getKnowledgeCheckpoint({
+                    corpusId: request.corpusId,
+                    checkpointId: request.knowledgeCheckpointId,
+                });
+                if (checkpoint.state !== "ready")
+                    throw new Error(
+                        `Knowledge checkpoint is not ready: ${checkpoint.state}`,
+                    );
+                const allowed = checkpoint.sources.map((item) => item.sourceId);
+                if (sourceIds?.some((id) => !allowed.includes(id)))
+                    throw new Error(
+                        "Preview source scope exceeds its knowledge checkpoint",
+                    );
+                sourceIds ??= allowed;
+            }
+            const selected = await runtime.index.readFragments({
+                terms: indexedQueryTerms(request.question),
+                sourceIds: runtime.manifest.sources
+                    .filter(
+                        (source) =>
+                            (!sourceIds ||
+                                sourceIds.includes(source.sourceId)) &&
+                            source.revisions.some(
+                                (revision) =>
+                                    revision.revisionId ===
+                                        source.activeRevisionId &&
+                                    revision.state === "ready",
+                            ),
+                    )
+                    .map((source) => source.sourceId),
+                maxFragments: 6,
+                maxCharsPerFragment: 600,
+                maxReadChars: 6000,
+            });
+            return this.toEvidence(
+                request.corpusId,
+                runtime,
+                selected.fragments,
+                {
+                    ...(sourceIds ? { sourceIds } : {}),
+                },
+                6,
             );
-        return this.understanding.understand(request);
+        });
     }
 
     public async understandingModule(request: UnderstandingModuleRequest) {
-        await this.initialize();
+        return this.foregroundRead(async () => {
+            await this.initialize();
+            if (!this.understanding)
+                throw new Error(
+                    "Memory understanding is disabled by this host",
+                );
+            return this.understanding.module(request);
+        });
+    }
+
+    public async cancelUnderstanding(request: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<boolean> {
+        validateIdentifier("corpus ID", request.corpusId);
+        validateIdentifier("request ID", request.requestId);
         if (!this.understanding)
             throw new Error("Memory understanding is disabled by this host");
-        return this.understanding.module(request);
+        return this.understanding.cancel(request);
     }
 
     private async validateUnderstandingSupport(
@@ -10681,8 +11061,10 @@ export class FileMemoryService
     public async answer(
         request: MemoryAnswerRequest,
     ): Promise<MemoryAnswerResult> {
-        await this.initialize();
-        return this.answerRequest(request);
+        return this.foregroundRead(async () => {
+            await this.initialize();
+            return this.answerRequest(request);
+        });
     }
 
     private async answerSeed(
@@ -10713,8 +11095,13 @@ export class FileMemoryService
         if (scope(snapshot.request) !== scope(request))
             throw new Error("Prepared answer question or scope does not match");
         if (
-            snapshot.seed.original.indexVersion !==
-                this.indexVersion(runtime.manifest) ||
+            (snapshot.seed.original.indexVersion !==
+                this.indexVersion(runtime.manifest) &&
+                !(
+                    this.experiments.has("evidence-leases") &&
+                    snapshot.seed.leaseExpiresAt !== undefined &&
+                    Date.now() < snapshot.seed.leaseExpiresAt
+                )) ||
             !(await this.validateAnswerEvidence(
                 request,
                 snapshot.seed.influence,
@@ -10841,7 +11228,19 @@ export class FileMemoryService
                                           {
                                               corpusId: request.corpusId,
                                               request: structuredClone(request),
-                                              seed: prepared,
+                                              seed: {
+                                                  ...prepared,
+                                                  ...(this.experiments.has(
+                                                      "evidence-leases",
+                                                  )
+                                                      ? {
+                                                            leaseExpiresAt:
+                                                                seed?.leaseExpiresAt ??
+                                                                Date.now() +
+                                                                    120_000,
+                                                        }
+                                                      : {}),
+                                              },
                                           },
                                           epoch,
                                       );
@@ -10854,6 +11253,15 @@ export class FileMemoryService
                             : {}),
                         ...(this.indexedAnswerModel
                             ? { model: this.indexedAnswerModel }
+                            : {}),
+                        ...(this.initialReaderModelEndpoint
+                            ? {
+                                  initialEndpoint:
+                                      this.initialReaderModelEndpoint,
+                              }
+                            : {}),
+                        ...(this.experiments.has("brief-reader")
+                            ? { initialOutputTokens: 700 }
                             : {}),
                         outputTokens: Math.min(
                             this.wikiBudget?.outputTokens ?? 4000,
@@ -11204,6 +11612,8 @@ export class FileMemoryService
             const changed =
                 candidateManifest.knowledgeSuppressions.length !==
                 suppressions.length;
+            if (suppress && changed)
+                this.translationCache.invalidate(request.corpusId);
             if (suppress && changed)
                 this.visibility.set(
                     request.corpusId,
@@ -12672,11 +13082,20 @@ export class FileMemoryService
         corpusId: string,
         operation: (runtime: CorpusRuntime) => Promise<T>,
     ): Promise<T> {
+        const lease = this.readScope.getStore()?.get(corpusId);
+        if (lease?.documentReady && lease.snapshot) {
+            this.assertCorpusReadable(corpusId);
+            return operation(lease.snapshot.runtime);
+        }
         return this.enqueueRead(
             corpusId,
             (runtime) => this.documentIndexReady(corpusId, runtime),
             (runtime) => this.prepareDocumentReadIndex(corpusId, runtime),
-            operation,
+            (runtime) => {
+                const active = this.readScope.getStore()?.get(corpusId);
+                if (active) active.documentReady = true;
+                return operation(runtime);
+            },
             true,
         );
     }
@@ -12734,6 +13153,18 @@ export class FileMemoryService
         corpusId: string,
         recoveringRemoval = false,
     ): Promise<CorpusRuntime> {
+        if (this.collectionInitializationScope.getStore() !== corpusId) {
+            const pending = this.collectionInitializations.get(corpusId);
+            if (pending) {
+                pending.promise ??= this.collectionInitializationScope.run(
+                    corpusId,
+                    pending.initialize,
+                );
+                await pending.promise;
+                if (this.collectionInitializations.get(corpusId) === pending)
+                    this.collectionInitializations.delete(corpusId);
+            }
+        }
         const cached = this.corpora.get(corpusId);
         if (cached !== undefined) {
             await this.eventStore(corpusId).recover();
@@ -15134,7 +15565,12 @@ export class FileMemoryService
         runtime: CorpusRuntime,
         operation: () => Promise<T>,
     ): Promise<T> {
+        this.translationCache.invalidate(corpusId);
         this.visibility.set(corpusId, (this.visibility.get(corpusId) ?? 0) + 1);
+        this.viewIndexes.invalidate(corpusId);
+        this.viewWarmup.invalidate(corpusId);
+        this.pendingViewWarmup.delete(corpusId);
+        this.viewStore.invalidateReadCaches(corpusId);
         this.pendingReadCleanup.delete(corpusId);
         this.eventIndexControllers
             .get(corpusId)
@@ -15510,6 +15946,8 @@ export class FileMemoryService
 
     private async closeService(): Promise<void> {
         this.closed = true;
+        this.translationCache.close();
+        const warmupClosure = this.viewWarmup.close();
         this.understanding?.close();
         this.answerSnapshots.close();
         for (const work of this.topicSummaryWork.values())
@@ -15547,6 +15985,9 @@ export class FileMemoryService
         await Promise.allSettled([
             this.rootWriteTail,
             ...this.corpusLoads.values(),
+            ...[...this.collectionInitializations.values()].flatMap((entry) =>
+                entry.promise ? [entry.promise] : [],
+            ),
             ...this.indexedReads,
             ...this.reindexWork,
         ]);
@@ -15558,6 +15999,9 @@ export class FileMemoryService
         await this.drainViewIndexPreparations([
             ...this.viewIndexPreparations.values(),
         ]);
+        await warmupClosure;
+        this.viewStore.closeReadCaches();
+        this.viewIndexes.close();
         await this.releaseLock?.();
         this.releaseLock = undefined;
         const viewFailure = viewClosure[0];
@@ -15570,6 +16014,12 @@ export class FileMemoryService
                 throw failure;
     }
     private closePromise: Promise<void> | undefined;
+
+    private foregroundRead<T>(work: () => Promise<T>): Promise<T> {
+        return this.experiments.has("foreground-priority")
+            ? this.maintenance.foreground(work)
+            : work();
+    }
     private readonly viewIndexCleanup = new Map<string, Promise<void>>();
     private readonly viewIndexRemovalBarriers = new Map<string, number>();
     private readonly viewIndexPreparations = new Map<

@@ -15,6 +15,7 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import { loadSchema } from "@typeagent/agent-runtime";
 import { getTimeRangePromptSectionForConversation } from "./conversation.js";
 import { IConversation } from "./interfaces.js";
+import { cancellableSearchModel } from "./searchCancellation.js";
 
 /**
  * A TypeChat Translator that turns natural language into structured queries
@@ -82,7 +83,7 @@ export function createSearchQueryJsonTranslator<
         import.meta.url,
     );
     return createJsonTranslator<T>(
-        model,
+        cancellableSearchModel(model),
         createTypeScriptJsonValidator<T>(searchActionSchema, typeName),
     );
 }

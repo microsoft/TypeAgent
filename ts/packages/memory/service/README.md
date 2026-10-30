@@ -38,6 +38,82 @@ isolation; this is the existing local single-principal service boundary.
 Enable `TYPEAGENT_MEMORY_SEARCH_TRACE=1` for redacted rich-stage timing,
 reader-call counts and response-byte/module counts, not prompt/source text.
 
+### Serving performance experiments
+
+These are opt-in experiments, not recommended production defaults. Set
+`TYPEAGENT_MEMORY_PERF_EXPERIMENTS` to a comma-separated switch list, or pass
+`performanceExperiments` to `FileMemoryService`. Unknown names fail explicitly.
+`p2` expands to the first five switches below; `p3` expands to the last four.
+
+| Switch                | Behavior                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fast-models`         | Separate fast query translation and initial reading; refinement and ingestion extraction retain their existing models. Requires an explicitly configured `TYPEAGENT_MEMORY_FAST_MODEL` or `fastQueryModelEndpoint`. Injected reader models retain precedence. Custom index factories are rejected rather than silently ignoring translation experiments. |
+| `brief-reader`        | A 700-token soft initial target with unchanged structured output and grounding requirements.                                                                                                                                                                                                                                                             |
+| `source-preview`      | An optional model-free, provisional lexical source phase before semantic retrieval. At most six 600-character fragments; not a validated answer or a usable follow-on/module handle.                                                                                                                                                                     |
+| `refinement-fallback` | Revalidate and retain an initial explanation only after an explicitly retryable model failure/deadline. Return `refinementFailed: true`, incomplete/partial status and warnings. Privacy, cancellation, scope and malformed-output errors still fail.                                                                                                    |
+| `translation-cache`   | Completed successes only, keyed by corpus, fixed model, schema, exact question and full prompt context. Five-minute expiry; at most 128 entries / 1 MiB payload / 64 KiB per entry. Relative-date questions bypass caching; privacy changes and close purge it. Concurrent callers retain independent cancellation.                                      |
+| `evidence-leases`     | Tolerate unrelated index-version changes for at most 120 seconds from original preparation, only after complete exact-evidence revalidation. Later phases cannot renew the lease. Forget, clear, suppression and changed references remain immediate. This is not whole-index MVCC.                                                                      |
+| `graph-parallel`      | Existing graph projections plus ordered support queries at concurrency two. All siblings settle before a failed batch leaves scope.                                                                                                                                                                                                                      |
+| `foreground-priority` | Defer new background maintenance for a shared maximum ten seconds, with a one-second cooldown under sustained requests. Does not cancel running work or defer explicit writes.                                                                                                                                                                           |
+| `lazy-collections`    | Single-flight per-collection recovery on first access, with pending removal/clear recovery still eager. Unopened collections join completion-paced background warmup rather than all loading during discovery.                                                                                                                                           |
+
+Fast model deployments also need verified `modelRequestConstraints` context,
+input and full output capacities for uncapped request admission. A soft reader
+target is not a provider-output reservation. The shipped `gpt_5_4_mini`
+capacities follow the provider's published limits; explicitly configured
+overrides remain authoritative. Document-scoped query translation uses its own
+model and applies cache decoration after its scoped schema is installed, without
+changing the ingestion/extraction model.
+Fast query models retain the default JSON-output mode; selecting a faster model
+does not remove that safeguard.
+For independent role experiments, `initialReaderModelEndpoint` overrides only
+initial Search/Ask and Understanding reading, not query translation, extraction
+or deeper refinement. Injected reader models still take precedence. For example,
+retain fast query translation while selecting the ordinary reader endpoint.
+The native agent-server host accepts
+`TYPEAGENT_MEMORY_INITIAL_READER_MODEL_ENDPOINT` for this override and validates
+that it names a configured endpoint. Its existing
+`TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT` selects the deeper answer/View model
+independently. Neither setting changes the fast query model or ingestion model.
+Hosts that customize built-in document settings can use `indexSettingsFactory`;
+their extraction model, validators and embedding batches are retained while
+serving roles and decorators are applied. The ordinary agent-server host uses
+this path. Opaque `indexFactory` implementations still reject query experiments,
+and supplying both factories is invalid.
+
+For browser SSE previews, use the same environment switches in the service and
+browser gateway. The gateway omits the preview RPC when disabled. Direct clients
+may explicitly request `phase: "preview"` only from an enabled host; provisional
+results have `provisional: true`, no answer and no prepared evidence handle.
+
+Both readers allow one same-model regeneration when the returned status conflicts
+with its factual citations/sections. The same evidence, cancellation/deadline and
+serialized request limits still apply. The regenerated response is fully parsed
+and revalidated; invalid references, malformed JSON, privacy changes and other
+failures are not silently accepted or converted into a successful answer.
+`memory.reader.statusRepair` records the exceptional extra model call.
+
+The [latency runner](../../../tools/memory-maintenance-qualification/search-latency-benchmark.mts)
+accepts `--experiments`, `--fast-model`, `--initial-reader-model`, `--answer-model`, `--paths`, `--understanding-rounds`
+and optional `--retain-answers`. Opt-in `--retain-model-responses` also saves
+private model output, bounded to 65,536 characters per chat response, in
+`provider-responses.jsonl`; it never records request headers or prompts.
+`--answer-model` sets the service's existing `viewModelEndpoint` and the Hub
+synthesizer endpoint. Set both reader flags to compare all answer stages using
+one model while keeping query translation fixed. Ingestion/View maintenance
+is disabled in these benchmark runs, not a separately measured model role.
+Provider timing, usage and private diagnostics support Chat Completions and
+Responses API endpoints.
+Responses API reader requests preserve JSON schemas through `text.format`,
+including strict output requirements; plain JSON-object requests retain JSON
+mode. Configured Terra deployments have provider-capacity metadata for existing
+request admission, without imposing a new generation-token cap.
+Private files are written outside measurement intervals; do not publish them.
+Repeated questions overestimate general translation-cache hit rates.
+The [local experiment tool](../../../tools/memory-maintenance-qualification/serving-local-experiments.mts)
+compares eager/lazy startup and fixture JSON parsing versus a local worker with
+full-result cloning. It prohibits network calls and does not ship a storage worker.
+
 ## Scoped knowledge graphs and read inventories
 
 `queryKnowledgeGraph` reads bounded entity, raw-topic or maintained-hierarchy
@@ -315,6 +391,11 @@ derived-view indexing also schedules extraction completions through this pool
 within maintenance scope; foreground extraction and embeddings are not included.
 Custom injected adapters and index/settings factories remain responsible for
 their own request scheduling.
+
+Foreground reads may use an older committed generation while maintenance runs.
+Retrying a failed View build selects its history head and target versions inside
+the admission writer rather than reusing that foreground inventory head.
+Explicit build requests still enforce the caller's `expectedHead`.
 
 `topicBuildTimeoutMs` (`TYPEAGENT_MEMORY_TOPIC_BUILD_TIMEOUT_MS`) retains the
 3,000,000 ms topic-target default and accepts integers from 1 to 3,600,000.

@@ -42,6 +42,8 @@ export interface IntegratedAnswerHost {
 }
 
 export interface IntegratedAnswerOptions {
+    initialEndpoint?: string | undefined;
+    initialOutputTokens?: number;
     outputTokens?: number;
     endpoint?: string;
     model?: ChatModel;
@@ -59,6 +61,7 @@ export interface IntegratedAnswerOptions {
 }
 
 export interface IntegratedAnswerSeed {
+    leaseExpiresAt?: number | undefined;
     prepareOnly: boolean;
     original: MemorySearchResult;
     views: AnswerViewEvidence[];
@@ -383,27 +386,39 @@ async function retrieve(
     host: IntegratedAnswerHost,
     diagnostics: IntegratedAnswerDiagnostics,
 ) {
-    const original = await timeSearchStage("answer.originalSearch", () =>
+    const originalWork = timeSearchStage("answer.originalSearch", () =>
         host.searchOriginal(request),
     );
-    if (original.indexedSelection)
-        diagnostics.sourceSelection = original.indexedSelection;
-    diagnostics.warnings.push(...original.warnings);
-    if (request.retrievalPolicy === "sourcesOnly")
+    if (request.retrievalPolicy === "sourcesOnly") {
+        const original = await originalWork;
+        if (original.indexedSelection)
+            diagnostics.sourceSelection = original.indexedSelection;
+        diagnostics.warnings.push(...original.warnings);
         return { original, views: [] };
-    try {
-        const result = await timeSearchStage("answer.maintainedViews", () => {
+    }
+    const [originalResult, viewResult] = await Promise.allSettled([
+        originalWork,
+        timeSearchStage("answer.maintainedViews", async () => {
             if (!host.getEligibleViewMatches)
                 throw new Error(
                     "Host does not support maintained-view retrieval",
                 );
             return host.getEligibleViewMatches(request);
-        });
+        }),
+    ]);
+    if (originalResult.status === "rejected") throw originalResult.reason;
+    const original = originalResult.value;
+    if (original.indexedSelection)
+        diagnostics.sourceSelection = original.indexedSelection;
+    diagnostics.warnings.push(...original.warnings);
+    if (viewResult.status === "fulfilled") {
+        const result = viewResult.value;
         diagnostics.warnings.push(...(result.warnings ?? []));
         diagnostics.omittedViewCandidates = result.omittedCandidates ?? 0;
         return { original, views: result.matches };
-    } catch (error) {
-        if (request.retrievalPolicy === "sourcesAndViews") throw error;
+    } else {
+        if (request.retrievalPolicy === "sourcesAndViews")
+            throw viewResult.reason;
         diagnostics.retrievalMode = "degraded";
         diagnostics.warnings.push(
             "Maintained-view retrieval failed; returning an explicitly degraded source-only answer.",
@@ -454,7 +469,20 @@ async function initialResponse(
     if (seed && options.resumeRefinement) return seed.response;
     const read = options.reader ?? readIntegratedEvidence;
     return timeSearchStage("answer.reader.initial", () =>
-        read(request, evidence, options, true),
+        read(
+            request,
+            evidence,
+            {
+                ...options,
+                ...(options.initialEndpoint
+                    ? { endpoint: options.initialEndpoint }
+                    : {}),
+                ...(options.initialOutputTokens
+                    ? { outputTokens: options.initialOutputTokens }
+                    : {}),
+            },
+            true,
+        ),
     );
 }
 

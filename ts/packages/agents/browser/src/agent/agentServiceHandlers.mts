@@ -130,8 +130,13 @@ export function createAgentInvokeHandlers(
         memoryListCorpora: () => getMemoryService().listCorpora(),
         memoryListEvents: (params) => getMemoryService().listEvents(params),
         ...createMemoryViewFunctions(getMemoryService),
-        memoryGetCorpus: ({ corpusId }) =>
-            getMemoryService().getCorpus(corpusId),
+        memoryGetCorpus: async ({ corpusId }) => {
+            const service = getMemoryService();
+            const corpus = await service.getCorpus(corpusId);
+            if (corpus && service.warmViewIndexes)
+                await service.warmViewIndexes(corpusId);
+            return corpus;
+        },
         memoryListSources: (params) =>
             getMemoryService().listSourcesPage(params),
         memoryGetSource: ({ corpusId, sourceId }) =>
