@@ -107,7 +107,7 @@ You should see:
 
 ```
 [AgentSDK] NFA cache mode enabled - config: <path-to-config>
-[AgentSDK] Model: claude-sonnet-4-5-20250929
+[AgentSDK] Model: claude-sonnet-5-5
 [AgentSDK] Cache: enabled
 ```
 
