@@ -1,0 +1,294 @@
+[
+  {
+    "id": "542c3482-cffd-43a3-a34c-dbe5ef756be7",
+    "versionId": "d0e1575b-7123-4b78-9106-79ef19721fdd",
+    "parentVersionIds": [
+      "7a4212be-e83a-44f3-b15f-685fd5883098"
+    ],
+    "revision": 2,
+    "createdAt": "2026-10-30T07:59:28.632Z",
+    "updatedAt": "2026-10-30T08:01:18.104Z",
+    "editor": {
+      "kind": "agent"
+    },
+    "changeReason": "Additional recorded evidence",
+    "protectedFields": [],
+    "statement": "The running service already rejects the old certificate with HTTP 401",
+    "scope": "authentication requests to the running certificate-rotation service",
+    "origin": {
+      "kind": "agent-stated",
+      "agent": null,
+      "model": null
+    },
+    "status": "active",
+    "evidence": [
+      {
+        "sessionId": "89d6c2b051b167182314a68e51c143e54e0ad5abc78f1680c754ac2af208636b",
+        "entityId": "7fbcce4f828651fc78cf74db05ac0d192cb2b5f77b26f92d9b25759c610ff871",
+        "entityType": "event-summary",
+        "assumptionVersionId": "7a4212be-e83a-44f3-b15f-685fd5883098",
+        "origin": {
+          "kind": "agent-stated",
+          "agent": null,
+          "model": null
+        },
+        "role": "supports",
+        "note": "The stated current rejection supports retiring the old certificate rather than restoring acceptance.",
+        "observedAt": "2026-10-30T07:58:21.834Z"
+      },
+      {
+        "sessionId": "89d6c2b051b167182314a68e51c143e54e0ad5abc78f1680c754ac2af208636b",
+        "entityId": "be2a436312c9aedfb112f86a6658a6e5541f8c10313365091377ac722855fd2f",
+        "entityType": "tool-call",
+        "assumptionVersionId": "7a4212be-e83a-44f3-b15f-685fd5883098",
+        "origin": {
+          "kind": "inferred",
+          "agent": null,
+          "model": null
+        },
+        "role": "relied-on",
+        "note": "The invocation throws unless the old certificate fails.",
+        "observedAt": "2026-10-30T07:58:52.506Z"
+      }
+    ],
+    "corrections": [],
+    "history": [
+      {
+        "id": "542c3482-cffd-43a3-a34c-dbe5ef756be7",
+        "versionId": "7a4212be-e83a-44f3-b15f-685fd5883098",
+        "parentVersionIds": [],
+        "revision": 1,
+        "createdAt": "2026-10-30T07:59:28.632Z",
+        "updatedAt": "2026-10-30T07:59:28.632Z",
+        "editor": {
+          "kind": "agent"
+        },
+        "changeReason": "KnowPro assumption extraction",
+        "protectedFields": [],
+        "statement": "The running service already rejects the old certificate with HTTP 401",
+        "scope": "authentication requests to the running certificate-rotation service",
+        "origin": {
+          "kind": "agent-stated",
+          "agent": null,
+          "model": null
+        },
+        "status": "active",
+        "evidence": [
+          {
+            "sessionId": "89d6c2b051b167182314a68e51c143e54e0ad5abc78f1680c754ac2af208636b",
+            "entityId": "7fbcce4f828651fc78cf74db05ac0d192cb2b5f77b26f92d9b25759c610ff871",
+            "entityType": "event-summary",
+            "assumptionVersionId": "7a4212be-e83a-44f3-b15f-685fd5883098",
+            "origin": {
+              "kind": "agent-stated",
+              "agent": null,
+              "model": null
+            },
+            "role": "supports",
+            "note": "The stated current rejection supports retiring the old certificate rather than restoring acceptance.",
+            "observedAt": "2026-10-30T07:58:21.834Z"
+          }
+        ],
+        "corrections": []
+      }
+    ]
+  },
+  {
+    "id": "d0dab489-4972-4aad-aefa-6c049d0d6c0d",
+    "versionId": "d076542f-f9a8-4666-9b67-9e89d6172825",
+    "parentVersionIds": [],
+    "revision": 1,
+    "createdAt": "2026-10-30T07:59:28.634Z",
+    "updatedAt": "2026-10-30T07:59:28.634Z",
+    "editor": {
+      "kind": "agent"
+    },
+    "changeReason": "KnowPro assumption extraction",
+    "protectedFields": [],
+    "statement": "A restart will preserve the replacement-only certificate policy",
+    "scope": "after the service-config.json change and service restart",
+    "origin": {
+      "kind": "agent-stated",
+      "agent": null,
+      "model": null
+    },
+    "status": "active",
+    "evidence": [
+      {
+        "sessionId": "89d6c2b051b167182314a68e51c143e54e0ad5abc78f1680c754ac2af208636b",
+        "entityId": "7fbcce4f828651fc78cf74db05ac0d192cb2b5f77b26f92d9b25759c610ff871",
+        "entityType": "event-summary",
+        "assumptionVersionId": "d076542f-f9a8-4666-9b67-9e89d6172825",
+        "origin": {
+          "kind": "agent-stated",
+          "agent": null,
+          "model": null
+        },
+        "role": "supports",
+        "note": "The expectation is the reason for changing the checked-in service configuration.",
+        "observedAt": "2026-10-30T07:58:21.834Z"
+      },
+      {
+        "sessionId": "89d6c2b051b167182314a68e51c143e54e0ad5abc78f1680c754ac2af208636b",
+        "entityId": "4eb3a548ed04a52ed77ca41459b218e944e687f26756d60c5e51cfbaa83049d6",
+        "entityType": "knowpro-entity",
+        "assumptionVersionId": "d076542f-f9a8-4666-9b67-9e89d6172825",
+        "origin": {
+          "kind": "agent-stated",
+          "agent": null,
+          "model": null
+        },
+        "role": "supports",
+        "note": "The expectation is the reason for changing the checked-in service configuration.",
+        "observedAt": "2026-10-30T07:58:21.834Z"
+      }
+    ],
+    "corrections": [],
+    "history": []
+  },
+  {
+    "id": "60422b5d-120e-4b53-8cd9-4b4d5dafbb09",
+    "versionId": "cfc55975-b884-4d1c-9ee8-daaef79a9858",
+    "parentVersionIds": [],
+    "revision": 1,
+    "createdAt": "2026-10-30T07:59:28.636Z",
+    "updatedAt": "2026-10-30T07:59:28.636Z",
+    "editor": {
+      "kind": "agent"
+    },
+    "changeReason": "KnowPro assumption extraction",
+    "protectedFields": [],
+    "statement": "Git does not update ignored local settings",
+    "scope": "the ignored local-config.json file in the certificate-rotation demo",
+    "origin": {
+      "kind": "agent-stated",
+      "agent": null,
+      "model": null
+    },
+    "status": "active",
+    "evidence": [
+      {
+        "sessionId": "89d6c2b051b167182314a68e51c143e54e0ad5abc78f1680c754ac2af208636b",
+        "entityId": "7fbcce4f828651fc78cf74db05ac0d192cb2b5f77b26f92d9b25759c610ff871",
+        "entityType": "event-summary",
+        "assumptionVersionId": "cfc55975-b884-4d1c-9ee8-daaef79a9858",
+        "origin": {
+          "kind": "agent-stated",
+          "agent": null,
+          "model": null
+        },
+        "role": "supports",
+        "note": "This explains why the local configuration should retain its existing value.",
+        "observedAt": "2026-10-30T07:58:21.834Z"
+      },
+      {
+        "sessionId": "89d6c2b051b167182314a68e51c143e54e0ad5abc78f1680c754ac2af208636b",
+        "entityId": "871c542d309d4ebce8c56d2ee8f984e24360ec5b3d3330e491d56da26fbbe2f3",
+        "entityType": "knowpro-entity",
+        "assumptionVersionId": "cfc55975-b884-4d1c-9ee8-daaef79a9858",
+        "origin": {
+          "kind": "agent-stated",
+          "agent": null,
+          "model": null
+        },
+        "role": "supports",
+        "note": "This explains why the local configuration should retain its existing value.",
+        "observedAt": "2026-10-30T07:58:21.834Z"
+      }
+    ],
+    "corrections": [],
+    "history": []
+  },
+  {
+    "id": "43d590fe-39db-4a82-964a-f560b6def67a",
+    "versionId": "b215cb72-2279-4d4e-a6e3-b59c2710719b",
+    "parentVersionIds": [],
+    "revision": 1,
+    "createdAt": "2026-10-30T08:01:01.843Z",
+    "updatedAt": "2026-10-30T08:01:01.843Z",
+    "editor": {
+      "kind": "agent"
+    },
+    "changeReason": "KnowPro assumption extraction",
+    "protectedFields": [],
+    "statement": "The replacement certificate is expected to work",
+    "scope": "report requests and client execution using synthetic-certificate-replacement",
+    "origin": {
+      "kind": "inferred",
+      "agent": null,
+      "model": null
+    },
+    "status": "active",
+    "evidence": [
+      {
+        "sessionId": "89d6c2b051b167182314a68e51c143e54e0ad5abc78f1680c754ac2af208636b",
+        "entityId": "be2a436312c9aedfb112f86a6658a6e5541f8c10313365091377ac722855fd2f",
+        "entityType": "tool-call",
+        "assumptionVersionId": "b215cb72-2279-4d4e-a6e3-b59c2710719b",
+        "origin": {
+          "kind": "inferred",
+          "agent": null,
+          "model": null
+        },
+        "role": "relied-on",
+        "note": "The invocation throws unless the replacement certificate succeeds.",
+        "observedAt": "2026-10-30T07:58:52.506Z"
+      }
+    ],
+    "corrections": [],
+    "history": []
+  },
+  {
+    "id": "95d5e8e8-e810-4e12-9e06-4d91b9bf1f09",
+    "versionId": "3887d2aa-4b7f-4ebc-a51e-eb9fbf33712c",
+    "parentVersionIds": [],
+    "revision": 1,
+    "createdAt": "2026-10-30T08:01:22.321Z",
+    "updatedAt": "2026-10-30T08:01:22.321Z",
+    "editor": {
+      "kind": "agent"
+    },
+    "changeReason": "KnowPro assumption extraction",
+    "protectedFields": [],
+    "statement": "the security decision to retire the old certificate still applies even when a developer is blocked",
+    "scope": "authentication in docs/demos/certificate-rotation when a developer is blocked",
+    "origin": {
+      "kind": "agent-stated",
+      "agent": null,
+      "model": null
+    },
+    "status": "active",
+    "evidence": [
+      {
+        "sessionId": "89d6c2b051b167182314a68e51c143e54e0ad5abc78f1680c754ac2af208636b",
+        "entityId": "d087458da2753a850c1d8c54944efecc0417d855945b41f99b02090bc30ef9d0",
+        "entityType": "event-summary",
+        "assumptionVersionId": "3887d2aa-4b7f-4ebc-a51e-eb9fbf33712c",
+        "origin": {
+          "kind": "agent-stated",
+          "agent": null,
+          "model": null
+        },
+        "role": "relied-on",
+        "note": "The speaker explicitly says this assumption is why the service remains replacement-only without a fallback.",
+        "observedAt": "2026-10-30T08:00:07.087Z"
+      },
+      {
+        "sessionId": "89d6c2b051b167182314a68e51c143e54e0ad5abc78f1680c754ac2af208636b",
+        "entityId": "7d8efdf7a9aa0fb739d6866c8bff7380534186ed155bbdf69861be0c72455b44",
+        "entityType": "knowpro-entity",
+        "assumptionVersionId": "3887d2aa-4b7f-4ebc-a51e-eb9fbf33712c",
+        "origin": {
+          "kind": "agent-stated",
+          "agent": null,
+          "model": null
+        },
+        "role": "relied-on",
+        "note": "The speaker explicitly says this assumption is why the service remains replacement-only without a fallback.",
+        "observedAt": "2026-10-30T08:00:07.087Z"
+      }
+    ],
+    "corrections": [],
+    "history": []
+  }
+]

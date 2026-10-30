@@ -6,7 +6,7 @@ The HTTP header models a certificate identity: **there is no TLS, actual
 certificate, private key, or real security incident**. Do not use this as an
 authentication implementation.
 
-## Baseline
+## Start or reset the failing demo
 
 From the repository root in PowerShell, run each command on its own line:
 
@@ -22,10 +22,52 @@ node .\docs\demos\certificate-rotation\client.mjs
 node --test .\docs\demos\certificate-rotation\service.spec.mjs
 ```
 
+At the rotation commit, the client prints `Request failed: HTTP 401` and exits
+with code 1. This failure is intentional: setup recreates the original synthetic
+identity, but the service now accepts only its replacement. Repeating the request
+with the retired identity still fails. At the baseline commit the same client
+and setup commands succeeded.
+
 Setup creates an ignored developer-local configuration. The service reads its
 committed configuration at startup; restart it after changing that configuration.
 Stop the server with Ctrl+C in its terminal. The client optionally accepts a
 configuration file path as its sole argument.
+
+To reset the demo, rerun `setup.mjs`. It overwrites only the demo's ignored local
+configuration with the original identity. Do not repair that file before filming.
+To prove the replacement works without changing the stale local file:
+
+```powershell
+curl.exe --silent --show-error --write-out "HTTP %{http_code}\n" -H "x-demo-certificate-identity: synthetic-certificate-original" http://127.0.0.1:43187/report
+curl.exe --silent --show-error --write-out "HTTP %{http_code}\n" -H "x-demo-certificate-identity: synthetic-certificate-replacement" http://127.0.0.1:43187/report
+```
+
+Expected results are 401 and 200 respectively. The tests explicitly reject the
+original, unknown, and empty identities. All values here are nonsecret.
+
+## Rotation constraint and live demo
+
+The fictional security concern requires retiring the original identity. The
+retired credential must **never** be accepted as a fallback. The assumption is
+that retirement remains applicable even when a developer's ignored configuration
+is stale. Retrying the same credential cannot resolve this policy mismatch.
+
+The rotation changes the service policy, not `client.mjs` or `setup.mjs`.
+The client intentionally has only a generic HTTP failure message: actionable
+configuration guidance is left for the later live demo agent to implement.
+
+Suggested prompts:
+
+> Find out why this script is failing. It worked before rotation.
+
+> Improve how the script handles this authentication failure.
+
+Git Story's normal commit hook produces the portable story; generated
+`GIT-STORY-ASSUMPTIONS.json` files are staged explicitly. Use `git story log HEAD
+--json --max-count 1` for the published story and `git story insights read
+--revision HEAD` for committed assumption versions. Locally captured raw events
+and their model-generated publication summaries are different evidence surfaces;
+an invocation by itself is not proof of success.
 
 ## Provenance
 

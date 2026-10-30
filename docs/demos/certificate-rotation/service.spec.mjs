@@ -26,7 +26,11 @@ test("localhost service accepts only the configured certificate identity", async
   });
   assert.equal(accepted.status, 200);
   assert.equal((await accepted.json()).status, "ok");
-  for (const identity of ["synthetic-certificate-unknown", ""]) {
+  for (const identity of [
+    "synthetic-certificate-original",
+    "synthetic-certificate-unknown",
+    "",
+  ]) {
     const rejected = await fetch(url, {
       headers: { "x-demo-certificate-identity": identity },
     });
