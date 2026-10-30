@@ -368,6 +368,7 @@ test("actual P0 revisions automate correction/withdrawal around human edits and 
             file: string,
             sourceId: string,
         ) => {
+            await settled(service, corpusId);
             const text = await readFile(
                 path.join(originalFixtureRoot(), stage, file),
                 "utf8",
