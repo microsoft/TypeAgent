@@ -19,12 +19,12 @@ In another terminal:
 
 ```powershell
 node .\docs\demos\certificate-rotation\client.mjs
-node --test .\docs\demos\certificate-rotation\service.spec.mjs
+node --test .\docs\demos\certificate-rotation\client.spec.mjs .\docs\demos\certificate-rotation\service.spec.mjs
 ```
 
-At the rotation commit, the client prints `Request failed: HTTP 401` and exits
-with code 1. This failure is intentional: setup recreates the original synthetic
-identity, but the service now accepts only its replacement. Repeating the request
+The client reports `Authentication failed: HTTP 401`, identifies the configuration
+file to update, and exits with code 1. This failure is intentional: setup recreates
+the original synthetic identity, but the service now accepts only its replacement. Repeating the request
 with the retired identity still fails. At the baseline commit the same client
 and setup commands succeeded.
 
@@ -53,8 +53,10 @@ that retirement remains applicable even when a developer's ignored configuration
 is stale. Retrying the same credential cannot resolve this policy mismatch.
 
 The rotation changes the service policy, not `client.mjs` or `setup.mjs`.
-The client intentionally has only a generic HTTP failure message: actionable
-configuration guidance is left for the later live demo agent to implement.
+The client explains a 401 without retrying or restoring the retired identity.
+Update `certificateIdentity` in the selected local configuration to
+`synthetic-certificate-replacement` to restore access. Configuration and connection
+errors have separate guidance; other HTTP failures retain their status code.
 
 Suggested prompts:
 
