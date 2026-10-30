@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import "./memoryHubViewPreferences.css";
 
 export type MemoryHubViewMode = "list" | "grid" | "timeline" | "domain";
@@ -131,7 +132,7 @@ export function mountMemoryHubViewPreferences(
     }
     const note = document.createElement("p");
     note.textContent =
-        "Timeline and Domain apply only to web evidence; other evidence remains visible in List. Confidence scores apply only to typed insights (retrieval ranking is not confidence). Optional Search completion notifications require host support; this does not control search status, errors, or other host notifications.";
+        "Timeline and Domain apply only to web evidence; other evidence remains visible in List. Confidence scores apply only to typed insights (retrieval ranking is not confidence). Optional Search completion notices appear in Notifications. This preference does not disable warnings, search status, or errors.";
     const status = document.createElement("p");
     status.setAttribute("role", "status");
     const outdated = document.createElement("p");
@@ -168,7 +169,12 @@ export function mountMemoryHubViewPreferences(
         view.value = preferences.defaultViewMode;
         confidence.checked = preferences.showConfidenceScores;
         notifications.checked = preferences.enableNotifications;
-        status.textContent = preferences.notices.join(" ");
+        hubNotifications.set("view-preferences", {
+            title: "View preferences",
+            page: "settings",
+            messages: preferences.notices,
+        });
+        status.textContent = "";
         dirty.clear();
         outdated.hidden = true;
         outdated.textContent = "";
@@ -234,10 +240,7 @@ export function mountMemoryHubViewPreferences(
         try {
             const preferences = updateMemoryHubViewPreferences(update);
             render(preferences);
-            status.textContent = [
-                "View preferences saved on this browser.",
-                ...preferences.notices,
-            ].join(" ");
+            status.textContent = "View preferences saved on this browser.";
         } catch (error) {
             report(error);
         }

@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -633,7 +634,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     viewInvoke.mockImplementation(
         async (method: string, params: { query?: string } = {}) => {
             if (method === "memoryViewCapabilities")
-                return { features: { memoryUnderstanding: false } };
+                return { features: { memoryUnderstanding: true } };
             if (method === "memoryHubSnapshot") {
                 if (initialSnapshotPending) {
                     initialSnapshotPending = false;
@@ -647,6 +648,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
             }
             if (method === "memoryHubSearch")
                 return {
+                    resolvedIntent: "ask",
                     query: params.query,
                     matches: [searchEvidence],
                     warnings: [],
@@ -783,13 +785,47 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     expect(sourceTabs.querySelectorAll('i[aria-hidden="true"]')).toHaveLength(
         7,
     );
-    expect(value("page-settings").dataset.settingsTab).toBe("graph");
+    expect(value("page-settings").dataset.settingsTab).toBe("sources");
+    for (const id of ["hubCorpus", "hubAdd", "hubRefresh"]) {
+        expect(value(id).closest("#hubSourceSettings")).not.toBeNull();
+        expect(value(id).closest(".hub-top")).toBeNull();
+    }
+    for (const id of ["hubTheme", "hubStatus"]) {
+        expect(value(id).closest("#hubGeneralSettings")).not.toBeNull();
+        expect(value(id).closest(".hub-top")).toBeNull();
+    }
+    expect(value("hubNotificationsLink").closest(".hub-top")).not.toBeNull();
+    expect(document.querySelector('a[href="#/search"]')?.textContent).toContain(
+        "Ask or Explain",
+    );
+    expect(value("hubAsk").getAttribute("aria-label")).toBe("Ask or Explain");
+    expect(value("hubAsk").tagName).toBe("TEXTAREA");
+    expect(value("hubSearch").querySelector('[name="query"]')).toBeNull();
+    expect(
+        document.querySelector('#hubRail a[href="#/inbox"] i.fa-inbox'),
+    ).not.toBeNull();
+    expect(document.querySelectorAll("#hubRail .hub-nav-icon")).toHaveLength(7);
+    for (const id of ["page-search", "page-understanding"])
+        expect(value(id).querySelector("h2")?.textContent).toBe(
+            "Ask or Explain",
+        );
+    expect(value("hubStatus").getAttribute("href")).toBe("#/activity");
+    expect(value("hubStatus").getAttribute("aria-live")).toBe("polite");
+    value("page-settings")
+        .querySelector<HTMLButtonElement>('[data-page-tab="general"]')!
+        .click();
+    expect(value("page-settings").dataset.settingsTab).toBe("general");
+    const initialTheme = value("hubTheme").getAttribute("aria-label");
+    value("hubTheme").click();
+    expect(value("hubTheme").getAttribute("aria-label")).not.toBe(initialTheme);
+    expect(
+        value("hubTheme").querySelector("[data-theme-label]")!.textContent,
+    ).toBe(value("hubTheme").getAttribute("aria-label"));
+    value("page-settings")
+        .querySelector<HTMLButtonElement>('[data-page-tab="sources"]')!
+        .click();
     expect(document.getElementById("hubRunbooks")).toBeNull();
     expect(document.getElementById("hubLegacyGuides")).toBeNull();
-    value("page-activity")
-        .querySelector<HTMLButtonElement>('[data-page-tab="web"]')!
-        .click();
-    expect(value("page-activity").dataset.activityTab).toBe("web");
     history.replaceState({}, "", location.href);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     jest.advanceTimersByTime(1);
@@ -800,6 +836,15 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         "source",
     );
     expect(document.activeElement?.isConnected).toBe(true);
+    history.replaceState({}, "", "#/activity");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
+    value("page-activity")
+        .querySelector<HTMLButtonElement>('[data-page-tab="web"]')!
+        .click();
+    await settle();
+    expect(location.hash).toBe("#/activity/web");
+    expect(value("page-activity").dataset.activityTab).toBe("web");
     history.replaceState({}, "", "#/library/a/source");
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     await settle();
@@ -838,10 +883,31 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     history.replaceState({}, "", "#/library");
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     await settle();
-    value<HTMLInputElement>("hubAsk").value = "worker";
-    value("hubAskForm").dispatchEvent(
-        new Event("submit", { cancelable: true }),
-    );
+    value<HTMLTextAreaElement>("hubAsk").value = "worker";
+    const newline = new KeyboardEvent("keydown", {
+        key: "Enter",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+    });
+    value("hubAsk").dispatchEvent(newline);
+    expect(newline.defaultPrevented).toBe(false);
+    const composing = new KeyboardEvent("keydown", {
+        key: "Enter",
+        isComposing: true,
+        bubbles: true,
+        cancelable: true,
+    });
+    value("hubAsk").dispatchEvent(composing);
+    expect(composing.defaultPrevented).toBe(false);
+    expect(location.hash).toBe("#/library");
+    const submitQuery = new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+    });
+    value("hubAsk").dispatchEvent(submitQuery);
+    expect(submitQuery.defaultPrevented).toBe(true);
     jest.advanceTimersByTime(1);
     await settle();
     await settle();
@@ -908,8 +974,14 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     viewInvoke.mockImplementation(beforeInboxRefresh);
     const selector = value<HTMLSelectElement>("hubCorpus");
     selector.value = "a";
+    hubNotifications.set("scope-check", {
+        title: "Previous scope",
+        page: "search",
+        messages: ["Stale scope notice"],
+    });
     selector.dispatchEvent(new Event("change"));
     await settle();
+    expect(hubNotifications.has("scope-check")).toBe(false);
     const currentView = viewInvoke.getMockImplementation()!;
     viewInvoke.mockImplementation((method: string, params: unknown) =>
         method === "memoryHubSnapshot"
@@ -976,9 +1048,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         window.dispatchEvent(new HashChangeEvent("hashchange"));
         await settle();
         expect(showGraph).toHaveBeenLastCalledWith({ view, selection });
-        expect(value("exploreScopeBadge").textContent).toBe(
-            "Scope: All memory",
-        );
+        expect(document.getElementById("exploreScopeBadge")).toBeNull();
         expect(value("hubExplore").hidden).toBe(true);
         expect(
             document
@@ -996,7 +1066,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     await settle();
     expect(showWeb).toHaveBeenLastCalledWith({ view: "analytics" });
-    expect(value("exploreScopeBadge").textContent).toBe("Browser memory only");
+    expect(document.getElementById("exploreScopeBadge")).toBeNull();
     expect(
         viewInvoke.mock.calls.filter(
             ([method]) => method === "memoryHubExplore",
@@ -1028,6 +1098,11 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     await settle();
     value("forgetSourceButton").click();
     await settle();
+    hubNotifications.set("ordinary-operation", {
+        title: "Existing operation",
+        page: "activity",
+        messages: ["Current operation notice"],
+    });
     value("confirmForgetButton").click();
     await settle();
     jest.advanceTimersByTime(1);
@@ -1036,9 +1111,30 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     expect(location.hash).toBe("#/library");
     expect(value("hubDrawer").classList.contains("hidden")).toBe(true);
     expect(value("sourceCount").textContent).toBe("0 total");
-    expect(document.querySelector(".alert-success")?.textContent).toBe(
+    expect(document.querySelector(".alert-success")).toBeNull();
+    expect(value("hubNotifications").textContent).toContain(
         'Forgot source "Source".',
     );
+    expect(hubNotifications.has("ordinary-operation")).toBe(true);
+    history.replaceState({}, "", "#/notifications");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
+    expect(value("page-activity").classList.contains("hidden")).toBe(false);
+    expect(value("page-activity").dataset.activityTab).toBe("notifications");
+    expect(value("hubNotificationsLink").getAttribute("aria-current")).toBe(
+        "page",
+    );
+    expect(value("hubNotifications").textContent).toContain(
+        'Forgot source "Source".',
+    );
+    hubNotifications.set("refresh-check", {
+        title: "Before refresh",
+        page: "settings",
+        messages: ["Stale refresh notice"],
+    });
+    value("hubRefresh").click();
+    await settle();
+    expect(hubNotifications.has("refresh-check")).toBe(false);
     const beforeQuestions = invoke.getMockImplementation()!;
     const selectedQuestion = { ...question(), corpusId: "a" };
     invoke.mockImplementation((method: string, params: unknown) => {

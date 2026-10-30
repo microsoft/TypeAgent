@@ -20,7 +20,11 @@ import {
     UnderstandingReaderUnavailable,
 } from "../src/understandingReader.js";
 import { UnderstandingStore } from "../src/understandingStore.js";
-import type { AnswerEvidence, MemoryEvidence } from "../src/types.js";
+import type {
+    AnswerEvidence,
+    MemoryEvidence,
+    MemoryAnswerRequest,
+} from "../src/types.js";
 import type {
     UnderstandingCandidates,
     UnderstandingHost,
@@ -294,6 +298,108 @@ function fixture(originals = [source()]) {
 }
 
 describe("strict understanding reader", () => {
+    test("document explanation and follow-ons retain a single exact revision and reject scope drift", async () => {
+        const { engine, host, calls } = fixture([source(), source("other")]);
+        host.validateSource = async () => true;
+        const answer = host.answer;
+        const requests: Parameters<UnderstandingHost["answer"]>[0][] = [];
+        host.answer = (input, reader) => {
+            requests.push(input);
+            return answer(input, reader);
+        };
+        const input = {
+            ...request,
+            source: { sourceId: "original", revisionId: "r1" },
+            retrievalPolicy: "sourcesOnly" as const,
+        };
+        const first = await engine.understand(input);
+        expect(requests[0].sourceIds).toEqual(["original"]);
+        expect(first.citations).toHaveLength(1);
+        const citation = first.citations[0];
+        expect(citation.kind).toBe("source");
+        if (citation.kind !== "source")
+            throw new Error("Expected source citation");
+        expect(citation.source).toMatchObject(input.source);
+        await engine.understand({
+            ...input,
+            question: "Was it verified?",
+            parentSnapshotId: first.snapshotId,
+            parentTurnId: first.turnId,
+        });
+        expect(
+            requests.every((item) => item.sourceIds?.[0] === "original"),
+        ).toBe(true);
+        await expect(
+            engine.understand({
+                ...input,
+                source: { sourceId: "other", revisionId: "r1" },
+                parentSnapshotId: first.snapshotId,
+                parentTurnId: first.turnId,
+            }),
+        ).rejects.toThrow("scope");
+        host.validateSource = async () => false;
+        await expect(
+            engine.module({
+                corpusId: "corpus",
+                snapshotId: first.snapshotId,
+                kind: "sources",
+            }),
+        ).rejects.toThrow("exact document revision");
+        expect(calls).toHaveLength(2);
+        engine.close();
+    });
+
+    test("document source preview forwards source filters and rejects out-of-scope evidence", async () => {
+        const { engine, host, calls } = fixture();
+        host.validateSource = async () => true;
+        const previews: MemoryAnswerRequest[] = [];
+        host.preview = async (input) => {
+            previews.push(input);
+            return [source()];
+        };
+        const input = {
+            ...request,
+            phase: "preview" as const,
+            source: { sourceId: "original", revisionId: "r1" },
+        };
+        await engine.understand(input);
+        expect(previews[0]).toMatchObject({
+            sourceIds: ["original"],
+            retrievalPolicy: "sourcesOnly",
+        });
+        host.preview = async () => [source("different")];
+        await expect(engine.understand(input)).rejects.toThrow(
+            "outside its exact source",
+        );
+        expect(calls).toHaveLength(0);
+        engine.close();
+    });
+
+    test("document explanations never silently broaden unsupported or stale requests", async () => {
+        const { engine, host, calls } = fixture([
+            { ...source(), revisionId: "r2" },
+        ]);
+        const input = {
+            ...request,
+            source: { sourceId: "original", revisionId: "r1" },
+        };
+        await expect(engine.understand(input)).rejects.toThrow("not supported");
+        host.validateSource = async () => true;
+        await expect(engine.understand(input)).rejects.toThrow(
+            "outside its exact source",
+        );
+        await expect(
+            engine.understand({ ...input, retrievalPolicy: "sourcesAndViews" }),
+        ).rejects.toThrow("sources-only");
+        await expect(
+            engine.understand({
+                ...input,
+                source: { sourceId: "", revisionId: "r1" },
+            }),
+        ).rejects.toThrow("exact source and revision");
+        expect(calls).toHaveLength(0);
+        engine.close();
+    });
     const evidence: AnswerEvidence[] = [
         { id: "s0", kind: "source", source: source() },
     ];

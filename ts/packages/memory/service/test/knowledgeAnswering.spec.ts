@@ -315,6 +315,50 @@ describe("service source-plus-view answer integration", () => {
         ).rejects.toThrow("changed");
     });
 
+    test("document understanding validates a ready exact revision before the real indexed pipeline", async () => {
+        const { corpusId } = await service.createCorpus("Document Harbor");
+        const receipt = await ingest(
+            corpusId,
+            "document",
+            "Morgan leads the Harbor rollout.",
+        );
+        expect(
+            (await service.getCapabilities()).features
+                .memoryDocumentUnderstanding,
+        ).toBe(true);
+        const request = {
+            corpusId,
+            question: "Who leads the Harbor rollout?",
+            source: {
+                sourceId: receipt.sourceId,
+                revisionId: receipt.revisionId,
+            },
+        };
+        const result = await service.understand(request);
+        expect(result.citations).toContainEqual(
+            expect.objectContaining({
+                kind: "source",
+                source: expect.objectContaining(request.source),
+            }),
+        );
+        await expect(
+            service.understand({
+                ...request,
+                source: {
+                    ...request.source,
+                    revisionId: "unavailable-revision",
+                },
+            }),
+        ).rejects.toThrow("exact document revision");
+        await expect(
+            service.understand({
+                ...request,
+                source: { ...request.source, sourceId: "unavailable-source" },
+            }),
+        ).rejects.toThrow("exact document revision");
+        expect(readerInputs).toHaveLength(1);
+    });
+
     test("rich understanding uses the real indexed pipeline and forget/clear purge its handles", async () => {
         const { corpusId } = await service.createCorpus("Understanding Harbor");
         const receipt = await ingest(

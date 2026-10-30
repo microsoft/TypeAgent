@@ -148,6 +148,60 @@ test("explanation-first layout keeps uncertainty in the reading flow and source 
     });
 });
 
+test("exact-document explanation works from All memory and preserves source scope for follow-ons and new questions", async () => {
+    scope = undefined;
+    invoke.mockResolvedValue(result());
+    const request = {
+        corpusId: "corpus",
+        question: result().question,
+        source: { sourceId: "source", revisionId: "r1" },
+        retrievalPolicy: "sourcesOnly" as const,
+        selection: {
+            mode: "only" as const,
+            modules: ["explanation", "sources"] as (
+                | "explanation"
+                | "sources"
+            )[],
+        },
+    };
+    await mounted.show(request);
+    expect(onError).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("Grounded explanation ready");
+    expect(scope).toBeUndefined();
+    const forms = host.querySelectorAll("form");
+    const follow = forms[1].querySelector("textarea")!;
+    follow.value = "Was it verified?";
+    forms[1].dispatchEvent(new Event("submit", { cancelable: true }));
+    await settle();
+    expect(stream).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+            source: request.source,
+            corpusId: "corpus",
+            parentSnapshotId: "snapshot",
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
+    );
+    forms[0].querySelector("input")!.value = "Explain its risks";
+    forms[0].dispatchEvent(new Event("submit", { cancelable: true }));
+    await settle();
+    expect(stream).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+            source: request.source,
+            corpusId: "corpus",
+            question: "Explain its risks",
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
+    );
+    const count = stream.mock.calls.length;
+    await mounted.show({
+        ...request,
+        source: { sourceId: "another", revisionId: "r2" },
+    });
+    expect(stream).toHaveBeenCalledTimes(count + 1);
+});
+
 test("ready prose and exact source cards do not wait for timeline; late modules preserve composer, prose and focus", async () => {
     const module = deferred<UnderstandingModuleResult>();
     invoke.mockImplementation((method) =>
@@ -211,16 +265,31 @@ test("sources and provisional prose render before stream completion without losi
         corpusId: "corpus",
         question: result().question,
     });
+    const loading = host.querySelector(".understanding-loading")!;
+    expect(loading.textContent).toBe("Loading...");
+    expect(loading.getAttribute("role")).toBe("status");
+    expect(
+        loading
+            .querySelector(".fa-spinner.fa-spin")
+            ?.getAttribute("aria-hidden"),
+    ).toBe("true");
     const sources = result("sources");
     sources.answer = undefined;
     sources.modules = [{ kind: "sources", status: "ready" }];
     publish(sources);
+    expect(host.querySelector(".understanding-loading")).toBe(loading);
+    expect(host.querySelector(".understanding-prose h2")).toBeNull();
+    expect(host.textContent).not.toContain("Source cards are ready.");
     expect(host.textContent).toContain("Gallery source");
     expect(host.textContent).toContain("Preparing the explanation");
     const initial = result("initial");
     initial.modules = sources.modules;
     initial.refinementPending = true;
     publish(initial);
+    expect(host.querySelector(".understanding-loading")).toBeNull();
+    expect(host.querySelector(".understanding-prose")?.textContent).toContain(
+        "The user reported six projects.",
+    );
     expect(host.textContent).toContain("Checking additional evidence");
     const draft = host.querySelector("textarea")!;
     draft.value = "How was it verified?";
@@ -234,6 +303,70 @@ test("sources and provisional prose render before stream completion without losi
     finished.resolve();
     await showing;
     expect(button(host, "Ask more").disabled).toBe(false);
+});
+test("a failed explanation removes the loading indicator and offers an explicit retry", async () => {
+    const pending = deferred<UnderstandingResult>();
+    invoke.mockReturnValueOnce(pending.promise);
+    const showing = mounted.show({
+        corpusId: "corpus",
+        question: result().question,
+    });
+    expect(host.querySelector(".understanding-loading")).not.toBeNull();
+    pending.reject(new Error("Explanation failed"));
+    await showing;
+    expect(host.querySelector(".understanding-loading")).toBeNull();
+    expect(host.textContent).toContain("Explanation failed");
+    expect(button(host, "Retry question")).not.toBeNull();
+    expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "Explanation failed" }),
+    );
+});
+
+test("leaving an in-flight explanation removes the loading indicator and ignores late sources", async () => {
+    const pending = deferred<UnderstandingResult>();
+    invoke.mockReturnValueOnce(pending.promise);
+    const showing = mounted.show({
+        corpusId: "corpus",
+        question: result().question,
+    });
+    expect(host.querySelector(".understanding-loading")).not.toBeNull();
+    mounted.hide();
+    expect(host.querySelector(".understanding-loading")).toBeNull();
+    const sources = result("sources");
+    sources.answer = undefined;
+    pending.resolve(sources);
+    await showing;
+    expect(host.querySelector(".understanding-loading")).toBeNull();
+    expect(host.textContent).not.toContain("Gallery source");
+    expect(onError).not.toHaveBeenCalled();
+});
+test("reopening an interrupted sources-only explanation starts a fresh stream", async () => {
+    const finished = deferred<void>();
+    stream.mockImplementationOnce(async (_request, publish) => {
+        const sources = result();
+        sources.answer = undefined;
+        sources.modules = [{ kind: "sources", status: "ready" }];
+        publish(sources);
+        await finished.promise;
+    });
+    stream.mockImplementationOnce(async (_request, publish) =>
+        publish(result()),
+    );
+    const request = {
+        corpusId: "corpus",
+        question: result().question,
+        source: { sourceId: "source", revisionId: "r1" },
+        retrievalPolicy: "sourcesOnly" as const,
+    };
+    const first = mounted.show(request);
+    mounted.hide();
+    await mounted.show(request);
+    expect(stream).toHaveBeenCalledTimes(2);
+    expect(host.querySelector(".understanding-prose")?.textContent).toContain(
+        "The user reported six projects.",
+    );
+    finished.resolve();
+    await first;
 });
 test("same-snapshot stream updates reuse a module slot and refresh aborts only its prior request", async () => {
     const finished = deferred<void>();

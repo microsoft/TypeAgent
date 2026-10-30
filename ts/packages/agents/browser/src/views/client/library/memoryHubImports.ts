@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import "./memoryHubImports.css";
 import { WebsiteImportManager } from "./websiteImportManager";
 import { createExtensionService } from "./knowledgeUtilities";
@@ -249,10 +250,13 @@ export function mountMemoryHubImports(
         active = true;
         progressLost = false;
         connection.textContent = "";
-        status.textContent = [
-            "Checking import service…",
-            ...validation.warnings,
-        ].join("\n");
+        status.textContent = "Checking import service…";
+        hubNotifications.set("web-import", {
+            title: "Source imports",
+            page: "settings",
+            context: kind === "browser" ? "Browser import" : "Folder import",
+            messages: validation.warnings,
+        });
         updateFields();
         try {
             const health = await service.checkWebSocketConnection();

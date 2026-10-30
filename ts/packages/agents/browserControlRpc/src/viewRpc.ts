@@ -26,6 +26,7 @@ export type * from "./memoryGraphViewTypes.js";
 export type * from "./runbookImportViewTypes.js";
 
 export type MemoryHubSearchRequest = {
+    intent?: "auto" | "find" | "ask";
     evidenceSnapshotId?: string;
     prepareUnderstanding?: boolean;
     query: string;
@@ -100,6 +101,7 @@ export type MemoryHubAnswer = {
 };
 
 export type MemoryHubSearchResult = {
+    resolvedIntent?: "find" | "ask";
     evidenceSnapshotId?: string;
     query: string;
     matches: MemoryHubEvidence[];

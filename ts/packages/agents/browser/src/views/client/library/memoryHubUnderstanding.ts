@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
+import { icon } from "./memoryHubUi";
 import type {
     UnderstandingCitation,
     UnderstandingClaim,
@@ -31,7 +33,7 @@ export function toUnderstandingRequest(
         request.dateTo
     )
         throw new Error(
-            "Understanding needs one document collection with no search filters or conversations. Keep Results for this scope; filters have not been removed.",
+            "A focused explanation needs one document collection with no search filters or conversations. Keep Results for this scope; filters have not been removed.",
         );
     return {
         ...(evidenceSnapshotId ? { evidenceSnapshotId } : {}),
@@ -43,6 +45,27 @@ export function toUnderstandingRequest(
         ...(request.knowledgeCheckpointId
             ? { knowledgeCheckpointId: request.knowledgeCheckpointId }
             : {}),
+    };
+}
+
+export function toSourceUnderstandingRequest(
+    source: MemoryHubEvidence,
+    question: string,
+): UnderstandingRequest {
+    if (
+        source.kind !== "source" ||
+        !source.revisionId ||
+        source.corpusId === "fixedBrowserMemory"
+    )
+        throw new Error(
+            "This evidence does not support an exact document explanation.",
+        );
+    return {
+        corpusId: source.corpusId,
+        question,
+        source: { sourceId: source.objectId, revisionId: source.revisionId },
+        retrievalPolicy: "sourcesOnly",
+        selection: { mode: "only", modules: ["explanation", "sources"] },
     };
 }
 
@@ -97,6 +120,7 @@ function evidence(
 export function mountMemoryHubUnderstanding(
     host: HTMLElement,
     options: {
+        presentation?: "overlay";
         scope(): string | undefined;
         onError(error: unknown): void;
         onQueryChanged(request: UnderstandingRequest): void;
@@ -110,12 +134,15 @@ export function mountMemoryHubUnderstanding(
     },
 ) {
     const root = node("section", undefined, "memory-understanding");
+    if (options.presentation === "overlay")
+        root.classList.add("understanding-overlay");
     const form = node("form", undefined, "understanding-question");
     const question = node("input");
     question.required = true;
     question.maxLength = 2000;
-    question.setAttribute("aria-label", "Ask a new understanding question");
-    const submit = node("button", "Explain");
+    question.setAttribute("aria-label", "Ask or Explain");
+    question.placeholder = "Ask or Explain";
+    const submit = node("button", "Ask or Explain");
     submit.type = "submit";
     form.append(question, submit, button("Back to Results", options.onResults));
     const status = node("p");
@@ -123,6 +150,9 @@ export function mountMemoryHubUnderstanding(
     const grid = node("div", undefined, "understanding-grid");
     const main = node("div", undefined, "understanding-reading");
     const prose = node("article", undefined, "understanding-prose");
+    const loading = node("p", undefined, "understanding-loading");
+    loading.setAttribute("role", "status");
+    loading.append(icon("fa-solid fa-spinner fa-spin"), "Loading...");
     const modules = node("div", undefined, "understanding-modules");
     const follow = node("section", undefined, "understanding-follow");
     follow.append(
@@ -146,12 +176,19 @@ export function mountMemoryHubUnderstanding(
     follow.hidden = true;
     const rail = node("aside", undefined, "understanding-rail");
     rail.setAttribute("aria-label", "Sources and related context");
-    main.append(prose, follow, modules);
+    main.append(prose);
+    if (options.presentation !== "overlay") main.append(follow);
+    main.append(modules);
     grid.append(main, rail);
-    root.append(form, status, grid);
+    const documentScope = node("p", undefined, "understanding-document-scope");
+    documentScope.hidden = true;
+    if (options.presentation !== "overlay") root.append(form, documentScope);
+    root.append(status, grid);
     host.append(root);
     let result: UnderstandingResult | undefined;
     let input: UnderstandingRequest | undefined;
+    let operationScope: string | undefined;
+    let operationCorpus: string | undefined;
     let version = 0;
     let controller = new AbortController();
     let busy = false;
@@ -169,7 +206,12 @@ export function mountMemoryHubUnderstanding(
         options.onError(error);
     }
     function valid(token: number, scope: string) {
-        return !disposed && token === version && scope === options.scope();
+        return (
+            !disposed &&
+            token === version &&
+            scope === operationCorpus &&
+            operationScope === options.scope()
+        );
     }
     function openCitation(citation: UnderstandingCitation, focus: HTMLElement) {
         if (result)
@@ -313,14 +355,8 @@ export function mountMemoryHubUnderstanding(
             for (const id of result.previousAnswer.evidenceIds)
                 previous.append(" ", cite(id));
             prose.append(previous);
-        } else if (busy && result) {
-            prose.append(
-                node("h2", "Preparing a grounded explanation"),
-                node(
-                    "p",
-                    "Source cards are ready. Review them or draft a follow-on while the explanation is prepared.",
-                ),
-            );
+        } else if (busy) {
+            prose.append(loading);
         }
         sourceRail();
         suggestions.replaceChildren();
@@ -569,7 +605,7 @@ export function mountMemoryHubUnderstanding(
             );
             return;
         }
-        if (request.corpusId !== options.scope()) {
+        if (request.corpusId !== options.scope() && !request.source) {
             report(
                 new Error(
                     "Collection changed. Start a new understanding in the selected collection.",
@@ -578,14 +614,31 @@ export function mountMemoryHubUnderstanding(
             return;
         }
         controller.abort();
+        hubNotifications.clear("understanding");
         moduleControllers.clear();
         moduleVersions.clear();
         moduleSlots.clear();
         controller = new AbortController();
+        operationScope = options.scope();
+        operationCorpus = request.corpusId;
+        if (
+            input?.source?.sourceId !== request.source?.sourceId ||
+            input?.source?.revisionId !== request.source?.revisionId
+        ) {
+            result = undefined;
+            render();
+            follow.hidden = true;
+        }
+        input = request;
+        documentScope.hidden = !request.source;
+        documentScope.textContent = request.source
+            ? "Explaining one document at its exact captured revision. Follow-up questions stay within this document."
+            : "";
         const token = ++version;
         busy = true;
         submit.disabled = followSubmit.disabled = true;
         status.textContent = "Reading supporting memory…";
+        render();
         const submittedDraft = draft.value;
         try {
             const started = performance.now();
@@ -609,10 +662,12 @@ export function mountMemoryHubUnderstanding(
                                 ? `Initial explanation ready in ${elapsed}s. Checking additional evidence…`
                                 : `Grounded explanation ready in ${elapsed}s. Supporting visuals load independently.`
                             : `Sources ready in ${elapsed}s. Preparing the explanation…`;
-                    if (response.warnings.length)
-                        status.append(
-                            node("small", response.warnings.join(" · ")),
-                        );
+                    hubNotifications.set("understanding", {
+                        title: "Ask or Explain",
+                        page: "understanding",
+                        context: response.question,
+                        messages: response.warnings,
+                    });
                     render();
                 },
                 controller.signal,
@@ -638,6 +693,7 @@ export function mountMemoryHubUnderstanding(
         } finally {
             if (token === version) {
                 busy = false;
+                loading.remove();
                 submit.disabled = followSubmit.disabled = false;
             }
         }
@@ -645,8 +701,11 @@ export function mountMemoryHubUnderstanding(
     form.addEventListener("submit", (event) => {
         event.preventDefault();
         void run({
-            corpusId: options.scope() ?? "",
+            corpusId: input?.source ? input.corpusId : (options.scope() ?? ""),
             question: question.value.trim(),
+            ...(input?.source
+                ? { source: input.source, selection: input.selection }
+                : {}),
             ...(input?.retrievalPolicy
                 ? { retrievalPolicy: input.retrievalPolicy }
                 : {}),
@@ -674,6 +733,8 @@ export function mountMemoryHubUnderstanding(
             if (
                 request &&
                 (!result ||
+                    !result.answer ||
+                    result.refinementPending ||
                     request.question !== result.question ||
                     request.corpusId !== result.corpusId ||
                     (!!request.evidenceSnapshotId &&
@@ -681,7 +742,9 @@ export function mountMemoryHubUnderstanding(
                             input?.evidenceSnapshotId) ||
                     request.knowledgeCheckpointId !==
                         input?.knowledgeCheckpointId ||
-                    request.retrievalPolicy !== input?.retrievalPolicy)
+                    request.retrievalPolicy !== input?.retrievalPolicy ||
+                    request.source?.sourceId !== input?.source?.sourceId ||
+                    request.source?.revisionId !== input?.source?.revisionId)
             )
                 await run(request);
         },
@@ -689,6 +752,7 @@ export function mountMemoryHubUnderstanding(
             controller.abort();
             version++;
             busy = false;
+            loading.remove();
             submit.disabled = followSubmit.disabled = false;
             for (const body of moduleVersions.keys())
                 if (body.getAttribute("aria-busy") === "true") {
@@ -702,12 +766,15 @@ export function mountMemoryHubUnderstanding(
                 }
         },
         scopeChanged() {
+            hubNotifications.clear("understanding");
             this.hide();
             moduleVersions.clear();
             moduleSlots.clear();
             moduleControllers.clear();
             result = undefined;
             input = undefined;
+            documentScope.hidden = true;
+            documentScope.textContent = "";
             prose.replaceChildren();
             rail.replaceChildren();
             modules.replaceChildren();

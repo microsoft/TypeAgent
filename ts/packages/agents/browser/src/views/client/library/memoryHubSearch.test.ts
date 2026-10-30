@@ -1,19 +1,27 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
+import type { UnderstandingResult } from "@typeagent/memory-service";
 import type {
     MemoryHubEvidence,
     MemoryHubSearchResult,
 } from "@typeagent/browser-control-rpc/viewRpc";
 import { mountMemoryHubSearch } from "./memoryHubSearch";
-import { invokeView } from "./viewClient";
+import { invokeView, streamUnderstanding } from "./viewClient";
 import { updateMemoryHubViewPreferences } from "./memoryHubViewPreferences";
 
 jest.mock("./memoryHubPhase2.css", () => ({}));
+jest.mock("./memoryHubUnderstanding.css", () => ({}));
 jest.mock("./memoryHubViewPreferences.css", () => ({}));
-jest.mock("./viewClient", () => ({ invokeView: jest.fn() }));
+jest.mock("./viewClient", () => ({
+    invokeView: jest.fn(),
+    streamUnderstanding: jest.fn(),
+}));
 const invoke = invokeView as jest.Mock;
+const stream = streamUnderstanding as jest.Mock;
 let host: HTMLElement;
+let queryInput: HTMLTextAreaElement;
 let mounted: ReturnType<typeof mountMemoryHubSearch>;
 let scope: string | undefined;
 let onSource: jest.Mock;
@@ -75,6 +83,7 @@ function result(
         query: "worker",
         matches,
         ranking: "reciprocal-rank-fusion",
+        resolvedIntent: "ask",
         warnings: [],
         errors: [],
         answer: {
@@ -87,14 +96,309 @@ function result(
 }
 function button(text: string): HTMLButtonElement {
     const value = Array.from(host.querySelectorAll("button")).find(
-        (item) => item.textContent === text,
+        (item) =>
+            item.textContent?.trim() === text ||
+            item.getAttribute("aria-label") === text ||
+            item.getAttribute("aria-label") === `${text} view`,
     );
     if (!value) throw new Error(`Button not found: ${text}`);
     return value;
 }
 function field<T extends HTMLElement>(name: string): T {
-    return host.querySelector<T>(`[name="${name}"]`)!;
+    return (name === "query" ? document : host).querySelector<T>(
+        `[name="${name}"]`,
+    )!;
 }
+function clickQuery(text: string) {
+    const link = Array.from(host.querySelectorAll("a")).find(
+        (item) => item.textContent === text,
+    );
+    if (!link) throw new Error(`Query link not found: ${text}`);
+    link.click();
+}
+test("uses the external header query and does not create a duplicate composer", () => {
+    expect(host.querySelector("section")?.getAttribute("aria-label")).toBe(
+        "Ask or Explain",
+    );
+    expect(host.querySelector(".phase2-query")).toBeNull();
+    expect(host.querySelector('[name="query"]')).toBeNull();
+    expect(field<HTMLInputElement>("query").placeholder).toBe("Ask or Explain");
+    expect(host.querySelector('button[type="submit"]')?.textContent).toBe(
+        "Apply filters",
+    );
+    expect(field<HTMLSelectElement>("intent").getAttribute("aria-label")).toBe(
+        "Response mode",
+    );
+});
+test.each([26, 49, 50])(
+    "paginates %i returned results in exact groups of 25 and resets on a new search",
+    async (count) => {
+        const matches = Array.from({ length: count }, (_, index) => ({
+            ...source,
+            id: `cite-${index}`,
+            objectId: `source-${index}`,
+            title: `Document ${index}`,
+        }));
+        invoke.mockResolvedValue(result(matches));
+        await mounted.show("worker");
+        expect(host.querySelectorAll(".phase2-results > article")).toHaveLength(
+            25,
+        );
+        expect(
+            host.querySelector(".phase2-results")!.textContent,
+        ).not.toContain("Document 25");
+        expect(button("Previous page").disabled).toBe(true);
+        button("Next page").click();
+        expect(host.querySelectorAll(".phase2-results > article")).toHaveLength(
+            count - 25,
+        );
+        expect(
+            host.querySelector(".phase2-result-pager")!.textContent,
+        ).toContain(`26-${count} of ${count} returned`);
+        expect(button("Next page").disabled).toBe(true);
+        expect(
+            host.querySelector(".phase2-results h3 button")!.textContent,
+        ).toBe("Document 25");
+        const card = host.querySelector(".phase2-results article")!;
+        (card.querySelector("button") as HTMLButtonElement).click();
+        await settle();
+        expect(invoke).toHaveBeenLastCalledWith(
+            "memoryHubEvidence",
+            expect.objectContaining({
+                objectId: "source-25",
+                revisionId: "r3",
+            }),
+        );
+        button("Close evidence").click();
+        await mounted.show("another query");
+        expect(
+            host.querySelector(".phase2-results h3 button")!.textContent,
+        ).toBe("Document 0");
+        expect(button("Previous page").disabled).toBe(true);
+    },
+);
+
+test.each(["Timeline", "Domain"])(
+    "%s grouping paginates the same bounded evidence selection",
+    async (mode) => {
+        const matches = Array.from({ length: 26 }, (_, index) => ({
+            ...source,
+            id: `web-${index}`,
+            sourceType: "web" as const,
+            title: `Web document ${index}`,
+            canonicalUri: "https://example.invalid/page",
+            eventTime: "2026-10-01T00:00:00Z",
+        }));
+        invoke.mockResolvedValue(result(matches));
+        await mounted.show("worker");
+        button(mode).click();
+        expect(host.querySelectorAll(".phase2-results article")).toHaveLength(
+            25,
+        );
+        button("Next page").click();
+        expect(host.querySelectorAll(".phase2-results article")).toHaveLength(
+            1,
+        );
+        expect(host.querySelector(".phase2-results")!.textContent).toContain(
+            "Web document 25",
+        );
+    },
+);
+
+test("manual response modes stay under Filters and the automatically chosen mode is visible", async () => {
+    expect(field("intent").closest(".hub-filters")).not.toBeNull();
+    invoke.mockResolvedValue({ ...result([source]), resolvedIntent: "ask" });
+    await mounted.show("worker");
+    expect(host.textContent).toContain(
+        "Answer and sources (chosen automatically)",
+    );
+    field<HTMLSelectElement>("intent").value = "find";
+    await mounted.show("find worker docs");
+    expect(invoke).toHaveBeenLastCalledWith(
+        "memoryHubSearch",
+        expect.objectContaining({ intent: "find" }),
+    );
+    expect(
+        invoke.mock.calls[invoke.mock.calls.length - 1][1].generateAnswer,
+    ).toBe(false);
+});
+
+test("an older host cannot silently downgrade Auto into a source-only success", async () => {
+    const { resolvedIntent: _intent, ...legacy } = result();
+    invoke.mockResolvedValue(legacy);
+    await mounted.show("worker");
+    expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+            message: expect.stringContaining("does not support automatic"),
+        }),
+    );
+    expect(host.querySelectorAll(".phase2-results article")).toHaveLength(0);
+});
+
+test("only eligible exact document evidence offers Explain this", async () => {
+    mounted.dispose();
+    mounted = mountMemoryHubSearch(host, {
+        queryInput,
+        scope: () => scope,
+        onError,
+        onOpenSource: onSource,
+        onUnderstand: jest.fn(),
+    });
+    mounted.setUnderstandingEnabled(true);
+    invoke.mockResolvedValue(
+        result([
+            source,
+            derivedView,
+            conversation,
+            { ...source, id: "missing", revisionId: undefined },
+            { ...source, id: "browser", corpusId: "fixedBrowserMemory" },
+        ]),
+    );
+    await mounted.show("worker");
+    expect(
+        [...host.querySelectorAll("button")].filter(
+            (item) => item.textContent === "Explain this",
+        ),
+    ).toHaveLength(1);
+});
+
+test("Explain opens an in-place source overlay, streams real prose and cancels cleanly on close", async () => {
+    mounted.dispose();
+    host.replaceChildren();
+    const onUnderstand = jest.fn();
+    mounted = mountMemoryHubSearch(host, {
+        queryInput,
+        scope: () => scope,
+        onError,
+        onOpenSource: onSource,
+        onUnderstand,
+    });
+    mounted.setUnderstandingEnabled(true);
+    let publish!: (value: UnderstandingResult) => void;
+    let signal!: AbortSignal;
+    let finish!: () => void;
+    stream.mockImplementation((_request, callback, abort) => {
+        publish = callback;
+        signal = abort;
+        return new Promise<void>((resolve) => {
+            finish = resolve;
+        });
+    });
+    await mounted.show("worker");
+    const opener = button("Explain this");
+    opener.focus();
+    const originalHash = location.hash;
+    opener.click();
+    const dialog = host.querySelector<HTMLDialogElement>(
+        ".phase2-source-dialog",
+    )!;
+    expect(dialog.open).toBe(true);
+    expect(host.querySelector(".understanding-loading")?.textContent).toBe(
+        "Loading...",
+    );
+    expect(onUnderstand).not.toHaveBeenCalled();
+    expect(location.hash).toBe(originalHash);
+    expect(dialog.querySelector("input,textarea")).toBeNull();
+    const response: UnderstandingResult = {
+        schemaVersion: 1,
+        snapshotId: "explanation",
+        turnId: "turn",
+        corpusId: "a",
+        question: "worker",
+        expiresAt: "2099-01-01T00:00:00Z",
+        citations: [],
+        modules: [],
+        warnings: [],
+    };
+    publish(response);
+    expect(host.querySelector(".understanding-loading")).not.toBeNull();
+    publish({
+        ...response,
+        answer: {
+            status: "noAnswer",
+            title: "Not established in this source",
+            summary: {
+                text: "The source does not establish that claim.",
+                evidenceIds: [],
+                role: "memory",
+            },
+            sections: [],
+            unknowns: [],
+            followUps: [],
+        },
+    });
+    expect(host.querySelector(".understanding-loading")).toBeNull();
+    expect(dialog.textContent).toContain("Not established in this source");
+    button("Close evidence").click();
+    expect(signal.aborted).toBe(true);
+    expect(document.activeElement).toBe(opener);
+    expect(dialog.open).toBe(false);
+    finish();
+    await settle();
+});
+
+test("answer citations are inline numbered footnotes, skip code and retain exact evidence actions", async () => {
+    const value = result([source, derivedView]);
+    value.answer!.text =
+        "First claim [1]. Second claim [2]. Literal code `[1]`.";
+    invoke.mockResolvedValueOnce(value);
+    await mounted.show("worker");
+    const answer = host.querySelector(".phase2-answer")!;
+    expect(answer.querySelector("h3")?.textContent).toBe("From your memory");
+    expect(answer.querySelector("code")?.textContent).toBe("[1]");
+    const notes = answer.querySelectorAll<HTMLButtonElement>(
+        ".phase2-citation button",
+    );
+    expect([...notes].map((note) => note.textContent)).toEqual(["[1]", "[2]"]);
+    expect(notes[0].getAttribute("aria-label")).toContain(source.title);
+    expect(answer.textContent).not.toContain(source.title);
+    notes[1].click();
+    await settle();
+    expect(invoke).toHaveBeenLastCalledWith(
+        "memoryHubEvidence",
+        expect.objectContaining({
+            objectId: "derivedView",
+            revisionId: "view-r4",
+        }),
+    );
+    expect(
+        [...host.querySelectorAll(".phase2-source-index")].map(
+            (node) => node.textContent,
+        ),
+    ).toEqual(["[1]", "[2]"]);
+});
+
+test("History opens a query-link dialog and Filters dismisses without losing selected values", async () => {
+    localStorage.setItem(
+        "memoryHub.recentQueries",
+        JSON.stringify(["worker", "Earlier question"]),
+    );
+    await mounted.show("worker");
+    button("History").click();
+    const history = host.querySelector<HTMLDialogElement>(
+        ".phase2-history-dialog",
+    )!;
+    expect(history.open).toBe(true);
+    expect(
+        [...history.querySelectorAll("a")].map((link) => link.textContent),
+    ).toEqual(["Earlier question"]);
+    history.querySelector<HTMLAnchorElement>("a")!.click();
+    await settle();
+    expect(history.open).toBe(false);
+    expect(queryInput.value).toBe("Earlier question");
+    const filters = host.querySelector<HTMLDetailsElement>(".hub-filters")!;
+    filters.open = true;
+    field<HTMLInputElement>("tags").value = "keep";
+    document.body.click();
+    expect(filters.open).toBe(false);
+    filters.open = true;
+    filters.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    expect(filters.open).toBe(false);
+    expect(field<HTMLInputElement>("tags").value).toBe("keep");
+});
+
 test("answer and supporting evidence stay together while typed insights use the supporting rail", async () => {
     invoke.mockResolvedValue(result([source]));
     await mounted.show("worker");
@@ -105,7 +409,7 @@ test("answer and supporting evidence stay together while typed insights use the 
         host
             .querySelector(".phase2-result-layout > aside")
             ?.getAttribute("aria-label"),
-    ).toBe("Search insights");
+    ).toBe("Related context");
     expect(
         reading.querySelector(".phase2-evidence-meta")?.textContent,
     ).toContain("Captured source revision");
@@ -148,11 +452,12 @@ test("Ask forwards explicit retrieval/checkpoint policy and shows exact derived 
         "candidate candidate (not independent source evidence)",
     );
 });
-test("Find defaults to retrieval and only forwards prepared evidence for an unchanged scope", async () => {
+test("Auto is default and Explain this uses the exact document, never a collection-wide prepared search", async () => {
     mounted.dispose();
     host.replaceChildren();
     const onUnderstand = jest.fn();
     mounted = mountMemoryHubSearch(host, {
+        queryInput,
         scope: () => scope,
         onError,
         onOpenSource: onSource,
@@ -168,31 +473,48 @@ test("Find defaults to retrieval and only forwards prepared evidence for an unch
     expect(invoke).toHaveBeenCalledWith(
         "memoryHubSearch",
         expect.objectContaining({
-            generateAnswer: false,
-            prepareUnderstanding: true,
+            intent: "auto",
         }),
     );
-    button("Understand").click();
-    expect(onUnderstand).toHaveBeenLastCalledWith(
-        expect.objectContaining({ query: "worker" }),
-        "prepared",
+    expect(host.querySelector("form")!.textContent).not.toContain("Understand");
+    button("Explain this").click();
+    expect(stream).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+            corpusId: "a",
+            question: "worker",
+            source: { sourceId: "source", revisionId: "r3" },
+            retrievalPolicy: "sourcesOnly",
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
     );
     field<HTMLInputElement>("tags").value = "different";
-    button("Understand").click();
-    expect(onUnderstand).toHaveBeenLastCalledWith(
-        expect.objectContaining({ tags: ["different"] }),
-        undefined,
+    button("Explain this").click();
+    expect(stream).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+            source: { sourceId: "source", revisionId: "r3" },
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
     );
+    expect(stream.mock.calls[0][0]).not.toHaveProperty("evidenceSnapshotId");
+    expect(onUnderstand).not.toHaveBeenCalled();
+    expect(host.querySelector<HTMLDialogElement>("dialog")?.open).toBe(true);
+    button("Open full explanation").click();
+    expect(onUnderstand).toHaveBeenCalledWith(
+        expect.objectContaining({
+            source: { sourceId: "source", revisionId: "r3" },
+        }),
+    );
+    expect(scope).toBeUndefined();
 });
 
 test("empty search hides recent and result controls, and source-type disclosure preserves multiselect filters", async () => {
     expect(
-        host.querySelector<HTMLElement>('[aria-label="Recent queries"]')!
-            .hidden,
+        host.querySelector<HTMLElement>('[aria-label="Past queries"]')!.hidden,
     ).toBe(true);
     expect(
-        host.querySelector<HTMLElement>('[aria-label="Search result view"]')!
-            .hidden,
+        host.querySelector<HTMLElement>('[aria-label="Evidence view"]')!.hidden,
     ).toBe(true);
     const types = field<HTMLSelectElement>("sourceTypes");
     expect(types.multiple).toBe(true);
@@ -208,12 +530,10 @@ test("empty search hides recent and result controls, and source-type disclosure 
         expect.objectContaining({ sourceTypes: ["web", "markdown"] }),
     );
     expect(
-        host.querySelector<HTMLElement>('[aria-label="Recent queries"]')!
-            .hidden,
-    ).toBe(false);
+        host.querySelector<HTMLElement>('[aria-label="Past queries"]')!.hidden,
+    ).toBe(true);
     expect(
-        host.querySelector<HTMLElement>('[aria-label="Search result view"]')!
-            .hidden,
+        host.querySelector<HTMLElement>('[aria-label="Evidence view"]')!.hidden,
     ).toBe(false);
     expect(button("List").getAttribute("aria-pressed")).toBe("true");
 });
@@ -224,8 +544,13 @@ async function settle() {
 beforeEach(() => {
     localStorage.clear();
     invoke.mockReset();
+    stream.mockReset();
+    stream.mockResolvedValue(undefined);
     host = document.createElement("div");
-    document.body.append(host);
+    queryInput = document.createElement("textarea");
+    queryInput.name = "query";
+    queryInput.placeholder = "Ask or Explain";
+    document.body.append(queryInput, host);
     scope = undefined;
     onSource = jest.fn();
     onError = jest.fn();
@@ -239,6 +564,7 @@ beforeEach(() => {
         this.dispatchEvent(new Event("close"));
     };
     mounted = mountMemoryHubSearch(host, {
+        queryInput,
         scope: () => scope,
         onOpenSource: onSource,
         onError,
@@ -270,6 +596,115 @@ beforeEach(() => {
 afterEach(() => {
     mounted.dispose();
     host.remove();
+    queryInput.remove();
+});
+
+test("past queries are navigation links and exclude both the active question and its normalized duplicates", async () => {
+    localStorage.setItem(
+        "memoryHub.recentQueries",
+        JSON.stringify(["worker", " WORKER  ", "Earlier question"]),
+    );
+    await mounted.show("worker");
+    const links = Array.from(
+        host.querySelectorAll<HTMLAnchorElement>(
+            '[aria-label="Past queries"] a',
+        ),
+    );
+    expect(links.map((link) => link.textContent)).toEqual(["Earlier question"]);
+    expect(links.every((link) => link.classList.contains("phase2-link"))).toBe(
+        true,
+    );
+    expect(new URL(links[0].href).searchParams.get("query")).toBe(
+        "Earlier question",
+    );
+    expect(new URL(links[0].href).hash).toBe("#/search");
+    queryInput.value = " Earlier   question ";
+    queryInput.dispatchEvent(new Event("input"));
+    expect(host.querySelectorAll('[aria-label="Past queries"] a')).toHaveLength(
+        0,
+    );
+    queryInput.value = "worker";
+    queryInput.dispatchEvent(new Event("input"));
+    const historyLink = host.querySelector<HTMLAnchorElement>(
+        '[aria-label="Past queries"] a',
+    )!;
+    const calls = invoke.mock.calls.length;
+    historyLink.addEventListener(
+        "click",
+        (event) => {
+            expect(event.defaultPrevented).toBe(false);
+            event.preventDefault();
+        },
+        { once: true },
+    );
+    historyLink.dispatchEvent(
+        new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            ctrlKey: true,
+        }),
+    );
+    expect(invoke).toHaveBeenCalledTimes(calls);
+    expect(queryInput.value).toBe("worker");
+    historyLink.click();
+    await settle();
+    expect(queryInput.value).toBe("Earlier question");
+    expect(invoke).toHaveBeenLastCalledWith(
+        "memoryHubSearch",
+        expect.objectContaining({ query: "Earlier question" }),
+    );
+    expect(host.querySelector(".phase2-status")?.textContent).not.toContain(
+        "Earlier question",
+    );
+});
+
+test("List and Grid are accessible icon buttons without visible text labels", async () => {
+    await mounted.show("worker");
+    for (const mode of ["List", "Grid"]) {
+        expect(button(mode).textContent).toBe("");
+        expect(button(mode).title).toBe(`${mode} view`);
+    }
+    button("Grid").click();
+    expect(button("Grid").getAttribute("aria-pressed")).toBe("true");
+    expect(button("List").getAttribute("aria-pressed")).toBe("false");
+});
+
+test("stale generated descriptions move to notifications without replacing the captured passage", async () => {
+    invoke.mockResolvedValue(
+        result([
+            {
+                ...source,
+                synopsis: {
+                    status: "ready",
+                    freshness: "stale",
+                    preview: "Obsolete generated description",
+                    generatedVersion: 1,
+                    recipe: "source-synopsis-v1",
+                    inputHash: "semantic",
+                },
+            },
+        ]),
+    );
+    await mounted.show("worker");
+    expect(host.querySelector(".phase2-source-passage")?.textContent).toContain(
+        "Captured evidence",
+    );
+    expect(host.querySelector(".phase2-source-summary")).toBeNull();
+    expect(host.querySelector(".phase2-results")?.textContent).not.toContain(
+        "Obsolete generated description",
+    );
+    expect(hubNotifications.list()).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                title: "Ask or Explain",
+                messages: expect.arrayContaining([
+                    expect.stringContaining(
+                        "generated description ready · stale",
+                    ),
+                ]),
+            }),
+        ]),
+    );
 });
 
 test("healthy bounded retrieval notices are not failed retrieval, and explicit decisions are labelled", async () => {
@@ -278,11 +713,14 @@ test("healthy bounded retrieval notices are not failed retrieval, and explicit d
         warnings: ["Bounded evidence selection"],
     });
     await mounted.show("worker");
-    expect(host.querySelector(".phase2-warning")!.textContent).toContain(
-        "Search limits and notices",
-    );
-    expect(host.querySelector(".phase2-warning")!.textContent).not.toContain(
-        "degraded",
+    expect(host.querySelector(".phase2-warning")).toBeNull();
+    expect(hubNotifications.list()).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                title: "Ask or Explain",
+                messages: ["Bounded evidence selection"],
+            }),
+        ]),
     );
     expect(host.querySelector(".phase2-results")!.textContent).toContain(
         "Explicit conversation decision",
@@ -335,9 +773,21 @@ test("citation cards show generated source navigation without substituting synop
     expect(host.querySelector(".phase2-results")!.textContent).toContain(
         "Local review only.",
     );
-    expect(host.querySelector(".phase2-results")!.textContent).toContain(
-        "not citation evidence",
+    expect(
+        host
+            .querySelector(".phase2-source-summary")
+            ?.getAttribute("aria-label"),
+    ).toContain("not citation evidence");
+    expect(host.querySelector(".phase2-source-passage")?.textContent).toContain(
+        "Captured evidence",
     );
+    expect(
+        host.querySelector(".phase2-source-passage")?.textContent,
+    ).not.toContain("Local review only.");
+    expect(
+        host.querySelector(".phase2-source-header .phase2-source-actions")
+            ?.textContent,
+    ).toContain("Preview");
     expect(host.querySelector("img")).toBeNull();
     button(source.title).click();
     await settle();
@@ -353,7 +803,7 @@ test("citation cards show generated source navigation without substituting synop
 test("mixed evidence is answer-first, safely rendered, and exact citations never guess by excerpt", async () => {
     await mounted.show("worker");
     expect(host.querySelector(".phase2-answer")!.textContent).toContain(
-        "Derived answer",
+        "From your memory",
     );
     expect(host.querySelectorAll(".phase2-results article")).toHaveLength(3);
     expect(host.querySelector("img")).toBeNull();
@@ -488,7 +938,7 @@ test("submitted filters include corpus, types, tags, inclusive dates and convers
             dateFrom: "2026-10-01T00:00:00.000Z",
             dateTo: "2026-10-02T23:59:59.999Z",
             conversationScope: "current",
-            generateAnswer: true,
+            intent: "ask",
         }),
     );
     expect(host.textContent).toContain("Unknown dates are excluded");
@@ -503,7 +953,7 @@ test("submitted filters include corpus, types, tags, inclusive dates and convers
     expect(host.querySelector(".phase2-results.grid")).not.toBeNull();
     expect(field<HTMLInputElement>("tags").value).toBe("ops, worker");
     expect(localStorage.getItem("memoryHub.recentQueries")).toContain("worker");
-    button("What changed?").click();
+    clickQuery("What changed?");
     await settle();
     expect(invoke).toHaveBeenLastCalledWith(
         "memoryHubSearch",
@@ -560,11 +1010,17 @@ test("partial results and unavailable exact revisions remain explicit", async ()
         errors: [{ corpusId: "b", operation: "search", message: "offline" }],
     });
     await mounted.show("worker");
-    expect(host.querySelector(".phase2-warning")!.textContent).toContain(
-        "Partial or degraded",
-    );
-    expect(host.querySelector(".phase2-warning")!.textContent).toContain(
-        "offline",
+    expect(host.querySelector(".phase2-warning")).toBeNull();
+    expect(hubNotifications.list()).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                title: "Ask or Explain: partial results",
+                messages: [
+                    "Conversation dates unavailable",
+                    "b · search: offline",
+                ],
+            }),
+        ]),
     );
     const count = invoke.mock.calls.length;
     button(source.title).click();
@@ -607,9 +1063,13 @@ test("noAnswer status and bounded evidence counts do not claim successful synthe
     expect(host.querySelector(".phase2-status")!.textContent).toContain(
         "bounded, not a full total",
     );
-    expect(host.querySelector(".phase2-warning")!.textContent).toContain(
-        "Only responding providers",
-    );
+    expect(host.textContent).not.toContain("Only responding providers");
+    expect(
+        hubNotifications
+            .list()
+            .flatMap((entry) => entry.messages)
+            .join(" "),
+    ).toContain("Only responding providers");
     expect(host.querySelectorAll(".phase2-results article")).toHaveLength(1);
 });
 
@@ -650,6 +1110,7 @@ test.each(["{bad JSON", '{"not":"an array"}', '["valid",7]'])(
             localStorage.setItem("memoryHub.recentQueries", stored);
             mounted.dispose();
             mounted = mountMemoryHubSearch(host, {
+                queryInput,
                 scope: () => scope,
                 onOpenSource: onSource,
                 onError,
@@ -804,7 +1265,13 @@ test("web-only defaults are gated for nonweb results and restored for real web r
     expect(button("Timeline").hidden).toBe(true);
     expect(button("Domain").hidden).toBe(true);
     expect(button("List").getAttribute("aria-pressed")).toBe("true");
-    expect(host.textContent).toContain("requires web evidence");
+    expect(host.textContent).not.toContain("requires web evidence");
+    expect(
+        hubNotifications
+            .list()
+            .flatMap((entry) => entry.messages)
+            .join(" "),
+    ).toContain("requires web evidence");
     field<HTMLInputElement>("tags").value = "ops";
     invoke.mockResolvedValueOnce(result([{ ...web, corpusId: "named" }]));
     await mounted.show("web worker");
@@ -827,6 +1294,7 @@ test("optional success notifications honor preferences without suppressing error
     mounted.dispose();
     const onNotify = jest.fn();
     mounted = mountMemoryHubSearch(host, {
+        queryInput,
         scope: () => scope,
         onOpenSource: onSource,
         onError,
@@ -871,7 +1339,7 @@ test("snippets and the answer render as Markdown, not raw text", async () => {
     expect(host.querySelector("strong")!.textContent).toBe("bold");
 });
 
-test("related entities are cards like the Explore view", async () => {
+test("related entities use compact mock-aligned sidecards", async () => {
     scope = "a";
     invoke.mockResolvedValueOnce({
         ...result([source]),
@@ -890,18 +1358,16 @@ test("related entities are cards like the Explore view", async () => {
     const insights = host.querySelector(".phase2-search-insights")!;
     expect(insights.querySelector("ul")).toBeNull();
     const cards = insights.querySelectorAll(
-        ".knowledge-collection .knowledge-cards article.knowledge-item",
+        ".phase2-sidecard .phase2-context-entity",
     );
     expect(cards).toHaveLength(2);
-    expect(cards[0].querySelector(".knowledge-item-title")!.textContent).toBe(
+    expect(cards[0].querySelector(".phase2-context-item")!.textContent).toBe(
         "Worker",
     );
-    expect(cards[0].querySelector(".knowledge-item-meta")!.textContent).toBe(
+    expect(cards[0].querySelector("small")!.textContent).toBe(
         "service · confidence 87%",
     );
-    expect(cards[1].querySelector(".knowledge-item-meta")!.textContent).toBe(
-        "system",
-    );
+    expect(cards[1].querySelector("small")!.textContent).toBe("system");
 });
 
 test("canonical typed insights navigate queries without losing named scope or filters and confidence is preference-driven", async () => {
@@ -929,7 +1395,7 @@ test("canonical typed insights navigate queries without losing named scope or fi
     updateMemoryHubViewPreferences({ showConfidenceScores: false });
     expect(insights.textContent).not.toContain("confidence 87%");
     expect(insights.textContent).toContain("Worker");
-    button("Queue operations").click();
+    clickQuery("Queue operations");
     await settle();
     expect(invoke).toHaveBeenLastCalledWith(
         "memoryHubSearch",
@@ -941,7 +1407,7 @@ test("canonical typed insights navigate queries without losing named scope or fi
     );
     invoke.mockResolvedValueOnce(response);
     await mounted.show("worker");
-    button("Worker").click();
+    clickQuery("Worker");
     await settle();
     expect(invoke).toHaveBeenLastCalledWith(
         "memoryHubSearch",
@@ -1051,9 +1517,13 @@ test.each(["unsupported", "unavailable"])(
         expect(
             host.querySelector(".phase2-search-insights")!.textContent,
         ).toContain("Knowledge unavailable");
-        expect(host.querySelector(".phase2-warning")!.textContent).toContain(
-            "Search offline",
-        );
+        expect(host.querySelector(".phase2-warning")).toBeNull();
+        expect(
+            hubNotifications
+                .list()
+                .flatMap((entry) => entry.messages)
+                .join(" "),
+        ).toContain("Search offline");
         expect(host.querySelectorAll(".phase2-results article")).toHaveLength(
             1,
         );
