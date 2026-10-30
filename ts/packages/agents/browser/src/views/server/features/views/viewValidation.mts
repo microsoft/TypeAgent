@@ -185,6 +185,7 @@ const schemas: Record<ViewMethod, z.ZodType> = {
             .optional(),
     }),
     memoryHubSearch: z.strictObject({
+        intent: z.enum(["auto", "find", "ask"]).optional(),
         evidenceSnapshotId: z.string().uuid().optional(),
         prepareUnderstanding: boolean,
         query: text,

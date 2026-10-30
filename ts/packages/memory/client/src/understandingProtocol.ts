@@ -32,6 +32,12 @@ export const understandingRequestSchema = z
         phase: z.enum(["preview", "retrieve", "initial", "refine"]).optional(),
         corpusId: identifierSchema,
         question: z.string().trim().min(1).max(2000),
+        source: z
+            .strictObject({
+                sourceId: identifierSchema,
+                revisionId: identifierSchema,
+            })
+            .optional(),
         retrievalPolicy: z.enum(["sourcesOnly", "sourcesAndViews"]).optional(),
         knowledgeCheckpointId: identifierSchema.optional(),
         parentSnapshotId: z.string().uuid().optional(),
@@ -54,6 +60,10 @@ export const understandingRequestSchema = z
     .refine(
         (value) => value.phase !== "refine" || !!value.evidenceSnapshotId,
         "Refinement requires a prepared evidence snapshot",
+    )
+    .refine(
+        (value) => !value.source || value.retrievalPolicy !== "sourcesAndViews",
+        "Document explanations require sources-only retrieval",
     );
 
 const claim = z.strictObject({

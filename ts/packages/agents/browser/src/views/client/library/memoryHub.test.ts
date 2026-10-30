@@ -795,8 +795,13 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     }
     expect(value("hubNotificationsLink").closest(".hub-top")).not.toBeNull();
     expect(document.querySelector('a[href="#/search"]')?.textContent).toContain(
-        "Search & Explain",
+        "Ask or Explain",
     );
+    expect(value("hubAsk").getAttribute("aria-label")).toBe("Ask or Explain");
+    for (const id of ["page-search", "page-understanding"])
+        expect(value(id).querySelector("h2")?.textContent).toBe(
+            "Ask or Explain",
+        );
     expect(value("hubStatus").getAttribute("href")).toBe("#/activity");
     expect(value("hubStatus").getAttribute("aria-live")).toBe("polite");
     value("page-settings")

@@ -275,7 +275,7 @@ function mountPhaseTwo(): void {
         onQueryChanged: synchronizeQuery,
         onNotify: (message) =>
             hubNotifications.set("search-completion", {
-                title: "Search and Ask",
+                title: "Ask or Explain",
                 page: "search",
                 severity: "info",
                 messages: [message],

@@ -98,6 +98,21 @@ function button(text: string): HTMLButtonElement {
 function field<T extends HTMLElement>(name: string): T {
     return host.querySelector<T>(`[name="${name}"]`)!;
 }
+test("uses Ask or Explain consistently for the composer and its accessible controls", () => {
+    expect(host.querySelector("section")?.getAttribute("aria-label")).toBe(
+        "Ask or Explain",
+    );
+    expect(host.querySelector(".phase2-query")?.textContent).toBe(
+        "Ask or Explain",
+    );
+    expect(field<HTMLInputElement>("query").placeholder).toBe("Ask or Explain");
+    expect(
+        host.querySelector('button[type="submit"]')?.getAttribute("aria-label"),
+    ).toBe("Ask or Explain");
+    expect(field<HTMLSelectElement>("intent").getAttribute("aria-label")).toBe(
+        "Response mode",
+    );
+});
 test.each([26, 49, 50])(
     "paginates %i returned results in exact groups of 25 and resets on a new search",
     async (count) => {
@@ -239,7 +254,7 @@ test("answer and supporting evidence stay together while typed insights use the 
         host
             .querySelector(".phase2-result-layout > aside")
             ?.getAttribute("aria-label"),
-    ).toBe("Search insights");
+    ).toBe("Related context");
     expect(
         reading.querySelector(".phase2-evidence-meta")?.textContent,
     ).toContain("Captured source revision");
@@ -334,8 +349,7 @@ test("empty search hides recent and result controls, and source-type disclosure 
             .hidden,
     ).toBe(true);
     expect(
-        host.querySelector<HTMLElement>('[aria-label="Search result view"]')!
-            .hidden,
+        host.querySelector<HTMLElement>('[aria-label="Evidence view"]')!.hidden,
     ).toBe(true);
     const types = field<HTMLSelectElement>("sourceTypes");
     expect(types.multiple).toBe(true);
@@ -355,8 +369,7 @@ test("empty search hides recent and result controls, and source-type disclosure 
             .hidden,
     ).toBe(false);
     expect(
-        host.querySelector<HTMLElement>('[aria-label="Search result view"]')!
-            .hidden,
+        host.querySelector<HTMLElement>('[aria-label="Evidence view"]')!.hidden,
     ).toBe(false);
     expect(button("List").getAttribute("aria-pressed")).toBe("true");
 });
@@ -425,7 +438,7 @@ test("healthy bounded retrieval notices are not failed retrieval, and explicit d
     expect(hubNotifications.list()).toEqual(
         expect.arrayContaining([
             expect.objectContaining({
-                title: "Search and Ask",
+                title: "Ask or Explain",
                 messages: ["Bounded evidence selection"],
             }),
         ]),
@@ -710,7 +723,7 @@ test("partial results and unavailable exact revisions remain explicit", async ()
     expect(hubNotifications.list()).toEqual(
         expect.arrayContaining([
             expect.objectContaining({
-                title: "Search and Ask: partial results",
+                title: "Ask or Explain: partial results",
                 messages: [
                     "Conversation dates unavailable",
                     "b · search: offline",

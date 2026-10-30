@@ -67,7 +67,7 @@ test("Notifications counts current messages, links to their source, and renders 
     expect(link.getAttribute("aria-label")).toBe("Notifications");
     expect(link.querySelector("span")!.hidden).toBe(true);
     store.set("search", {
-        title: "Search and Ask",
+        title: "Ask or Explain",
         page: "search",
         context: "Question about Alpha",
         messages: ["<img src=x onerror=alert(1)>", "Missing event dates"],

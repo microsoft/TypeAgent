@@ -121,14 +121,14 @@ export function mountMemoryHubSearch(
     options: MemoryHubSearchOptions,
 ) {
     const root = node("section", undefined, "memory-phase2 memory-search");
-    root.setAttribute("aria-label", "Search and Ask");
+    root.setAttribute("aria-label", "Ask or Explain");
     const form = node("form", undefined, "phase2-controls");
     const query = node("input");
     query.type = "search";
     query.required = true;
     query.name = "query";
-    query.placeholder = "Ask memory";
-    const queryLabel = node("label", "Question or search", "phase2-query");
+    query.placeholder = "Ask or Explain";
+    const queryLabel = node("label", "Ask or Explain", "phase2-query");
     queryLabel.append(query);
     const types = node("select");
     types.multiple = true;
@@ -215,13 +215,13 @@ export function mountMemoryHubSearch(
     const submit = setIconButton(
         node("button"),
         "fa-arrow-right",
-        "Search or ask",
+        "Ask or Explain",
     );
     submit.type = "submit";
     submit.classList.add("primary");
     const intent = node("select");
     intent.name = "intent";
-    intent.setAttribute("aria-label", "Search intent");
+    intent.setAttribute("aria-label", "Response mode");
     for (const [value, label] of [
         ["auto", "Automatic (recommended)"],
         ["find", "Find sources"],
@@ -256,14 +256,14 @@ export function mountMemoryHubSearch(
     recent.setAttribute("aria-label", "Recent queries");
     const status = node(
         "div",
-        "Enter a query to search memory.",
+        "Enter a question or describe what you want to find.",
         "phase2-status",
     );
     status.setAttribute("role", "status");
     const answer = node("section", undefined, "phase2-answer");
     answer.hidden = true;
     const layout = node("div", undefined, "phase2-controls");
-    layout.setAttribute("aria-label", "Search result view");
+    layout.setAttribute("aria-label", "Evidence view");
     const layoutNote = node("p", undefined, "phase2-layout-note");
     const results = node("div", undefined, "phase2-results");
     const resultPager = node(
@@ -271,14 +271,14 @@ export function mountMemoryHubSearch(
         undefined,
         "phase2-controls phase2-result-pager",
     );
-    resultPager.setAttribute("aria-label", "Search result pages");
+    resultPager.setAttribute("aria-label", "Evidence pages");
     const pageStatus = node("span");
     pageStatus.setAttribute("role", "status");
     const previousPage = action("Previous page", () => changePage(-1));
     const nextPage = action("Next page", () => changePage(1));
     resultPager.append(previousPage, pageStatus, nextPage);
     const insights = node("aside", undefined, "phase2-search-insights");
-    insights.setAttribute("aria-label", "Search insights");
+    insights.setAttribute("aria-label", "Related context");
     const preferenceStatus = node("p");
     preferenceStatus.setAttribute("role", "status");
     let preferredMode: MemoryHubViewMode = "list";
@@ -725,7 +725,7 @@ export function mountMemoryHubSearch(
         return card;
     }
     function renderScopeInsights() {
-        const scopeCard = sidecard("Search scope");
+        const scopeCard = sidecard("Memory scope");
         scopeCard.append(
             node(
                 "strong",
@@ -775,7 +775,7 @@ export function mountMemoryHubSearch(
                     submitted?.corpusId !== "fixedBrowserMemory")
             )
                 throw new Error(
-                    "Search insights scope does not match the submitted query. Browser-memory insights cannot stand in for All memory or a named corpus.",
+                    "Related context scope does not match the submitted query. Browser-memory insights cannot stand in for All memory or a named corpus.",
                 );
             if (value.status !== "available") {
                 sidecard("Related context").append(
@@ -893,8 +893,8 @@ export function mountMemoryHubSearch(
         ];
         hubNotifications.set("search", {
             title: result.errors.length
-                ? "Search and Ask: partial results"
-                : "Search and Ask",
+                ? "Ask or Explain: partial results"
+                : "Ask or Explain",
             page: "search",
             context: `Query: ${result.query} · ${submitted?.corpusId ?? "All memory"}`,
             messages,
@@ -935,7 +935,8 @@ export function mountMemoryHubSearch(
     }
     function readRequest(): MemoryHubSearchRequest {
         const text = query.value.trim();
-        if (!text) throw new Error("Enter a query before searching.");
+        if (!text)
+            throw new Error("Enter a question or request before continuing.");
         if (from.value && to.value && from.value > to.value)
             throw new Error("From date must not follow Through date.");
         const sourceTypes = Array.from(types.selectedOptions).map(
@@ -1013,7 +1014,7 @@ export function mountMemoryHubSearch(
         const stopWatching = watchSlowRequest(status, () => {
             searchVersion++;
             submit.disabled = false;
-            status.textContent = "Search cancelled. Results were not loaded.";
+            status.textContent = "Request cancelled. Results were not loaded.";
         });
         try {
             if (queryChanged) options.onQueryChanged?.(request.query);
@@ -1041,7 +1042,7 @@ export function mountMemoryHubSearch(
                 response.errors.length === 0
             )
                 options.onNotify?.(
-                    `Search completed: ${response.matches.length} returned evidence results.`,
+                    `Ask or Explain completed: ${response.matches.length} returned evidence results.`,
                 );
         } catch (error) {
             if (
@@ -1111,7 +1112,7 @@ export function mountMemoryHubSearch(
             hubNotifications.clear("search-completion");
             submit.disabled = false;
             status.textContent =
-                "Scope changed. Search again to load evidence for this scope.";
+                "Scope changed. Submit your request again to load evidence for this scope.";
             if (dialog.open) dialog.close();
             selectedEvidence = undefined;
             evidencePage = undefined;

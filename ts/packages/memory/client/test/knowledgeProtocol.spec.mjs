@@ -15,7 +15,42 @@ import {
     answerRequestSchema,
     answerResultSchema,
     integratedAnswerDiagnosticsSchema,
+    understandingRequestSchema,
 } from "../dist/index.js";
+
+test("exact-document explanation protocol preserves scope and rejects partial or broadened requests", () => {
+    const request = {
+        corpusId: "corpus",
+        question: "Explain this document",
+        source: { sourceId: "source", revisionId: "revision" },
+        retrievalPolicy: "sourcesOnly",
+        selection: { mode: "only", modules: ["explanation", "sources"] },
+    };
+    assert.deepEqual(
+        understandingRequestSchema.parse(JSON.parse(JSON.stringify(request))),
+        request,
+    );
+    for (const source of [
+        null,
+        {},
+        { sourceId: "source" },
+        { revisionId: "revision" },
+        { sourceId: "", revisionId: "revision" },
+        { sourceId: "source", revisionId: "revision", extra: true },
+    ])
+        assert.equal(
+            understandingRequestSchema.safeParse({ ...request, source })
+                .success,
+            false,
+        );
+    assert.equal(
+        understandingRequestSchema.safeParse({
+            ...request,
+            retrievalPolicy: "sourcesAndViews",
+        }).success,
+        false,
+    );
+});
 
 const checkpoint = {
     version: 1,

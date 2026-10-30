@@ -32,7 +32,7 @@ export function toUnderstandingRequest(
         request.dateTo
     )
         throw new Error(
-            "Understanding needs one document collection with no search filters or conversations. Keep Results for this scope; filters have not been removed.",
+            "A focused explanation needs one document collection with no search filters or conversations. Keep Results for this scope; filters have not been removed.",
         );
     return {
         ...(evidenceSnapshotId ? { evidenceSnapshotId } : {}),
@@ -136,8 +136,9 @@ export function mountMemoryHubUnderstanding(
     const question = node("input");
     question.required = true;
     question.maxLength = 2000;
-    question.setAttribute("aria-label", "Ask a new understanding question");
-    const submit = node("button", "Explain");
+    question.setAttribute("aria-label", "Ask or Explain");
+    question.placeholder = "Ask or Explain";
+    const submit = node("button", "Ask or Explain");
     submit.type = "submit";
     form.append(question, submit, button("Back to Results", options.onResults));
     const status = node("p");
@@ -657,7 +658,7 @@ export function mountMemoryHubUnderstanding(
                                 : `Grounded explanation ready in ${elapsed}s. Supporting visuals load independently.`
                             : `Sources ready in ${elapsed}s. Preparing the explanation…`;
                     hubNotifications.set("understanding", {
-                        title: "Understanding",
+                        title: "Ask or Explain",
                         page: "understanding",
                         context: response.question,
                         messages: response.warnings,

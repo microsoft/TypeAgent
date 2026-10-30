@@ -14,16 +14,23 @@ import {
 import { validateViewRequest } from "../dist/views/server/features/views/viewValidation.mjs";
 import { understandingStages } from "../dist/views/server/features/views/viewRoutes.mjs";
 
-test("opt-in lexical preview yields before semantic retrieval without replacing its prepared handle", async () => {
+test("opt-in lexical preview preserves exact document scope before semantic retrieval without replacing its prepared handle", async () => {
     const phases = [];
     const id = "00000000-0000-4000-8000-000000000001";
-    const input = { corpusId: "corpus", question: "Explain the gallery" };
+    const source = { sourceId: "source", revisionId: "revision" };
+    const input = {
+        corpusId: "corpus",
+        question: "Explain the gallery",
+        source,
+    };
     const stages = understandingStages(
         input,
         async ({ params }) => {
             phases.push(params.phase);
+            assert.deepEqual(params.source, source);
             return {
-                ...input,
+                corpusId: input.corpusId,
+                question: input.question,
                 schemaVersion: 1,
                 snapshotId: id,
                 turnId: id,
@@ -662,111 +669,289 @@ test("view validation rejects generic operations and malformed domain payloads",
     );
 });
 
-test(
-    "localhost HTTP gateway invokes parent RPC and forwards progress SSE",
-    { timeout: 20_000 },
-    async (t) => {
-        const child = fork(
-            new URL("../dist/views/server/server.mjs", import.meta.url),
-            ["0"],
-            { stdio: ["ignore", "ignore", "inherit", "ipc"] },
-        );
-        t.after(async () => {
-            if (child.exitCode === null) {
-                const exited = once(child, "exit");
-                child.kill();
-                await exited;
-            }
-        });
-        const graphCalls = [];
-        const rpc = createRpc("view-test-parent", child, {
-            memoryListCorpora: async () => [
-                { corpusId: "c", name: "Test corpus" },
-            ],
-            memoryHubSnapshot: async () => ({
-                corpora: [{ corpusId: "c", name: "Test corpus" }],
-                inbox: [],
-                errors: [],
-            }),
-            memoryHubSearch: async (params) => ({
+async function startTestGateway(t) {
+    const child = fork(
+        new URL("../dist/views/server/server.mjs", import.meta.url),
+        ["0"],
+        { stdio: ["ignore", "ignore", "inherit", "ipc"] },
+    );
+    t.after(async () => {
+        if (child.exitCode === null) {
+            const exited = once(child, "exit");
+            child.kill();
+            await exited;
+        }
+    });
+    const graphCalls = [];
+    const searchCalls = [];
+    const understandingCalls = [];
+    const snapshotId = "00000000-0000-4000-8000-000000000001";
+    const rpc = createRpc("view-test-parent", child, {
+        memoryListCorpora: async () => [{ corpusId: "c", name: "Test corpus" }],
+        memoryHubSnapshot: async () => ({
+            corpora: [{ corpusId: "c", name: "Test corpus" }],
+            inbox: [],
+            errors: [],
+        }),
+        memoryHubSearch: async (params) => {
+            searchCalls.push(params);
+            return {
                 query: params.query,
                 matches: [],
                 warnings: [],
                 ranking: "reciprocal-rank-fusion",
                 errors: [],
-            }),
-            memoryHubEvidence: async (params) => ({
-                title: "Retained evidence",
-                content: "Original",
-                offset: 0,
-                totalChars: 8,
-                provenance: params,
-            }),
-            memoryHubExplore: async () => ({
-                counts: { sources: 0 },
-                errors: [],
-            }),
-            memoryHubGraph: async (params) => {
-                graphCalls.push(["memoryHubGraph", params]);
-                return {
-                    corpora: [],
-                    errors: [],
-                    omittedCorpora: 0,
-                    presetLayout: { elements: [] },
-                };
-            },
-            memoryHubGraphSupport: async (params) => {
-                graphCalls.push(["memoryHubGraphSupport", params]);
-                return { generation: params.generation, items: [], total: 0 };
-            },
-            memoryHubGraphEvent: async (params) => {
-                graphCalls.push(["memoryHubGraphEvent", params]);
-                return {
-                    title: "Original event",
-                    content: "{}",
-                    offset: params.offset ?? 0,
-                    totalChars: 2,
-                };
-            },
-            memoryHubChanges: async () => ({ items: [], total: 0, errors: [] }),
-            memoryHubCapturePage: async () => ({
-                corpusId: "c",
-                sourceId: "s",
+                ...(params.intent
+                    ? {
+                          resolvedIntent:
+                              params.intent === "auto" ? "ask" : params.intent,
+                      }
+                    : {}),
+            };
+        },
+        memoryHubUnderstand: async (params) => {
+            understandingCalls.push(params);
+            return {
+                schemaVersion: 1,
+                snapshotId,
+                turnId: snapshotId,
+                evidenceSnapshotId: snapshotId,
+                corpusId: params.corpusId,
+                question: params.question,
+                expiresAt: "2099-01-01T00:00:00.000Z",
+                citations: [],
+                modules: [],
                 warnings: [],
-            }),
-            memoryHubCapturePages: async () => ({
-                pages: [
-                    {
-                        pageId: "tab:1",
-                        url: "https://example.invalid",
-                        title: "Example",
-                    },
-                ],
-            }),
-            memoryCreateCorpus: async () => {
-                throw new Error("Domain failure");
+                refinementPending: params.phase === "initial",
+            };
+        },
+        memoryHubEvidence: async (params) => ({
+            title: "Retained evidence",
+            content: "Original",
+            offset: 0,
+            totalChars: 8,
+            provenance: params,
+        }),
+        memoryHubExplore: async () => ({
+            counts: { sources: 0 },
+            errors: [],
+        }),
+        memoryHubGraph: async (params) => {
+            graphCalls.push(["memoryHubGraph", params]);
+            return {
+                corpora: [],
+                errors: [],
+                omittedCorpora: 0,
+                presetLayout: { elements: [] },
+            };
+        },
+        memoryHubGraphSupport: async (params) => {
+            graphCalls.push(["memoryHubGraphSupport", params]);
+            return { generation: params.generation, items: [], total: 0 };
+        },
+        memoryHubGraphEvent: async (params) => {
+            graphCalls.push(["memoryHubGraphEvent", params]);
+            return {
+                title: "Original event",
+                content: "{}",
+                offset: params.offset ?? 0,
+                totalChars: 2,
+            };
+        },
+        memoryHubChanges: async () => ({ items: [], total: 0, errors: [] }),
+        memoryHubCapturePage: async () => ({
+            corpusId: "c",
+            sourceId: "s",
+            warnings: [],
+        }),
+        memoryHubCapturePages: async () => ({
+            pages: [
+                {
+                    pageId: "tab:1",
+                    url: "https://example.invalid",
+                    title: "Example",
+                },
+            ],
+        }),
+        memoryCreateCorpus: async () => {
+            throw new Error("Domain failure");
+        },
+        importWebsiteDataWithProgress: async (params) => ({
+            importId: params.importId,
+            complete: true,
+        }),
+    });
+    const ready = await new Promise((resolve, reject) => {
+        child.on("message", (message) => {
+            if (message.type === "Success") resolve(message);
+        });
+        child.once("error", reject);
+        child.once("exit", () =>
+            reject(new Error("Views server exited before readiness")),
+        );
+    });
+    const base = `http://localhost:${ready.port}`;
+    const invoke = (body, headers = {}) =>
+        fetch(`${base}/api/views/invoke`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...headers },
+            body: JSON.stringify(body),
+        });
+    return {
+        base,
+        invoke,
+        rpc,
+        ready,
+        graphCalls,
+        searchCalls,
+        understandingCalls,
+    };
+}
+
+test(
+    "Ask or Explain requests cross the HTTP gateway",
+    { timeout: 20_000 },
+    async (t) => {
+        const { base, invoke, searchCalls, understandingCalls } =
+            await startTestGateway(t);
+        await t.test(
+            "Auto and explicit response modes cross HTTP with the exact client request",
+            async () => {
+                for (const intent of ["auto", "find", "ask"]) {
+                    const params = {
+                        query: "Which changes are completed?",
+                        corpusId: "c",
+                        limit: 50,
+                        tags: [],
+                        conversationScope: "none",
+                        intent,
+                        ...(intent === "auto"
+                            ? {}
+                            : { generateAnswer: intent === "ask" }),
+                    };
+                    const response = await invoke({
+                        method: "memoryHubSearch",
+                        params,
+                    });
+                    assert.equal(response.status, 200, intent);
+                    const body = await response.json();
+                    assert.equal(body.success, true);
+                    assert.equal(
+                        body.data.resolvedIntent,
+                        intent === "auto" ? "ask" : intent,
+                    );
+                    assert.deepEqual(
+                        searchCalls[searchCalls.length - 1],
+                        params,
+                    );
+                }
+                const legacy = { query: "worker", generateAnswer: false };
+                assert.equal(
+                    (
+                        await invoke({
+                            method: "memoryHubSearch",
+                            params: legacy,
+                        })
+                    ).status,
+                    200,
+                );
+                assert.deepEqual(searchCalls[searchCalls.length - 1], legacy);
+                const count = searchCalls.length;
+                for (const intent of ["explain", true, null, {}])
+                    assert.equal(
+                        (
+                            await invoke({
+                                method: "memoryHubSearch",
+                                params: { query: "worker", intent },
+                            })
+                        ).status,
+                        400,
+                    );
+                assert.equal(
+                    (
+                        await invoke({
+                            method: "memoryHubSearch",
+                            params: {
+                                query: "worker",
+                                intent: "auto",
+                                unexpected: true,
+                            },
+                        })
+                    ).status,
+                    400,
+                );
+                assert.equal(searchCalls.length, count);
             },
-            importWebsiteDataWithProgress: async (params) => ({
-                importId: params.importId,
-                complete: true,
-            }),
-        });
-        const ready = await new Promise((resolve, reject) => {
-            child.on("message", (message) => {
-                if (message.type === "Success") resolve(message);
-            });
-            child.once("error", reject);
-            child.once("exit", () =>
-                reject(new Error("Views server exited before readiness")),
-            );
-        });
-        const base = `http://localhost:${ready.port}`;
-        const invoke = (body, headers = {}) =>
-            fetch(`${base}/api/views/invoke`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", ...headers },
-                body: JSON.stringify(body),
-            });
+        );
+        await t.test(
+            "exact document scope crosses HTTP and every streamed explanation phase unchanged",
+            async () => {
+                const params = {
+                    corpusId: "c",
+                    question: "Explain this document",
+                    source: { sourceId: "s", revisionId: "r1" },
+                    retrievalPolicy: "sourcesOnly",
+                    selection: {
+                        mode: "only",
+                        modules: ["explanation", "sources"],
+                    },
+                };
+                const direct = await invoke({
+                    method: "memoryHubUnderstand",
+                    params,
+                });
+                assert.equal(direct.status, 200);
+                assert.deepEqual(understandingCalls[0], params);
+                const response = await fetch(`${base}/api/views/understand`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(params),
+                });
+                assert.equal(response.status, 200);
+                assert.match(
+                    response.headers.get("content-type"),
+                    /text\/event-stream/,
+                );
+                const body = await response.text();
+                assert.ok(!body.includes('"type":"error"'), body);
+                const phases = understandingCalls.slice(1);
+                assert.deepEqual(
+                    phases.map((call) => call.phase),
+                    ["retrieve", "initial", "refine"],
+                );
+                for (const phase of phases) {
+                    assert.deepEqual(phase.source, params.source);
+                    assert.deepEqual(phase.selection, params.selection);
+                    assert.equal(phase.retrievalPolicy, "sourcesOnly");
+                }
+                const count = understandingCalls.length;
+                for (const source of [
+                    null,
+                    {},
+                    { sourceId: "s" },
+                    { revisionId: "r1" },
+                ])
+                    assert.equal(
+                        (
+                            await invoke({
+                                method: "memoryHubUnderstand",
+                                params: { ...params, source },
+                            })
+                        ).status,
+                        400,
+                    );
+                assert.equal(understandingCalls.length, count);
+            },
+        );
+    },
+);
+
+test(
+    "localhost HTTP gateway invokes parent RPC and forwards progress SSE",
+    { timeout: 20_000 },
+    async (t) => {
+        const { base, invoke, rpc, ready, graphCalls } =
+            await startTestGateway(t);
         await t.test(
             "removed APIs are rejected and the legacy asset route is absent",
             async () => {
