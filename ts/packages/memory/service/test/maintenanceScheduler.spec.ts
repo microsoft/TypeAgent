@@ -3,6 +3,226 @@
 
 import { setTimeout as delay } from "node:timers/promises";
 import { MaintenanceScheduler } from "../src/maintenanceScheduler.js";
+import {
+    createMaintenanceBuildScheduler,
+    yieldMaintenanceBuild,
+} from "../src/maintenanceConcurrency.js";
+
+test("a passive callback reacquires capacity before continuing after its build returns", async () => {
+    const scheduler = new MaintenanceScheduler(() => false, "manual");
+    let finishBuild!: () => void;
+    const build = new Promise<void>((resolve) => {
+        finishBuild = resolve;
+    });
+    let finishBorrower!: () => void;
+    const borrowed = new Promise<void>((resolve) => {
+        finishBorrower = resolve;
+    });
+    let borrowerStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+        borrowerStarted = resolve;
+    });
+    const order: string[] = [];
+    scheduler.request("first", "wiki", "v1", async () => {
+        await scheduler.waitForBuild(() => build);
+        order.push("first-resumed");
+    });
+    scheduler.request("second", "wiki", "v1", async () => {
+        order.push("borrower-started");
+        borrowerStarted();
+        await borrowed;
+        order.push("borrower-finished");
+    });
+    const draining = scheduler.drain(5000);
+    try {
+        await started;
+        finishBuild();
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(order).toEqual(["borrower-started"]);
+        finishBorrower();
+        expect((await draining).settled).toBe(true);
+        expect(order).toEqual([
+            "borrower-started",
+            "borrower-finished",
+            "first-resumed",
+        ]);
+    } finally {
+        finishBuild();
+        finishBorrower();
+        await scheduler.close();
+        await draining;
+    }
+});
+
+test("shutdown cancels a callback waiting to reacquire capacity", async () => {
+    const scheduler = new MaintenanceScheduler(() => false, "manual");
+    let finishBuild!: () => void;
+    const build = new Promise<void>((resolve) => {
+        finishBuild = resolve;
+    });
+    let borrowerStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+        borrowerStarted = resolve;
+    });
+    let resumed = false;
+    scheduler.request("first", "wiki", "v1", async () => {
+        await scheduler.waitForBuild(() => build);
+        resumed = true;
+    });
+    scheduler.request("second", "wiki", "v1", async (signal) => {
+        borrowerStarted();
+        await delay(10_000, undefined, { signal });
+    });
+    const draining = scheduler.drain(5000);
+    try {
+        await started;
+        finishBuild();
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(resumed).toBe(false);
+        await scheduler.close();
+        expect(resumed).toBe(false);
+        expect((await draining).failures.length).toBeGreaterThan(0);
+    } finally {
+        finishBuild();
+        await scheduler.close();
+        await draining;
+    }
+});
+
+test("a pending dispatch timer rechecks capacity after a passive callback resumes", async () => {
+    const scheduler = new MaintenanceScheduler(() => false, "manual");
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        finish = resolve;
+    });
+    let resumed!: () => void;
+    const ready = new Promise<void>((resolve) => {
+        resumed = resolve;
+    });
+    let secondStarted = false;
+    scheduler.request("first", "wiki", "v1", async () => {
+        await scheduler.waitForBuild(async () => {
+            scheduler.request("second", "wiki", "v1", async () => {
+                secondStarted = true;
+            });
+        });
+        resumed();
+        await gate;
+    });
+    const draining = scheduler.drain(5000);
+    try {
+        await ready;
+        await delay(350);
+        expect(secondStarted).toBe(false);
+        finish();
+        expect((await draining).settled).toBe(true);
+        expect(secondStarted).toBe(true);
+    } finally {
+        finish();
+        await scheduler.close();
+        await draining;
+    }
+});
+
+test("automatic native waits let independent short work reach the build queue without releasing corpus exclusion", async () => {
+    const scheduler = new MaintenanceScheduler(
+        () => false,
+        "manual",
+        undefined,
+        1,
+        true,
+    );
+    const builds = createMaintenanceBuildScheduler(1, false, true);
+    const order: string[] = [];
+    let shortAdmitted!: () => void;
+    const admitted = new Promise<void>((resolve) => {
+        shortAdmitted = resolve;
+    });
+    scheduler.request(
+        "native-corpus",
+        "topics",
+        "generation",
+        async (signal) => {
+            const build = builds(async () => {
+                order.push("native-start");
+                await admitted;
+                order.push("durable");
+                await yieldMaintenanceBuild(signal);
+                order.push("native-resumed");
+            }, true);
+            await scheduler.waitForBuild(() => build);
+        },
+    );
+    scheduler.request("native-corpus", "wiki", "generation", async () => {
+        order.push("same-corpus");
+    });
+    scheduler.request("short-corpus", "wiki", "generation", async () => {
+        const build = builds(async () => {
+            order.push("short");
+        }, false);
+        shortAdmitted();
+        await scheduler.waitForBuild(() => build);
+    });
+    try {
+        const status = await scheduler.drain(5000);
+        expect(status.settled).toBe(true);
+        expect(order).toEqual([
+            "native-start",
+            "durable",
+            "short",
+            "native-resumed",
+            "same-corpus",
+        ]);
+    } finally {
+        await scheduler.close();
+    }
+});
+
+test("automatic build waits retain the native and total admission bounds", async () => {
+    const scheduler = new MaintenanceScheduler(
+        () => false,
+        "manual",
+        undefined,
+        2,
+        true,
+    );
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let filled!: () => void;
+    const capacity = new Promise<void>((resolve) => {
+        filled = resolve;
+    });
+    let native = 0;
+    let entered = 0;
+    for (let index = 0; index < 44; index++) {
+        const family = index < 8 ? "topics" : "wiki";
+        scheduler.request(`corpus-${index}`, family, "generation", async () => {
+            if (family === "topics") native++;
+            if (++entered === 32) filled();
+            await scheduler.waitForBuild(() => gate);
+        });
+    }
+    const drain = scheduler.drain(20000);
+    try {
+        await capacity;
+        await delay(300);
+        expect(entered).toBe(32);
+        expect(native).toBe(2);
+        expect(scheduler.status().running).toHaveLength(32);
+        const status = scheduler.status();
+        expect(
+            status.pending.filter((key) => !status.running.includes(key)),
+        ).toHaveLength(12);
+        release();
+        expect((await drain).settled).toBe(true);
+    } finally {
+        release();
+        await scheduler.close();
+        await drain;
+    }
+});
 
 describe("coalesced maintenance execution", () => {
     test("quiet-period requests coalesce without delaying explicit drains", async () => {

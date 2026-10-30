@@ -122,6 +122,11 @@ export interface WikiFamilyState {
         policy: string;
         count: number;
     };
+    candidateReadCursor?: {
+        generation: string | undefined;
+        policy: string;
+        visitedViewIds: string[];
+    };
     descriptors: Array<{
         viewId: string;
         query: string;
@@ -133,6 +138,8 @@ export interface WikiFamilyState {
             generation: string | undefined;
             policy: string;
             reason: string;
+            assessmentKey?: string;
+            assessmentJobId?: string;
         };
     }>;
 }
@@ -1273,6 +1280,7 @@ export class TypedViewStore {
         corpusId: string,
         jobId: string,
         update: (job: ViewBuildJob) => void,
+        updateWikiFamily?: (family: WikiFamilyState) => void,
     ): Promise<ViewBuildJob> {
         const { head, state } = await this.history(corpusId).read();
         const job = state.builds?.[jobId];
@@ -1281,6 +1289,15 @@ export class TypedViewStore {
                 "View build was removed or forgotten; cannot persist a result",
             );
         update(job);
+        if (updateWikiFamily) {
+            state.wikiFamily ??= {
+                enabled: true,
+                dirty: true,
+                cursor: 0,
+                descriptors: [],
+            };
+            updateWikiFamily(state.wikiFamily);
+        }
         job.updatedAt = timestamp();
         await this.commitBuildState(
             corpusId,
@@ -1314,6 +1331,7 @@ export class TypedViewStore {
             ) {
                 family.dirty = true;
                 family.cursor = 0;
+                delete family.candidateReadCursor;
                 delete family.error;
             }
         }
@@ -2147,6 +2165,7 @@ export class TypedViewStore {
             );
             family.dirty = true;
             family.cursor = 0;
+            delete family.candidateReadCursor;
             delete family.indexVersion;
             delete family.error;
         }

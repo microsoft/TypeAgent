@@ -32,6 +32,12 @@ the host's integrated default. Exact `derivedReferences`, `assertionReferences`,
 warnings and integrated reader diagnostics survive MCP serialization. Hosts
 advertise `derivedViews.integratedAnswering` and `derivedViews.knowledge`.
 
+Search matches and answer citations preserve optional source-scoped
+`temporalContext`, including inherited/discovered date evidence, unresolved event
+mentions and rejected anchors. The MCP JSON Schema validates this structured
+provenance instead of stripping it. Context does not turn a rejected anchor into
+an event date or supply a date for an unresolved mention.
+
 ## Schema-defined questions
 
 Generic View protocols include `schemaView` definitions, candidates, support
