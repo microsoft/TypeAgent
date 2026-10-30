@@ -333,7 +333,8 @@ export interface EmbeddingConfig {
     readonly cacheDir?: string | undefined;
     /**
      * Embedding vector size (dimensions). Used to size embedding indexes and,
-     * for hosted providers that support it, requested from the endpoint.
+     * for named OpenAI/Azure text-embedding-3 profiles, requested from the
+     * endpoint. Named Ada and unknown hosted models only validate output size.
      */
     readonly size?: number | undefined;
     /** Maximum number of inputs per embedding batch. */

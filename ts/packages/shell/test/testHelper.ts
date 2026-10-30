@@ -18,9 +18,9 @@ import { fileURLToPath } from "node:url";
 const chatViewUrlSuffix = "/chatView.html";
 const inputDivId = "phraseDiv";
 
-const runningApplications: Map<string, ElectronApplication> = new Map<
+const runningProcesses = new Map<
     string,
-    ElectronApplication
+    ReturnType<ElectronApplication["process"]>
 >();
 
 async function waitForPromiseWithTimeout<T>(
@@ -71,6 +71,9 @@ function runCommand(command: string, args: string[]): Promise<string> {
 async function killProcessTree(
     proc: ReturnType<ElectronApplication["process"]>,
 ): Promise<void> {
+    if (proc.exitCode !== null || proc.signalCode !== null) {
+        return;
+    }
     const pid = proc.pid;
     if (pid === undefined) {
         proc.kill("SIGKILL");
@@ -115,12 +118,11 @@ async function killProcessTree(
 }
 
 async function forceCloseInstance(instanceName: string): Promise<void> {
-    const existing = runningApplications.get(instanceName);
-    if (existing === undefined) {
+    const proc = runningProcesses.get(instanceName);
+    if (proc === undefined) {
         return;
     }
 
-    const proc = existing.process();
     console.log(`Force closing instance ${instanceName}`);
     try {
         await killProcessTree(proc);
@@ -132,7 +134,7 @@ async function forceCloseInstance(instanceName: string): Promise<void> {
             );
         }
     } finally {
-        runningApplications.delete(instanceName);
+        runningProcesses.delete(instanceName);
     }
     console.log(`Force closed instance ${instanceName}`);
 }
@@ -143,12 +145,11 @@ async function exitInstance(
     budgetMs: number,
     requireGracefulShutdown: boolean,
 ): Promise<number> {
-    const existing = runningApplications.get(instanceName);
-    if (existing === undefined) {
+    const proc = runningProcesses.get(instanceName);
+    if (proc === undefined) {
         throw new Error(`No running instance '${instanceName}' to shut down.`);
     }
 
-    const proc = existing.process();
     const exited = waitForProcessExit(proc);
     const start = Date.now();
     let gracefulError: unknown;
@@ -164,7 +165,7 @@ async function exitInstance(
         await killProcessTree(proc);
         await waitForPromiseWithTimeout(exited, 10000);
     } finally {
-        runningApplications.delete(instanceName);
+        runningProcesses.delete(instanceName);
     }
 
     if (requireGracefulShutdown) {
@@ -206,7 +207,7 @@ export async function startShell(
 
     do {
         try {
-            if (runningApplications.has(instanceName)) {
+            if (runningProcesses.has(instanceName)) {
                 throw new Error(
                     "Application instance already running. Did you shutdown cleanly?",
                 );
@@ -216,7 +217,7 @@ export async function startShell(
             const app: ElectronApplication = await electron.launch({
                 args: getLaunchArgs(testGreetings),
             });
-            runningApplications.set(instanceName, app);
+            runningProcesses.set(instanceName, app.process());
 
             // get the main window
             const mainWindow: Page = await getChatViewWindow(app);

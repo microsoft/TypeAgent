@@ -212,6 +212,79 @@ describe("embedding provider selection reaches real construction (offline)", () 
         expect(calls).toEqual([]);
     });
 
+    test.each(["azure", "openai"] as const)(
+        "named %s embedding-3 profile requests 1536 dimensions for single and batch inputs",
+        async (provider) => {
+            globalThis.fetch = async (url, init) => {
+                calls.push(String(url));
+                const body = JSON.parse(String(init?.body));
+                bodies.push(body);
+                const inputs = Array.isArray(body.input)
+                    ? body.input
+                    : [body.input];
+                return new Response(
+                    JSON.stringify({
+                        data: inputs.map(() => ({
+                            embedding: [1, ...Array<number>(1535).fill(0)],
+                        })),
+                    }),
+                    { status: 200 },
+                );
+            };
+            configureNamed("large", {
+                large: {
+                    provider,
+                    ...(provider === "azure"
+                        ? { deployment: "embedding_named" }
+                        : {}),
+                    model: "text-embedding-3-large",
+                    size: 1536,
+                    modalities: ["text"],
+                },
+            });
+            const model = tryCreateEmbeddingModel()!;
+            const single = await model.generateEmbedding("single");
+            const batch = await model.generateEmbeddingBatch!(["one", "two"]);
+            expect(single.success && single.data).toHaveLength(1536);
+            expect(batch.success && batch.data).toHaveLength(2);
+            expect(bodies.map((body) => body.dimensions)).toEqual([1536, 1536]);
+            expect(model.embeddingIdentity?.model).toBe(
+                "text-embedding-3-large",
+            );
+            expect(model.embeddingIdentity?.dimensions).toBe(1536);
+            expect(calls).toEqual([
+                provider === "azure"
+                    ? endpoints.AZURE_OPENAI_ENDPOINT_EMBEDDING_NAMED_EASTUS
+                    : endpoints.OPENAI_ENDPOINT_EMBEDDING,
+                provider === "azure"
+                    ? endpoints.AZURE_OPENAI_ENDPOINT_EMBEDDING_NAMED_EASTUS
+                    : endpoints.OPENAI_ENDPOINT_EMBEDDING,
+            ]);
+        },
+    );
+
+    test.each(["text-embedding-3-small", "text-embedding-3-large"])(
+        "named %s requests its configured size and rejects a different output size",
+        async (model) => {
+            configureNamed("reduced", {
+                reduced: { ...hostedProfile, model, size: 1536 },
+            });
+            const result = await tryCreateEmbeddingModel()!.generateEmbedding(
+                "wrong-sized response",
+            );
+            expect(bodies[0].dimensions).toBe(1536);
+            expect(result.success).toBe(false);
+        },
+    );
+
+    test("named Ada profile does not request unsupported dimension reduction", async () => {
+        configureNamed("ada", {
+            ada: { ...hostedProfile, model: "text-embedding-ada-002" },
+        });
+        await tryCreateEmbeddingModel()!.generateEmbedding("Ada");
+        expect(bodies[0]).not.toHaveProperty("dimensions");
+    });
+
     test("a catalog profile can retain the legacy Azure default transport and identity", () => {
         setRuntimeConfig({
             ...configFromEnvRecord(endpoints),

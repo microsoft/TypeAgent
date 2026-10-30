@@ -25,6 +25,7 @@ jest.mock("./memoryHubRunbookImports.css", () => ({}));
 jest.mock("./memoryHubViewPreferences.css", () => ({}));
 jest.mock("./memoryHubWebExplore.css", () => ({}));
 jest.mock("./memoryHubGraph.css", () => ({}));
+jest.mock("./memoryHubUnderstanding.css", () => ({}));
 jest.mock(
     "./memoryHubWebExploreAnalytics.html?raw",
     () =>
