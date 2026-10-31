@@ -122,6 +122,7 @@ esac
             "SKILL.md:16 flag-unknown",
             "SKILL.md:20 subcommand-unknown",
             "SKILL.md:24 skill-unknown",
+            "old_fetch.py:1 orphan",
         ]);
         const sub = res.diagnostics.find(
             (d) => d.rule === "subcommand-unknown",

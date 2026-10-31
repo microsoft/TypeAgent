@@ -5,8 +5,8 @@ import * as path from "node:path";
 import { type BuildResult, type Skill } from "../context.js";
 import { defineRule } from "./sdk.js";
 
-// Orphans: unreferenced files beside referenced ones (info only —
-// scripts load assets through string literals we don't model).
+// Orphans: unreferenced files beside referenced ones. Any mention of the
+// file name in another file (doc or script string) counts as a reference.
 // Only folders the docs already use count as skill content, e.g.
 // scripts/old.py next to a linked scripts/fetch.py. Folders nothing
 // references (crates/, tests/, the skill root itself) are other
@@ -36,7 +36,7 @@ export function checkOrphans(
             continue;
         res.diagnostics.push({
             rule: "orphan",
-            severity: "info",
+            severity: "error",
             at: { file: f, line: 1, col: 1, endCol: 1 },
             message: `${skill.name}/${path.relative(skill.dir, f).split(path.sep).join("/")} is not referenced by any doc or script`,
         });
@@ -47,7 +47,7 @@ export const orphansRule = defineRule({
     meta: {
         name: "orphans",
         description: "Files beside referenced ones are referenced too.",
-        diagnostics: { orphan: "info" },
+        diagnostics: { orphan: "error" },
     },
     // Runs after all docs so `referenced` is complete.
     create: (ctx) => ({
