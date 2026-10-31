@@ -6478,6 +6478,9 @@ importers:
 
   packages/skillgraph:
     dependencies:
+      '@kusto/language-service-next':
+        specifier: 12.4.1
+        version: 12.4.1
       gpt-tokenizer:
         specifier: 2.9.0
         version: 2.9.0
@@ -9767,6 +9770,9 @@ packages:
     resolution: {integrity: sha512-ZmZNiBO6bkOSh3QNzgfvb1cMY0yMobn6ZQrSMqbAce21qyYL8niIbyipz9N/PIRDciGhsV0wUxnZsxIO+yWsHQ==}
     cpu: [x64]
     os: [win32]
+
+  '@kusto/language-service-next@12.4.1':
+    resolution: {integrity: sha512-8Ybwi1DVxnFZ8+mnw38ruXjSGIxA2jwx1HeqjStvMa5kSHzHPtEYm5n7et1fwgn5KDUZJzsSNjuRroiI+j8brA==, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@kusto/language-service-next/-/language-service-next-12.4.1.tgz}
 
   '@leichtgewicht/ip-codec@2.0.5':
     resolution: {integrity: sha512-Vo+PSpZG2/fmgmiNzYK9qWRh8h/CHrwD0mo1h1DzL4yzHNSfWYujGTYsWGreD000gcgmZ7K4Ys6Tx9TxtsKdDw==}
@@ -23348,6 +23354,8 @@ snapshots:
 
   '@koromix/koffi-win32-x64@3.2.1':
     optional: true
+
+  '@kusto/language-service-next@12.4.1': {}
 
   '@leichtgewicht/ip-codec@2.0.5': {}
 

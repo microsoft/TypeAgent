@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { commandsRule } from "./commands.js";
+import { fencesRule } from "./fences.js";
 import { frontmatterRule } from "./frontmatter.js";
 import { linksRule } from "./links.js";
 import { orphansRule } from "./orphans.js";
@@ -16,6 +17,7 @@ export const RULES: Rule[] = [
     linksRule,
     skillsRule,
     commandsRule,
+    fencesRule,
     orphansRule,
 ];
 

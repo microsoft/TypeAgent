@@ -49,10 +49,10 @@ export function commandEdges(
             code.line,
             code.col,
         )) {
-            // Inline prose is only a call when its executable is known.
-            // Missing tools remain reportable inside explicit shell fences.
+            // Inline prose and unlabeled fences are only a call when the
+            // executable is known. Missing tools stay reportable in shell fences.
             if (
-                code.lang === "inline" &&
+                (code.lang === "inline" || code.lang === "") &&
                 !cmd.isPath &&
                 !ctx.store.isProbeable(cmd.tool)
             )
@@ -99,6 +99,14 @@ export function scriptCall(
         resolved.strict = false; // deep reference trees are often vendored docs
     }
     if (!resolved) return; // absolute or repo-relative path: not ours to check
+    // A bare mention (`scripts/x.py` in prose) may name another skill's or the
+    // agent's script; claim it only when its folder exists in this skill.
+    if (cmd.raw === cmd.tool) {
+        const first = cmd.tool.replace(/^\.\//, "").split("/")[0];
+        resolved.strict &&=
+            cmd.tool.includes("/") &&
+            fs.existsSync(path.join(skill.dir, first));
+    }
     if (TEMPLATE_PATH.test(cmd.tool)) return; // "scripts/*.py", "scripts/<name>.sh", "scripts/"
     const { target, strict } = resolved;
     if (!fs.existsSync(target)) {

@@ -19,7 +19,7 @@ const CONSOLE_LANGS = new Set(["console", "shell-session"]);
 type Dialect = "posix" | "pwsh";
 /** Transcript prompts, e.g. `$ gh pr view` and `PS C:\> ./x.ps1`. */
 const PROMPT: Record<Dialect, RegExp> = {
-    posix: /^\s*\$ /,
+    posix: /^\s*(?:\$|execute:) /, // "execute:" is an agent-runtime prompt
     pwsh: /^\s*PS(?: [^>]*)?> /,
 };
 const GRAMMAR: Record<Dialect, Grammar> = { posix: "bash", pwsh: "powershell" };
@@ -56,6 +56,10 @@ const BASH_EXPANSIONS = [
 ];
 /** PowerShell nodes whose value is only known at run time. */
 const PWSH_EXPANSIONS = ["variable", "sub_expression"];
+/** Real binaries that read as English in inline prose, e.g. `yes to all`. */
+const PROSE_TOOLS = new Set(["yes", "true", "false", "test", "time", "say"]);
+/** Script files; a lone inline `scripts/x.ps1` is a script reference. */
+const SCRIPT_EXT = /\.(py|js|mjs|cjs|ts|sh|ps1)$/;
 /** Interpreter options whose value is inline code, not a script path. */
 const INLINE_CODE_FLAGS = new Set([
     "-m",
@@ -172,7 +176,7 @@ export function isShellLang(lang: string): boolean {
     );
 }
 
-/** Extract simple commands from a fence; `inline` spans need ≥2 words. */
+/** Extract simple commands from a fence; `inline` spans need ≥2 words or a script path. */
 export function commandsFromCode(
     lang: string,
     value: string,
@@ -181,17 +185,21 @@ export function commandsFromCode(
 ): Command[] {
     if (lang === "inline") {
         return parseCommands(value, line, col, "posix", true).filter(
-            (c) => c.args.length > 0,
+            (c) =>
+                !PROSE_TOOLS.has(c.tool) &&
+                (c.args.length > 0 || (c.isPath && SCRIPT_EXT.test(c.tool))),
         );
     }
-    if (!isShellLang(lang)) return [];
+    // Unlabeled fences are shell only when the whole fence parses as bash.
+    const unlabeled = lang === "";
+    if (!unlabeled && !isShellLang(lang)) return [];
     const dialect: Dialect = PWSH_LANGS.has(lang) ? "pwsh" : "posix";
     return parseCommands(
         transcriptToScript(value, dialect, CONSOLE_LANGS.has(lang)),
         line,
         col,
         dialect,
-        false,
+        unlabeled,
     );
 }
 

@@ -22,6 +22,7 @@ const whichMemo = new Map<string, string | undefined>();
 /** Clear PATH lookups; called at the start of each build. */
 export function resetWhich() {
     whichMemo.clear();
+    dirMemo.clear();
 }
 
 export function which(tool: string): string | undefined {
@@ -31,8 +32,24 @@ export function which(tool: string): string | undefined {
     return found;
 }
 
+/** Exact-case directory listings: macOS resolves `False` to /usr/bin/false. */
+const dirMemo = new Map<string, Set<string>>();
+function listing(dir: string): Set<string> {
+    let names = dirMemo.get(dir);
+    if (!names) {
+        try {
+            names = new Set(fs.readdirSync(dir));
+        } catch {
+            names = new Set();
+        }
+        dirMemo.set(dir, names);
+    }
+    return names;
+}
+
 function whichUncached(tool: string): string | undefined {
     for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
+        if (!listing(dir).has(tool)) continue;
         const p = path.join(dir, tool);
         try {
             fs.accessSync(p, fs.constants.X_OK);

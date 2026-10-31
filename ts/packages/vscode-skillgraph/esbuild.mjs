@@ -10,6 +10,7 @@ import * as path from "node:path";
 //   extension.cjs   VS Code client (vscode-languageclient)
 //   skillgraph.mjs  CLI + LSP server, one file (`node skillgraph.mjs lsp`)
 //   *.wasm          tree-sitter runtime + grammars, loaded beside the bundle
+//   *Bridge*.min.js Kusto parser, loaded beside the bundle
 
 const OUT = "dist";
 const WASM = [
@@ -19,6 +20,9 @@ const WASM = [
     "tree-sitter-python/tree-sitter-python.wasm",
     "tree-sitter-javascript/tree-sitter-javascript.wasm",
     "tree-sitter-typescript/tree-sitter-typescript.wasm",
+    // Kusto parser scripts, evaluated at run time (see skillgraph/src/kusto.ts).
+    "@kusto/language-service-next/bridge.min.js",
+    "@kusto/language-service-next/Kusto.Language.Bridge.min.js",
 ];
 
 const common = {
