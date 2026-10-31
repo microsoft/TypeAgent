@@ -134,6 +134,14 @@ esac
                     d.rule === "orphan" && d.at.file.endsWith("old_fetch.py"),
             ),
         ).toBe(true);
+        // A folder link covers its subtree; deep files are still listed.
+        const orphans = res.diagnostics
+            .filter((d) => d.rule === "orphan")
+            .map((d) => path.basename(d.at.file));
+        expect(orphans).not.toContain("two.md");
+        expect([...res.docs.keys()].some((f) => f.endsWith("leaf.md"))).toBe(
+            true,
+        );
     });
 
     it("reads help sections and transcripts without hardcoded tool lists", () => {

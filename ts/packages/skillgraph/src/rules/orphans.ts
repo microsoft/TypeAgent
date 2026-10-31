@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as path from "node:path";
-import { rel, type BuildResult, type Skill } from "../context.js";
+import { type BuildResult, type Skill } from "../context.js";
 import { defineRule } from "./sdk.js";
 
 // Orphans: unreferenced files beside referenced ones (info only —
@@ -23,8 +23,13 @@ export function checkOrphans(
             .map((r) => path.dirname(r))
             .filter((d) => d !== skill.dir),
     );
+    // A referenced folder covers every file under it, e.g. a link to
+    // references/tables/ covers references/tables/x/y.md.
+    const fileSet = new Set(files);
+    const refDirs = [...referenced].filter((r) => !fileSet.has(r));
     for (const f of files) {
         if (referenced.has(f) || !usedDirs.has(path.dirname(f))) continue;
+        if (refDirs.some((d) => f.startsWith(d + path.sep))) continue;
         const base = path.basename(f);
         if (base.startsWith(".")) continue;
         if (mentionText.some((t, i) => files[i] !== f && t.includes(base)))
@@ -33,7 +38,7 @@ export function checkOrphans(
             rule: "orphan",
             severity: "info",
             at: { file: f, line: 1, col: 1, endCol: 1 },
-            message: `${rel(skill, f)} is not referenced by any doc or script`,
+            message: `${skill.name}/${path.relative(skill.dir, f).split(path.sep).join("/")} is not referenced by any doc or script`,
         });
     }
 }

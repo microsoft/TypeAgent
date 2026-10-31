@@ -10,6 +10,9 @@ import type { Diagnostic } from "./types.js";
 // Filesystem discovery: roots → skills, skill dir → files.
 
 export const ENTRY = "SKILL.md";
+// Deep reference trees (references/tables/X/dynamic-fields/categories/) must be listed,
+// or their links are never read and their targets look orphaned.
+const MAX_DEPTH = 12;
 export const SKIP_DIRS = new Set([
     "node_modules",
     ".git",
@@ -89,11 +92,11 @@ function readHead(file: string): string {
     }
 }
 
-/** Files under dir (depth ≤ 4), skipping SKIP_DIRS and dotfiles. */
+/** Files under dir (depth ≤ 12, a symlink-loop guard), skipping SKIP_DIRS and dotfiles. */
 export function listFiles(dir: string): string[] {
     const out: string[] = [];
     const walk = (d: string, depth: number) => {
-        if (depth > 4) return;
+        if (depth > MAX_DEPTH) return;
         let entries: fs.Dirent[] = [];
         try {
             entries = fs.readdirSync(d, { withFileTypes: true });
