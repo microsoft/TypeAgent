@@ -43,6 +43,20 @@ const PY_SUBCOMMAND_CALLS = new Set(["add_parser", "command"]);
 /** JS calls: commander/yargs `.option("-x, --xx <v>")`, `.command("go")`. */
 const JS_FLAG_CALLS = new Set(["option", "requiredOption"]);
 const JS_SUBCOMMAND_CALLS = new Set(["command"]);
+/** argparse actions that take no value: `--dry` alone. */
+const PY_SWITCH_ACTIONS = new Set([
+    "store_true",
+    "store_false",
+    "store_const",
+    "append_const",
+    "count",
+    "help",
+    "version",
+]);
+/** Calls that declare a parser; flags are ambiguous when a file has several. */
+const PY_PARSER_CALLS = new Set(["ArgumentParser", "command", "group"]);
+/** Positional declarations: argparse add_argument("x"), click argument("x"). */
+const PY_POSITIONAL_CALLS = new Set(["add_argument", "argument"]);
 /** Runtime argv sources for hand-rolled parsing. */
 const ARGV = new Set(["process.argv", "Bun.argv", "Deno.args"]);
 const FLAG = /^-{1,2}[A-Za-z][\w-]*$/;
@@ -100,22 +114,92 @@ function args(call: Node): Node[] {
     return call.childForFieldName("arguments")?.namedChildren ?? [];
 }
 
+/** What a definition says about its argument: required, allowed values, arity. */
+type ArgMeta = Pick<FlagDef, "required" | "choices" | "takesValue">;
+
 interface Found {
-    flags: [string, Node][];
+    flags: [string, Node, ArgMeta?][];
+    /** Positional slots; undefined once one is optional or variadic. */
+    positionals?: number | undefined;
+    /** Parser declarations (ArgumentParser, click command); >1 means unknown scope. */
+    parsers: number;
     subcommands: string[];
     /** A real argv parser was found; otherwise flag rules are skipped. */
     structured: boolean;
 }
 
+/** Keyword arguments of a call: `required=True` → {required: Node}. */
+function kwargs(call: Node): Map<string, Node> {
+    const out = new Map<string, Node>();
+    for (const a of args(call))
+        if (a.type === "keyword_argument") {
+            const k = a.childForFieldName("name")?.text;
+            const v = a.childForFieldName("value");
+            if (k && v) out.set(k, v);
+        }
+    return out;
+}
+
+/** `["a", "b"]` or `click.Choice(["a", "b"])` → ["a", "b"]; undefined if not all literals. */
+function stringList(n: Node | undefined): string[] | undefined {
+    if (n?.type === "call") n = args(n)[0];
+    if (!n || (n.type !== "list" && n.type !== "tuple")) return undefined;
+    const items = n.namedChildren.map(literal);
+    return items.every((i) => i !== undefined)
+        ? (items as string[])
+        : undefined;
+}
+
+function pyMeta(call: Node): ArgMeta {
+    const kw = kwargs(call);
+    const meta: ArgMeta = {};
+    if (kw.get("required")?.text === "True") meta.required = true;
+    const choices = stringList(kw.get("choices") ?? kw.get("type"));
+    if (choices) meta.choices = choices;
+    const action = literal(kw.get("action") ?? null);
+    if (
+        (action && PY_SWITCH_ACTIONS.has(action)) ||
+        kw.get("is_flag")?.text === "True" ||
+        kw.get("count")?.text === "True"
+    )
+        meta.takesValue = false;
+    else if (!action && !kw.has("nargs")) meta.takesValue = true;
+    return meta;
+}
+
 function readPython(root: Node): Found {
-    const out: Found = { flags: [], subcommands: [], structured: false };
+    const out: Found = {
+        flags: [],
+        subcommands: [],
+        structured: false,
+        positionals: 0,
+        parsers: 0,
+    };
     for (const call of root.descendantsOfType("call")) {
         const name = callee(call) ?? "";
         const strings = args(call).map(literal);
+        if (PY_PARSER_CALLS.has(name)) out.parsers++;
+        if (
+            PY_POSITIONAL_CALLS.has(name) &&
+            strings[0] &&
+            !strings[0].startsWith("-")
+        ) {
+            // add_argument("target"): one slot unless nargs/required=False.
+            const kw = kwargs(call);
+            if (
+                out.positionals !== undefined &&
+                !kw.has("nargs") &&
+                kw.get("required")?.text !== "False"
+            )
+                out.positionals++;
+            else out.positionals = undefined;
+            continue;
+        }
         if (PY_FLAG_CALLS.has(name)) {
             out.structured = true;
+            const meta = pyMeta(call);
             for (const s of strings)
-                if (s && FLAG.test(s)) out.flags.push([s, call]);
+                if (s && FLAG.test(s)) out.flags.push([s, call, meta]);
         } else if (PY_SUBCOMMAND_CALLS.has(name)) {
             // add_parser("go") or @cli.command(name="go")
             const kw = args(call).find(
@@ -131,7 +215,12 @@ function readPython(root: Node): Found {
 }
 
 function readJs(root: Node): Found {
-    const out: Found = { flags: [], subcommands: [], structured: false };
+    const out: Found = {
+        flags: [],
+        subcommands: [],
+        structured: false,
+        parsers: 1,
+    };
     const calls = root.descendantsOfType("call_expression");
     for (const call of calls) {
         const name = callee(call) ?? "";
@@ -144,9 +233,14 @@ function readJs(root: Node): Found {
                 // yargs: .option("verbose", {...}) / .option("v", {...})
                 out.flags.push([s.length === 1 ? `-${s}` : `--${s}`, call]);
             } else {
-                // commander: "-x, --xx <value>"
+                // commander: "-x, --xx <value>"; requiredOption must be given.
+                // "<v>" takes a value, "[v]" maybe, none is a switch.
+                const meta: ArgMeta = {};
+                if (/<[^>]+>/.test(s)) meta.takesValue = true;
+                else if (!/\[[^\]]+\]/.test(s)) meta.takesValue = false;
+                if (name === "requiredOption") meta.required = true;
                 for (const part of s.split(/[\s,|]+/))
-                    if (FLAG.test(part)) out.flags.push([part, call]);
+                    if (FLAG.test(part)) out.flags.push([part, call, meta]);
             }
         } else if (JS_SUBCOMMAND_CALLS.has(name)) {
             out.subcommands.push(s.split(" ")[0]);
@@ -193,15 +287,50 @@ function readJs(root: Node): Found {
     return out;
 }
 
+/** `[Parameter(Mandatory)]`, `[ValidateSet('a','b')]`, `[switch]` on one parameter. */
+function psMeta(p: Node): ArgMeta {
+    const meta: ArgMeta = { takesValue: true };
+    for (const a of p.descendantsOfType("attribute")) {
+        const name = a
+            .descendantsOfType("type_identifier")[0]
+            ?.text.toLowerCase();
+        const argList = a.descendantsOfType("attribute_argument");
+        if (name === "switch") meta.takesValue = false;
+        else if (name === "parameter") {
+            // Mandatory, Mandatory=$true; not Mandatory=$false.
+            if (
+                argList.some(
+                    (x) =>
+                        /^mandatory$/i.test(x.namedChildren[0]?.text ?? "") &&
+                        !/\$false/i.test(x.text),
+                )
+            )
+                meta.required = true;
+        } else if (name === "validateset") {
+            const vals = argList.map(
+                (x) => /^(['"])(.*)\1$/.exec(x.text.trim())?.[2],
+            );
+            if (vals.length && vals.every((v) => v !== undefined))
+                meta.choices = vals as string[];
+        }
+    }
+    return meta;
+}
+
 function readPowerShell(root: Node): Found {
-    const out: Found = { flags: [], subcommands: [], structured: false };
+    const out: Found = {
+        flags: [],
+        subcommands: [],
+        structured: false,
+        parsers: 1,
+    };
     // Only the script-level block; function param blocks are nested deeper.
     const block = root.namedChildren.find((c) => c.type === "param_block");
     if (!block) return out;
     out.structured = true;
     for (const p of block.descendantsOfType("script_parameter")) {
         const v = p.namedChildren.find((c) => c.type === "variable");
-        if (v) out.flags.push([`-${v.text.replace(/^\$/, "")}`, p]);
+        if (v) out.flags.push([`-${v.text.replace(/^\$/, "")}`, p, psMeta(p)]);
     }
     const cmdletBinding = block
         .descendantsOfType("type_name")
@@ -213,7 +342,12 @@ function readPowerShell(root: Node): Found {
 }
 
 function readBash(root: Node): Found {
-    const out: Found = { flags: [], subcommands: [], structured: false };
+    const out: Found = {
+        flags: [],
+        subcommands: [],
+        structured: false,
+        parsers: 1,
+    };
     // case "$1" in -a|--all) … esac
     for (const item of root.descendantsOfType("case_item")) {
         for (const v of item.childrenForFieldName("value")) {
@@ -298,9 +432,20 @@ export function scriptSpec(file: string): CliSpec | undefined {
           }))
         : { found: undefined, summary: undefined, partial: false };
     const flags = new Map<string, FlagDef>();
-    for (const [name, node] of found?.flags ?? [])
+    // Subcommands or several parsers: a required flag may belong to another
+    // parser, so keep names only.
+    const scoped = !!found && found.parsers <= 1 && !found.subcommands.length;
+    for (const [name, node, meta] of found?.flags ?? [])
         if (!flags.has(name))
-            flags.set(name, { name, line: node.startPosition.row + 1 });
+            flags.set(name, {
+                name,
+                line: node.startPosition.row + 1,
+                ...(scoped
+                    ? meta
+                    : meta?.takesValue !== undefined
+                      ? { takesValue: meta.takesValue }
+                      : {}),
+            });
     const spec: CliSpec = {
         tool: file,
         version: `sha256:${sha8(src)}`,
@@ -315,6 +460,8 @@ export function scriptSpec(file: string): CliSpec | undefined {
         expectsSubcommand: false,
     };
     if (lang === "ps1") spec.pwsh = true;
+    if (scoped && found.positionals !== undefined)
+        spec.positionals = found.positionals;
     if (summary) spec.summary = summary;
     if (partial) spec.partial = true;
     return spec;

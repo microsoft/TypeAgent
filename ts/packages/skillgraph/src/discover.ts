@@ -35,6 +35,7 @@ export function discoverSkills(roots: string[]): {
     const byReal = new Map<string, Skill>();
     const aliases = new Map<string, Skill>();
     const dupes: Diagnostic[] = [];
+    const names = new Map<string, Skill>();
     for (const r of roots) {
         const root = path.resolve(expandHome(r));
         const candidates: string[] = [];
@@ -71,6 +72,17 @@ export function discoverSkills(roots: string[]): {
             );
             if (fm && fm[1] !== skill.name)
                 aliases.set(`${root}\0${fm[1]}`, skill);
+            // One root loads every skill by name: two `name: report` are ambiguous.
+            const name = fm?.[1] ?? skill.name;
+            const first = names.get(`${root}\0${name}`);
+            if (first)
+                dupes.push({
+                    rule: "skill-name-duplicate",
+                    severity: "error",
+                    at: { file: skill.entry, line: 1, col: 1, endCol: 4 },
+                    message: `name "${name}" is also used by ${path.relative(root, first.dir)}`,
+                });
+            else names.set(`${root}\0${name}`, skill);
         }
     }
     const skills = [...byReal.values()];

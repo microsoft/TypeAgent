@@ -8,6 +8,8 @@ import { frontmatterRule } from "./frontmatter.js";
 import { linksRule } from "./links.js";
 import { orphansRule } from "./orphans.js";
 import type { Rule } from "./sdk.js";
+import { scriptFilesRule } from "./scriptfiles.js";
+import { secretsRule } from "./secrets.js";
 import { sectionsRule } from "./sections.js";
 import { sizeRule } from "./size.js";
 import { skillsRule } from "./skills.js";
@@ -24,6 +26,8 @@ export const RULES: Rule[] = [
     sectionsRule,
     sizeRule,
     divergedRule,
+    secretsRule,
+    scriptFilesRule,
     orphansRule,
 ];
 

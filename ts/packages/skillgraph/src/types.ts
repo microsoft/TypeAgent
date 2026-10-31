@@ -71,6 +71,12 @@ export interface FlagDef {
     name: string;
     line?: number;
     help?: string;
+    /** argparse `required=True`, click `required=True`, `[Parameter(Mandatory)]`. */
+    required?: boolean;
+    /** Allowed values: argparse `choices=`, `click.Choice`, `[ValidateSet]`. */
+    choices?: string[];
+    /** False for switches (`store_true`, `is_flag`, `[switch]`); unknown when absent. */
+    takesValue?: boolean;
 }
 
 /** Normalized CLI surface for one command level. */
@@ -88,6 +94,8 @@ export interface CliSpec {
     expectsSubcommand: boolean;
     /** Help says it lists only some options (e.g. curl "--help all"). */
     partial?: boolean;
+    /** Fixed positional count (argparse/click); absent when unknown or variadic. */
+    positionals?: number;
     /** PowerShell parameters: `-Name`, case-insensitive, unique prefixes allowed. */
     pwsh?: boolean;
     /** Hash of the help output; a child equal to its parent is not a real subcommand. */

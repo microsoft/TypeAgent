@@ -14,7 +14,7 @@ import { commandsFromCode, type Command } from "../shell.js";
 import { sameHelp } from "../specs/help.js";
 import { which } from "../specs/process.js";
 import { scriptSpec } from "../specs/script.js";
-import type { CliSpec, Loc, SpecRef } from "../types.js";
+import type { CliSpec, FlagDef, Loc, SpecRef } from "../types.js";
 import { nearest } from "../util.js";
 import { defineRule } from "./sdk.js";
 
@@ -159,6 +159,132 @@ export function scriptCall(
         source: "ast",
     };
     checkFlags(ctx, cmd, 0, spec, [spec], ref, file, res);
+    // A bare mention (`scripts/x.py` in prose) names the script, not a call.
+    if (cmd.raw !== cmd.tool) checkScriptArgs(cmd, spec, ref, at, file, res);
+}
+
+/**
+ * Script calls against the script's own parser:
+ *   fetch.py: add_argument("--pr", required=True); add_argument("--mode", choices=["quick","full"])
+ *   `python fetch.py --mode fast`  → script-arg-invalid (fast ∉ quick|full)
+ *                                  → script-arg-missing (--pr)
+ */
+function checkScriptArgs(
+    cmd: Command,
+    spec: CliSpec,
+    ref: SpecRef,
+    at: Loc,
+    file: string,
+    res: BuildResult,
+) {
+    if (!spec.flags.length || spec.partial) return;
+    const match = (a: string) => {
+        const n = a.toLowerCase();
+        const hits = spec.flags.filter((f) =>
+            spec.pwsh ? f.name.toLowerCase().startsWith(n) : f.name === a,
+        );
+        // PowerShell: an exact name wins over a longer one sharing its prefix.
+        return hits.find((f) => f.name.toLowerCase() === n) ?? hits[0];
+    };
+    const given = new Set<string>();
+    let positionals = 0;
+    // Unknown arity (unknown flag, `[v]` option, expansion) makes counting unsafe.
+    let countable = true;
+    for (let j = 0; j < cmd.args.length; j++) {
+        const a = cmd.args[j];
+        if (PASSTHROUGH.has(a)) {
+            countable = false;
+            break;
+        }
+        if (UNIVERSAL_FLAGS.has(a) || a === "-h") return; // `--help` runs nothing
+        if (cmd.opaque.has(j)) {
+            countable = false;
+            continue;
+        }
+        if (!/^--?[A-Za-z]/.test(a)) {
+            positionals++;
+            continue;
+        }
+        const [name, inline] = splitFlag(a, spec.pwsh);
+        const def = match(name);
+        if (!def) {
+            countable = false;
+            continue;
+        }
+        given.add(def.name);
+        if (def.takesValue === undefined) countable = false;
+        if (!def.takesValue || inline !== undefined) {
+            if (inline !== undefined) checkChoice(def, inline, j);
+            continue;
+        }
+        const v = cmd.args[j + 1];
+        if (
+            v === undefined ||
+            (/^--?[A-Za-z]/.test(v) && !cmd.opaque.has(j + 1))
+        ) {
+            report("script-arg-missing", j, a, `${def.name} needs a value`);
+            continue;
+        }
+        j++;
+        if (!cmd.opaque.has(j)) checkChoice(def, v, j);
+    }
+    // PowerShell binds positionals to parameters, so skip both counts there.
+    if (!countable || (spec.pwsh && positionals)) return;
+    for (const f of spec.flags)
+        if (f.required && !given.has(f.name))
+            report(
+                "script-arg-missing",
+                -1,
+                cmd.tool,
+                `${f.name} is required by ${ref.tool}`,
+            );
+    if (spec.positionals === undefined || spec.pwsh) return;
+    if (positionals !== spec.positionals)
+        report(
+            positionals < spec.positionals
+                ? "script-arg-missing"
+                : "script-arg-invalid",
+            -1,
+            cmd.tool,
+            `${ref.tool} takes ${spec.positionals} positional argument(s), got ${positionals}`,
+        );
+
+    function checkChoice(def: FlagDef, value: string, j: number) {
+        if (!def.choices) return;
+        const ok = spec.pwsh
+            ? def.choices.some((c) => c.toLowerCase() === value.toLowerCase())
+            : def.choices.includes(value);
+        if (!ok)
+            report(
+                "script-arg-invalid",
+                j,
+                value,
+                `${def.name} ${value} not in ${def.choices.join(" | ")}`,
+            );
+    }
+    function report(rule: string, j: number, text: string, message: string) {
+        res.diagnostics.push({
+            rule,
+            severity: "error",
+            at:
+                j < 0
+                    ? at
+                    : {
+                          file,
+                          line: cmd.argLines[j],
+                          col: cmd.argCols[j],
+                          endCol: cmd.argCols[j] + text.length,
+                      },
+            message,
+            spec: ref,
+        });
+    }
+}
+
+/** `--mode=x` → ["--mode", "x"]; PowerShell `-Mode:x` → ["-Mode", "x"]. */
+function splitFlag(a: string, pwsh?: boolean): [string, string | undefined] {
+    const i = a.indexOf(pwsh ? ":" : "=");
+    return i < 0 ? [a, undefined] : [a.slice(0, i), a.slice(i + 1)];
 }
 
 export function toolCall(
@@ -518,6 +644,8 @@ export const commandsRule = defineRule({
             "spec-pending": "info",
             "subcommand-unknown": "error",
             "flag-unknown": "error",
+            "script-arg-missing": "error",
+            "script-arg-invalid": "error",
         },
     },
     create: (ctx) => ({

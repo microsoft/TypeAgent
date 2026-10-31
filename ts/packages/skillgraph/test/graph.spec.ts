@@ -90,6 +90,52 @@ describe("skillgraph check on fixture skills", () => {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
+    it("checks script arguments, script paths, names, and secrets", () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "skillgraph-args-"));
+        try {
+            const w = (f: string, text: string) => {
+                fs.mkdirSync(path.dirname(path.join(dir, f)), {
+                    recursive: true,
+                });
+                fs.writeFileSync(path.join(dir, f), text);
+            };
+            w(
+                "a/scripts/run.py",
+                'import argparse\np = argparse.ArgumentParser()\np.add_argument("--pr", required=True)\np.add_argument("--mode", choices=["quick", "full"])\np.add_argument("--dry", action="store_true")\np.add_argument("target")\nopen("references/gone.json")\nopen("references/here.json")\n',
+            );
+            w("a/references/here.json", "{}");
+            w(
+                "a/scripts/sync.ps1",
+                "param(\n  [Parameter(Mandatory)][ValidateSet('dev','prod')][string]$Env,\n  [switch]$DryRun\n)\n",
+            );
+            w(
+                "a/SKILL.md",
+                "---\nname: a\ndescription: A\n---\n```bash\npython scripts/run.py --pr 1 --mode quick --dry x\npython scripts/run.py --mode fast x y\npython scripts/run.py --pr\npwsh -File scripts/sync.ps1 -env PROD -dry\npwsh -File scripts/sync.ps1 -DryRun\n```\nKey: " + "AK" + "IA" + "ABCDEFGHIJKLMNOP\n",
+            );
+            w("b/SKILL.md", "---\nname: a\ndescription: B\n---\n");
+            const got = new SkillGraph({ roots: [dir], probe: false })
+                .build()
+                .diagnostics.filter((d) => d.rule !== "name-mismatch")
+                .map(
+                    (d) => `${path.basename(d.at.file)}:${d.at.line} ${d.rule}`,
+                );
+            expect(got.sort()).toEqual(
+                [
+                    "SKILL.md:1 skill-name-duplicate",
+                    "SKILL.md:12 secret-literal",
+                    "SKILL.md:7 script-arg-invalid",
+                    "SKILL.md:7 script-arg-invalid",
+                    "SKILL.md:7 script-arg-missing",
+                    "SKILL.md:8 script-arg-missing",
+                    "SKILL.md:8 script-arg-missing",
+                    "SKILL.md:10 script-arg-missing",
+                    "run.py:7 script-path-missing",
+                ].sort(),
+            );
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
     it("reports each broken reference once, with the spec version", async () => {
         // Fake `gh` on PATH so the help probe is hermetic.
         const bin = fs.mkdtempSync(path.join(os.tmpdir(), "skillgraph-bin-"));
