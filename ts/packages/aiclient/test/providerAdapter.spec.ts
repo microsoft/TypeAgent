@@ -475,6 +475,43 @@ describe("MessagesWireApiProvider", () => {
         );
         expect(piece.text).toBe("hi");
     });
+
+    test("streaming decoder reports usage once, combining message_start input with message_delta output", () => {
+        const decoder = adapter.createStreamDecoder!(makeRequest());
+        const start = decoder.push(
+            JSON.stringify({
+                type: "message_start",
+                message: {
+                    content: [],
+                    usage: {
+                        input_tokens: 10,
+                        output_tokens: 1,
+                        cache_creation_input_tokens: 20,
+                        cache_read_input_tokens: 30,
+                    },
+                },
+            }),
+        );
+        const delta = decoder.push(
+            JSON.stringify({
+                type: "message_delta",
+                delta: { stop_reason: "end_turn", stop_sequence: null },
+                usage: {
+                    input_tokens: null,
+                    output_tokens: 42,
+                    cache_creation_input_tokens: null,
+                    cache_read_input_tokens: null,
+                },
+            }),
+        );
+        expect(start.usage).toBeUndefined();
+        expect(delta.usage).toEqual({
+            prompt_tokens: 60,
+            completion_tokens: 42,
+            total_tokens: 102,
+            cached_tokens: 30,
+        });
+    });
 });
 
 describe("ResponsesWireApiProvider", () => {
