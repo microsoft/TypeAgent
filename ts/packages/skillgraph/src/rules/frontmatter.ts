@@ -51,7 +51,7 @@ export function checkFrontmatter(
     else if (fm.name !== skill.name) {
         push(
             "name-mismatch",
-            "warn",
+            "error",
             `name "${fm.name}" does not match directory "${skill.name}"`,
             lineOf("name"),
         );
@@ -81,7 +81,7 @@ export const frontmatterRule = defineRule({
             "frontmatter-invalid": "error",
             "frontmatter-missing": "error",
             "name-missing": "error",
-            "name-mismatch": "warn",
+            "name-mismatch": "error",
             "description-missing": "error",
             "description-too-long": "warn",
         },
