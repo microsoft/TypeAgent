@@ -9,6 +9,11 @@ import type {
     AgentSessionImportRequest,
     AgentSessionParseResult,
 } from "./agentSessionTypes.js";
+import {
+    canonicalJsonValue,
+    codePointOrder,
+    uniqueKey,
+} from "./canonicalJson.js";
 import { redactRunbookText, redactRunbookValue } from "./runbookRedaction.js";
 import { validateIsoTimestamp } from "./timestampValidation.js";
 
@@ -139,19 +144,18 @@ function timestamp(value: unknown): string {
     return text;
 }
 
+// Set only while legacyAgentSessionEventDigests re-parses a chunk. Parsing is
+// synchronous, so no other parse can observe it.
+let keyCollision: "suffix" | "overwrite" = "suffix";
+
+// Event text feeds agentSessionEventDigest, which sessions store to detect
+// conflicting re-sent events, so this keeps the original code-point key order.
 function sortedValue(value: unknown): unknown {
-    if (Array.isArray(value)) return value.map(sortedValue);
-    if (value !== null && typeof value === "object") {
-        return Object.fromEntries(
-            Object.entries(value)
-                .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-                .map(([key, child]) => [
-                    redactRunbookText(key),
-                    sortedValue(child),
-                ]),
-        );
-    }
-    return value;
+    return canonicalJsonValue(value, {
+        keyOrder: codePointOrder,
+        mapKey: redactRunbookText,
+        keyCollision,
+    });
 }
 
 function redactedStrings(value: unknown, depth: number): unknown {
@@ -161,11 +165,18 @@ function redactedStrings(value: unknown, depth: number): unknown {
         return value.map((child) => redactedStrings(child, depth + 1));
     }
     if (value !== null && typeof value === "object") {
+        // Keep key order: redactedText compares this with the parsed input.
+        const used = new Set<string>();
         return Object.fromEntries(
-            Object.entries(value).map(([key, child]) => [
-                redactRunbookText(key),
-                redactedStrings(child, depth + 1),
-            ]),
+            Object.entries(value).map(([key, child]) => {
+                const redacted = redactRunbookText(key);
+                return [
+                    keyCollision === "overwrite"
+                        ? redacted
+                        : uniqueKey(used, redacted),
+                    redactedStrings(child, depth + 1),
+                ];
+            }),
         );
     }
     return value;
@@ -561,6 +572,30 @@ export function parseAgentSessionChunk(
             result.losses.push({ line: index + 1, reason });
     }
     return result;
+}
+
+/**
+ * Event digests as computed before colliding redacted keys were kept, when a
+ * later key silently replaced an earlier one. Used only to recognize events
+ * stored by that version when they are re-sent.
+ * TODO: remove once sessions recorded with lossy key redaction are gone.
+ */
+export function legacyAgentSessionEventDigests(
+    request: AgentSessionImportRequest,
+): Map<string, string> {
+    keyCollision = "overwrite";
+    try {
+        return new Map(
+            parseAgentSessionChunk(request).events.map((event) => [
+                event.id,
+                agentSessionEventDigest(event),
+            ]),
+        );
+    } catch {
+        return new Map();
+    } finally {
+        keyCollision = "suffix";
+    }
 }
 
 /** Group explicit tasks/agents without inferring causality from adjacent events. */
