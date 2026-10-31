@@ -69,7 +69,8 @@ function display(file: string, res: BuildResult): string {
     const skill = res.skills.find(
         (s) => file === s.dir || file.startsWith(s.dir + path.sep),
     );
-    return skill ? `${skill.name}/${path.relative(skill.dir, file)}` : file;
+    // Skill names repeat across roots (e.g. Agent and AgentDev copies); show the cwd-relative path.
+    return skill ? path.relative(process.cwd(), file) : file;
 }
 
 function tag(d: Diagnostic): string {

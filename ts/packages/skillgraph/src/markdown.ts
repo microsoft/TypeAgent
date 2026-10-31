@@ -42,6 +42,8 @@ export interface MdSkillRef {
 export interface ParsedMarkdown {
     frontmatter?: Record<string, unknown>;
     frontmatterError?: string;
+    /** 1-based file line of the YAML error (frontmatter starts on line 2). */
+    frontmatterErrorLine?: number;
     /** Number of lines the frontmatter block occupies. */
     frontmatterLines: number;
     links: MdLink[];
@@ -74,6 +76,7 @@ export function parseMarkdown(text: string): ParsedMarkdown {
     const fm = FRONTMATTER.exec(text);
     let frontmatter: Record<string, unknown> | undefined;
     let frontmatterError: string | undefined;
+    let frontmatterErrorLine: number | undefined;
     let frontmatterLines = 0;
     let body = text;
     if (fm) {
@@ -85,7 +88,12 @@ export function parseMarkdown(text: string): ParsedMarkdown {
                     ? (value as Record<string, unknown>)
                     : {};
         } catch (e) {
-            frontmatterError = (e as Error).message.split("\n")[0];
+            // yaml's YAMLError carries linePos; drop its "at line N" suffix since we report the file line.
+            const err = e as Error & { linePos?: [{ line: number }] };
+            frontmatterError = err.message
+                .split("\n")[0]!
+                .replace(/ at line \d+, column \d+:?$/, "");
+            if (err.linePos) frontmatterErrorLine = err.linePos[0].line + 1;
         }
         body = "\n".repeat(frontmatterLines) + text.slice(fm[0].length);
     }
@@ -105,6 +113,7 @@ export function parseMarkdown(text: string): ParsedMarkdown {
     };
     if (frontmatter) out.frontmatter = frontmatter;
     if (frontmatterError) out.frontmatterError = frontmatterError;
+    if (frontmatterErrorLine) out.frontmatterErrorLine = frontmatterErrorLine;
 
     const slug = slugger();
     // A template may declare data roots for angle-delimited JSON selectors.

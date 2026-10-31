@@ -29,7 +29,12 @@ export function checkFrontmatter(
         line = 1,
     ) => res.diagnostics.push({ rule, severity, at: at(line), message });
     if (md.frontmatterError)
-        return push("frontmatter-invalid", "error", md.frontmatterError);
+        return push(
+            "frontmatter-invalid",
+            "error",
+            md.frontmatterError,
+            md.frontmatterErrorLine,
+        );
     const fm = md.frontmatter;
     if (!fm)
         return push(
