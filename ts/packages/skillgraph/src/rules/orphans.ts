@@ -3,6 +3,7 @@
 
 import * as path from "node:path";
 import { rel, type BuildResult, type Skill } from "../context.js";
+import { defineRule } from "./sdk.js";
 
 // Orphans: unreferenced files beside referenced ones (info only —
 // scripts load assets through string literals we don't model).
@@ -36,3 +37,22 @@ export function checkOrphans(
         });
     }
 }
+
+export const orphansRule = defineRule({
+    meta: {
+        name: "orphans",
+        description: "Files beside referenced ones are referenced too.",
+        diagnostics: { orphan: "info" },
+    },
+    // Runs after all docs so `referenced` is complete.
+    create: (ctx) => ({
+        skillEnd: () =>
+            checkOrphans(
+                ctx.skill,
+                ctx.files,
+                ctx.files.map((f) => ctx.read(f) ?? ""),
+                ctx.referenced,
+                ctx.result,
+            ),
+    }),
+});

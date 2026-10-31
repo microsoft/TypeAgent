@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": ".skillgraphrc.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "roots": {
+      "description": "Skill folders to check in addition to .agents/skills, .claude/skills, and .github/skills. Globs allowed, e.g. \"src/**/skills\".",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "rules": {
+      "description": "Severity override per diagnostic id, e.g. { \"orphan\": \"off\" }.",
+      "type": "object",
+      "additionalProperties": { "enum": ["error", "warn", "info", "off"] }
+    },
+    "probe": {
+      "description": "Run `<tool> --help` to check flags of external CLIs.",
+      "type": "boolean"
+    }
+  }
+}

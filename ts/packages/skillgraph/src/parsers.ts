@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as fs from "node:fs";
 import { createRequire } from "node:module";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Language, Parser, type Node } from "web-tree-sitter";
 
 // Tree-sitter grammars: the same parsers bash-language-server and editors use.
@@ -27,11 +30,18 @@ const WASM: Record<Grammar, string> = {
     typescript: "tree-sitter-typescript/tree-sitter-typescript.wasm",
 };
 
+/** Bundles (VS Code extension) ship the .wasm files beside the script. */
+function locate(file: string): string {
+    const bundled = path.join(here, path.basename(file));
+    return fs.existsSync(bundled) ? bundled : require.resolve(file);
+}
+const here = path.dirname(fileURLToPath(import.meta.url));
+
 await Parser.init();
 const parsers = new Map<Grammar, Parser>();
 for (const [name, file] of Object.entries(WASM) as [Grammar, string][]) {
     const parser = new Parser();
-    parser.setLanguage(await Language.load(require.resolve(file)));
+    parser.setLanguage(await Language.load(locate(file)));
     parsers.set(name, parser);
 }
 

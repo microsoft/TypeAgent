@@ -7232,6 +7232,33 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/vscode-skillgraph:
+    devDependencies:
+      '@typeagent/skillgraph':
+        specifier: workspace:*
+        version: link:../skillgraph
+      '@types/vscode':
+        specifier: ^1.95.0
+        version: 1.100.0
+      '@vscode/vsce':
+        specifier: ^3.2.1
+        version: 3.4.0(supports-color@8.1.1)
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      mkdirp:
+        specifier: ^3.0.1
+        version: 3.0.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+      vscode-languageclient:
+        specifier: ^9.0.1
+        version: 9.0.1
+
   tools:
     dependencies:
       '@azure/arm-authorization':

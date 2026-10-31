@@ -3,8 +3,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { SkillGraph, expandHome, type BuildResult } from "./graph.js";
-import type { Config, Diagnostic, Severity } from "./types.js";
+import { DEFAULT_ROOTS, loadConfig, RC_FILE } from "./config.js";
+import { SkillGraph, type BuildResult } from "./graph.js";
+import type { Diagnostic, Severity } from "./types.js";
 
 // skillgraph CLI. Same engine as the LSP.
 //
@@ -13,8 +14,6 @@ import type { Config, Diagnostic, Severity } from "./types.js";
 //   skillgraph refs   <target> [--root dir]...
 //   skillgraph lsp    [--root dir]...                    (stdio)
 
-const DEFAULT_ROOT = "~/.config/skillshare/skills";
-const CONFIG_FILE = "skillgraph.json";
 const EXIT_OK = 0;
 const EXIT_ERRORS = 1;
 const EXIT_USAGE = 2;
@@ -28,7 +27,8 @@ Usage:
   skillgraph refs <target> [--root DIR]...
   skillgraph lsp [--root DIR]...
 
-Roots default to skillgraph.json "roots" in the cwd, else ${DEFAULT_ROOT}.
+Roots: --root, else ${DEFAULT_ROOTS.join(", ")} plus "roots" in ${RC_FILE}
+at the repo root. Text output shows the offending line under each issue.
 `;
 
 interface Args {
@@ -65,29 +65,6 @@ function parseArgs(argv: string[]): Args | undefined {
     return a;
 }
 
-export function loadConfig(
-    roots: string[],
-    probe: boolean,
-    cwd = process.cwd(),
-): Config {
-    if (roots.length)
-        return { roots: roots.map((r) => path.resolve(expandHome(r))), probe };
-    try {
-        const file = JSON.parse(
-            fs.readFileSync(path.join(cwd, CONFIG_FILE), "utf8"),
-        );
-        if (Array.isArray(file.roots)) {
-            return {
-                roots: file.roots.map((r: string) =>
-                    path.resolve(cwd, expandHome(r)),
-                ),
-                probe,
-            };
-        }
-    } catch {}
-    return { roots: [expandHome(DEFAULT_ROOT)], probe };
-}
-
 function display(file: string, res: BuildResult): string {
     const skill = res.skills.find(
         (s) => file === s.dir || file.startsWith(s.dir + path.sep),
@@ -103,6 +80,25 @@ function tag(d: Diagnostic): string {
             : (d.spec.probe?.slice(-1)[0] ?? "help");
     return `  [${d.spec.source === "ast" ? d.spec.tool : `${d.spec.tool} ${d.spec.version}`} · ${how}]`;
 }
+
+/** Source line plus caret under the range, like compilers print. */
+function snippet(d: Diagnostic): string {
+    let lines = sources.get(d.at.file);
+    if (!lines) {
+        try {
+            lines = fs.readFileSync(d.at.file, "utf8").split("\n");
+        } catch {
+            lines = [];
+        }
+        sources.set(d.at.file, lines);
+    }
+    const text = lines[d.at.line - 1];
+    if (text === undefined || !text.trim()) return "";
+    const gutter = `${d.at.line}`.padStart(5);
+    const width = Math.max(1, d.at.endCol - d.at.col);
+    return `${paint("2", `${gutter} │`)} ${text}\n${paint("2", `${" ".repeat(gutter.length)} │`)} ${" ".repeat(d.at.col - 1)}${paint(SEV_COLOR[d.severity], "^".repeat(width))}\n`;
+}
+const sources = new Map<string, string[]>();
 
 const COLOR = process.stdout.isTTY && !process.env.NO_COLOR;
 const paint = (code: string, s: string) =>
@@ -123,7 +119,11 @@ export async function main(argv: string[]): Promise<number> {
             ? EXIT_OK
             : EXIT_USAGE;
     }
-    const config = loadConfig(args.roots, args.probe);
+    const config = loadConfig({
+        cwd: process.cwd(),
+        roots: args.roots,
+        probe: args.probe ? undefined : false,
+    });
     if (args.cmd === "lsp") {
         const { startServer } = await import("./server.js");
         startServer(config);
@@ -221,6 +221,7 @@ export async function main(argv: string[]): Promise<number> {
             process.stdout.write(
                 `${paint("1", loc)}  ${paint(SEV_COLOR[d.severity], d.severity.padEnd(5))}  ${paint("2", d.rule.padEnd(19))} ${d.message}${paint("2", tag(d))}\n`,
             );
+            process.stdout.write(snippet(d));
         }
         const warns = diags.filter((d) => d.severity === "warn").length;
         const infos = diags.length - errors - warns;

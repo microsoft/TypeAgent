@@ -4,6 +4,7 @@
 import type { BuildContext, BuildResult, Skill } from "../context.js";
 import type { ParsedMarkdown } from "../markdown.js";
 import type { Loc } from "../types.js";
+import { defineRule } from "./sdk.js";
 
 // skill://name references resolve within configured roots.
 
@@ -54,3 +55,14 @@ export function skillEdges(
         }
     }
 }
+
+export const skillsRule = defineRule({
+    meta: {
+        name: "skills",
+        description: "skill://name references resolve to a loaded skill.",
+        diagnostics: { "skill-unknown": "error" },
+    },
+    create: (ctx) => ({
+        doc: (d) => skillEdges(ctx, ctx.skill, d.file, d.id, d.md, ctx.result),
+    }),
+});

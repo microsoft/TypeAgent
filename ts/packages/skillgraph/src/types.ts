@@ -98,4 +98,6 @@ export interface Config {
     roots: string[];
     /** Run `--help` / `--version` probes for external tools. */
     probe: boolean;
+    /** Severity overrides by diagnostic id; "off" drops it. */
+    rules?: Record<string, Severity | "off">;
 }

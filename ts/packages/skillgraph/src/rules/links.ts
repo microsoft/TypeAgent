@@ -11,6 +11,7 @@ import {
 } from "../context.js";
 import { parseMarkdown, type ParsedMarkdown } from "../markdown.js";
 import type { Loc } from "../types.js";
+import { defineRule } from "./sdk.js";
 
 // Markdown links: file exists, #anchor matches a heading.
 
@@ -37,9 +38,7 @@ export function linkEdges(
             endCol: l.endCol,
         };
         const [rawPath, anchor] = splitAnchor(l.url);
-        const target = rawPath
-            ? path.resolve(path.dirname(file), decodeURIComponent(rawPath))
-            : file;
+        const target = rawPath ? resolveLink(skill, file, rawPath, ctx) : file;
         // Links that climb out of the skill into a missing directory
         // ("../../security/advisories/new") are site routes, not files.
         if (
@@ -108,7 +107,41 @@ export function linkEdges(
     }
 }
 
+/** Doc-relative first; Agent Skills also resolves paths from the skill root. */
+function resolveLink(
+    skill: Skill,
+    file: string,
+    rawPath: string,
+    ctx: BuildContext,
+): string {
+    const p = decodeURIComponent(rawPath);
+    const fromDoc = path.resolve(path.dirname(file), p);
+    if (fs.existsSync(fromDoc) || ctx.hasOverlay(fromDoc)) return fromDoc;
+    const fromRoot = path.resolve(skill.dir, p);
+    return fs.existsSync(fromRoot) ? fromRoot : fromDoc;
+}
+
 function splitAnchor(url: string): [string, string | undefined] {
     const i = url.indexOf("#");
     return i < 0 ? [url, undefined] : [url.slice(0, i), url.slice(i + 1)];
 }
+
+export const linksRule = defineRule({
+    meta: {
+        name: "links",
+        description: "Markdown links point to existing files and headings.",
+        diagnostics: { "link-broken": "error", "anchor-missing": "error" },
+    },
+    create: (ctx) => ({
+        doc: (d) =>
+            linkEdges(
+                ctx,
+                ctx.skill,
+                d.file,
+                d.id,
+                d.md,
+                ctx.result,
+                ctx.referenced,
+            ),
+    }),
+});

@@ -5,6 +5,7 @@ import type { Skill } from "../context.js";
 import type { ParsedMarkdown } from "../markdown.js";
 import type { BuildResult } from "../context.js";
 import type { Diagnostic, Loc } from "../types.js";
+import { defineRule } from "./sdk.js";
 
 // SKILL.md frontmatter: present, valid YAML, name matches dir, description bounded.
 
@@ -65,3 +66,22 @@ export function checkFrontmatter(
         );
     }
 }
+
+export const frontmatterRule = defineRule({
+    meta: {
+        name: "frontmatter",
+        description:
+            "SKILL.md has valid frontmatter with name and description.",
+        diagnostics: {
+            "frontmatter-invalid": "error",
+            "frontmatter-missing": "error",
+            "name-missing": "error",
+            "name-mismatch": "warn",
+            "description-missing": "error",
+            "description-too-long": "warn",
+        },
+    },
+    create: (ctx) => ({
+        doc: (d) => d.isEntry && checkFrontmatter(ctx.skill, d.md, ctx.result),
+    }),
+});

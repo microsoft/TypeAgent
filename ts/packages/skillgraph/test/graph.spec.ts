@@ -5,6 +5,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadConfig } from "../src/config.js";
 import { SkillGraph } from "../src/graph.js";
 import { parseHelp, SpecStore } from "../src/specs/index.js";
 import { commandsFromCode } from "../src/shell.js";
@@ -25,6 +26,22 @@ describe("skillgraph check on fixture skills", () => {
                     '---\nname: review\ndescription: Review\n---\n`var x = "CANARY";` `GET /api/items HTTP/1.1`\n`../references/missing.md` `../../etc/passwd`\n| Example | Value |\n| --- | --- |\n| `x` | `[example](<url>)` |\n[missing](<missing.md>)\n```bash\npython3 -c "\nfrom pathlib import Path\ndoc = {}\n"\npython scripts/missing.py\n```';
                 fs.writeFileSync(path.join(skill, "SKILL.md"), text);
             }
+            // .skillgraphrc.json: default .github/skills plus globbed roots, rule overrides.
+            fs.mkdirSync(path.join(dir, ".github", "skills"), {
+                recursive: true,
+            });
+            fs.writeFileSync(
+                path.join(dir, ".skillgraphrc.json"),
+                '{ "roots": ["t*"], "rules": { "script-missing": "off" } }',
+            );
+            const rc = loadConfig({ cwd: path.join(dir, "one"), probe: false });
+            expect(rc.roots.map((r) => path.relative(dir, r))).toEqual([
+                path.join(".github", "skills"),
+                "two",
+            ]);
+            expect(
+                new SkillGraph(rc).build().diagnostics.map((d) => d.rule),
+            ).toEqual(["link-broken"]);
             const result = new SkillGraph({ roots, probe: false }).build();
             expect(result.skills).toHaveLength(2);
             expect(result.diagnostics.map((d) => d.rule).sort()).toEqual([

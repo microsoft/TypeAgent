@@ -16,6 +16,7 @@ import { which } from "../specs/process.js";
 import { scriptSpec } from "../specs/script.js";
 import type { CliSpec, Loc, SpecRef } from "../types.js";
 import { nearest } from "../util.js";
+import { defineRule } from "./sdk.js";
 
 // Code spans → commands → bundled script or external tool checks.
 //   `gh pr view --jsn` ──walk subcommands──▶ flag-unknown (did you mean --json?)
@@ -495,3 +496,32 @@ function allowedBash(value: unknown): ((c: Command) => boolean)[] | undefined {
     }
     return sawBash ? preds : undefined;
 }
+
+export const commandsRule = defineRule({
+    meta: {
+        name: "commands",
+        description:
+            "Commands in code spans match the bundled script or tool CLI.",
+        diagnostics: {
+            "tool-not-allowed": "info",
+            "script-cwd-unknown": "info",
+            "script-missing": "error",
+            "tool-unknown": "info",
+            "spec-pending": "info",
+            "subcommand-unknown": "error",
+            "flag-unknown": "error",
+        },
+    },
+    create: (ctx) => ({
+        doc: (d) =>
+            commandEdges(
+                ctx,
+                ctx.skill,
+                d.file,
+                d.id,
+                d.md,
+                ctx.result,
+                ctx.referenced,
+            ),
+    }),
+});

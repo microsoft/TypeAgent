@@ -11,11 +11,11 @@ import {
     rel,
 } from "./context.js";
 import { discoverSkills, listFiles } from "./discover.js";
-import { commandEdges, MAX_SUBCOMMAND_DEPTH } from "./rules/commands.js";
-import { checkFrontmatter } from "./rules/frontmatter.js";
-import { linkEdges } from "./rules/links.js";
-import { checkOrphans } from "./rules/orphans.js";
-import { skillEdges } from "./rules/skills.js";
+import {
+    MAX_SUBCOMMAND_DEPTH,
+    RULES,
+    type RuleContext,
+} from "./rules/index.js";
 import { resetWhich } from "./specs/process.js";
 import { SpecStore } from "./specs/store.js";
 import type { Config, Diagnostic, GraphNode } from "./types.js";
@@ -30,7 +30,7 @@ import { runLimited } from "./util.js";
 // `build()` never runs a tool. It reports `spec-pending` and returns the
 // probes it needs; callers run them (CLI: await, LSP: background) and rebuild.
 //
-// Modules: discover.ts (fs) · rules/* (one diagnostic family each) ·
+// Modules: discover.ts (fs) · rules/* (defineRule; see rules/sdk.ts) ·
 // specs/* (script AST, --help parsing, probing, cache) · shell.ts (commands).
 
 export type { BuildResult, Probe, Skill } from "./context.js";
@@ -94,18 +94,31 @@ export class SkillGraph {
             if (scope && skill.name !== scope) continue;
             this.buildSkill(ctx, skill, res);
         }
+        res.diagnostics = applySeverity(res.diagnostics, this.config.rules);
         return res;
     }
 
     private buildSkill(ctx: BuildContext, skill: Skill, res: BuildResult) {
         const files = listFiles(skill.dir);
-        const mdFiles = files.filter((f) => f.endsWith(".md"));
         const referenced = new Set<string>([skill.entry]);
-        // Assets can be loaded by HTML, PowerShell, or other non-Markdown files.
-        const mentionText = files.map((f) => this.read(f) ?? "");
         const skillId = `skill:${skill.id}`;
+        const visitors = RULES.map((rule) => {
+            const rc: RuleContext = {
+                ...ctx,
+                skill,
+                files,
+                referenced,
+                result: res,
+                report: (d) =>
+                    res.diagnostics.push({
+                        ...d,
+                        severity: rule.meta.diagnostics[d.rule] ?? "error",
+                    }),
+            };
+            return rule.create(rc);
+        });
 
-        for (const file of mdFiles) {
+        for (const file of files.filter((f) => f.endsWith(".md"))) {
             const text = this.read(file);
             if (text === undefined) continue;
             const md = parseMarkdown(text);
@@ -130,12 +143,9 @@ export class SkillGraph {
                     line: h.line,
                 });
             }
-            if (isEntry) checkFrontmatter(skill, md, res);
-            linkEdges(ctx, skill, file, docId, md, res, referenced);
-            skillEdges(ctx, skill, file, docId, md, res);
-            commandEdges(ctx, skill, file, docId, md, res, referenced);
+            for (const v of visitors) v.doc?.({ file, id: docId, md, isEntry });
         }
-        checkOrphans(skill, files, mentionText, referenced, res);
+        for (const v of visitors) v.skillEnd?.();
     }
 
     /** Run pending probes, then rebuild until no new probes appear. */
@@ -153,4 +163,17 @@ export class SkillGraph {
         }
         return res;
     }
+}
+
+/** .skillgraphrc.json "rules": { "orphan": "off", "tool-unknown": "warn" }. */
+function applySeverity(
+    diags: Diagnostic[],
+    rules: Config["rules"],
+): Diagnostic[] {
+    if (!rules) return diags;
+    return diags.flatMap((d) => {
+        const level = rules[d.rule];
+        if (level === undefined) return [d];
+        return level === "off" ? [] : [{ ...d, severity: level }];
+    });
 }

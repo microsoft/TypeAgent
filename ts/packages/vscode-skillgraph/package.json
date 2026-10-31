@@ -1,0 +1,72 @@
+{
+  "name": "vscode-skillgraph",
+  "displayName": "Skill Graph",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Diagnostics, hover, and go-to-definition for Agent Skills (SKILL.md)",
+  "categories": [
+    "Linters"
+  ],
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/vscode-skillgraph"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "publisher": "typeagent",
+  "type": "module",
+  "main": "./dist/extension.cjs",
+  "scripts": {
+    "build": "npm run compile",
+    "bundle": "node esbuild.mjs",
+    "clean": "rimraf --glob dist dist-pub *.vsix",
+    "compile": "npm run tsc && npm run bundle",
+    "deploy:local": "npm run package && code --install-extension dist-pub/vscode-skillgraph.vsix --force",
+    "package": "mkdirp dist-pub && vsce package --allow-missing-repository --no-dependencies -o dist-pub/vscode-skillgraph.vsix",
+    "tsc": "tsc --noEmit -p .",
+    "vscode:prepublish": "npm run compile"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "skillgraph.restart",
+        "title": "Skill Graph: Restart Server"
+      }
+    ],
+    "configuration": {
+      "title": "Skill Graph",
+      "properties": {
+        "skillgraph.probe": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run `<tool> --help` to check flags of external CLIs."
+        }
+      }
+    },
+    "jsonValidation": [
+      {
+        "fileMatch": ".skillgraphrc.json",
+        "url": "./skillgraphrc.schema.json"
+      }
+    ]
+  },
+  "activationEvents": [
+    "workspaceContains:**/SKILL.md",
+    "workspaceContains:.skillgraphrc.json"
+  ],
+  "devDependencies": {
+    "@typeagent/skillgraph": "workspace:*",
+    "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.28.2",
+    "mkdirp": "^3.0.1",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5",
+    "vscode-languageclient": "^9.0.1"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  }
+}
