@@ -53,15 +53,16 @@ describe("skillgraph check on fixture skills", () => {
             // Fences: JSON and KQL parse; doc fragments and placeholders are fine.
             fs.writeFileSync(
                 path.join(roots[0], "review", "SKILL.md"),
-                '---\nname: review\ndescription: Review\n---\n```json\n{"a": 1,}\n```\n```kql\n| top 10 by <col> desc\n```\n```kql\nT | where | take 1\n```\n```\nYes `yes to all`\n```',
+                '---\nname: review\ndescription: Review\n---\n## 1. Setup\nSee §1, §1a and §9.\n```json\n{"a": 1,}\n```\n```kql\n| top 10 by <col> desc\n```\n```kql\nT | where | take 1\n```\n```\nYes `yes to all`\n```',
             );
             const fences = new SkillGraph({ roots: [roots[0]], probe: false })
                 .build()
                 .diagnostics.map((d) => `${d.rule}:${d.at.line}`);
             expect(fences).toEqual([
-                "json-invalid:6",
-                "kql-invalid:12",
-                "fence-lang-missing:14",
+                "json-invalid:8",
+                "kql-invalid:14",
+                "fence-lang-missing:16",
+                "section-ref-unknown:6",
             ]);
             const shell =
                 "python3 <<'PY'\nfrom pathlib import Path\nPY\ngh pr view 1 --json \"a # b\"";

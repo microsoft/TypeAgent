@@ -100,4 +100,8 @@ export interface Config {
     probe: boolean;
     /** Severity overrides by diagnostic id; "off" drops it. */
     rules?: Record<string, Severity | "off">;
+    /** skill-too-large threshold for SKILL.md, in tokens. */
+    maxSkillTokens?: number;
+    /** Skill names whose copies may differ (variants, forks). */
+    allowDiverged?: string[];
 }

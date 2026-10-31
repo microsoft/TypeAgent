@@ -7,16 +7,32 @@
     "roots": {
       "description": "Skill folders to check in addition to .agents/skills, .claude/skills, and .github/skills. Globs allowed, e.g. \"src/**/skills\".",
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "rules": {
       "description": "Severity override per diagnostic id, e.g. { \"orphan\": \"off\" }.",
       "type": "object",
-      "additionalProperties": { "enum": ["error", "warn", "info", "off"] }
+      "additionalProperties": {
+        "enum": ["error", "warn", "info", "off"]
+      }
     },
     "probe": {
       "description": "Run `<tool> --help` to check flags of external CLIs.",
       "type": "boolean"
+    },
+    "maxSkillTokens": {
+      "description": "skill-too-large: warn when SKILL.md exceeds this many tokens (default 5000).",
+      "type": "integer",
+      "minimum": 1
+    },
+    "allowDiverged": {
+      "description": "skill-diverged: skill names whose copies may differ, e.g. variants.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   }
 }

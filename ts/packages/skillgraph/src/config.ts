@@ -11,7 +11,9 @@ import type { Config } from "./types.js";
 //   {
 //     "roots": ["src/agents/**/skills"],     // added to DEFAULT_ROOTS; globs ok
 //     "rules": { "orphan": "off", "tool-unknown": "warn" },
-//     "probe": true
+//     "probe": true,
+//     "maxSkillTokens": 5000,                // skill-too-large
+//     "allowDiverged": ["reach-crown-jewel"] // skill-diverged exemptions
 //   }
 //
 //   cwd ─walk up─▶ first dir with .skillgraphrc.json or .git = repo
@@ -30,6 +32,8 @@ export interface RcFile {
     roots?: string[];
     rules?: Config["rules"];
     probe?: boolean;
+    maxSkillTokens?: number;
+    allowDiverged?: string[];
 }
 
 /** Repo root for `dir`: nearest ancestor with .skillgraphrc.json, else .git. */
@@ -81,6 +85,8 @@ export function loadConfig(opts: {
 
 function withRules(config: Config, rc: RcFile): Config {
     if (rc.rules) config.rules = rc.rules;
+    if (rc.maxSkillTokens) config.maxSkillTokens = rc.maxSkillTokens;
+    if (rc.allowDiverged) config.allowDiverged = rc.allowDiverged;
     return config;
 }
 
