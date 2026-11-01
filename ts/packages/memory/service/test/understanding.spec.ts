@@ -250,6 +250,12 @@ describe("bounded original-citation repair", () => {
                     calls++;
                     if (typeof prompt === "string")
                         throw new Error("Expected structured reader prompt");
+                    expect(JSON.stringify(prompt)).toContain(
+                        "treat that view as the requested artifact",
+                    );
+                    expect(JSON.stringify(prompt)).toContain(
+                        "If no matching view was supplied",
+                    );
                     packets.push(
                         String(
                             prompt.find((item) => item.role === "user")!

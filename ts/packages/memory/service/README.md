@@ -1506,6 +1506,12 @@ reference requirement. A second failure, unknown reference, malformed response,
 transport failure or cancellation remains an error; the host never repairs
 citations by attaching them to an unchanged model claim.
 
+When a question requests a supplied maintained view's interpretation, both
+readers are guided to describe and cite that artifact with its required
+originals, rather than silently substitute a source-only answer. This does not
+make the interpretation independent confirmation or require unrelated views
+in source-focused answers. Missing matching views must remain explicit.
+
 The bounded refinement also applies to integrated source-plus-view answers,
 including `sourcesOnly`. Follow-up searches retain the original access scope
 and temporal constraints; views are still evaluated against the original
