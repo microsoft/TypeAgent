@@ -7339,7 +7339,9 @@ export class FileMemoryService
                     view.revisionId,
                 );
                 const matches =
-                    informationalWiki(view.content) && index.readFragments
+                    (informationalWiki(view.content) ||
+                        view.content.kind === "extension") &&
+                    index.readFragments
                         ? (
                               await index.readFragments({
                                   terms: [
@@ -11364,7 +11366,7 @@ export class FileMemoryService
                             rubricVersion: view.content.provider.recipeDigest,
                             extension: view.content.provider,
                         },
-                        text: `${section.heading}\n${section.body}`,
+                        text: `${view.content.title}\n${section.heading}\n${section.body}`,
                         influencingSourceIds: this.answerViewSources(view),
                         supportingSources: binding.support.map(
                             ({ sourceId, revisionId, locator }) => ({

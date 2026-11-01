@@ -401,7 +401,11 @@ Module-only requests do not invoke the prose reader.
 
 Snapshots are service-local: 64 entries, 8 MiB total, 512 KiB per entry, with
 absolute 15-minute expiry. Corpus clear, source forgetting and close purge
-cached bodies. Parent/module reads revalidate all influencing evidence and
+cached bodies. Oversized serialized snapshots are additionally accounted as a
+retained object graph: shared evidence objects count once, without removing any
+body or lineage identifiers. Distinct objects remain separately charged, even
+when equal; cycles and genuinely oversized entries still fail. Response and
+model-request wire limits are unchanged. Parent/module reads revalidate all influencing evidence and
 index versions. Handles do not replace authorization or provide per-chat-session
 isolation; this is the existing local single-principal service boundary.
 Enable `TYPEAGENT_MEMORY_SEARCH_TRACE=1` for redacted rich-stage timing,
@@ -456,11 +460,19 @@ may explicitly request `phase: "preview"` only from an enabled host; provisional
 results have `provisional: true`, no answer and no prepared evidence handle.
 
 Both readers allow one same-model regeneration when the returned status conflicts
-with its factual citations/sections. The same evidence, cancellation/deadline and
+with its factual citations/sections or omits a view's original citations.
+The model receives an explicit `requiredEvidenceIds` bundle for each view and
+the complete required bundle in repair feedback. The host never invents missing
+citations or accepts a repeated omission. The same evidence, cancellation/deadline and
 serialized request limits still apply. The regenerated response is fully parsed
 and revalidated; invalid references, malformed JSON, privacy changes and other
 failures are not silently accepted or converted into a successful answer.
 `memory.reader.statusRepair` records the exceptional extra model call.
+
+Extension-view lookup uses bounded indexed fragments when available, matching
+the existing informational-wiki path rather than relying solely on a semantic
+search rewrite of a long question. Every returned block includes its view title
+and retains exact support/opposition, publication freshness and authorization.
 
 The [latency runner](../../../tools/memory-maintenance-qualification/search-latency-benchmark.mts)
 accepts `--experiments`, `--fast-model`, `--initial-reader-model`, `--answer-model`, `--paths`, `--understanding-rounds`

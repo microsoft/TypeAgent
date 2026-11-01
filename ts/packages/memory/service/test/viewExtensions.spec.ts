@@ -110,6 +110,7 @@ function readerModel(understanding = false, onRead?: () => void): ChatModel {
                 ...view.supportingEvidenceIds,
                 ...view.opposingEvidenceIds,
             ];
+            expect(view.requiredEvidenceIds).toEqual(evidenceIds);
             onRead?.();
             return {
                 success: true,
@@ -905,8 +906,15 @@ describe("registered extension service lifecycle", () => {
             fixture.installed,
             2,
             {
-                indexFactory: (_id, directory) =>
-                    new ExtensionQueryIndex(directory),
+                indexFactory: (_id, directory) => {
+                    const index = new ExtensionQueryIndex(directory);
+                    const search = index.search.bind(index);
+                    index.search = (query, limit) =>
+                        query.length > 40
+                            ? Promise.resolve([])
+                            : search(query, limit);
+                    return index;
+                },
                 indexedAnswerModel: readerModel(false, () => reads++),
                 understanding: true,
             },
@@ -944,12 +952,22 @@ describe("registered extension service lifecycle", () => {
         );
         const answer = await service.answer({
             corpusId: corpus.corpusId,
-            question: "Copper lantern",
+            question: `Summarize the generated analyst interpretation "${view.content.title}", its original evidence and its limits.`,
             retrievalPolicy: "sourcesAndViews",
             answerMode: "synthesized",
             includeDiagnostics: true,
         });
         expect(answer.answer).toContain("not established");
+        expect(
+            answer.readerContext?.integratedAnswer?.suppliedEvidence,
+        ).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    kind: "derived",
+                    text: expect.stringContaining(view.content.title),
+                }),
+            ]),
+        );
         expect(
             answer.citations.map((source) => source.sourceId).sort(),
         ).toEqual(["source-0", "source-1"]);
@@ -965,7 +983,7 @@ describe("registered extension service lifecycle", () => {
         );
         const understanding = await service.understand({
             corpusId: corpus.corpusId,
-            question: "Copper lantern",
+            question: `Summarize the generated analyst interpretation "${view.content.title}", its original evidence and its limits.`,
             retrievalPolicy: "sourcesAndViews",
         });
         expect(understanding.modules).toEqual(
