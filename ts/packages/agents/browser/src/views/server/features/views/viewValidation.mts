@@ -15,6 +15,7 @@ import {
     viewArchiveRequestSchema,
     viewBuildRequestSchema,
     viewBuildJobRequestSchema,
+    viewBuildContinuationRequestSchema,
     viewConflictReadSchema,
     viewResolutionSchema,
     viewPublicationPolicyUpdateSchema,
@@ -168,6 +169,8 @@ const schemas: Record<ViewMethod, z.ZodType> = {
     memoryListViewBuilds: z.strictObject(corpus),
     memoryCancelViewBuild: protocolInput(viewBuildJobRequestSchema),
     memoryRetryViewBuild: protocolInput(viewBuildJobRequestSchema),
+    memoryContinueViewBuild: protocolInput(viewBuildContinuationRequestSchema),
+    memoryRefreshExtensionViews: protocolInput(knowledgeCorpusRequestSchema),
     memoryGetViewConflict: protocolInput(viewConflictReadSchema),
     memoryResolveViewConflict: protocolInput(viewResolutionSchema),
     ...runbookImportViewSchemas,
@@ -212,6 +215,7 @@ const schemas: Record<ViewMethod, z.ZodType> = {
                 "timeline",
                 "wiki",
                 "schemaView",
+                "extension",
             ])
             .array()
             .max(5)

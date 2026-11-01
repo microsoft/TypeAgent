@@ -146,6 +146,17 @@ export interface MemorySource extends SourceDocument {
     revisions: SourceRevision[];
 }
 
+export interface MemorySourceAuthorizationRequest {
+    corpusId: string;
+    sourceId: string;
+    revisionId: string;
+    /** SourceRevision.contentHash, which may be supplied by the ingestion owner. */
+    contentHash: string;
+    /** Digest of the actual retained text, using the core derived-view digest contract. */
+    retainedContentHash: string;
+    operation: "read" | "retrieve" | "expand" | "reader" | "build" | "publish";
+}
+
 export interface IngestionSource {
     authoredAt?: string;
     temporalContext?: import("@typeagent/knowpro").SourceTemporalContext;
@@ -319,6 +330,7 @@ export interface JobListRequest {
 }
 
 export interface MemorySearchRequest {
+    retrievalPolicy?: AnswerRetrievalPolicy;
     includeDiagnostics?: boolean;
     temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
     traceId?: string;
@@ -352,6 +364,8 @@ export interface MemoryEvidence {
 }
 
 export interface MemorySearchResult {
+    derivedViews?: AnswerViewEvidence[];
+    omittedViewCandidates?: number;
     indexedSelection?: IndexedSelectionDiagnostics;
     query: string;
     matches: MemoryEvidence[];
@@ -372,6 +386,7 @@ export interface AnswerSourceReference {
 }
 
 export interface AnswerDerivedReference {
+    extension?: import("./viewExtensionTypes.js").ViewProviderIdentity;
     viewId: string;
     revisionId: string;
     sectionId?: string;
@@ -645,12 +660,14 @@ export interface SourceKnowledgeSuppressionRequest
 
 export interface MemoryServiceCapabilities {
     derivedViews?: {
+        extension?: import("./viewExtensionTypes.js").ViewExtensionCapabilities;
         kinds: Array<
             | "troubleshootingGuide"
             | "projectBrief"
             | "timeline"
             | "wiki"
             | "schemaView"
+            | "extension"
         >;
         drafts: true;
         history: true;
@@ -1013,6 +1030,7 @@ export interface CorpusIndex {
         limit: number,
         tags?: string[],
         temporalContext?: import("@typeagent/knowpro").TemporalQueryContext,
+        sourceIds?: ReadonlySet<string>,
     ): Promise<CorpusIndexMatch[]>;
     answer?(
         query: string,

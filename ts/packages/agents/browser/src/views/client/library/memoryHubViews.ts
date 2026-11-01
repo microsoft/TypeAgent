@@ -49,6 +49,7 @@ import { createWikiEditor } from "./memoryHubWiki";
 import { createMaintenancePanel } from "./memoryHubMaintenance";
 import { createGuideEditor } from "./memoryHubGuide";
 import { viewContentToText } from "@typeagent/memory-service/view-text";
+import { renderExtensionView } from "./memoryHubExtension";
 
 function articleCompleteness(content: DerivedViewContent): HTMLElement[] {
     if (
@@ -130,6 +131,7 @@ const viewKindLabels: Record<ViewKind, string> = {
     projectBrief: "Project brief",
     troubleshootingGuide: "Troubleshooting guide",
     schemaView: "Schema-defined questions",
+    extension: "User-defined view",
 };
 
 const viewKindIcons: Record<ViewKind, string> = {
@@ -138,6 +140,7 @@ const viewKindIcons: Record<ViewKind, string> = {
     projectBrief: "fa-diagram-project",
     troubleshootingGuide: "fa-screwdriver-wrench",
     schemaView: "fa-table-list",
+    extension: "fa-layer-group",
 };
 
 const viewTypeTabs: { kind?: ViewKind; label: string }[] = [
@@ -146,6 +149,7 @@ const viewTypeTabs: { kind?: ViewKind; label: string }[] = [
     { kind: "projectBrief", label: "Project Brief" },
     { kind: "timeline", label: "Timeline" },
     { kind: "troubleshootingGuide", label: "Troubleshooting Guide" },
+    { kind: "extension", label: "User-defined views" },
 ];
 
 function publicationDescription(
@@ -309,6 +313,7 @@ export function mountMemoryHubViews(
               revisionId?: string;
               pageId?: string;
               itemKey?: string;
+              layoutId?: string;
           }
         | undefined;
     let activeCorpus: string | undefined;
@@ -418,7 +423,8 @@ export function mountMemoryHubViews(
                 kind === "projectBrief" ||
                 kind === "timeline" ||
                 kind === "wiki" ||
-                kind === "schemaView",
+                kind === "schemaView" ||
+                kind === "extension",
         );
         if (!buildsSupported) {
             pendingConflicts.clear();
@@ -479,15 +485,9 @@ export function mountMemoryHubViews(
                 view.publication,
             );
         if (current !== sequence) return;
-        const build = rbButton("Build views", () => {
-            exactInitialSources.clear();
-            void action(() => openBuilder());
-        });
-        build.classList.add("primary");
-        build.prepend(icon("fa-plus"));
         const maintenance = collectionWikiControls(capabilities);
         controls.replaceChildren(
-            build,
+            ...inventoryBuildControls(corpora),
             rbIconButton("fa-arrows-rotate", "Refresh views", () => {
                 pager.reset();
                 void action(refresh);
@@ -667,7 +667,7 @@ export function mountMemoryHubViews(
                 view.viewId === target.viewId,
         );
         const view =
-            target.revisionId || !latest
+            target.revisionId || !latest || latest.content.kind === "extension"
                 ? await invokeMemory("memoryGetView", {
                       corpusId: target.corpusId,
                       viewId: target.viewId,
@@ -701,6 +701,7 @@ export function mountMemoryHubViews(
             revisionId?: string;
             pageId?: string;
             itemKey?: string;
+            layoutId?: string;
         },
         current: number,
     ): Promise<void> {
@@ -811,6 +812,34 @@ export function mountMemoryHubViews(
             publicationKey(view.corpusId, view.viewId),
             latestSummary.publication,
         );
+    }
+
+    function inventoryBuildControls(
+        corpora: Array<{ corpusId: string }>,
+    ): HTMLElement[] {
+        const result: HTMLElement[] = [];
+        if (supportedKinds.some((kind) => kind !== "extension")) {
+            const build = rbButton("Build views", () => {
+                exactInitialSources.clear();
+                void action(() => openBuilder());
+            });
+            build.classList.add("primary");
+            build.prepend(icon("fa-plus"));
+            result.push(build);
+        }
+        if (supportedKinds.includes("extension"))
+            result.push(
+                rbButton("Qualify provider views", () => {
+                    void action(async () => {
+                        for (const collection of corpora)
+                            await invokeMemory("memoryRefreshExtensionViews", {
+                                corpusId: collection.corpusId,
+                            });
+                        await refresh();
+                    });
+                }),
+            );
+        return result;
     }
 
     function loadDetail(
@@ -1098,15 +1127,18 @@ export function mountMemoryHubViews(
         updateSelection();
         const selectedKinds = new Set<ViewKind>();
         if (rebuilding) selectedKinds.add(rebuilding.content.kind);
+        const editableKinds = supportedKinds.filter(
+            (kind) => kind !== "extension",
+        );
         const targets = new Map(
-            supportedKinds.map((kind) => [
+            editableKinds.map((kind) => [
                 kind,
                 `${kind}-${[...crypto.getRandomValues(new Uint8Array(16))].map((value) => value.toString(16).padStart(2, "0")).join("")}`,
             ]),
         );
         const kindPicker = rbNode("fieldset", undefined, "hub-view-kinds");
         kindPicker.append(rbNode("legend", "What would you like to build?"));
-        for (const kind of supportedKinds) {
+        for (const kind of editableKinds) {
             if ((kind === "wiki" && !rebuilding) || kind === "schemaView")
                 continue;
             if (rebuilding && kind !== rebuilding.content.kind) continue;
@@ -2005,7 +2037,22 @@ export function mountMemoryHubViews(
                 );
             readingFlow.append(contents);
         }
-        for (const section of view.content.sections) {
+        if (view.content.kind === "extension")
+            readingFlow.append(
+                renderExtensionView(
+                    view,
+                    (citation) => showTimelineEvidence(view, citation),
+                    route?.layoutId,
+                    (layoutId) => {
+                        const destination = `#/views/${encodeURIComponent(view.corpusId)}/${encodeURIComponent(view.viewId)}/revision/${encodeURIComponent(view.revisionId)}${route?.pageId ? `/page/${encodeURIComponent(route.pageId)}` : ""}/layout/${encodeURIComponent(layoutId)}`;
+                        if (options.onNavigate) options.onNavigate(destination);
+                        else window.location.hash = destination;
+                    },
+                ),
+            );
+        for (const section of view.content.kind === "extension"
+            ? []
+            : view.content.sections) {
             const page = rbNode("section", undefined, "hub-view-section");
             page.tabIndex = -1;
             page.dataset.page = section.id;
@@ -2095,13 +2142,35 @@ export function mountMemoryHubViews(
             actions.append(
                 back,
                 rbNode("span", undefined, "hub-spacer"),
-                editButton,
+                ...(view.content.kind === "extension" ? [] : [editButton]),
             );
             more.push(
                 {
-                    label: "Rebuild from evidence",
+                    label:
+                        view.content.kind === "extension"
+                            ? "Refresh approved provider targets"
+                            : "Rebuild from evidence",
                     icon: "fa-arrows-rotate",
                     action: () => {
+                        if (view.content.kind === "extension") {
+                            void action(async () => {
+                                const jobs = await invokeView(
+                                    "memoryRefreshExtensionViews",
+                                    { corpusId: view.corpusId },
+                                );
+                                const job = jobs.find((job) =>
+                                    job.results.some(
+                                        (target) =>
+                                            target.viewId === view.viewId,
+                                    ),
+                                );
+                                if (job) showReceipt(job);
+                                else
+                                    status.textContent =
+                                        "No approved provider target currently selects this view.";
+                            });
+                            return;
+                        }
                         exactInitialSources.clear();
                         void action(() =>
                             openBuilder(
@@ -2283,6 +2352,15 @@ export function mountMemoryHubViews(
 
     function showEditor(view: ViewVersion): void {
         if (!discardChanges()) return;
+        if (view.content.kind === "extension") {
+            comparison.replaceChildren(
+                rbNode(
+                    "p",
+                    "This registered provider artifact is read-only. Build a new revision to refresh it.",
+                ),
+            );
+            return;
+        }
         if (view.content.kind === "schemaView") {
             const link = rbNode(
                 "a",
@@ -2760,6 +2838,7 @@ export function mountMemoryHubViews(
                 revisionId?: string;
                 pageId?: string;
                 itemKey?: string;
+                layoutId?: string;
             } = {},
         ) => {
             if (!discardChanges()) return;
@@ -2772,6 +2851,7 @@ export function mountMemoryHubViews(
                     revisionId: value.revisionId,
                     pageId: value.pageId,
                     itemKey: value.itemKey,
+                    layoutId: value.layoutId,
                 });
                 return;
             }
@@ -2787,6 +2867,7 @@ export function mountMemoryHubViews(
                           revisionId: value.revisionId,
                           pageId: value.pageId,
                           itemKey: value.itemKey,
+                          layoutId: value.layoutId,
                       }
                     : undefined;
             comparison.replaceChildren();
@@ -2806,6 +2887,7 @@ export function mountMemoryHubViews(
             revisionId?: string;
             pageId?: string;
             itemKey?: string;
+            layoutId?: string;
         }) => {
             if (!discardChanges()) return;
             sequence++;

@@ -142,6 +142,10 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             forward("memoryCancelViewBuild", params),
         memoryRetryViewBuild: (params) =>
             forward("memoryRetryViewBuild", params),
+        memoryContinueViewBuild: (params) =>
+            forward("memoryContinueViewBuild", params),
+        memoryRefreshExtensionViews: (params) =>
+            forward("memoryRefreshExtensionViews", params),
         memoryGetViewConflict: (params) =>
             forward("memoryGetViewConflict", params),
         memoryResolveViewConflict: (params) =>

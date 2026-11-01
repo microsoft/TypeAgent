@@ -10,11 +10,375 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Retained ingestion jobs
+
+Corpus status, paginated job lists, individual job reads, restart recovery and
+forgotten-source diagnostic cleanup share a pool of at most 16 concurrent
+job-file reads per service instance. Large retained histories must not open all
+job files at once. Filtering, ordering and pagination remain unchanged;
+unreadable or corrupt job files still fail explicitly rather than producing
+an apparently empty or complete result.
+
+## Host-registered extension Views
+
+Hosts can inject `extensionProviders: ViewExtensionProvider[]` and explicitly
+set `extensionBuilds: true`. `TYPEAGENT_MEMORY_EXTENSION_BUILDS=true` is parsed
+by `getConfiguredMemoryViewOptions`; it does not load provider code. Registration
+validates the versioned descriptor and output schema without invoking a model.
+`getCapabilities().derivedViews.extension` reports installed definitions.
+
+Provider-only hosts may retain `viewDrafts: false` and
+`informationalViews: false`. Existing source-only defaults are unchanged.
+Model-backed providers require the existing `informationalBudget`, or
+`maintenanceLimits.requestBudget`, and use the shared maintenance model
+admission and cooperative build checkpoints. Static eligibility cannot call a
+model; construction may do so only through the admitted provider context.
+
+Use `maintenanceLimits.requestBudget` for an extension/maintenance-only
+envelope. It governs shared maintenance and provider work, not ordinary source
+ingestion, reindexing or answer reads. `informationalBudget` retains its legacy
+opt-in rehearsal scope, including those original-source operations; it is not
+an extension-only setting. Both options preserve configured provider request
+constraints, model admission and native source authorization.
+
+For an uncapped chat request, output reservation uses the configured provider
+capacity, not the prompt's requested final-answer length. The default Luna
+capacity is 128,000 output tokens. An envelope with `outputTokens: 32768`
+therefore rejects even a small uncapped request before dispatch. Set an approved
+envelope that truthfully accommodates provider capacity or retain the rejection;
+the service never silently increases limits, changes models or inserts an
+unsupported completion cap. Cumulative reservations must accommodate the same
+capacity. Capacity-related endpoint errors use the
+[AI client's bounded recovery](../../aiclient/README.md#completion-limits-and-reasoning):
+one retry at a reported lower capacity, or half the reservation if none is
+reported. Each physical attempt retains its reservation and outcome. Existing
+extension continuation cannot increase per-request limits.
+
+Use exported `viewExtensionDigest` for descriptor and manifest hashes and
+`extensionViewId(providerId, definitionId, targetKey)` for the stable grouped
+target. The digest hashes pretty-printed canonical JSON with a final newline, including JSON quoting for string
+values; it is not a raw file-byte hash. Explicit `buildViews` requests use `kind: "extension"` and the exact
+versioned definition. The legacy direct selector still accepts at most 32
+references. Larger selections require `sourceManifest`: an ingested immutable
+manifest revision plus the complete expanded member list and content hashes.
+The manifest root and every member remain dependencies; no input is truncated.
+
+Accepted structured payloads, readable sections, template bindings, fidelity
+proofs, qualification receipts and revisions live in the corpus View store.
+Extension artifacts are read-only. Publication is a separate existing
+`publishView` operation, not permission supplied by eligibility.
+Extension projection coalesces only identical predicate/from/to relationships.
+For each block and role, citations sharing one source/revision are attached to
+one edge; all exact locators/excerpts and original evidence bindings remain.
+The edge keeps `<blockId>.support.<firstCitationIndex>` or
+`<blockId>.opposition.<firstCitationIndex>`, where the index is the first occurrence
+in that role's original citation array. IDs can have gaps: sources `[A, A, B, A]`
+produce `support.0` and `support.2`, retaining all four citations. Different
+blocks, roles or source/revision endpoints are not merged.
+
+Fidelity relationship receipts must cover exactly these emitted coalesced IDs,
+including opposition, and inspect all citations bound to each edge. Extra
+per-citation edge receipts fail unchanged exact-coverage validation. Apps/source
+expansion citation IDs still use every original `<blockId>.<role>.<citationIndex>`;
+they are not renumbered or removed when semantic edges coalesce.
+
+`ViewPayloadSchema` supports objects, arrays, bounded strings, primitive
+values and `type: "union"` with 2–8 variants. For a nullable field, use a string
+variant and `{ type: "null" }`; no opaque JSON string or sentinel is necessary.
+Both strict wire codecs and runtime validation enforce these contracts.
+
+### Qualification, automatic refresh and accounted continuation
+
+Static and native decision-model qualification persist distinct `eligible`,
+`ineligible`, `deferred` and `failed` receipts. Only positive qualification
+proceeds to construction; qualification is not authorization, readiness or
+publication. Static qualification cannot call a model, although its admitted
+construction can. Set `provider.model` and, when needed, `provider.decisionModel`;
+there is no separate host extension-model option.
+
+Optional `provider.discover({ corpusId, sources })` returns
+`ViewDefinitionInput[]`. Sources include exact revision, retained-content digest,
+title, type and optional metadata. Metadata alone is not trusted: an application
+provider must authenticate its installed approved manifests before grouping.
+One stable `(providerId, definitionId, targetKey)` identifies a group, not each
+record or layout. Conflicting duplicate targets fail.
+
+`extensionDiscovery: true`, or
+`TYPEAGENT_MEMORY_EXTENSION_DISCOVERY=true`, separately opts into source-ready
+and startup qualification through existing maintenance. It requires extension
+builds; provider registration itself invokes neither discovery nor models.
+`refreshExtensionViews({ corpusId })` uses the same admission path explicitly.
+Unchanged inputs/definition/policy skip rebuilding; changed dependencies become
+stale and rebuild. Interrupted or failed unchanged jobs are not hidden retries.
+Manual maintenance mode and ingestion barriers remain effective. Periodic
+provider refresh is not implemented.
+
+Providers call `context.complete(stage, prompt, jsonSchema?)`,
+`context.decide(stage, request)`, and `context.checkpoint(stage, state?)`, not
+direct HTTP. Classification uses short-work admission; long construction
+changes the same lease's class. First-party model admission, reserved short
+capacity, burst fairness, corpus ownership, cancellation and cooperative yielding
+are shared. `context.recordCandidate(stage, value)` persists intermediate JSON;
+`context.resume` exposes candidates and checkpoints after restart.
+
+Returned stage outputs are stored before delivery and replay only for identical
+stage/prompt/schema fingerprints. `providerRequests` records each physical SDK
+retry reservation and outcome; a reservation-persistence failure prevents
+dispatch. `providerAttempts`, candidates, checkpoints, cumulative elapsed time,
+original limits and audited host-budget amendments stay on the build receipt.
+Physical reservations follow the AI client's `RequestBudgetReceipt`: token
+counts and estimate accounting are required, but an estimator name is not a
+per-request field. MCP accepts reservations without `tokenizer` and preserves
+an optional name when supplied; it does not invent one. The named estimator
+remains in the build's `providerLimits`.
+Unreported usage remains unknown, not zero.
+
+Extension document blocks use the shared `viewDocumentSectionRoles` vocabulary
+in both native validation and MCP. It includes `decisions` and `context` without
+relaxing the narrower role rules for first-party guides. Specialized event,
+page and question sections remain confined to their respective view kinds.
+The browser-safe `@typeagent/memory-service/view-types` export exposes this
+vocabulary without loading the native service or its Node-only dependencies.
+
+`continueViewBuild({ corpusId, jobId, expectedHead })` resumes the same
+extension-only job and input scope. An explicitly increased host cumulative
+budget permits accounted continuation without resetting prior reservations.
+Per-request input/output/context and safety limits cannot be raised this way.
+Counters, interrupted attempts and successful returned stages survive restart.
+Mixed first-party/extension jobs require separate first-party retry. Completed,
+stale or purged targets are not resurrected by continuation.
+
+### Original authorization and the native private-host connection
+
+The optional neutral host callback is:
+
+```typescript
+sourceAuthorization: async ({
+  corpusId,
+  sourceId,
+  revisionId,
+  contentHash,
+  retainedContentHash,
+  operation,
+}: MemorySourceAuthorizationRequest): Promise<boolean> => {
+  return checkCurrentApproval({
+    corpusId,
+    sourceId,
+    revisionId,
+    contentHash: retainedContentHash,
+  });
+};
+```
+
+`contentHash` is the stored ingestion revision hash; `retainedContentHash`
+is `viewExtensionDigest` of the actual retained text. Operations are
+`read | retrieve | expand | reader | build | publish`. With no callback, existing
+behavior is unchanged. Otherwise only `true` admits a source; callback failures
+fail closed. Original retrieval, exact expansion, reader dispatch/return,
+construction and publication recheck approval. Provider authorization also
+rechecks every manifest member and root through generic, cached and MCP paths.
+
+Callback invocations are serialized per service instance, including concurrent
+builds and reads. Large manifests therefore wait for authorization instead of
+overflowing a host's bounded worker queue. Every request still checks current
+approval; grants are not cached. Denial and errors release the slot without
+becoming successful authorization.
+
+Azure `LARGE REQUEST` warnings use stderr rather than stdout so large prompts
+do not introduce non-protocol lines into stdio MCP responses.
+
+Set `TYPEAGENT_MEMORY_CONNECTION_CONFIG` before starting the native agent
+server/Hub. Its private JSON file is a `MemoryMcpTransportConfig`, for example:
+
+```json
+{
+  "kind": "stdio",
+  "command": "node",
+  "args": ["<approved-provider-host-entrypoint>"],
+  "cwd": "<approved-private-workspace>"
+}
+```
+
+The existing HTTP form `{ "kind": "http", "url": "<host-endpoint>",
+"headers": { ... } }` also works. Keep credentials in the private configuration;
+never log it. Relative stdio `cwd` resolves against the configuration file.
+Both standalone and in-process native servers select this connection. Invalid
+explicit configuration fails rather than creating/falling back to the native
+instance's unrelated corpus store.
+
+From `ts`, before starting the intended native server:
+
+```powershell
+if (Test-Path $PROFILE) { . $PROFILE }
+$env:TYPEAGENT_MEMORY_CONNECTION_CONFIG = (Resolve-Path $connectionFile).Path
+pnpm --filter agent-server run start
+```
+
+Do not expect an already-running server to reload its memory connection. Use
+the existing host/instance lifecycle rather than stopping an unrelated server.
+
+### Build, publish, Ask, Explain and official Apps
+
+The service facade, typed client and MCP expose the same requests:
+
+```typescript
+const job = await client.buildViews({
+  corpusId,
+  expectedHead: (await client.listViews(corpusId)).head,
+  publication: false,
+  targets: [{ expectedVersion: 0, definition }],
+});
+// Inspect getViewBuild({ corpusId, jobId: job.jobId }) until settled.
+// Require the intended successful target and fidelity before publishing.
+const view = await client.getView({ corpusId, viewId: definition.viewId });
+if (!view) throw new Error("Expected corpus artifact is unavailable");
+const publication = await client.publishView({
+  corpusId,
+  viewId: view.viewId,
+  revisionId: view.revisionId,
+  expectedVersion: view.version,
+  expectedHead: (await client.listViews(corpusId)).head,
+});
+if (
+  publication.indexState !== "ready" ||
+  publication.indexedRevisionId !== view.revisionId
+)
+  throw new Error("Publication is not yet indexed; inspect/retry its receipt");
+await client.search({ corpusId, query: question });
+await client.answer({ corpusId, question, retrievalPolicy: "sourcesAndViews" });
+const explanation = await client.understand({
+  corpusId,
+  question,
+  retrievalPolicy: "sourcesAndViews",
+});
+await client.understandingModule({
+  corpusId,
+  snapshotId: explanation.snapshotId,
+  kind: "derivedViews",
+  viewId: view.viewId,
+  revisionId: view.revisionId,
+  layoutId,
+});
+```
+
+`definition` is the installed versioned extension identity plus its stable
+definition/group key, parameters and exact selector. Larger selections use the
+immutable ingested `sourceManifest` root and its complete expanded list, bounded
+at 4,096 members. Every member participates in authorization and invalidation.
+
+MCP equivalents are `memory_views_build`, `memory_view_build_get`,
+`memory_view_build_continue`, `memory_view_extension_refresh`,
+`memory_view_get`, `memory_view_publish`, `memory_search`, `memory_answer`,
+`memory_understand` and `memory_understanding_module`. Ordinary Search/Ask and
+rich Explain admit only current authorized published blocks, expand original
+support/opposition and retain reader-selected claim/source IDs. Original sources
+and their derived layouts are not independent corroboration.
+Default Explain retains its reader-selected answer and derived modules. At each
+evidence-validation boundary it checks every distinct exact original snippet
+first, then validates each distinct view/revision and its complete dependencies
+once, rather than repeating identical native authorization for every block.
+No authorization result is retained across reader return, Understanding snapshot
+validation or module reads. A revoked dependency blocks return even when it was
+not selected as an answer citation.
+Build completion and publication do not alone establish indexed readiness.
+`retryViewIndex` / `memory_view_index_retry` repairs publication indexing without
+regenerating the stored artifact.
+
+`reindexSource(corpusId, sourceId)` / `memory_source_reindex` and
+`reindexCorpus(corpusId)` / `memory_corpus_reindex` rebuild committed active source
+revisions without ingesting new content or changing their identities. They do
+not retry failed ingestion jobs. A pre-commit ingestion failure preserves its
+job/error record but does not commit the candidate source revision. Diagnostic
+source/revision IDs on that job do not establish retained corpus content:
+reindexing an empty corpus remains empty, and source reindex rejects an unknown
+source. Recovery of such content requires separately authorized resubmission
+from the unchanged approved input; there is no failed-job recovery endpoint.
+
+Set `understanding: true` (or `TYPEAGENT_MEMORY_UNDERSTANDING=true`) and use
+`MemoryServiceHost.start(service, { previews: true })` to enable the existing
+official `memory_preview` / `memory_preview_expand` path. The version-1
+`derivedViews` module uses the same fixed safe renderer as native Understanding.
+Module-only inspection uses `selection: { mode: "only", modules: ["derivedViews"] }`;
+matching stored claims not selected by an answer are explicitly labeled.
+
+An Apps-capable SDK client advertises the official extension
+`{ extensions: { [EXTENSION_ID]: { mimeTypes: [RESOURCE_MIME_TYPE] } } }`.
+The same tool requests work without that capability, returning text/citations:
+
+```typescript
+const preview = await sdk.callTool({
+  name: "memory_preview",
+  arguments: {
+    corpusId,
+    question,
+    retrievalPolicy: "sourcesAndViews",
+    selection: { mode: "only", modules: ["derivedViews"] },
+  },
+});
+const { snapshotId } = (
+  preview.structuredContent as {
+    result: { snapshotId: string };
+  }
+).result;
+await sdk.callTool({
+  name: "memory_preview_expand",
+  arguments: {
+    corpusId,
+    snapshotId,
+    kind: "derivedViews",
+    viewId,
+    revisionId,
+    layoutId,
+    blockId,
+    bodyOffset: 1600,
+  },
+});
+await sdk.callTool({
+  name: "memory_preview_expand",
+  arguments: {
+    corpusId,
+    snapshotId,
+    kind: "derivedViews",
+    viewId,
+    revisionId,
+    layoutId,
+    blockId,
+    citationId,
+  },
+});
+```
+
+Expansion pins `corpusId`, `snapshotId`, `viewId`, `revisionId` and `layoutId`;
+`blockId`, `bodyOffset`, `citationOffset`, `citationId` and `citationBodyOffset`
+expand only that stored claim and its bound original source. The block limit is
+1–8; claim/source text pages contain at most 1,600/1,000 UTF-16 characters.
+Layouts, pagination and expansion never repeat summarization. Omission counts,
+unsupported scopes/versions, expiry and revoked sources are explicit.
+Negotiation, CSP, renderer/resource byte ceilings and non-Apps text/citations
+remain on the existing preview stack.
+
+Native Views provides inventory, provider qualification, read-only detail and
+four fixed templates: `document-v1`, `grouped-cards-v1`, `table-v1`,
+`sources-v1`. Pinned routes use
+`#/views/<corpus>/<view>/revision/<revision>/page/<claim>/layout/<layout>`.
+No model HTML, executable layouts or downloaded renderer code is accepted.
+
+Offline Windows qualification exercises actual service/client/authenticated MCP,
+native Chromium Hub HTTP RPC and official SDK AppBridge with the packaged CSP
+iframe, including original-source expansion and warmed/cached revocation.
+Run `pnpm run test:views:derived-browser` in `packages/agents/browser` after the
+full root build; use an installed Chromium or set
+`TYPEAGENT_BROWSER_EXECUTABLE`. This is a synthetic host fixture, not an actual
+private deployment, live-model quality result or cross-platform qualification.
+Linux/WSL Node validation and private application/live evaluation remain separate.
+
 ## Opt-in memory understanding
 
 Set `TYPEAGENT_MEMORY_UNDERSTANDING=true` in the host environment (or pass
 `understanding: true` to `FileMemoryService`) to advertise
-`features.memoryUnderstanding`. `understand` and `understandingModule` reuse
+`features.memoryUnderstanding` and `features.memoryDocumentUnderstanding`.
+Both optional boolean flags are preserved by the public capability codec and
+advertised MCP output schema. `understand` and `understandingModule` reuse
 the existing indexed original/Views retrieval, support closure, refinement
 and access validation. Existing search/answer contracts and defaults do not change.
 
@@ -700,6 +1064,11 @@ snapshot; actual qualification runs still require an explicit fixture root.
 No generated memory stores, recordings, provider responses or run receipts are
 included in these fixtures.
 
+The source-plus-view integration fixture checks reader evidence separately from
+host diagnostics. Readers receive `influencingSourceCount`, while diagnostics
+retain complete `influencingSourceIds`. Original supporting passages, citation
+references and the remaining evidence fields must match on both paths.
+
 ### Memory quality evaluation
 
 The [offline quality tools](../../../tools/memory-maintenance-qualification/quality-README.md)
@@ -807,7 +1176,7 @@ In CI, Jest runs this package in one worker and recycles it between suites when
 its idle heap exceeds 1 GB. This bounds accumulated ESM module state on Node 22
 without increasing test timeouts or skipping coverage.
 
-The [memory-regression workflow](../../../../../.github/workflows/memory-regression.yml)
+The [memory-regression workflow](../../../../.github/workflows/memory-regression.yml)
 runs both suites every Monday at 08:23 UTC and on manual dispatch, on Ubuntu,
 Windows and macOS with Node 24.22.1. Each OS uploads Jest JSON results, including
 individual test durations. No model credentials or external fixture checkout
@@ -1133,6 +1502,29 @@ and one reader call, so aggregate retrieval and provider cost can increase;
 per-search indexed reads remain bounded at 32,000 characters. Diagnostics retain
 both reader contexts and the refinement queries and selection receipts. The
 product and qualification harness use this same answer path.
+
+Ask and Explain retain complete influencing-source identifiers for eligibility,
+deduplication, validation and diagnostics, but send only their distinct source
+count to the model. Opaque construction-scope IDs are not original passages or
+independent observations. Required supporting and opposing passages, exact
+view references and evidence IDs remain in the reader envelope. View-budget
+checks use that same serialized representation, so large-scope views do not
+lose their reader allocation to host-only lineage metadata. Existing evidence,
+source-count and complete-request limits are unchanged.
+
+Readers permit one logged regeneration for an inconsistent status or an omitted
+original-citation bundle, using the same evidence and request limits. Explain
+requires every claim citing a view to include that view's supporting and
+opposing evidence IDs in that same claim. Ask retains its selected-view original
+reference requirement. A second failure, unknown reference, malformed response,
+transport failure or cancellation remains an error; the host never repairs
+citations by attaching them to an unchanged model claim.
+
+When a question requests a supplied maintained view's interpretation, both
+readers are guided to describe and cite that artifact with its required
+originals, rather than silently substitute a source-only answer. This does not
+make the interpretation independent confirmation or require unrelated views
+in source-focused answers. Missing matching views must remain explicit.
 
 The bounded refinement also applies to integrated source-plus-view answers,
 including `sourcesOnly`. Follow-up searches retain the original access scope

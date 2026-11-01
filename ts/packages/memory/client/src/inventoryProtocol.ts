@@ -27,6 +27,7 @@ const viewKindSchema = z.enum([
     "projectBrief",
     "timeline",
     "schemaView",
+    "extension",
     "troubleshootingGuide",
 ]);
 export const viewSummaryRequestSchema = inventoryPageRequestSchema.extend({
@@ -142,13 +143,12 @@ export const viewBuildSummarySchema = viewBuildJobSchema
                 conflictState: z
                     .enum(["pending", "resolved", "missing"])
                     .optional(),
-                snapshot: result.shape.snapshot
-                    .pick({ pipeline: true })
-                    .extend({
-                        definition: z.strictObject({
-                            kind: viewSummarySchema.shape.content.shape.kind,
-                        }),
+                snapshot: z.object({
+                    pipeline: result.shape.snapshot.shape.pipeline,
+                    definition: z.strictObject({
+                        kind: viewSummarySchema.shape.content.shape.kind,
                     }),
+                }),
             })
             .array(),
     });

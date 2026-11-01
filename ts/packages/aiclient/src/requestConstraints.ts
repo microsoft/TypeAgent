@@ -7,6 +7,7 @@ import {
     outputReservation,
     decisionOutputReservation,
     isChatWireRequest,
+    outputTokenLimitField,
 } from "./requestBudget.js";
 
 export interface RequestConstraintReceipt {
@@ -89,7 +90,7 @@ export function checkSerializedRequestConstraints(
     const decision = !chat && "questions" in body;
     const outputTokens = decision
         ? decisionOutputReservation(body)
-        : chat && (constraints || "max_tokens" in body)
+        : chat && (constraints || outputTokenLimitField(body) !== undefined)
           ? outputReservation(body, constraints?.outputTokens)
           : 0;
     if (constraints) {

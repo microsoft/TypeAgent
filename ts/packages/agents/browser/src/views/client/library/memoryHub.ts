@@ -1370,6 +1370,7 @@ async function showManagedRoute(
             revisionId: route.viewRevisionId,
             pageId: route.viewPageId,
             itemKey: route.viewItemKey,
+            layoutId: route.viewLayoutId,
         });
         return;
     }

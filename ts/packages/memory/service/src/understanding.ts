@@ -36,6 +36,7 @@ import type {
 } from "./understandingTypes.js";
 
 interface Snapshot {
+    selectedEvidenceIds?: string[];
     corpusId: string;
     request: MemoryAnswerRequest;
     input: UnderstandingRequest;
@@ -56,6 +57,20 @@ export function assertUnderstandingBytes(
         throw new Error(
             `Understanding response exceeds ${maximum} byte budget`,
         );
+}
+
+function derivedModuleEvidence(snapshot: Snapshot): AnswerEvidence[] {
+    const selected = new Set(snapshot.selectedEvidenceIds);
+    const explicit =
+        snapshot.input.selection?.mode === "only" &&
+        !wantsExplanation(snapshot.input) &&
+        snapshot.input.selection.modules?.includes("derivedViews");
+    return snapshot.evidence.filter(
+        (item) =>
+            item.kind === "derived" &&
+            item.reference.extension &&
+            (selected.has(item.id) || explicit),
+    );
 }
 
 function validateRequest(request: UnderstandingRequest): void {
@@ -90,9 +105,9 @@ function validateRequest(request: UnderstandingRequest): void {
     const selection = request.selection;
     if (
         selection?.mode === "only" &&
-        (!selection.modules?.length || selection.modules.length > 5)
+        (!selection.modules?.length || selection.modules.length > 6)
     )
-        throw new Error("Explicit understanding selection needs 1–5 modules");
+        throw new Error("Explicit understanding selection needs 1–6 modules");
     if (selection?.mode === "auto" && selection.modules !== undefined)
         throw new Error("Automatic selection does not accept a module list");
 }
@@ -488,6 +503,7 @@ export class MemoryUnderstanding {
                 "Understanding requires indexed document evidence; this scope is unsupported",
             );
         const diagnostics = answer.readerContext.integratedAnswer;
+        snapshot.selectedEvidenceIds = diagnostics.selectedEvidenceIds;
         if (!snapshot.evidence.length)
             snapshot.evidence = diagnostics.suppliedEvidence;
         snapshot.indexVersion = answer.indexVersion;
@@ -537,6 +553,7 @@ export class MemoryUnderstanding {
             snapshot.reader,
             snapshot.candidates,
         );
+        result.modules.push(...this.derivedModules(snapshot));
         result.warnings = [
             ...new Set([...answer.warnings, ...snapshot.candidates.warnings]),
         ];
@@ -555,6 +572,22 @@ export class MemoryUnderstanding {
             ).length,
         });
         return this.storeResult(snapshot, epoch);
+    }
+
+    private derivedModules(snapshot: Snapshot): UnderstandingResult["modules"] {
+        const { input } = snapshot;
+        if (
+            (input.selection?.mode !== "only" ||
+                input.selection.modules?.includes("derivedViews")) &&
+            derivedModuleEvidence(snapshot).length
+        )
+            return [
+                {
+                    kind: "derivedViews",
+                    status: this.host.derivedViews ? "planned" : "unavailable",
+                },
+            ];
+        return [];
     }
 
     private storeResult(
@@ -678,6 +711,24 @@ export class MemoryUnderstanding {
         input: UnderstandingModuleRequest,
         signal: AbortSignal,
     ): Promise<UnderstandingModuleResult> {
+        if (
+            input.kind !== "derivedViews" &&
+            [
+                input.viewId,
+                input.revisionId,
+                input.layoutId,
+                input.offset,
+                input.limit,
+                input.blockId,
+                input.bodyOffset,
+                input.citationOffset,
+                input.citationId,
+                input.citationBodyOffset,
+            ].some((value) => value !== undefined)
+        )
+            throw new Error(
+                "Derived-view scope is unsupported for this module",
+            );
         const epoch = this.store.version;
         const snapshot = await this.checked(input.snapshotId, input.corpusId);
         signal.throwIfAborted();
@@ -696,7 +747,20 @@ export class MemoryUnderstanding {
             result.reason =
                 planned?.reason ??
                 "Module was not selected for this understanding";
-        else if (input.kind === "sources" || input.kind === "timeline") {
+        else if (input.kind === "derivedViews") {
+            if (!this.host.derivedViews)
+                result.reason =
+                    "Derived view modules are unsupported by this host";
+            else
+                Object.assign(
+                    result,
+                    await this.host.derivedViews(
+                        input,
+                        derivedModuleEvidence(snapshot),
+                        snapshot.selectedEvidenceIds,
+                    ),
+                );
+        } else if (input.kind === "sources" || input.kind === "timeline") {
             const key = createHash("sha256")
                 .update(
                     JSON.stringify([

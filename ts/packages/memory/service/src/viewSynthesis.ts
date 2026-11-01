@@ -796,6 +796,7 @@ export function assertSynthesisOutput(
             "chronology",
             "knowledgePages",
             "schemaAnswers",
+            "extensionArtifact",
         ].includes(String(value.outcome))
     )
         errors.push("Unsupported synthesis outcome");
@@ -1013,6 +1014,23 @@ export function validateConstructedGuide(
     }
     if (input.pipeline === "schema-defined-v1") {
         validateSchemaOutput(input, output);
+        return;
+    }
+    if (input.pipeline === "extension-v1") {
+        if (
+            output.content.kind !== "extension" ||
+            output.outcome !== "extensionArtifact"
+        )
+            throw new Error("Invalid extension construction outcome");
+        validateConstructedCitations(input, output);
+        for (const binding of output.content.evidence)
+            validateConstructedCitations(input, {
+                ...output,
+                content: {
+                    ...output.content,
+                    citations: [...binding.support, ...binding.opposition],
+                },
+            });
         return;
     }
     validateLegacyConstructedContent(input, output);

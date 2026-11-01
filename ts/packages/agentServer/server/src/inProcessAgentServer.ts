@@ -22,7 +22,7 @@ import {
     ConversationManager,
     createConversationManager,
 } from "./conversationManager.js";
-import { createDurableMemoryService } from "./durableMemoryService.js";
+import { createConfiguredMemoryService } from "./memoryConnection.js";
 import {
     createRunbookHostCapabilities,
     withRunbookHostCapabilities,
@@ -91,14 +91,16 @@ export async function createInProcessAgentServer(
         memoryAgentOptions?.memoryServiceClient;
     const ownedMemoryService =
         injectedMemoryService === undefined
-            ? createDurableMemoryService(path.join(instanceDir, "memory"))
+            ? await createConfiguredMemoryService(
+                  path.join(instanceDir, "memory"),
+              )
             : undefined;
     const memoryService = injectedMemoryService ?? ownedMemoryService!;
     if (ownedMemoryService) {
         try {
-            await ownedMemoryService.initialize();
+            await ownedMemoryService.initialize?.();
         } catch (error) {
-            await ownedMemoryService.close();
+            await ownedMemoryService.close?.();
             throw error;
         }
     }
@@ -192,7 +194,7 @@ export async function createInProcessAgentServer(
             try {
                 await conversationManager.close();
             } finally {
-                await ownedMemoryService?.close();
+                await ownedMemoryService?.close?.();
             }
         },
     };
