@@ -10,6 +10,34 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Host ceiling for automatic knowledge discovery
+
+`FileMemoryServiceOptions.automaticKnowledgeDiscovery: false` prevents scheduled
+knowledge discovery, even when a corpus has persisted `sourceObserved`
+discovery policy. The host ceiling is rechecked when a scheduled
+callback fires. It does not rewrite the stored policy or disable explicitly
+requested checkpoint discovery.
+
+Use this ceiling for read-only analyst hosts: manual maintenance alone does not
+override persisted discovery policy. This option is not a general prohibition
+on explicit generation, ingestion or local indexing; govern those operations
+separately through the existing host features, authorization and budgets.
+
+## Exact scoped view reads
+
+`getView({ corpusId, viewId, revisionId, includeContext: false })` reads the
+selected immutable version without following wiki redirects or enriching it
+with corpus-wide related editorial articles. The MCP/client `memory_view_get`
+request advertises the same optional boolean. Omitting it preserves existing
+contextual navigation.
+
+This option is not authorization: scoped hosts must authorize the exact corpus,
+view and revision before retrieval, validate source lineage and publication
+state, and reject redirects or unrelated context in the returned version.
+Passive UI navigation should connect to an explicitly approved, already-running
+`MemoryServiceHost`; starting a new service can perform initialization/recovery
+work even when the requested operation is a read.
+
 ## Opt-in memory understanding
 
 Set `TYPEAGENT_MEMORY_UNDERSTANDING=true` in the host environment (or pass
@@ -1573,6 +1601,16 @@ An explicit build uses `kind: "wiki"` with a current revision-aware selector.
 Inspect actual receipts and original evidence. Publication, exact derivative
 readiness and human review remain separate. Default enablement and offline
 lifecycle fixtures do not establish real-model completeness or useful prose.
+
+For informational Wiki and project builds, an explicit `publication: false`
+is persisted as the build override and leaves the draft unpublished and unindexed.
+Operator reads, draft edits, conflict handling and service recovery do not publish
+it implicitly; unpublished drafts are excluded from derived search and contextual
+related articles. Omitting the override retains normal automatic informational
+visibility. Later publication requires the existing exact-revision, version and
+head-bound publish operation. That operation records publication intent, not human
+review approval. Older builds without the captured override are not retroactively
+reclassified.
 
 See [Derived Views](../../../docs/architecture/memory/derived-views.md) and
 [automatic/editorial maintenance](../../../docs/architecture/memory/view-maintenance.md)

@@ -591,6 +591,7 @@ export const viewReadRequestSchema = z.strictObject({
     corpusId: id,
     viewId: id,
     revisionId: id.optional(),
+    includeContext: z.boolean().optional(),
 });
 export const viewArchiveRequestSchema = z.strictObject({
     corpusId: id,

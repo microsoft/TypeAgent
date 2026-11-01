@@ -394,6 +394,8 @@ export interface ViewReadRequest {
     corpusId: string;
     viewId: string;
     revisionId?: string;
+    /** Disable redirect traversal and corpus-wide related-article enrichment. */
+    includeContext?: boolean;
 }
 export interface ViewHistoryEntry {
     commitId: string;

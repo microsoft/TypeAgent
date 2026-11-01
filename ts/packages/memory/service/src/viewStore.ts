@@ -799,10 +799,12 @@ export class TypedViewStore {
         if (
             current?.revisionId !== version.revisionId ||
             current.state !== "draft" ||
-            !informationalView(current.content)
+            !informationalView(current.content) ||
+            current.generation?.input?.publicationPolicy?.buildOverride ===
+                false
         )
             throw new Error(
-                "Informational visibility requires the exact current page",
+                "Informational visibility requires the exact current page without an explicit draft-only build override",
             );
         const publication: ViewPublicationStatus = {
             viewId: version.viewId,

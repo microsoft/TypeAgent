@@ -346,12 +346,22 @@ export class MemoryMcpServer {
                 annotations: { destructiveHint: false },
             },
             async (request, extra) =>
-                this.run(() =>
-                    this.service.ingestDocument(
-                        request as unknown as DocumentIngestRequest,
-                        extra.signal,
-                    ),
-                ),
+                this.run(async () => {
+                    const admission = new AbortController();
+                    const cancel = () => admission.abort(extra.signal.reason);
+                    extra.signal.addEventListener("abort", cancel, {
+                        once: true,
+                    });
+                    if (extra.signal.aborted) cancel();
+                    try {
+                        return await this.service.ingestDocument(
+                            request as unknown as DocumentIngestRequest,
+                            admission.signal,
+                        );
+                    } finally {
+                        extra.signal.removeEventListener("abort", cancel);
+                    }
+                }),
         );
         this.server.registerTool(
             memoryToolNames.sourceReplace,
