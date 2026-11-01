@@ -10,6 +10,10 @@ import {
 } from "./indexedAnswer.js";
 import type { AnswerEvidence } from "./types.js";
 import {
+    answerEvidenceForReader,
+    influencingSourceScopeInstructions,
+} from "./integratedAnswerReader.js";
+import {
     ReaderStatusMismatch,
     readWithStatusRepair,
 } from "./readerStatusRepair.js";
@@ -281,7 +285,7 @@ export async function readUnderstanding(input: {
             followUps: [],
             retrievalQueries: [],
         };
-    const supplied = input.evidence.map((item) => {
+    const supplied = input.evidence.map(answerEvidenceForReader).map((item) => {
         if (item.kind !== "source") return item;
         const { synopsis: _synopsis, ...source } = item.source;
         return { ...item, source };
@@ -289,7 +293,7 @@ export async function readUnderstanding(input: {
     const messages: PromptSection[] = [
         {
             role: "system",
-            content: `${instructions} Aim for at most ${input.brief ? "700" : "1,600"} output tokens; shorter is better for simple questions. Explicitly label arithmetic or other inferred intermediate states as inference, not reported history. Concept signals use existing entity candidate IDs and only recommend useful context, not invented descriptions. ${input.allowRefinement ? "When evidence is missing, request at most two focused retrievalQueries within the same scope; otherwise return []. Use concise search keywords, not instructions such as 'find the conversation'. Include likely original wording and common abbreviations (for example JS for JavaScript) when useful; do not invent missing quantities." : "No further searches are allowed; retrievalQueries must be []."}`,
+            content: `${instructions} ${influencingSourceScopeInstructions} Aim for at most ${input.brief ? "700" : "1,600"} output tokens; shorter is better for simple questions. Explicitly label arithmetic or other inferred intermediate states as inference, not reported history. Concept signals use existing entity candidate IDs and only recommend useful context, not invented descriptions. ${input.allowRefinement ? "When evidence is missing, request at most two focused retrievalQueries within the same scope; otherwise return []. Use concise search keywords, not instructions such as 'find the conversation'. Include likely original wording and common abbreviations (for example JS for JavaScript) when useful; do not invent missing quantities." : "No further searches are allowed; retrievalQueries must be []."}`,
         },
         {
             role: "user",

@@ -6,6 +6,7 @@ import { timeSearchStage } from "@typeagent/knowpro";
 import { mergeIndexedAnswerEvidence } from "./indexedAnswer.js";
 import { indexedQueryTerms } from "./indexedFragments.js";
 import {
+    answerEvidenceForReader,
     readIntegratedEvidence,
     serializeAnswerEvidence,
     type IntegratedReaderResponse,
@@ -343,7 +344,9 @@ async function assembleEvidence(
         }
         const candidate = attachView(view, expanded, evidence, selectedViews);
         const viewChars = JSON.stringify(
-            candidate.filter((item) => item.kind !== "source"),
+            candidate
+                .filter((item) => item.kind !== "source")
+                .map(answerEvidenceForReader),
         ).length;
         if (
             viewChars > Math.floor(budget.chars / 2) ||

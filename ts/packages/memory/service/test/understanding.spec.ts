@@ -101,6 +101,88 @@ function graph(): MemoryGraphQueryResult {
         },
     };
 }
+test("Explain counts large view construction scopes without sending opaque lineage IDs", async () => {
+    const influencingSourceIds = [
+        "original",
+        ...Array.from({ length: 164 }, (_, index) =>
+            index.toString(16).padStart(64, "0"),
+        ),
+    ];
+    const evidence: AnswerEvidence[] = [
+        { kind: "source", id: "s0", source: source() },
+        ...Array.from(
+            { length: 4 },
+            (_, index): AnswerEvidence => ({
+                kind: "derived",
+                id: `d${index}`,
+                reference: {
+                    viewId: `view${index}`,
+                    revisionId: "v1",
+                    sectionId: "claim",
+                    state: "selected",
+                },
+                text: "The user reported six projects.",
+                influencingSourceIds,
+                supportingSources: [
+                    {
+                        sourceId: "original",
+                        revisionId: "r1",
+                        locator: "lines:1-2",
+                    },
+                ],
+                opposingSources: [],
+                supportingEvidenceIds: ["s0"],
+                opposingEvidenceIds: [],
+                authorship: "informational",
+                review: "unreviewed",
+                freshness: "current",
+                coverage: "evaluated current retained sources",
+            }),
+        ),
+    ];
+    expect(JSON.stringify(evidence).length).toBeGreaterThan(32000);
+    let calls = 0;
+    const model: ChatModel = {
+        completionSettings: {},
+        async complete(prompt, _options, jsonSchema) {
+            calls++;
+            if (typeof prompt === "string")
+                throw new Error("Expected structured understanding prompt");
+            expect(
+                JSON.stringify({ messages: prompt, jsonSchema }).length,
+            ).toBeLessThanOrEqual(32000);
+            const envelope = JSON.parse(
+                String(prompt.find((item) => item.role === "user")!.content),
+            );
+            const views = envelope.evidence.filter(
+                (item: { kind: string }) => item.kind === "derived",
+            );
+            expect(views).toHaveLength(4);
+            for (const view of views) {
+                expect(view).not.toHaveProperty("influencingSourceIds");
+                expect(view).toHaveProperty("influencingSourceCount", 165);
+            }
+            return {
+                success: true,
+                data: JSON.stringify(response(["s0", "d0", "d1", "d2", "d3"])),
+            };
+        },
+    };
+    const result = await readUnderstanding({
+        question: request.question,
+        evidence,
+        candidates: empty,
+        allowRefinement: false,
+        model,
+    });
+    expect(result.status).toBe("answered");
+    expect(calls).toBe(1);
+    expect(evidence[1]).toHaveProperty(
+        "influencingSourceIds",
+        influencingSourceIds,
+    );
+});
+
 describe("Understanding operation cancellation", () => {
     test("opt-in transient refinement recovery retains only revalidated initial content", async () => {
         const { engine: original, host, model } = fixture();

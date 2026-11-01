@@ -1489,6 +1489,15 @@ per-search indexed reads remain bounded at 32,000 characters. Diagnostics retain
 both reader contexts and the refinement queries and selection receipts. The
 product and qualification harness use this same answer path.
 
+Ask and Explain retain complete influencing-source identifiers for eligibility,
+deduplication, validation and diagnostics, but send only their distinct source
+count to the model. Opaque construction-scope IDs are not original passages or
+independent observations. Required supporting and opposing passages, exact
+view references and evidence IDs remain in the reader envelope. View-budget
+checks use that same serialized representation, so large-scope views do not
+lose their reader allocation to host-only lineage metadata. Existing evidence,
+source-count and complete-request limits are unchanged.
+
 The bounded refinement also applies to integrated source-plus-view answers,
 including `sourcesOnly`. Follow-up searches retain the original access scope
 and temporal constraints; views are still evaluated against the original

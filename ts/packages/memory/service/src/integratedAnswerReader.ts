@@ -23,6 +23,18 @@ export interface IntegratedReaderResponse {
     retrievalQueries?: string[];
 }
 
+export const influencingSourceScopeInstructions =
+    "influencingSourceCount is the number of distinct sources in a view's full construction scope, not independent observations or a count of supplied original passages. Complete identifiers remain with the host; cite only the supplied evidence IDs and original passages.";
+
+export function answerEvidenceForReader(item: AnswerEvidence) {
+    if (item.kind === "source") return item;
+    const { influencingSourceIds, ...view } = item;
+    return {
+        ...view,
+        influencingSourceCount: new Set(influencingSourceIds).size,
+    };
+}
+
 export function serializeAnswerEvidence(
     request: MemoryAnswerRequest,
     evidence: AnswerEvidence[],
@@ -30,7 +42,7 @@ export function serializeAnswerEvidence(
     return JSON.stringify({
         question: request.question,
         temporalContext: normalizeQueryTemporalContext(request.temporalContext),
-        evidence,
+        evidence: evidence.map(answerEvidenceForReader),
     });
 }
 
@@ -110,7 +122,7 @@ export async function readIntegratedEvidence(
         },
         {
             role: "system",
-            content: indexedEvidenceRetrievalInstructions,
+            content: `${indexedEvidenceRetrievalInstructions} ${influencingSourceScopeInstructions}`,
         },
         {
             role: "user",
