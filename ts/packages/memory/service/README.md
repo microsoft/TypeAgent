@@ -157,6 +157,15 @@ fail closed. Original retrieval, exact expansion, reader dispatch/return,
 construction and publication recheck approval. Provider authorization also
 rechecks every manifest member and root through generic, cached and MCP paths.
 
+Callback invocations are serialized per service instance, including concurrent
+builds and reads. Large manifests therefore wait for authorization instead of
+overflowing a host's bounded worker queue. Every request still checks current
+approval; grants are not cached. Denial and errors release the slot without
+becoming successful authorization.
+
+Azure `LARGE REQUEST` warnings use stderr rather than stdout so large prompts
+do not introduce non-protocol lines into stdio MCP responses.
+
 Set `TYPEAGENT_MEMORY_CONNECTION_CONFIG` before starting the native agent
 server/Hub. Its private JSON file is a `MemoryMcpTransportConfig`, for example:
 

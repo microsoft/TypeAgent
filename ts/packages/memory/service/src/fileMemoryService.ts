@@ -3,6 +3,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { openai } from "@typeagent/aiclient";
+import { createLimiter } from "@typeagent/common-utils";
 import {
     createDocMemorySettings,
     type DocMemorySettings,
@@ -1412,6 +1413,7 @@ export class FileMemoryService
     private readonly extensionDiscovery: boolean;
     private readonly extensionProviders: ViewExtensionRegistry;
     private readonly sourceAuthorization: FileMemoryServiceOptions["sourceAuthorization"];
+    private readonly sourceAuthorizationLimiter = createLimiter(1);
     private readonly viewPublicationCheckpoint: FileMemoryServiceOptions["viewPublicationCheckpoint"];
     private readonly viewAdapter: ViewSynthesisAdapter;
     private readonly curatedTopics: boolean;
@@ -8955,16 +8957,18 @@ export class FileMemoryService
         revision: StoredRevision,
         operation: import("./types.js").MemorySourceAuthorizationRequest["operation"],
     ): Promise<boolean> {
-        if (!this.sourceAuthorization) return true;
-        return (
-            (await this.sourceAuthorization({
-                corpusId: source.corpusId,
-                sourceId: source.sourceId,
-                revisionId: revision.revisionId,
-                contentHash: revision.contentHash,
-                retainedContentHash: viewHash(revision.content),
-                operation,
-            })) === true
+        const authorize = this.sourceAuthorization;
+        if (!authorize) return true;
+        return this.sourceAuthorizationLimiter(
+            async () =>
+                (await authorize({
+                    corpusId: source.corpusId,
+                    sourceId: source.sourceId,
+                    revisionId: revision.revisionId,
+                    contentHash: revision.contentHash,
+                    retainedContentHash: viewHash(revision.content),
+                    operation,
+                })) === true,
         );
     }
 

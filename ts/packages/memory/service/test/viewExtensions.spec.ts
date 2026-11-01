@@ -1495,75 +1495,130 @@ process.stdout.write(JSON.stringify(allowed && request.sourceId !== denied));`,
         );
     });
 
-    test("a complete manifest preserves more than 32 dependencies and root source usage", async () => {
-        const fake = provider();
-        const { request, corpus } = await setup(fake.installed, 33);
-        const members = [];
-        for (const source of request.targets[0].definition.selector.sources) {
-            const content = await service.getSourceContent({
-                corpusId: corpus.corpusId,
-                ...source,
+    test.each([33, 65])(
+        "a complete manifest preserves all dependencies with bounded source authorization (sources=%i)",
+        async (count) => {
+            const fake = provider();
+            fake.installed.descriptor.limits.maxSources = 128;
+            let active = 0;
+            let peak = 0;
+            let denied = false;
+            let failed = false;
+            const checked = new Set<string>();
+            const { request, corpus } = await setup(fake.installed, count, {
+                sourceAuthorization: async (source) => {
+                    active++;
+                    peak = Math.max(peak, active);
+                    try {
+                        if (active > 64)
+                            throw new Error(
+                                "Synthetic source authorization queue is full",
+                            );
+                        if (failed)
+                            throw new Error("Synthetic authorization failure");
+                        await new Promise<void>((resolve) =>
+                            setImmediate(resolve),
+                        );
+                        checked.add(source.sourceId);
+                        return !denied;
+                    } finally {
+                        active--;
+                    }
+                },
             });
-            members.push({ ...source, contentHash: viewHash(content.content) });
-        }
-        const manifest = JSON.stringify({
-            schemaVersion: 1,
-            corpusId: corpus.corpusId,
-            members,
-        });
-        const ingestion = await service.ingestDocument({
-            corpusId: corpus.corpusId,
-            source: {
-                sourceId: "group-manifest",
-                sourceType: "text",
-                title: "Complete input manifest",
-                text: manifest,
-            },
-            pipeline: { mode: "content" },
-        });
-        await waitForMemoryJob(service, ingestion.jobId);
-        const root = (await service.getSource(
-            corpus.corpusId,
-            "group-manifest",
-        ))!;
-        request.targets[0].definition.selector = {
-            kind: "sourceManifest",
-            sources: members.map(({ sourceId, revisionId }) => ({
-                sourceId,
-                revisionId,
-            })),
-            manifest: {
-                sourceId: root.sourceId,
-                revisionId: root.activeRevisionId!,
-                contentHash: viewHash(manifest),
-            },
-        };
-        request.expectedHead = (await service.listViews(corpus.corpusId)).head;
-        const result = await settled(
-            service,
-            await service.buildViews(request),
-        );
-        expect(result.state).toBe("complete");
-        expect(result.results[0].snapshot.inputs).toHaveLength(33);
-        expect(result.results[0].snapshot.influenceSources).toHaveLength(34);
-        expect(
-            (
-                await service.getSourceViewUsage({
+            const members = [];
+            for (const source of request.targets[0].definition.selector
+                .sources) {
+                const content = await service.getSourceContent({
                     corpusId: corpus.corpusId,
-                    sourceId: "source-32",
-                })
-            ).total,
-        ).toBe(1);
-        expect(
-            (
-                await service.getSourceViewUsage({
-                    corpusId: corpus.corpusId,
+                    ...source,
+                });
+                members.push({
+                    ...source,
+                    contentHash: viewHash(content.content),
+                });
+            }
+            const manifest = JSON.stringify({
+                schemaVersion: 1,
+                corpusId: corpus.corpusId,
+                members,
+            });
+            const ingestion = await service.ingestDocument({
+                corpusId: corpus.corpusId,
+                source: {
                     sourceId: "group-manifest",
-                })
-            ).total,
-        ).toBe(1);
-        expect(fake.calls()).toBe(1);
-    });
+                    sourceType: "text",
+                    title: "Complete input manifest",
+                    text: manifest,
+                },
+                pipeline: { mode: "content" },
+            });
+            await waitForMemoryJob(service, ingestion.jobId);
+            const root = (await service.getSource(
+                corpus.corpusId,
+                "group-manifest",
+            ))!;
+            request.targets[0].definition.selector = {
+                kind: "sourceManifest",
+                sources: members.map(({ sourceId, revisionId }) => ({
+                    sourceId,
+                    revisionId,
+                })),
+                manifest: {
+                    sourceId: root.sourceId,
+                    revisionId: root.activeRevisionId!,
+                    contentHash: viewHash(manifest),
+                },
+            };
+            request.expectedHead = (
+                await service.listViews(corpus.corpusId)
+            ).head;
+            fake.installed.discover = async () =>
+                request.targets.map((target) => target.definition);
+            const admitted = await service.refreshExtensionViews({
+                corpusId: corpus.corpusId,
+            });
+            expect(admitted).toHaveLength(1);
+            const result = await settled(service, admitted[0]);
+            expect(result.state).toBe("complete");
+            expect(result.results[0].snapshot.inputs).toHaveLength(count);
+            expect(result.results[0].snapshot.influenceSources).toHaveLength(
+                count + 1,
+            );
+            expect(
+                (
+                    await service.getSourceViewUsage({
+                        corpusId: corpus.corpusId,
+                        sourceId: `source-${count - 1}`,
+                    })
+                ).total,
+            ).toBe(1);
+            expect(
+                (
+                    await service.getSourceViewUsage({
+                        corpusId: corpus.corpusId,
+                        sourceId: "group-manifest",
+                    })
+                ).total,
+            ).toBe(1);
+            expect(fake.calls()).toBe(1);
+            expect(peak).toBe(1);
+            expect(checked.size).toBe(count + 1);
+            denied = true;
+            expect(
+                await service.getSource(corpus.corpusId, "source-0"),
+            ).toBeUndefined();
+            denied = false;
+            failed = true;
+            await expect(
+                service.getSource(corpus.corpusId, "source-0"),
+            ).rejects.toThrow("Synthetic authorization failure");
+            failed = false;
+            expect(
+                await service.getSource(corpus.corpusId, "source-0"),
+            ).toMatchObject({ sourceId: "source-0" });
+        },
+    );
 });
 
 test("registration rejects duplicate identity and schema mismatch without executing the provider", () => {
