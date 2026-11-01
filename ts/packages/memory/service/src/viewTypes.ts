@@ -80,22 +80,25 @@ export type ViewSourceSelector =
           };
           events?: never;
       };
+export const viewDocumentSectionRoles = [
+    "description",
+    "prerequisites",
+    "diagnostic",
+    "guard",
+    "verification",
+    "recovery",
+    "context",
+    "goalsScope",
+    "owners",
+    "status",
+    "milestones",
+    "decisions",
+    "risks",
+] as const;
 export interface ViewSection {
     id: string;
     role:
-        | "description"
-        | "prerequisites"
-        | "diagnostic"
-        | "guard"
-        | "verification"
-        | "recovery"
-        | "context"
-        | "goalsScope"
-        | "owners"
-        | "status"
-        | "milestones"
-        | "decisions"
-        | "risks"
+        | (typeof viewDocumentSectionRoles)[number]
         | "event"
         | "page"
         | "question";

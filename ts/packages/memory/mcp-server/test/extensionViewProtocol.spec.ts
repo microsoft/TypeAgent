@@ -222,7 +222,7 @@ test("registered extension traverses authenticated MCP/client with 33 exact memb
                 sections: [
                     {
                         id: "claim",
-                        role: "context",
+                        role: "decisions",
                         heading: "Status",
                         body: "Amber recap retains its qualifications. ".repeat(
                             60,
@@ -448,6 +448,7 @@ test("registered extension traverses authenticated MCP/client with 33 exact memb
             viewId,
         });
         expect(view?.content.kind).toBe("extension");
+        expect(view?.content.sections[0].role).toBe("decisions");
         const revisionId = view!.revisionId;
         await client.close();
         await host.close();

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { projectBriefRoles } from "./projectBrief.js";
+import { viewDocumentSectionRoles } from "./viewTypes.js";
 import { validateTimeline } from "./timeline.js";
 import {
     assertViewIdentifier,
@@ -133,23 +134,25 @@ function validateSections(sections: ViewSection[], kind: string): Set<string> {
         if (ids.has(section.id)) throw new Error("Duplicate section ID");
         ids.add(section.id);
         const allowed: readonly string[] =
-            kind === "timeline"
-                ? ["event"]
-                : kind === "wiki"
-                  ? ["page"]
-                  : kind === "schemaView"
-                    ? ["question"]
-                    : kind === "projectBrief"
-                      ? projectBriefRoles
-                      : [
-                            "description",
-                            "prerequisites",
-                            "diagnostic",
-                            "guard",
-                            "verification",
-                            "recovery",
-                            "context",
-                        ];
+            kind === "extension"
+                ? viewDocumentSectionRoles
+                : kind === "timeline"
+                  ? ["event"]
+                  : kind === "wiki"
+                    ? ["page"]
+                    : kind === "schemaView"
+                      ? ["question"]
+                      : kind === "projectBrief"
+                        ? projectBriefRoles
+                        : [
+                              "description",
+                              "prerequisites",
+                              "diagnostic",
+                              "guard",
+                              "verification",
+                              "recovery",
+                              "context",
+                          ];
         if (!allowed.includes(section.role))
             throw new Error("Unsupported guide section role");
         text(section.heading, "Section heading");

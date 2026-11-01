@@ -124,6 +124,13 @@ an optional name when supplied; it does not invent one. The named estimator
 remains in the build's `providerLimits`.
 Unreported usage remains unknown, not zero.
 
+Extension document blocks use the shared `viewDocumentSectionRoles` vocabulary
+in both native validation and MCP. It includes `decisions` and `context` without
+relaxing the narrower role rules for first-party guides. Specialized event,
+page and question sections remain confined to their respective view kinds.
+The browser-safe `@typeagent/memory-service/view-types` export exposes this
+vocabulary without loading the native service or its Node-only dependencies.
+
 `continueViewBuild({ corpusId, jobId, expectedHead })` resumes the same
 extension-only job and input scope. An explicitly increased host cumulative
 budget permits accounted continuation without resetting prior reservations.

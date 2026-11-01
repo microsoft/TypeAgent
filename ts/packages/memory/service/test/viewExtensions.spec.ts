@@ -14,6 +14,8 @@ import {
     ViewExtensionRegistry,
 } from "../src/viewExtensions.js";
 import { viewHash } from "../src/viewContent.js";
+import { validateViewDraft } from "../src/viewValidation.js";
+import { viewDocumentSectionRoles } from "../src/viewTypes.js";
 import type {
     ViewExtensionProvider,
     ViewPayloadSchema,
@@ -24,6 +26,7 @@ import type {
     ViewBuildRequest,
     ViewBuildSnapshot,
     ViewRelationship,
+    ViewSaveRequest,
 } from "../src/viewTypes.js";
 import type {
     ChatModel,
@@ -136,6 +139,30 @@ function readerModel(understanding = false, onRead?: () => void): ChatModel {
                               retrievalQueries: [],
                           },
                 ),
+            };
+        },
+    };
+}
+
+function budgetedCompletionModel(): ChatModel {
+    return {
+        completionSettings: {},
+        async complete(prompt) {
+            const response = await fetchWithRetry(
+                "https://synthetic.invalid/derived",
+                {
+                    method: "POST",
+                    body: JSON.stringify({
+                        messages: [{ role: "user", content: prompt }],
+                        max_tokens: 16,
+                    }),
+                },
+                0,
+            );
+            if (!response.success) throw new Error(response.message);
+            return {
+                success: true,
+                data: JSON.stringify({ items: ["retained candidate"] }),
             };
         },
     };
@@ -1216,27 +1243,7 @@ process.stdout.write(JSON.stringify(allowed && request.sourceId !== denied));`,
                 dispatches++;
                 return new Response("{}");
             };
-            const model: ChatModel = {
-                completionSettings: {},
-                async complete(prompt) {
-                    const response = await fetchWithRetry(
-                        "https://synthetic.invalid/derived",
-                        {
-                            method: "POST",
-                            body: JSON.stringify({
-                                messages: [{ role: "user", content: prompt }],
-                                max_tokens: 16,
-                            }),
-                        },
-                        0,
-                    );
-                    if (!response.success) throw new Error(response.message);
-                    return {
-                        success: true,
-                        data: JSON.stringify({ items: ["retained candidate"] }),
-                    };
-                },
-            };
+            const model = budgetedCompletionModel();
             fixture.installed.model = model;
             try {
                 const { corpus, request } = await setup(fixture.installed, 1, {
@@ -1381,6 +1388,164 @@ process.stdout.write(JSON.stringify(allowed && request.sourceId !== denied));`,
         };
         return { corpus, request, options };
     }
+
+    test("failed materialization replays retained model stages after restart without another request", async () => {
+        const fake = provider();
+        const generate = fake.installed.generate;
+        let validRole = false;
+        fake.installed.model = budgetedCompletionModel();
+        fake.installed.generate = async (...args) => {
+            await args[2].complete("draft", "Retained synthetic draft");
+            const content = await generate(...args);
+            Object.assign(content.sections[0], {
+                role: validRole ? "decisions" : "invented",
+            });
+            return content;
+        };
+        let dispatches = 0;
+        const previousFetch = globalThis.fetch;
+        globalThis.fetch = async () => {
+            dispatches++;
+            return new Response("{}");
+        };
+        try {
+            const { corpus, request, options } = await setup(
+                fake.installed,
+                1,
+                {
+                    maintenanceLimits: { requestBudget },
+                },
+            );
+            const failed = await settled(
+                service,
+                await service.buildViews(request),
+            );
+            expect(failed.state).toBe("failed");
+            expect(failed.results[0].reason).toBe(
+                "Unsupported guide section role",
+            );
+            expect(failed.results[0].providerRequests).toHaveLength(1);
+            expect(failed.results[0].providerAttempts?.[0].state).toBe(
+                "returned",
+            );
+            expect(dispatches).toBe(1);
+            validRole = true;
+            await service.close();
+            service = new FileMemoryService(root, options);
+            const resumed = await settled(
+                service,
+                await service.continueViewBuild({
+                    corpusId: corpus.corpusId,
+                    jobId: failed.jobId,
+                    expectedHead: (await service.listViews(corpus.corpusId))
+                        .head,
+                }),
+            );
+            expect(resumed.state).toBe("complete");
+            expect(resumed.jobId).toBe(failed.jobId);
+            expect(resumed.results[0].providerRequests).toEqual(
+                failed.results[0].providerRequests,
+            );
+            expect(dispatches).toBe(1);
+            expect(
+                (
+                    await service.getView({
+                        corpusId: corpus.corpusId,
+                        viewId: request.targets[0].definition.viewId,
+                    })
+                )?.content.sections[0].role,
+            ).toBe("decisions");
+        } finally {
+            globalThis.fetch = previousFetch;
+        }
+    });
+
+    test.each(viewDocumentSectionRoles)(
+        "extension document section role %s survives native build and read",
+        async (role) => {
+            const fake = provider();
+            const generate = fake.installed.generate;
+            fake.installed.generate = async (...args) => {
+                const content = await generate(...args);
+                content.sections[0].role = role;
+                return content;
+            };
+            const { corpus, request } = await setup(fake.installed, 1);
+            const result = await settled(
+                service,
+                await service.buildViews(request),
+            );
+            expect(result.state).toBe("complete");
+            const view = await service.getView({
+                corpusId: corpus.corpusId,
+                viewId: request.targets[0].definition.viewId,
+            });
+            expect(view?.content.sections[0].role).toBe(role);
+        },
+    );
+
+    test.each(["event", "page", "question", "invented"] as const)(
+        "non-document extension section role %s fails without an artifact",
+        async (role) => {
+            const fake = provider();
+            const generate = fake.installed.generate;
+            fake.installed.generate = async (...args) => {
+                const content = await generate(...args);
+                Object.assign(content.sections[0], { role });
+                return content;
+            };
+            const { corpus, request } = await setup(fake.installed, 1);
+            const result = await settled(
+                service,
+                await service.buildViews(request),
+            );
+            expect(result.state).toBe("failed");
+            expect(result.results[0].reason).toBe(
+                "Unsupported guide section role",
+            );
+            expect(await service.listViews(corpus.corpusId)).toMatchObject({
+                views: [],
+            });
+        },
+    );
+
+    test("extension roles do not widen troubleshooting guide roles", () => {
+        const request: ViewSaveRequest = {
+            corpusId: "synthetic-corpus",
+            viewId: "synthetic-guide",
+            expectedVersion: 0,
+            expectedHead: null,
+            definition: {
+                viewId: "synthetic-guide",
+                kind: "troubleshootingGuide",
+                selector: {
+                    kind: "sources",
+                    sources: [
+                        { sourceId: "synthetic-source", revisionId: "r1" },
+                    ],
+                },
+            },
+            content: {
+                kind: "troubleshootingGuide",
+                title: "Synthetic guide",
+                sections: [
+                    {
+                        id: "context",
+                        role: "context",
+                        heading: "Context",
+                        body: "Retained context.",
+                    },
+                ],
+                citations: [],
+            },
+            relationships: [],
+        };
+        expect(() => validateViewDraft(request)).not.toThrow();
+        request.content.sections[0].role = "decisions";
+        expect(() => validateViewDraft(request)).toThrow(
+            "Unsupported guide section role",
+        );
+    });
 
     test("stores nested corpus artifact and eligibility, deduplicates admission, and reauthorizes reads", async () => {
         const fake = provider();

@@ -3,6 +3,7 @@
 
 import { z } from "zod";
 import type { ViewPayloadSchema } from "@typeagent/memory-service";
+import { viewDocumentSectionRoles } from "@typeagent/memory-service/view-types";
 import { topicBuildInputSchema } from "./topicProtocol.js";
 import {
     schemaViewDefinitionSchema,
@@ -379,21 +380,7 @@ const factStatus = z.enum([
 const inventoryIds = id.array().min(1).max(128);
 const section = z.strictObject({
     id,
-    role: z.enum([
-        "description",
-        "prerequisites",
-        "diagnostic",
-        "guard",
-        "verification",
-        "recovery",
-        "context",
-        "goalsScope",
-        "owners",
-        "status",
-        "milestones",
-        "decisions",
-        "risks",
-    ]),
+    role: z.enum(viewDocumentSectionRoles),
     heading: text,
     body: text,
 });
