@@ -183,6 +183,153 @@ test("Explain counts large view construction scopes without sending opaque linea
     );
 });
 
+describe("bounded original-citation repair", () => {
+    const evidence: AnswerEvidence[] = [
+        { id: "s0", kind: "source", source: source() },
+        { id: "s1", kind: "source", source: source("opposition") },
+        {
+            id: "d0",
+            kind: "derived",
+            reference: { viewId: "view", revisionId: "v1", state: "selected" },
+            text: "The reports disagree.",
+            influencingSourceIds: ["original", "opposition"],
+            supportingSources: [],
+            opposingSources: [],
+            supportingEvidenceIds: ["s0"],
+            opposingEvidenceIds: ["s1"],
+            authorship: "informational",
+            review: "unreviewed",
+            freshness: "current",
+            coverage: "current retained sources",
+        },
+    ];
+    const modes = ["Ask", "Explain summary", "Explain section"] as const;
+    function resultFor(mode: (typeof modes)[number], ids: string[]) {
+        if (mode === "Ask")
+            return {
+                status: "answered",
+                answer: "The reports disagree.",
+                evidenceIds: ids,
+                retrievalQueries: [],
+            };
+        if (mode === "Explain summary") return response(ids);
+        const result = response(["s0"]);
+        result.sections = [
+            {
+                title: "Disagreement",
+                claims: [
+                    {
+                        text: "The reports disagree.",
+                        role: "memory",
+                        evidenceIds: ids,
+                    },
+                ],
+            },
+        ];
+        return result;
+    }
+    function read(mode: (typeof modes)[number], model: ChatModel) {
+        return mode === "Ask"
+            ? readIntegratedEvidence(request, evidence, { model })
+            : readUnderstanding({
+                  question: request.question,
+                  evidence,
+                  candidates: empty,
+                  allowRefinement: false,
+                  model,
+              });
+    }
+    test.each(modes)(
+        "%s regenerates one incomplete citation bundle from unchanged evidence",
+        async (mode) => {
+            const packets: string[] = [];
+            let calls = 0;
+            const model: ChatModel = {
+                completionSettings: {},
+                async complete(prompt, _options, jsonSchema) {
+                    calls++;
+                    if (typeof prompt === "string")
+                        throw new Error("Expected structured reader prompt");
+                    packets.push(
+                        String(
+                            prompt.find((item) => item.role === "user")!
+                                .content,
+                        ),
+                    );
+                    expect(
+                        JSON.stringify({ messages: prompt, jsonSchema }).length,
+                    ).toBeLessThanOrEqual(32000);
+                    if (calls === 2) {
+                        expect(JSON.stringify(prompt)).toContain(
+                            "supportingEvidenceIds",
+                        );
+                        expect(JSON.stringify(prompt)).toContain(
+                            "opposingEvidenceIds",
+                        );
+                        expect(JSON.stringify(prompt)).toContain(
+                            "references: s1",
+                        );
+                    }
+                    return {
+                        success: true,
+                        data: JSON.stringify(
+                            resultFor(
+                                mode,
+                                calls === 1 ? ["d0", "s0"] : ["d0", "s0", "s1"],
+                            ),
+                        ),
+                    };
+                },
+            };
+            const result = await read(mode, model);
+            expect(result.status).toBe("answered");
+            expect(calls).toBe(2);
+            expect(packets[1]).toBe(packets[0]);
+            expect(JSON.stringify(result)).toContain('"s1"');
+        },
+    );
+    test.each(modes)(
+        "%s rejects a repeated citation omission after one repair",
+        async (mode) => {
+            let calls = 0;
+            await expect(
+                read(mode, {
+                    completionSettings: {},
+                    async complete() {
+                        calls++;
+                        return {
+                            success: true,
+                            data: JSON.stringify(resultFor(mode, ["d0", "s0"])),
+                        };
+                    },
+                }),
+            ).rejects.toThrow("original support or opposition");
+            expect(calls).toBe(2);
+        },
+    );
+    test.each(modes)(
+        "%s rejects an unknown reference without citation repair",
+        async (mode) => {
+            let calls = 0;
+            await expect(
+                read(mode, {
+                    completionSettings: {},
+                    async complete() {
+                        calls++;
+                        return {
+                            success: true,
+                            data: JSON.stringify(
+                                resultFor(mode, ["d0", "s0", "invented"]),
+                            ),
+                        };
+                    },
+                }),
+            ).rejects.toThrow(/unknown|unsupported/);
+            expect(calls).toBe(1);
+        },
+    );
+});
+
 describe("Understanding operation cancellation", () => {
     test("opt-in transient refinement recovery retains only revalidated initial content", async () => {
         const { engine: original, host, model } = fixture();

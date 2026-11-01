@@ -11,6 +11,7 @@ import {
 } from "./indexedAnswer.js";
 import { normalizeQueryTemporalContext } from "./temporalContext.js";
 import {
+    assertReaderOriginalCitations,
     ReaderStatusMismatch,
     readWithStatusRepair,
 } from "./readerStatusRepair.js";
@@ -86,6 +87,14 @@ function parseReaderResponse(
         throw new ReaderStatusMismatch(
             "Integrated answer status and references disagree",
         );
+    for (const item of evidence) {
+        if (
+            evidenceIds.includes(item.id) &&
+            item.kind === "derived" &&
+            item.reference.state === "selected"
+        )
+            assertReaderOriginalCitations(item, evidenceIds);
+    }
     const retrievalQueries = indexedRetrievalQueries(
         "retrievalQueries" in value ? value.retrievalQueries : [],
         value.status,

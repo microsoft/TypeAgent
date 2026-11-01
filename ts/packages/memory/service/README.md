@@ -1498,6 +1498,14 @@ checks use that same serialized representation, so large-scope views do not
 lose their reader allocation to host-only lineage metadata. Existing evidence,
 source-count and complete-request limits are unchanged.
 
+Readers permit one logged regeneration for an inconsistent status or an omitted
+original-citation bundle, using the same evidence and request limits. Explain
+requires every claim citing a view to include that view's supporting and
+opposing evidence IDs in that same claim. Ask retains its selected-view original
+reference requirement. A second failure, unknown reference, malformed response,
+transport failure or cancellation remains an error; the host never repairs
+citations by attaching them to an unchanged model claim.
+
 The bounded refinement also applies to integrated source-plus-view answers,
 including `sourcesOnly`. Follow-up searches retain the original access scope
 and temporal constraints; views are still evaluated against the original

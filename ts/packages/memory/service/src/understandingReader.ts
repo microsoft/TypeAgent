@@ -14,6 +14,7 @@ import {
     influencingSourceScopeInstructions,
 } from "./integratedAnswerReader.js";
 import {
+    assertReaderOriginalCitations,
     ReaderStatusMismatch,
     readWithStatusRepair,
 } from "./readerStatusRepair.js";
@@ -57,20 +58,13 @@ function claim(value: unknown, evidence: AnswerEvidence[]): UnderstandingClaim {
     if (object.role !== "memory")
         throw new Error("Unsupported understanding claim role");
     const evidenceIds = strings(object.evidenceIds, 32, 500);
-    for (const id of evidenceIds) {
+    const cited = evidenceIds.map((id) => {
         const item = evidence.find((item) => item.id === id);
         if (!item)
             throw new Error("Understanding returned an unknown evidence ID");
-        if (
-            item.kind !== "source" &&
-            ![...item.supportingEvidenceIds, ...item.opposingEvidenceIds].every(
-                (required) => evidenceIds.includes(required),
-            )
-        )
-            throw new Error(
-                "Understanding claim omitted original support or opposition",
-            );
-    }
+        return item;
+    });
+    for (const item of cited) assertReaderOriginalCitations(item, evidenceIds);
     return {
         text: text(object.text, 3000),
         evidenceIds: [...new Set(evidenceIds)],
