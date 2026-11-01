@@ -1414,6 +1414,7 @@ export class FileMemoryService
     private readonly extensionProviders: ViewExtensionRegistry;
     private readonly sourceAuthorization: FileMemoryServiceOptions["sourceAuthorization"];
     private readonly sourceAuthorizationLimiter = createLimiter(1);
+    private readonly jobReadLimiter = createLimiter(16);
     private readonly viewPublicationCheckpoint: FileMemoryServiceOptions["viewPublicationCheckpoint"];
     private readonly viewAdapter: ViewSynthesisAdapter;
     private readonly curatedTopics: boolean;
@@ -3907,6 +3908,14 @@ export class FileMemoryService
         return this.reindex(corpusId, sourceId, signal);
     }
 
+    private readStoredJob(
+        filePath: string,
+    ): Promise<IngestionJobStatus | undefined> {
+        return this.jobReadLimiter(() =>
+            readJson<IngestionJobStatus>(filePath),
+        );
+    }
+
     public async getJob(
         jobId: string,
     ): Promise<IngestionJobStatus | undefined> {
@@ -3914,7 +3923,7 @@ export class FileMemoryService
         validateIdentifier("job ID", jobId);
         const job =
             this.jobs.get(jobId) ??
-            (await readJson<IngestionJobStatus>(this.jobPath(jobId)));
+            (await this.readStoredJob(this.jobPath(jobId)));
         if (!job) return undefined;
         return this.sourceJobRead(job);
     }
@@ -3946,7 +3955,7 @@ export class FileMemoryService
                 entries
                     .filter((entry) => entry.endsWith(".json"))
                     .map((entry) =>
-                        readJson<IngestionJobStatus>(
+                        this.readStoredJob(
                             path.join(
                                 this.rootDirectory,
                                 jobsDirectoryName,
@@ -4010,9 +4019,7 @@ export class FileMemoryService
             throw error;
         }
         for (const entry of entries.filter((name) => name.endsWith(".json"))) {
-            const job = await readJson<IngestionJobStatus>(
-                path.join(directory, entry),
-            );
+            const job = await this.readStoredJob(path.join(directory, entry));
             if (job?.corpusId !== corpusId || job.sourceId !== sourceId)
                 continue;
             await this.serializeJobWrite(job.jobId, async () => {
@@ -12990,9 +12997,7 @@ export class FileMemoryService
             "cancelled",
         ]);
         for (const entry of entries.filter((name) => name.endsWith(".json"))) {
-            const job = await readJson<IngestionJobStatus>(
-                path.join(directory, entry),
-            );
+            const job = await this.readStoredJob(path.join(directory, entry));
             if (job === undefined || terminalStates.has(job.state)) {
                 continue;
             }

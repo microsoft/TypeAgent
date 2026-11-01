@@ -10,6 +10,15 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Retained ingestion jobs
+
+Corpus status, paginated job lists, individual job reads, restart recovery and
+forgotten-source diagnostic cleanup share a pool of at most 16 concurrent
+job-file reads per service instance. Large retained histories must not open all
+job files at once. Filtering, ordering and pagination remain unchanged;
+unreadable or corrupt job files still fail explicitly rather than producing
+an apparently empty or complete result.
+
 ## Host-registered extension Views
 
 Hosts can inject `extensionProviders: ViewExtensionProvider[]` and explicitly
