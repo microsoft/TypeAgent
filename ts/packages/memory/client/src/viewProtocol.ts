@@ -1089,7 +1089,7 @@ export const viewBuildJobSchema = z.object({
                     reservation: z.strictObject({
                         attempt: z.number().int().positive(),
                         kind: z.enum(["chat", "embedding", "decision"]),
-                        tokenizer: z.string(),
+                        tokenizer: z.string().optional(),
                         inputTokens: z.number().int().nonnegative(),
                         outputTokens: z.number().int().nonnegative(),
                         safetyTokens: z.number().int().nonnegative(),

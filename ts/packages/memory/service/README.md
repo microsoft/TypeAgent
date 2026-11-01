@@ -117,6 +117,11 @@ stage/prompt/schema fingerprints. `providerRequests` records each physical SDK
 retry reservation and outcome; a reservation-persistence failure prevents
 dispatch. `providerAttempts`, candidates, checkpoints, cumulative elapsed time,
 original limits and audited host-budget amendments stay on the build receipt.
+Physical reservations follow the AI client's `RequestBudgetReceipt`: token
+counts and estimate accounting are required, but an estimator name is not a
+per-request field. MCP accepts reservations without `tokenizer` and preserves
+an optional name when supplied; it does not invent one. The named estimator
+remains in the build's `providerLimits`.
 Unreported usage remains unknown, not zero.
 
 `continueViewBuild({ corpusId, jobId, expectedHead })` resumes the same

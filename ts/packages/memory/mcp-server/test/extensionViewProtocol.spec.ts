@@ -4,7 +4,10 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { McpMemoryServiceClient } from "@typeagent/memory-client";
+import {
+    McpMemoryServiceClient,
+    viewBuildJobSchema,
+} from "@typeagent/memory-client";
 import {
     FileMemoryService,
     extensionViewId,
@@ -23,7 +26,7 @@ import {
     RESOURCE_MIME_TYPE,
 } from "@modelcontextprotocol/ext-apps/server";
 import { previewMetaKey, previewResourceUri } from "../src/previewTypes.js";
-import type { ChatModel } from "@typeagent/aiclient";
+import { fetchWithRetry, type ChatModel } from "@typeagent/aiclient";
 import type { IndexedFragmentRequest } from "@typeagent/memory-service";
 
 const {
@@ -57,6 +60,7 @@ test("registered extension traverses authenticated MCP/client with 33 exact memb
         required: ["title", "decisionId"],
     };
     let constructionCalls = 0;
+    let physicalRequests = 0;
     let readerCalls = 0,
         approved = true;
     const reader: ChatModel = {
@@ -170,8 +174,39 @@ test("registered extension traverses authenticated MCP/client with 33 exact memb
             reason: "Complete synthetic case group",
         }),
         prepare: async () => ({ title: "Prepared" }),
-        generate: async (input) => {
+        model: {
+            completionSettings: {},
+            async complete(prompt) {
+                const endpoint = "https://synthetic.invalid/extension";
+                const originalFetch = globalThis.fetch;
+                globalThis.fetch = (input, options) => {
+                    if (input !== endpoint)
+                        return originalFetch(input, options);
+                    physicalRequests++;
+                    return Promise.resolve(new Response("{}"));
+                };
+                try {
+                    const response = await fetchWithRetry(
+                        endpoint,
+                        {
+                            method: "POST",
+                            body: JSON.stringify({
+                                messages: [{ role: "user", content: prompt }],
+                                max_tokens: 16,
+                            }),
+                        },
+                        0,
+                    );
+                    if (!response.success) throw new Error(response.message);
+                    return { success: true, data: "Synthetic completion" };
+                } finally {
+                    globalThis.fetch = originalFetch;
+                }
+            },
+        },
+        generate: async (input, _prepared, context) => {
             constructionCalls++;
+            await context.complete("draft", "Synthetic grouped recap");
             const source = input.inputs[0];
             const citation = {
                 sourceId: source.sourceId,
@@ -252,6 +287,19 @@ test("registered extension traverses authenticated MCP/client with 33 exact memb
             sourceSynopses: false,
             discoveryPolicy: "off",
             maintenanceMode: "manual",
+            maintenanceLimits: {
+                requestBudget: {
+                    inputTokens: 4096,
+                    outputTokens: 128,
+                    safetyTokens: 16,
+                    chatAttempts: 6,
+                    embeddingAttempts: 1,
+                    reservedTokens: 30000,
+                    elapsedMs: 30000,
+                    tokenizer: "synthetic-character-estimate",
+                    countTokens: (serialized) => serialized.length,
+                },
+            },
             extensionBuilds: true,
             extensionProviders: [provider],
             sourceAuthorization: async () => approved,
@@ -362,6 +410,39 @@ test("registered extension traverses authenticated MCP/client with 33 exact memb
         expect(job.results[0].eligibility?.disposition).toBe("eligible");
         expect(job.results[0].snapshot.inputs).toHaveLength(33);
         expect(job.results[0].snapshot.influenceSources).toHaveLength(34);
+        expect(physicalRequests).toBe(1);
+        expect(job.results[0].providerRequests).toHaveLength(1);
+        const request = job.results[0].providerRequests![0];
+        expect(request.state).toBe("returned");
+        expect(request.reservation).toMatchObject({
+            attempt: 1,
+            kind: "chat",
+            tokenAccounting: "estimate",
+        });
+        expect(request.reservation).not.toHaveProperty("tokenizer");
+        const withReservation = (reservation: unknown) =>
+            viewBuildJobSchema.safeParse({
+                ...job,
+                results: [
+                    {
+                        ...job.results[0],
+                        providerRequests: [{ ...request, reservation }],
+                    },
+                ],
+            });
+        expect(
+            withReservation({
+                ...request.reservation,
+                tokenizer: "synthetic-estimate",
+            }).success,
+        ).toBe(true);
+        expect(
+            withReservation({ ...request.reservation, tokenizer: 42 }).success,
+        ).toBe(false);
+        expect(
+            withReservation({ ...request.reservation, outputTokens: -1 })
+                .success,
+        ).toBe(false);
         const view = await client.getView({
             corpusId: corpus.corpusId,
             viewId,
