@@ -85,6 +85,10 @@ variables:
     value: $(Build.SourcesDirectory)/ts
   - name: nodeVersion
     value: "24.22.1"
+  # Embedding runtimes use CPU execution. The npm package includes CPU binaries;
+  # its Linux postinstall otherwise downloads optional CUDA libraries from NuGet.
+  - name: ONNXRUNTIME_NODE_INSTALL
+    value: skip
   # Unified version — every artifact from this run shares the same version.
   - name: packageVersion
     value: 0.0.1-$(Build.BuildId)
