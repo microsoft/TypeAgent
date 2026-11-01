@@ -33,6 +33,10 @@ import {
     validateSchemaViewDefinition,
     validateSchemaViewContent,
 } from "./schemaView.js";
+import {
+    assertViewJson,
+    validateExtensionDefinition,
+} from "./viewExtensions.js";
 
 function text(value: unknown, label: string): asserts value is string {
     if (typeof value !== "string" || !value.trim())
@@ -46,7 +50,9 @@ function onlyKeys(value: object, keys: string[], label: string): void {
 
 function validateSelector(selector: ViewSourceSelector): Set<string> {
     if (
-        !["sources", "timelineEvidence"].includes(selector?.kind) ||
+        !["sources", "timelineEvidence", "sourceManifest"].includes(
+            selector?.kind,
+        ) ||
         !Array.isArray(selector.sources)
     )
         throw new Error(
@@ -58,10 +64,25 @@ function validateSelector(selector: ViewSourceSelector): Set<string> {
             "kind",
             "sources",
             ...(selector.kind === "timelineEvidence" ? ["events"] : []),
+            ...(selector.kind === "sourceManifest" ? ["manifest"] : []),
         ],
         "source selector",
     );
     const sources = new Set<string>();
+    if (selector.kind === "sourceManifest") {
+        assertViewIdentifier("manifest source ID", selector.manifest?.sourceId);
+        assertViewIdentifier(
+            "manifest revision ID",
+            selector.manifest?.revisionId,
+        );
+        if (!/^[a-f0-9]{64}$/.test(selector.manifest?.contentHash))
+            throw new Error("Invalid exact source manifest hash");
+        onlyKeys(
+            selector.manifest,
+            ["sourceId", "revisionId", "contentHash"],
+            "manifest identity",
+        );
+    }
     for (const source of selector.sources) {
         if (!source || typeof source !== "object")
             throw new Error("Invalid selected source");
@@ -360,6 +381,7 @@ export function validateViewDraft(request: ViewSaveRequest): void {
             "timeline",
             "wiki",
             "schemaView",
+            "extension",
         ].includes(request.definition?.kind) ||
         request.content?.kind !== request.definition?.kind
     )
@@ -376,6 +398,7 @@ export function validateViewDraft(request: ViewSaveRequest): void {
             "wiki",
             "projectSummary",
             "schemaView",
+            "extension",
         ],
         "view definition",
     );
@@ -383,6 +406,7 @@ export function validateViewDraft(request: ViewSaveRequest): void {
     validateWikiSelector(request.definition);
     validateProjectSelector(request.definition);
     validateSchemaViewDefinition(request.definition);
+    validateExtensionDefinition(request.definition);
     if (!!request.definition.wiki !== informationalWiki(request.content))
         throw new Error("Wiki content and construction definition differ");
     if (
@@ -418,6 +442,11 @@ function validateDraftContent(
     if (request.content.kind === "wiki") validateWiki(request.content);
     if (request.content.kind === "schemaView")
         validateSchemaViewContent(request.definition, request.content);
+    if (request.content.kind === "extension") {
+        assertViewJson(request.content.payload);
+        if (request.content.construction !== "extension-v1")
+            throw new Error("Unsupported extension content version");
+    }
     if (request.content.agentEdition !== undefined)
         throw new Error(
             "Agent editions are not supported in derived view drafts",
@@ -438,6 +467,17 @@ function validateDraftContent(
                 ? ["construction", "status", "coverageNote"]
                 : []),
             ...(request.content.kind === "schemaView" ? ["construction"] : []),
+            ...(request.content.kind === "extension"
+                ? [
+                      "construction",
+                      "provider",
+                      "payload",
+                      "presentation",
+                      "inputUse",
+                      "fidelity",
+                      "evidence",
+                  ]
+                : []),
         ],
         "guide content",
     );

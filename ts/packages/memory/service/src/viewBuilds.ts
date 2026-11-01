@@ -49,9 +49,14 @@ import {
 } from "@typeagent/aiclient";
 import {
     createMaintenanceBuildScheduler,
+    setMaintenanceBuildClass,
     yieldMaintenanceBuild,
+    type MaintenanceModelScheduler,
 } from "./maintenanceConcurrency.js";
 import { createLimiter } from "@typeagent/common-utils";
+import { ViewExtensionRegistry } from "./viewExtensions.js";
+import type { ViewEligibilityReceipt } from "./viewExtensionTypes.js";
+import { createExtensionExecution } from "./viewExtensionExecution.js";
 
 export class ViewBuildStaleError extends Error {}
 
@@ -145,6 +150,8 @@ export class ViewBuildRunner {
         reserveShortSlot = false,
         private readonly wikiAssessmentConcurrency = 1,
         prioritizeShortBuilds = !reserveShortSlot,
+        private readonly extensions?: ViewExtensionRegistry,
+        private readonly modelScheduler?: MaintenanceModelScheduler,
     ) {
         if (
             !Number.isSafeInteger(wikiAssessmentConcurrency) ||
@@ -444,6 +451,12 @@ export class ViewBuildRunner {
         let validation = false;
         try {
             signal.throwIfAborted();
+            if (result.snapshot.pipeline === "extension-v1")
+                return await this.extensionTarget(job, result, signal);
+            await setMaintenanceBuildClass(
+                result.snapshot.pipeline === "topics-v1",
+                signal,
+            );
             if (result.snapshot.pipeline === "topics-v1") {
                 if (!this.owner.materializeTopics)
                     throw new Error(
@@ -512,6 +525,7 @@ export class ViewBuildRunner {
                 );
                 return true;
             }
+
             if (
                 result.snapshot.definition.kind === "timeline" &&
                 !result.snapshot.inputs.some((input) => input.records?.length)
@@ -668,6 +682,141 @@ export class ViewBuildRunner {
             clearTimeout(timer);
             jobSignal.removeEventListener("abort", cancel);
         }
+        return true;
+    }
+
+    private async extensionTarget(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+    ): Promise<boolean> {
+        if (!this.extensions || !this.modelScheduler)
+            throw new Error("Extension provider execution is unavailable");
+        const registry = this.extensions;
+        const input = result.snapshot;
+        await setMaintenanceBuildClass(false, signal);
+        const provider = registry.resolve(input);
+        const update = async (
+            operation: (target: ViewBuildTargetResult) => void,
+            finishing = false,
+        ) => {
+            await this.owner.update(job.corpusId, job.jobId, (current) => {
+                const target = current.results.find(
+                    (entry) => entry.viewId === result.viewId,
+                );
+                if (!target || (!finishing && current.state !== "running"))
+                    throw new Error("Provider job is no longer active");
+                operation(target);
+            });
+        };
+        const context = await createExtensionExecution({
+            input,
+            result,
+            provider,
+            registry,
+            signal,
+            update,
+            requestBudget: this.informationalLimits,
+            models: this.modelScheduler,
+            errorText: safeError,
+        });
+        await registry.authorize(input, "build");
+        const definition = input.definition.extension!;
+        const criteria = provider.descriptor.definitions.find(
+            (entry) => entry.id === definition.definitionId,
+        )!;
+        const receipt: ViewEligibilityReceipt = {
+            schemaVersion: 1,
+            provider: provider.descriptor.identity,
+            definitionId: definition.definitionId,
+            targetKey: definition.targetKey,
+            criteriaVersion: criteria.eligibilityVersion,
+            policyDigest: definition.policyDigest,
+            inputFingerprint: input.fingerprint,
+            mode: criteria.mode,
+            disposition: "failed",
+            reason: "Qualification did not complete",
+        };
+        try {
+            const qualification = await provider.evaluateEligibility(
+                structuredClone(input),
+                criteria.mode === "decision"
+                    ? context
+                    : {
+                          ...context,
+                          complete: async () => {
+                              throw new Error(
+                                  "Static eligibility cannot invoke a model",
+                              );
+                          },
+                          decide: async () => {
+                              throw new Error(
+                                  "Static eligibility cannot invoke a decision model",
+                              );
+                          },
+                      },
+            );
+            if (
+                !["eligible", "ineligible", "deferred", "failed"].includes(
+                    qualification.disposition,
+                ) ||
+                typeof qualification.reason !== "string" ||
+                !qualification.reason.trim()
+            )
+                throw new Error("Invalid provider qualification result");
+            Object.assign(receipt, qualification);
+        } catch (error) {
+            receipt.reason = safeError(error);
+        }
+        await update((target) => {
+            target.eligibility = receipt;
+        });
+        if (receipt.disposition !== "eligible") {
+            await this.result(
+                job,
+                result.viewId,
+                receipt.disposition === "ineligible"
+                    ? "skipped"
+                    : receipt.disposition === "failed"
+                      ? "failed"
+                      : "blocked",
+                receipt.reason,
+            );
+            return receipt.disposition === "ineligible";
+        }
+        await context.checkpoint("qualified");
+        await setMaintenanceBuildClass(
+            input.inputs.reduce(
+                (sum, source) => sum + source.content.length,
+                0,
+            ) > 120000,
+            context.signal,
+        );
+        await this.result(
+            job,
+            result.viewId,
+            "generating",
+            "Constructing qualified extension artifact",
+        );
+        const output = await registry.generate(input, context);
+        validateConstructedGuide(input, output);
+        if (output.content.kind !== "extension")
+            throw new Error("Extension output changed kind");
+        validateSupport(output, output.content.fidelity);
+        await registry.authorize(input, "accept");
+        await this.owner.materialize(
+            job,
+            result,
+            output,
+            output,
+            [],
+            context.signal,
+            publicationProof(
+                input.fingerprint,
+                output,
+                output.content.fidelity,
+            ),
+        );
         return true;
     }
 
@@ -931,6 +1080,11 @@ export class ViewBuildRunner {
         };
         try {
             for (const [index, result] of job.results.entries()) {
+                if (
+                    result.snapshot.pipeline === "extension-v1" &&
+                    result.state !== "pending"
+                )
+                    continue;
                 if (index % this.wikiAssessmentConcurrency === 0)
                     prepare(index);
                 const target = () =>

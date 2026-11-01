@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { hubNotifications } from "./memoryHubNotifications";
+import { renderDerivedViewModule } from "@typeagent/memory-client/derived-view-presentation";
 import { icon } from "./memoryHubUi";
 import type {
     UnderstandingCitation,
@@ -404,7 +405,9 @@ export function mountMemoryHubUnderstanding(
                         ? "Evidence timeline"
                         : module.kind === "concepts"
                           ? "Related concepts"
-                          : "Recorded relationships",
+                          : module.kind === "derivedViews"
+                            ? "Derived views"
+                            : "Recorded relationships",
                 ),
             );
             const body = node("div");
@@ -515,6 +518,7 @@ export function mountMemoryHubUnderstanding(
     async function loadModule(
         kind: UnderstandingModuleRequest["kind"],
         body: HTMLElement,
+        scope: Partial<UnderstandingModuleRequest> = {},
     ) {
         if (!result) return;
         const token = version;
@@ -538,7 +542,13 @@ export function mountMemoryHubUnderstanding(
         try {
             const value = await invokeView(
                 "memoryHubUnderstandingModule",
-                { corpusId, snapshotId, kind, requestId: crypto.randomUUID() },
+                {
+                    corpusId,
+                    snapshotId,
+                    kind,
+                    requestId: crypto.randomUUID(),
+                    ...scope,
+                },
                 { signal },
             );
             if (
@@ -552,6 +562,10 @@ export function mountMemoryHubUnderstanding(
             if (value.status === "unavailable")
                 body.append(node("p", value.reason ?? "Module unavailable."));
             else if (kind === "timeline") renderTimeline(value, body);
+            else if (kind === "derivedViews")
+                renderDerivedViewModule(value, body, (scope) => {
+                    void loadModule(kind, body, scope);
+                });
             else if (kind === "concepts") {
                 for (const concept of value.concepts ?? []) {
                     const card = node(
@@ -576,7 +590,9 @@ export function mountMemoryHubUnderstanding(
                 body.append(
                     node(
                         "small",
-                        "Bounded preview; more relationships may exist.",
+                        kind === "derivedViews"
+                            ? "Bounded exact-revision preview; expand omitted stored claims, text and citations without regeneration."
+                            : "Bounded preview; more relationships may exist.",
                     ),
                 );
         } catch (error) {

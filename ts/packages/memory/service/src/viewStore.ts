@@ -1281,8 +1281,11 @@ export class TypedViewStore {
         jobId: string,
         update: (job: ViewBuildJob) => void,
         updateWikiFamily?: (family: WikiFamilyState) => void,
+        expectedHead?: string | null,
     ): Promise<ViewBuildJob> {
         const { head, state } = await this.history(corpusId).read();
+        if (expectedHead !== undefined && head !== expectedHead)
+            throw new Error("View build continuation head conflict");
         const job = state.builds?.[jobId];
         if (!job)
             throw new Error(

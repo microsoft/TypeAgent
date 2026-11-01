@@ -165,6 +165,12 @@ export function createMemoryServiceRpcFacade(
         retryViewBuild: (...args) =>
             service.retryViewBuild?.(...args) ??
             unsupportedCapability("view build retry"),
+        continueViewBuild: (...args) =>
+            service.continueViewBuild?.(...args) ??
+            unsupportedCapability("accounted view continuation"),
+        refreshExtensionViews: (...args) =>
+            service.refreshExtensionViews?.(...args) ??
+            unsupportedCapability("extension refresh"),
         getViewConflict: (...args) =>
             service.getViewConflict?.(...args) ??
             unsupportedCapability("view conflicts"),

@@ -1,0 +1,1588 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { mkdir, rm } from "node:fs/promises";
+import path from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { FileMemoryService } from "../src/fileMemoryService.js";
+import { waitForMemoryJob } from "../src/rpcFacade.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import {
+    extensionViewId,
+    ViewExtensionRegistry,
+} from "../src/viewExtensions.js";
+import { viewHash } from "../src/viewContent.js";
+import type {
+    ViewExtensionProvider,
+    ViewPayloadSchema,
+    ExtensionViewContent,
+} from "../src/viewExtensionTypes.js";
+import type {
+    ViewBuildJob,
+    ViewBuildRequest,
+    ViewBuildSnapshot,
+    ViewRelationship,
+} from "../src/viewTypes.js";
+import type {
+    ChatModel,
+    DecisionModel,
+    RequestBudgetLimits,
+} from "@typeagent/aiclient";
+import { fetchWithRetry } from "@typeagent/aiclient";
+import type { FileMemoryServiceOptions } from "../src/fileMemoryService.js";
+import type {
+    IndexedFragmentRequest,
+    IndexedFragmentSelection,
+} from "../src/types.js";
+
+const requestBudget: RequestBudgetLimits = {
+    tokenizer: "offline-char-bound",
+    countTokens: (text) => text.length,
+    inputTokens: 100000,
+    outputTokens: 2048,
+    safetyTokens: 64,
+    contextTokens: 120000,
+    reservedTokens: 1000000,
+    chatAttempts: 6,
+    embeddingAttempts: 1,
+    elapsedMs: 30000,
+};
+
+class ExtensionQueryIndex extends FakeSemanticCorpusIndex {
+    async readFragments(
+        input: IndexedFragmentRequest,
+    ): Promise<IndexedFragmentSelection> {
+        const fragments = this.documents
+            .filter(
+                (document) =>
+                    input.sourceIds.includes(document.source.sourceId) &&
+                    input.terms.some((term) =>
+                        document.content
+                            .toLowerCase()
+                            .includes(term.toLowerCase()),
+                    ),
+            )
+            .slice(0, input.maxFragments ?? 12)
+            .map((document) => ({
+                sourceId: document.source.sourceId,
+                revisionId: document.revision.revisionId,
+                locator: `chars:0-${document.content.length}`,
+                snippet: document.content,
+                score: 1,
+            }));
+        return {
+            fragments,
+            readChars: fragments.reduce(
+                (sum, fragment) => sum + fragment.snippet.length,
+                0,
+            ),
+            limited: false,
+        };
+    }
+}
+
+function readerModel(understanding = false, onRead?: () => void): ChatModel {
+    return {
+        completionSettings: {},
+        async complete(prompt) {
+            const body =
+                typeof prompt === "string"
+                    ? prompt
+                    : prompt.find((section) => section.role === "user")!
+                          .content;
+            if (typeof body !== "string")
+                throw new Error("Expected serialized offline reader evidence");
+            const envelope = JSON.parse(body);
+            const view = envelope.evidence.find(
+                (item: { kind: string }) => item.kind === "derived",
+            );
+            if (!view)
+                throw new Error(
+                    "Ordinary reader did not receive extension evidence",
+                );
+            const evidenceIds = [
+                view.id,
+                ...view.supportingEvidenceIds,
+                ...view.opposingEvidenceIds,
+            ];
+            onRead?.();
+            return {
+                success: true,
+                data: JSON.stringify(
+                    understanding || "candidates" in envelope
+                        ? {
+                              schemaVersion: 1,
+                              status: "answered",
+                              title: "Copper lantern status",
+                              summary: {
+                                  text: "Copper lantern is marked complete, but independent verification is not established.",
+                                  evidenceIds,
+                                  role: "memory",
+                              },
+                              sections: [],
+                              unknowns: [
+                                  "Independent verification is not established.",
+                              ],
+                              followUps: [],
+                              moduleSignals: [],
+                              retrievalQueries: [],
+                          }
+                        : {
+                              status: "answered",
+                              answer: "Copper lantern is marked complete, but independent verification is not established.",
+                              evidenceIds,
+                              retrievalQueries: [],
+                          },
+                ),
+            };
+        },
+    };
+}
+
+function opposingProvider() {
+    const fixture = provider();
+    const generate = fixture.installed.generate;
+    fixture.installed.generate = async (...args) => {
+        const content = await generate(...args);
+        const source = args[0].inputs[1];
+        const opposition = {
+            sourceId: source.sourceId,
+            revisionId: source.revisionId,
+            locator: `chars:0-${source.content.length}`,
+            excerpt: source.content,
+        };
+        content.citations.push(opposition);
+        content.evidence[0].opposition.push(opposition);
+        content.inputUse[1].disposition = "represented";
+        content.inputUse[1].reason = "Original opposing qualification";
+        content.fidelity.relationships.push({
+            edgeId: "claim.opposition.0",
+            supported: true,
+            reason: "Offline exact opposing source",
+        });
+        content.presentation.layouts = [
+            "story",
+            "roles",
+            "brief",
+            "sources",
+        ].map((id) => ({
+            id,
+            label: id,
+            groups: [{ id: `${id}-group`, label: id, blockIds: ["claim"] }],
+        }));
+        return content;
+    };
+    return fixture;
+}
+
+const outputSchema: ViewPayloadSchema = {
+    type: "object",
+    properties: {
+        items: {
+            type: "array",
+            items: { type: "string", maxLength: 200 },
+            maxItems: 4,
+        },
+    },
+    required: ["items"],
+};
+
+function provider(
+    disposition: "eligible" | "ineligible" | "deferred" = "eligible",
+) {
+    let constructionCalls = 0;
+    let authorized = true;
+    const installed: ViewExtensionProvider = {
+        descriptor: {
+            apiVersion: 1,
+            label: "Synthetic status recap",
+            identity: {
+                providerId: "synthetic-recap",
+                version: "1",
+                implementationDigest: viewHash("synthetic implementation"),
+                inputContract: "synthetic-input-v1",
+                outputContract: "synthetic-output-v1",
+                schemaDigest: viewHash(outputSchema),
+                recipeDigest: viewHash("synthetic recipe"),
+            },
+            outputSchema,
+            definitions: [
+                { id: "recap", eligibilityVersion: "1", mode: "static" },
+            ],
+            limits: {
+                maxSources: 64,
+                maxInputChars: 240000,
+                maxOutputChars: 120000,
+                maxModelCalls: 6,
+                timeoutMs: 30000,
+            },
+        },
+        authorize: async () => authorized,
+        evaluateEligibility: async () => ({
+            disposition,
+            reason: `Synthetic ${disposition} source group`,
+        }),
+        prepare: async () => ({ items: ["prepared"] }),
+        generate: async (input) => {
+            constructionCalls++;
+            const source = input.inputs[0];
+            const citation = {
+                sourceId: source.sourceId,
+                revisionId: source.revisionId,
+                locator: `chars:0-${source.content.length}`,
+                excerpt: source.content,
+            };
+            return {
+                kind: "extension",
+                construction: "extension-v1",
+                provider: installed.descriptor.identity,
+                title: "Synthetic recap",
+                sections: [
+                    {
+                        id: "claim",
+                        role: "context",
+                        heading: "Status",
+                        body: "Copper lantern completed under stated limits.",
+                    },
+                ],
+                citations: [citation],
+                evidence: [
+                    { blockId: "claim", support: [citation], opposition: [] },
+                ],
+                payload: { items: ["Copper lantern"] },
+                presentation: {
+                    schemaVersion: 1,
+                    templateId: "document-v1",
+                    templateVersion: 1,
+                    layouts: [
+                        {
+                            id: "story",
+                            label: "Story",
+                            groups: [
+                                {
+                                    id: "recap",
+                                    label: "Recap",
+                                    blockIds: ["claim"],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                inputUse: input.inputs.map((source, index) => ({
+                    sourceId: source.sourceId,
+                    revisionId: source.revisionId,
+                    disposition: index === 0 ? "represented" : "unused",
+                    reason:
+                        index === 0
+                            ? "Claim support"
+                            : "Retained complete group context",
+                })),
+                fidelity: {
+                    supported: true,
+                    sections: [
+                        {
+                            sectionId: "claim",
+                            supported: true,
+                            reason: "Synthetic assessment",
+                        },
+                    ],
+                    relationships: [
+                        {
+                            edgeId: "claim.support.0",
+                            supported: true,
+                            reason: "Synthetic assessment",
+                        },
+                    ],
+                    missingContext: [],
+                    reasons: [],
+                },
+            };
+        },
+    };
+    return {
+        installed,
+        calls: () => constructionCalls,
+        revoke: () => {
+            authorized = false;
+        },
+    };
+}
+
+async function settled(
+    service: FileMemoryService,
+    job: ViewBuildJob,
+): Promise<ViewBuildJob> {
+    for (let attempt = 0; attempt < 2000; attempt++) {
+        const current = await service.getViewBuild({
+            corpusId: job.corpusId,
+            jobId: job.jobId,
+        });
+        if (!current) throw new Error("Build disappeared");
+        if (current.state !== "running") return current;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    throw new Error("Synthetic provider build did not settle");
+}
+
+describe("registered extension service lifecycle", () => {
+    let root: string;
+    let service: FileMemoryService;
+
+    afterEach(async () => {
+        await service?.close();
+        if (root) await rm(root, { recursive: true, force: true });
+    });
+
+    test("provider registration rejects remote schema references", () => {
+        const fixture = provider();
+        const remoteSchema = {
+            ...outputSchema,
+            $ref: "https://example.invalid/schema",
+        };
+        fixture.installed.descriptor.outputSchema = remoteSchema;
+        fixture.installed.descriptor.identity.schemaDigest =
+            viewHash(remoteSchema);
+        expect(() => new ViewExtensionRegistry([fixture.installed])).toThrow(
+            /remote reference/,
+        );
+        expect(fixture.calls()).toBe(0);
+    });
+
+    test("static qualification cannot spend model calls and leaves a failed receipt", async () => {
+        const fixture = provider();
+        fixture.installed.evaluateEligibility = async (_input, context) => {
+            await context.complete("classify", "This must not execute");
+            return { disposition: "eligible", reason: "Must not qualify" };
+        };
+        const { corpus, request } = await setup(fixture.installed);
+        const job = await settled(service, await service.buildViews(request));
+        expect(job.state).toBe("failed");
+        expect(job.results[0].eligibility?.disposition).toBe("failed");
+        expect(job.results[0].providerAttempts).toBeUndefined();
+        expect(fixture.calls()).toBe(0);
+        expect((await service.listViews(corpus.corpusId)).views).toHaveLength(
+            0,
+        );
+    });
+
+    test.each([false, true])(
+        "same-source field citations retain exact bindings and strict coalesced fidelity acceptance (stale receipt=%s)",
+        async (staleReceipt) => {
+            const fixture = provider();
+            const generate = fixture.installed.generate;
+            let generated: ExtensionViewContent | undefined;
+            const edgeIds = [
+                "claim.support.0",
+                "claim.support.2",
+                "claim.opposition.0",
+                "claim.opposition.1",
+                "history.support.0",
+            ];
+            fixture.installed.generate = async (...args) => {
+                const content = await generate(...args);
+                const [source, other] = args[0].inputs;
+                const fields = [
+                    [0, 9],
+                    [10, 15],
+                    [16, 24],
+                    [25, 35],
+                    [36, 47],
+                ].map(([start, end]) => ({
+                    sourceId: source.sourceId,
+                    revisionId: source.revisionId,
+                    locator: `chars:${start}-${end}`,
+                    excerpt: source.content.slice(start, end),
+                }));
+                const otherCitation = {
+                    sourceId: other.sourceId,
+                    revisionId: other.revisionId,
+                    locator: `chars:0-${other.content.length}`,
+                    excerpt: other.content,
+                };
+                content.citations = [...fields, otherCitation];
+                content.evidence[0].support = [
+                    fields[0],
+                    fields[1],
+                    otherCitation,
+                    ...fields.slice(2),
+                ];
+                content.evidence[0].opposition = [
+                    fields[3],
+                    otherCitation,
+                    fields[4],
+                ];
+                content.sections.push({
+                    id: "history",
+                    role: "context",
+                    heading: "Hypothesis history",
+                    body: "Statement, scope, next test, assessment and uncertainty remain qualified.",
+                });
+                content.evidence.push({
+                    blockId: "history",
+                    support: [fields[0]],
+                    opposition: [],
+                });
+                content.presentation.layouts[0].groups[0].blockIds.push(
+                    "history",
+                );
+                content.inputUse[1].disposition = "represented";
+                content.inputUse[1].reason = "Additional exact qualification";
+                content.fidelity.sections = content.sections.map((section) => ({
+                    sectionId: section.id,
+                    supported: true,
+                    reason: "All exact fields inspected in the offline fixture",
+                }));
+                content.fidelity.relationships = [
+                    ...edgeIds,
+                    ...(staleReceipt ? ["claim.support.1"] : []),
+                ].map((edgeId) => ({
+                    edgeId,
+                    supported: true,
+                    reason: "All bound citations inspected in the offline fixture",
+                }));
+                generated = structuredClone(content);
+                return content;
+            };
+            const { corpus, request } = await setup(fixture.installed, 2, {}, [
+                "statement scope nextTest assessment uncertainty",
+                "Additional observed qualification.",
+            ]);
+            const result = await settled(
+                service,
+                await service.buildViews(request),
+            );
+            expect(fixture.calls()).toBe(1);
+            if (staleReceipt) {
+                expect(result.results[0].state).toBe("failed");
+                expect(result.results[0].reason).toMatch(
+                    /every exact relationship/,
+                );
+                expect(
+                    (await service.listViews(corpus.corpusId)).views,
+                ).toEqual([]);
+                return;
+            }
+            expect(result.state).toBe("complete");
+            expect(result.results[0].state).toBe("draft");
+            const artifact = await service.getView({
+                corpusId: corpus.corpusId,
+                viewId: request.targets[0].definition.viewId,
+            });
+            if (
+                !artifact ||
+                artifact.content.kind !== "extension" ||
+                !generated
+            )
+                throw new Error("Expected accepted exact extension artifact");
+            expect(artifact.content.citations).toEqual(generated.citations);
+            expect(artifact.content.evidence).toEqual(generated.evidence);
+            const projected = artifact.relationships.filter(
+                (
+                    edge,
+                ): edge is Extract<
+                    ViewRelationship,
+                    { origin: "human" | "generator" }
+                > => edge.origin !== "system" && edge.from.kind === "section",
+            );
+            expect(projected.map((edge) => edge.id)).toEqual(edgeIds);
+            expect(projected[0].citations).toEqual([
+                ...generated.citations.slice(0, 5),
+            ]);
+            expect(projected[1].citations).toEqual([generated.citations[5]]);
+            expect(projected[2].citations).toEqual(
+                generated.citations.slice(3, 5),
+            );
+            expect(projected[3].citations).toEqual([generated.citations[5]]);
+            expect(projected[4].citations).toEqual([generated.citations[0]]);
+        },
+    );
+
+    test.each(["eligible", "ineligible", "deferred"] as const)(
+        "native decision eligibility records %s under shared admission",
+        async (disposition) => {
+            const fixture = provider();
+            let calls = 0;
+            fixture.installed.descriptor.definitions[0].mode = "decision";
+            const decision: DecisionModel = {
+                provider: "azure",
+                providerSource: "factory",
+                model: "offline-choice",
+                configGeneration: 1,
+                async decide() {
+                    calls++;
+                    return {
+                        success: true,
+                        data: {
+                            provider: "azure",
+                            requestedModel: "offline-choice",
+                            answers: {
+                                qualification: {
+                                    type: "choice",
+                                    choice: disposition,
+                                    probabilities: {
+                                        eligible:
+                                            disposition === "eligible" ? 1 : 0,
+                                        ineligible:
+                                            disposition === "ineligible"
+                                                ? 1
+                                                : 0,
+                                        deferred:
+                                            disposition === "deferred" ? 1 : 0,
+                                    },
+                                },
+                            },
+                        },
+                    };
+                },
+            };
+            fixture.installed.decisionModel = decision;
+            fixture.installed.evaluateEligibility = async (_input, context) => {
+                const response = await context.decide!("qualify", {
+                    state: { family: "installed-status-family" },
+                    questions: {
+                        qualification: {
+                            type: "choice",
+                            instructions: "Evaluate this approved group only.",
+                            criteria: {
+                                eligible: "Concluded and complete",
+                                ineligible: "Unrelated",
+                                deferred: "Incomplete",
+                            },
+                        },
+                    },
+                });
+                const answer = response.answers.qualification;
+                if (answer.type !== "choice")
+                    throw new Error("Invalid native decision");
+                return {
+                    disposition: answer.choice as typeof disposition,
+                    reason: `Native choice: ${answer.choice}`,
+                };
+            };
+            const { request } = await setup(fixture.installed, 1, {
+                informationalBudget: requestBudget,
+            });
+            const job = await settled(
+                service,
+                await service.buildViews(request),
+            );
+            expect(job.results[0].eligibility).toMatchObject({
+                disposition,
+                mode: "decision",
+            });
+            expect(job.results[0].providerAttempts).toHaveLength(1);
+            expect(
+                JSON.parse(job.results[0].providerAttempts![0].output!).answers
+                    .qualification.choice,
+            ).toBe(disposition);
+            expect(calls).toBe(1);
+            expect(fixture.calls()).toBe(disposition === "eligible" ? 1 : 0);
+        },
+    );
+
+    test("accounted continuation persists candidates and replays returned stages after restart", async () => {
+        const fixture = provider();
+        const construct = fixture.installed.generate;
+        let failed = true,
+            modelCalls = 0;
+        fixture.installed.model = {
+            completionSettings: {},
+            complete: async () => ({
+                success: true,
+                data: `candidate-${++modelCalls}`,
+            }),
+        };
+        fixture.installed.generate = async (input, prepared, context) => {
+            const output = await context.complete(
+                "construct",
+                "Exact approved group prompt",
+            );
+            await context.recordCandidate!("story", {
+                output,
+                decisionId: null,
+            });
+            await context.checkpoint("review", { accepted: !failed });
+            if (failed)
+                throw new Error(
+                    "Offline interruption after a durable returned stage",
+                );
+            await context.complete(
+                "fidelity",
+                "Review exact candidate with qualifications",
+            );
+            return construct(input, prepared, context);
+        };
+        const { request, options, corpus } = await setup(fixture.installed, 1, {
+            informationalBudget: requestBudget,
+        });
+        const first = await settled(service, await service.buildViews(request));
+        expect(first.state).toBe("failed");
+        expect(first.results[0].providerCandidates?.[0].value).toEqual({
+            output: "candidate-1",
+            decisionId: null,
+        });
+        expect(first.results[0].providerCheckpoints).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    stage: "review",
+                    state: { accepted: false },
+                }),
+            ]),
+        );
+        expect(modelCalls).toBe(1);
+        await service.close();
+        service = new FileMemoryService(root, options);
+        failed = false;
+        const expectedHead = (await service.listViews(corpus.corpusId)).head;
+        const resumed = await service.continueViewBuild({
+            corpusId: corpus.corpusId,
+            jobId: first.jobId,
+            expectedHead,
+        });
+        const duplicate = await service.continueViewBuild({
+            corpusId: corpus.corpusId,
+            jobId: first.jobId,
+            expectedHead,
+        });
+        expect(duplicate.jobId).toBe(first.jobId);
+        const result = await settled(service, resumed);
+        expect(result.state).toBe("complete");
+        expect(result.jobId).toBe(first.jobId);
+        expect(modelCalls).toBe(2);
+        expect(result.results[0].providerAttempts).toHaveLength(2);
+        expect(result.results[0].providerCandidates).toHaveLength(1);
+        expect(result.results[0].continuations).toHaveLength(1);
+        await expect(
+            service.continueViewBuild({
+                corpusId: corpus.corpusId,
+                jobId: result.jobId,
+                expectedHead: (await service.listViews(corpus.corpusId)).head,
+            }),
+        ).rejects.toThrow("no resumable");
+    });
+
+    test("persists actual nullable structured payload and rejects bounded union overflow", async () => {
+        const fixture = provider();
+        const schema: ViewPayloadSchema = {
+            type: "object",
+            properties: {
+                decisionId: {
+                    type: "union",
+                    variants: [
+                        { type: "string", maxLength: 100 },
+                        { type: "null" },
+                    ],
+                },
+            },
+            required: ["decisionId"],
+        };
+        fixture.installed.descriptor.outputSchema = schema;
+        fixture.installed.descriptor.identity.schemaDigest = viewHash(schema);
+        const construct = fixture.installed.generate;
+        fixture.installed.generate = async (...args) => ({
+            ...(await construct(...args)),
+            payload: { decisionId: null },
+        });
+        const { request, corpus } = await setup(fixture.installed);
+        const result = await settled(
+            service,
+            await service.buildViews(request),
+        );
+        expect(result.state).toBe("complete");
+        expect(
+            (
+                await service.getView({
+                    corpusId: corpus.corpusId,
+                    viewId: request.targets[0].definition.viewId,
+                })
+            )?.content,
+        ).toHaveProperty("payload.decisionId", null);
+        const invalid = {
+            type: "union",
+            variants: Array.from({ length: 9 }, () => ({ type: "null" })),
+        } as ViewPayloadSchema;
+        fixture.installed.descriptor.outputSchema = invalid;
+        fixture.installed.descriptor.identity.schemaDigest = viewHash(invalid);
+        expect(() => new ViewExtensionRegistry([fixture.installed])).toThrow(
+            "union",
+        );
+    });
+
+    test("opted-in post-ingestion discovery creates one group target, ignores spoofed sources and refreshes changed inputs", async () => {
+        const fixture = provider();
+        const identity = fixture.installed.descriptor.identity;
+        fixture.installed.discover = async (input) => {
+            const selected = input.sources.filter(
+                (source) => source.sourceId === "source-0",
+            );
+            if (!selected.length) return [];
+            const definition = {
+                viewId: extensionViewId(
+                    identity.providerId,
+                    "recap",
+                    "approved-group",
+                ),
+                kind: "extension" as const,
+                selector: {
+                    kind: "sources" as const,
+                    sources: selected.map(({ sourceId, revisionId }) => ({
+                        sourceId,
+                        revisionId,
+                    })),
+                },
+                extension: {
+                    ...identity,
+                    definitionId: "recap",
+                    targetKey: "approved-group",
+                    eligibilityVersion: "1",
+                    policyDigest: viewHash("synthetic approval"),
+                    parameters: {},
+                },
+            };
+            return [definition, structuredClone(definition)];
+        };
+        const { corpus } = await setup(fixture.installed, 1, {
+            extensionDiscovery: true,
+            maintenanceMode: "automatic",
+        });
+        async function waitForCalls(count: number) {
+            for (let probe = 0; probe < 500; probe++) {
+                if (
+                    fixture.calls() === count &&
+                    (await service.listViewBuilds(corpus.corpusId)).every(
+                        (job) => job.state !== "running",
+                    )
+                )
+                    return;
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+            throw new Error("Automatic extension maintenance did not settle");
+        }
+        await waitForCalls(1);
+        expect(await service.listViewBuilds(corpus.corpusId)).toHaveLength(1);
+        const spoof = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            pipeline: { mode: "content" },
+            source: {
+                sourceId: "unrelated-spoof",
+                sourceType: "text",
+                title: "Copied metadata",
+                text: "Unrelated record",
+                metadata: {
+                    family: "offline-approved-status",
+                    concluded: true,
+                },
+            },
+        });
+        await waitForMemoryJob(service, spoof.jobId);
+        await service.refreshExtensionViews({ corpusId: corpus.corpusId });
+        expect(fixture.calls()).toBe(1);
+        const updated = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            pipeline: {
+                mode: "content",
+                updatePolicy: "replaceActiveRevision",
+            },
+            source: {
+                sourceId: "source-0",
+                sourceType: "text",
+                title: "Updated status",
+                text: "Completed status with a new qualification.",
+            },
+        });
+        await waitForMemoryJob(service, updated.jobId);
+        await waitForCalls(2);
+        const views = await service.listViews(corpus.corpusId);
+        expect(views.views).toHaveLength(1);
+        expect(views.views[0].version).toBe(3);
+        expect(await service.listViewBuilds(corpus.corpusId)).toHaveLength(2);
+    }, 20000);
+
+    test("ordinary Search and Ask plus rich Explain select extension evidence with exact original support and opposition", async () => {
+        const fixture = opposingProvider();
+        let reads = 0;
+        const { corpus, request } = await setup(
+            fixture.installed,
+            2,
+            {
+                indexFactory: (_id, directory) =>
+                    new ExtensionQueryIndex(directory),
+                indexedAnswerModel: readerModel(false, () => reads++),
+                understanding: true,
+            },
+            [
+                "Copper lantern was marked complete.",
+                "Copper lantern completion was not independently verified.",
+            ],
+        );
+        const completed = await settled(
+            service,
+            await service.buildViews(request),
+        );
+        expect(completed.results).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ state: "draft" }),
+            ]),
+        );
+        const search = { corpusId: corpus.corpusId, query: "Copper lantern" };
+        expect((await service.search(search)).derivedViews).toEqual([]);
+        const view = (await service.getView({
+            corpusId: corpus.corpusId,
+            viewId: request.targets[0].definition.viewId,
+        }))!;
+        await service.publishView({
+            corpusId: corpus.corpusId,
+            viewId: view.viewId,
+            revisionId: view.revisionId,
+            expectedVersion: view.version,
+            expectedHead: (await service.listViews(corpus.corpusId)).head!,
+        });
+        const found = await service.search(search);
+        expect(found.derivedViews).toHaveLength(1);
+        expect(found.derivedViews![0].opposingSources[0].sourceId).toBe(
+            "source-1",
+        );
+        const answer = await service.answer({
+            corpusId: corpus.corpusId,
+            question: "Copper lantern",
+            retrievalPolicy: "sourcesAndViews",
+            answerMode: "synthesized",
+            includeDiagnostics: true,
+        });
+        expect(answer.answer).toContain("not established");
+        expect(
+            answer.citations.map((source) => source.sourceId).sort(),
+        ).toEqual(["source-0", "source-1"]);
+        expect(answer.derivedReferences).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    viewId: view.viewId,
+                    revisionId: view.revisionId,
+                    sectionId: "claim",
+                    extension: fixture.installed.descriptor.identity,
+                }),
+            ]),
+        );
+        const understanding = await service.understand({
+            corpusId: corpus.corpusId,
+            question: "Copper lantern",
+            retrievalPolicy: "sourcesAndViews",
+        });
+        expect(understanding.modules).toEqual(
+            expect.arrayContaining([
+                { kind: "derivedViews", status: "planned" },
+            ]),
+        );
+        const readCount = reads;
+        for (const layoutId of ["story", "roles", "brief", "sources"]) {
+            const module = await service.understandingModule({
+                corpusId: corpus.corpusId,
+                snapshotId: understanding.snapshotId,
+                kind: "derivedViews",
+                viewId: view.viewId,
+                revisionId: view.revisionId,
+                layoutId,
+            });
+            expect(module.derivedViews?.[0].selectedBlockIds).toEqual([
+                "claim",
+            ]);
+            expect(
+                module.derivedViews?.[0].blocks[0].citations.map(
+                    (citation) => citation.role,
+                ),
+            ).toEqual(["support", "opposition"]);
+        }
+        expect(reads).toBe(readCount);
+        const original = await service.understandingModule({
+            corpusId: corpus.corpusId,
+            snapshotId: understanding.snapshotId,
+            kind: "derivedViews",
+            viewId: view.viewId,
+            revisionId: view.revisionId,
+            blockId: "claim",
+            citationId: "claim.opposition.0",
+        });
+        expect(original.derivedViews?.[0].sourceFragment).toMatchObject({
+            blockId: "claim",
+            role: "opposition",
+            source: { sourceId: "source-1" },
+            text: "Copper lantern completion was not independently verified.",
+        });
+        expect(reads).toBe(readCount);
+        await expect(
+            service.understandingModule({
+                corpusId: corpus.corpusId,
+                snapshotId: understanding.snapshotId,
+                kind: "derivedViews",
+                viewId: "outside-snapshot",
+                revisionId: view.revisionId,
+            }),
+        ).rejects.toThrow("outside");
+    });
+
+    test.each([false, true])(
+        "default Explain validates one view revision per boundary with external source authorization (revoked dependency=%s)",
+        async (revoke) => {
+            const fixture = opposingProvider();
+            const generate = fixture.installed.generate;
+            const blockIds = ["claim", "context", "limits", "review"];
+            fixture.installed.generate = async (...args) => {
+                const content = await generate(...args);
+                content.sections = blockIds.map((id) => ({
+                    ...content.sections[0],
+                    id,
+                    heading: id,
+                    body: `Copper lantern ${id}: completion has bounded support and opposition.`,
+                }));
+                content.evidence = blockIds.map((blockId) => ({
+                    ...content.evidence[0],
+                    blockId,
+                }));
+                content.fidelity.sections = blockIds.map((sectionId) => ({
+                    sectionId,
+                    supported: true,
+                    reason: "Synthetic exact section support",
+                }));
+                content.fidelity.relationships = blockIds.flatMap((id) =>
+                    ["support", "opposition"].map((role) => ({
+                        edgeId: `${id}.${role}.0`,
+                        supported: true,
+                        reason: "Synthetic exact original field",
+                    })),
+                );
+                for (const layout of content.presentation.layouts)
+                    layout.groups[0].blockIds = blockIds;
+                return content;
+            };
+            let reads = 0;
+            let postReaderChecks = 0;
+            let deniedSource: string | undefined;
+            const authorize = fixture.installed.authorize;
+            fixture.installed.authorize = async (snapshot, operation) => {
+                if (operation === "publish" && reads) {
+                    postReaderChecks++;
+                    if (revoke && postReaderChecks === 2)
+                        deniedSource = "source-2";
+                }
+                return authorize(snapshot, operation);
+            };
+            const texts = [
+                "Copper lantern was marked complete.",
+                "Copper lantern completion was not independently verified.",
+                "Retained qualification dependency outside the query.",
+            ];
+            const approvals = texts.map((text, index) => ({
+                sourceId: `source-${index}`,
+                contentHash: createHash("sha256").update(text).digest("hex"),
+                retainedContentHash: viewHash(text),
+            }));
+            const nativeCheck = promisify(execFile);
+            const gates: Array<{ operation: string; sourceId: string }> = [];
+            const { corpus, request, options } = await setup(
+                fixture.installed,
+                3,
+                {
+                    indexFactory: (_id, directory) =>
+                        new ExtensionQueryIndex(directory),
+                    indexedAnswerModel: readerModel(false, () => reads++),
+                    understanding: true,
+                    sourceAuthorization: async (input) => {
+                        gates.push(input);
+                        const { stdout } = await nativeCheck(process.execPath, [
+                            "-e",
+                            `const [request, approvals, denied] = process.argv.slice(1).map(JSON.parse);
+const allowed = approvals.some(source => source.sourceId === request.sourceId &&
+    source.contentHash === request.contentHash && source.retainedContentHash === request.retainedContentHash);
+process.stdout.write(JSON.stringify(allowed && request.sourceId !== denied));`,
+                            JSON.stringify(input),
+                            JSON.stringify(approvals),
+                            JSON.stringify(deniedSource ?? null),
+                        ]);
+                        return JSON.parse(stdout) === true;
+                    },
+                },
+                texts,
+            );
+            const built = await settled(
+                service,
+                await service.buildViews(request),
+            );
+            expect(built.state).toBe("complete");
+            const view = (await service.getView({
+                corpusId: corpus.corpusId,
+                viewId: request.targets[0].definition.viewId,
+            }))!;
+            await service.publishView({
+                corpusId: corpus.corpusId,
+                viewId: view.viewId,
+                revisionId: view.revisionId,
+                expectedVersion: view.version,
+                expectedHead: (await service.listViews(corpus.corpusId)).head!,
+            });
+            await service.close();
+            service = new FileMemoryService(root, options);
+            const explaining = service.understand({
+                corpusId: corpus.corpusId,
+                question: "Copper lantern",
+                retrievalPolicy: "sourcesAndViews",
+            });
+            if (revoke) {
+                await expect(explaining).rejects.toThrow("influence changed");
+                expect(postReaderChecks).toBe(2);
+                expect(reads).toBe(1);
+                return;
+            }
+            const result = await explaining;
+            expect(postReaderChecks).toBe(2);
+            expect(reads).toBe(1);
+            expect(result.answer?.status).toBe("answered");
+            expect(result.modules).toEqual(
+                expect.arrayContaining([
+                    { kind: "explanation", status: "ready" },
+                    { kind: "derivedViews", status: "planned" },
+                ]),
+            );
+            expect(result.answer?.summary.evidenceIds).toHaveLength(3);
+            expect(
+                result.citations.flatMap((item) =>
+                    item.kind === "source"
+                        ? [[item.source.sourceId, item.source.snippet]]
+                        : [],
+                ),
+            ).toEqual([
+                ["source-0", texts[0]],
+                ["source-1", texts[1]],
+            ]);
+            expect(
+                result.citations.filter((item) => item.kind === "derived"),
+            ).toHaveLength(4);
+            expect(gates).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        sourceId: "source-0",
+                        operation: "reader",
+                    }),
+                    expect.objectContaining({
+                        sourceId: "source-2",
+                        operation: "read",
+                    }),
+                ]),
+            );
+            const module = await service.understandingModule({
+                corpusId: corpus.corpusId,
+                snapshotId: result.snapshotId,
+                kind: "derivedViews",
+                viewId: view.viewId,
+                revisionId: view.revisionId,
+                layoutId: "story",
+                limit: 4,
+            });
+            expect(module.derivedViews?.[0].selectedBlockIds).toEqual([
+                "claim",
+            ]);
+            expect(module.derivedViews?.[0].blocks).toHaveLength(4);
+            expect(reads).toBe(1);
+        },
+        30000,
+    );
+
+    test("native approval revocation blocks warmed originals, cached modules and in-flight ordinary reader return", async () => {
+        const fixture = opposingProvider();
+        let approved = true,
+            revokeOnReturn = false,
+            reads = 0;
+        const { corpus, request } = await setup(fixture.installed, 2, {
+            indexFactory: (_id, directory) =>
+                new ExtensionQueryIndex(directory),
+            sourceAuthorization: async () => approved,
+            indexedAnswerModel: readerModel(false, () => {
+                reads++;
+                if (revokeOnReturn) approved = false;
+            }),
+            understanding: true,
+        });
+        const completed = await settled(
+            service,
+            await service.buildViews(request),
+        );
+        expect(completed.results).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ state: "draft" }),
+            ]),
+        );
+        const view = (await service.getView({
+            corpusId: corpus.corpusId,
+            viewId: request.targets[0].definition.viewId,
+        }))!;
+        await service.publishView({
+            corpusId: corpus.corpusId,
+            viewId: view.viewId,
+            revisionId: view.revisionId,
+            expectedVersion: view.version,
+            expectedHead: (await service.listViews(corpus.corpusId)).head!,
+        });
+        const snapshot = await service.understand({
+            corpusId: corpus.corpusId,
+            question: "Copper lantern",
+            retrievalPolicy: "sourcesAndViews",
+        });
+        await service.understandingModule({
+            corpusId: corpus.corpusId,
+            snapshotId: snapshot.snapshotId,
+            kind: "derivedViews",
+        });
+        await service.warmViewIndexes(corpus.corpusId);
+        const previousReads = reads;
+        approved = false;
+        await expect(
+            service.getSourceContent({
+                corpusId: corpus.corpusId,
+                ...request.targets[0].definition.selector.sources[0],
+            }),
+        ).rejects.toThrow("not authorized");
+        expect(
+            (
+                await service.search({
+                    corpusId: corpus.corpusId,
+                    query: "Retained",
+                    retrievalPolicy: "sourcesOnly",
+                })
+            ).matches,
+        ).toEqual([]);
+        const denied = await service.answer({
+            corpusId: corpus.corpusId,
+            question: "Retained",
+            retrievalPolicy: "sourcesOnly",
+        });
+        expect(denied.citations).toEqual([]);
+        expect(reads).toBe(previousReads);
+        await expect(
+            service.understandingModule({
+                corpusId: corpus.corpusId,
+                snapshotId: snapshot.snapshotId,
+                kind: "derivedViews",
+            }),
+        ).rejects.toThrow();
+        approved = true;
+        revokeOnReturn = true;
+        await expect(
+            service.answer({
+                corpusId: corpus.corpusId,
+                question: "Copper lantern",
+                retrievalPolicy: "sourcesAndViews",
+            }),
+        ).rejects.toThrow();
+        expect(reads).toBe(previousReads + 1);
+    });
+
+    test.each(["informationalBudget", "maintenanceBudget"] as const)(
+        "physical attempt receipts and intermediate candidates survive accounted host-budget continuation without replay spend (%s)",
+        async (budgetScope) => {
+            const budgetOptions = (
+                chatAttempts: number,
+            ): FileMemoryServiceOptions =>
+                budgetScope === "informationalBudget"
+                    ? {
+                          informationalBudget: {
+                              ...requestBudget,
+                              chatAttempts,
+                          },
+                      }
+                    : {
+                          maintenanceLimits: {
+                              requestBudget: { ...requestBudget, chatAttempts },
+                          },
+                      };
+            const fixture = provider();
+            fixture.installed.descriptor.limits.maxModelCalls = 1;
+            const generate = fixture.installed.generate;
+            fixture.installed.generate = async (input, prepared, context) => {
+                const candidate = await context.complete(
+                    "draft",
+                    "Synthetic draft",
+                );
+                await context.recordCandidate?.("draft", JSON.parse(candidate));
+                await context.checkpoint("draft-retained", {
+                    candidate: "draft",
+                });
+                await context.complete("review", "Synthetic review");
+                return generate(input, prepared, context);
+            };
+            let dispatches = 0;
+            const previous = globalThis.fetch;
+            globalThis.fetch = async () => {
+                dispatches++;
+                return new Response("{}");
+            };
+            const model: ChatModel = {
+                completionSettings: {},
+                async complete(prompt) {
+                    const response = await fetchWithRetry(
+                        "https://synthetic.invalid/derived",
+                        {
+                            method: "POST",
+                            body: JSON.stringify({
+                                messages: [{ role: "user", content: prompt }],
+                                max_tokens: 16,
+                            }),
+                        },
+                        0,
+                    );
+                    if (!response.success) throw new Error(response.message);
+                    return {
+                        success: true,
+                        data: JSON.stringify({ items: ["retained candidate"] }),
+                    };
+                },
+            };
+            fixture.installed.model = model;
+            try {
+                const { corpus, request } = await setup(fixture.installed, 1, {
+                    indexedAnswerModel: model,
+                    ...budgetOptions(1),
+                });
+                const failed = await settled(
+                    service,
+                    await service.buildViews(request),
+                );
+                expect(failed.state).toBe("failed");
+                expect(failed.results[0].providerRequests).toHaveLength(1);
+                expect(failed.results[0].providerCandidates?.[0].value).toEqual(
+                    {
+                        items: ["retained candidate"],
+                    },
+                );
+                expect(dispatches).toBe(1);
+                await service.close();
+                service = new FileMemoryService(root, {
+                    viewDrafts: false,
+                    informationalViews: false,
+                    sourceSynopses: false,
+                    discoveryPolicy: "off",
+                    maintenanceMode: "manual",
+                    extensionBuilds: true,
+                    extensionProviders: [fixture.installed],
+                    ...budgetOptions(3),
+                    indexFactory: (_id, directory) =>
+                        new FakeSemanticCorpusIndex(directory),
+                });
+                const resumed = await settled(
+                    service,
+                    await service.continueViewBuild({
+                        corpusId: corpus.corpusId,
+                        jobId: failed.jobId,
+                        expectedHead: (await service.listViews(corpus.corpusId))
+                            .head,
+                    }),
+                );
+                expect(resumed.jobId).toBe(failed.jobId);
+                expect(resumed.state).toBe("complete");
+                expect(dispatches).toBe(2);
+                expect(
+                    resumed.results[0].providerRequests?.map(
+                        (attempt) => attempt.reservation.attempt,
+                    ),
+                ).toEqual([1, 2]);
+                expect(resumed.results[0].providerCandidates).toHaveLength(1);
+                expect(
+                    resumed.results[0].providerBudgetAmendments,
+                ).toHaveLength(1);
+                expect(
+                    resumed.results[0].providerBudgetElapsedMs,
+                ).toBeGreaterThanOrEqual(
+                    failed.results[0].providerBudgetElapsedMs!,
+                );
+            } finally {
+                globalThis.fetch = previous;
+            }
+        },
+    );
+
+    async function setup(
+        installed: ViewExtensionProvider,
+        count = 1,
+        extra: FileMemoryServiceOptions = {},
+        texts: string[] = [],
+    ) {
+        root = path.resolve(".extension-fixtures", randomUUID());
+        await mkdir(root, { recursive: true });
+        const options = {
+            viewDrafts: false,
+            extensionBuilds: true,
+            extensionProviders: [installed],
+            informationalViews: false,
+            discoveryPolicy: "off" as const,
+            maintenanceMode: "manual" as const,
+            sourceSynopses: false,
+            indexFactory: (_id: unknown, directory: string) =>
+                new FakeSemanticCorpusIndex(directory),
+            ...extra,
+        };
+        service = new FileMemoryService(root, options);
+        const corpus = await service.createCorpus("Synthetic extension corpus");
+        const sources: ViewBuildSnapshot["definition"]["selector"]["sources"] =
+            [];
+        for (let index = 0; index < count; index++) {
+            const job = await service.ingestDocument({
+                corpusId: corpus.corpusId,
+                source: {
+                    sourceId: `source-${index}`,
+                    sourceType: "text",
+                    title: `Status ${index}`,
+                    text:
+                        texts[index] ??
+                        "Retained completed status with limitations.",
+                    metadata: {
+                        family: "offline-approved-status",
+                        concluded: true,
+                    },
+                },
+                pipeline: { mode: "content" },
+            });
+            await waitForMemoryJob(service, job.jobId);
+            const source = await service.getSource(
+                corpus.corpusId,
+                `source-${index}`,
+            );
+            sources.push({
+                sourceId: source!.sourceId,
+                revisionId: source!.activeRevisionId!,
+            });
+        }
+        const targetKey = "approved-group";
+        const request: ViewBuildRequest = {
+            corpusId: corpus.corpusId,
+            expectedHead: (await service.listViews(corpus.corpusId)).head,
+            targets: [
+                {
+                    expectedVersion: 0,
+                    definition: {
+                        viewId: extensionViewId(
+                            installed.descriptor.identity.providerId,
+                            "recap",
+                            targetKey,
+                        ),
+                        kind: "extension",
+                        selector: { kind: "sources", sources },
+                        extension: {
+                            ...installed.descriptor.identity,
+                            definitionId: "recap",
+                            eligibilityVersion: "1",
+                            targetKey,
+                            policyDigest: viewHash("synthetic approval"),
+                            parameters: {},
+                        },
+                    },
+                },
+            ],
+            publication: false,
+        };
+        return { corpus, request, options };
+    }
+
+    test("stores nested corpus artifact and eligibility, deduplicates admission, and reauthorizes reads", async () => {
+        const fake = provider();
+        const { corpus, request, options } = await setup(fake.installed);
+        const first = await service.buildViews(request);
+        const result = await settled(service, first);
+        expect(result.state).toBe("complete");
+        expect(result.results[0].eligibility?.disposition).toBe("eligible");
+        expect(result.results[0].state).toBe("draft");
+        expect((await service.buildViews(request)).jobId).toBe(first.jobId);
+        expect(fake.calls()).toBe(1);
+        const read = {
+            corpusId: corpus.corpusId,
+            viewId: request.targets[0].definition.viewId,
+        };
+        const artifact = await service.getView(read);
+        expect(artifact?.content.kind).toBe("extension");
+        expect(artifact?.content).toHaveProperty("payload.items", [
+            "Copper lantern",
+        ]);
+        await service.close();
+        service = new FileMemoryService(root, options);
+        expect((await service.getView(read))?.revisionId).toBe(
+            artifact?.revisionId,
+        );
+        expect(
+            (
+                await service.getViewBuild({
+                    corpusId: corpus.corpusId,
+                    jobId: first.jobId,
+                })
+            )?.results[0].eligibility,
+        ).toEqual(result.results[0].eligibility);
+        fake.revoke();
+        expect(await service.getView(read)).toBeUndefined();
+        expect((await service.listViews(corpus.corpusId)).views).toEqual([]);
+    });
+
+    test.each(["ineligible", "deferred"] as const)(
+        "%s input cannot construct an artifact",
+        async (disposition) => {
+            const fake = provider(disposition);
+            const { request, corpus } = await setup(fake.installed);
+            const result = await settled(
+                service,
+                await service.buildViews(request),
+            );
+            expect(result.results[0].eligibility?.disposition).toBe(
+                disposition,
+            );
+            expect(fake.calls()).toBe(0);
+            expect((await service.listViews(corpus.corpusId)).views).toEqual(
+                [],
+            );
+            expect(result.results[0].state).toBe(
+                disposition === "ineligible" ? "skipped" : "blocked",
+            );
+        },
+    );
+
+    test("unknown provider and oversized legacy selector are rejected without construction", async () => {
+        const fake = provider();
+        const { request } = await setup(fake.installed);
+        const changed = structuredClone(request);
+        changed.targets[0].definition.extension!.version = "missing";
+        await expect(service.buildViews(changed)).rejects.toThrow(
+            "Missing or mismatched installed view provider",
+        );
+        const overflowing = structuredClone(request);
+        overflowing.targets[0].definition.selector.sources = Array.from(
+            { length: 33 },
+            (_, index) => ({
+                sourceId: `missing-${index}`,
+                revisionId: "revision",
+            }),
+        );
+        await expect(service.buildViews(overflowing)).rejects.toThrow(
+            "overflowing",
+        );
+        expect(fake.calls()).toBe(0);
+    });
+
+    test("drafts stay outside retrieval and published generated wording is withdrawn after warmed access revocation", async () => {
+        const fake = provider();
+        const { request, corpus } = await setup(fake.installed);
+        await settled(service, await service.buildViews(request));
+        const query = {
+            corpusId: corpus.corpusId,
+            query: "Copper lantern",
+            freshness: "current" as const,
+        };
+        expect(await service.searchViews(query)).toEqual([]);
+        const artifact = (await service.getView({
+            corpusId: corpus.corpusId,
+            viewId: request.targets[0].definition.viewId,
+        }))!;
+        const publication = await service.publishView({
+            corpusId: corpus.corpusId,
+            viewId: artifact.viewId,
+            revisionId: artifact.revisionId,
+            expectedVersion: artifact.version,
+            expectedHead: (await service.listViews(corpus.corpusId)).head!,
+        });
+        expect(publication.indexState).toBe("ready");
+        expect((await service.searchViews(query))[0].view.revisionId).toBe(
+            artifact.revisionId,
+        );
+        await service.warmViewIndexes(corpus.corpusId);
+        fake.revoke();
+        await expect(service.searchViews(query)).rejects.toThrow(
+            "Provider scope is not authorized",
+        );
+    });
+
+    test("a complete manifest preserves more than 32 dependencies and root source usage", async () => {
+        const fake = provider();
+        const { request, corpus } = await setup(fake.installed, 33);
+        const members = [];
+        for (const source of request.targets[0].definition.selector.sources) {
+            const content = await service.getSourceContent({
+                corpusId: corpus.corpusId,
+                ...source,
+            });
+            members.push({ ...source, contentHash: viewHash(content.content) });
+        }
+        const manifest = JSON.stringify({
+            schemaVersion: 1,
+            corpusId: corpus.corpusId,
+            members,
+        });
+        const ingestion = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "group-manifest",
+                sourceType: "text",
+                title: "Complete input manifest",
+                text: manifest,
+            },
+            pipeline: { mode: "content" },
+        });
+        await waitForMemoryJob(service, ingestion.jobId);
+        const root = (await service.getSource(
+            corpus.corpusId,
+            "group-manifest",
+        ))!;
+        request.targets[0].definition.selector = {
+            kind: "sourceManifest",
+            sources: members.map(({ sourceId, revisionId }) => ({
+                sourceId,
+                revisionId,
+            })),
+            manifest: {
+                sourceId: root.sourceId,
+                revisionId: root.activeRevisionId!,
+                contentHash: viewHash(manifest),
+            },
+        };
+        request.expectedHead = (await service.listViews(corpus.corpusId)).head;
+        const result = await settled(
+            service,
+            await service.buildViews(request),
+        );
+        expect(result.state).toBe("complete");
+        expect(result.results[0].snapshot.inputs).toHaveLength(33);
+        expect(result.results[0].snapshot.influenceSources).toHaveLength(34);
+        expect(
+            (
+                await service.getSourceViewUsage({
+                    corpusId: corpus.corpusId,
+                    sourceId: "source-32",
+                })
+            ).total,
+        ).toBe(1);
+        expect(
+            (
+                await service.getSourceViewUsage({
+                    corpusId: corpus.corpusId,
+                    sourceId: "group-manifest",
+                })
+            ).total,
+        ).toBe(1);
+        expect(fake.calls()).toBe(1);
+    });
+});
+
+test("registration rejects duplicate identity and schema mismatch without executing the provider", () => {
+    const fake = provider();
+    expect(
+        () => new ViewExtensionRegistry([fake.installed, fake.installed]),
+    ).toThrow("Duplicate provider identity");
+    const changed = {
+        ...fake.installed,
+        descriptor: {
+            ...fake.installed.descriptor,
+            identity: {
+                ...fake.installed.descriptor.identity,
+                schemaDigest: viewHash("wrong schema"),
+            },
+        },
+    };
+    expect(() => new ViewExtensionRegistry([changed])).toThrow(
+        "schema digest mismatch",
+    );
+    expect(fake.calls()).toBe(0);
+});
