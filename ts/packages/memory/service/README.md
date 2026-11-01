@@ -62,6 +62,11 @@ versioned definition. The legacy direct selector still accepts at most 32
 references. Larger selections require `sourceManifest`: an ingested immutable
 manifest revision plus the complete expanded member list and content hashes.
 The manifest root and every member remain dependencies; no input is truncated.
+Providers can opt into a complete-source proof bound up to 8,000,000
+characters through `limits.maxInputChars`. Smaller declared bounds remain
+enforced. This limits the native original-source snapshot, not the model
+prompt: a provider can prepare a smaller extraction packet. Model-token
+budgets, source-count limits and output limits remain independent.
 
 Accepted structured payloads, readable sections, template bindings, fidelity
 proofs, qualification receipts and revisions live in the corpus View store.

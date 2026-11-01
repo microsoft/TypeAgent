@@ -377,6 +377,77 @@ describe("registered extension service lifecycle", () => {
         expect(fixture.calls()).toBe(0);
     });
 
+    test("complete-source registration retains a finite opt-in ceiling", () => {
+        const fixture = provider();
+        fixture.installed.descriptor.limits.maxInputChars = 8_000_000;
+        expect(
+            () => new ViewExtensionRegistry([fixture.installed]),
+        ).not.toThrow();
+        fixture.installed.descriptor.limits.maxInputChars = 8_000_001;
+        expect(() => new ViewExtensionRegistry([fixture.installed])).toThrow(
+            /provider input bound/,
+        );
+        expect(fixture.calls()).toBe(0);
+    });
+
+    test.each([4_000_000, 8_000_000])(
+        "complete source proof remains untruncated under the declared %i-character bound",
+        async (bound) => {
+            const fixture = provider();
+            fixture.installed.descriptor.limits.maxInputChars = bound;
+            let preparedChars = 0;
+            fixture.installed.prepare = async (snapshot) => {
+                preparedChars = snapshot.inputs[0].content.length;
+                expect(viewHash(snapshot.inputs[0].content)).toBe(
+                    viewHash(text),
+                );
+                return { items: ["prepared"] };
+            };
+            const generate = fixture.installed.generate;
+            fixture.installed.generate = async (...args) => {
+                const content = await generate(...args);
+                const original = content.citations[0];
+                const citation = {
+                    ...original,
+                    locator: "chars:0-9",
+                    excerpt: args[0].inputs[0].content.slice(0, 9),
+                };
+                content.citations = [citation];
+                content.evidence[0].support = [citation];
+                return content;
+            };
+            const text = "x".repeat(4_000_001);
+            const { corpus, request } = await setup(fixture.installed, 1, {}, [
+                text,
+            ]);
+            if (bound < text.length) {
+                await expect(service.buildViews(request)).rejects.toThrow(
+                    /Complete extension input exceeds provider bounds/,
+                );
+                expect(preparedChars).toBe(0);
+                expect(fixture.calls()).toBe(0);
+            } else {
+                const job = await settled(
+                    service,
+                    await service.buildViews(request),
+                );
+                expect(job.state).toBe("complete");
+                expect(preparedChars).toBe(text.length);
+                expect(fixture.calls()).toBe(1);
+            }
+            const source = request.targets[0].definition.selector.sources[0];
+            const retained = await service.getSource(
+                corpus.corpusId,
+                source.sourceId,
+            );
+            expect(
+                retained?.revisions.find(
+                    (revision) => revision.revisionId === source.revisionId,
+                )?.contentHash,
+            ).toBe(createHash("sha256").update(text).digest("hex"));
+        },
+    );
+
     test("static qualification cannot spend model calls and leaves a failed receipt", async () => {
         const fixture = provider();
         fixture.installed.evaluateEligibility = async (_input, context) => {
