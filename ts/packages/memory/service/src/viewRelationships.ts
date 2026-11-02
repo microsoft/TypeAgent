@@ -44,6 +44,9 @@ export function derivedDefinitionInput(
         ...(version.definition.schemaView
             ? { schemaView: version.definition.schemaView }
             : {}),
+        ...(version.definition.extension
+            ? { extension: version.definition.extension }
+            : {}),
     };
 }
 
@@ -59,6 +62,7 @@ export function materializeDefinition(
             definition.wiki,
             definition.projectSummary,
             definition.schemaView,
+            definition.extension,
         ]);
     return {
         ...structuredClone(input),

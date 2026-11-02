@@ -16,6 +16,7 @@
     "./rpc": "./dist/rpcFacade.js",
     "./benchmark": "./dist/benchmarkBridge.js",
     "./agent-edition-validation": "./dist/agentEditionValidation.js",
+    "./view-provider-validation": "./dist/viewProviderValidation.js",
     "./procedure-markdown": "./dist/procedureMarkdown.js",
     "./procedureMarkdown": "./dist/procedureMarkdown.js",
     "./view-text": "./dist/viewText.js"

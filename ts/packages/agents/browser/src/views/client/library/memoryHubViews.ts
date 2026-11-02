@@ -130,6 +130,7 @@ const viewKindLabels: Record<ViewKind, string> = {
     projectBrief: "Project brief",
     troubleshootingGuide: "Troubleshooting guide",
     schemaView: "Schema-defined questions",
+    extension: "Structured view",
 };
 
 const viewKindIcons: Record<ViewKind, string> = {
@@ -138,6 +139,7 @@ const viewKindIcons: Record<ViewKind, string> = {
     projectBrief: "fa-diagram-project",
     troubleshootingGuide: "fa-screwdriver-wrench",
     schemaView: "fa-table-list",
+    extension: "fa-diagram-project",
 };
 
 const viewTypeTabs: { kind?: ViewKind; label: string }[] = [
@@ -418,7 +420,8 @@ export function mountMemoryHubViews(
                 kind === "projectBrief" ||
                 kind === "timeline" ||
                 kind === "wiki" ||
-                kind === "schemaView",
+                kind === "schemaView" ||
+                kind === "extension",
         );
         if (!buildsSupported) {
             pendingConflicts.clear();
@@ -1107,7 +1110,11 @@ export function mountMemoryHubViews(
         const kindPicker = rbNode("fieldset", undefined, "hub-view-kinds");
         kindPicker.append(rbNode("legend", "What would you like to build?"));
         for (const kind of supportedKinds) {
-            if ((kind === "wiki" && !rebuilding) || kind === "schemaView")
+            if (
+                (kind === "wiki" && !rebuilding) ||
+                kind === "schemaView" ||
+                kind === "extension"
+            )
                 continue;
             if (rebuilding && kind !== rebuilding.content.kind) continue;
             const label = rbNode("label", undefined, "hub-view-kind");
@@ -2088,17 +2095,14 @@ export function mountMemoryHubViews(
                         );
                     },
                 });
-            const editButton = rbIconButton("fa-pen", "Edit", () =>
-                showEditor(view),
-            );
-            editButton.classList.add("primary");
-            actions.append(
-                back,
-                rbNode("span", undefined, "hub-spacer"),
-                editButton,
-            );
-            more.push(
-                {
+            actions.append(back, rbNode("span", undefined, "hub-spacer"));
+            if (view.content.kind !== "extension") {
+                const editButton = rbIconButton("fa-pen", "Edit", () =>
+                    showEditor(view),
+                );
+                editButton.classList.add("primary");
+                actions.append(editButton);
+                more.push({
                     label: "Rebuild from evidence",
                     icon: "fa-arrows-rotate",
                     action: () => {
@@ -2113,7 +2117,9 @@ export function mountMemoryHubViews(
                             ),
                         );
                     },
-                },
+                });
+            }
+            more.push(
                 {
                     label: "Publication and search",
                     icon: "fa-magnifying-glass",

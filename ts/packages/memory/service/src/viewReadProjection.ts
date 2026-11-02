@@ -2,6 +2,10 @@
 // Licensed under the MIT License.
 
 import { buildSummary } from "./inventory.js";
+import {
+    viewProviderInputReference,
+    type ViewProviderInputReference,
+} from "./viewProviders.js";
 import type { ViewBuildSummary } from "./inventoryTypes.js";
 import { viewBuildEvidenceFingerprint } from "./viewMerge.js";
 import type { WikiFamilyState } from "./viewStore.js";
@@ -21,6 +25,7 @@ export interface ViewInventoryBuild extends Omit<ViewBuildSummary, "results"> {
         ViewBuildSummary["results"][number] & {
             inputFingerprint: string;
             evidenceFingerprint: string;
+            providerInput?: ViewProviderInputReference;
             wikiAssessment?: Pick<WikiSubjectAssessment, "disposition">;
         }
     >;
@@ -66,6 +71,13 @@ export function viewReadProjection(state: {
                               }
                             : {}),
                         inputFingerprint: target.snapshot.fingerprint,
+                        ...(target.snapshot.pipeline === "host-defined-v1"
+                            ? {
+                                  providerInput: viewProviderInputReference(
+                                      target.snapshot,
+                                  ),
+                              }
+                            : {}),
                         evidenceFingerprint:
                             result.state === "conflicted" && result.conflictId
                                 ? viewBuildEvidenceFingerprint(target.snapshot)

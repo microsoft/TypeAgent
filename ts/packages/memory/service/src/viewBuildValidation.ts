@@ -78,45 +78,61 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
             expectedVersion: target.expectedVersion,
             expectedHead: request.expectedHead,
             definition: target.definition,
-            content: target.definition?.schemaView
-                ? emptySchemaView(
-                      target.definition.schemaView,
-                      target.definition.selector.sources,
-                  )
-                : target.definition?.wiki
-                  ? {
-                        kind: "wiki",
-                        construction: "informational-wiki-v1",
-                        status: "partial",
-                        title: "Selection validation",
-                        summary: "Selection validation summary",
-                        sections: [
-                            {
-                                id: target.definition.viewId,
-                                role: "page",
-                                heading: "Selection validation",
-                                body: "Selection validation",
-                                details: {
-                                    kind: "page",
-                                    construction: "informational-wiki-v1",
-                                    taxonomy: "concept",
-                                    note: "",
-                                    mergedPageIds: [],
-                                },
-                            },
-                        ],
-                        index: [
-                            {
-                                pageId: target.definition.viewId,
-                                title: "Selection validation",
-                                taxonomy: "concept",
-                            },
-                        ],
-                        citations: [],
-                    }
-                  : target.definition?.projectSummary
-                    ? emptyProjectBrief()
-                    : selectionValidationContent(target.definition?.kind),
+            content: target.definition?.extension
+                ? {
+                      kind: "extension",
+                      provider: target.definition.extension.provider,
+                      title: "Selection validation",
+                      data: null,
+                      sections: [
+                          {
+                              id: "selection",
+                              role: "context",
+                              heading: "Selection",
+                              body: "Selected evidence",
+                          },
+                      ],
+                      citations: [],
+                  }
+                : target.definition?.schemaView
+                  ? emptySchemaView(
+                        target.definition.schemaView,
+                        target.definition.selector.sources,
+                    )
+                  : target.definition?.wiki
+                    ? {
+                          kind: "wiki",
+                          construction: "informational-wiki-v1",
+                          status: "partial",
+                          title: "Selection validation",
+                          summary: "Selection validation summary",
+                          sections: [
+                              {
+                                  id: target.definition.viewId,
+                                  role: "page",
+                                  heading: "Selection validation",
+                                  body: "Selection validation",
+                                  details: {
+                                      kind: "page",
+                                      construction: "informational-wiki-v1",
+                                      taxonomy: "concept",
+                                      note: "",
+                                      mergedPageIds: [],
+                                  },
+                              },
+                          ],
+                          index: [
+                              {
+                                  pageId: target.definition.viewId,
+                                  title: "Selection validation",
+                                  taxonomy: "concept",
+                              },
+                          ],
+                          citations: [],
+                      }
+                    : target.definition?.projectSummary
+                      ? emptyProjectBrief()
+                      : selectionValidationContent(target.definition?.kind),
             relationships: [],
         });
         const id = target.definition.viewId;

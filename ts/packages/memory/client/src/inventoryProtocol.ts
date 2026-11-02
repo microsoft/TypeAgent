@@ -12,6 +12,7 @@ import {
     viewPublicationStatusSchema,
     viewVersionSchema,
     viewSnapshotSchema,
+    viewKindSchema,
 } from "./viewProtocol.js";
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/);
@@ -22,16 +23,9 @@ export const inventoryPageRequestSchema = z.strictObject({
     query: z.string().max(1000).optional(),
     viewId: id.optional(),
 });
-const viewKindSchema = z.enum([
-    "wiki",
-    "projectBrief",
-    "timeline",
-    "schemaView",
-    "troubleshootingGuide",
-]);
 export const viewSummaryRequestSchema = inventoryPageRequestSchema.extend({
     kind: viewKindSchema.optional(),
-    excludeKinds: viewKindSchema.array().max(5).optional(),
+    excludeKinds: viewKindSchema.array().max(6).optional(),
 });
 export const questionSummaryRequestSchema = inventoryPageRequestSchema.extend({
     viewId: id.optional(),

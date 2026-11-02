@@ -651,7 +651,9 @@ export interface MemoryServiceCapabilities {
             | "timeline"
             | "wiki"
             | "schemaView"
+            | "extension"
         >;
+        providers?: import("./viewProviders.js").ViewProviderIdentity[];
         drafts: true;
         history: true;
         publication: true;
@@ -833,7 +835,10 @@ export interface MemoryService
         request: MemoryEventForgetRequest,
     ): Promise<MemoryEventForgetResult>;
     search(request: MemorySearchRequest): Promise<MemorySearchResult>;
-    answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult>;
+    answer(
+        request: MemoryAnswerRequest,
+        signal?: AbortSignal,
+    ): Promise<MemoryAnswerResult>;
     getKnowledgeGraph(corpusId: string): Promise<MemoryKnowledgeGraph>;
     getCapabilities(): Promise<MemoryServiceCapabilities>;
 }

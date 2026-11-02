@@ -13,6 +13,15 @@ import {
     type MemoryPerformanceExperiment,
 } from "./memoryPerformanceExperiments.js";
 import { TranslationCache } from "./translationCache.js";
+import {
+    ViewProviderRegistry,
+    viewProviderInputReference,
+    type HostViewProvider,
+    type ViewProviderAuthorization,
+    type ViewProviderJson,
+    type ViewProviderResult,
+    type ViewProviderInputReference,
+} from "./viewProviders.js";
 import { ViewIndexPool } from "./viewIndexPool.js";
 import { IndexWarmupScheduler, type IndexWarmupJob } from "./indexWarmup.js";
 import {
@@ -52,6 +61,7 @@ import {
     currentSearchTraceId,
     recordSearchTiming,
     runWithSearchTiming,
+    runWithSearchCancellation,
     timeSearchStage,
     collectJsonSegments,
     clearJsonSegmentCache,
@@ -97,6 +107,7 @@ import type {
 import { knowledgeLimits } from "./knowledgeTypes.js";
 import {
     createMaintenanceModelScheduler,
+    yieldMaintenanceBuild,
     resolveMaintenanceConcurrency,
     resolveMaintenanceBuildPriority,
     withMaintenanceExtraction,
@@ -711,6 +722,9 @@ export interface FileMemoryServiceOptions {
     informationalViews?: boolean;
     viewPublicationCheckpoint?: (point: "intent" | "index") => Promise<void>;
     viewSynthesisAdapter?: ViewSynthesisAdapter;
+    viewProviders?: readonly HostViewProvider[];
+    viewProviderModel?: { identity: string; model: ChatModel };
+    viewProviderAuthorization?: ViewProviderAuthorization;
     viewModelEndpoint?: string;
     /** Disable to retain raw-topic summaries instead of lazy curated concepts. */
     curatedTopics?: boolean;
@@ -1670,6 +1684,11 @@ export class FileMemoryService
     private readonly maintenance: MaintenanceScheduler;
     private readonly maintenanceLimits: FileMemoryServiceOptions["maintenanceLimits"];
     private readonly maintenanceModels: MaintenanceModelScheduler;
+    private readonly viewProviders: ViewProviderRegistry;
+    private readonly viewProviderModel: FileMemoryServiceOptions["viewProviderModel"];
+    private readonly viewProviderAuthorization:
+        | ViewProviderAuthorization
+        | undefined;
     private readonly admissionPolicy: string;
     private readonly preparingIndexes = new Map<
         string,
@@ -1825,6 +1844,10 @@ export class FileMemoryService
         this.wikiBudget = options.informationalBudget;
         this.informationalWikiEnabled =
             this.viewDrafts && options.informationalViews !== false;
+        const providers = this.configureViewProviders(options);
+        this.viewProviders = providers.registry;
+        this.viewProviderModel = providers.model;
+        this.viewProviderAuthorization = providers.authorization;
         const adapter =
             options.viewSynthesisAdapter ??
             createConfiguredViewSynthesisAdapter(
@@ -1850,6 +1873,8 @@ export class FileMemoryService
         this.viewBuilds = new ViewBuildRunner(
             this.viewAdapter,
             {
+                constructExtension: (job, result, signal) =>
+                    this.constructExtension(job, result, signal),
                 unchanged: (input) =>
                     this.unchangedInformationalInput(input, true),
                 canPrepareWikiAssessment: async (input) =>
@@ -4481,13 +4506,20 @@ export class FileMemoryService
                               "timeline",
                               "wiki",
                               "schemaView",
+                              ...(this.viewProviders.identities().length
+                                  ? ["extension" as const]
+                                  : []),
                           ] as Array<
                               | "troubleshootingGuide"
                               | "projectBrief"
                               | "timeline"
                               | "wiki"
                               | "schemaView"
+                              | "extension"
                           >,
+                          ...(this.viewProviders.identities().length
+                              ? { providers: this.viewProviders.identities() }
+                              : {}),
                           drafts: true as const,
                           history: true as const,
                           publication: true as const,
@@ -4766,6 +4798,15 @@ export class FileMemoryService
         current?: ViewVersion,
         includeDraft = false,
     ): Promise<boolean> {
+        if (view.content.kind === "extension") {
+            if (!view.generation?.input)
+                throw new Error(
+                    "Host-defined content lacks its retained source snapshot",
+                );
+            await this.authorizeProviderInput(view.generation.input, "read");
+            await this.assertViewPublicationFresh(view, current);
+            return true;
+        }
         if (!informationalWiki(view.content)) return true;
         if (view.state !== "draft") return false;
         if (
@@ -6426,11 +6467,16 @@ export class FileMemoryService
             );
         if (
             (request.content.kind === "timeline" ||
-                request.content.kind === "wiki") &&
+                request.content.kind === "wiki" ||
+                request.content.kind === "extension") &&
             !prior?.generation?.input
         )
             throw new Error(
                 "Timeline and wiki drafts must begin with a grounded Build views result",
+            );
+        if (request.content.kind === "extension")
+            throw new Error(
+                "Host-defined content must be changed through its managed provider build",
             );
         const proof = await this.validateDraftGeneration(request, prior);
         const result = await this.enqueueWrite(request.corpusId, async () => {
@@ -6741,6 +6787,8 @@ export class FileMemoryService
             assertPublicationProof(version);
         const runtime = await this.getCorpusRuntime(version.corpusId);
         await this.assertInfluenceEligible(version.generation?.input);
+        if (version.generation?.input)
+            await this.authorizeProviderInput(version.generation.input, "read");
         const latest =
             current ??
             (await this.viewStore.getView({
@@ -6756,7 +6804,39 @@ export class FileMemoryService
                 "Maintenance intent changed since publication; reconcile and publish the intended exact revision",
             );
         this.assertPublicationMaintenance(version, runtime);
-        for (const input of version.generation!.input!.inputs) {
+        this.assertRetainedViewInputs(runtime, version.generation!.input!);
+        if (version.content.kind === "timeline") {
+            const frozen = version.generation!.input!;
+            validateTimelineEvidence(frozen, version.content);
+            validateTimelineCorrections(
+                frozen,
+                version.content,
+                authoredRelationships(version),
+            );
+            const target = await this.snapshotViewTarget(
+                version.corpusId,
+                {
+                    definition: frozen.definition,
+                    expectedVersion: (await this.viewStore.getView({
+                        corpusId: version.corpusId,
+                        viewId: version.viewId,
+                    }))!.version,
+                },
+                frozen.bounds,
+                frozen.publicationPolicy?.buildOverride,
+            );
+            if (target.selectionFingerprint !== frozen.selectionFingerprint)
+                throw new ViewBuildStaleError(
+                    "Timeline record membership or retained evidence changed; rebuild first",
+                );
+        }
+    }
+
+    private assertRetainedViewInputs(
+        runtime: CorpusRuntime,
+        snapshot: Pick<ViewProviderInputReference, "pipeline" | "inputs">,
+    ): void {
+        for (const input of snapshot.inputs) {
             if (input.evidence) {
                 const event = runtime.events.find(
                     (entry) => entry.eventId === input.evidence?.eventId,
@@ -6781,35 +6861,15 @@ export class FileMemoryService
                 !revision ||
                 revision.state !== "ready" ||
                 source?.activeRevisionId !== input.revisionId ||
+                (snapshot.pipeline === "host-defined-v1" &&
+                    runtime.manifest.knowledgeSuppressions?.some(
+                        (suppression) =>
+                            suppression.sourceId === input.sourceId,
+                    )) ||
                 viewHash(revision.content) !== input.contentHash
             )
                 throw new ViewBuildStaleError(
                     "Publication evidence was changed, forgotten or is no longer the exact accessible current revision; rebuild first",
-                );
-        }
-        if (version.content.kind === "timeline") {
-            const frozen = version.generation!.input!;
-            validateTimelineEvidence(frozen, version.content);
-            validateTimelineCorrections(
-                frozen,
-                version.content,
-                authoredRelationships(version),
-            );
-            const target = await this.snapshotViewTarget(
-                version.corpusId,
-                {
-                    definition: frozen.definition,
-                    expectedVersion: (await this.viewStore.getView({
-                        corpusId: version.corpusId,
-                        viewId: version.viewId,
-                    }))!.version,
-                },
-                frozen.bounds,
-                frozen.publicationPolicy?.buildOverride,
-            );
-            if (target.selectionFingerprint !== frozen.selectionFingerprint)
-                throw new ViewBuildStaleError(
-                    "Timeline record membership or retained evidence changed; rebuild first",
                 );
         }
     }
@@ -6846,6 +6906,8 @@ export class FileMemoryService
         const view = await this.viewStore.getView(request);
         if (!view) throw new Error("Publication revision is missing");
         await this.assertViewPublicationFresh(view);
+        if (view.generation?.input)
+            await this.authorizeProviderInput(view.generation.input, "publish");
         const publication = await this.viewStore.publishView(request);
         if (publication.indexState === "ready") return publication;
         await this.viewPublicationCheckpoint?.("intent");
@@ -9641,12 +9703,14 @@ export class FileMemoryService
                   }
                 : {}),
             pipeline:
-                target.definition.kind === "schemaView"
-                    ? ("schema-defined-v1" as const)
-                    : target.definition.kind === "timeline"
-                      ? ("timeline-v1" as const)
-                      : ("troubleshooting-v1" as const),
-            model: this.viewAdapter.identity,
+                target.definition.kind === "extension"
+                    ? ("host-defined-v1" as const)
+                    : target.definition.kind === "schemaView"
+                      ? ("schema-defined-v1" as const)
+                      : target.definition.kind === "timeline"
+                        ? ("timeline-v1" as const)
+                        : ("troubleshooting-v1" as const),
+            model: this.viewBuildModelIdentity(target.definition),
             publicationPolicy: effectiveViewPublicationPolicy(
                 await this.viewStore.getViewPublicationPolicy(corpusId),
                 target.definition.viewId,
@@ -9656,7 +9720,9 @@ export class FileMemoryService
                 ? { maintenance: maintenance.snapshot }
                 : {}),
         };
-        return { ...snapshot, fingerprint: viewHash(snapshot) };
+        const frozen = { ...snapshot, fingerprint: viewHash(snapshot) };
+        await this.authorizeProviderInput(frozen, "build");
+        return frozen;
     }
 
     private topicSources(runtime: CorpusRuntime) {
@@ -10058,6 +10124,263 @@ export class FileMemoryService
         );
     }
 
+    private configureViewProviders(options: FileMemoryServiceOptions) {
+        const registry = new ViewProviderRegistry(options.viewProviders);
+        const model = options.viewProviderModel
+            ? Object.freeze({ ...options.viewProviderModel })
+            : undefined;
+        const authorization = options.viewProviderAuthorization;
+        if (
+            registry.identities().length &&
+            (!model ||
+                typeof model.identity !== "string" ||
+                !model.identity.trim() ||
+                typeof authorization?.assertAuthorized !== "function")
+        )
+            throw new Error(
+                "Host-defined views require an identified model and source authorization",
+            );
+        return { registry, model, authorization };
+    }
+
+    private viewBuildModelIdentity(definition: ViewDefinitionInput): string {
+        if (definition.extension) {
+            this.viewProviders.require(definition.extension.provider);
+            if (!this.viewProviderModel)
+                throw new Error("The host-defined view model is not installed");
+            return viewHash([
+                this.viewAdapter.identity,
+                definition.extension.provider,
+                this.viewProviderModel.identity,
+            ]);
+        }
+        return viewSynthesisIdentity(
+            this.viewAdapter.identity,
+            definition,
+            !!this.viewAdapter.assessWikiConsolidation &&
+                !!this.viewAdapter.checkWikiConsolidation,
+        );
+    }
+
+    private async authorizeProviderInput(
+        input: ViewProviderInputReference,
+        operation: "build" | "model" | "publish" | "read",
+    ): Promise<void> {
+        if (input.pipeline !== "host-defined-v1") return;
+        if (!this.viewProviderAuthorization)
+            throw new Error(
+                "Host-defined source authorization is not installed",
+            );
+        const runtime = await this.getCorpusRuntime(input.corpusId);
+        await this.assertInfluenceEligible(input);
+        this.assertRetainedViewInputs(runtime, input);
+        await this.viewProviderAuthorization.assertAuthorized({
+            operation,
+            input: viewProviderInputReference(input),
+        });
+    }
+
+    private async providerStage(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        stage: string,
+        update: (
+            stage: NonNullable<ViewBuildTargetResult["providerStages"]>[number],
+        ) => void,
+        allowTerminal = false,
+    ): Promise<void> {
+        await this.enqueueWrite(job.corpusId, async () => {
+            if (!allowTerminal) {
+                await this.recheckViewInput(result.snapshot);
+                await this.authorizeProviderInput(result.snapshot, "build");
+            }
+            return this.viewStore.updateViewBuild(
+                job.corpusId,
+                job.jobId,
+                (current) => {
+                    const target = current.results.find(
+                        (entry) => entry.viewId === result.viewId,
+                    );
+                    if (
+                        !target ||
+                        (!allowTerminal && current.state !== "running") ||
+                        target.snapshot.fingerprint !==
+                            result.snapshot.fingerprint
+                    )
+                        throw new Error(
+                            "Provider checkpoint owner is missing, changed or terminal",
+                        );
+                    const stages = (target.providerStages ??= []);
+                    let entry = stages.find((item) => item.stage === stage);
+                    if (!entry) {
+                        entry = {
+                            stage,
+                            inputFingerprint: result.snapshot.fingerprint,
+                            checkpoints: [],
+                            candidates: [],
+                            completions: [],
+                        };
+                        stages.push(entry);
+                    }
+                    if (entry.inputFingerprint !== result.snapshot.fingerprint)
+                        throw new Error(
+                            "Provider checkpoint input identity changed",
+                        );
+                    update(entry);
+                },
+            );
+        });
+    }
+
+    private async constructExtension(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+    ): Promise<ViewProviderResult> {
+        const model = this.viewProviderModel;
+        const identity = result.snapshot.definition.extension?.provider;
+        if (!model || !identity)
+            throw new Error(
+                "Host-defined view model or provider definition is missing",
+            );
+        const retained = await this.viewStore.getViewBuild(
+            job.corpusId,
+            job.jobId,
+        );
+        const previous: Record<string, ViewProviderJson> = {};
+        for (const stage of retained?.results.find(
+            (entry) => entry.viewId === result.viewId,
+        )?.providerStages ?? []) {
+            if (stage.inputFingerprint !== result.snapshot.fingerprint)
+                throw new Error("Provider checkpoint input identity changed");
+            const checkpoint = stage.checkpoints[stage.checkpoints.length - 1];
+            if (checkpoint)
+                previous[stage.stage] = structuredClone(checkpoint.state);
+        }
+        return this.viewProviders.construct(identity, {
+            input: result.snapshot,
+            modelIdentity: model.identity,
+            previous,
+            signal,
+            assertEligible: async (operation) => {
+                signal.throwIfAborted();
+                await this.recheckViewInput(result.snapshot);
+                await this.authorizeProviderInput(
+                    result.snapshot,
+                    operation === "model" ? "model" : "build",
+                );
+            },
+            complete: (stage, ...request) =>
+                this.completeProviderRequest(
+                    job,
+                    result,
+                    stage,
+                    signal,
+                    ...request,
+                ),
+            checkpoint: async (stage, state) => {
+                await this.providerStage(job, result, stage, (entry) =>
+                    entry.checkpoints.push({
+                        recordedAt: new Date().toISOString(),
+                        state,
+                    }),
+                );
+                await yieldMaintenanceBuild(signal);
+            },
+            recordCandidate: (stage, candidate) =>
+                this.providerStage(job, result, stage, (entry) =>
+                    entry.candidates.push({
+                        recordedAt: new Date().toISOString(),
+                        candidate,
+                    }),
+                ),
+        });
+    }
+
+    private async completeProviderRequest(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        stage: string,
+        signal: AbortSignal,
+        ...request: Parameters<ChatModel["complete"]>
+    ): ReturnType<ChatModel["complete"]> {
+        const model = this.viewProviderModel;
+        if (!model) throw new Error("The host-defined model is not installed");
+        const id = randomUUID();
+        await this.providerStage(job, result, stage, (entry) =>
+            entry.completions.push({
+                id,
+                queuedAt: new Date().toISOString(),
+                state: "running",
+            }),
+        );
+        let response: Awaited<ReturnType<ChatModel["complete"]>>;
+        try {
+            response = await this.maintenanceModels(async () => {
+                signal.throwIfAborted();
+                await this.recheckViewInput(result.snapshot);
+                await this.authorizeProviderInput(result.snapshot, "model");
+                await this.providerStage(job, result, stage, (entry) => {
+                    const completion = entry.completions.find(
+                        (call) => call.id === id,
+                    );
+                    if (!completion)
+                        throw new Error(
+                            "Provider completion journal entry is missing",
+                        );
+                    completion.admittedAt = new Date().toISOString();
+                });
+                return model.model.complete(
+                    request[0],
+                    request[1],
+                    request[2],
+                    undefined,
+                    signal,
+                );
+            }, signal);
+        } catch (error) {
+            await this.providerStage(
+                job,
+                result,
+                stage,
+                (entry) => {
+                    const completion = entry.completions.find(
+                        (call) => call.id === id,
+                    );
+                    if (!completion)
+                        throw new Error(
+                            "Provider completion journal entry is missing",
+                        );
+                    completion.finishedAt = new Date().toISOString();
+                    completion.state = signal.aborted ? "cancelled" : "failed";
+                    completion.error =
+                        error instanceof Error ? error.message : String(error);
+                },
+                true,
+            );
+            throw error;
+        }
+        await this.providerStage(
+            job,
+            result,
+            stage,
+            (entry) => {
+                const completion = entry.completions.find(
+                    (call) => call.id === id,
+                );
+                if (!completion)
+                    throw new Error(
+                        "Provider completion journal entry is missing",
+                    );
+                completion.finishedAt = new Date().toISOString();
+                completion.state = response.success ? "succeeded" : "failed";
+                if (!response.success) completion.error = response.message;
+            },
+            true,
+        );
+        return response;
+    }
+
     private async recheckViewInput(input: ViewBuildSnapshot): Promise<void> {
         await this.assertInfluenceEligible(input);
         const snapshot = await this.snapshotViewTarget(
@@ -10089,18 +10412,86 @@ export class FileMemoryService
                 job.results.every(
                     (result) =>
                         result.snapshot.model ===
-                        viewSynthesisIdentity(
-                            this.viewAdapter.identity,
-                            result.snapshot.definition,
-                            !!this.viewAdapter.assessWikiConsolidation &&
-                                !!this.viewAdapter.checkWikiConsolidation,
-                        ),
+                        this.viewBuildModelIdentity(result.snapshot.definition),
                 ),
         );
-        if (existing) return existing;
+        if (existing) {
+            if (this.resumableProviderBuild(existing))
+                return this.enqueueWrite(request.corpusId, () =>
+                    this.resumeProviderBuild(existing),
+                );
+            return existing;
+        }
         return this.enqueueWrite(request.corpusId, () =>
             this.admitViewBuild(request),
         );
+    }
+
+    private resumableProviderBuild(job: ViewBuildJob): boolean {
+        return (
+            ["failed", "partial", "interrupted"].includes(job.state) &&
+            job.results.every(
+                (result) => result.snapshot.pipeline === "host-defined-v1",
+            ) &&
+            job.results.some(
+                (result) =>
+                    result.state === "failed" || result.state === "interrupted",
+            )
+        );
+    }
+
+    private async resumeProviderBuild(
+        previous: ViewBuildJob,
+    ): Promise<ViewBuildJob> {
+        const current = await this.viewStore.getViewBuild(
+            previous.corpusId,
+            previous.jobId,
+        );
+        if (!current)
+            throw new Error("Provider build was removed before continuation");
+        if (
+            !this.resumableProviderBuild(current) ||
+            this.viewBuilds.isActive(current.jobId)
+        )
+            return current;
+        const reservation = this.viewBuilds.reserve();
+        try {
+            for (const result of current.results) {
+                await this.authorizeProviderInput(result.snapshot, "build");
+                if (result.state === "failed" || result.state === "interrupted")
+                    await this.recheckViewInput(result.snapshot);
+            }
+            const job = await this.viewStore.updateViewBuild(
+                current.corpusId,
+                current.jobId,
+                (saved) => {
+                    saved.state = "running";
+                    for (const result of saved.results) {
+                        if (
+                            result.state !== "failed" &&
+                            result.state !== "interrupted"
+                        )
+                            continue;
+                        result.state = "pending";
+                        result.reason =
+                            "Explicitly continuing the same authorized provider snapshot and stage journal";
+                        for (const stage of result.providerStages ?? [])
+                            for (const completion of stage.completions)
+                                if (completion.state === "running") {
+                                    completion.state = "cancelled";
+                                    completion.finishedAt =
+                                        new Date().toISOString();
+                                    completion.error =
+                                        "Previous owner stopped before a result was persisted; physical completion is unknown";
+                                }
+                    }
+                },
+            );
+            reservation.start(job);
+            return job;
+        } finally {
+            reservation.release();
+        }
     }
 
     private assertViewBuildEnabled(request: ViewBuildRequest): void {
@@ -10450,9 +10841,13 @@ export class FileMemoryService
 
     public async listViewBuilds(corpusId: string): Promise<ViewBuildJob[]> {
         const runtime = await this.requireViews(corpusId);
-        return runtime.access.read(() =>
-            this.viewStore.listViewBuilds(corpusId),
-        );
+        return runtime.access.read(async () => {
+            const jobs = await this.viewStore.listViewBuilds(corpusId);
+            for (const job of jobs)
+                for (const result of job.results)
+                    await this.authorizeProviderInput(result.snapshot, "read");
+            return jobs;
+        });
     }
 
     public async getViewBuild(
@@ -10460,9 +10855,15 @@ export class FileMemoryService
     ): Promise<ViewBuildJob | undefined> {
         const runtime = await this.requireViews(request.corpusId);
         this.viewBuilds.assertPersistence(request.jobId);
-        return runtime.access.read(() =>
-            this.viewStore.getViewBuild(request.corpusId, request.jobId),
-        );
+        return runtime.access.read(async () => {
+            const job = await this.viewStore.getViewBuild(
+                request.corpusId,
+                request.jobId,
+            );
+            for (const result of job?.results ?? [])
+                await this.authorizeProviderInput(result.snapshot, "read");
+            return job;
+        });
     }
 
     public async cancelViewBuild(
@@ -11164,11 +11565,17 @@ export class FileMemoryService
 
     public async answer(
         request: MemoryAnswerRequest,
+        signal?: AbortSignal,
     ): Promise<MemoryAnswerResult> {
-        return this.foregroundRead(async () => {
-            await this.initialize();
-            return this.answerRequest(request);
-        });
+        const answer = () =>
+            this.foregroundRead(async () => {
+                signal?.throwIfAborted();
+                await this.initialize();
+                const result = await this.answerRequest(request);
+                signal?.throwIfAborted();
+                return result;
+            });
+        return signal ? runWithSearchCancellation(signal, answer) : answer();
     }
 
     private async answerSeed(
@@ -15896,6 +16303,18 @@ export class FileMemoryService
                     request.pageSize ?? 25,
                     request.continuationToken,
                 );
+                for (const job of page.items)
+                    for (const result of job.results)
+                        if (result.snapshot.pipeline === "host-defined-v1") {
+                            if (!result.providerInput)
+                                throw new Error(
+                                    "Provider build summary lacks its authorization scope",
+                                );
+                            await this.authorizeProviderInput(
+                                result.providerInput,
+                                "read",
+                            );
+                        }
                 return {
                     ...page,
                     items: page.items.map((job) => ({
@@ -15905,6 +16324,7 @@ export class FileMemoryService
                                 inputFingerprint: _input,
                                 evidenceFingerprint: _evidence,
                                 wikiAssessment: _assessment,
+                                providerInput: _provider,
                                 ...result
                             }) => ({
                                 ...result,

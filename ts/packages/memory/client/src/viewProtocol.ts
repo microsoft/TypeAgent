@@ -2,7 +2,16 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import { topicBuildInputSchema } from "./topicProtocol.js";
+import {
+    viewKindSchema,
+    viewProviderIdentitySchema,
+    viewProviderJsonSchema,
+} from "./viewProviderProtocol.js";
+export * from "./viewProviderProtocol.js";
+import {
+    topicBuildInputSchema,
+    topicEventReferenceSchema,
+} from "./topicProtocol.js";
 import {
     schemaViewDefinitionSchema,
     schemaViewContentSchema,
@@ -18,6 +27,15 @@ const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/);
 const text = z.string().min(1).max(120000);
 const head = z.string().regex(/^[0-9a-f]{40}$/);
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
+const viewOutcomeSchema = z.enum([
+    "diagnosticOnly",
+    "verifiedRecovery",
+    "projectSummary",
+    "chronology",
+    "knowledgePages",
+    "schemaAnswers",
+    "structuredExplanation",
+]);
 const source = z.strictObject({ sourceId: id, revisionId: id });
 export const viewSourceUsageRequestSchema = z.strictObject({
     corpusId: id,
@@ -34,13 +52,7 @@ export const viewSourceUsagePageSchema = z.strictObject({
             viewId: id,
             revisionId: id,
             version: z.number().int().positive(),
-            kind: z.enum([
-                "troubleshootingGuide",
-                "projectBrief",
-                "timeline",
-                "wiki",
-                "schemaView",
-            ]),
+            kind: viewKindSchema,
             title: text,
             state: z.enum(["draft", "stale", "archived"]),
             provenance: z.enum(["human", "generated", "merged"]),
@@ -68,13 +80,7 @@ export const viewSelectorSchema = z.discriminatedUnion("kind", [
 export const viewDefinitionSchema = z
     .strictObject({
         viewId: id,
-        kind: z.enum([
-            "troubleshootingGuide",
-            "projectBrief",
-            "timeline",
-            "wiki",
-            "schemaView",
-        ]),
+        kind: viewKindSchema,
         selector: viewSelectorSchema,
         maintenance: viewMaintenanceDefinitionSchema.optional(),
         wiki: z
@@ -94,8 +100,21 @@ export const viewDefinitionSchema = z
             })
             .optional(),
         schemaView: schemaViewDefinitionSchema.optional(),
+        extension: z
+            .strictObject({
+                provider: viewProviderIdentitySchema,
+                configuration: viewProviderJsonSchema,
+            })
+            .optional(),
     })
     .superRefine((definition, context) => {
+        if ((definition.kind === "extension") !== !!definition.extension)
+            context.addIssue({
+                code: "custom",
+                path: ["extension"],
+                message:
+                    "Extension views require their pinned provider configuration",
+            });
         if (
             (definition.kind === "schemaView") !== !!definition.schemaView ||
             (definition.schemaView &&
@@ -516,7 +535,16 @@ const wikiContent = wikiContentShape.superRefine((wiki, context) => {
             });
     }
 });
+const extensionContent = z.strictObject({
+    kind: z.literal("extension"),
+    provider: viewProviderIdentitySchema,
+    title: text,
+    data: viewProviderJsonSchema,
+    sections: section.array().min(1).max(1000),
+    citations: citation.array(),
+});
 const content = z.union([
+    extensionContent,
     schemaViewContentSchema,
     guideContent,
 
@@ -525,6 +553,7 @@ const content = z.union([
     informationalProjectContent,
 ]);
 const requestContent = z.union([
+    extensionContent.extend({ citations: citation.array().max(1000) }),
     schemaViewContentSchema,
     guideContent.extend({ citations: citation.array().max(1000) }),
 
@@ -537,14 +566,7 @@ const requestContent = z.union([
 export const viewSynthesisSchema = z.strictObject({
     content: requestContent,
     relationships: requestEdge.array().max(1000),
-    outcome: z.enum([
-        "diagnosticOnly",
-        "verifiedRecovery",
-        "projectSummary",
-        "chronology",
-        "knowledgePages",
-        "schemaAnswers",
-    ]),
+    outcome: viewOutcomeSchema,
     missingEvidence: text.array().max(100),
 });
 const viewSynthesisResponseSchema = viewSynthesisSchema.extend({
@@ -666,17 +688,7 @@ export const viewSearchRequestSchema = z.strictObject({
     query: text,
     limit: z.number().int().min(1).max(100).optional(),
     freshness: z.literal("current"),
-    kinds: z
-        .enum([
-            "troubleshootingGuide",
-            "projectBrief",
-            "timeline",
-            "wiki",
-            "schemaView",
-        ])
-        .array()
-        .max(5)
-        .optional(),
+    kinds: viewKindSchema.array().max(6).optional(),
 });
 const snapshot = z.object({
     corpusId: id,
@@ -707,6 +719,7 @@ const snapshot = z.object({
         .array()
         .max(32),
     influenceSources: source.array().optional(),
+    influenceEvents: topicEventReferenceSchema.array().optional(),
     topicInput: topicBuildInputSchema.optional(),
     pipeline: z.enum([
         "troubleshooting-v1",
@@ -715,6 +728,7 @@ const snapshot = z.object({
         "informational-project-summary-v1",
         "topics-v1",
         "schema-defined-v1",
+        "host-defined-v1",
     ]),
     selectionFingerprint: hash.optional(),
     informationalRetrieval: z
@@ -852,6 +866,40 @@ export const viewBuildJobSchema = z.object({
             topicGeneration: id.optional(),
             conflictId: z.string().uuid().optional(),
             missingEvidence: z.string().array().optional(),
+            providerStages: z
+                .object({
+                    stage: z.string().regex(/^[a-z][a-z0-9.-]{0,127}$/),
+                    inputFingerprint: hash,
+                    checkpoints: z
+                        .object({
+                            recordedAt: z.string(),
+                            state: viewProviderJsonSchema,
+                        })
+                        .array(),
+                    candidates: z
+                        .object({
+                            recordedAt: z.string(),
+                            candidate: viewProviderJsonSchema,
+                        })
+                        .array(),
+                    completions: z
+                        .object({
+                            id: z.string().uuid(),
+                            queuedAt: z.string(),
+                            admittedAt: z.string().optional(),
+                            finishedAt: z.string().optional(),
+                            state: z.enum([
+                                "running",
+                                "succeeded",
+                                "failed",
+                                "cancelled",
+                            ]),
+                            error: z.string().optional(),
+                        })
+                        .array(),
+                })
+                .array()
+                .optional(),
             ...inventoryEvidence,
             publication: viewPublicationStatusSchema.optional(),
         })
@@ -950,20 +998,16 @@ export const viewVersionSchema = z.object({
     definition: z.object({
         viewId: id,
         revisionId: id,
-        kind: z.enum([
-            "troubleshootingGuide",
-            "projectBrief",
-            "timeline",
-            "wiki",
-            "schemaView",
-        ]),
+        kind: viewKindSchema,
         selector: viewSelectorSchema,
         maintenance: viewMaintenanceDefinitionSchema.optional(),
         wiki: viewDefinitionSchema.shape.wiki,
         projectSummary: viewDefinitionSchema.shape.projectSummary,
         schemaView: viewDefinitionSchema.shape.schemaView,
+        extension: viewDefinitionSchema.shape.extension,
     }),
     content: z.union([
+        extensionContent,
         schemaViewContentSchema,
         informationalProjectContent,
         timelineContent,
@@ -991,16 +1035,7 @@ export const viewVersionSchema = z.object({
             fingerprint: hash,
             relationships: edge.array().optional(),
             input: snapshot.optional(),
-            outcome: z
-                .enum([
-                    "diagnosticOnly",
-                    "verifiedRecovery",
-                    "projectSummary",
-                    "chronology",
-                    "knowledgePages",
-                    "schemaAnswers",
-                ])
-                .optional(),
+            outcome: viewOutcomeSchema.optional(),
             missingEvidence: z.string().array().max(100).optional(),
             ...inventoryEvidence,
         })

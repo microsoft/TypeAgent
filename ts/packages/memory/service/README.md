@@ -38,6 +38,69 @@ Passive UI navigation should connect to an explicitly approved, already-running
 `MemoryServiceHost`; starting a new service can perform initialization/recovery
 work even when the requested operation is a read.
 
+## Foreground answer cancellation
+
+`answer(request, signal?)` accepts an optional caller `AbortSignal`. Cancellation
+reaches the foreground index/reader operation and the reader model's completion
+signal; an aborted request cannot return a completed answer. This does not undo
+stored source revisions or cancel unrelated background maintenance.
+
+The MCP answer handler forwards request cancellation. For stateless HTTP,
+built-in clients send a fresh `X-TypeAgent-Client-Id` UUID per transport. The host
+correlates SDK cancellation notifications using that UUID and the exact JSON-RPC
+request ID, rejects duplicate active identities, and cancels abandoned response
+connections. Another client's reuse of a JSON-RPC ID cannot cancel this request.
+The client ID is correlation, not authorization: bearer and source checks remain
+required. Existing clients without the header remain compatible; their abandoned
+connections still cancel active foreground work.
+
+## Host-defined structured Views
+
+A host may install `viewProviders`, an identified `viewProviderModel`, and
+`viewProviderAuthorization` in `FileMemoryServiceOptions`. Registration is
+inert: it does not fetch sources, invoke models, or start builds. Installed
+identities appear in the derived-view capabilities; ordinary hosts keep their
+existing supported kinds.
+
+An explicit `buildViews` target with `kind: "extension"` supplies an
+`extension` containing a pinned provider identity and data-only configuration.
+The service rejects unknown providers or changed implementation/schema identities.
+Construction uses the existing durable build runner and shared maintenance model
+scheduler. The provider validates the immutable input and document and supplies
+an independent support report. The provider must validate the schema and fidelity
+of the full structured data, not only its statement projection. Core validation
+checks every projected statement's exact citations and binds publication proof
+to the whole artifact. Arbitrary Save draft edits are not supported for
+these provider-owned documents; change them through the managed constructor.
+
+Providers receive cancellation, eligibility checks, checkpoint/candidate writers,
+the identified host model separately from the snapshot fingerprint, and the last
+saved stage checkpoints. Journals retain candidate/checkpoint history
+and logical completion requests with queue, admission and completion times.
+These logical rows are not physical wire-attempt counts; physical retry/usage
+accounting remains with the existing model client. Source authorization is
+rechecked at model admission, before checkpoint/candidate persistence, when
+reading source-bearing content/history/jobs, and before publication. A host that
+reopens provider-owned content without its authorizer cannot serve it.
+
+An explicit repeat of the same failed or interrupted provider-only build may
+continue its existing job and stage journal after current source checks pass.
+Completed targets are not rebuilt. Fidelity-blocked, stale and explicitly
+cancelled targets are not automatically retried; legacy build behavior is
+unchanged. Reopening or navigating does not start continuation. An interrupted
+logical completion retains its receipt with an unknown physical outcome rather
+than being counted as a successful request.
+
+MCP/HTTP schemas preserve installed identities, structured content, source
+lineage and authorized stage journals. The generic Hub can list and read these
+documents but does not offer arbitrary editing or an unconfigured provider build.
+
+This is the service construction API, not automatic loading of host modules or
+a new model-authored UI renderer. Native-host installation, private domain
+constructors, source-reader authorization, and trusted product layouts must be
+wired by the owning host. Raw source bodies remain in the private corpus/build
+store; do not expose journals through a host that has not authorized their scope.
+
 ## Opt-in memory understanding
 
 Set `TYPEAGENT_MEMORY_UNDERSTANDING=true` in the host environment (or pass

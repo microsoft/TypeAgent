@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { randomUUID } from "node:crypto";
 
 import {
     graphQueryRequestSchema,
@@ -1752,10 +1753,10 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
 
 function createTransport(config: MemoryMcpTransportConfig): MemoryMcpTransport {
     if (config.kind === "http") {
+        const headers = new Headers(config.headers);
+        headers.set("X-TypeAgent-Client-Id", randomUUID());
         return new StreamableHTTPClientTransport(new URL(config.url), {
-            ...(config.headers === undefined
-                ? {}
-                : { requestInit: { headers: config.headers } }),
+            requestInit: { headers },
             ...(config.timeoutMs === undefined
                 ? {}
                 : {

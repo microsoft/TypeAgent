@@ -7,6 +7,10 @@ import {
     validateRunbookCatalogIdentity,
 } from "@typeagent/memory-service/agent-edition-validation";
 import { z } from "zod";
+import {
+    viewKindSchema,
+    viewProviderIdentitySchema,
+} from "./viewProviderProtocol.js";
 
 export const memoryToolNames = {
     corpusCreate: "memory_corpus_create",
@@ -841,15 +845,8 @@ export const capabilitiesSchema = z.object({
         .object({
             knowledge: z.boolean().optional(),
             integratedAnswering: z.boolean().optional(),
-            kinds: z
-                .enum([
-                    "troubleshootingGuide",
-                    "projectBrief",
-                    "timeline",
-                    "wiki",
-                    "schemaView",
-                ])
-                .array(),
+            kinds: viewKindSchema.array(),
+            providers: viewProviderIdentitySchema.array().optional(),
             drafts: z.literal(true),
             history: z.literal(true),
             publication: z.literal(true),

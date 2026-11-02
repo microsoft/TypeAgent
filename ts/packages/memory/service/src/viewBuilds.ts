@@ -52,6 +52,11 @@ import {
     yieldMaintenanceBuild,
 } from "./maintenanceConcurrency.js";
 import { createLimiter } from "@typeagent/common-utils";
+import {
+    viewProviderOutput,
+    type ViewProviderResult,
+} from "./viewProviders.js";
+import { assertSupportReport } from "./viewSynthesis.js";
 
 export class ViewBuildStaleError extends Error {}
 
@@ -77,6 +82,11 @@ interface ViewBuildRuntimeScope {
 }
 
 export interface ViewBuildOwner extends TopicBuildOwner {
+    constructExtension?(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+    ): Promise<ViewProviderResult>;
     update(
         corpusId: string,
         jobId: string,
@@ -167,6 +177,10 @@ export class ViewBuildRunner {
         if (failure) throw failure.error;
     }
 
+    public isActive(jobId: string): boolean {
+        return this.tasks.has(jobId);
+    }
+
     public start(job: ViewBuildJob): void {
         this.assertCapacity();
         const controller = new AbortController();
@@ -216,7 +230,9 @@ export class ViewBuildRunner {
                     { corpusId: job.corpusId, buildId: job.jobId },
                 ),
             job.results.some(
-                (result) => result.snapshot.pipeline === "topics-v1",
+                (result) =>
+                    result.snapshot.pipeline === "topics-v1" ||
+                    result.snapshot.pipeline === "host-defined-v1",
             ),
             job.corpusId,
         );
@@ -444,6 +460,14 @@ export class ViewBuildRunner {
         let validation = false;
         try {
             signal.throwIfAborted();
+            if (result.snapshot.pipeline === "host-defined-v1") {
+                return await this.extensionTarget(
+                    job,
+                    result,
+                    signal,
+                    jobSignal,
+                );
+            }
             if (result.snapshot.pipeline === "topics-v1") {
                 if (!this.owner.materializeTopics)
                     throw new Error(
@@ -655,20 +679,111 @@ export class ViewBuildRunner {
                 this.consolidateWikiTarget(job, result, conflicts, signal),
             );
         } catch (error) {
-            const state = failedTargetState(
+            await this.failTarget(
+                job,
+                result,
                 error,
                 signal,
                 jobSignal,
                 validation,
             );
-            if (!this.purged.has(job.jobId))
-                await this.result(job, result.viewId, state, safeError(error));
             return false;
         } finally {
             clearTimeout(timer);
             jobSignal.removeEventListener("abort", cancel);
         }
         return true;
+    }
+
+    private async extensionTarget(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+        jobSignal: AbortSignal,
+    ): Promise<boolean> {
+        let validation = false;
+        try {
+            if (!this.owner.constructExtension)
+                throw new Error(
+                    "Host-defined view construction is not installed",
+                );
+            await this.result(
+                job,
+                result.viewId,
+                "generating",
+                "Constructing the installed structured view",
+            );
+            const constructed = await abortable(
+                this.owner.constructExtension(job, result, signal),
+                signal,
+            );
+            if (constructed.state !== "accepted") {
+                await this.result(
+                    job,
+                    result.viewId,
+                    constructed.state === "deferred" ? "blocked" : "failed",
+                    constructed.reason,
+                );
+                return constructed.state === "deferred";
+            }
+            validation = true;
+            const output = viewProviderOutput(
+                result.snapshot,
+                constructed.document,
+            );
+            validateConstructedGuide(result.snapshot, output);
+            assertSupportReport(constructed.support);
+            validateSupport(output, constructed.support);
+            await this.result(
+                job,
+                result.viewId,
+                "validating",
+                "Validated structured content and independent exact-source support",
+            );
+            validation = false;
+            signal.throwIfAborted();
+            await this.owner.materialize(
+                job,
+                result,
+                output,
+                output,
+                [],
+                signal,
+                publicationProof(
+                    result.snapshot.fingerprint,
+                    output,
+                    constructed.support,
+                ),
+            );
+            return true;
+        } catch (error) {
+            await this.failTarget(
+                job,
+                result,
+                error,
+                signal,
+                jobSignal,
+                validation,
+            );
+            return false;
+        }
+    }
+
+    private async failTarget(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        error: unknown,
+        signal: AbortSignal,
+        jobSignal: AbortSignal,
+        validation: boolean,
+    ): Promise<void> {
+        if (!this.purged.has(job.jobId))
+            await this.result(
+                job,
+                result.viewId,
+                failedTargetState(error, signal, jobSignal, validation),
+                safeError(error),
+            );
     }
 
     private async validateOrRepairAnswers(
@@ -931,6 +1046,11 @@ export class ViewBuildRunner {
         };
         try {
             for (const [index, result] of job.results.entries()) {
+                if (
+                    result.snapshot.pipeline === "host-defined-v1" &&
+                    result.state !== "pending"
+                )
+                    continue;
                 if (index % this.wikiAssessmentConcurrency === 0)
                     prepare(index);
                 const target = () =>

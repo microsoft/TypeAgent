@@ -13,9 +13,13 @@ import {
     viewSynthesisSchema,
     viewToolNames,
     viewVersionSchema,
+    viewBuildJobSchema,
+    viewBuildRequestSchema,
+    viewProviderJsonSchema,
 } from "../dist/viewProtocol.js";
 import { viewMaintenanceRequestSchema } from "../dist/viewMaintenanceProtocol.js";
-import { searchRequestSchema } from "../dist/protocol.js";
+import { searchRequestSchema, capabilitiesSchema } from "../dist/protocol.js";
+import { z } from "zod";
 
 test("bounded indexed search flag survives protocol round-trip and rejects nonboolean input", () => {
     const request = {
@@ -131,6 +135,202 @@ const snapshot = {
     model: "model",
     fingerprint: hash,
 };
+
+test("extension requests and installed capabilities preserve data-only pinned identities", () => {
+    const provider = {
+        id: "fixture.structured",
+        version: "1",
+        implementationSha256: hash,
+        schemaSha256: hash,
+    };
+    const extension = {
+        provider,
+        configuration: { inputMode: "retained", titles: ["What happened?"] },
+    };
+    const target = {
+        expectedVersion: 0,
+        definition: { ...definition, kind: "extension", extension },
+    };
+    const request = {
+        corpusId: "corpus",
+        expectedHead: null,
+        targets: [target],
+        publication: false,
+    };
+    assert.deepEqual(
+        viewBuildRequestSchema.parse(JSON.parse(JSON.stringify(request))),
+        request,
+    );
+    assert.ok(z.toJSONSchema(viewBuildRequestSchema).properties);
+    const capability = {
+        derivedViews: {
+            kinds: ["extension"],
+            providers: [provider],
+            drafts: true,
+            history: true,
+            publication: true,
+            search: true,
+            builds: true,
+        },
+        features: {
+            knowledgeExtraction: false,
+            queryTranslation: false,
+            vectorSimilarity: false,
+            structuredSearch: false,
+            exactSearch: true,
+            management: true,
+            groundedAnswer: false,
+        },
+        warnings: [],
+    };
+    assert.deepEqual(capabilitiesSchema.parse(capability), capability);
+    for (const invalid of [
+        { ...target.definition, extension: undefined },
+        { ...target.definition, kind: "timeline" },
+        {
+            ...target.definition,
+            extension: { ...extension, executable: "not allowed" },
+        },
+        {
+            ...target.definition,
+            extension: { ...extension, provider: { ...provider, version: "" } },
+        },
+    ])
+        assert.equal(
+            viewBuildRequestSchema.safeParse({
+                ...request,
+                targets: [{ ...target, definition: invalid }],
+            }).success,
+            false,
+        );
+});
+
+test("extension structured content and durable stage receipts survive the wire unchanged", () => {
+    const provider = {
+        id: "fixture.structured",
+        version: "1",
+        implementationSha256: hash,
+        schemaSha256: hash,
+    };
+    const output = {
+        ...synthesis,
+        outcome: "structuredExplanation",
+        content: {
+            kind: "extension",
+            provider,
+            title: "Case",
+            sections: [{ ...section, role: "context" }],
+            citations: [citation],
+            data: {
+                questionTitle: "What did the lookup establish?",
+                statement: "It failed.",
+            },
+        },
+    };
+    const { version } = persisted(output);
+    version.generation.outcome = "structuredExplanation";
+    version.definition = {
+        ...version.definition,
+        kind: "extension",
+        extension: { provider, configuration: { inputMode: "retained" } },
+    };
+    assert.deepEqual(
+        viewVersionSchema.parse(JSON.parse(JSON.stringify(version))),
+        version,
+    );
+    const job = {
+        jobId: conflictId,
+        corpusId: "corpus",
+        fingerprint: hash,
+        request: {
+            corpusId: "corpus",
+            expectedHead: null,
+            targets: [
+                {
+                    definition: {
+                        ...definition,
+                        kind: "extension",
+                        extension: version.definition.extension,
+                    },
+                    expectedVersion: 0,
+                },
+            ],
+            publication: false,
+        },
+        actor: "actor",
+        createdAt: version.createdAt,
+        updatedAt: version.createdAt,
+        state: "complete",
+        publication: false,
+        results: [
+            {
+                viewId: "guide",
+                reason: "Accepted",
+                state: "draft",
+                snapshot: {
+                    ...snapshot,
+                    definition: {
+                        ...definition,
+                        kind: "extension",
+                        extension: version.definition.extension,
+                    },
+                    pipeline: "host-defined-v1",
+                },
+                providerStages: [
+                    {
+                        stage: "full.explanation",
+                        inputFingerprint: hash,
+                        checkpoints: [
+                            {
+                                recordedAt: version.createdAt,
+                                state: { accepted: true },
+                            },
+                        ],
+                        candidates: [
+                            {
+                                recordedAt: version.createdAt,
+                                candidate: output.content.data,
+                            },
+                        ],
+                        completions: [
+                            {
+                                id: conflictId,
+                                queuedAt: version.createdAt,
+                                admittedAt: version.createdAt,
+                                finishedAt: version.createdAt,
+                                state: "succeeded",
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    };
+    assert.deepEqual(
+        viewBuildJobSchema.parse(JSON.parse(JSON.stringify(job))),
+        job,
+    );
+});
+
+test("provider JSON rejects cycles, non-JSON values and depth beyond the shared limit", () => {
+    const cyclic = {};
+    cyclic.self = cyclic;
+    let deep = {};
+    for (let depth = 1; depth < 64; depth++) deep = { child: deep };
+    assert.equal(viewProviderJsonSchema.safeParse(deep).success, true);
+    assert.equal(
+        viewProviderJsonSchema.safeParse({ child: deep }).success,
+        false,
+    );
+    for (const value of [
+        cyclic,
+        undefined,
+        { value: NaN },
+        new Date(),
+        { run: () => true },
+    ])
+        assert.equal(viewProviderJsonSchema.safeParse(value).success, false);
+});
 
 test("distinct indexed project summaries round-trip through save and MCP without weakening legacy inventories", async () => {
     const roles = [

@@ -8,6 +8,10 @@ import {
     viewSourceKey as sourceKey,
 } from "./viewContent.js";
 import { validateMaintenanceDefinition } from "./viewMaintenance.js";
+import {
+    validateExtensionDefinition,
+    validateExtensionContent,
+} from "./viewProviders.js";
 import type {
     ViewArchiveRequest,
     ViewCitation,
@@ -360,6 +364,7 @@ export function validateViewDraft(request: ViewSaveRequest): void {
             "timeline",
             "wiki",
             "schemaView",
+            "extension",
         ].includes(request.definition?.kind) ||
         request.content?.kind !== request.definition?.kind
     )
@@ -376,6 +381,7 @@ export function validateViewDraft(request: ViewSaveRequest): void {
             "wiki",
             "projectSummary",
             "schemaView",
+            "extension",
         ],
         "view definition",
     );
@@ -383,6 +389,7 @@ export function validateViewDraft(request: ViewSaveRequest): void {
     validateWikiSelector(request.definition);
     validateProjectSelector(request.definition);
     validateSchemaViewDefinition(request.definition);
+    validateExtensionDefinition(request.definition);
     if (!!request.definition.wiki !== informationalWiki(request.content))
         throw new Error("Wiki content and construction definition differ");
     if (
@@ -400,8 +407,10 @@ function validateDraftContent(
     sources: Set<string>,
 ): Set<string> {
     if (
-        (request.content.kind === "timeline") !==
-        (request.definition.selector.kind === "timelineEvidence")
+        (request.content.kind === "timeline" &&
+            request.definition.selector.kind !== "timelineEvidence") ||
+        (request.definition.selector.kind === "timelineEvidence" &&
+            !["timeline", "extension"].includes(request.content.kind))
     )
         throw new Error(
             "Timeline requires discriminated canonical-event/document selection",
@@ -418,6 +427,8 @@ function validateDraftContent(
     if (request.content.kind === "wiki") validateWiki(request.content);
     if (request.content.kind === "schemaView")
         validateSchemaViewContent(request.definition, request.content);
+    if (request.content.kind === "extension")
+        validateExtensionContent(request.definition, request.content);
     if (request.content.agentEdition !== undefined)
         throw new Error(
             "Agent editions are not supported in derived view drafts",
@@ -438,6 +449,9 @@ function validateDraftContent(
                 ? ["construction", "status", "coverageNote"]
                 : []),
             ...(request.content.kind === "schemaView" ? ["construction"] : []),
+            ...(request.content.kind === "extension"
+                ? ["provider", "data"]
+                : []),
         ],
         "guide content",
     );

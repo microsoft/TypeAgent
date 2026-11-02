@@ -2,6 +2,10 @@
 // Licensed under the MIT License.
 
 import type { AgentEdition } from "./agentEdition.js";
+import type {
+    ViewProviderIdentity,
+    ViewProviderJson,
+} from "./viewProviders.js";
 import type { MemoryInventoryService } from "./inventoryTypes.js";
 import type { MemoryAcquisitionService } from "./acquisitionTypes.js";
 import type {
@@ -43,7 +47,8 @@ export type ViewKind =
     | "projectBrief"
     | "timeline"
     | "wiki"
-    | "schemaView";
+    | "schemaView"
+    | "extension";
 export type ViewState = "draft" | "stale" | "archived";
 export interface ViewCitation extends ProcedureSourceCitation {
     locator: string;
@@ -225,7 +230,18 @@ export type DerivedViewContent =
     | ProjectBriefContent
     | TimelineContent
     | WikiContent
-    | SchemaViewContent;
+    | SchemaViewContent
+    | ExtensionViewContent;
+export interface ExtensionViewContent {
+    kind: "extension";
+    provider: ViewProviderIdentity;
+    title: string;
+    data: ViewProviderJson;
+    sections: ViewSection[];
+    citations: ViewCitation[];
+    summary?: string;
+    agentEdition?: never;
+}
 export type ViewEndpoint =
     | { kind: "section"; viewId: string; sectionId: string }
     | {
@@ -285,6 +301,10 @@ export interface ViewDefinitionInput {
     selector: ViewSourceSelector;
     maintenance?: ViewMaintenanceDefinition;
     schemaView?: SchemaViewDefinition;
+    extension?: {
+        provider: ViewProviderIdentity;
+        configuration: ViewProviderJson;
+    };
     wiki?: {
         construction: "informational-wiki-v1";
         query: string;
@@ -305,6 +325,7 @@ export interface ViewDefinition {
     selector: ViewSourceSelector;
     maintenance?: ViewMaintenanceDefinition;
     schemaView?: SchemaViewDefinition;
+    extension?: NonNullable<ViewDefinitionInput["extension"]>;
     wiki?: NonNullable<ViewDefinitionInput["wiki"]>;
     projectSummary?: NonNullable<ViewDefinitionInput["projectSummary"]>;
 }
@@ -513,7 +534,8 @@ export interface ViewBuildSnapshot {
         | "informational-wiki-v1"
         | "informational-project-summary-v1"
         | "topics-v1"
-        | "schema-defined-v1";
+        | "schema-defined-v1"
+        | "host-defined-v1";
     model: string;
     fingerprint: string;
     publicationPolicy?: ViewEffectivePublicationPolicy;
@@ -536,7 +558,8 @@ export interface ViewSynthesisOutput {
         | "projectSummary"
         | "chronology"
         | "knowledgePages"
-        | "schemaAnswers";
+        | "schemaAnswers"
+        | "structuredExplanation";
     missingEvidence: string[];
     inventory?: ViewFactInventory;
     inventoryAudit?: ViewInventoryAudit;
@@ -786,6 +809,20 @@ export interface ViewBuildTargetResult {
     inventory?: ViewFactInventory;
     inventoryAudit?: ViewInventoryAudit;
     coverage?: ViewInventoryCoverage;
+    providerStages?: Array<{
+        stage: string;
+        inputFingerprint: string;
+        checkpoints: Array<{ recordedAt: string; state: ViewProviderJson }>;
+        candidates: Array<{ recordedAt: string; candidate: ViewProviderJson }>;
+        completions: Array<{
+            id: string;
+            queuedAt: string;
+            admittedAt?: string;
+            finishedAt?: string;
+            state: "running" | "succeeded" | "failed" | "cancelled";
+            error?: string;
+        }>;
+    }>;
     publication?: ViewPublicationStatus;
     wikiAssessment?: WikiSubjectAssessment & { canonicalRevisionId?: string };
     wikiContribution?: {
