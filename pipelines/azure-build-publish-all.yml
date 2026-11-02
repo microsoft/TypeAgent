@@ -539,6 +539,9 @@ stages:
               npm run test:local
             displayName: "Run Tests (Local)"
             workingDirectory: $(buildDirectory)
+            env:
+              # Keep full coverage without running large heaps side by side.
+              TYPEAGENT_TEST_WORKSPACE_CONCURRENCY: "1"
 
           - script: |
               Xvfb :99 -screen 0 1600x1200x24 &
