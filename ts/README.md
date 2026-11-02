@@ -307,6 +307,11 @@ Compiled [Coda test](./packages/coda/src/test/) output in
 `packages/coda/dist-test` is excluded from formatting. The TypeScript test
 sources remain checked.
 
+The Azure DevOps smoke pipeline uses Ubuntu 24.04, a supported image for the
+installed Playwright release, rather than following `ubuntu-latest` image
+changes. Ubuntu 26.04 reached that label before the pinned Playwright release
+supported it.
+
 #### macOS blocking and nightly coverage
 
 The [build-ts workflow](../.github/workflows/build-ts.yml) keeps full local

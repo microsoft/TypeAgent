@@ -20,6 +20,12 @@ const pipeline = yaml.load(
         "utf8",
     ),
 );
+const smoke = yaml.load(
+    fs.readFileSync(
+        new URL("../../../../pipelines/azure-smoke-tests.yml", import.meta.url),
+        "utf8",
+    ),
+);
 const runtimeRequire = createRequire(
     new URL(
         "../../../packages/agentServer/bundledRuntime/package.json",
@@ -46,15 +52,6 @@ test("publishing selects CPU-only ONNX installation for every job", () => {
 test("publishing uses the standard Node heap budget and CI test settings", () => {
     const variables = Object.fromEntries(
         pipeline.variables.map(({ name, value }) => [name, value]),
-    );
-    const smoke = yaml.load(
-        fs.readFileSync(
-            new URL(
-                "../../../../pipelines/azure-smoke-tests.yml",
-                import.meta.url,
-            ),
-            "utf8",
-        ),
     );
     assert.equal(variables.CI, "true");
     assert.equal(
@@ -120,6 +117,13 @@ test("publishing fetches the lint ratchet base before running lint", () => {
         "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
         "npm run lint",
     ]);
+});
+
+test("smoke tests pin the supported Linux image without changing Windows", () => {
+    const matrix = smoke.jobs.find(({ job }) => job === "shell_and_cli")
+        .strategy.matrix;
+    assert.equal(matrix.linux.image, "ubuntu-24.04");
+    assert.equal(matrix.windows.image, "windows-latest");
 });
 
 test("the Linux x64 ONNX installer avoids NuGet only with the publishing setting", () => {
