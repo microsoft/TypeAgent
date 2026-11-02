@@ -303,6 +303,10 @@ script phase. The publishing pipeline uses `1` on its hosted test agent to
 avoid memory contention between the larger suites. This does not change
 Jest's per-package worker settings or the macOS compatibility selection.
 
+Compiled [Coda test](./packages/coda/src/test/) output in
+`packages/coda/dist-test` is excluded from formatting. The TypeScript test
+sources remain checked.
+
 #### macOS blocking and nightly coverage
 
 The [build-ts workflow](../.github/workflows/build-ts.yml) keeps full local

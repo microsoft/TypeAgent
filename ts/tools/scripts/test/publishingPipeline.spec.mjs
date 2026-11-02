@@ -7,6 +7,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const yaml = require("js-yaml");
@@ -84,6 +85,41 @@ test("the publishing gate retains all local tests with serialized packages", () 
     );
     assert.equal(step.script.trim(), "npm run test:local");
     assert.equal(step.env.TYPEAGENT_TEST_WORKSPACE_CONCURRENCY, "1");
+});
+
+test("publishing lint excludes compiled Coda tests but retains source checks", async () => {
+    const { getFileInfo } = require("prettier");
+    const ignorePath = fileURLToPath(
+        new URL("../../../.prettierignore", import.meta.url),
+    );
+    for (const [file, ignored] of [
+        ["dist-test/test/workspaceCommandPolicy.spec.js", true],
+        ["dist-test/test/workspaceCommandRunner.spec.js", true],
+        ["dist-test/workspaceCommandPolicy.js", true],
+        ["dist-test/workspaceCommandRunner.js", true],
+        ["src/test/workspaceCommandPolicy.spec.ts", false],
+        ["src/test/workspaceCommandRunner.spec.ts", false],
+    ]) {
+        const info = await getFileInfo(
+            fileURLToPath(
+                new URL(`../../../packages/coda/${file}`, import.meta.url),
+            ),
+            { ignorePath },
+        );
+        assert.equal(info.ignored, ignored, file);
+    }
+});
+
+test("publishing fetches the lint ratchet base before running lint", () => {
+    const step = pipeline.stages
+        .find(({ stage }) => stage === "Test")
+        .jobs.find(({ job }) => job === "unit_tests")
+        .steps.find(({ displayName }) => displayName === "Lint");
+    assert.deepEqual(step.script.trim().split("\n"), [
+        "set -e",
+        "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
+        "npm run lint",
+    ]);
 });
 
 test("the Linux x64 ONNX installer avoids NuGet only with the publishing setting", () => {
