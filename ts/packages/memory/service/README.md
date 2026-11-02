@@ -285,6 +285,12 @@ once, rather than repeating identical native authorization for every block.
 No authorization result is retained across reader return, Understanding snapshot
 validation or module reads. A revoked dependency blocks return even when it was
 not selected as an answer citation.
+Derived-view module reads use those complete checks before and after assembling
+their exact-revision response. The assembly step separately checks the provider's
+read permission without repeating the full dependency sweep between those
+boundaries. Each later expansion runs both complete checks again; authorization
+is not cached between requests. Original-source expansion also retains its
+independent source authorization.
 Build completion and publication do not alone establish indexed readiness.
 `retryViewIndex` / `memory_view_index_retry` repairs publication indexing without
 regenerating the stored artifact.

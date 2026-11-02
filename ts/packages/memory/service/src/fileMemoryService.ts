@@ -11626,16 +11626,26 @@ export class FileMemoryService
         const derivedViews: import("./viewExtensionUnderstanding.js").UnderstandingDerivedView[] =
             [];
         for (const [viewId, references] of scope) {
-            const view = await this.getView({
+            const view = await this.viewStore.getView({
                 corpusId: input.corpusId,
                 viewId,
                 revisionId: references[0].revisionId,
             });
-            if (!view || view.content.kind !== "extension")
+            if (
+                !view ||
+                view.content.kind !== "extension" ||
+                !this.extensionBuilds ||
+                !view.generation?.input
+            )
                 throw new Error(
                     "Selected derived artifact is unavailable or unauthorized",
                 );
-            await this.assertViewPublicationFresh(view);
+            // The engine checks the complete published snapshot before and after
+            // this hook. The distinct provider read permission still applies.
+            await this.extensionProviders.authorize(
+                view.generation.input,
+                "read",
+            );
             const selectedBlockIds = evidence
                 .filter(
                     (item) =>

@@ -1127,8 +1127,14 @@ describe("registered extension service lifecycle", () => {
             let reads = 0;
             let postReaderChecks = 0;
             let deniedSource: string | undefined;
+            let denyModuleRead = false;
+            let onModuleRead: (() => void) | undefined;
             const authorize = fixture.installed.authorize;
             fixture.installed.authorize = async (snapshot, operation) => {
+                if (operation === "read") {
+                    if (denyModuleRead) return false;
+                    onModuleRead?.();
+                }
                 if (operation === "publish" && reads) {
                     postReaderChecks++;
                     if (revoke && postReaderChecks === 2)
@@ -1238,19 +1244,54 @@ process.stdout.write(JSON.stringify(allowed && request.sourceId !== denied));`,
                     }),
                 ]),
             );
-            const module = await service.understandingModule({
+            const beforeModuleChecks = postReaderChecks;
+            gates.length = 0;
+            const moduleRequest = {
                 corpusId: corpus.corpusId,
                 snapshotId: result.snapshotId,
-                kind: "derivedViews",
+                kind: "derivedViews" as const,
                 viewId: view.viewId,
                 revisionId: view.revisionId,
                 layoutId: "story",
                 limit: 4,
-            });
+            };
+            const module = await service.understandingModule(moduleRequest);
             expect(module.derivedViews?.[0].selectedBlockIds).toEqual([
                 "claim",
             ]);
             expect(module.derivedViews?.[0].blocks).toHaveLength(4);
+            expect(reads).toBe(1);
+            expect(postReaderChecks - beforeModuleChecks).toBe(2);
+            expect(
+                gates.filter(
+                    (gate) =>
+                        gate.operation === "read" &&
+                        gate.sourceId === "source-2",
+                ),
+            ).toHaveLength(2);
+            gates.length = 0;
+            await service.understandingModule({
+                ...moduleRequest,
+                layoutId: "roles",
+            });
+            expect(
+                gates.filter(
+                    (gate) =>
+                        gate.operation === "read" &&
+                        gate.sourceId === "source-2",
+                ),
+            ).toHaveLength(2);
+            denyModuleRead = true;
+            await expect(
+                service.understandingModule(moduleRequest),
+            ).rejects.toThrow("not authorized");
+            denyModuleRead = false;
+            onModuleRead = () => {
+                deniedSource = "source-2";
+            };
+            await expect(
+                service.understandingModule(moduleRequest),
+            ).rejects.toThrow(/changed|forgotten|revoked/);
             expect(reads).toBe(1);
         },
         30000,
