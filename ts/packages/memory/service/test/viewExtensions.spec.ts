@@ -27,6 +27,7 @@ import type {
     ViewBuildJob,
     ViewBuildRequest,
     ViewBuildSnapshot,
+    ViewBuildTargetResult,
     ViewRelationship,
     ViewSaveRequest,
 } from "../src/viewTypes.js";
@@ -483,7 +484,12 @@ describe("registered extension service lifecycle", () => {
         const fixture = provider();
         const { request } = await setup(fixture.installed);
         const job = await settled(service, await service.buildViews(request));
-        const result = structuredClone(job.results[0]);
+        const result: ViewBuildTargetResult = {
+            viewId: job.results[0].viewId,
+            snapshot: structuredClone(job.results[0].snapshot),
+            state: "pending",
+            reason: "Synthetic queued admission",
+        };
         let eligible = true;
         let calls = 0;
         fixture.installed.model = {
