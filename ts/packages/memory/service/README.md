@@ -62,6 +62,11 @@ versioned definition. The legacy direct selector still accepts at most 32
 references. Larger selections require `sourceManifest`: an ingested immutable
 manifest revision plus the complete expanded member list and content hashes.
 The manifest root and every member remain dependencies; no input is truncated.
+Providers can opt into a complete-source proof bound up to 8,000,000
+characters through `limits.maxInputChars`. Smaller declared bounds remain
+enforced. This limits the native original-source snapshot, not the model
+prompt: a provider can prepare a smaller extraction packet. Model-token
+budgets, source-count limits and output limits remain independent.
 
 Accepted structured payloads, readable sections, template bindings, fidelity
 proofs, qualification receipts and revisions live in the corpus View store.
@@ -320,6 +325,12 @@ once, rather than repeating identical native authorization for every block.
 No authorization result is retained across reader return, Understanding snapshot
 validation or module reads. A revoked dependency blocks return even when it was
 not selected as an answer citation.
+Derived-view module reads use those complete checks before and after assembling
+their exact-revision response. The assembly step separately checks the provider's
+read permission without repeating the full dependency sweep between those
+boundaries. Each later expansion runs both complete checks again; authorization
+is not cached between requests. Original-source expansion also retains its
+independent source authorization.
 Build completion and publication do not alone establish indexed readiness.
 `retryViewIndex` / `memory_view_index_retry` repairs publication indexing without
 regenerating the stored artifact.
@@ -412,6 +423,39 @@ full root build; use an installed Chromium or set
 private deployment, live-model quality result or cross-platform qualification.
 Linux/WSL Node validation and private application/live evaluation remain separate.
 
+## Paged view details
+
+Use view summaries for inventory and `getViewDetailPage`
+(`memory_view_detail_page`) for complete large artifacts. Each response contains
+at most 262144 JSON characters, with corpus/view/revision identity, a SHA-256
+digest, total character count, offset and optional next offset. Continuations
+must carry the returned revision, digest and projection. Every page uses the ordinary
+authorized exact-view read; access changes fail rather than returning cached
+proof without validation.
+
+The default `complete` projection preserves the entire stored artifact.
+Explicit `presentation` projection omits only `generation.input`, the embedded
+construction snapshot; it preserves all view content, presentation layouts,
+citations, relationships, generation output and validation metadata. Native Hub
+uses presentation details instead of downloading every original build input.
+The canonical corpus revision is unchanged, and complete paging remains
+available for inspection of that snapshot. Neither projection bypasses
+authorization of the complete original-source dependency set.
+
+The typed client's `readViewDetail` assembles and schema-validates all pages,
+verifies identity, offsets, length and the complete digest, and returns nothing
+partial on failure. Complete reads are bounded to 33554432 characters.
+Native Hub uses this path behind its existing detail interaction; layout
+selection and original-source inspection are unchanged. Complete corpus
+payloads, lineage and legacy full-read APIs are retained. The native MCP
+transport's default message limit is unchanged; neither truncation nor a larger
+transport buffer is used to admit large views.
+
+Switching layouts in an already-open extension view reuses that displayed
+revision only for the layout's own URL handoff. Exact links, explicit reopen,
+other views and later navigation still perform a fresh authorized read.
+Original-source expansion retains its independent authorization checks.
+
 ## Opt-in memory understanding
 
 Set `TYPEAGENT_MEMORY_UNDERSTANDING=true` in the host environment (or pass
@@ -436,7 +480,11 @@ Module-only requests do not invoke the prose reader.
 
 Snapshots are service-local: 64 entries, 8 MiB total, 512 KiB per entry, with
 absolute 15-minute expiry. Corpus clear, source forgetting and close purge
-cached bodies. Parent/module reads revalidate all influencing evidence and
+cached bodies. Oversized serialized snapshots are additionally accounted as a
+retained object graph: shared evidence objects count once, without removing any
+body or lineage identifiers. Distinct objects remain separately charged, even
+when equal; cycles and genuinely oversized entries still fail. Response and
+model-request wire limits are unchanged. Parent/module reads revalidate all influencing evidence and
 index versions. Handles do not replace authorization or provide per-chat-session
 isolation; this is the existing local single-principal service boundary.
 Enable `TYPEAGENT_MEMORY_SEARCH_TRACE=1` for redacted rich-stage timing,
@@ -491,11 +539,19 @@ may explicitly request `phase: "preview"` only from an enabled host; provisional
 results have `provisional: true`, no answer and no prepared evidence handle.
 
 Both readers allow one same-model regeneration when the returned status conflicts
-with its factual citations/sections. The same evidence, cancellation/deadline and
+with its factual citations/sections or omits a view's original citations.
+The model receives an explicit `requiredEvidenceIds` bundle for each view and
+the complete required bundle in repair feedback. The host never invents missing
+citations or accepts a repeated omission. The same evidence, cancellation/deadline and
 serialized request limits still apply. The regenerated response is fully parsed
 and revalidated; invalid references, malformed JSON, privacy changes and other
 failures are not silently accepted or converted into a successful answer.
 `memory.reader.statusRepair` records the exceptional extra model call.
+
+Extension-view lookup uses bounded indexed fragments when available, matching
+the existing informational-wiki path rather than relying solely on a semantic
+search rewrite of a long question. Every returned block includes its view title
+and retains exact support/opposition, publication freshness and authorization.
 
 The [latency runner](../../../tools/memory-maintenance-qualification/search-latency-benchmark.mts)
 accepts `--experiments`, `--fast-model`, `--initial-reader-model`, `--answer-model`, `--paths`, `--understanding-rounds`

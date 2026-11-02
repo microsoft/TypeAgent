@@ -429,6 +429,9 @@ export interface MemoryViewService
         Partial<MemorySchemaViewService>,
         Partial<MemoryKnowledgeService>,
         Partial<MemoryAcquisitionService> {
+    getViewDetailPage?(
+        request: import("./viewDetail.js").ViewDetailPageRequest,
+    ): Promise<import("./viewDetail.js").ViewDetailPage | undefined>;
     updateViewMaintenance(
         request: ViewMaintenanceUpdate,
     ): Promise<ViewHistoryEntry>;

@@ -8,6 +8,15 @@ import {
     McpMemoryServiceClient,
 } from "../dist/memoryClient.js";
 import {
+    readViewDetail,
+    viewDetailPageRequestSchema,
+} from "../dist/viewDetailProtocol.js";
+import {
+    viewDetailPage,
+    viewDetailPageChars,
+    viewDetailMaxChars,
+} from "@typeagent/memory-service";
+import {
     viewConflictSchema,
     viewHistoryEntrySchema,
     viewResolutionSchema,
@@ -20,6 +29,168 @@ import {
 } from "../dist/viewProtocol.js";
 import { viewMaintenanceRequestSchema } from "../dist/viewMaintenanceProtocol.js";
 import { searchRequestSchema } from "../dist/protocol.js";
+
+test("paged details retain a complete large Unicode view over bounded typed MCP results", async () => {
+    const { version } = persisted(structuredClone(synthesis));
+    version.content.sections = Array.from({ length: 20 }, (_, index) => ({
+        ...section,
+        id: `section-${index}`,
+        body: "retained \u{1f50e} evidence\n".repeat(4500),
+    }));
+    let calls = 0;
+    const client = new McpMemoryServiceClient({
+        callTool: async ({ name, arguments: request }) => {
+            assert.equal(name, viewToolNames.getViewDetailPage);
+            viewDetailPageRequestSchema.parse(request);
+            const page = viewDetailPage(version, request);
+            assert.ok(page.text.length <= viewDetailPageChars);
+            const response = {
+                content: [
+                    { type: "text", text: JSON.stringify(page, null, 2) },
+                ],
+                structuredContent: { result: page },
+            };
+            assert.ok(
+                Buffer.byteLength(JSON.stringify(response)) < 10 * 1024 * 1024,
+            );
+            calls++;
+            return response;
+        },
+    });
+    const complete = await readViewDetail(client, {
+        corpusId: version.corpusId,
+        viewId: version.viewId,
+    });
+    assert.deepEqual(complete, version);
+    assert.ok(calls > 1);
+});
+
+test("maximally escaped detail pages fit the default native MCP message limit", () => {
+    const text = "\ud800".repeat(viewDetailPageChars);
+    const page = { text };
+    const response = {
+        content: [{ type: "text", text: JSON.stringify(page, null, 2) }],
+        structuredContent: { result: page },
+    };
+    assert.ok(Buffer.byteLength(JSON.stringify(response)) < 10 * 1024 * 1024);
+});
+
+for (const failure of [
+    "missing",
+    "corpus",
+    "view",
+    "total",
+    "projection",
+    "revision",
+    "digest",
+    "offset",
+    "continuation",
+    "corrupt",
+    "revoked",
+]) {
+    test(`paged details fail without returning a partial view after ${failure}`, async () => {
+        const { version } = persisted(structuredClone(synthesis));
+        version.content.sections = Array.from({ length: 2 }, (_, index) => ({
+            ...section,
+            id: `section-${index}`,
+            body: "x".repeat(120000),
+        }));
+        let calls = 0;
+        await assert.rejects(
+            readViewDetail(
+                {
+                    async getViewDetailPage(request) {
+                        calls++;
+                        if (calls === 2) {
+                            if (failure === "missing") return undefined;
+                            if (failure === "revoked")
+                                throw new Error("Source authorization revoked");
+                        }
+                        const page = viewDetailPage(version, request);
+                        if (calls === 2) {
+                            if (failure === "corpus") page.corpusId = "other";
+                            if (failure === "view") page.viewId = "other";
+                            if (failure === "total") page.totalChars++;
+                            if (failure === "projection")
+                                page.projection = "presentation";
+                            if (failure === "revision")
+                                page.revisionId = "other";
+                            if (failure === "digest")
+                                page.digest = "a".repeat(64);
+                            if (failure === "offset") page.offset++;
+                            if (failure === "continuation")
+                                page.nextOffset = page.offset;
+                            if (failure === "corrupt")
+                                page.text = "z" + page.text.slice(1);
+                        }
+                        return page;
+                    },
+                },
+                { corpusId: version.corpusId, viewId: version.viewId },
+            ),
+        );
+        const pageCount = Math.ceil(
+            JSON.stringify(version).length / viewDetailPageChars,
+        );
+        assert.ok(calls >= 2 && calls <= pageCount);
+    });
+}
+
+test("paged detail continuation pins identity and rejects unbounded or changed reads", async () => {
+    const { version } = persisted(structuredClone(synthesis));
+    const request = { corpusId: version.corpusId, viewId: version.viewId };
+    assert.equal(
+        viewDetailPageRequestSchema.safeParse({ ...request, offset: 1 })
+            .success,
+        false,
+    );
+    assert.throws(
+        () => viewDetailPage(version, { ...request, offset: 1 }),
+        /pinned/,
+    );
+    assert.throws(
+        () => viewDetailPage(version, { ...request, digest: "a".repeat(64) }),
+        /changed/,
+    );
+    assert.throws(
+        () => viewDetailPage(version, { ...request, offset: -1 }),
+        /continuation/,
+    );
+    assert.equal(
+        await readViewDetail(
+            { getViewDetailPage: async () => undefined },
+            request,
+        ),
+        undefined,
+    );
+    await assert.rejects(readViewDetail({}, request), /does not support/);
+    version.content.sections[0].body = "x".repeat(viewDetailMaxChars);
+    assert.throws(
+        () => viewDetailPage(version, request),
+        /complete-read character bound/,
+    );
+});
+
+test("presentation details retain content and citations without mutating retained build inputs", async () => {
+    const { version } = persisted(structuredClone(synthesis));
+    const retained = structuredClone(version);
+    const complete = await readViewDetail(
+        {
+            getViewDetailPage: async (request) =>
+                viewDetailPage(version, request),
+        },
+        {
+            corpusId: version.corpusId,
+            viewId: version.viewId,
+            projection: "presentation",
+        },
+    );
+    assert.deepEqual(complete.content, version.content);
+    assert.deepEqual(complete.relationships, version.relationships);
+    assert.deepEqual(complete.generation.content, version.generation.content);
+    assert.equal(complete.generation.input, undefined);
+    assert.deepEqual(version, retained);
+});
 
 for (const transport of ["inProcess", "mcp"]) {
     test(`${transport} answers forward the exact foreground abort signal`, async () => {

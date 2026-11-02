@@ -360,6 +360,7 @@ import {
 } from "./integratedAnswer.js";
 import { MemoryUnderstanding } from "./understanding.js";
 import { UnderstandingStore } from "./understandingStore.js";
+import { viewDetailPage, type ViewDetailPageRequest } from "./viewDetail.js";
 import {
     ViewExtensionRegistry,
     ViewExtensionUnavailable,
@@ -6611,6 +6612,11 @@ export class FileMemoryService
         );
     }
 
+    public async getViewDetailPage(request: ViewDetailPageRequest) {
+        const view = await this.getView(request);
+        return view ? viewDetailPage(view, request) : undefined;
+    }
+
     public async saveViewDraft(
         request: ViewSaveRequest,
     ): Promise<ViewHistoryEntry> {
@@ -7403,7 +7409,9 @@ export class FileMemoryService
                     view.revisionId,
                 );
                 const matches =
-                    informationalWiki(view.content) && index.readFragments
+                    (informationalWiki(view.content) ||
+                        view.content.kind === "extension") &&
+                    index.readFragments
                         ? (
                               await index.readFragments({
                                   terms: [
@@ -11475,7 +11483,7 @@ export class FileMemoryService
                             rubricVersion: view.content.provider.recipeDigest,
                             extension: view.content.provider,
                         },
-                        text: `${section.heading}\n${section.body}`,
+                        text: `${view.content.title}\n${section.heading}\n${section.body}`,
                         influencingSourceIds: this.answerViewSources(view),
                         supportingSources: binding.support.map(
                             ({ sourceId, revisionId, locator }) => ({
@@ -11707,6 +11715,16 @@ export class FileMemoryService
         );
     }
 
+    private async authorizeUnderstandingDerivedViewRead(
+        view: ViewVersion,
+    ): Promise<void> {
+        if (!this.extensionBuilds || !view.generation?.input)
+            throw new Error(
+                "Selected derived artifact is unavailable or unauthorized",
+            );
+        await this.extensionProviders.authorize(view.generation.input, "read");
+    }
+
     private async readUnderstandingDerivedViews(
         input: import("./understandingTypes.js").UnderstandingModuleRequest,
         evidence: AnswerEvidence[],
@@ -11729,7 +11747,7 @@ export class FileMemoryService
         const derivedViews: import("./viewExtensionUnderstanding.js").UnderstandingDerivedView[] =
             [];
         for (const [viewId, references] of scope) {
-            const view = await this.getView({
+            const view = await this.viewStore.getView({
                 corpusId: input.corpusId,
                 viewId,
                 revisionId: references[0].revisionId,
@@ -11738,7 +11756,9 @@ export class FileMemoryService
                 throw new Error(
                     "Selected derived artifact is unavailable or unauthorized",
                 );
-            await this.assertViewPublicationFresh(view);
+            // The engine checks the complete published snapshot before and after
+            // this hook. The distinct provider read permission still applies.
+            await this.authorizeUnderstandingDerivedViewRead(view);
             const selectedBlockIds = evidence
                 .filter(
                     (item) =>

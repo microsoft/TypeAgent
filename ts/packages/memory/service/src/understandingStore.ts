@@ -40,7 +40,22 @@ export class UnderstandingStore<T extends { corpusId: string }> {
             throw new Error(
                 "Understanding invalidated during preparation; retry.",
             );
-        const bytes = Buffer.byteLength(JSON.stringify(value), "utf8");
+        const serialized = JSON.stringify(value);
+        let bytes = Buffer.byteLength(serialized, "utf8");
+        if (bytes > 512 * 1024) {
+            const seen = new WeakSet<object>();
+            // Snapshots share evidence between prepared, selected and influence
+            // envelopes. Count each retained object once, without altering it.
+            bytes = Buffer.byteLength(
+                JSON.stringify(value, (_key, item: unknown) => {
+                    if (typeof item !== "object" || item === null) return item;
+                    if (seen.has(item)) return "<shared>";
+                    seen.add(item);
+                    return item;
+                }),
+                "utf8",
+            );
+        }
         if (bytes > 512 * 1024)
             throw new Error("Understanding snapshot exceeds byte budget");
         this.delete(id);
