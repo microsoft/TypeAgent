@@ -7540,6 +7540,22 @@ export class FileMemoryService
         );
     }
 
+    private async informationalPublicationOverride(
+        corpusId: string,
+        viewId: string,
+        buildOverride?: boolean,
+    ): Promise<Pick<ViewBuildSnapshot, "publicationPolicy">> {
+        return buildOverride === undefined
+            ? {}
+            : {
+                  publicationPolicy: effectiveViewPublicationPolicy(
+                      await this.viewStore.getViewPublicationPolicy(corpusId),
+                      viewId,
+                      buildOverride,
+                  ),
+              };
+    }
+
     private async snapshotInformationalTarget(
         corpusId: string,
         target: ViewBuildTarget,
@@ -7659,17 +7675,11 @@ export class FileMemoryService
         const snapshot = {
             corpusId,
             actor: userInfo().username,
-            ...(buildOverride === undefined
-                ? {}
-                : {
-                      publicationPolicy: effectiveViewPublicationPolicy(
-                          await this.viewStore.getViewPublicationPolicy(
-                              corpusId,
-                          ),
-                          target.definition.viewId,
-                          buildOverride,
-                      ),
-                  }),
+            ...(await this.informationalPublicationOverride(
+                corpusId,
+                target.definition.viewId,
+                buildOverride,
+            )),
             definition: {
                 ...structuredClone(target.definition),
                 selector: {
@@ -9976,12 +9986,9 @@ export class FileMemoryService
                   }
                 : {}),
             pipeline: exactViewPipeline(target.definition.kind),
-            model: this.extensionProviders.modelIdentity(target.definition)
-                ? viewHash([
-                      this.viewAdapter.identity,
-                      this.extensionProviders.modelIdentity(target.definition),
-                  ])
-                : this.viewAdapter.identity,
+            model:
+                this.extensionModelIdentity(target.definition) ??
+                this.viewAdapter.identity,
             ...(target.definition.kind === "extension"
                 ? {
                       influenceSources: [
@@ -10598,18 +10605,40 @@ export class FileMemoryService
                 job.results.every(
                     (result) =>
                         result.snapshot.model ===
-                        viewSynthesisIdentity(
-                            this.viewAdapter.identity,
+                        (this.extensionModelIdentity(
                             result.snapshot.definition,
-                            !!this.viewAdapter.assessWikiConsolidation &&
-                                !!this.viewAdapter.checkWikiConsolidation,
-                        ),
+                        ) ??
+                            viewSynthesisIdentity(
+                                this.viewAdapter.identity,
+                                result.snapshot.definition,
+                                !!this.viewAdapter.assessWikiConsolidation &&
+                                    !!this.viewAdapter.checkWikiConsolidation,
+                            )),
                 ),
         );
-        if (existing) return existing;
+        if (existing) {
+            for (const result of existing.results) {
+                if (result.snapshot.pipeline !== "extension-v1") continue;
+                await this.assertInfluenceEligible(result.snapshot);
+                await this.extensionProviders.authorize(
+                    result.snapshot,
+                    "build",
+                );
+            }
+            return existing;
+        }
         return this.enqueueWrite(request.corpusId, () =>
             this.admitViewBuild(request),
         );
+    }
+
+    private extensionModelIdentity(
+        definition: ViewDefinitionInput,
+    ): string | undefined {
+        const identity = this.extensionProviders.modelIdentity(definition);
+        return identity
+            ? viewHash([this.viewAdapter.identity, identity])
+            : undefined;
     }
 
     private assertViewBuildEnabled(request: ViewBuildRequest): void {
