@@ -11604,6 +11604,16 @@ export class FileMemoryService
         );
     }
 
+    private async authorizeUnderstandingDerivedViewRead(
+        view: ViewVersion,
+    ): Promise<void> {
+        if (!this.extensionBuilds || !view.generation?.input)
+            throw new Error(
+                "Selected derived artifact is unavailable or unauthorized",
+            );
+        await this.extensionProviders.authorize(view.generation.input, "read");
+    }
+
     private async readUnderstandingDerivedViews(
         input: import("./understandingTypes.js").UnderstandingModuleRequest,
         evidence: AnswerEvidence[],
@@ -11631,21 +11641,13 @@ export class FileMemoryService
                 viewId,
                 revisionId: references[0].revisionId,
             });
-            if (
-                !view ||
-                view.content.kind !== "extension" ||
-                !this.extensionBuilds ||
-                !view.generation?.input
-            )
+            if (!view || view.content.kind !== "extension")
                 throw new Error(
                     "Selected derived artifact is unavailable or unauthorized",
                 );
             // The engine checks the complete published snapshot before and after
             // this hook. The distinct provider read permission still applies.
-            await this.extensionProviders.authorize(
-                view.generation.input,
-                "read",
-            );
+            await this.authorizeUnderstandingDerivedViewRead(view);
             const selectedBlockIds = evidence
                 .filter(
                     (item) =>
