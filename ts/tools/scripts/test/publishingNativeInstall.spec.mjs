@@ -42,6 +42,38 @@ test("publishing selects CPU-only ONNX installation for every job", () => {
     assert.equal(workspace.allowBuilds["onnxruntime-node"], true);
 });
 
+test("publishing uses the standard Node heap budget and CI test settings", () => {
+    const variables = Object.fromEntries(
+        pipeline.variables.map(({ name, value }) => [name, value]),
+    );
+    const smoke = yaml.load(
+        fs.readFileSync(
+            new URL(
+                "../../../../pipelines/azure-smoke-tests.yml",
+                import.meta.url,
+            ),
+            "utf8",
+        ),
+    );
+    assert.equal(variables.CI, "true");
+    assert.equal(
+        variables.NODE_OPTIONS,
+        smoke.variables.find(({ name }) => name === "NODE_OPTIONS").value,
+    );
+    const result = spawnSync(
+        process.execPath,
+        ["-p", "require('node:v8').getHeapStatistics().heap_size_limit"],
+        {
+            env: { ...process.env, NODE_OPTIONS: variables.NODE_OPTIONS },
+            encoding: "utf8",
+            timeout: 30000,
+        },
+    );
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(Number(result.stdout.trim()) >= 8192 * 1024 * 1024);
+});
+
 test("the Linux x64 ONNX installer avoids NuGet only with the publishing setting", () => {
     const env = { ...process.env };
     for (const key of Object.keys(env)) {

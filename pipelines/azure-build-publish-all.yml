@@ -85,6 +85,11 @@ variables:
     value: $(Build.SourcesDirectory)/ts
   - name: nodeVersion
     value: "24.22.1"
+  # Match the build and smoke-test workflows' heap budget and CI test settings.
+  - name: NODE_OPTIONS
+    value: --max_old_space_size=8192
+  - name: CI
+    value: "true"
   # Embedding runtimes use CPU execution. The npm package includes CPU binaries;
   # its Linux postinstall otherwise downloads optional CUDA libraries from NuGet.
   - name: ONNXRUNTIME_NODE_INSTALL
