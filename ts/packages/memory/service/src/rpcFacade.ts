@@ -185,6 +185,9 @@ export function createMemoryServiceRpcFacade(
             unsupportedCapability("source View usage"),
         getView: (...args) =>
             service.getView?.(...args) ?? unsupportedCapability("view drafts"),
+        getViewDetailPage: (request) =>
+            service.getViewDetailPage?.(request) ??
+            unsupportedCapability("paged view detail"),
         saveViewDraft: (...args) =>
             service.saveViewDraft?.(...args) ??
             unsupportedCapability("view drafts"),

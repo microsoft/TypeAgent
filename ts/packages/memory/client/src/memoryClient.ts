@@ -8,6 +8,11 @@ import {
     graphSupportPageSchema,
     graphToolNames,
 } from "./graphProtocol.js";
+import { viewDetailPageSchema } from "./viewDetailProtocol.js";
+import type {
+    ViewDetailPage,
+    ViewDetailPageRequest,
+} from "@typeagent/memory-service";
 import {
     understandingToolNames,
     understandingRequestSchema,
@@ -502,6 +507,12 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return (
             this.service.getView?.(request) ??
             unsupportedCapability("view drafts")
+        );
+    }
+    public getViewDetailPage(request: ViewDetailPageRequest) {
+        return (
+            this.service.getViewDetailPage?.(request) ??
+            unsupportedCapability("paged view detail")
         );
     }
     public saveViewDraft(request: ViewSaveRequest) {
@@ -1159,6 +1170,15 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             viewToolNames.getView,
             request,
             viewVersionSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public getViewDetailPage(
+        request: ViewDetailPageRequest,
+    ): Promise<ViewDetailPage | undefined> {
+        return this.invoke<ViewDetailPage | null>(
+            viewToolNames.getViewDetailPage,
+            request,
+            viewDetailPageSchema.nullable(),
         ).then((value) => value ?? undefined);
     }
     public saveViewDraft(request: ViewSaveRequest): Promise<ViewHistoryEntry> {

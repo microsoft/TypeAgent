@@ -359,6 +359,7 @@ import {
 } from "./integratedAnswer.js";
 import { MemoryUnderstanding } from "./understanding.js";
 import { UnderstandingStore } from "./understandingStore.js";
+import { viewDetailPage, type ViewDetailPageRequest } from "./viewDetail.js";
 import {
     ViewExtensionRegistry,
     ViewExtensionUnavailable,
@@ -6563,6 +6564,11 @@ export class FileMemoryService
                 return view;
             }),
         );
+    }
+
+    public async getViewDetailPage(request: ViewDetailPageRequest) {
+        const view = await this.getView(request);
+        return view ? viewDetailPage(view, request) : undefined;
     }
 
     public async saveViewDraft(

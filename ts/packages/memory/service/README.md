@@ -377,6 +377,25 @@ full root build; use an installed Chromium or set
 private deployment, live-model quality result or cross-platform qualification.
 Linux/WSL Node validation and private application/live evaluation remain separate.
 
+## Paged view details
+
+Use view summaries for inventory and `getViewDetailPage`
+(`memory_view_detail_page`) for complete large artifacts. Each response contains
+at most 262144 JSON characters, with corpus/view/revision identity, a SHA-256
+digest, total character count, offset and optional next offset. Continuations
+must carry the returned revision and digest. Every page uses the ordinary
+authorized exact-view read; access changes fail rather than returning cached
+proof without validation.
+
+The typed client's `readViewDetail` assembles and schema-validates all pages,
+verifies identity, offsets, length and the complete digest, and returns nothing
+partial on failure. Complete reads are bounded to 33554432 characters.
+Native Hub uses this path behind its existing detail interaction; layout
+selection and original-source inspection are unchanged. Complete corpus
+payloads, lineage and legacy full-read APIs are retained. The native MCP
+transport's default message limit is unchanged; neither truncation nor a larger
+transport buffer is used to admit large views.
+
 ## Opt-in memory understanding
 
 Set `TYPEAGENT_MEMORY_UNDERSTANDING=true` in the host environment (or pass

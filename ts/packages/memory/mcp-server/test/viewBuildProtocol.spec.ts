@@ -3,11 +3,13 @@
 
 import {
     McpMemoryServiceClient,
+    readViewDetail,
     viewBuildRequestSchema,
     viewResolutionSchema,
 } from "@typeagent/memory-client";
 import {
     FileMemoryService,
+    viewDetailPageChars,
     type ViewBuildSnapshot,
     type ViewSynthesisOutput,
 } from "@typeagent/memory-service";
@@ -51,7 +53,7 @@ function syntheticOutput(input: ViewBuildSnapshot): ViewSynthesisOutput {
                 id: role,
                 role,
                 heading: role,
-                body: source.content,
+                body: source.content.repeat(1000),
             })),
         },
         relationships: roles.map((role) => ({
@@ -165,6 +167,22 @@ test("real authenticated loopback MCP builds, inspects, edits, rejects publicati
         expect(job.results[0].state).toBe("draft");
         const snapshot = await client.listViews(corpus.corpusId);
         const view = snapshot.views[0];
+        const detailRequest = {
+            corpusId: corpus.corpusId,
+            viewId: view.viewId,
+            revisionId: view.revisionId,
+        };
+        const firstPage = await client.getViewDetailPage(detailRequest);
+        expect(firstPage?.text.length).toBe(viewDetailPageChars);
+        expect(firstPage?.nextOffset).toBe(viewDetailPageChars);
+        expect(await readViewDetail(client, detailRequest)).toEqual(view);
+        await expect(
+            client.getViewDetailPage({
+                ...detailRequest,
+                offset: viewDetailPageChars,
+                digest: "a".repeat(64),
+            }),
+        ).rejects.toThrow(/changed or continuation/);
         if (view.content.kind !== "troubleshootingGuide")
             throw new Error("Expected a generated troubleshooting guide");
         expect(view.generation?.input?.inputs[0].content).toContain(

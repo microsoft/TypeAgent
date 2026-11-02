@@ -1375,6 +1375,7 @@ export const viewConflictSchema = z.object({
 });
 
 export const viewToolNames = {
+    getViewDetailPage: "memory_view_detail_page",
     planViewMaintenance: "memory_views_maintenance_plan",
     maintainViews: "memory_views_maintain",
     updateViewMaintenance: "memory_view_maintenance_update",

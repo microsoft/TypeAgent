@@ -9,6 +9,7 @@ import type {
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import type { MemoryAcquisitionProgressService } from "@typeagent/memory-client";
 import {
+    readViewDetail,
     inventoryPageRequestSchema,
     viewSummaryRequestSchema,
     viewPublicationBatchRequestSchema,
@@ -187,7 +188,7 @@ export function createMemoryViewFunctions(
             required("proposeSchemaView")(request),
         memoryDiscoverSchemaQuestions: (request) =>
             required("discoverSchemaQuestions")(request),
-        memoryGetView: (request) => views().getView(request),
+        memoryGetView: (request) => readViewDetail(views(), request),
         memorySaveViewDraft: (request) => views().saveViewDraft(request),
         memoryArchiveView: (request) => views().archiveView(request),
         memoryViewHistory: (request) => views().getViewHistory(request),

@@ -418,9 +418,15 @@ describe("registered extension service lifecycle", () => {
                 return content;
             };
             const text = "x".repeat(4_000_001);
-            const { corpus, request } = await setup(fixture.installed, 1, {}, [
-                text,
-            ]);
+            let approved = true;
+            const { corpus, request } = await setup(
+                fixture.installed,
+                1,
+                {
+                    sourceAuthorization: async () => approved,
+                },
+                [text],
+            );
             if (bound < text.length) {
                 await expect(service.buildViews(request)).rejects.toThrow(
                     /Complete extension input exceeds provider bounds/,
@@ -435,7 +441,41 @@ describe("registered extension service lifecycle", () => {
                 expect(job.state).toBe("complete");
                 expect(preparedChars).toBe(text.length);
                 expect(fixture.calls()).toBe(1);
+                const target = {
+                    corpusId: corpus.corpusId,
+                    viewId: request.targets[0].definition.viewId,
+                };
+                const full = await service.getView(target);
+                const first = await service.getViewDetailPage(target);
+                expect(first).toBeDefined();
+                if (!first) throw new Error("Missing first detail page");
+                const parts = [first.text];
+                let page = first;
+                while (page.nextOffset !== undefined) {
+                    const next = await service.getViewDetailPage({
+                        ...target,
+                        revisionId: first.revisionId,
+                        digest: first.digest,
+                        offset: page.nextOffset,
+                    });
+                    if (!next) throw new Error("Missing continuation");
+                    expect(next.text.length).toBeLessThanOrEqual(256 * 1024);
+                    parts.push(next.text);
+                    page = next;
+                }
+                expect(JSON.parse(parts.join(""))).toEqual(full);
+                expect(parts.length).toBeGreaterThan(1);
+                approved = false;
+                await expect(
+                    service.getViewDetailPage({
+                        ...target,
+                        revisionId: first.revisionId,
+                        digest: first.digest,
+                        offset: first.nextOffset,
+                    }),
+                ).resolves.toBeUndefined();
             }
+            approved = true;
             const source = request.targets[0].definition.selector.sources[0];
             const retained = await service.getSource(
                 corpus.corpusId,

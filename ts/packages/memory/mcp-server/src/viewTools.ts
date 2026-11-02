@@ -4,6 +4,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
+    viewDetailPageRequestSchema,
+    viewDetailPageSchema,
     viewArchiveRequestSchema,
     viewBuildJobRequestSchema,
     viewBuildContinuationRequestSchema,
@@ -248,6 +250,31 @@ export function registerViewTools(
             outputSchema: z.object({ result: viewSnapshotSchema }),
         },
         async ({ corpusId }) => run(() => views.listViews(corpusId)),
+    );
+    server.registerTool(
+        viewToolNames.getViewDetailPage,
+        {
+            description:
+                "Read a bounded JSON slice of a complete view revision. Follow every nextOffset with the returned revisionId and digest; an individual slice is not a complete view. Each page rechecks original access. Prefer view summaries for inventory.",
+            inputSchema: viewDetailPageRequestSchema,
+            outputSchema: z.object({ result: viewDetailPageSchema.nullable() }),
+        },
+        async (request) =>
+            run(async () => {
+                if (!views.getViewDetailPage)
+                    throw new Error("Paged view detail is unavailable");
+                return (
+                    (await views.getViewDetailPage({
+                        corpusId: request.corpusId,
+                        viewId: request.viewId,
+                        ...(request.revisionId !== undefined
+                            ? { revisionId: request.revisionId }
+                            : {}),
+                        offset: request.offset,
+                        digest: request.digest,
+                    })) ?? null
+                );
+            }),
     );
     server.registerTool(
         viewToolNames.getView,
