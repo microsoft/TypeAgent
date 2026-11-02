@@ -125,6 +125,7 @@ rewriting or reinterpretation is performed.
 Foreground `answer(request, signal?)` accepts an optional abort signal. MCP
 request cancellation reaches the same service boundary, prevents a completed
 answer from returning after cancellation, and leaves background jobs intact.
+The typed in-process and MCP clients forward the same optional signal.
 
 ### Qualification, automatic refresh and accounted continuation
 

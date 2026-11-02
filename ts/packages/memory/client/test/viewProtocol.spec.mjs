@@ -3,7 +3,10 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { McpMemoryServiceClient } from "../dist/memoryClient.js";
+import {
+    InProcessMemoryServiceClient,
+    McpMemoryServiceClient,
+} from "../dist/memoryClient.js";
 import {
     viewConflictSchema,
     viewHistoryEntrySchema,
@@ -17,6 +20,39 @@ import {
 } from "../dist/viewProtocol.js";
 import { viewMaintenanceRequestSchema } from "../dist/viewMaintenanceProtocol.js";
 import { searchRequestSchema } from "../dist/protocol.js";
+
+for (const transport of ["inProcess", "mcp"]) {
+    test(`${transport} answers forward the exact foreground abort signal`, async () => {
+        const controller = new AbortController();
+        const request = { corpusId: "corpus", question: "Why?" };
+        const failure = new Error("Synthetic cancelled request");
+        let received;
+        const client =
+            transport === "inProcess"
+                ? new InProcessMemoryServiceClient({
+                      async answer(args, signal) {
+                          received = { args, signal };
+                          throw failure;
+                      },
+                  })
+                : new McpMemoryServiceClient({
+                      async callTool(tool, options) {
+                          assert.equal(tool.name, "memory_answer");
+                          received = {
+                              args: tool.arguments,
+                              signal: options.signal,
+                          };
+                          throw failure;
+                      },
+                  });
+        await assert.rejects(
+            () => client.answer(request, controller.signal),
+            (error) => error === failure,
+        );
+        assert.deepEqual(received.args, request);
+        assert.equal(received.signal, controller.signal);
+    });
+}
 
 test("exact view reads retain the context flag and reject nonboolean values", () => {
     const request = {

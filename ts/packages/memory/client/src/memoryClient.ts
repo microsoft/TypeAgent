@@ -824,8 +824,8 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return this.service.search(request);
     }
 
-    public answer(request: MemoryAnswerRequest) {
-        return this.service.answer(request);
+    public answer(request: MemoryAnswerRequest, signal?: AbortSignal) {
+        return this.service.answer(request, signal);
     }
 
     public understand(
@@ -1635,11 +1635,15 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
         );
     }
 
-    public answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult> {
+    public answer(
+        request: MemoryAnswerRequest,
+        signal?: AbortSignal,
+    ): Promise<MemoryAnswerResult> {
         return this.invoke(
             memoryToolNames.answer,
             answerRequestSchema.parse(request),
             answerResultSchema,
+            signal === undefined ? {} : { signal },
         );
     }
 
