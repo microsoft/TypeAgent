@@ -53,6 +53,7 @@ import {
     currentSearchTraceId,
     recordSearchTiming,
     runWithSearchTiming,
+    runWithSearchCancellation,
     timeSearchStage,
     collectJsonSegments,
     clearJsonSegmentCache,
@@ -706,6 +707,8 @@ export interface FileMemoryServiceOptions {
         requestBudget?: RequestBudgetLimits;
     };
     discoveryPolicy?: DiscoveryPolicy;
+    /** Disable scheduled discovery even when an existing corpus policy allows it. */
+    automaticKnowledgeDiscovery?: boolean;
     acquisition?: DeferredAcquisitionConfig & {
         principalId: string;
         policyId: string;
@@ -1963,6 +1966,8 @@ export class FileMemoryService
         this.viewBuilds = new ViewBuildRunner(
             this.viewAdapter,
             {
+                assertExtensionEligible: (input) =>
+                    this.recheckViewInput(input),
                 unchanged: (input) =>
                     this.unchangedInformationalInput(input, true),
                 canPrepareWikiAssessment: async (input) =>
@@ -2049,7 +2054,9 @@ export class FileMemoryService
                         if (
                             !conflicts.length &&
                             saved.revisionId &&
-                            informationalWiki(merged.content)
+                            informationalWiki(merged.content) &&
+                            result.snapshot.publicationPolicy?.buildOverride !==
+                                false
                         ) {
                             const view = await this.viewStore.getView({
                                 corpusId: job.corpusId,
@@ -2174,6 +2181,7 @@ export class FileMemoryService
             ? (options.discoveryPolicy ?? "sourceObserved")
             : "off";
         this.knowledge = new KnowledgeCoordinator({
+            automaticDiscovery: options.automaticKnowledgeDiscovery,
             begin: async (corpusId) => {
                 this.knowledgeMaintenance.add(corpusId);
                 const schemaTimer = this.schemaTimers.get(corpusId);
@@ -4715,10 +4723,19 @@ export class FileMemoryService
         const snapshot = await this.viewStore.listViews(corpusId);
         const eligible = await Promise.all(
             snapshot.views.map((view) =>
-                this.informationalVersionEligible(view, view),
+                this.informationalVersionEligible(view, view, true),
             ),
         );
         const views = snapshot.views.filter((_, index) => eligible[index]);
+        const visible = await Promise.all(
+            views.map((view) =>
+                view.generation?.input?.publicationPolicy?.buildOverride ===
+                false
+                    ? this.informationalVersionEligible(view, view)
+                    : true,
+            ),
+        );
+        const contextualViews = views.filter((_, index) => visible[index]);
         return {
             ...snapshot,
             views: views.map((view) => {
@@ -4728,7 +4745,7 @@ export class FileMemoryService
                         ? {
                               relatedArticles: relatedEditorialArticles(
                                   view,
-                                  views,
+                                  contextualViews,
                               ),
                               protectedTargets: editorialProtection(view),
                           }
@@ -4949,9 +4966,14 @@ export class FileMemoryService
     private async informationalVersionEligible(
         view: ViewVersion,
         current?: ViewVersion,
+        includeDraft = false,
     ): Promise<boolean> {
         if (view.content.kind === "extension") {
             if (!this.extensionBuilds || !view.generation?.input) return false;
+            await this.extensionProviders.validateContent(
+                view.generation.input,
+                view.content,
+            );
             try {
                 await this.extensionProviders.authorize(
                     view.generation.input,
@@ -4970,6 +4992,19 @@ export class FileMemoryService
         }
         if (!informationalWiki(view.content)) return true;
         if (view.state !== "draft") return false;
+        if (
+            !includeDraft &&
+            view.generation?.input?.publicationPolicy?.buildOverride === false
+        ) {
+            const publication = await this.viewStore.getViewPublication(view);
+            if (
+                publication.publishedRevisionId !== view.revisionId ||
+                publication.indexState !== "ready" ||
+                publication.indexedRevisionId !== view.revisionId ||
+                publication.blockedReason
+            )
+                return false;
+        }
         try {
             await this.assertViewPublicationFresh(view, current);
             return true;
@@ -6533,14 +6568,25 @@ export class FileMemoryService
         return runtime.access.read(() =>
             this.viewStore.withInventorySnapshot(request.corpusId, async () => {
                 const view = await this.viewStore.getView(request);
-                if (view?.redirect)
+                if (view?.redirect && request.includeContext !== false)
                     return this.readWikiRedirect(
                         view,
                         request.revisionId !== undefined,
                     );
-                if (view && !(await this.informationalVersionEligible(view)))
+                if (
+                    view &&
+                    !(await this.informationalVersionEligible(
+                        view,
+                        undefined,
+                        true,
+                    ))
+                )
                     return undefined;
-                if (view?.generation && editorialArticle(view.content)) {
+                if (
+                    request.includeContext !== false &&
+                    view?.generation &&
+                    editorialArticle(view.content)
+                ) {
                     const snapshot = await this.viewStore.listViews(
                         request.corpusId,
                     );
@@ -6782,7 +6828,11 @@ export class FileMemoryService
     }
 
     private async acceptInformationalVersion(view: ViewVersion): Promise<void> {
-        if (!informationalWiki(view.content)) return;
+        if (
+            !informationalWiki(view.content) ||
+            view.generation?.input?.publicationPolicy?.buildOverride === false
+        )
+            return;
         const publication = await this.viewStore.getViewPublication(view);
         if (publication.blockedReason) {
             console.warn(
@@ -6816,7 +6866,11 @@ export class FileMemoryService
             const history = await this.viewStore.getViewHistory(request);
             const eligible = await Promise.all(
                 history.map((entry) =>
-                    this.informationalVersionEligible(entry.version),
+                    this.informationalVersionEligible(
+                        entry.version,
+                        undefined,
+                        true,
+                    ),
                 ),
             );
             return history.filter((_, index) => eligible[index]);
@@ -6922,6 +6976,10 @@ export class FileMemoryService
             await this.extensionProviders.authorize(
                 version.generation.input,
                 "publish",
+            );
+            await this.extensionProviders.validateContent(
+                version.generation.input,
+                version.content,
             );
         }
         await this.assertInfluenceEligible(version.generation?.input);
@@ -7221,6 +7279,12 @@ export class FileMemoryService
             corpusId: view.corpusId,
             viewId: view.viewId,
         });
+        if (
+            view.generation?.input?.publicationPolicy?.buildOverride ===
+                false &&
+            publication.publishedRevisionId !== view.revisionId
+        )
+            return publication;
         if (publication.publishedRevisionId !== view.revisionId)
             publication = await this.viewStore.makeInformationalVisible(view);
         if (
@@ -7476,12 +7540,29 @@ export class FileMemoryService
         );
     }
 
+    private async informationalPublicationOverride(
+        corpusId: string,
+        viewId: string,
+        buildOverride?: boolean,
+    ): Promise<Pick<ViewBuildSnapshot, "publicationPolicy">> {
+        return buildOverride === undefined
+            ? {}
+            : {
+                  publicationPolicy: effectiveViewPublicationPolicy(
+                      await this.viewStore.getViewPublicationPolicy(corpusId),
+                      viewId,
+                      buildOverride,
+                  ),
+              };
+    }
+
     private async snapshotInformationalTarget(
         corpusId: string,
         target: ViewBuildTarget,
         current?: ViewVersion,
         retrieval?: ViewBuildSnapshot["informationalRetrieval"] | false,
         detachedRetrieval = false,
+        buildOverride?: boolean,
     ): Promise<ViewBuildSnapshot> {
         if (!this.informationalWikiEnabled)
             throw new Error(
@@ -7594,6 +7675,11 @@ export class FileMemoryService
         const snapshot = {
             corpusId,
             actor: userInfo().username,
+            ...(await this.informationalPublicationOverride(
+                corpusId,
+                target.definition.viewId,
+                buildOverride,
+            )),
             definition: {
                 ...structuredClone(target.definition),
                 selector: {
@@ -9829,6 +9915,8 @@ export class FileMemoryService
                 target,
                 current,
                 retrieval,
+                false,
+                buildOverride,
             );
         if (target.definition.kind === "wiki")
             throw new Error("Wiki construction requires informational-wiki-v1");
@@ -9898,7 +9986,9 @@ export class FileMemoryService
                   }
                 : {}),
             pipeline: exactViewPipeline(target.definition.kind),
-            model: this.viewAdapter.identity,
+            model:
+                this.extensionModelIdentity(target.definition) ??
+                this.viewAdapter.identity,
             ...(target.definition.kind === "extension"
                 ? {
                       influenceSources: [
@@ -10515,18 +10605,40 @@ export class FileMemoryService
                 job.results.every(
                     (result) =>
                         result.snapshot.model ===
-                        viewSynthesisIdentity(
-                            this.viewAdapter.identity,
+                        (this.extensionModelIdentity(
                             result.snapshot.definition,
-                            !!this.viewAdapter.assessWikiConsolidation &&
-                                !!this.viewAdapter.checkWikiConsolidation,
-                        ),
+                        ) ??
+                            viewSynthesisIdentity(
+                                this.viewAdapter.identity,
+                                result.snapshot.definition,
+                                !!this.viewAdapter.assessWikiConsolidation &&
+                                    !!this.viewAdapter.checkWikiConsolidation,
+                            )),
                 ),
         );
-        if (existing) return existing;
+        if (existing) {
+            for (const result of existing.results) {
+                if (result.snapshot.pipeline !== "extension-v1") continue;
+                await this.assertInfluenceEligible(result.snapshot);
+                await this.extensionProviders.authorize(
+                    result.snapshot,
+                    "build",
+                );
+            }
+            return existing;
+        }
         return this.enqueueWrite(request.corpusId, () =>
             this.admitViewBuild(request),
         );
+    }
+
+    private extensionModelIdentity(
+        definition: ViewDefinitionInput,
+    ): string | undefined {
+        const identity = this.extensionProviders.modelIdentity(definition);
+        return identity
+            ? viewHash([this.viewAdapter.identity, identity])
+            : undefined;
     }
 
     private assertViewBuildEnabled(request: ViewBuildRequest): void {
@@ -11161,8 +11273,7 @@ export class FileMemoryService
                     request,
                     output,
                 );
-                await this.viewStore.makeInformationalVisible(saved.version);
-                await this.indexViewLocked(saved.version);
+                await this.acceptInformationalVersion(saved.version);
                 return saved;
             });
         const support = await this.viewAdapter.validate(
@@ -11957,11 +12068,17 @@ export class FileMemoryService
 
     public async answer(
         request: MemoryAnswerRequest,
+        signal?: AbortSignal,
     ): Promise<MemoryAnswerResult> {
-        return this.foregroundRead(async () => {
-            await this.initialize();
-            return this.answerRequest(request);
-        });
+        const answer = () =>
+            this.foregroundRead(async () => {
+                signal?.throwIfAborted();
+                await this.initialize();
+                const result = await this.answerRequest(request);
+                signal?.throwIfAborted();
+                return result;
+            });
+        return signal ? runWithSearchCancellation(signal, answer) : answer();
     }
 
     private async answerSeed(

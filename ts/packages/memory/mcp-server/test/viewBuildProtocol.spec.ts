@@ -10,6 +10,9 @@ import {
     FileMemoryService,
     type ViewBuildSnapshot,
     type ViewSynthesisOutput,
+    type ViewExtensionProvider,
+    extensionViewId,
+    viewExtensionDigest,
 } from "@typeagent/memory-service";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -73,6 +76,310 @@ function syntheticOutput(input: ViewBuildSnapshot): ViewSynthesisOutput {
         missingEvidence: ["No confirmed recovery"],
     };
 }
+
+test("authenticated MCP installs, builds and reopens provider content with scope-gated journals", async () => {
+    const root = await mkdtemp(
+        path.join(os.tmpdir(), "memory-provider-protocol-"),
+    );
+    let completions = 0;
+    let allowed = true;
+    const outputSchema = {
+        type: "object" as const,
+        properties: {
+            questionTitle: { type: "string" as const, maxLength: 200 },
+            statement: { type: "string" as const, maxLength: 2000 },
+        },
+        required: ["questionTitle", "statement"],
+    };
+    const identity = {
+        providerId: "fixture.protocol",
+        version: "1",
+        implementationDigest: "a".repeat(64),
+        inputContract: "fixture-input-v1",
+        outputContract: "fixture-output-v1",
+        schemaDigest: viewExtensionDigest(outputSchema),
+        recipeDigest: "b".repeat(64),
+    };
+    const provider: ViewExtensionProvider = {
+        descriptor: {
+            apiVersion: 1,
+            identity,
+            modelIdentity: "offline-protocol-model",
+            label: "Protocol fixture",
+            outputSchema,
+            definitions: [
+                { id: "lookup", eligibilityVersion: "1", mode: "static" },
+            ],
+            limits: {
+                maxSources: 32,
+                maxInputChars: 120000,
+                maxOutputChars: 120000,
+                maxModelCalls: 4,
+                timeoutMs: 30000,
+            },
+        },
+        authorize: async () => {
+            if (!allowed) throw new Error("Original access revoked");
+            return true;
+        },
+        evaluateEligibility: async () => ({
+            disposition: "eligible",
+            reason: "Synthetic approved input",
+        }),
+        prepare: async () => null,
+        model: {
+            completionSettings: {},
+            async complete() {
+                completions++;
+                return {
+                    success: true,
+                    data: "The lookup failed, not an empty result.",
+                };
+            },
+        },
+        async generate(input, _prepared, context) {
+            const completion = await context.complete(
+                "explanation",
+                "Explain the retained result.",
+            );
+            const source = input.inputs[0];
+            const citation = {
+                sourceId: source.sourceId,
+                revisionId: source.revisionId,
+                locator: `chars:0-${source.content.length}`,
+                excerpt: source.content,
+            };
+            const document = {
+                title: "Lookup result",
+                data: {
+                    questionTitle: "What did the lookup establish?",
+                    statement: completion,
+                },
+                missingEvidence: [],
+                statements: [
+                    {
+                        id: "lookup",
+                        text: completion,
+                        citations: [citation],
+                    },
+                ],
+            };
+            await context.recordCandidate!("explanation", document.data);
+            await context.checkpoint("explanation", { accepted: true });
+            return {
+                kind: "extension",
+                construction: "extension-v1",
+                provider: identity,
+                title: document.title,
+                payload: document.data,
+                sections: document.statements.map((statement) => ({
+                    id: statement.id,
+                    role: "context",
+                    heading: statement.id,
+                    body: statement.text,
+                })),
+                citations: [citation],
+                evidence: [
+                    { blockId: "lookup", support: [citation], opposition: [] },
+                ],
+                inputUse: [
+                    {
+                        sourceId: source.sourceId,
+                        revisionId: source.revisionId,
+                        disposition: "represented",
+                        reason: "Synthetic original support",
+                    },
+                ],
+                presentation: {
+                    schemaVersion: 1,
+                    templateId: "document-v1",
+                    templateVersion: 1,
+                    layouts: [
+                        {
+                            id: "story",
+                            label: "Story",
+                            groups: [
+                                {
+                                    id: "lookup",
+                                    label: "Lookup",
+                                    blockIds: ["lookup"],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                fidelity: {
+                    supported: true,
+                    reasons: [
+                        "Synthetic transport fixture, not real-data fidelity qualification",
+                    ],
+                    missingContext: [],
+                    sections: [
+                        {
+                            sectionId: "lookup",
+                            supported: true,
+                            reason: "Controlled fixture",
+                        },
+                    ],
+                    relationships: [
+                        {
+                            edgeId: "lookup.support.0",
+                            supported: true,
+                            reason: "Controlled fixture",
+                        },
+                    ],
+                },
+            };
+        },
+    };
+    const open = () =>
+        new FileMemoryService(root, {
+            discoveryPolicy: "off",
+            informationalViews: false,
+            sourceSynopses: false,
+            indexFactory: (_id, directory) =>
+                new FakeSemanticCorpusIndex(directory),
+            extensionBuilds: true,
+            extensionProviders: [provider],
+            maintenanceLimits: {
+                requestBudget: {
+                    tokenizer: "offline-chars",
+                    countTokens: (text) => text.length,
+                    inputTokens: 120000,
+                    outputTokens: 2000,
+                    contextTokens: 124000,
+                    safetyTokens: 64,
+                    reservedTokens: 1000000,
+                    chatAttempts: 4,
+                    embeddingAttempts: 1,
+                    elapsedMs: 30000,
+                },
+            },
+        });
+    let host = await MemoryServiceHost.start(open());
+    const connect = () =>
+        McpMemoryServiceClient.create({
+            kind: "http",
+            url: host.endpoint,
+            headers: { authorization: "Bearer " + host.bearerToken },
+        });
+    let client = await connect();
+    try {
+        expect((await client.getCapabilities()).derivedViews).toMatchObject({
+            kinds: expect.arrayContaining(["extension"]),
+        });
+        const corpus = await client.createCorpus("Provider transport fixture");
+        const source = await client.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "lookup",
+                sourceType: "text",
+                title: "Lookup",
+                text: "The lookup failed. No successful result was returned.",
+            },
+        });
+        await client.waitForJob(source.jobId);
+        const definition = {
+            viewId: extensionViewId(identity.providerId, "lookup", "retained"),
+            kind: "extension" as const,
+            selector: {
+                kind: "sources" as const,
+                sources: [
+                    {
+                        sourceId: source.sourceId,
+                        revisionId: source.revisionId,
+                    },
+                ],
+            },
+            extension: {
+                ...identity,
+                definitionId: "lookup",
+                targetKey: "retained",
+                eligibilityVersion: "1",
+                policyDigest: "c".repeat(64),
+                parameters: { inputMode: "retained" },
+            },
+        };
+        const request = {
+            corpusId: corpus.corpusId,
+            expectedHead: (await client.listViews(corpus.corpusId)).head,
+            publication: false,
+            targets: [{ expectedVersion: 0, definition }],
+        };
+        let job = await client.buildViews(request);
+        while (job.state === "running") {
+            await new Promise<void>((resolve) => setTimeout(resolve, 20));
+            job = (await client.getViewBuild({
+                corpusId: corpus.corpusId,
+                jobId: job.jobId,
+            }))!;
+        }
+        expect(job.state).toBe("complete");
+        expect(job.results[0].providerCheckpoints).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    stage: "explanation",
+                    state: { accepted: true },
+                }),
+            ]),
+        );
+        expect(job.results[0].providerCandidates).toMatchObject([
+            {
+                stage: "explanation",
+                value: { questionTitle: "What did the lookup establish?" },
+            },
+        ]);
+        expect(job.results[0].providerAttempts).toMatchObject([
+            { state: "returned" },
+        ]);
+        const read = { corpusId: corpus.corpusId, viewId: definition.viewId };
+        const view = await client.getView(read);
+        if (!view || view.content.kind !== "extension")
+            throw new Error("Provider view missing");
+        expect(view.content.payload).toMatchObject({
+            questionTitle: "What did the lookup establish?",
+        });
+        expect(
+            (
+                await client.getSourceViewUsage({
+                    corpusId: corpus.corpusId,
+                    sourceId: source.sourceId,
+                })
+            ).items[0].kind,
+        ).toBe("extension");
+        await expect(
+            client.saveViewDraft({
+                ...read,
+                expectedHead: (await client.listViews(corpus.corpusId)).head,
+                expectedVersion: view.version,
+                definition,
+                content: view.content,
+                relationships: [],
+            }),
+        ).rejects.toThrow();
+        await client.close();
+        await host.close();
+        host = await MemoryServiceHost.start(open());
+        client = await connect();
+        expect((await client.getView(read))?.content).toEqual(view.content);
+        expect((await client.buildViews(request)).jobId).toBe(job.jobId);
+        expect(completions).toBe(1);
+        allowed = false;
+        await expect(client.getView(read)).rejects.toThrow(
+            "Original access revoked",
+        );
+        await expect(
+            client.getViewBuild({
+                corpusId: corpus.corpusId,
+                jobId: job.jobId,
+            }),
+        ).rejects.toThrow("Original access revoked");
+    } finally {
+        await client.close();
+        await host.close();
+        await rm(root, { recursive: true, force: true });
+    }
+});
 
 test("real authenticated loopback MCP builds, inspects, edits, rejects publication and crosses restart", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "memory-view-protocol-"));

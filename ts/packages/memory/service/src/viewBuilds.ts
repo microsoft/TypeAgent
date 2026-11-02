@@ -54,7 +54,10 @@ import {
     type MaintenanceModelScheduler,
 } from "./maintenanceConcurrency.js";
 import { createLimiter } from "@typeagent/common-utils";
-import { ViewExtensionRegistry } from "./viewExtensions.js";
+import {
+    ViewExtensionRegistry,
+    ViewExtensionDeferred,
+} from "./viewExtensions.js";
 import type { ViewEligibilityReceipt } from "./viewExtensionTypes.js";
 import { createExtensionExecution } from "./viewExtensionExecution.js";
 
@@ -82,6 +85,7 @@ interface ViewBuildRuntimeScope {
 }
 
 export interface ViewBuildOwner extends TopicBuildOwner {
+    assertExtensionEligible?(input: ViewBuildSnapshot): Promise<void>;
     update(
         corpusId: string,
         jobId: string,
@@ -700,12 +704,15 @@ export class ViewBuildRunner {
             operation: (target: ViewBuildTargetResult) => void,
             finishing = false,
         ) => {
+            if (!finishing) await this.owner.assertExtensionEligible?.(input);
             await this.owner.update(job.corpusId, job.jobId, (current) => {
                 const target = current.results.find(
                     (entry) => entry.viewId === result.viewId,
                 );
                 if (!target || (!finishing && current.state !== "running"))
                     throw new Error("Provider job is no longer active");
+                if (target.snapshot.fingerprint !== input.fingerprint)
+                    throw new Error("Provider job input identity changed");
                 operation(target);
             });
         };
@@ -719,6 +726,9 @@ export class ViewBuildRunner {
             requestBudget: this.informationalLimits,
             models: this.modelScheduler,
             errorText: safeError,
+            assertEligible: () =>
+                this.owner.assertExtensionEligible?.(input) ??
+                Promise.resolve(),
         });
         await registry.authorize(input, "build");
         const definition = input.definition.extension!;
@@ -1165,7 +1175,8 @@ function failedTargetState(
         return "stale";
     if (
         error instanceof EditorialRejection ||
-        error instanceof ConsolidationRejection
+        error instanceof ConsolidationRejection ||
+        error instanceof ViewExtensionDeferred
     )
         return "blocked";
     if (targetSignal.aborted) return jobSignal.aborted ? "cancelled" : "failed";

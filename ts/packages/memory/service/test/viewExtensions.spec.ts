@@ -12,8 +12,10 @@ import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import {
     extensionViewId,
     ViewExtensionRegistry,
+    ViewExtensionDeferred,
 } from "../src/viewExtensions.js";
 import { viewHash } from "../src/viewContent.js";
+import { createExtensionExecution } from "../src/viewExtensionExecution.js";
 import { validateViewDraft } from "../src/viewValidation.js";
 import { viewDocumentSectionRoles } from "../src/viewTypes.js";
 import type {
@@ -25,6 +27,7 @@ import type {
     ViewBuildJob,
     ViewBuildRequest,
     ViewBuildSnapshot,
+    ViewBuildTargetResult,
     ViewRelationship,
     ViewSaveRequest,
 } from "../src/viewTypes.js";
@@ -360,6 +363,168 @@ describe("registered extension service lifecycle", () => {
     afterEach(async () => {
         await service?.close();
         if (root) await rm(root, { recursive: true, force: true });
+    });
+
+    test("managed content validators run before acceptance and on exact cold reads without regeneration", async () => {
+        const fixture = provider();
+        let validations = 0;
+        let accepted = true;
+        fixture.installed.validateContent = async (input, content) => {
+            validations++;
+            expect(input.inputs[0].content).toContain("Retained");
+            expect(content.payload).toEqual({ items: ["Copper lantern"] });
+            if (!accepted)
+                throw new Error("Independent artifact validation failed");
+        };
+        const { corpus, request, options } = await setup(fixture.installed);
+        const job = await settled(service, await service.buildViews(request));
+        expect(job.state).toBe("complete");
+        const read = {
+            corpusId: corpus.corpusId,
+            viewId: request.targets[0].definition.viewId,
+            includeContext: false,
+        };
+        expect(await service.getView(read)).toBeDefined();
+        await service.close();
+        service = new FileMemoryService(root, options);
+        expect(await service.getView(read)).toBeDefined();
+        expect(validations).toBeGreaterThanOrEqual(3);
+        accepted = false;
+        await expect(service.getView(read)).rejects.toThrow(
+            "Independent artifact validation failed",
+        );
+        expect(fixture.calls()).toBe(1);
+    });
+
+    test("identified model changes during construction cannot accept a stale candidate", async () => {
+        const fixture = provider();
+        fixture.installed.descriptor.modelIdentity = "synthetic-model-v1";
+        const generate = fixture.installed.generate;
+        fixture.installed.generate = async (...args) => {
+            const content = await generate(...args);
+            fixture.installed.descriptor.modelIdentity = "synthetic-model-v2";
+            return content;
+        };
+        const { corpus, request } = await setup(fixture.installed);
+        const job = await settled(service, await service.buildViews(request));
+        expect(job.state).toBe("failed");
+        expect(job.results[0].snapshot.model).toMatch(/^[a-f0-9]{64}$/);
+        expect(job.results[0].reason).toMatch(/changed/);
+        expect((await service.listViews(corpus.corpusId)).views).toHaveLength(
+            0,
+        );
+    });
+
+    test.each([false, true])(
+        "nonaccepted construction retains its candidate without materializing a draft (deferred=%s)",
+        async (deferred) => {
+            const fixture = provider();
+            fixture.installed.generate = async (_input, _prepared, context) => {
+                await context.recordCandidate!("full.explanation", {
+                    accepted: false,
+                    statement: "Unverified synthetic claim",
+                });
+                await context.checkpoint("full.review", { accepted: false });
+                throw deferred
+                    ? new ViewExtensionDeferred("Independent review deferred")
+                    : new Error(
+                          "Independent full review rejected the candidate",
+                      );
+            };
+            const { corpus, request } = await setup(fixture.installed);
+            const job = await settled(
+                service,
+                await service.buildViews(request),
+            );
+            expect(job.state).toBe("failed");
+            expect(job.results[0].state).toBe(deferred ? "blocked" : "failed");
+            expect(job.publication).toBe(false);
+            expect(job.request.publication).toBe(false);
+            expect(job.results[0].providerCandidates).toMatchObject([
+                { stage: "full.explanation", value: { accepted: false } },
+            ]);
+            expect(job.results[0].providerCheckpoints).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        stage: "full.review",
+                        state: { accepted: false },
+                    }),
+                ]),
+            );
+            expect(
+                (await service.listViews(corpus.corpusId)).views,
+            ).toHaveLength(0);
+        },
+    );
+
+    test("legacy managed-provider records require an explicit rebuild instead of reinterpretation", async () => {
+        const fixture = provider();
+        const { corpus, request } = await setup(fixture.installed);
+        const job = await settled(service, await service.buildViews(request));
+        const registry = new ViewExtensionRegistry([fixture.installed]);
+        const legacy = structuredClone(job.results[0].snapshot);
+        Object.assign(legacy, { pipeline: "host-defined-v1" });
+        expect(() => registry.resolve(legacy)).toThrow(
+            /Legacy.*explicit rebuild/,
+        );
+        const view = await service.getView({
+            corpusId: corpus.corpusId,
+            viewId: request.targets[0].definition.viewId,
+        });
+        const content = Object.assign({}, view!.content, {
+            construction: "legacy",
+        }) as unknown as ExtensionViewContent;
+        await expect(
+            registry.validateContent(job.results[0].snapshot, content),
+        ).rejects.toThrow(/Legacy.*explicit rebuild/);
+        expect(fixture.calls()).toBe(1);
+    });
+
+    test("queued model dispatch rechecks eligibility and retains a failed attempt without inference", async () => {
+        const fixture = provider();
+        const { request } = await setup(fixture.installed);
+        const job = await settled(service, await service.buildViews(request));
+        const result: ViewBuildTargetResult = {
+            viewId: job.results[0].viewId,
+            snapshot: structuredClone(job.results[0].snapshot),
+            state: "pending",
+            reason: "Synthetic queued admission",
+        };
+        let eligible = true;
+        let calls = 0;
+        fixture.installed.model = {
+            completionSettings: {},
+            async complete() {
+                calls++;
+                return { success: true, data: "Must not run" };
+            },
+        };
+        const context = await createExtensionExecution({
+            input: result.snapshot,
+            result,
+            provider: fixture.installed,
+            registry: new ViewExtensionRegistry([fixture.installed]),
+            signal: new AbortController().signal,
+            requestBudget,
+            models: async (call) => {
+                eligible = false;
+                return call();
+            },
+            update: async (operation) => {
+                operation(result);
+            },
+            errorText: String,
+            assertEligible: async () => {
+                if (!eligible) throw new Error("Queued source grant revoked");
+            },
+        });
+        await expect(
+            context.complete("explanation", "Retained original"),
+        ).rejects.toThrow("Queued source grant revoked");
+        expect(calls).toBe(0);
+        expect(result.providerAttempts).toMatchObject([
+            { stage: "explanation", state: "failed" },
+        ]);
     });
 
     test("provider registration rejects remote schema references", () => {

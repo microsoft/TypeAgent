@@ -32,7 +32,7 @@ const viewKindSchema = z.enum([
 ]);
 export const viewSummaryRequestSchema = inventoryPageRequestSchema.extend({
     kind: viewKindSchema.optional(),
-    excludeKinds: viewKindSchema.array().max(5).optional(),
+    excludeKinds: viewKindSchema.array().max(6).optional(),
 });
 export const questionSummaryRequestSchema = inventoryPageRequestSchema.extend({
     viewId: id.optional(),

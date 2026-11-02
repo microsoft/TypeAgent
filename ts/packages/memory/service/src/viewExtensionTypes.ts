@@ -125,6 +125,8 @@ export interface ExtensionViewContent {
 
 export interface ViewProviderContext {
     readonly signal: AbortSignal;
+    /** Recheck the retained source snapshot and current provider authorization. */
+    assertEligible?(): Promise<void>;
     readonly deadline: number;
     checkpoint(stage: string, state?: ViewJsonValue): Promise<void>;
     recordCandidate?(stage: string, value: ViewJsonValue): Promise<void>;
@@ -170,6 +172,8 @@ export interface ViewExtensionProvider {
     descriptor: {
         apiVersion: 1;
         identity: ViewProviderIdentity;
+        /** Pin the admitted model configuration when the provider uses inference. */
+        modelIdentity?: string;
         label: string;
         outputSchema: ViewPayloadSchema;
         definitions: Array<{
@@ -199,6 +203,10 @@ export interface ViewExtensionProvider {
         context: ViewProviderContext,
     ): Promise<Pick<ViewEligibilityReceipt, "disposition" | "reason">>;
     prepare(input: ViewBuildSnapshot): Promise<ViewJsonValue>;
+    validateContent?(
+        input: ViewBuildSnapshot,
+        content: ExtensionViewContent,
+    ): void | Promise<void>;
     generate(
         input: ViewBuildSnapshot,
         prepared: ViewJsonValue,

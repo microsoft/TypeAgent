@@ -40,6 +40,7 @@ export interface ExtensionExecutionOptions {
         finishing?: boolean,
     ): Promise<void>;
     errorText(error: unknown): string;
+    assertEligible?(): Promise<void>;
 }
 
 function cumulativeElapsed(result: ViewBuildTargetResult): number {
@@ -166,10 +167,16 @@ export async function createExtensionExecution(
         signal,
         AbortSignal.timeout(provider.descriptor.limits.timeoutMs),
     ]);
+    const assertEligible = async () => {
+        boundedSignal.throwIfAborted();
+        await options.assertEligible?.();
+        await registry.authorize(input, "build");
+        boundedSignal.throwIfAborted();
+    };
     const checkpoint = async (stage: string, state?: ViewJsonValue) => {
         validateStage(stage);
         boundedSignal.throwIfAborted();
-        await registry.authorize(input, "build");
+        await assertEligible();
         if (state !== undefined) assertViewJson(state);
         await update((target) => {
             (target.providerCheckpoints ??= []).push({
@@ -192,7 +199,7 @@ export async function createExtensionExecution(
     ): Promise<string> => {
         validateStage(stage);
         boundedSignal.throwIfAborted();
-        await registry.authorize(input, "build");
+        await assertEligible();
         const promptFingerprint = viewHash(prompt);
         const schemaFingerprint = viewHash(schema ?? null);
         const cached = completed.find(
@@ -233,7 +240,11 @@ export async function createExtensionExecution(
         try {
             const output = await runWithRequestBudget(budget, () =>
                 runWithRequestAttemptObserver(observer, () =>
-                    options.models(call, boundedSignal),
+                    options.models(async () => {
+                        await assertEligible();
+                        await registry.authorize(input, "model");
+                        return call();
+                    }, boundedSignal),
                 ),
             );
             if (output.length > provider.descriptor.limits.maxOutputChars)
@@ -241,7 +252,7 @@ export async function createExtensionExecution(
                     "Provider stage output exceeds its admitted bound",
                 );
             boundedSignal.throwIfAborted();
-            await registry.authorize(input, "build");
+            await assertEligible();
             await update((target) => {
                 const entry = target.providerAttempts![attempt];
                 entry.state = "returned";
@@ -264,6 +275,7 @@ export async function createExtensionExecution(
     };
     return {
         signal: boundedSignal,
+        assertEligible,
         deadline: Date.now() + provider.descriptor.limits.timeoutMs,
         checkpoint,
         ...(completed.length ||
@@ -283,7 +295,7 @@ export async function createExtensionExecution(
         async recordCandidate(stage, value) {
             validateStage(stage);
             boundedSignal.throwIfAborted();
-            await registry.authorize(input, "build");
+            await assertEligible();
             assertViewJson(value);
             if (
                 JSON.stringify(value).length >
