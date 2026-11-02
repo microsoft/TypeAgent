@@ -507,6 +507,8 @@ stages:
     jobs:
       - job: unit_tests
         displayName: "Unit tests, lint, policy"
+        # Allow the full build and serialized suites beyond the default hour.
+        timeoutInMinutes: 150
         # Manual-only gate: a failure here must NOT block Publish.
         # continueOnError makes a failing job report SucceededWithIssues
         # instead of Failed, and the Publish stage accepts that result.

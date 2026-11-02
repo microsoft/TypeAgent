@@ -75,10 +75,13 @@ test("publishing uses the standard Node heap budget and CI test settings", () =>
 });
 
 test("the publishing gate retains all local tests with serialized packages", () => {
-    const step = pipeline.stages
+    const job = pipeline.stages
         .find(({ stage }) => stage === "Test")
-        .jobs.find(({ job }) => job === "unit_tests")
-        .steps.find(({ displayName }) => displayName === "Run Tests (Local)");
+        .jobs.find(({ job }) => job === "unit_tests");
+    assert.equal(job.timeoutInMinutes, 150);
+    const step = job.steps.find(
+        ({ displayName }) => displayName === "Run Tests (Local)",
+    );
     assert.equal(step.script.trim(), "npm run test:local");
     assert.equal(step.env.TYPEAGENT_TEST_WORKSPACE_CONCURRENCY, "1");
 });
