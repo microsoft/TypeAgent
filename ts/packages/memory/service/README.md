@@ -1109,6 +1109,11 @@ snapshot; actual qualification runs still require an explicit fixture root.
 No generated memory stores, recordings, provider responses or run receipts are
 included in these fixtures.
 
+The source-plus-view integration fixture checks reader evidence separately from
+host diagnostics. Readers receive `influencingSourceCount`, while diagnostics
+retain complete `influencingSourceIds`. Original supporting passages, citation
+references and the remaining evidence fields must match on both paths.
+
 ### Memory quality evaluation
 
 The [offline quality tools](../../../tools/memory-maintenance-qualification/quality-README.md)
