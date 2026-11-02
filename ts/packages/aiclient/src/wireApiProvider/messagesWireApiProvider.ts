@@ -220,14 +220,18 @@ export class MessagesWireApiProvider implements ProviderAdapter {
                     }
                     piece.usage = usageFromMessagesUsage({
                         input_tokens:
-                            evt.usage.input_tokens ?? startUsage?.input_tokens,
+                            evt.usage.input_tokens ??
+                            startUsage?.input_tokens ??
+                            null,
                         output_tokens: evt.usage.output_tokens,
                         cache_creation_input_tokens:
                             evt.usage.cache_creation_input_tokens ??
-                            startUsage?.cache_creation_input_tokens,
+                            startUsage?.cache_creation_input_tokens ??
+                            null,
                         cache_read_input_tokens:
                             evt.usage.cache_read_input_tokens ??
-                            startUsage?.cache_read_input_tokens,
+                            startUsage?.cache_read_input_tokens ??
+                            null,
                     });
                 }
 
