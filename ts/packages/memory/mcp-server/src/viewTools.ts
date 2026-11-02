@@ -255,7 +255,7 @@ export function registerViewTools(
         viewToolNames.getViewDetailPage,
         {
             description:
-                "Read a bounded JSON slice of a complete view revision. Follow every nextOffset with the returned revisionId and digest; an individual slice is not a complete view. Each page rechecks original access. Prefer view summaries for inventory.",
+                "Read bounded JSON slices of a view revision. Complete projection retains build inputs; presentation retains all view content and citations without the embedded build input snapshot. Follow every nextOffset with the same projection, revisionId and digest. An individual slice is not a complete view. Each page rechecks original access. Prefer summaries for inventory.",
             inputSchema: viewDetailPageRequestSchema,
             outputSchema: z.object({ result: viewDetailPageSchema.nullable() }),
         },
@@ -272,6 +272,7 @@ export function registerViewTools(
                             : {}),
                         offset: request.offset,
                         digest: request.digest,
+                        projection: request.projection,
                     })) ?? null
                 );
             }),

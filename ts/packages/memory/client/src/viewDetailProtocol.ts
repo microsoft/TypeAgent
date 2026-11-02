@@ -8,7 +8,7 @@ import {
     viewDetailPageChars,
     type ViewDetailPage,
     type ViewDetailPageRequest,
-    type ViewReadRequest,
+    type ViewDetailReadRequest,
     type ViewVersion,
 } from "@typeagent/memory-service";
 import { viewReadRequestSchema, viewVersionSchema } from "./viewProtocol.js";
@@ -18,6 +18,7 @@ export const viewDetailPageRequestSchema = viewReadRequestSchema
     .extend({
         offset: z.number().int().min(0).max(viewDetailMaxChars).optional(),
         digest: digest.optional(),
+        projection: z.enum(["complete", "presentation"]).optional(),
     })
     .refine(
         (request) =>
@@ -28,6 +29,7 @@ export const viewDetailPageSchema = z.strictObject({
     corpusId: z.string().min(1),
     viewId: z.string().min(1),
     revisionId: z.string().min(1),
+    projection: z.enum(["complete", "presentation"]),
     digest,
     offset: z.number().int().min(0).max(viewDetailMaxChars),
     totalChars: z.number().int().min(1).max(viewDetailMaxChars),
@@ -41,7 +43,7 @@ export async function readViewDetail(
             request: ViewDetailPageRequest,
         ): Promise<ViewDetailPage | undefined>;
     },
-    request: ViewReadRequest,
+    request: ViewDetailReadRequest,
 ): Promise<ViewVersion | undefined> {
     if (!service.getViewDetailPage)
         throw new Error(
@@ -68,6 +70,7 @@ export async function readViewDetail(
         if (
             page.corpusId !== request.corpusId ||
             page.viewId !== request.viewId ||
+            page.projection !== (request.projection ?? "complete") ||
             (request.revisionId && page.revisionId !== request.revisionId) ||
             page.offset !== offset ||
             (pinned &&
@@ -94,14 +97,20 @@ export async function readViewDetail(
         offset = page.nextOffset;
     }
     if (!pinned) throw new Error("Complete view detail was not received");
-    const text = chunks.join("");
-    if (createHash("sha256").update(text).digest("hex") !== pinned.digest)
+    return parseCompleteViewDetail(chunks.join(""), pinned);
+}
+
+function parseCompleteViewDetail(
+    text: string,
+    page: ViewDetailPage,
+): ViewVersion {
+    if (createHash("sha256").update(text).digest("hex") !== page.digest)
         throw new Error("Complete view detail digest mismatch");
     const view = viewVersionSchema.parse(JSON.parse(text));
     if (
-        view.corpusId !== pinned.corpusId ||
-        view.viewId !== pinned.viewId ||
-        view.revisionId !== pinned.revisionId
+        view.corpusId !== page.corpusId ||
+        view.viewId !== page.viewId ||
+        view.revisionId !== page.revisionId
     )
         throw new Error("Complete view detail identity mismatch");
     return view as ViewVersion;

@@ -188,7 +188,11 @@ export function createMemoryViewFunctions(
             required("proposeSchemaView")(request),
         memoryDiscoverSchemaQuestions: (request) =>
             required("discoverSchemaQuestions")(request),
-        memoryGetView: (request) => readViewDetail(views(), request),
+        memoryGetView: (request) =>
+            readViewDetail(views(), {
+                ...request,
+                projection: "presentation",
+            }),
         memorySaveViewDraft: (request) => views().saveViewDraft(request),
         memoryArchiveView: (request) => views().archiveView(request),
         memoryViewHistory: (request) => views().getViewHistory(request),

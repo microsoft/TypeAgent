@@ -176,6 +176,13 @@ test("real authenticated loopback MCP builds, inspects, edits, rejects publicati
         expect(firstPage?.text.length).toBe(viewDetailPageChars);
         expect(firstPage?.nextOffset).toBe(viewDetailPageChars);
         expect(await readViewDetail(client, detailRequest)).toEqual(view);
+        const presentation = await readViewDetail(client, {
+            ...detailRequest,
+            projection: "presentation",
+        });
+        expect(presentation?.content).toEqual(view.content);
+        expect(presentation?.relationships).toEqual(view.relationships);
+        expect(presentation?.generation?.input).toBeUndefined();
         await expect(
             client.getViewDetailPage({
                 ...detailRequest,

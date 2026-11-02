@@ -383,9 +383,18 @@ Use view summaries for inventory and `getViewDetailPage`
 (`memory_view_detail_page`) for complete large artifacts. Each response contains
 at most 262144 JSON characters, with corpus/view/revision identity, a SHA-256
 digest, total character count, offset and optional next offset. Continuations
-must carry the returned revision and digest. Every page uses the ordinary
+must carry the returned revision, digest and projection. Every page uses the ordinary
 authorized exact-view read; access changes fail rather than returning cached
 proof without validation.
+
+The default `complete` projection preserves the entire stored artifact.
+Explicit `presentation` projection omits only `generation.input`, the embedded
+construction snapshot; it preserves all view content, presentation layouts,
+citations, relationships, generation output and validation metadata. Native Hub
+uses presentation details instead of downloading every original build input.
+The canonical corpus revision is unchanged, and complete paging remains
+available for inspection of that snapshot. Neither projection bypasses
+authorization of the complete original-source dependency set.
 
 The typed client's `readViewDetail` assembles and schema-validates all pages,
 verifies identity, offsets, length and the complete digest, and returns nothing

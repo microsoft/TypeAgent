@@ -7,7 +7,13 @@ import type { ViewReadRequest, ViewVersion } from "./viewTypes.js";
 export const viewDetailPageChars = 256 * 1024;
 export const viewDetailMaxChars = 32 * 1024 * 1024;
 
-export interface ViewDetailPageRequest extends ViewReadRequest {
+export type ViewDetailProjection = "complete" | "presentation";
+
+export interface ViewDetailReadRequest extends ViewReadRequest {
+    projection?: ViewDetailProjection | undefined;
+}
+
+export interface ViewDetailPageRequest extends ViewDetailReadRequest {
     offset?: number | undefined;
     digest?: string | undefined;
 }
@@ -16,6 +22,7 @@ export interface ViewDetailPage {
     corpusId: string;
     viewId: string;
     revisionId: string;
+    projection: ViewDetailProjection;
     digest: string;
     offset: number;
     totalChars: number;
@@ -36,7 +43,16 @@ export function viewDetailPage(
         throw new Error(
             "View detail continuation requires a pinned revision and digest",
         );
-    const serialized = JSON.stringify(view);
+    const projection = request.projection ?? "complete";
+    if (!["complete", "presentation"].includes(projection))
+        throw new Error("Unsupported view detail projection");
+    let detail = view;
+    if (projection === "presentation" && view.generation?.input) {
+        const generation = { ...view.generation };
+        delete generation.input;
+        detail = { ...view, generation };
+    }
+    const serialized = JSON.stringify(detail);
     if (serialized.length > viewDetailMaxChars)
         throw new Error(
             "View detail exceeds the complete-read character bound",
@@ -55,6 +71,7 @@ export function viewDetailPage(
         corpusId: view.corpusId,
         viewId: view.viewId,
         revisionId: view.revisionId,
+        projection,
         digest,
         offset,
         totalChars: serialized.length,

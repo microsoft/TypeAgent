@@ -76,6 +76,7 @@ for (const failure of [
     "corpus",
     "view",
     "total",
+    "projection",
     "revision",
     "digest",
     "offset",
@@ -106,6 +107,8 @@ for (const failure of [
                             if (failure === "corpus") page.corpusId = "other";
                             if (failure === "view") page.viewId = "other";
                             if (failure === "total") page.totalChars++;
+                            if (failure === "projection")
+                                page.projection = "presentation";
                             if (failure === "revision")
                                 page.revisionId = "other";
                             if (failure === "digest")
@@ -162,6 +165,27 @@ test("paged detail continuation pins identity and rejects unbounded or changed r
         () => viewDetailPage(version, request),
         /complete-read character bound/,
     );
+});
+
+test("presentation details retain content and citations without mutating retained build inputs", async () => {
+    const { version } = persisted(structuredClone(synthesis));
+    const retained = structuredClone(version);
+    const complete = await readViewDetail(
+        {
+            getViewDetailPage: async (request) =>
+                viewDetailPage(version, request),
+        },
+        {
+            corpusId: version.corpusId,
+            viewId: version.viewId,
+            projection: "presentation",
+        },
+    );
+    assert.deepEqual(complete.content, version.content);
+    assert.deepEqual(complete.relationships, version.relationships);
+    assert.deepEqual(complete.generation.content, version.generation.content);
+    assert.equal(complete.generation.input, undefined);
+    assert.deepEqual(version, retained);
 });
 
 test("bounded indexed search flag survives protocol round-trip and rejects nonboolean input", () => {

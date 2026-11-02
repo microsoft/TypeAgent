@@ -465,6 +465,18 @@ describe("registered extension service lifecycle", () => {
                 }
                 expect(JSON.parse(parts.join(""))).toEqual(full);
                 expect(parts.length).toBeGreaterThan(1);
+                const presentation = await service.getViewDetailPage({
+                    ...target,
+                    projection: "presentation",
+                });
+                if (!presentation)
+                    throw new Error("Missing presentation detail");
+                expect(presentation.nextOffset).toBeUndefined();
+                const rendered = JSON.parse(presentation.text);
+                expect(rendered.content).toEqual(full?.content);
+                expect(rendered.relationships).toEqual(full?.relationships);
+                expect(rendered.generation.input).toBeUndefined();
+                expect(await service.getView(target)).toEqual(full);
                 approved = false;
                 await expect(
                     service.getViewDetailPage({
