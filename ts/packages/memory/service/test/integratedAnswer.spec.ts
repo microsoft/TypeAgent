@@ -2,12 +2,19 @@
 // Licensed under the MIT License.
 
 import type { ChatModel } from "@typeagent/aiclient";
-import { runWithSearchTiming } from "@typeagent/knowpro";
+import {
+    runWithSearchTiming,
+    runWithSearchCancellation,
+} from "@typeagent/knowpro";
 import {
     answerIntegratedEvidence,
     type IntegratedAnswerHost,
     type IntegratedAnswerSeed,
 } from "../src/integratedAnswer.js";
+import {
+    answerEvidenceForReader,
+    serializeAnswerEvidence,
+} from "../src/integratedAnswerReader.js";
 import type {
     AnswerDerivedEvidence,
     AnswerEvidence,
@@ -78,7 +85,7 @@ function fixture(
     views: AnswerViewEvidence[] = [view()],
     expanded = originals,
 ) {
-    const calls: AnswerEvidence[][] = [];
+    const calls: ReturnType<typeof answerEvidenceForReader>[][] = [];
     const host: IntegratedAnswerHost = {
         searchOriginal: async () => ({
             query: request.question,
@@ -105,7 +112,7 @@ function fixture(
             if (typeof content !== "string")
                 throw new Error("Expected serialized evidence");
             const envelope = JSON.parse(content) as {
-                evidence: AnswerEvidence[];
+                evidence: ReturnType<typeof answerEvidenceForReader>[];
             };
             calls.push(envelope.evidence);
             return {
@@ -120,6 +127,32 @@ function fixture(
     };
     return { host, model, calls };
 }
+
+test("cancellation reaches the managed integrated reader as the fifth model argument", async () => {
+    const { host, model } = fixture();
+    const controller = new AbortController();
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    const reason = new Error("Caller cancelled the foreground answer");
+    model.complete = async (_prompt, _usage, _schema, _log, signal) => {
+        expect(signal).toBe(controller.signal);
+        entered();
+        return new Promise((_resolve, reject) => {
+            signal?.addEventListener("abort", () => reject(signal.reason), {
+                once: true,
+            });
+        });
+    };
+    const answer = runWithSearchCancellation(controller.signal, () =>
+        answerIntegratedEvidence(request, host, { model }),
+    );
+    const rejected = expect(answer).rejects.toBe(reason);
+    await started;
+    controller.abort(reason);
+    await rejected;
+});
 
 describe("parallel answer retrieval", () => {
     test("views start before originals finish and preserve the prepared evidence", async () => {
@@ -556,7 +589,9 @@ describe("bounded source-plus-view answering", () => {
         expect(result.citations).toEqual([source()]);
         expect(result.derivedReferences).toEqual([view().reference]);
         expect(
-            result.readerContext?.integratedAnswer?.suppliedEvidence,
+            result.readerContext?.integratedAnswer?.suppliedEvidence.map(
+                answerEvidenceForReader,
+            ),
         ).toEqual(calls[0]);
         expect(
             result.readerContext?.integratedAnswer?.selectedEvidenceIds,
@@ -794,7 +829,11 @@ describe("bounded source-plus-view answering", () => {
         };
         const result = await answerIntegratedEvidence(request, host, { model });
         expect(calls).toHaveLength(2);
-        expect(validations).toEqual(calls);
+        expect(
+            validations.map((evidence) =>
+                evidence.map(answerEvidenceForReader),
+            ),
+        ).toEqual(calls);
         expect(
             result.readerContext?.integratedAnswer?.reconstructionCount,
         ).toBe(1);
@@ -805,6 +844,69 @@ describe("bounded source-plus-view answering", () => {
             "changed before delivery after one bounded reconstruction",
         );
         expect(calls).toHaveLength(4);
+    });
+
+    test("large construction scope does not consume the reader's view budget or weaken host scope", async () => {
+        const influencingSourceIds = Array.from({ length: 165 }, (_, index) =>
+            index.toString(16).padStart(64, "0"),
+        );
+        const originals = influencingSourceIds
+            .slice(0, 6)
+            .map((id) => source(id));
+        const candidate = view({
+            reference: {
+                viewId: `extension:${"a".repeat(64)}`,
+                revisionId: "00000000-0000-4000-8000-000000000001",
+                sectionId: "takeaway.0",
+                state: "selected",
+                contractVersion: "b".repeat(64),
+                rubricVersion: "c".repeat(64),
+                extension: {
+                    providerId: "synthetic",
+                    version: "1",
+                    implementationDigest: "a".repeat(64),
+                    schemaDigest: "b".repeat(64),
+                    recipeDigest: "c".repeat(64),
+                    inputContract: "retained-facts-v1",
+                    outputContract: "story-v1",
+                },
+            },
+            text: "The retained assessment records a bounded conclusion; original qualifications and opposing evidence remain relevant.",
+            influencingSourceIds,
+            supportingSources: originals.slice(0, 3).map(reference),
+            opposingSources: [reference(originals[3])],
+        });
+        expect(JSON.stringify(candidate).length).toBeGreaterThan(12000);
+        const { host, model, calls } = fixture(originals, [candidate]);
+        let validated: AnswerEvidence[] = [];
+        host.validateEvidence = async ({ evidence }) => {
+            validated = evidence;
+            return true;
+        };
+        const result = await answerIntegratedEvidence(request, host, { model });
+        expect(result.derivedReferences).toEqual([candidate.reference]);
+        const readerView = calls[0].find((item) => item.kind === "derived");
+        expect(readerView).not.toHaveProperty("influencingSourceIds");
+        expect(readerView).toHaveProperty("influencingSourceCount", 165);
+        const hostView = validated.find((item) => item.kind === "derived");
+        expect(
+            hostView?.kind === "derived" && hostView.influencingSourceIds,
+        ).toEqual(influencingSourceIds);
+        expect(
+            result.readerContext?.integratedAnswer?.suppliedEvidence,
+        ).toEqual(validated);
+        expect(
+            serializeAnswerEvidence(request, validated).length,
+        ).toBeLessThanOrEqual(24000);
+        expect(result.citations).toEqual(
+            expect.arrayContaining(originals.slice(0, 4)),
+        );
+        const restricted = await answerIntegratedEvidence(
+            { ...request, sourceIds: originals.map((item) => item.sourceId) },
+            host,
+            { model },
+        );
+        expect(restricted.derivedReferences).toEqual([]);
     });
 
     test("bounds source fragments, derived blocks and serialized reader evidence", async () => {

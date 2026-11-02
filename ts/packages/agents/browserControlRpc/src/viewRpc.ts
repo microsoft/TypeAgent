@@ -46,6 +46,7 @@ export type MemoryHubSearchRequest = {
         | "timeline"
         | "wiki"
         | "schemaView"
+        | "extension"
     >;
 };
 
@@ -70,7 +71,8 @@ export type MemoryHubEvidence = {
         | "projectBrief"
         | "timeline"
         | "wiki"
-        | "schemaView";
+        | "schemaView"
+        | "extension";
     viewVersion?: number;
     viewProvenance?: ViewVersion["provenance"];
     review?: "unreviewed";
@@ -498,6 +500,8 @@ export const viewMethods = [
     "memoryListViewBuilds",
     "memoryCancelViewBuild",
     "memoryRetryViewBuild",
+    "memoryContinueViewBuild",
+    "memoryRefreshExtensionViews",
     "memoryGetViewConflict",
     "memoryResolveViewConflict",
     "memoryListCorpora",

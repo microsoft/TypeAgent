@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash } from "node:crypto";
 
 export interface RequestBudgetLimits {
     contextTokens?: number | undefined;
@@ -30,17 +31,69 @@ export interface RequestBudgetReceipt {
     elapsedMs: number;
 }
 
+export interface RequestAttemptReservation {
+    requestFingerprint: string;
+    at: string;
+    reservations: readonly RequestBudgetReceipt[];
+}
+
+export interface RequestAttemptOutcome {
+    state: "returned" | "failed";
+    at: string;
+    status?: number;
+    elapsedMs: number;
+}
+
+export interface RequestAttemptObserver {
+    reserve(event: RequestAttemptReservation): Promise<string>;
+    finish(id: string, outcome: RequestAttemptOutcome): Promise<void>;
+}
+
+export interface RequestBudgetResume {
+    receipts: readonly RequestBudgetReceipt[];
+    elapsedMs: number;
+}
+
 export class RequestAdmissionError extends Error {}
+
+function validateResumedReceipt(
+    receipt: RequestBudgetReceipt,
+    attempt: number,
+): void {
+    if (
+        receipt.attempt !== attempt ||
+        !["chat", "embedding", "decision"].includes(receipt.kind) ||
+        receipt.tokenAccounting !== "estimate" ||
+        [
+            receipt.inputTokens,
+            receipt.outputTokens,
+            receipt.safetyTokens,
+            receipt.serializedChars,
+        ].some((value) => !Number.isSafeInteger(value) || value < 0) ||
+        !Number.isFinite(receipt.elapsedMs) ||
+        receipt.elapsedMs < 0
+    )
+        throw new RequestAdmissionError(
+            "Invalid persisted request budget receipt",
+        );
+}
 
 export class RequestBudget {
     public readonly receipts: RequestBudgetReceipt[] = [];
-    private readonly started = performance.now();
+    private readonly started: number;
     private reserved = 0;
     private reservedInput = 0;
     private chats = 0;
     private embeddings = 0;
+    public get elapsedMs(): number {
+        return performance.now() - this.started;
+    }
 
-    public constructor(public readonly limits: RequestBudgetLimits) {
+    public constructor(
+        public readonly limits: RequestBudgetLimits,
+        resume?: RequestBudgetResume,
+    ) {
+        this.started = performance.now() - (resume?.elapsedMs ?? 0);
         const { countTokens, tokenizer, ...bounds } = limits;
         if (
             !tokenizer.trim() ||
@@ -54,6 +107,16 @@ export class RequestBudget {
             throw new RequestAdmissionError(
                 "A named token estimator and positive request budget limits are required",
             );
+        if (resume) {
+            if (!Number.isFinite(resume.elapsedMs) || resume.elapsedMs < 0)
+                throw new RequestAdmissionError(
+                    "Invalid cumulative elapsed request budget",
+                );
+            for (const receipt of resume.receipts) {
+                validateResumedReceipt(receipt, this.receipts.length + 1);
+                this.commit(structuredClone(receipt));
+            }
+        }
     }
 
     public reserve(serialized: string, providerOutputTokens?: number): void {
@@ -199,11 +262,29 @@ function requestOutputReservation(
         : outputReservation(body, defaultOutputTokens);
 }
 
+export const outputTokenLimitFields = [
+    "max_tokens",
+    "max_completion_tokens",
+    "max_output_tokens",
+] as const;
+
+export function outputTokenLimitField(body: object) {
+    const fields = outputTokenLimitFields.filter((field) => field in body);
+    if (fields.length > 1)
+        throw new RequestAdmissionError(
+            "Inference request has conflicting output-token limit fields",
+        );
+    return fields[0];
+}
+
 export function outputReservation(
     body: object,
     defaultOutputTokens?: number,
 ): number {
-    const value = "max_tokens" in body ? body.max_tokens : defaultOutputTokens;
+    const field = outputTokenLimitField(body);
+    const value = field
+        ? (body as Record<string, unknown>)[field]
+        : defaultOutputTokens;
     if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1)
         throw new RequestAdmissionError(
             "Budgeted chat requires an explicit output-token reservation or configured provider output capacity",
@@ -225,10 +306,50 @@ export function isChatWireRequest(body: object): boolean {
 }
 
 const budgets = new AsyncLocalStorage<readonly RequestBudget[] | undefined>();
+const observers = new AsyncLocalStorage<RequestAttemptObserver | undefined>();
 
 export function bindRequestBudgetScope<T>(work: () => T): () => T {
     const active = budgets.getStore();
-    return () => budgets.run(active, work);
+    const observer = observers.getStore();
+    return () => observers.run(observer, () => budgets.run(active, work));
+}
+
+export function runWithRequestAttemptObserver<T>(
+    observer: RequestAttemptObserver,
+    work: () => T,
+): T {
+    return observers.run(observer, work);
+}
+
+export async function reserveSerializedRequestForDispatch(
+    options?: RequestInit,
+    defaultOutputTokens?: number,
+): Promise<((outcome: RequestAttemptOutcome) => Promise<void>) | undefined> {
+    reserveSerializedRequest(options, defaultOutputTokens);
+    const observer = observers.getStore();
+    if (!observer) return undefined;
+    const reservations = (budgets.getStore() ?? []).map(
+        (budget) => budget.receipts.at(-1)!,
+    );
+    if (!reservations.length || typeof options?.body !== "string")
+        throw new RequestAdmissionError(
+            "Durable inference recording requires an admitted serialized request",
+        );
+    let id: string;
+    try {
+        id = await observer.reserve({
+            requestFingerprint: createHash("sha256")
+                .update(options.body)
+                .digest("hex"),
+            at: new Date().toISOString(),
+            reservations,
+        });
+    } catch {
+        throw new RequestAdmissionError(
+            "Durable inference reservation failed; dispatch blocked",
+        );
+    }
+    return (outcome) => observer.finish(id, outcome);
 }
 
 export function runWithRequestBudget<T>(

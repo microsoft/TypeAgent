@@ -7,6 +7,7 @@ import type { ApiSettings, CompletionUsageStats } from "../openai.js";
 import type { FunctionCallingJsonSchema } from "../models.js";
 import {
     createApiHeaders,
+    incompleteOutputMessage,
     splitSystemMessages,
     usageFromInputOutput,
 } from "./shared.js";
@@ -163,6 +164,9 @@ export class MessagesWireApiProvider implements ProviderAdapter {
 
     parseResponse(data: unknown, request: ModelRequest): Result<string> {
         const msg = data as Message;
+        if (msg.stop_reason === "max_tokens") {
+            return error(incompleteOutputMessage);
+        }
         const blocks = msg.content;
 
         if (Array.isArray(request.jsonSchema)) {
@@ -211,6 +215,9 @@ export class MessagesWireApiProvider implements ProviderAdapter {
                 if (evt.type === "message_start") {
                     startUsage = evt.message.usage;
                 } else if (evt.type === "message_delta") {
+                    if (evt.delta.stop_reason === "max_tokens") {
+                        throw new Error(incompleteOutputMessage);
+                    }
                     piece.usage = usageFromMessagesUsage({
                         input_tokens:
                             evt.usage.input_tokens ?? startUsage?.input_tokens,

@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { randomUUID } from "node:crypto";
 
 import {
     graphQueryRequestSchema,
@@ -606,6 +607,20 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
             unsupportedCapability("view builds")
         );
     }
+    public continueViewBuild(
+        request: import("@typeagent/memory-service").ViewBuildContinuationRequest,
+    ) {
+        return (
+            this.service.continueViewBuild?.(request) ??
+            unsupportedCapability("accounted view continuation")
+        );
+    }
+    public refreshExtensionViews(request: { corpusId: string }) {
+        return (
+            this.service.refreshExtensionViews?.(request) ??
+            unsupportedCapability("extension refresh")
+        );
+    }
     public retryViewBuild(request: ViewBuildJobRequest) {
         return (
             this.service.retryViewBuild?.(request) ??
@@ -809,8 +824,8 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return this.service.search(request);
     }
 
-    public answer(request: MemoryAnswerRequest) {
-        return this.service.answer(request);
+    public answer(request: MemoryAnswerRequest, signal?: AbortSignal) {
+        return this.service.answer(request, signal);
     }
 
     public understand(
@@ -1290,6 +1305,24 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             viewBuildJobSchema,
         );
     }
+    public continueViewBuild(
+        request: import("@typeagent/memory-service").ViewBuildContinuationRequest,
+    ): Promise<ViewBuildJob> {
+        return this.invoke(
+            viewToolNames.continueViewBuild,
+            request,
+            viewBuildJobSchema,
+        );
+    }
+    public refreshExtensionViews(request: {
+        corpusId: string;
+    }): Promise<ViewBuildJob[]> {
+        return this.invoke(
+            viewToolNames.refreshExtensionViews,
+            request,
+            viewBuildJobSchema.array(),
+        );
+    }
     public retryViewBuild(request: ViewBuildJobRequest): Promise<ViewBuildJob> {
         return this.invoke(
             viewToolNames.retryViewBuild,
@@ -1602,11 +1635,15 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
         );
     }
 
-    public answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult> {
+    public answer(
+        request: MemoryAnswerRequest,
+        signal?: AbortSignal,
+    ): Promise<MemoryAnswerResult> {
         return this.invoke(
             memoryToolNames.answer,
             answerRequestSchema.parse(request),
             answerResultSchema,
+            signal === undefined ? {} : { signal },
         );
     }
 
@@ -1752,10 +1789,10 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
 
 function createTransport(config: MemoryMcpTransportConfig): MemoryMcpTransport {
     if (config.kind === "http") {
+        const headers = new Headers(config.headers);
+        headers.set("X-TypeAgent-Client-Id", randomUUID());
         return new StreamableHTTPClientTransport(new URL(config.url), {
-            ...(config.headers === undefined
-                ? {}
-                : { requestInit: { headers: config.headers } }),
+            requestInit: { headers },
             ...(config.timeoutMs === undefined
                 ? {}
                 : {
@@ -1765,7 +1802,13 @@ function createTransport(config: MemoryMcpTransportConfig): MemoryMcpTransport {
                               signal:
                                   init?.signal == null
                                       ? AbortSignal.timeout(config.timeoutMs!)
-                                      : AbortSignal.any([
+                                      : (
+                                            AbortSignal as typeof AbortSignal & {
+                                                any(
+                                                    signals: AbortSignal[],
+                                                ): AbortSignal;
+                                            }
+                                        ).any([
                                             init.signal,
                                             AbortSignal.timeout(
                                                 config.timeoutMs!,

@@ -29,6 +29,7 @@ export type HubRoute = {
     viewRevisionId?: string;
     viewPageId?: string;
     viewItemKey?: string;
+    viewLayoutId?: string;
     questionSlotId?: string;
     activityKind?: "view-build";
     activityTab?: HubActivityTab;
@@ -43,8 +44,15 @@ export type HiddenItems = Record<
 
 function parseViewSelection(
     parts: string[],
-): Pick<HubRoute, "viewRevisionId" | "viewPageId" | "viewItemKey"> {
+): Pick<
+    HubRoute,
+    "viewRevisionId" | "viewPageId" | "viewItemKey" | "viewLayoutId"
+> {
+    const layout = [3, 5, 7, 9].find((offset) => parts[offset] === "layout");
     return {
+        ...(layout !== undefined && parts[layout + 1]
+            ? { viewLayoutId: parts[layout + 1] }
+            : {}),
         ...(parts[3] === "revision" && parts[4]
             ? { viewRevisionId: parts[4] }
             : {}),
@@ -153,6 +161,9 @@ export function routeHash(route: HubRoute): string {
                           : []),
                       ...(route.page === "views" && route.viewItemKey
                           ? ["item", route.viewItemKey]
+                          : []),
+                      ...(route.page === "views" && route.viewLayoutId
+                          ? ["layout", route.viewLayoutId]
                           : []),
                       ...(route.page === "activity" && route.activityKind
                           ? [route.activityKind]

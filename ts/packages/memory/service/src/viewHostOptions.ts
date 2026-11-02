@@ -82,6 +82,8 @@ export function getConfiguredMemoryViewOptions(
 ): Pick<
     FileMemoryServiceOptions,
     | "viewDrafts"
+    | "extensionBuilds"
+    | "extensionDiscovery"
     | "informationalViews"
     | "decisionTopics"
     | "decisionTopicExecution"
@@ -180,6 +182,22 @@ export function getConfiguredMemoryViewOptions(
         viewDrafts: parseViewDraftCapability(
             environment.TYPEAGENT_MEMORY_VIEW_DRAFTS,
         ),
+        ...(environment.TYPEAGENT_MEMORY_EXTENSION_BUILDS === undefined
+            ? {}
+            : {
+                  extensionBuilds: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_EXTENSION_BUILDS,
+                      "TYPEAGENT_MEMORY_EXTENSION_BUILDS",
+                  ),
+              }),
+        ...(environment.TYPEAGENT_MEMORY_EXTENSION_DISCOVERY === undefined
+            ? {}
+            : {
+                  extensionDiscovery: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_EXTENSION_DISCOVERY,
+                      "TYPEAGENT_MEMORY_EXTENSION_DISCOVERY",
+                  ),
+              }),
         informationalViews: parseViewDraftCapability(
             environment.TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS,
             "TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS",

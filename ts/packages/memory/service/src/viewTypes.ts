@@ -37,13 +37,20 @@ import type {
 } from "./viewMaintenanceTypes.js";
 export type * from "./viewMaintenanceTypes.js";
 export type * from "./topicTypes.js";
+export type * from "./viewExtensionTypes.js";
+import type {
+    ExtensionViewContent,
+    ViewExtensionDefinition,
+    ViewEligibilityReceipt,
+} from "./viewExtensionTypes.js";
 
 export type ViewKind =
     | "troubleshootingGuide"
     | "projectBrief"
     | "timeline"
     | "wiki"
-    | "schemaView";
+    | "schemaView"
+    | "extension";
 export type ViewState = "draft" | "stale" | "archived";
 export interface ViewCitation extends ProcedureSourceCitation {
     locator: string;
@@ -62,23 +69,36 @@ export interface TimelineEvidenceSelector {
 }
 export type ViewSourceSelector =
     | ViewDocumentSelector
-    | TimelineEvidenceSelector;
+    | TimelineEvidenceSelector
+    | {
+          kind: "sourceManifest";
+          sources: Array<{ sourceId: string; revisionId: string }>;
+          manifest: {
+              sourceId: string;
+              revisionId: string;
+              contentHash: string;
+          };
+          events?: never;
+      };
+export const viewDocumentSectionRoles = [
+    "description",
+    "prerequisites",
+    "diagnostic",
+    "guard",
+    "verification",
+    "recovery",
+    "context",
+    "goalsScope",
+    "owners",
+    "status",
+    "milestones",
+    "decisions",
+    "risks",
+] as const;
 export interface ViewSection {
     id: string;
     role:
-        | "description"
-        | "prerequisites"
-        | "diagnostic"
-        | "guard"
-        | "verification"
-        | "recovery"
-        | "context"
-        | "goalsScope"
-        | "owners"
-        | "status"
-        | "milestones"
-        | "decisions"
-        | "risks"
+        | (typeof viewDocumentSectionRoles)[number]
         | "event"
         | "page"
         | "question";
@@ -225,7 +245,8 @@ export type DerivedViewContent =
     | ProjectBriefContent
     | TimelineContent
     | WikiContent
-    | SchemaViewContent;
+    | SchemaViewContent
+    | ExtensionViewContent;
 export type ViewEndpoint =
     | { kind: "section"; viewId: string; sectionId: string }
     | {
@@ -285,6 +306,7 @@ export interface ViewDefinitionInput {
     selector: ViewSourceSelector;
     maintenance?: ViewMaintenanceDefinition;
     schemaView?: SchemaViewDefinition;
+    extension?: ViewExtensionDefinition;
     wiki?: {
         construction: "informational-wiki-v1";
         query: string;
@@ -305,6 +327,7 @@ export interface ViewDefinition {
     selector: ViewSourceSelector;
     maintenance?: ViewMaintenanceDefinition;
     schemaView?: SchemaViewDefinition;
+    extension?: ViewExtensionDefinition;
     wiki?: NonNullable<ViewDefinitionInput["wiki"]>;
     projectSummary?: NonNullable<ViewDefinitionInput["projectSummary"]>;
 }
@@ -394,6 +417,7 @@ export interface ViewReadRequest {
     corpusId: string;
     viewId: string;
     revisionId?: string;
+    includeContext?: boolean;
 }
 export interface ViewHistoryEntry {
     commitId: string;
@@ -442,6 +466,12 @@ export interface MemoryViewService
     listViewBuilds(corpusId: string): Promise<ViewBuildJob[]>;
     cancelViewBuild(request: ViewBuildJobRequest): Promise<ViewBuildJob>;
     retryViewBuild(request: ViewBuildJobRequest): Promise<ViewBuildJob>;
+    continueViewBuild(
+        request: ViewBuildContinuationRequest,
+    ): Promise<ViewBuildJob>;
+    refreshExtensionViews(request: {
+        corpusId: string;
+    }): Promise<ViewBuildJob[]>;
     getViewConflict(
         request: ViewConflictReadRequest,
     ): Promise<ViewMergeConflict | undefined>;
@@ -511,7 +541,8 @@ export interface ViewBuildSnapshot {
         | "informational-wiki-v1"
         | "informational-project-summary-v1"
         | "topics-v1"
-        | "schema-defined-v1";
+        | "schema-defined-v1"
+        | "extension-v1";
     model: string;
     fingerprint: string;
     publicationPolicy?: ViewEffectivePublicationPolicy;
@@ -534,7 +565,8 @@ export interface ViewSynthesisOutput {
         | "projectSummary"
         | "chronology"
         | "knowledgePages"
-        | "schemaAnswers";
+        | "schemaAnswers"
+        | "extensionArtifact";
     missingEvidence: string[];
     inventory?: ViewFactInventory;
     inventoryAudit?: ViewInventoryAudit;
@@ -772,6 +804,42 @@ export type ViewBuildResultState =
     | "cancelled"
     | "interrupted";
 export interface ViewBuildTargetResult {
+    eligibility?: ViewEligibilityReceipt;
+    providerAttempts?: Array<{
+        stage: string;
+        state: "started" | "returned" | "failed";
+        promptFingerprint: string;
+        reason?: string;
+        schemaFingerprint?: string;
+        output?: string;
+        usage?: import("./viewExtensionTypes.js").ViewJsonValue;
+    }>;
+    providerCheckpoints?: import("./viewExtensionTypes.js").ViewProviderCheckpoint[];
+    providerCandidates?: import("./viewExtensionTypes.js").ViewProviderCandidate[];
+    providerRequests?: Array<{
+        id: string;
+        stage: string;
+        outerAttempt: number;
+        state: "started" | "returned" | "failed";
+        requestFingerprint: string;
+        reservation: import("@typeagent/aiclient").RequestBudgetReceipt;
+        at: string;
+        finishedAt?: string;
+        elapsedMs?: number;
+        status?: number;
+    }>;
+    providerLimits?: import("./viewExtensionTypes.js").ViewJsonValue;
+    providerBudgetElapsedMs?: number;
+    providerBudgetAmendments?: Array<{
+        at: string;
+        previous: import("./viewExtensionTypes.js").ViewJsonValue;
+        current: import("./viewExtensionTypes.js").ViewJsonValue;
+    }>;
+    continuations?: Array<{
+        at: string;
+        actor: string;
+        previousState: ViewBuildJob["state"];
+    }>;
     wikiConsolidation?: WikiConsolidationReceipt;
     viewId: string;
     snapshot: ViewBuildSnapshot;
@@ -873,6 +941,9 @@ export interface ViewSearchMatch {
 export interface ViewBuildJobRequest {
     corpusId: string;
     jobId: string;
+}
+export interface ViewBuildContinuationRequest extends ViewBuildJobRequest {
+    expectedHead: string | null;
 }
 export interface ViewEditOperation {
     id: string;

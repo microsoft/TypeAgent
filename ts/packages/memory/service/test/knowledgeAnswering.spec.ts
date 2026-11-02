@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { FileMemoryService } from "../src/fileMemoryService.js";
+import { answerEvidenceForReader } from "../src/integratedAnswerReader.js";
 import {
     indexedLocator,
     parseIndexedLocator,
@@ -14,9 +15,11 @@ import {
 } from "../src/indexedFragments.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { hydrateSchemaAnswers } from "../src/schemaViewSynthesis.js";
-import type { AnswerEvidence, IndexedFragmentRequest } from "../src/types.js";
+import type { IndexedFragmentRequest } from "../src/types.js";
 import type { ViewBuildJob, ViewSynthesisAdapter } from "../src/viewTypes.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+
+type ReaderEvidence = ReturnType<typeof answerEvidenceForReader>;
 
 class AnsweringIndexedCorpus extends FakeSemanticCorpusIndex {
     public async readFragments(request: IndexedFragmentRequest) {
@@ -77,7 +80,7 @@ class AnsweringIndexedCorpus extends FakeSemanticCorpusIndex {
 describe("service source-plus-view answer integration", () => {
     let root: string;
     let service: FileMemoryService;
-    let readerInputs: AnswerEvidence[][];
+    let readerInputs: ReaderEvidence[][];
     let discoveryGate: Promise<void> | undefined;
     let discoveryStarted: (() => void) | undefined;
 
@@ -96,7 +99,7 @@ describe("service source-plus-view answer integration", () => {
                 if (typeof content !== "string")
                     throw new Error("Reader must receive serialized evidence");
                 const input = JSON.parse(content) as {
-                    evidence: AnswerEvidence[];
+                    evidence: ReaderEvidence[];
                     candidates?: unknown;
                 };
                 readerInputs.push(input.evidence);
@@ -522,6 +525,7 @@ describe("service source-plus-view answer integration", () => {
         expect(derived).toMatchObject({
             kind: "derived",
             selectedValue: "Morgan",
+            influencingSourceCount: 1,
             reference: {
                 viewId: current.viewId,
                 revisionId: current.revisionId,
@@ -533,6 +537,7 @@ describe("service source-plus-view answer integration", () => {
             throw new Error(
                 "Published derived evidence did not reach the reader",
             );
+        expect(derived).not.toHaveProperty("influencingSourceIds");
         expect(derived.supportingEvidenceIds.length).toBeGreaterThan(0);
         for (const id of derived.supportingEvidenceIds) {
             const original = readerInputs[0].find((item) => item.id === id);
@@ -550,9 +555,14 @@ describe("service source-plus-view answer integration", () => {
             expect(result.citations).toContainEqual(original.source);
         }
         expect(result.derivedReferences).toContainEqual(derived.reference);
+        const suppliedEvidence =
+            result.readerContext?.integratedAnswer?.suppliedEvidence;
         expect(
-            result.readerContext?.integratedAnswer?.suppliedEvidence,
-        ).toEqual(readerInputs[0]);
+            suppliedEvidence?.find((item) => item.kind === "derived"),
+        ).toMatchObject({ influencingSourceIds: ["captured"] });
+        expect(suppliedEvidence?.map(answerEvidenceForReader)).toEqual(
+            readerInputs[0],
+        );
         expect(result.warnings).toEqual([]);
     }, 30000);
 
