@@ -1312,6 +1312,12 @@ shutdown. Full-input limits and stopped retries remain enforced; changed
 evidence or a successful explicit retry clears the diagnostic. Unexpected
 schema-maintenance errors, including exhausted head/version conflicts, still
 fail shutdown.
+
+For explicit or schema-reconciliation builds, wait for a successful terminal
+build receipt before capturing the exact head, version and revision to publish.
+An answered page alone is not a completion barrier: the final build receipt can
+advance the history head without changing the view revision.
+
 Shutdown cancels their linked work before releasing storage. A provider that
 ignores cancellation must still be drained before storage ownership is released.
 
