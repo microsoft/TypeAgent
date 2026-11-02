@@ -417,6 +417,7 @@ export interface ViewReadRequest {
     corpusId: string;
     viewId: string;
     revisionId?: string;
+    includeContext?: boolean;
 }
 export interface ViewHistoryEntry {
     commitId: string;

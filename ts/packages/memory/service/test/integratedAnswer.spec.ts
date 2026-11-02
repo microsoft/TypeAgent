@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import type { ChatModel } from "@typeagent/aiclient";
-import { runWithSearchTiming } from "@typeagent/knowpro";
+import {
+    runWithSearchTiming,
+    runWithSearchCancellation,
+} from "@typeagent/knowpro";
 import {
     answerIntegratedEvidence,
     type IntegratedAnswerHost,
@@ -124,6 +127,32 @@ function fixture(
     };
     return { host, model, calls };
 }
+
+test("cancellation reaches the managed integrated reader as the fifth model argument", async () => {
+    const { host, model } = fixture();
+    const controller = new AbortController();
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    const reason = new Error("Caller cancelled the foreground answer");
+    model.complete = async (_prompt, _usage, _schema, _log, signal) => {
+        expect(signal).toBe(controller.signal);
+        entered();
+        return new Promise((_resolve, reject) => {
+            signal?.addEventListener("abort", () => reject(signal.reason), {
+                once: true,
+            });
+        });
+    };
+    const answer = runWithSearchCancellation(controller.signal, () =>
+        answerIntegratedEvidence(request, host, { model }),
+    );
+    const rejected = expect(answer).rejects.toBe(reason);
+    await started;
+    controller.abort(reason);
+    await rejected;
+});
 
 describe("parallel answer retrieval", () => {
     test("views start before originals finish and preserve the prepared evidence", async () => {

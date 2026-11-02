@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { randomUUID } from "node:crypto";
 
 import {
     graphQueryRequestSchema,
@@ -834,8 +835,8 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return this.service.search(request);
     }
 
-    public answer(request: MemoryAnswerRequest) {
-        return this.service.answer(request);
+    public answer(request: MemoryAnswerRequest, signal?: AbortSignal) {
+        return this.service.answer(request, signal);
     }
 
     public understand(
@@ -1654,11 +1655,15 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
         );
     }
 
-    public answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult> {
+    public answer(
+        request: MemoryAnswerRequest,
+        signal?: AbortSignal,
+    ): Promise<MemoryAnswerResult> {
         return this.invoke(
             memoryToolNames.answer,
             answerRequestSchema.parse(request),
             answerResultSchema,
+            signal === undefined ? {} : { signal },
         );
     }
 
@@ -1804,10 +1809,10 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
 
 function createTransport(config: MemoryMcpTransportConfig): MemoryMcpTransport {
     if (config.kind === "http") {
+        const headers = new Headers(config.headers);
+        headers.set("X-TypeAgent-Client-Id", randomUUID());
         return new StreamableHTTPClientTransport(new URL(config.url), {
-            ...(config.headers === undefined
-                ? {}
-                : { requestInit: { headers: config.headers } }),
+            requestInit: { headers },
             ...(config.timeoutMs === undefined
                 ? {}
                 : {

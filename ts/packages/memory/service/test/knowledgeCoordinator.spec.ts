@@ -107,6 +107,7 @@ test.each([0, 11])(
             { length: previousCalls },
             () => Date.now(),
         );
+
         let modelCalls = 0;
         f.host.discover = async (_input, _signal, reserveRepair) => {
             modelCalls++;
@@ -811,5 +812,33 @@ test("empty ready scope succeeds without inventing any questions", async () => {
         expect(f.discoveries()).toBe(0);
     } finally {
         await f.coordinator.close();
+    }
+});
+
+test("host ceiling prevents scheduled discovery without rewriting stored policy or blocking an explicit checkpoint", async () => {
+    const f = fixture();
+    const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+    clock.useFakeTimers();
+    f.host.automaticDiscovery = false;
+    try {
+        f.coordinator.schedule("corpus");
+        await f.coordinator.update({
+            corpusId: "corpus",
+            policy: "sourceObserved",
+        });
+        await clock.advanceTimersByTimeAsync(2000);
+        expect(f.state().discovery.policy).toBe("sourceObserved");
+        expect(f.discoveries()).toBe(0);
+        expect(f.state().discovery.receipts).toEqual([]);
+        const checkpoint = await f.coordinator.create({ corpusId: "corpus" });
+        const completed = await f.coordinator.wait({
+            corpusId: "corpus",
+            checkpointId: checkpoint.checkpointId,
+        });
+        expect(completed.state).toBe("ready");
+        expect(f.discoveries()).toBe(1);
+    } finally {
+        await f.coordinator.close();
+        clock.useRealTimers();
     }
 });

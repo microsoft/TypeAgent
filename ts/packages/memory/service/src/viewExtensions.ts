@@ -30,6 +30,7 @@ import {
 } from "./viewContent.js";
 
 export class ViewExtensionUnavailable extends Error {}
+export class ViewExtensionDeferred extends Error {}
 
 export { viewHash as viewExtensionDigest } from "./viewContent.js";
 
@@ -219,6 +220,10 @@ export function validateExtensionDefinition(
             "Extension views require an installed provider definition",
         );
     if (!extension) return;
+    if ("provider" in extension || "configuration" in extension)
+        throw new ViewExtensionUnavailable(
+            "Legacy managed-provider definitions require an explicit rebuild",
+        );
     if (
         definition.viewId !==
         extensionViewId(
@@ -355,6 +360,13 @@ export class ViewExtensionRegistry {
                     "Unsupported provider API version",
                 );
             assertProviderIdentity(descriptor.identity);
+            if (
+                descriptor.modelIdentity !== undefined &&
+                (typeof descriptor.modelIdentity !== "string" ||
+                    !descriptor.modelIdentity.trim() ||
+                    descriptor.modelIdentity.length > 2000)
+            )
+                throw new Error("Invalid provider model identity");
             assertViewJson(descriptor.outputSchema);
             validateSchema(descriptor.outputSchema);
             if (
@@ -472,6 +484,13 @@ export class ViewExtensionRegistry {
 
     public resolve(input: ViewBuildSnapshot): ViewExtensionProvider {
         const definition = input.definition.extension;
+        if (
+            (input.pipeline as string) === "host-defined-v1" ||
+            (definition && "provider" in definition)
+        )
+            throw new ViewExtensionUnavailable(
+                "Legacy managed-provider records require an explicit rebuild; automatic migration is not supported",
+            );
         const provider =
             definition && this.installed.get(definition.providerId);
         if (
@@ -510,10 +529,40 @@ export class ViewExtensionRegistry {
             );
     }
 
+    public modelIdentity(definition: ViewDefinitionInput): string | undefined {
+        return definition.extension
+            ? this.installed.get(definition.extension.providerId)?.descriptor
+                  .modelIdentity
+            : undefined;
+    }
+
+    public async validateContent(
+        input: ViewBuildSnapshot,
+        content: ExtensionViewContent,
+    ): Promise<void> {
+        if (content.construction !== "extension-v1")
+            throw new ViewExtensionUnavailable(
+                "Legacy managed-provider content requires an explicit rebuild",
+            );
+        const provider = this.resolve(input);
+        if (
+            viewHash(content.provider) !==
+            viewHash(provider.descriptor.identity)
+        )
+            throw new ViewExtensionUnavailable(
+                "Extension content provider identity changed",
+            );
+        await provider.validateContent?.(
+            structuredClone(input),
+            structuredClone(content),
+        );
+    }
+
     public async generate(
         input: ViewBuildSnapshot,
         context: ViewProviderContext,
     ): Promise<ViewSynthesisOutput> {
+        await context.assertEligible?.();
         await this.authorize(input, "build");
         const provider = this.resolve(input);
         const prepared = await provider.prepare(structuredClone(input));
@@ -524,6 +573,7 @@ export class ViewExtensionRegistry {
             prepared,
             context,
         );
+        await context.assertEligible?.();
         assertViewJson(content.payload);
         validatePayload(provider.descriptor.outputSchema, content.payload);
         if (
@@ -538,6 +588,7 @@ export class ViewExtensionRegistry {
                 "Invalid provider artifact identity or output overflow",
             );
         validateExtensionContent(input, content);
+        await this.validateContent(input, content);
         await context.checkpoint("constructed");
         await this.authorize(input, "accept");
         const relationships: ViewRelationshipInput[] = content.evidence.flatMap(

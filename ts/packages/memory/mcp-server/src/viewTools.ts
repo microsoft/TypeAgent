@@ -270,6 +270,9 @@ export function registerViewTools(
                         ...(request.revisionId !== undefined
                             ? { revisionId: request.revisionId }
                             : {}),
+                        ...(request.includeContext !== undefined
+                            ? { includeContext: request.includeContext }
+                            : {}),
                         offset: request.offset,
                         digest: request.digest,
                         projection: request.projection,

@@ -6,6 +6,10 @@ import {
     type WebStandardStreamableHTTPServerTransportOptions,
 } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import {
+    CancelledNotificationSchema,
+    JSONRPCRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import type { MemoryService } from "@typeagent/memory-service";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
@@ -59,6 +63,7 @@ export class MemoryServiceHost {
         const bearerToken =
             options.bearerToken ?? randomBytes(32).toString("base64url");
         const activeServers = new Set<MemoryMcpServer>();
+        const cancellations = new Map<string, AbortController>();
         const appSessions =
             (options.previews ?? memoryPreviewsEnabled())
                 ? new MemoryAppSessions(
@@ -126,17 +131,27 @@ export class MemoryServiceHost {
                     await writeWebResponse(response, webResponse);
                     return;
                 }
-                const transport = new WebStandardStreamableHTTPServerTransport({
-                    sessionIdGenerator: undefined,
-                    enableJsonResponse: false,
-                } as unknown as WebStandardStreamableHTTPServerTransportOptions);
-                const mcpServer = new MemoryMcpServer(service, {
-                    previews: false,
-                });
-                activeServers.add(mcpServer);
-                mcpServer.server.server.onerror = (error) =>
-                    options.onError?.(error);
+                const cancellation = beginStatelessRequest(
+                    request.headers,
+                    parsedBody,
+                    response,
+                    cancellations,
+                );
+                if (!cancellation) return;
+                let mcpServer: MemoryMcpServer | undefined;
                 try {
+                    const transport =
+                        new WebStandardStreamableHTTPServerTransport({
+                            sessionIdGenerator: undefined,
+                            enableJsonResponse: false,
+                        } as unknown as WebStandardStreamableHTTPServerTransportOptions);
+                    mcpServer = new MemoryMcpServer(service, {
+                        previews: false,
+                        requestSignal: cancellation.signal,
+                    });
+                    activeServers.add(mcpServer);
+                    mcpServer.server.server.onerror = (error) =>
+                        options.onError?.(error);
                     await mcpServer.start(transport as unknown as Transport);
                     const webResponse = await transport.handleRequest(
                         new Request(requestUrl, {
@@ -149,8 +164,11 @@ export class MemoryServiceHost {
                     webResponse.headers.set("connection", "close");
                     await writeWebResponse(response, webResponse);
                 } finally {
-                    activeServers.delete(mcpServer);
-                    await mcpServer.close();
+                    cancellation.dispose();
+                    if (mcpServer) {
+                        activeServers.delete(mcpServer);
+                        await mcpServer.close();
+                    }
                 }
             } catch (error) {
                 options.onError?.(
@@ -218,6 +236,74 @@ export class MemoryServiceHost {
         })();
         return this.closePromise;
     }
+}
+
+function beginStatelessRequest(
+    headers: IncomingHttpHeaders,
+    body: unknown,
+    response: ServerResponse,
+    cancellations: Map<string, AbortController>,
+) {
+    const clientId = headers["x-typeagent-client-id"];
+    if (
+        clientId !== undefined &&
+        (typeof clientId !== "string" ||
+            !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(
+                clientId,
+            ))
+    ) {
+        response.writeHead(400, { "content-type": "application/json" });
+        response.end(
+            JSON.stringify({ error: "Invalid memory client identity" }),
+        );
+        return;
+    }
+    const notification = CancelledNotificationSchema.safeParse(body);
+    const key = (id: string | number) =>
+        JSON.stringify([clientId?.toLowerCase(), id]);
+    if (
+        clientId &&
+        notification.success &&
+        notification.data.params.requestId !== undefined
+    ) {
+        cancellations
+            .get(key(notification.data.params.requestId))
+            ?.abort(
+                new Error(
+                    notification.data.params.reason ??
+                        "Caller cancelled the memory request",
+                ),
+            );
+        response.writeHead(202).end();
+        return;
+    }
+    const request = JSONRPCRequestSchema.safeParse(body);
+    const requestKey =
+        clientId && request.success ? key(request.data.id) : undefined;
+    if (requestKey && cancellations.has(requestKey)) {
+        response.writeHead(409, { "content-type": "application/json" });
+        response.end(
+            JSON.stringify({
+                error: "Memory request identity is already active",
+            }),
+        );
+        return;
+    }
+    const controller = new AbortController();
+    if (requestKey) cancellations.set(requestKey, controller);
+    const disconnected = () => {
+        if (!response.writableEnded)
+            controller.abort(new Error("Memory client disconnected"));
+    };
+    response.once("close", disconnected);
+    return {
+        signal: controller.signal,
+        dispose() {
+            response.off("close", disconnected);
+            if (requestKey) cancellations.delete(requestKey);
+            controller.abort();
+        },
+    };
 }
 
 function toWebHeaders(headers: IncomingHttpHeaders): Headers {

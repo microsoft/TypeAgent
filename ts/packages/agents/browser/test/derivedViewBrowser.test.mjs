@@ -391,7 +391,6 @@ iframe.srcdoc = html; window.appBridge = bridge;
                 configFile: false,
                 cacheDir: path.join(root, "vite-cache"),
                 server: {
-                    watch: null,
                     host: "127.0.0.1",
                     port: 0,
                     watch: {

@@ -92,6 +92,46 @@ values and `type: "union"` with 2–8 variants. For a nullable field, use a stri
 variant and `{ type: "null" }`; no opaque JSON string or sentinel is necessary.
 Both strict wire codecs and runtime validation enforce these contracts.
 
+### Managed execution and validation
+
+Providers may set `descriptor.modelIdentity` to a nonempty identifier for the
+admitted model configuration. It participates in the retained input fingerprint;
+changing it prevents an in-flight build or continuation from mixing model
+configurations. Omitting it preserves the existing extension identity behavior.
+
+The supplied context includes `assertEligible()`, which rechecks the exact
+source snapshot and current provider authorization. The host also performs
+these checks inside queued model admission, after model completion, and before
+checkpoint/candidate writes and construction acceptance. Work uses the existing
+shared maintenance scheduler, request accounting and durable extension journal.
+
+An optional `provider.validateContent(input, content)` can reconstruct and
+validate domain-specific artifacts beyond schema and fidelity checks. It runs
+before acceptance and again on exact reads, including cold reopen, and before
+publication. A failed validation never falls back to another artifact or
+regenerates content during a read. Independent generation and review stages
+remain provider-owned and can use existing checkpoint/candidate receipts.
+Construction may throw `ViewExtensionDeferred` to retain a blocked target;
+other construction failures remain failures and never produce accepted content.
+
+Explicit `publication: false` remains draft-only, including informational
+builds, edits and restart recovery. Exact reads can set `includeContext: false`
+to omit related-article and redirect expansion; that flag does not bypass
+authorization or content validation. `automaticKnowledgeDiscovery: false`
+disables scheduled knowledge discovery even when a retained corpus policy
+would otherwise permit it; explicit operations remain available.
+
+Unmerged legacy managed-provider records (`host-defined-v1`, nested
+`extension.provider`/`configuration`, or extension content without
+`construction: "extension-v1"`) are incompatible with this canonical contract.
+They require an explicit rebuild. No automatic migration, revision/grant
+rewriting or reinterpretation is performed.
+
+Foreground `answer(request, signal?)` accepts an optional abort signal. MCP
+request cancellation reaches the same service boundary, prevents a completed
+answer from returning after cancellation, and leaves background jobs intact.
+The typed in-process and MCP clients forward the same optional signal.
+
 ### Qualification, automatic refresh and accounted continuation
 
 Static and native decision-model qualification persist distinct `eligible`,
@@ -1328,6 +1368,12 @@ shutdown. Full-input limits and stopped retries remain enforced; changed
 evidence or a successful explicit retry clears the diagnostic. Unexpected
 schema-maintenance errors, including exhausted head/version conflicts, still
 fail shutdown.
+
+For explicit or schema-reconciliation builds, wait for a successful terminal
+build receipt before capturing the exact head, version and revision to publish.
+An answered page alone is not a completion barrier: the final build receipt can
+advance the history head without changing the view revision.
+
 Shutdown cancels their linked work before releasing storage. A provider that
 ignores cancellation must still be drained before storage ownership is released.
 
