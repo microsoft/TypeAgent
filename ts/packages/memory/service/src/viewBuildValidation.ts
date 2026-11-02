@@ -13,6 +13,7 @@ import { validateIsoTimestamp } from "./timestampValidation.js";
 import { emptyProjectBrief } from "./projectBrief.js";
 import { validateProjectSelector } from "./informationalProject.js";
 import { emptySchemaView } from "./schemaView.js";
+import { validateExtensionDefinition } from "./viewExtensions.js";
 
 export function resolveTopicBuildTimeout(value = 3_000_000): number {
     if (!Number.isSafeInteger(value) || value < 1 || value > 3_600_000)
@@ -29,6 +30,35 @@ export function parseViewDraftCapability(
     if (value === undefined || value === "true" || value === "1") return true;
     if (value === "false" || value === "0") return false;
     throw new Error(`${setting} must be true or false`);
+}
+
+function validateExtensionBuildTarget(
+    target: ViewBuildRequest["targets"][number],
+): void {
+    validateExtensionDefinition(target.definition);
+    assertViewIdentifier("view ID", target.definition.viewId);
+    if (
+        !Number.isSafeInteger(target.expectedVersion) ||
+        target.expectedVersion < 0
+    )
+        throw new Error("Invalid extension target version");
+    const selector = target.definition.selector;
+    const maximum = selector.kind === "sourceManifest" ? 4096 : 32;
+    if (
+        !["sources", "sourceManifest"].includes(selector.kind) ||
+        !Array.isArray(selector.sources) ||
+        !selector.sources.length ||
+        selector.sources.length > maximum ||
+        new Set(selector.sources.map((source) => source.sourceId)).size !==
+            selector.sources.length
+    )
+        throw new Error(
+            "Invalid or overflowing complete extension source selection",
+        );
+    for (const source of selector.sources) {
+        assertViewIdentifier("source ID", source.sourceId);
+        assertViewIdentifier("revision ID", source.revisionId);
+    }
 }
 
 export function validateBuildRequest(request: ViewBuildRequest): void {
@@ -71,6 +101,13 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
             )
         )
             throw new Error("Unsupported build target");
+        if (target.definition?.kind === "extension") {
+            validateExtensionBuildTarget(target);
+            if (ids.has(target.definition.viewId))
+                throw new Error("Duplicate build target");
+            ids.add(target.definition.viewId);
+            continue;
+        }
         validateProjectSelector(target.definition);
         validateViewDraft({
             corpusId: request.corpusId,
@@ -78,61 +115,45 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
             expectedVersion: target.expectedVersion,
             expectedHead: request.expectedHead,
             definition: target.definition,
-            content: target.definition?.extension
-                ? {
-                      kind: "extension",
-                      provider: target.definition.extension.provider,
-                      title: "Selection validation",
-                      data: null,
-                      sections: [
-                          {
-                              id: "selection",
-                              role: "context",
-                              heading: "Selection",
-                              body: "Selected evidence",
-                          },
-                      ],
-                      citations: [],
-                  }
-                : target.definition?.schemaView
-                  ? emptySchemaView(
-                        target.definition.schemaView,
-                        target.definition.selector.sources,
-                    )
-                  : target.definition?.wiki
-                    ? {
-                          kind: "wiki",
-                          construction: "informational-wiki-v1",
-                          status: "partial",
-                          title: "Selection validation",
-                          summary: "Selection validation summary",
-                          sections: [
-                              {
-                                  id: target.definition.viewId,
-                                  role: "page",
-                                  heading: "Selection validation",
-                                  body: "Selection validation",
-                                  details: {
-                                      kind: "page",
-                                      construction: "informational-wiki-v1",
-                                      taxonomy: "concept",
-                                      note: "",
-                                      mergedPageIds: [],
-                                  },
-                              },
-                          ],
-                          index: [
-                              {
-                                  pageId: target.definition.viewId,
-                                  title: "Selection validation",
-                                  taxonomy: "concept",
-                              },
-                          ],
-                          citations: [],
-                      }
-                    : target.definition?.projectSummary
-                      ? emptyProjectBrief()
-                      : selectionValidationContent(target.definition?.kind),
+            content: target.definition?.schemaView
+                ? emptySchemaView(
+                      target.definition.schemaView,
+                      target.definition.selector.sources,
+                  )
+                : target.definition?.wiki
+                  ? {
+                        kind: "wiki",
+                        construction: "informational-wiki-v1",
+                        status: "partial",
+                        title: "Selection validation",
+                        summary: "Selection validation summary",
+                        sections: [
+                            {
+                                id: target.definition.viewId,
+                                role: "page",
+                                heading: "Selection validation",
+                                body: "Selection validation",
+                                details: {
+                                    kind: "page",
+                                    construction: "informational-wiki-v1",
+                                    taxonomy: "concept",
+                                    note: "",
+                                    mergedPageIds: [],
+                                },
+                            },
+                        ],
+                        index: [
+                            {
+                                pageId: target.definition.viewId,
+                                title: "Selection validation",
+                                taxonomy: "concept",
+                            },
+                        ],
+                        citations: [],
+                    }
+                  : target.definition?.projectSummary
+                    ? emptyProjectBrief()
+                    : selectionValidationContent(target.definition?.kind),
             relationships: [],
         });
         const id = target.definition.viewId;

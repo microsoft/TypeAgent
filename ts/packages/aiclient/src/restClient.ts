@@ -8,9 +8,10 @@ import { otel } from "@typeagent/telemetry";
 import type { EndpointPool, EndpointPoolMember } from "./endpointPool.js";
 import type { ModelRequestConstraints } from "@typeagent/config";
 import { checkSerializedRequestConstraints } from "./requestConstraints.js";
+import { getOutputCapacity } from "./outputCapacity.js";
 import {
     RequestAdmissionError,
-    reserveSerializedRequest,
+    reserveSerializedRequestForDispatch,
     bindRequestBudgetScope,
 } from "./requestBudget.js";
 import {
@@ -290,23 +291,72 @@ async function callFetch(
     throttler?: FetchThrottler,
     requestConstraints?: ModelRequestConstraints,
     onAttempt?: () => void,
+    reserveCapacityRetry: () => boolean = () => true,
+    capacityOwner?: object,
 ) {
+    const capacity = getOutputCapacity(
+        url,
+        options,
+        requestConstraints,
+        capacityOwner,
+    );
     const safeOptions = redactRequestBody(options);
-    const send = bindRequestBudgetScope(() => {
-        safeOptions?.signal?.throwIfAborted();
-        if (requestConstraints) {
-            if (typeof safeOptions?.body !== "string")
-                throw new RequestAdmissionError(
-                    "Configured request constraints require a serialized body",
+    const send = bindRequestBudgetScope(async () => {
+        const started = performance.now();
+        let current =
+            safeOptions && capacity ? capacity.apply(safeOptions) : safeOptions;
+        for (let attempt = 0; ; attempt++) {
+            current?.signal?.throwIfAborted();
+            if (requestConstraints) {
+                if (typeof current?.body !== "string")
+                    throw new RequestAdmissionError(
+                        "Configured request constraints require a serialized body",
+                    );
+                checkSerializedRequestConstraints(
+                    current.body,
+                    requestConstraints,
                 );
-            checkSerializedRequestConstraints(
-                safeOptions.body,
-                requestConstraints,
+            }
+            const finish = await reserveSerializedRequestForDispatch(
+                current,
+                requestConstraints?.outputTokens,
             );
+            onAttempt?.();
+            const attemptStarted = performance.now();
+            let response: Response | undefined;
+            try {
+                const remaining =
+                    timeout === undefined
+                        ? undefined
+                        : Math.max(1, timeout - (performance.now() - started));
+                response = await fetchWithTimeout(url, current, remaining);
+                await finish?.({
+                    state: "returned",
+                    status: response?.status,
+                    at: new Date().toISOString(),
+                    elapsedMs: performance.now() - attemptStarted,
+                });
+            } catch (error) {
+                await finish?.({
+                    state: "failed",
+                    at: new Date().toISOString(),
+                    elapsedMs: performance.now() - attemptStarted,
+                });
+                throw error;
+            }
+            if (!response || !capacity || !current || attempt > 0)
+                return response;
+            const reduced = await capacity.reduce(response, current);
+            if (!reduced) return response;
+            debugRetry(
+                `capacity retry on ${hostOf(url)}: output=${reduced.previousTokens}->${reduced.tokens} reason=${reduced.reason}`,
+            );
+            if (timeout !== undefined && performance.now() - started >= timeout)
+                return response;
+            if (!reserveCapacityRetry()) return response;
+            await response.body?.cancel();
+            current = capacity.apply(current);
         }
-        reserveSerializedRequest(safeOptions, requestConstraints?.outputTokens);
-        onAttempt?.();
-        return fetchWithTimeout(url, safeOptions, timeout);
     });
     return throttler ? throttler(send) : send();
 }
@@ -398,6 +448,7 @@ export async function fetchWithRetry(
     throttler?: FetchThrottler,
     requestConstraints?: ModelRequestConstraints,
     onAttempt?: () => void,
+    capacityOwner?: object,
 ) {
     retryMaxAttempts ??= 3;
     retryPauseMs ??= 1000;
@@ -411,6 +462,7 @@ export async function fetchWithRetry(
     let retryCount = 0;
     const startTime: number = Date.now();
     const host = hostOf(url);
+    let capacityRetried = false;
     try {
         while (true) {
             const result = await callFetch(
@@ -420,6 +472,12 @@ export async function fetchWithRetry(
                 throttler,
                 requestConstraints,
                 onAttempt,
+                () => {
+                    if (capacityRetried) return false;
+                    capacityRetried = true;
+                    return true;
+                },
+                capacityOwner,
             );
             if (result === undefined) {
                 throw noResponseError();
@@ -652,7 +710,10 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 function isAbortError(e: unknown): e is Error {
-    return e instanceof Error && e.name === "AbortError";
+    return (
+        (e instanceof Error || e instanceof DOMException) &&
+        e.name === "AbortError"
+    );
 }
 
 /**
@@ -744,6 +805,7 @@ async function fetchWithPool(
             settings.throttler,
             settings.requestConstraints,
             () => options?.onAttempt?.(member),
+            member,
         );
     }
 
@@ -756,6 +818,7 @@ async function fetchWithPool(
     const startTime = Date.now();
     let lastError: Result<Response> | undefined;
     let attempts = 0;
+    let capacityRetried = false;
 
     while (true) {
         const elapsed = Date.now() - startTime;
@@ -831,6 +894,12 @@ async function fetchWithPool(
                 member.settings.throttler,
                 member.settings.requestConstraints,
                 () => options?.onAttempt?.(member),
+                () => {
+                    if (capacityRetried) return false;
+                    capacityRetried = true;
+                    return true;
+                },
+                member,
             );
         } catch (e: any) {
             // If the caller's abort signal fired, propagate immediately

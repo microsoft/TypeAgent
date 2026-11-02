@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createLimiter } from "@typeagent/common-utils";
 import { recordSearchTiming, timeSearchStage } from "@typeagent/knowpro";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ChatModel } from "@typeagent/aiclient";
@@ -52,6 +51,20 @@ interface BuildLease {
 
 const buildLease = new AsyncLocalStorage<BuildLease>();
 
+export async function setMaintenanceBuildClass(
+    long: boolean,
+    signal: AbortSignal,
+): Promise<void> {
+    signal.throwIfAborted();
+    const lease = buildLease.getStore();
+    if (!lease || lease.long === long) return;
+    lease.release?.();
+    lease.release = undefined;
+    lease.long = long;
+    lease.release = await lease.acquire(signal);
+    signal.throwIfAborted();
+}
+
 interface WaitingBuild {
     long: boolean;
     eligible: () => boolean;
@@ -76,9 +89,14 @@ export async function yieldMaintenanceBuild(
     });
 }
 
-function createMaintenanceAdmission(capacity: number, priority: boolean) {
+function createMaintenanceAdmission(
+    capacity: number,
+    priority: boolean,
+    reserveShortSlot = false,
+) {
     const waiting: WaitingBuild[] = [];
     let active = 0;
+    let activeLong = 0;
     let shortBurst = 0;
     function dispatch() {
         while (active < capacity && waiting.length) {
@@ -95,6 +113,7 @@ function createMaintenanceAdmission(capacity: number, priority: boolean) {
             const [entry] = waiting.splice(index, 1);
             shortBurst = entry.long || native < 0 ? 0 : shortBurst + 1;
             active++;
+            if (entry.long) activeLong++;
             entry.admit();
         }
     }
@@ -116,7 +135,11 @@ function createMaintenanceAdmission(capacity: number, priority: boolean) {
             };
             const entry: WaitingBuild = {
                 long,
-                eligible,
+                eligible: () =>
+                    eligible() &&
+                    (!long ||
+                        !reserveShortSlot ||
+                        activeLong < Math.max(1, capacity - 1)),
                 admit: () => {
                     onAdmit?.();
                     signal?.removeEventListener("abort", abort);
@@ -125,6 +148,7 @@ function createMaintenanceAdmission(capacity: number, priority: boolean) {
                         if (released) return;
                         released = true;
                         active--;
+                        if (long) activeLong--;
                         dispatch();
                     });
                 },
@@ -155,6 +179,7 @@ export function createMaintenanceBuildScheduler(
     const { acquire, hasShortWaiter, wake } = createMaintenanceAdmission(
         builds,
         priority,
+        reserveShortSlot,
     );
     const corpora = new Map<string, object>();
     async function run<T>(
@@ -170,9 +195,10 @@ export function createMaintenanceBuildScheduler(
         const claim = () => {
             if (corpusId !== undefined) corpora.set(corpusId, owner);
         };
+        let lease: BuildLease;
         const acquireSlot = (signal?: AbortSignal) =>
-            acquire(long, signal, eligible, claim);
-        const lease: BuildLease = {
+            acquire(lease?.long ?? long, signal, eligible, claim);
+        lease = {
             long,
             release: await acquireSlot(),
             acquire: acquireSlot,
@@ -186,17 +212,11 @@ export function createMaintenanceBuildScheduler(
             else wake();
         }
     }
-    const native = createLimiter(
-        reserveShortSlot ? Math.max(1, builds - 1) : builds,
-    );
     return <T>(
         work: () => Promise<T>,
         long: boolean,
         corpusId?: string,
-    ): Promise<T> =>
-        reserveShortSlot && long
-            ? native(() => run(work, long, corpusId))
-            : run(work, long, corpusId);
+    ): Promise<T> => run(work, long, corpusId);
 }
 
 const extractionScheduler = new AsyncLocalStorage<MaintenanceModelScheduler>();

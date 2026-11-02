@@ -66,6 +66,8 @@ type ViewMethods = Pick<
     | "memoryListViewBuilds"
     | "memoryCancelViewBuild"
     | "memoryRetryViewBuild"
+    | "memoryContinueViewBuild"
+    | "memoryRefreshExtensionViews"
     | "memoryGetViewConflict"
     | "memoryResolveViewConflict"
 >;
@@ -211,6 +213,10 @@ export function createMemoryViewFunctions(
             views().listViewBuilds(corpusId),
         memoryCancelViewBuild: (request) => views().cancelViewBuild(request),
         memoryRetryViewBuild: (request) => views().retryViewBuild(request),
+        memoryContinueViewBuild: (request) =>
+            views().continueViewBuild(request),
+        memoryRefreshExtensionViews: (request) =>
+            views().refreshExtensionViews(request),
         memoryGetViewConflict: (request) => views().getViewConflict(request),
         memoryResolveViewConflict: (request) =>
             views().resolveViewConflict(request),

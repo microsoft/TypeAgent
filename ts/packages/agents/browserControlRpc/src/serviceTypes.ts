@@ -359,6 +359,12 @@ export type MemoryCenterInvokeFunctions = {
     memoryListViewBuilds(params: { corpusId: string }): Promise<ViewBuildJob[]>;
     memoryCancelViewBuild(params: ViewBuildJobRequest): Promise<ViewBuildJob>;
     memoryRetryViewBuild(params: ViewBuildJobRequest): Promise<ViewBuildJob>;
+    memoryContinueViewBuild(
+        params: import("@typeagent/memory-service").ViewBuildContinuationRequest,
+    ): Promise<ViewBuildJob>;
+    memoryRefreshExtensionViews(params: {
+        corpusId: string;
+    }): Promise<ViewBuildJob[]>;
     memoryGetViewConflict(
         params: ViewConflictReadRequest,
     ): Promise<ViewMergeConflict | undefined>;

@@ -3,6 +3,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { openai } from "@typeagent/aiclient";
+import { createLimiter } from "@typeagent/common-utils";
 import {
     createDocMemorySettings,
     type DocMemorySettings,
@@ -13,15 +14,6 @@ import {
     type MemoryPerformanceExperiment,
 } from "./memoryPerformanceExperiments.js";
 import { TranslationCache } from "./translationCache.js";
-import {
-    ViewProviderRegistry,
-    viewProviderInputReference,
-    type HostViewProvider,
-    type ViewProviderAuthorization,
-    type ViewProviderJson,
-    type ViewProviderResult,
-    type ViewProviderInputReference,
-} from "./viewProviders.js";
 import { ViewIndexPool } from "./viewIndexPool.js";
 import { IndexWarmupScheduler, type IndexWarmupJob } from "./indexWarmup.js";
 import {
@@ -107,7 +99,6 @@ import type {
 import { knowledgeLimits } from "./knowledgeTypes.js";
 import {
     createMaintenanceModelScheduler,
-    yieldMaintenanceBuild,
     resolveMaintenanceConcurrency,
     resolveMaintenanceBuildPriority,
     withMaintenanceExtraction,
@@ -369,6 +360,17 @@ import {
 } from "./integratedAnswer.js";
 import { MemoryUnderstanding } from "./understanding.js";
 import { UnderstandingStore } from "./understandingStore.js";
+import {
+    ViewExtensionRegistry,
+    ViewExtensionUnavailable,
+    expandViewManifest,
+} from "./viewExtensions.js";
+import {
+    derivedViewModule,
+    selectedDerivedViews,
+    validateDerivedModuleScope,
+} from "./viewExtensionUnderstanding.js";
+import type { ViewExtensionProvider } from "./viewExtensionTypes.js";
 import type {
     UnderstandingRequest,
     UnderstandingModuleRequest,
@@ -684,6 +686,10 @@ interface PreparedEventIndex {
 }
 
 export interface FileMemoryServiceOptions {
+    extensionDiscovery?: boolean;
+    sourceAuthorization?(
+        request: import("./types.js").MemorySourceAuthorizationRequest,
+    ): Promise<boolean>;
     performanceExperiments?: string;
     fastQueryModelEndpoint?: string;
     initialReaderModelEndpoint?: string;
@@ -722,9 +728,8 @@ export interface FileMemoryServiceOptions {
     informationalViews?: boolean;
     viewPublicationCheckpoint?: (point: "intent" | "index") => Promise<void>;
     viewSynthesisAdapter?: ViewSynthesisAdapter;
-    viewProviders?: readonly HostViewProvider[];
-    viewProviderModel?: { identity: string; model: ChatModel };
-    viewProviderAuthorization?: ViewProviderAuthorization;
+    extensionProviders?: readonly ViewExtensionProvider[];
+    extensionBuilds?: boolean;
     viewModelEndpoint?: string;
     /** Disable to retain raw-topic summaries instead of lazy curated concepts. */
     curatedTopics?: boolean;
@@ -751,6 +756,89 @@ function decisionTopicsEnabled(options: FileMemoryServiceOptions): boolean {
             "Decision topic curation cannot override a custom topic generator",
         );
     return enabled;
+}
+
+function exactViewPipeline(
+    kind: ViewBuildTarget["definition"]["kind"],
+): ViewBuildSnapshot["pipeline"] {
+    switch (kind) {
+        case "extension":
+            return "extension-v1";
+        case "schemaView":
+            return "schema-defined-v1";
+        case "timeline":
+            return "timeline-v1";
+        default:
+            return "troubleshooting-v1";
+    }
+}
+
+function validateExtensionActivation(options: FileMemoryServiceOptions): void {
+    if (options.extensionDiscovery === true && options.extensionBuilds !== true)
+        throw new Error(
+            "Opted-in extension discovery requires extension builds",
+        );
+}
+
+function assertCompleteSourceTemporalBounds(
+    learnedAt: string | undefined,
+    occurredAt: string | undefined,
+    bounds: ViewBuildRequest["bounds"],
+): void {
+    if (
+        (bounds?.learnedBefore &&
+            (!learnedAt ||
+                Date.parse(learnedAt) > Date.parse(bounds.learnedBefore))) ||
+        (bounds?.occurredFrom &&
+            (!occurredAt ||
+                Date.parse(occurredAt) < Date.parse(bounds.occurredFrom))) ||
+        (bounds?.occurredTo &&
+            (!occurredAt ||
+                Date.parse(occurredAt) > Date.parse(bounds.occurredTo)))
+    )
+        throw new ViewBuildStaleError(
+            "Selected complete source is outside the temporal bounds or lacks a required timestamp; no source truncation is applied",
+        );
+}
+
+function answerSourceCharacterSpan(
+    locator: string,
+    contentLength: number,
+): RegExpExecArray | null {
+    const chars = /^chars:(\d+)-(\d+)$/.exec(locator);
+    if (!chars) return null;
+    const start = Number(chars[1]),
+        end = Number(chars[2]);
+    if (
+        !Number.isSafeInteger(start) ||
+        !Number.isSafeInteger(end) ||
+        start < 0 ||
+        end <= start ||
+        end > contentLength
+    )
+        throw new Error("Answer support character locator is out of range");
+    return chars;
+}
+
+function extensionRequestBudget(
+    options: FileMemoryServiceOptions,
+): RequestBudgetLimits | undefined {
+    const budget =
+        options.informationalBudget ??
+        (options.extensionBuilds === true
+            ? options.maintenanceLimits?.requestBudget
+            : undefined);
+    if (
+        options.extensionBuilds === true &&
+        options.extensionProviders?.some(
+            (provider) => provider.model || provider.decisionModel,
+        ) &&
+        !budget
+    )
+        throw new Error(
+            "Model-backed extensions require a shared maintenance request budget",
+        );
+    return budget;
 }
 
 function configuredTopicCuration(
@@ -1324,6 +1412,12 @@ export class FileMemoryService
     implements MemoryService, MemoryViewService, MemoryTopicService
 {
     private readonly viewDrafts: boolean;
+    private readonly extensionBuilds: boolean;
+    private readonly extensionDiscovery: boolean;
+    private readonly extensionProviders: ViewExtensionRegistry;
+    private readonly sourceAuthorization: FileMemoryServiceOptions["sourceAuthorization"];
+    private readonly sourceAuthorizationLimiter = createLimiter(1);
+    private readonly jobReadLimiter = createLimiter(16);
     private readonly viewPublicationCheckpoint: FileMemoryServiceOptions["viewPublicationCheckpoint"];
     private readonly viewAdapter: ViewSynthesisAdapter;
     private readonly curatedTopics: boolean;
@@ -1684,11 +1778,6 @@ export class FileMemoryService
     private readonly maintenance: MaintenanceScheduler;
     private readonly maintenanceLimits: FileMemoryServiceOptions["maintenanceLimits"];
     private readonly maintenanceModels: MaintenanceModelScheduler;
-    private readonly viewProviders: ViewProviderRegistry;
-    private readonly viewProviderModel: FileMemoryServiceOptions["viewProviderModel"];
-    private readonly viewProviderAuthorization:
-        | ViewProviderAuthorization
-        | undefined;
     private readonly admissionPolicy: string;
     private readonly preparingIndexes = new Map<
         string,
@@ -1820,6 +1909,13 @@ export class FileMemoryService
         this.revisionTextCheckpoint = options.revisionTextCheckpoint;
         this.viewPublicationCheckpoint = options.viewPublicationCheckpoint;
         this.viewDrafts = options.viewDrafts !== false;
+        this.extensionBuilds = options.extensionBuilds === true;
+        this.extensionDiscovery = options.extensionDiscovery === true;
+        validateExtensionActivation(options);
+        this.sourceAuthorization = options.sourceAuthorization;
+        this.extensionProviders = new ViewExtensionRegistry(
+            options.extensionProviders,
+        );
         this.wikiModelEndpoint = options.viewModelEndpoint;
         this.curatedTopics = options.curatedTopics ?? true;
         this.decisionTopics = decisionTopicsEnabled(options);
@@ -1841,13 +1937,10 @@ export class FileMemoryService
         this.sourceSynopsesEnabled =
             options.sourceSynopses ?? options.informationalViews !== false;
         this.synopsisModel = options.sourceSynopsisModel;
+        const viewRequestBudget = extensionRequestBudget(options);
         this.wikiBudget = options.informationalBudget;
         this.informationalWikiEnabled =
             this.viewDrafts && options.informationalViews !== false;
-        const providers = this.configureViewProviders(options);
-        this.viewProviders = providers.registry;
-        this.viewProviderModel = providers.model;
-        this.viewProviderAuthorization = providers.authorization;
         const adapter =
             options.viewSynthesisAdapter ??
             createConfiguredViewSynthesisAdapter(
@@ -1873,8 +1966,8 @@ export class FileMemoryService
         this.viewBuilds = new ViewBuildRunner(
             this.viewAdapter,
             {
-                constructExtension: (job, result, signal) =>
-                    this.constructExtension(job, result, signal),
+                assertExtensionEligible: (input) =>
+                    this.recheckViewInput(input),
                 unchanged: (input) =>
                     this.unchangedInformationalInput(input, true),
                 canPrepareWikiAssessment: async (input) =>
@@ -2031,13 +2124,15 @@ export class FileMemoryService
                         }
                     }),
             },
-            this.wikiBudget,
+            viewRequestBudget,
             this.createTopicGenerator(),
             options.topicBuildTimeoutMs,
             maintenanceConcurrency.builds,
             options.maintenanceShortBuildReservation,
             options.wikiAssessmentConcurrency,
             prioritizeShortBuilds,
+            this.extensionProviders,
+            this.maintenanceModels,
         );
         this.viewIndexes = new ViewIndexPool(this.indexFactory);
         this.viewWarmup = new IndexWarmupScheduler(
@@ -2101,7 +2196,10 @@ export class FileMemoryService
                 this.knowledgeMaintenance.delete(corpusId);
                 this.scheduleSchemaMaintenance(corpusId);
                 const runtime = this.corpora.get(corpusId);
-                if (runtime) this.scheduleTopics(corpusId, runtime);
+                if (runtime) {
+                    this.scheduleTopics(corpusId, runtime);
+                    this.scheduleExtensions(corpusId, runtime);
+                }
                 this.scheduleWikiMaintenance(corpusId, "wiki");
                 this.scheduleWikiMaintenance(corpusId, "projects");
             },
@@ -2694,7 +2792,7 @@ export class FileMemoryService
             };
             const manifest: CorpusManifest = { corpus, sources: [] };
             await this.writeManifest(corpusId, manifest);
-            if (this.viewDrafts)
+            if (this.viewDrafts || this.extensionBuilds)
                 await this.viewStore.initializeViewPublicationPolicy(corpusId);
             const index = this.createIndex(corpusId);
             const runtime: CorpusRuntime = {
@@ -3130,7 +3228,19 @@ export class FileMemoryService
         const source = runtime.manifest.sources.find(
             (item) => item.sourceId === sourceId,
         );
-        return source === undefined ? undefined : this.toMemorySource(source);
+        if (!source) return undefined;
+        const revision = source.revisions.find(
+            (entry) => entry.revisionId === source.activeRevisionId,
+        );
+        if (
+            this.sourceAuthorization &&
+            (!revision || !(await this.sourceAllowed(source, revision, "read")))
+        )
+            return undefined;
+        const result = this.toMemorySource(source);
+        if (revision && !(await this.sourceAllowed(source, revision, "read")))
+            return undefined;
+        return result;
     }
 
     public async getSourceContent(
@@ -3149,19 +3259,22 @@ export class FileMemoryService
                     );
                     const revisionId =
                         request.revisionId ?? source?.activeRevisionId;
+                    const revision = source?.revisions.find(
+                        (entry) =>
+                            entry.revisionId === revisionId &&
+                            entry.state === "ready",
+                    );
                     if (
                         !source ||
                         !revisionId ||
                         source.activeRevisionId !== revisionId ||
-                        !source.revisions.some(
-                            (revision) =>
-                                revision.revisionId === revisionId &&
-                                revision.state === "ready",
-                        )
+                        !revision
                     )
                         throw new Error(
                             "Indexed source revision is unavailable or stale",
                         );
+                    if (!(await this.sourceAllowed(source, revision, "expand")))
+                        throw new Error("Source expansion is not authorized");
                     if (!runtime.index.resolveIndexedLocator)
                         throw new Error(
                             "Host does not support indexed-text citation resolution",
@@ -3171,6 +3284,10 @@ export class FileMemoryService
                         revisionId,
                         request.indexedLocator!,
                     );
+                    if (!(await this.sourceAllowed(source, revision, "expand")))
+                        throw new Error(
+                            "Source expansion authorization changed",
+                        );
                     return {
                         corpusId: request.corpusId,
                         sourceId: request.sourceId,
@@ -3198,6 +3315,8 @@ export class FileMemoryService
         if (revision === undefined) {
             throw new Error(`Unknown revision '${revisionId}'`);
         }
+        if (!(await this.sourceAllowed(source, revision, "read")))
+            throw new Error("Source content read is not authorized");
         const offset = request.offset ?? 0;
         const maxChars = Math.max(
             1,
@@ -3212,6 +3331,8 @@ export class FileMemoryService
         }
         const content = revision.content.slice(offset, offset + maxChars);
         const nextOffset = offset + content.length;
+        if (!(await this.sourceAllowed(source, revision, "read")))
+            throw new Error("Source read authorization changed");
         return {
             corpusId: request.corpusId,
             sourceId: request.sourceId,
@@ -3795,6 +3916,14 @@ export class FileMemoryService
         return this.reindex(corpusId, sourceId, signal);
     }
 
+    private readStoredJob(
+        filePath: string,
+    ): Promise<IngestionJobStatus | undefined> {
+        return this.jobReadLimiter(() =>
+            readJson<IngestionJobStatus>(filePath),
+        );
+    }
+
     public async getJob(
         jobId: string,
     ): Promise<IngestionJobStatus | undefined> {
@@ -3802,7 +3931,7 @@ export class FileMemoryService
         validateIdentifier("job ID", jobId);
         const job =
             this.jobs.get(jobId) ??
-            (await readJson<IngestionJobStatus>(this.jobPath(jobId)));
+            (await this.readStoredJob(this.jobPath(jobId)));
         if (!job) return undefined;
         return this.sourceJobRead(job);
     }
@@ -3834,7 +3963,7 @@ export class FileMemoryService
                 entries
                     .filter((entry) => entry.endsWith(".json"))
                     .map((entry) =>
-                        readJson<IngestionJobStatus>(
+                        this.readStoredJob(
                             path.join(
                                 this.rootDirectory,
                                 jobsDirectoryName,
@@ -3898,9 +4027,7 @@ export class FileMemoryService
             throw error;
         }
         for (const entry of entries.filter((name) => name.endsWith(".json"))) {
-            const job = await readJson<IngestionJobStatus>(
-                path.join(directory, entry),
-            );
+            const job = await this.readStoredJob(path.join(directory, entry));
             if (job?.corpusId !== corpusId || job.sourceId !== sourceId)
                 continue;
             await this.serializeJobWrite(job.jobId, async () => {
@@ -4288,13 +4415,38 @@ export class FileMemoryService
     public async search(
         request: MemorySearchRequest,
     ): Promise<MemorySearchResult> {
-        return this.foregroundRead(() =>
-            runWithSearchTiming(request.traceId, "service.documents", () =>
-                timeSearchStage("service.total", () =>
-                    this.searchDocuments(request),
-                ),
-            ),
-        );
+        return this.foregroundRead(async () => {
+            const result = await runWithSearchTiming(
+                request.traceId,
+                "service.documents",
+                () =>
+                    timeSearchStage("service.total", () =>
+                        this.searchDocuments(request),
+                    ),
+            );
+            if (
+                this.extensionBuilds &&
+                request.retrievalPolicy !== "sourcesOnly" &&
+                !request.sourceTypes?.length &&
+                !request.tags?.length &&
+                !request.dateFrom &&
+                !request.dateTo
+            ) {
+                const views = await this.eligibleAnswerViews({
+                    corpusId: request.corpusId,
+                    question: request.query,
+                    ...(request.sourceIds
+                        ? { sourceIds: request.sourceIds }
+                        : {}),
+                });
+                result.derivedViews = views.matches.filter(
+                    (item) =>
+                        item.kind === "derived" && item.reference.extension,
+                );
+                result.omittedViewCandidates = views.omittedCandidates;
+            }
+            return result;
+        });
     }
 
     private async searchDocuments(
@@ -4312,6 +4464,13 @@ export class FileMemoryService
         }
         return this.enqueueDocumentRead(request.corpusId, async (runtime) => {
             const limit = Math.max(1, Math.min(request.limit ?? 10, 100));
+            const authorized = this.sourceAuthorization
+                ? await this.authorizedSourceScope(
+                      runtime,
+                      request.sourceIds,
+                      "retrieve",
+                  )
+                : undefined;
             let candidates: CorpusIndexMatch[] = request.indexedFragments
                 ? []
                 : await runtime.index.search(
@@ -4319,6 +4478,7 @@ export class FileMemoryService
                       limit * 4,
                       undefined,
                       request.temporalContext,
+                      authorized,
                   );
             let fragmentLimited = false;
             let indexedSelection: IndexedSelectionDiagnostics | undefined;
@@ -4330,6 +4490,7 @@ export class FileMemoryService
                 const nominated = runtime.manifest.sources.filter(
                     (source) =>
                         matchesSearchSource(source, request) &&
+                        (!authorized || authorized.has(source.sourceId)) &&
                         source.revisions.some(
                             (revision) =>
                                 revision.revisionId ===
@@ -4352,7 +4513,7 @@ export class FileMemoryService
                 indexedSelection = selection.diagnostics;
                 fragmentLimited = fragmentLimited || selection.limited;
             }
-            const matches = this.toEvidence(
+            const matches = await this.toEvidence(
                 request.corpusId,
                 runtime,
                 candidates,
@@ -4390,7 +4551,7 @@ export class FileMemoryService
         });
     }
 
-    private toEvidence(
+    private async toEvidence(
         corpusId: string,
         runtime: CorpusRuntime,
         candidates: CorpusIndexMatch[],
@@ -4404,7 +4565,7 @@ export class FileMemoryService
             | "dateTo"
         >,
         limit: number,
-    ): MemoryEvidence[] {
+    ): Promise<MemoryEvidence[]> {
         let usedCharacters = 0;
         const maxCharacters = request.maxResponseChars ?? 50_000;
         const matches: MemoryEvidence[] = [];
@@ -4424,6 +4585,8 @@ export class FileMemoryService
             ) {
                 continue;
             }
+            if (!(await this.sourceAllowed(source, revision, "retrieve")))
+                continue;
             if (usedCharacters + candidate.snippet.length > maxCharacters) {
                 break;
             }
@@ -4486,9 +4649,15 @@ export class FileMemoryService
                     ? ["agent-session-jsonl", "copilot-session-jsonl"]
                     : [],
             },
-            ...(this.viewDrafts
+            ...(this.viewDrafts || this.extensionBuilds
                 ? {
                       derivedViews: {
+                          ...(this.extensionBuilds
+                              ? {
+                                    extension:
+                                        this.extensionProviders.capabilities(),
+                                }
+                              : {}),
                           knowledge: true as const,
                           integratedAnswering: true as const,
                           builds: true as const,
@@ -4501,12 +4670,16 @@ export class FileMemoryService
                                 }
                               : {}),
                           kinds: [
-                              "troubleshootingGuide",
-                              "projectBrief",
-                              "timeline",
-                              "wiki",
-                              "schemaView",
-                              ...(this.viewProviders.identities().length
+                              ...(this.viewDrafts
+                                  ? ([
+                                        "troubleshootingGuide",
+                                        "projectBrief",
+                                        "timeline",
+                                        "wiki",
+                                        "schemaView",
+                                    ] as const)
+                                  : []),
+                              ...(this.extensionBuilds
                                   ? ["extension" as const]
                                   : []),
                           ] as Array<
@@ -4517,9 +4690,6 @@ export class FileMemoryService
                               | "schemaView"
                               | "extension"
                           >,
-                          ...(this.viewProviders.identities().length
-                              ? { providers: this.viewProviders.identities() }
-                              : {}),
                           drafts: true as const,
                           history: true as const,
                           publication: true as const,
@@ -4531,7 +4701,7 @@ export class FileMemoryService
     }
 
     private async requireViews(corpusId: string): Promise<CorpusRuntime> {
-        if (!this.viewDrafts)
+        if (!this.viewDrafts && !this.extensionBuilds)
             throw new Error(
                 "Memory Views are not supported: explicitly disabled by this host",
             );
@@ -4799,13 +4969,26 @@ export class FileMemoryService
         includeDraft = false,
     ): Promise<boolean> {
         if (view.content.kind === "extension") {
-            if (!view.generation?.input)
-                throw new Error(
-                    "Host-defined content lacks its retained source snapshot",
+            if (!this.extensionBuilds || !view.generation?.input) return false;
+            await this.extensionProviders.validateContent(
+                view.generation.input,
+                view.content,
+            );
+            try {
+                await this.extensionProviders.authorize(
+                    view.generation.input,
+                    "read",
                 );
-            await this.authorizeProviderInput(view.generation.input, "read");
-            await this.assertViewPublicationFresh(view, current);
-            return true;
+                await this.assertInfluenceEligible(view.generation.input);
+                return true;
+            } catch (error) {
+                if (
+                    error instanceof ViewExtensionUnavailable ||
+                    error instanceof ViewBuildStaleError
+                )
+                    return false;
+                throw error;
+            }
         }
         if (!informationalWiki(view.content)) return true;
         if (view.state !== "draft") return false;
@@ -6432,6 +6615,10 @@ export class FileMemoryService
         request: ViewSaveRequest,
     ): Promise<ViewHistoryEntry> {
         validateViewDraft(request);
+        if (request.definition.kind === "extension")
+            throw new Error(
+                "Extension artifacts are read-only; use their registered build provider",
+            );
         await this.requireViews(request.corpusId);
         const prior = await this.getView({
             corpusId: request.corpusId,
@@ -6467,16 +6654,11 @@ export class FileMemoryService
             );
         if (
             (request.content.kind === "timeline" ||
-                request.content.kind === "wiki" ||
-                request.content.kind === "extension") &&
+                request.content.kind === "wiki") &&
             !prior?.generation?.input
         )
             throw new Error(
                 "Timeline and wiki drafts must begin with a grounded Build views result",
-            );
-        if (request.content.kind === "extension")
-            throw new Error(
-                "Host-defined content must be changed through its managed provider build",
             );
         const proof = await this.validateDraftGeneration(request, prior);
         const result = await this.enqueueWrite(request.corpusId, async () => {
@@ -6786,9 +6968,21 @@ export class FileMemoryService
         if (!informationalWiki(version.content))
             assertPublicationProof(version);
         const runtime = await this.getCorpusRuntime(version.corpusId);
+        if (version.content.kind === "extension") {
+            if (!this.extensionBuilds || !version.generation?.input)
+                throw new ViewExtensionUnavailable(
+                    "Extension publication is unavailable",
+                );
+            await this.extensionProviders.authorize(
+                version.generation.input,
+                "publish",
+            );
+            await this.extensionProviders.validateContent(
+                version.generation.input,
+                version.content,
+            );
+        }
         await this.assertInfluenceEligible(version.generation?.input);
-        if (version.generation?.input)
-            await this.authorizeProviderInput(version.generation.input, "read");
         const latest =
             current ??
             (await this.viewStore.getView({
@@ -6804,39 +6998,7 @@ export class FileMemoryService
                 "Maintenance intent changed since publication; reconcile and publish the intended exact revision",
             );
         this.assertPublicationMaintenance(version, runtime);
-        this.assertRetainedViewInputs(runtime, version.generation!.input!);
-        if (version.content.kind === "timeline") {
-            const frozen = version.generation!.input!;
-            validateTimelineEvidence(frozen, version.content);
-            validateTimelineCorrections(
-                frozen,
-                version.content,
-                authoredRelationships(version),
-            );
-            const target = await this.snapshotViewTarget(
-                version.corpusId,
-                {
-                    definition: frozen.definition,
-                    expectedVersion: (await this.viewStore.getView({
-                        corpusId: version.corpusId,
-                        viewId: version.viewId,
-                    }))!.version,
-                },
-                frozen.bounds,
-                frozen.publicationPolicy?.buildOverride,
-            );
-            if (target.selectionFingerprint !== frozen.selectionFingerprint)
-                throw new ViewBuildStaleError(
-                    "Timeline record membership or retained evidence changed; rebuild first",
-                );
-        }
-    }
-
-    private assertRetainedViewInputs(
-        runtime: CorpusRuntime,
-        snapshot: Pick<ViewProviderInputReference, "pipeline" | "inputs">,
-    ): void {
-        for (const input of snapshot.inputs) {
+        for (const input of version.generation!.input!.inputs) {
             if (input.evidence) {
                 const event = runtime.events.find(
                     (entry) => entry.eventId === input.evidence?.eventId,
@@ -6861,15 +7023,35 @@ export class FileMemoryService
                 !revision ||
                 revision.state !== "ready" ||
                 source?.activeRevisionId !== input.revisionId ||
-                (snapshot.pipeline === "host-defined-v1" &&
-                    runtime.manifest.knowledgeSuppressions?.some(
-                        (suppression) =>
-                            suppression.sourceId === input.sourceId,
-                    )) ||
                 viewHash(revision.content) !== input.contentHash
             )
                 throw new ViewBuildStaleError(
                     "Publication evidence was changed, forgotten or is no longer the exact accessible current revision; rebuild first",
+                );
+        }
+        if (version.content.kind === "timeline") {
+            const frozen = version.generation!.input!;
+            validateTimelineEvidence(frozen, version.content);
+            validateTimelineCorrections(
+                frozen,
+                version.content,
+                authoredRelationships(version),
+            );
+            const target = await this.snapshotViewTarget(
+                version.corpusId,
+                {
+                    definition: frozen.definition,
+                    expectedVersion: (await this.viewStore.getView({
+                        corpusId: version.corpusId,
+                        viewId: version.viewId,
+                    }))!.version,
+                },
+                frozen.bounds,
+                frozen.publicationPolicy?.buildOverride,
+            );
+            if (target.selectionFingerprint !== frozen.selectionFingerprint)
+                throw new ViewBuildStaleError(
+                    "Timeline record membership or retained evidence changed; rebuild first",
                 );
         }
     }
@@ -6906,8 +7088,6 @@ export class FileMemoryService
         const view = await this.viewStore.getView(request);
         if (!view) throw new Error("Publication revision is missing");
         await this.assertViewPublicationFresh(view);
-        if (view.generation?.input)
-            await this.authorizeProviderInput(view.generation.input, "publish");
         const publication = await this.viewStore.publishView(request);
         if (publication.indexState === "ready") return publication;
         await this.viewPublicationCheckpoint?.("intent");
@@ -7162,7 +7342,7 @@ export class FileMemoryService
             request.freshness !== "current" ||
             (request.kinds !== undefined &&
                 (!Array.isArray(request.kinds) ||
-                    request.kinds.length > 5 ||
+                    request.kinds.length > 6 ||
                     request.kinds.some(
                         (kind) =>
                             ![
@@ -7171,6 +7351,7 @@ export class FileMemoryService
                                 "timeline",
                                 "wiki",
                                 "schemaView",
+                                "extension",
                             ].includes(kind),
                     ))) ||
             (request.limit !== undefined &&
@@ -7267,7 +7448,7 @@ export class FileMemoryService
 
     public async warmViewIndexes(corpusId?: string): Promise<void> {
         if (this.closed) throw new Error("Memory service is closing");
-        if (!this.viewDrafts) return;
+        if (!this.viewDrafts && !this.extensionBuilds) return;
         if (corpusId === undefined) this.viewWarmup.start();
         else {
             validateIdentifier("corpus ID", corpusId);
@@ -7357,22 +7538,6 @@ export class FileMemoryService
             },
             { corpusId: identity.corpusId, background: true },
         );
-    }
-
-    private async informationalPublicationOverride(
-        corpusId: string,
-        viewId: string,
-        buildOverride?: boolean,
-    ): Promise<Pick<ViewBuildSnapshot, "publicationPolicy">> {
-        return buildOverride === undefined
-            ? {}
-            : {
-                  publicationPolicy: effectiveViewPublicationPolicy(
-                      await this.viewStore.getViewPublicationPolicy(corpusId),
-                      viewId,
-                      buildOverride,
-                  ),
-              };
     }
 
     private async snapshotInformationalTarget(
@@ -7494,11 +7659,17 @@ export class FileMemoryService
         const snapshot = {
             corpusId,
             actor: userInfo().username,
-            ...(await this.informationalPublicationOverride(
-                corpusId,
-                target.definition.viewId,
-                buildOverride,
-            )),
+            ...(buildOverride === undefined
+                ? {}
+                : {
+                      publicationPolicy: effectiveViewPublicationPolicy(
+                          await this.viewStore.getViewPublicationPolicy(
+                              corpusId,
+                          ),
+                          target.definition.viewId,
+                          buildOverride,
+                      ),
+                  }),
             definition: {
                 ...structuredClone(target.definition),
                 selector: {
@@ -8842,6 +9013,48 @@ export class FileMemoryService
         );
     }
 
+    private async authorizedSourceScope(
+        runtime: CorpusRuntime,
+        requested: string[] | undefined,
+        operation: import("./types.js").MemorySourceAuthorizationRequest["operation"],
+    ): Promise<Set<string>> {
+        const allowed = new Set<string>();
+        for (const source of runtime.manifest.sources) {
+            if (requested && !requested.includes(source.sourceId)) continue;
+            const revision = source.revisions.find(
+                (entry) =>
+                    entry.revisionId === source.activeRevisionId &&
+                    entry.state === "ready",
+            );
+            if (
+                revision &&
+                (await this.sourceAllowed(source, revision, operation))
+            )
+                allowed.add(source.sourceId);
+        }
+        return allowed;
+    }
+
+    private async sourceAllowed(
+        source: StoredSource,
+        revision: StoredRevision,
+        operation: import("./types.js").MemorySourceAuthorizationRequest["operation"],
+    ): Promise<boolean> {
+        const authorize = this.sourceAuthorization;
+        if (!authorize) return true;
+        return this.sourceAuthorizationLimiter(
+            async () =>
+                (await authorize({
+                    corpusId: source.corpusId,
+                    sourceId: source.sourceId,
+                    revisionId: revision.revisionId,
+                    contentHash: revision.contentHash,
+                    retainedContentHash: viewHash(revision.content),
+                    operation,
+                })) === true,
+        );
+    }
+
     private async assertInfluenceEligible(
         input?: Pick<
             ViewBuildSnapshot,
@@ -8886,6 +9099,13 @@ export class FileMemoryService
             )
                 throw new ViewBuildStaleError(
                     "Read-but-not-cited evidence was replaced or forgotten",
+                );
+            const revision = source!.revisions.find(
+                (entry) => entry.revisionId === influence.revisionId,
+            )!;
+            if (!(await this.sourceAllowed(source!, revision, "read")))
+                throw new ViewBuildStaleError(
+                    "Native source authorization was revoked",
                 );
         }
     }
@@ -9556,6 +9776,110 @@ export class FileMemoryService
         };
     }
 
+    private async snapshotViewSourceInput(
+        runtime: CorpusRuntime,
+        selected: ViewBuildSnapshot["definition"]["selector"]["sources"][number],
+        target: ViewBuildTarget,
+        bounds: ViewBuildRequest["bounds"],
+    ): Promise<ViewRetainedInput> {
+        const source = runtime.manifest.sources.find(
+            (entry) => entry.sourceId === selected.sourceId,
+        );
+        const revision = source?.revisions.find(
+            (entry) => entry.revisionId === selected.revisionId,
+        );
+        if (
+            !source ||
+            !revision ||
+            revision.state !== "ready" ||
+            source.activeRevisionId !== selected.revisionId
+        )
+            throw new ViewBuildStaleError(
+                "Selected source is unavailable or no longer the current exact retained revision",
+            );
+        if (!(await this.sourceAllowed(source, revision, "build")))
+            throw new ViewBuildStaleError(
+                "Selected source is not authorized for construction",
+            );
+        if (target.definition.kind === "timeline")
+            return timelineDocumentInput(
+                {
+                    ...selected,
+                    title: source.title,
+                    content: revision.content,
+                    capturedAt: revision.capturedAt,
+                },
+                bounds ?? {},
+            );
+        const learnedAt = revision.capturedAt;
+        const occurredAt = revision.sourceModifiedAt;
+        assertCompleteSourceTemporalBounds(learnedAt, occurredAt, bounds);
+        return {
+            ...selected,
+            title: source.title,
+            content: revision.content,
+            contentHash: viewHash(revision.content),
+            ...(learnedAt === undefined ? {} : { learnedAt }),
+            ...(occurredAt === undefined ? {} : { occurredAt }),
+            ...(target.definition.schemaView &&
+            source.metadata?.assertionLineage !== undefined
+                ? { assertionLineage: sourceAssertionLineage(source.metadata)! }
+                : {}),
+        };
+    }
+
+    private viewManifestInfluence(
+        corpusId: string,
+        runtime: CorpusRuntime,
+        target: ViewBuildTarget,
+        inputs: ViewRetainedInput[],
+    ): ViewBuildSnapshot["influenceSources"] {
+        if (target.definition.selector.kind !== "sourceManifest")
+            return undefined;
+        if (target.definition.kind !== "extension")
+            throw new Error(
+                "Source manifests are available only to installed extensions",
+            );
+        const manifest = target.definition.selector.manifest;
+        const root = runtime.manifest.sources.find(
+            (source) => source.sourceId === manifest.sourceId,
+        );
+        const revision = root?.revisions.find(
+            (entry) => entry.revisionId === manifest.revisionId,
+        );
+        if (
+            !root ||
+            !revision ||
+            root.activeRevisionId !== manifest.revisionId ||
+            revision.state !== "ready" ||
+            viewHash(revision.content) !== manifest.contentHash
+        )
+            throw new ViewBuildStaleError(
+                "Exact source manifest is unavailable or changed",
+            );
+        const expanded = expandViewManifest(revision.content, corpusId, 4096);
+        if (
+            viewHash(
+                expanded.members.map(({ sourceId, revisionId }) => ({
+                    sourceId,
+                    revisionId,
+                })),
+            ) !== viewHash(target.definition.selector.sources) ||
+            expanded.members.some(
+                (member) =>
+                    member.sourceId === manifest.sourceId ||
+                    inputs.find((input) => input.sourceId === member.sourceId)
+                        ?.contentHash !== member.contentHash,
+            )
+        )
+            throw new ViewBuildStaleError(
+                "Source manifest membership or content hashes changed",
+            );
+        return [
+            { sourceId: manifest.sourceId, revisionId: manifest.revisionId },
+        ];
+    }
+
     private async snapshotViewTarget(
         corpusId: string,
         target: ViewBuildTarget,
@@ -9593,69 +9917,17 @@ export class FileMemoryService
             current,
         );
         assertMaintenanceMembership(target, current, maintenance);
-        const inputs: ViewRetainedInput[] =
-            target.definition.selector.sources.map((selected) => {
-                const source = runtime.manifest.sources.find(
-                    (entry) => entry.sourceId === selected.sourceId,
-                );
-                const revision = source?.revisions.find(
-                    (entry) => entry.revisionId === selected.revisionId,
-                );
-                if (
-                    !source ||
-                    !revision ||
-                    revision.state !== "ready" ||
-                    source.activeRevisionId !== selected.revisionId
-                )
-                    throw new ViewBuildStaleError(
-                        "Selected source is unavailable or no longer the current exact retained revision",
-                    );
-                if (target.definition.kind === "timeline")
-                    return timelineDocumentInput(
-                        {
-                            ...selected,
-                            title: source.title,
-                            content: revision.content,
-                            capturedAt: revision.capturedAt,
-                        },
-                        bounds ?? {},
-                    );
-                const learnedAt = revision.capturedAt;
-                const occurredAt = revision.sourceModifiedAt;
-                if (
-                    (bounds?.learnedBefore &&
-                        (!learnedAt ||
-                            Date.parse(learnedAt) >
-                                Date.parse(bounds.learnedBefore))) ||
-                    (bounds?.occurredFrom &&
-                        (!occurredAt ||
-                            Date.parse(occurredAt) <
-                                Date.parse(bounds.occurredFrom))) ||
-                    (bounds?.occurredTo &&
-                        (!occurredAt ||
-                            Date.parse(occurredAt) >
-                                Date.parse(bounds.occurredTo)))
-                )
-                    throw new ViewBuildStaleError(
-                        "Selected complete source is outside the temporal bounds or lacks a required timestamp; no source truncation is applied",
-                    );
-                return {
-                    ...selected,
-                    title: source.title,
-                    content: revision.content,
-                    contentHash: viewHash(revision.content),
-                    ...(learnedAt === undefined ? {} : { learnedAt }),
-                    ...(occurredAt === undefined ? {} : { occurredAt }),
-                    ...(target.definition.schemaView &&
-                    source.metadata?.assertionLineage !== undefined
-                        ? {
-                              assertionLineage: sourceAssertionLineage(
-                                  source.metadata,
-                              )!,
-                          }
-                        : {}),
-                };
-            });
+        const inputs: ViewRetainedInput[] = await Promise.all(
+            target.definition.selector.sources.map((selected) =>
+                this.snapshotViewSourceInput(runtime, selected, target, bounds),
+            ),
+        );
+        const manifestInfluence = this.viewManifestInfluence(
+            corpusId,
+            runtime,
+            target,
+            inputs,
+        );
         for (const selected of target.definition.selector.events ?? []) {
             const event = runtime.events.find(
                 (entry) => entry.eventId === selected.eventId,
@@ -9667,8 +9939,9 @@ export class FileMemoryService
             inputs.push(timelineEventInput(event, bounds ?? {}));
         }
         if (
+            target.definition.kind !== "extension" &&
             inputs.reduce((count, input) => count + input.content.length, 0) >
-            120_000
+                120_000
         )
             throw new Error(
                 "Complete view inputs exceed 120000 UTF-16 characters; no truncation applied",
@@ -9702,15 +9975,21 @@ export class FileMemoryService
                       ),
                   }
                 : {}),
-            pipeline:
-                target.definition.kind === "extension"
-                    ? ("host-defined-v1" as const)
-                    : target.definition.kind === "schemaView"
-                      ? ("schema-defined-v1" as const)
-                      : target.definition.kind === "timeline"
-                        ? ("timeline-v1" as const)
-                        : ("troubleshooting-v1" as const),
-            model: this.viewBuildModelIdentity(target.definition),
+            pipeline: exactViewPipeline(target.definition.kind),
+            model: this.extensionProviders.modelIdentity(target.definition)
+                ? viewHash([
+                      this.viewAdapter.identity,
+                      this.extensionProviders.modelIdentity(target.definition),
+                  ])
+                : this.viewAdapter.identity,
+            ...(target.definition.kind === "extension"
+                ? {
+                      influenceSources: [
+                          ...target.definition.selector.sources,
+                          ...(manifestInfluence ?? []),
+                      ],
+                  }
+                : {}),
             publicationPolicy: effectiveViewPublicationPolicy(
                 await this.viewStore.getViewPublicationPolicy(corpusId),
                 target.definition.viewId,
@@ -9721,8 +10000,27 @@ export class FileMemoryService
                 : {}),
         };
         const frozen = { ...snapshot, fingerprint: viewHash(snapshot) };
-        await this.authorizeProviderInput(frozen, "build");
+        await this.authorizeExtensionSnapshot(frozen);
         return frozen;
+    }
+
+    private async authorizeExtensionSnapshot(
+        input: ViewBuildSnapshot,
+    ): Promise<void> {
+        if (input.pipeline !== "extension-v1") return;
+        const provider = this.extensionProviders.resolve(input);
+        if (
+            input.inputs.length > provider.descriptor.limits.maxSources ||
+            input.inputs.reduce(
+                (sum, member) => sum + member.content.length,
+                0,
+            ) > provider.descriptor.limits.maxInputChars
+        )
+            throw new Error(
+                "Complete extension input exceeds provider bounds; no truncation applied",
+            );
+        await this.assertInfluenceEligible(input);
+        await this.extensionProviders.authorize(input, "build");
     }
 
     private topicSources(runtime: CorpusRuntime) {
@@ -10124,261 +10422,149 @@ export class FileMemoryService
         );
     }
 
-    private configureViewProviders(options: FileMemoryServiceOptions) {
-        const registry = new ViewProviderRegistry(options.viewProviders);
-        const model = options.viewProviderModel
-            ? Object.freeze({ ...options.viewProviderModel })
-            : undefined;
-        const authorization = options.viewProviderAuthorization;
-        if (
-            registry.identities().length &&
-            (!model ||
-                typeof model.identity !== "string" ||
-                !model.identity.trim() ||
-                typeof authorization?.assertAuthorized !== "function")
-        )
-            throw new Error(
-                "Host-defined views require an identified model and source authorization",
-            );
-        return { registry, model, authorization };
-    }
-
-    private viewBuildModelIdentity(definition: ViewDefinitionInput): string {
-        if (definition.extension) {
-            this.viewProviders.require(definition.extension.provider);
-            if (!this.viewProviderModel)
-                throw new Error("The host-defined view model is not installed");
-            return viewHash([
-                this.viewAdapter.identity,
-                definition.extension.provider,
-                this.viewProviderModel.identity,
-            ]);
-        }
-        return viewSynthesisIdentity(
-            this.viewAdapter.identity,
-            definition,
-            !!this.viewAdapter.assessWikiConsolidation &&
-                !!this.viewAdapter.checkWikiConsolidation,
+    private scheduleExtensions(corpusId: string, runtime: CorpusRuntime): void {
+        if (!this.extensionDiscovery || this.closed) return;
+        const generation = viewHash({
+            providers: this.extensionProviders.capabilities(),
+            sources: runtime.manifest.sources.map((source) => ({
+                sourceId: source.sourceId,
+                revisionId: source.activeRevisionId,
+                metadata: source.metadata ?? null,
+            })),
+            indexGeneration: runtime.manifest.indexGeneration,
+        });
+        this.maintenance.request(
+            corpusId,
+            "extensions",
+            generation,
+            async (signal) => {
+                if (this.maintenance.isDeferred(corpusId)) return;
+                const jobs = await this.enqueueWrite(corpusId, () =>
+                    this.discoverExtensionBuilds(corpusId, signal),
+                );
+                for (const admitted of jobs) {
+                    if (admitted.state !== "running") continue;
+                    await this.maintenance.waitForBuild(() =>
+                        this.viewBuilds.wait(admitted.jobId, signal),
+                    );
+                }
+            },
+            1000,
         );
     }
 
-    private async authorizeProviderInput(
-        input: ViewProviderInputReference,
-        operation: "build" | "model" | "publish" | "read",
-    ): Promise<void> {
-        if (input.pipeline !== "host-defined-v1") return;
-        if (!this.viewProviderAuthorization)
-            throw new Error(
-                "Host-defined source authorization is not installed",
-            );
-        const runtime = await this.getCorpusRuntime(input.corpusId);
-        await this.assertInfluenceEligible(input);
-        this.assertRetainedViewInputs(runtime, input);
-        await this.viewProviderAuthorization.assertAuthorized({
-            operation,
-            input: viewProviderInputReference(input),
-        });
+    public async refreshExtensionViews(request: {
+        corpusId: string;
+    }): Promise<ViewBuildJob[]> {
+        if (!request || Object.keys(request).some((key) => key !== "corpusId"))
+            throw new Error("Invalid extension refresh request");
+        await this.requireViews(request.corpusId);
+        if (!this.extensionBuilds)
+            throw new Error("Extension builds are disabled");
+        return this.enqueueWrite(request.corpusId, () =>
+            this.discoverExtensionBuilds(
+                request.corpusId,
+                new AbortController().signal,
+            ),
+        );
     }
 
-    private async providerStage(
-        job: ViewBuildJob,
-        result: ViewBuildTargetResult,
-        stage: string,
-        update: (
-            stage: NonNullable<ViewBuildTargetResult["providerStages"]>[number],
-        ) => void,
-        allowTerminal = false,
-    ): Promise<void> {
-        await this.enqueueWrite(job.corpusId, async () => {
-            if (!allowTerminal) {
-                await this.recheckViewInput(result.snapshot);
-                await this.authorizeProviderInput(result.snapshot, "build");
+    private async discoverExtensionBuilds(
+        corpusId: string,
+        signal: AbortSignal,
+    ): Promise<ViewBuildJob[]> {
+        const runtime = await this.getCorpusRuntime(corpusId);
+        const sources: import("./viewExtensionTypes.js").ViewProviderDiscoveryInput["sources"] =
+            [];
+        for (const source of runtime.manifest.sources) {
+            const revision = source.revisions.find(
+                (entry) =>
+                    entry.revisionId === source.activeRevisionId &&
+                    entry.state === "ready",
+            );
+            if (
+                !revision ||
+                !(await this.sourceAllowed(source, revision, "build"))
+            )
+                continue;
+            sources.push({
+                sourceId: source.sourceId,
+                revisionId: revision.revisionId,
+                contentHash: viewHash(revision.content),
+                title: source.title,
+                sourceType: source.sourceType,
+                ...(source.metadata
+                    ? { metadata: JSON.parse(JSON.stringify(source.metadata)) }
+                    : {}),
+            });
+        }
+        const definitions = await this.extensionProviders.discover({
+            corpusId,
+            sources,
+        });
+        const jobs: ViewBuildJob[] = [];
+        for (const definition of definitions) {
+            signal.throwIfAborted();
+            const current = await this.viewStore.getView({
+                corpusId,
+                viewId: definition.viewId,
+            });
+            const target = {
+                definition,
+                expectedVersion: current?.version ?? 0,
+            };
+            const snapshot = await this.snapshotViewTarget(
+                corpusId,
+                target,
+                undefined,
+                undefined,
+            );
+            const previous = (
+                await this.viewStore.listViewBuilds(corpusId)
+            ).find((job) =>
+                job.results.some(
+                    (result) =>
+                        result.viewId === definition.viewId &&
+                        (result.snapshot.fingerprint === snapshot.fingerprint ||
+                            (current?.generation?.input?.fingerprint ===
+                                result.snapshot.fingerprint &&
+                                viewHash({
+                                    definition: result.snapshot.definition,
+                                    inputs: result.snapshot.inputs,
+                                    influenceSources:
+                                        result.snapshot.influenceSources,
+                                    influenceEvents:
+                                        result.snapshot.influenceEvents,
+                                    bounds: result.snapshot.bounds,
+                                    model: result.snapshot.model,
+                                }) ===
+                                    viewHash({
+                                        definition: snapshot.definition,
+                                        inputs: snapshot.inputs,
+                                        influenceSources:
+                                            snapshot.influenceSources,
+                                        influenceEvents:
+                                            snapshot.influenceEvents,
+                                        bounds: snapshot.bounds,
+                                        model: snapshot.model,
+                                    }))),
+                ),
+            );
+            if (previous) {
+                if (!jobs.some((job) => job.jobId === previous.jobId))
+                    jobs.push(previous);
+                continue;
             }
-            return this.viewStore.updateViewBuild(
-                job.corpusId,
-                job.jobId,
-                (current) => {
-                    const target = current.results.find(
-                        (entry) => entry.viewId === result.viewId,
-                    );
-                    if (
-                        !target ||
-                        (!allowTerminal && current.state !== "running") ||
-                        target.snapshot.fingerprint !==
-                            result.snapshot.fingerprint
-                    )
-                        throw new Error(
-                            "Provider checkpoint owner is missing, changed or terminal",
-                        );
-                    const stages = (target.providerStages ??= []);
-                    let entry = stages.find((item) => item.stage === stage);
-                    if (!entry) {
-                        entry = {
-                            stage,
-                            inputFingerprint: result.snapshot.fingerprint,
-                            checkpoints: [],
-                            candidates: [],
-                            completions: [],
-                        };
-                        stages.push(entry);
-                    }
-                    if (entry.inputFingerprint !== result.snapshot.fingerprint)
-                        throw new Error(
-                            "Provider checkpoint input identity changed",
-                        );
-                    update(entry);
-                },
+            jobs.push(
+                await this.admitViewBuild({
+                    corpusId,
+                    expectedHead: (await this.viewStore.listViews(corpusId))
+                        .head,
+                    targets: [target],
+                }),
             );
-        });
-    }
-
-    private async constructExtension(
-        job: ViewBuildJob,
-        result: ViewBuildTargetResult,
-        signal: AbortSignal,
-    ): Promise<ViewProviderResult> {
-        const model = this.viewProviderModel;
-        const identity = result.snapshot.definition.extension?.provider;
-        if (!model || !identity)
-            throw new Error(
-                "Host-defined view model or provider definition is missing",
-            );
-        const retained = await this.viewStore.getViewBuild(
-            job.corpusId,
-            job.jobId,
-        );
-        const previous: Record<string, ViewProviderJson> = {};
-        for (const stage of retained?.results.find(
-            (entry) => entry.viewId === result.viewId,
-        )?.providerStages ?? []) {
-            if (stage.inputFingerprint !== result.snapshot.fingerprint)
-                throw new Error("Provider checkpoint input identity changed");
-            const checkpoint = stage.checkpoints[stage.checkpoints.length - 1];
-            if (checkpoint)
-                previous[stage.stage] = structuredClone(checkpoint.state);
         }
-        return this.viewProviders.construct(identity, {
-            input: result.snapshot,
-            modelIdentity: model.identity,
-            previous,
-            signal,
-            assertEligible: async (operation) => {
-                signal.throwIfAborted();
-                await this.recheckViewInput(result.snapshot);
-                await this.authorizeProviderInput(
-                    result.snapshot,
-                    operation === "model" ? "model" : "build",
-                );
-            },
-            complete: (stage, ...request) =>
-                this.completeProviderRequest(
-                    job,
-                    result,
-                    stage,
-                    signal,
-                    ...request,
-                ),
-            checkpoint: async (stage, state) => {
-                await this.providerStage(job, result, stage, (entry) =>
-                    entry.checkpoints.push({
-                        recordedAt: new Date().toISOString(),
-                        state,
-                    }),
-                );
-                await yieldMaintenanceBuild(signal);
-            },
-            recordCandidate: (stage, candidate) =>
-                this.providerStage(job, result, stage, (entry) =>
-                    entry.candidates.push({
-                        recordedAt: new Date().toISOString(),
-                        candidate,
-                    }),
-                ),
-        });
-    }
-
-    private async completeProviderRequest(
-        job: ViewBuildJob,
-        result: ViewBuildTargetResult,
-        stage: string,
-        signal: AbortSignal,
-        ...request: Parameters<ChatModel["complete"]>
-    ): ReturnType<ChatModel["complete"]> {
-        const model = this.viewProviderModel;
-        if (!model) throw new Error("The host-defined model is not installed");
-        const id = randomUUID();
-        await this.providerStage(job, result, stage, (entry) =>
-            entry.completions.push({
-                id,
-                queuedAt: new Date().toISOString(),
-                state: "running",
-            }),
-        );
-        let response: Awaited<ReturnType<ChatModel["complete"]>>;
-        try {
-            response = await this.maintenanceModels(async () => {
-                signal.throwIfAborted();
-                await this.recheckViewInput(result.snapshot);
-                await this.authorizeProviderInput(result.snapshot, "model");
-                await this.providerStage(job, result, stage, (entry) => {
-                    const completion = entry.completions.find(
-                        (call) => call.id === id,
-                    );
-                    if (!completion)
-                        throw new Error(
-                            "Provider completion journal entry is missing",
-                        );
-                    completion.admittedAt = new Date().toISOString();
-                });
-                return model.model.complete(
-                    request[0],
-                    request[1],
-                    request[2],
-                    undefined,
-                    signal,
-                );
-            }, signal);
-        } catch (error) {
-            await this.providerStage(
-                job,
-                result,
-                stage,
-                (entry) => {
-                    const completion = entry.completions.find(
-                        (call) => call.id === id,
-                    );
-                    if (!completion)
-                        throw new Error(
-                            "Provider completion journal entry is missing",
-                        );
-                    completion.finishedAt = new Date().toISOString();
-                    completion.state = signal.aborted ? "cancelled" : "failed";
-                    completion.error =
-                        error instanceof Error ? error.message : String(error);
-                },
-                true,
-            );
-            throw error;
-        }
-        await this.providerStage(
-            job,
-            result,
-            stage,
-            (entry) => {
-                const completion = entry.completions.find(
-                    (call) => call.id === id,
-                );
-                if (!completion)
-                    throw new Error(
-                        "Provider completion journal entry is missing",
-                    );
-                completion.finishedAt = new Date().toISOString();
-                completion.state = response.success ? "succeeded" : "failed";
-                if (!response.success) completion.error = response.message;
-            },
-            true,
-        );
-        return response;
+        return jobs;
     }
 
     private async recheckViewInput(input: ViewBuildSnapshot): Promise<void> {
@@ -10412,89 +10598,34 @@ export class FileMemoryService
                 job.results.every(
                     (result) =>
                         result.snapshot.model ===
-                        this.viewBuildModelIdentity(result.snapshot.definition),
+                        viewSynthesisIdentity(
+                            this.viewAdapter.identity,
+                            result.snapshot.definition,
+                            !!this.viewAdapter.assessWikiConsolidation &&
+                                !!this.viewAdapter.checkWikiConsolidation,
+                        ),
                 ),
         );
-        if (existing) {
-            if (this.resumableProviderBuild(existing))
-                return this.enqueueWrite(request.corpusId, () =>
-                    this.resumeProviderBuild(existing),
-                );
-            return existing;
-        }
+        if (existing) return existing;
         return this.enqueueWrite(request.corpusId, () =>
             this.admitViewBuild(request),
         );
     }
 
-    private resumableProviderBuild(job: ViewBuildJob): boolean {
-        return (
-            ["failed", "partial", "interrupted"].includes(job.state) &&
-            job.results.every(
-                (result) => result.snapshot.pipeline === "host-defined-v1",
-            ) &&
-            job.results.some(
-                (result) =>
-                    result.state === "failed" || result.state === "interrupted",
-            )
-        );
-    }
-
-    private async resumeProviderBuild(
-        previous: ViewBuildJob,
-    ): Promise<ViewBuildJob> {
-        const current = await this.viewStore.getViewBuild(
-            previous.corpusId,
-            previous.jobId,
-        );
-        if (!current)
-            throw new Error("Provider build was removed before continuation");
-        if (
-            !this.resumableProviderBuild(current) ||
-            this.viewBuilds.isActive(current.jobId)
-        )
-            return current;
-        const reservation = this.viewBuilds.reserve();
-        try {
-            for (const result of current.results) {
-                await this.authorizeProviderInput(result.snapshot, "build");
-                if (result.state === "failed" || result.state === "interrupted")
-                    await this.recheckViewInput(result.snapshot);
-            }
-            const job = await this.viewStore.updateViewBuild(
-                current.corpusId,
-                current.jobId,
-                (saved) => {
-                    saved.state = "running";
-                    for (const result of saved.results) {
-                        if (
-                            result.state !== "failed" &&
-                            result.state !== "interrupted"
-                        )
-                            continue;
-                        result.state = "pending";
-                        result.reason =
-                            "Explicitly continuing the same authorized provider snapshot and stage journal";
-                        for (const stage of result.providerStages ?? [])
-                            for (const completion of stage.completions)
-                                if (completion.state === "running") {
-                                    completion.state = "cancelled";
-                                    completion.finishedAt =
-                                        new Date().toISOString();
-                                    completion.error =
-                                        "Previous owner stopped before a result was persisted; physical completion is unknown";
-                                }
-                    }
-                },
-            );
-            reservation.start(job);
-            return job;
-        } finally {
-            reservation.release();
-        }
-    }
-
     private assertViewBuildEnabled(request: ViewBuildRequest): void {
+        if (
+            (!this.viewDrafts &&
+                request.targets.some(
+                    (target) => target.definition.kind !== "extension",
+                )) ||
+            (!this.extensionBuilds &&
+                request.targets.some(
+                    (target) => target.definition.kind === "extension",
+                ))
+        )
+            throw new Error(
+                "Requested view construction is explicitly disabled by this host",
+            );
         if (
             !this.informationalWikiEnabled &&
             request.targets.some(
@@ -10841,13 +10972,40 @@ export class FileMemoryService
 
     public async listViewBuilds(corpusId: string): Promise<ViewBuildJob[]> {
         const runtime = await this.requireViews(corpusId);
-        return runtime.access.read(async () => {
-            const jobs = await this.viewStore.listViewBuilds(corpusId);
-            for (const job of jobs)
-                for (const result of job.results)
-                    await this.authorizeProviderInput(result.snapshot, "read");
-            return jobs;
-        });
+        const jobs = await runtime.access.read(() =>
+            this.viewStore.listViewBuilds(corpusId),
+        );
+        for (const job of jobs) await this.authorizeBuildReceipt(job);
+        return jobs;
+    }
+
+    private async authorizeBuildReceipt(job: ViewBuildJob): Promise<void> {
+        for (const result of job.results) {
+            if (result.snapshot.pipeline === "extension-v1")
+                await this.extensionProviders.authorize(
+                    result.snapshot,
+                    "read",
+                );
+            if (!this.sourceAuthorization) continue;
+            const runtime = await this.getCorpusRuntime(job.corpusId);
+            for (const selected of result.snapshot.influenceSources ??
+                result.snapshot.inputs) {
+                const source = runtime.manifest.sources.find(
+                    (source) => source.sourceId === selected.sourceId,
+                );
+                const revision = source?.revisions.find(
+                    (revision) => revision.revisionId === selected.revisionId,
+                );
+                if (
+                    !source ||
+                    !revision ||
+                    !(await this.sourceAllowed(source, revision, "read"))
+                )
+                    throw new Error(
+                        "Retained build receipt source bodies are not authorized",
+                    );
+            }
+        }
     }
 
     public async getViewBuild(
@@ -10855,25 +11013,27 @@ export class FileMemoryService
     ): Promise<ViewBuildJob | undefined> {
         const runtime = await this.requireViews(request.corpusId);
         this.viewBuilds.assertPersistence(request.jobId);
-        return runtime.access.read(async () => {
-            const job = await this.viewStore.getViewBuild(
-                request.corpusId,
-                request.jobId,
-            );
-            for (const result of job?.results ?? [])
-                await this.authorizeProviderInput(result.snapshot, "read");
-            return job;
-        });
+        const job = await runtime.access.read(() =>
+            this.viewStore.getViewBuild(request.corpusId, request.jobId),
+        );
+        if (job) await this.authorizeBuildReceipt(job);
+        return job;
     }
 
     public async cancelViewBuild(
         request: ViewBuildJobRequest,
     ): Promise<ViewBuildJob> {
-        const job = await this.getViewBuild(request);
+        const runtime = await this.requireViews(request.corpusId);
+        const job = await runtime.access.read(() =>
+            this.viewStore.getViewBuild(request.corpusId, request.jobId),
+        );
         if (!job) throw new Error("Unknown view build");
-        if (job.state !== "running") return job;
+        if (job.state !== "running") {
+            await this.authorizeBuildReceipt(job);
+            return job;
+        }
         this.viewBuilds.cancel(job.jobId);
-        return this.enqueueWrite(request.corpusId, () =>
+        const cancelled = await this.enqueueWrite(request.corpusId, () =>
             this.viewStore.updateViewBuild(
                 request.corpusId,
                 request.jobId,
@@ -10892,6 +11052,8 @@ export class FileMemoryService
                 },
             ),
         );
+        await this.authorizeBuildReceipt(cancelled);
+        return cancelled;
     }
 
     public async retryViewBuild(
@@ -10900,6 +11062,17 @@ export class FileMemoryService
         const job = await this.getViewBuild(request);
         if (!job || job.state === "running")
             throw new Error("Retry requires an existing terminal view build");
+        if (
+            job.results.some(
+                (result) => result.snapshot.pipeline === "extension-v1",
+            )
+        )
+            return this.continueViewBuild({
+                corpusId: job.corpusId,
+                jobId: job.jobId,
+                expectedHead: (await this.viewStore.listViews(job.corpusId))
+                    .head,
+            });
         if (
             job.results.some(
                 (result) => result.snapshot.pipeline === "topics-v1",
@@ -10942,6 +11115,87 @@ export class FileMemoryService
                     .head,
                 targets,
             });
+        });
+    }
+
+    public async continueViewBuild(
+        request: import("./viewTypes.js").ViewBuildContinuationRequest,
+    ): Promise<ViewBuildJob> {
+        if (
+            !request ||
+            Object.keys(request).some(
+                (key) => !["corpusId", "jobId", "expectedHead"].includes(key),
+            ) ||
+            (request.expectedHead !== null &&
+                typeof request.expectedHead !== "string")
+        )
+            throw new Error("Invalid accounted view continuation request");
+        const previous = await this.getViewBuild(request);
+        if (!previous) throw new Error("Unknown or forgotten view build");
+        if (previous.state === "running") return previous;
+        await this.viewBuilds.wait(request.jobId, new AbortController().signal);
+        return this.enqueueWrite(request.corpusId, async () => {
+            const job = await this.viewStore.getViewBuild(
+                request.corpusId,
+                request.jobId,
+            );
+            if (!job) throw new Error("Unknown or forgotten view build");
+            if (job.state === "running") return job;
+            this.assertViewBuildEnabled(job.request);
+            if (
+                job.results.some(
+                    (result) => result.snapshot.pipeline !== "extension-v1",
+                )
+            )
+                throw new Error(
+                    "Accounted continuation requires an extension-only job; retry first-party targets separately",
+                );
+            const targets = job.results.filter((result) =>
+                ["failed", "interrupted", "cancelled", "blocked"].includes(
+                    result.state,
+                ),
+            );
+            if (!targets.length)
+                throw new Error(
+                    "Build has no resumable unchanged extension targets",
+                );
+            for (const result of targets) {
+                await this.recheckViewInput(result.snapshot);
+                await this.extensionProviders.authorize(
+                    result.snapshot,
+                    "build",
+                );
+            }
+            const reservation = this.viewBuilds.reserve();
+            try {
+                const continued = await this.viewStore.updateViewBuild(
+                    request.corpusId,
+                    request.jobId,
+                    (current) => {
+                        const state = current.state;
+                        for (const target of targets) {
+                            const result = current.results.find(
+                                (entry) => entry.viewId === target.viewId,
+                            )!;
+                            (result.continuations ??= []).push({
+                                at: new Date().toISOString(),
+                                actor: current.actor,
+                                previousState: state,
+                            });
+                            result.state = "pending";
+                            result.reason =
+                                "Explicit continuation retains counted attempts and completed stages";
+                        }
+                        current.state = "running";
+                    },
+                    undefined,
+                    request.expectedHead,
+                );
+                reservation.start(continued);
+                return continued;
+            } finally {
+                reservation.release();
+            }
         });
     }
 
@@ -11037,6 +11291,8 @@ export class FileMemoryService
                 ({ current, view }) =>
                     current.state !== "archived" &&
                     view &&
+                    (view.content.kind !== "extension" ||
+                        this.extensionBuilds) &&
                     (!request.sourceIds ||
                         this.answerViewSources(view).every((id) =>
                             request.sourceIds!.includes(id),
@@ -11172,6 +11428,45 @@ export class FileMemoryService
                         });
                     }
                 }
+            } else if (view.content.kind === "extension") {
+                for (const section of view.content.sections) {
+                    const binding = view.content.evidence.find(
+                        (entry) => entry.blockId === section.id,
+                    );
+                    if (!binding) continue;
+                    matches.push({
+                        kind: "derived",
+                        authorship: "informational",
+                        reference: {
+                            viewId: view.viewId,
+                            revisionId: view.revisionId,
+                            sectionId: section.id,
+                            state: "selected",
+                            contractVersion: view.content.provider.schemaDigest,
+                            rubricVersion: view.content.provider.recipeDigest,
+                            extension: view.content.provider,
+                        },
+                        text: `${section.heading}\n${section.body}`,
+                        influencingSourceIds: this.answerViewSources(view),
+                        supportingSources: binding.support.map(
+                            ({ sourceId, revisionId, locator }) => ({
+                                sourceId,
+                                revisionId,
+                                locator,
+                            }),
+                        ),
+                        opposingSources: binding.opposition.map(
+                            ({ sourceId, revisionId, locator }) => ({
+                                sourceId,
+                                revisionId,
+                                locator,
+                            }),
+                        ),
+                        review: match.review,
+                        freshness: match.freshness,
+                        coverage: "partial",
+                    });
+                }
             } else {
                 matches.push({
                     kind: "derived",
@@ -11197,6 +11492,7 @@ export class FileMemoryService
     private async expandAnswerSource(
         reference: AnswerSourceReference,
         request: MemoryAnswerRequest,
+        operation: import("./types.js").MemorySourceAuthorizationRequest["operation"] = "expand",
     ): Promise<MemoryEvidence | undefined> {
         if (
             request.sourceIds &&
@@ -11225,22 +11521,20 @@ export class FileMemoryService
             );
         if (!reference.locator)
             throw new Error("Answer support requires an exact locator");
+        if (!(await this.sourceAllowed(source, revision, operation)))
+            throw new ViewBuildStaleError(
+                "Original reader source authorization was revoked",
+            );
         let snippet: string;
-        const chars = /^chars:(\d+)-(\d+)$/.exec(reference.locator);
+        const chars = answerSourceCharacterSpan(
+            reference.locator,
+            revision.content.length,
+        );
         if (chars) {
-            const start = Number(chars[1]),
-                end = Number(chars[2]);
-            if (
-                !Number.isSafeInteger(start) ||
-                !Number.isSafeInteger(end) ||
-                start < 0 ||
-                end <= start ||
-                end > revision.content.length
-            )
-                throw new Error(
-                    "Answer support character locator is out of range",
-                );
-            snippet = revision.content.slice(start, end);
+            snippet = revision.content.slice(
+                Number(chars[1]),
+                Number(chars[2]),
+            );
         } else if (reference.locator.startsWith("indexed:")) {
             snippet = (
                 await this.getSourceContent({
@@ -11265,6 +11559,10 @@ export class FileMemoryService
                           segment.context.sourceSpan.end >= Number(chars[2]),
                   )?.context
                 : undefined;
+        if (!(await this.sourceAllowed(source, revision, operation)))
+            throw new ViewBuildStaleError(
+                "Original source authorization changed before reader return",
+            );
         return {
             evidenceId:
                 reference.evidenceId ??
@@ -11313,11 +11611,22 @@ export class FileMemoryService
                 return false;
         }
         const checked = new Set<string>();
-        for (const item of evidence) {
-            const identity = JSON.stringify([
-                item.kind,
-                item.kind === "source" ? item.source : item.reference,
-            ]);
+        // Check every exact original first, then each shared view dependency
+        // once at this boundary. Other boundaries must reauthorize afresh.
+        const ordered = [
+            ...evidence.filter((item) => item.kind === "source"),
+            ...evidence.filter((item) => item.kind !== "source"),
+        ];
+        for (const item of ordered) {
+            const identity = JSON.stringify(
+                item.kind === "source"
+                    ? [item.kind, item.source]
+                    : [
+                          item.kind,
+                          item.reference.viewId,
+                          item.reference.revisionId,
+                      ],
+            );
             if (checked.has(identity)) continue;
             checked.add(identity);
             if (!(await this.validateAnswerEvidenceItem(request, item)))
@@ -11331,7 +11640,11 @@ export class FileMemoryService
         item: AnswerEvidence,
     ): Promise<boolean> {
         if (item.kind === "source") {
-            const source = await this.expandAnswerSource(item.source, request);
+            const source = await this.expandAnswerSource(
+                item.source,
+                request,
+                "reader",
+            );
             return !!source && source.snippet === item.source.snippet;
         }
         const view = await this.viewStore.getView({
@@ -11365,12 +11678,164 @@ export class FileMemoryService
         );
     }
 
+    private async readUnderstandingDerivedViews(
+        input: import("./understandingTypes.js").UnderstandingModuleRequest,
+        evidence: AnswerEvidence[],
+        selectedEvidenceIds: string[] = [],
+    ): Promise<
+        Pick<
+            import("./understandingTypes.js").UnderstandingModuleResult,
+            "derivedViews" | "omittedViews" | "status" | "reason"
+        >
+    > {
+        validateDerivedModuleScope(input);
+        const selected = selectedDerivedViews(evidence);
+        if (input.viewId && !selected.has(input.viewId))
+            throw new Error(
+                "Derived view is outside the selected evidence snapshot",
+            );
+        const scope = input.viewId
+            ? [[input.viewId, selected.get(input.viewId)!] as const]
+            : [...selected];
+        const derivedViews: import("./viewExtensionUnderstanding.js").UnderstandingDerivedView[] =
+            [];
+        for (const [viewId, references] of scope) {
+            const view = await this.getView({
+                corpusId: input.corpusId,
+                viewId,
+                revisionId: references[0].revisionId,
+            });
+            if (!view || view.content.kind !== "extension")
+                throw new Error(
+                    "Selected derived artifact is unavailable or unauthorized",
+                );
+            await this.assertViewPublicationFresh(view);
+            const selectedBlockIds = evidence
+                .filter(
+                    (item) =>
+                        selectedEvidenceIds.includes(item.id) &&
+                        item.kind === "derived" &&
+                        item.reference.viewId === viewId,
+                )
+                .flatMap((item) =>
+                    item.kind === "derived" && item.reference.sectionId
+                        ? [item.reference.sectionId]
+                        : [],
+                );
+            const module = derivedViewModule(
+                view,
+                references,
+                input,
+                selectedBlockIds,
+            );
+            if (input.citationId) {
+                const binding = view.content.evidence.find(
+                    (binding) => binding.blockId === input.blockId,
+                );
+                const citations = [
+                    ...(binding?.support ?? []).map((source, index) => ({
+                        id: `${input.blockId}.support.${index}`,
+                        role: "support" as const,
+                        source,
+                    })),
+                    ...(binding?.opposition ?? []).map((source, index) => ({
+                        id: `${input.blockId}.opposition.${index}`,
+                        role: "opposition" as const,
+                        source,
+                    })),
+                ];
+                const citation = citations.find(
+                    (citation) => citation.id === input.citationId,
+                );
+                if (!citation)
+                    throw new Error(
+                        "Original citation is outside this exact snapshot block",
+                    );
+                const expanded = await this.expandAnswerSource(
+                    citation.source,
+                    {
+                        corpusId: input.corpusId,
+                        question: "Expand pinned original source",
+                    },
+                );
+                if (!expanded)
+                    throw new Error("Pinned original source is unavailable");
+                const offset = input.citationBodyOffset ?? 0;
+                if (offset > expanded.snippet.length)
+                    throw new Error(
+                        "Original citation text offset is out of range",
+                    );
+                const text = expanded.snippet.slice(offset, offset + 1000);
+                const { excerpt: _excerpt, ...source } = citation.source;
+                module.sourceFragment = {
+                    blockId: input.blockId!,
+                    citationId: citation.id,
+                    role: citation.role,
+                    source,
+                    text,
+                    offset,
+                    totalChars: expanded.snippet.length,
+                    ...(offset + text.length < expanded.snippet.length
+                        ? { nextOffset: offset + text.length }
+                        : {}),
+                };
+            }
+            if (
+                Buffer.byteLength(
+                    JSON.stringify([...derivedViews, module]),
+                    "utf8",
+                ) >
+                50 * 1024
+            ) {
+                if (input.viewId)
+                    throw new Error(
+                        "Derived view module exceeds its bounded byte budget",
+                    );
+                break;
+            }
+            derivedViews.push(module);
+        }
+        const omittedViews = scope.length - derivedViews.length;
+        const partial =
+            omittedViews > 0 ||
+            derivedViews.some(
+                (view) =>
+                    view.omittedBlocks > 0 ||
+                    view.sourceFragment?.nextOffset !== undefined ||
+                    view.blocks.some(
+                        (block) =>
+                            block.nextBodyOffset !== undefined ||
+                            block.nextCitationOffset !== undefined,
+                    ),
+            );
+        return {
+            derivedViews,
+            omittedViews,
+            status: !derivedViews.length
+                ? "unavailable"
+                : partial
+                  ? "partial"
+                  : "ready",
+            ...(partial
+                ? {
+                      reason: "Bounded exact-revision blocks, text and original citations; expand within this snapshot for omitted detail",
+                  }
+                : {}),
+        };
+    }
+
     private createUnderstanding(
         options: FileMemoryServiceOptions,
     ): MemoryUnderstanding | undefined {
         if (!options.understanding) return undefined;
         return new MemoryUnderstanding(
             {
+                derivedViews: (input, evidence, selectedIds) =>
+                    this.readUnderstandingDerivedViews(
+                        input,
+                        evidence,
+                        selectedIds,
+                    ),
                 validateSource: (corpusId, selected) => {
                     validateIdentifier("source ID", selected.sourceId);
                     validateIdentifier("revision ID", selected.revisionId);
@@ -11389,7 +11854,16 @@ export class FileMemoryService
                                         revision.revisionId ===
                                             selected.revisionId &&
                                         revision.state === "ready",
-                                )
+                                ) &&
+                                (await this.sourceAllowed(
+                                    source,
+                                    source.revisions.find(
+                                        (revision) =>
+                                            revision.revisionId ===
+                                            selected.revisionId,
+                                    )!,
+                                    "reader",
+                                ))
                             );
                         },
                     );
@@ -11701,13 +12175,14 @@ export class FileMemoryService
                                     ? { includeDiagnostics: true }
                                     : {}),
                                 indexedFragments: true,
+                                retrievalPolicy: "sourcesOnly",
                                 limit: Math.min(input.limit ?? 12, 12),
                                 maxResponseChars: Math.min(
                                     input.maxResponseChars ?? 24000,
                                     24000,
                                 ),
                             }),
-                        ...(this.viewDrafts
+                        ...(this.viewDrafts || this.extensionBuilds
                             ? {
                                   getEligibleViewMatches: (
                                       input: MemoryAnswerRequest,
@@ -11969,10 +12444,25 @@ export class FileMemoryService
                 return undefined;
             }
             const limit = Math.max(1, Math.min(request.limit ?? 5, 100));
-            const scope =
-                request.sourceIds === undefined
-                    ? undefined
-                    : new Set(request.sourceIds);
+            const scope = this.sourceAuthorization
+                ? await this.authorizedSourceScope(
+                      runtime,
+                      request.sourceIds,
+                      "reader",
+                  )
+                : request.sourceIds === undefined
+                  ? undefined
+                  : new Set(request.sourceIds);
+            if (scope?.size === 0)
+                return {
+                    question,
+                    answer: "No authorized supporting memory evidence was found.",
+                    mode: "synthesized",
+                    citations: [],
+                    grounded: true,
+                    indexVersion: this.indexVersion(runtime.manifest),
+                    warnings: [],
+                };
             const result = await index.answer(
                 question,
                 limit * 4,
@@ -11980,7 +12470,21 @@ export class FileMemoryService
                 request.temporalContext,
                 request.includeDiagnostics,
             );
-            const citations = this.toEvidence(
+            if (this.sourceAuthorization && scope) {
+                const current = await this.authorizedSourceScope(
+                    runtime,
+                    [...scope],
+                    "reader",
+                );
+                if (
+                    current.size !== scope.size ||
+                    result.matches.some((match) => !current.has(match.sourceId))
+                )
+                    throw new ViewBuildStaleError(
+                        "Original source authorization changed during reader work",
+                    );
+            }
+            const citations = await this.toEvidence(
                 request.corpusId,
                 runtime,
                 result.matches,
@@ -12581,9 +13085,7 @@ export class FileMemoryService
             "cancelled",
         ]);
         for (const entry of entries.filter((name) => name.endsWith(".json"))) {
-            const job = await readJson<IngestionJobStatus>(
-                path.join(directory, entry),
-            );
+            const job = await this.readStoredJob(path.join(directory, entry));
             if (job === undefined || terminalStates.has(job.state)) {
                 continue;
             }
@@ -13906,6 +14408,7 @@ export class FileMemoryService
                     );
         }
         this.scheduleTopics(corpusId, runtime);
+        this.scheduleExtensions(corpusId, runtime);
         await this.publishCommitted(corpusId);
     }
 
@@ -16303,18 +16806,6 @@ export class FileMemoryService
                     request.pageSize ?? 25,
                     request.continuationToken,
                 );
-                for (const job of page.items)
-                    for (const result of job.results)
-                        if (result.snapshot.pipeline === "host-defined-v1") {
-                            if (!result.providerInput)
-                                throw new Error(
-                                    "Provider build summary lacks its authorization scope",
-                                );
-                            await this.authorizeProviderInput(
-                                result.providerInput,
-                                "read",
-                            );
-                        }
                 return {
                     ...page,
                     items: page.items.map((job) => ({
@@ -16324,7 +16815,6 @@ export class FileMemoryService
                                 inputFingerprint: _input,
                                 evidenceFingerprint: _evidence,
                                 wikiAssessment: _assessment,
-                                providerInput: _provider,
                                 ...result
                             }) => ({
                                 ...result,

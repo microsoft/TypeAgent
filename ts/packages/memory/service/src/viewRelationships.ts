@@ -117,7 +117,12 @@ export function versionRelationships(
                 revisionId: version.definition.revisionId,
             },
         },
-        ...version.definition.selector.sources.map(
+        ...[
+            ...version.definition.selector.sources,
+            ...(version.definition.selector.kind === "sourceManifest"
+                ? [version.definition.selector.manifest]
+                : []),
+        ].map(
             (source): ViewRelationship => ({
                 id: `dependency:${createHash("sha256").update(viewSourceKey(source)).digest("hex").slice(0, 24)}`,
                 schemaVersion: 1,
@@ -125,7 +130,11 @@ export function versionRelationships(
                 family: "dependency",
                 origin: "system",
                 from,
-                to: { kind: "source", ...source },
+                to: {
+                    kind: "source",
+                    sourceId: source.sourceId,
+                    revisionId: source.revisionId,
+                },
             }),
         ),
         ...(

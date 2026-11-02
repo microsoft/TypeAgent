@@ -2,16 +2,13 @@
 // Licensed under the MIT License.
 
 import { projectBriefRoles } from "./projectBrief.js";
+import { viewDocumentSectionRoles } from "./viewTypes.js";
 import { validateTimeline } from "./timeline.js";
 import {
     assertViewIdentifier,
     viewSourceKey as sourceKey,
 } from "./viewContent.js";
 import { validateMaintenanceDefinition } from "./viewMaintenance.js";
-import {
-    validateExtensionDefinition,
-    validateExtensionContent,
-} from "./viewProviders.js";
 import type {
     ViewArchiveRequest,
     ViewCitation,
@@ -37,6 +34,10 @@ import {
     validateSchemaViewDefinition,
     validateSchemaViewContent,
 } from "./schemaView.js";
+import {
+    assertViewJson,
+    validateExtensionDefinition,
+} from "./viewExtensions.js";
 
 function text(value: unknown, label: string): asserts value is string {
     if (typeof value !== "string" || !value.trim())
@@ -50,7 +51,9 @@ function onlyKeys(value: object, keys: string[], label: string): void {
 
 function validateSelector(selector: ViewSourceSelector): Set<string> {
     if (
-        !["sources", "timelineEvidence"].includes(selector?.kind) ||
+        !["sources", "timelineEvidence", "sourceManifest"].includes(
+            selector?.kind,
+        ) ||
         !Array.isArray(selector.sources)
     )
         throw new Error(
@@ -62,10 +65,25 @@ function validateSelector(selector: ViewSourceSelector): Set<string> {
             "kind",
             "sources",
             ...(selector.kind === "timelineEvidence" ? ["events"] : []),
+            ...(selector.kind === "sourceManifest" ? ["manifest"] : []),
         ],
         "source selector",
     );
     const sources = new Set<string>();
+    if (selector.kind === "sourceManifest") {
+        assertViewIdentifier("manifest source ID", selector.manifest?.sourceId);
+        assertViewIdentifier(
+            "manifest revision ID",
+            selector.manifest?.revisionId,
+        );
+        if (!/^[a-f0-9]{64}$/.test(selector.manifest?.contentHash))
+            throw new Error("Invalid exact source manifest hash");
+        onlyKeys(
+            selector.manifest,
+            ["sourceId", "revisionId", "contentHash"],
+            "manifest identity",
+        );
+    }
     for (const source of selector.sources) {
         if (!source || typeof source !== "object")
             throw new Error("Invalid selected source");
@@ -116,23 +134,25 @@ function validateSections(sections: ViewSection[], kind: string): Set<string> {
         if (ids.has(section.id)) throw new Error("Duplicate section ID");
         ids.add(section.id);
         const allowed: readonly string[] =
-            kind === "timeline"
-                ? ["event"]
-                : kind === "wiki"
-                  ? ["page"]
-                  : kind === "schemaView"
-                    ? ["question"]
-                    : kind === "projectBrief"
-                      ? projectBriefRoles
-                      : [
-                            "description",
-                            "prerequisites",
-                            "diagnostic",
-                            "guard",
-                            "verification",
-                            "recovery",
-                            "context",
-                        ];
+            kind === "extension"
+                ? viewDocumentSectionRoles
+                : kind === "timeline"
+                  ? ["event"]
+                  : kind === "wiki"
+                    ? ["page"]
+                    : kind === "schemaView"
+                      ? ["question"]
+                      : kind === "projectBrief"
+                        ? projectBriefRoles
+                        : [
+                              "description",
+                              "prerequisites",
+                              "diagnostic",
+                              "guard",
+                              "verification",
+                              "recovery",
+                              "context",
+                          ];
         if (!allowed.includes(section.role))
             throw new Error("Unsupported guide section role");
         text(section.heading, "Section heading");
@@ -407,10 +427,8 @@ function validateDraftContent(
     sources: Set<string>,
 ): Set<string> {
     if (
-        (request.content.kind === "timeline" &&
-            request.definition.selector.kind !== "timelineEvidence") ||
-        (request.definition.selector.kind === "timelineEvidence" &&
-            !["timeline", "extension"].includes(request.content.kind))
+        (request.content.kind === "timeline") !==
+        (request.definition.selector.kind === "timelineEvidence")
     )
         throw new Error(
             "Timeline requires discriminated canonical-event/document selection",
@@ -427,8 +445,11 @@ function validateDraftContent(
     if (request.content.kind === "wiki") validateWiki(request.content);
     if (request.content.kind === "schemaView")
         validateSchemaViewContent(request.definition, request.content);
-    if (request.content.kind === "extension")
-        validateExtensionContent(request.definition, request.content);
+    if (request.content.kind === "extension") {
+        assertViewJson(request.content.payload);
+        if (request.content.construction !== "extension-v1")
+            throw new Error("Unsupported extension content version");
+    }
     if (request.content.agentEdition !== undefined)
         throw new Error(
             "Agent editions are not supported in derived view drafts",
@@ -450,7 +471,15 @@ function validateDraftContent(
                 : []),
             ...(request.content.kind === "schemaView" ? ["construction"] : []),
             ...(request.content.kind === "extension"
-                ? ["provider", "data"]
+                ? [
+                      "construction",
+                      "provider",
+                      "payload",
+                      "presentation",
+                      "inputUse",
+                      "fidelity",
+                      "evidence",
+                  ]
                 : []),
         ],
         "guide content",

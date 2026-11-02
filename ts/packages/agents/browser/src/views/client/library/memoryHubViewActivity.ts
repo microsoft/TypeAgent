@@ -64,7 +64,7 @@ function resultTitle(
         timeline: "Timeline",
         troubleshootingGuide: "Troubleshooting guide",
         schemaView: "Schema-defined questions",
-        extension: "Structured view",
+        extension: "User-defined view",
     };
     return labels[result.snapshot.definition.kind];
 }

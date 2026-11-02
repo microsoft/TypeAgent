@@ -12,7 +12,6 @@ import {
     viewPublicationStatusSchema,
     viewVersionSchema,
     viewSnapshotSchema,
-    viewKindSchema,
 } from "./viewProtocol.js";
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/);
@@ -23,6 +22,14 @@ export const inventoryPageRequestSchema = z.strictObject({
     query: z.string().max(1000).optional(),
     viewId: id.optional(),
 });
+const viewKindSchema = z.enum([
+    "wiki",
+    "projectBrief",
+    "timeline",
+    "schemaView",
+    "extension",
+    "troubleshootingGuide",
+]);
 export const viewSummaryRequestSchema = inventoryPageRequestSchema.extend({
     kind: viewKindSchema.optional(),
     excludeKinds: viewKindSchema.array().max(6).optional(),
@@ -136,13 +143,12 @@ export const viewBuildSummarySchema = viewBuildJobSchema
                 conflictState: z
                     .enum(["pending", "resolved", "missing"])
                     .optional(),
-                snapshot: result.shape.snapshot
-                    .pick({ pipeline: true })
-                    .extend({
-                        definition: z.strictObject({
-                            kind: viewSummarySchema.shape.content.shape.kind,
-                        }),
+                snapshot: z.object({
+                    pipeline: result.shape.snapshot.shape.pipeline,
+                    definition: z.strictObject({
+                        kind: viewSummarySchema.shape.content.shape.kind,
                     }),
+                }),
             })
             .array(),
     });

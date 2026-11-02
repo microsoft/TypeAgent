@@ -7,6 +7,8 @@ import {
     maintenanceExtractionModel,
     withMaintenanceExtraction,
     createMaintenanceBuildScheduler,
+    setMaintenanceBuildClass,
+    yieldMaintenanceBuild,
 } from "../src/maintenanceConcurrency.js";
 import type { ChatModel } from "@typeagent/aiclient";
 import { createDocMemorySettings } from "@typeagent/conversation-memory";
@@ -240,4 +242,124 @@ test("reserved short capacity admits Wiki work before the fourth native build", 
     }
     await Promise.all(native);
     expect(entered[entered.length - 1]).toBe("native-3");
+});
+
+test("provider classification and long construction share first-party reservation, priority, yielding, corpus barriers and cancellation", async () => {
+    const schedule = createMaintenanceBuildScheduler(1);
+    const entered: string[] = [];
+    let classified!: () => void,
+        proceed!: () => void,
+        constructed!: () => void,
+        releaseYield!: () => void;
+    const classification = new Promise<void>(
+        (resolve) => (classified = resolve),
+    );
+    const gate = new Promise<void>((resolve) => (proceed = resolve));
+    const construction = new Promise<void>(
+        (resolve) => (constructed = resolve),
+    );
+    const checkpoint = new Promise<void>((resolve) => (releaseYield = resolve));
+    const controller = new AbortController();
+    const provider = schedule(
+        async () => {
+            entered.push("provider-classification");
+            classified();
+            await gate;
+            await setMaintenanceBuildClass(true, controller.signal);
+            entered.push("provider-construction");
+            constructed();
+            await checkpoint;
+            await yieldMaintenanceBuild(controller.signal);
+            entered.push("provider-resumed");
+        },
+        false,
+        "provider-corpus",
+    );
+    await classification;
+    const long = schedule(
+        async () => {
+            entered.push("first-party-long");
+        },
+        true,
+        "native-corpus",
+    );
+    const shorts = [0, 1, 2, 3].map((index) =>
+        schedule(
+            async () => {
+                entered.push(`first-party-short-${index}`);
+            },
+            false,
+            `short-${index}`,
+        ),
+    );
+    const sameCorpus = schedule(
+        async () => {
+            entered.push("same-corpus");
+        },
+        false,
+        "provider-corpus",
+    );
+    proceed();
+    await construction;
+    const lateShort = schedule(
+        async () => {
+            entered.push("late-short");
+        },
+        false,
+        "late",
+    );
+    releaseYield();
+    await Promise.all([provider, long, ...shorts, sameCorpus, lateShort]);
+    expect(entered.slice(0, 5)).toEqual([
+        "provider-classification",
+        "first-party-short-0",
+        "first-party-short-1",
+        "first-party-short-2",
+        "first-party-long",
+    ]);
+    expect(entered.indexOf("same-corpus")).toBeGreaterThan(
+        entered.indexOf("provider-resumed"),
+    );
+    expect(entered).toContain("provider-construction");
+    expect(entered.indexOf("late-short")).toBeGreaterThan(
+        entered.indexOf("provider-construction"),
+    );
+    expect(entered.indexOf("late-short")).toBeLessThan(
+        entered.indexOf("provider-resumed"),
+    );
+
+    const reserved = createMaintenanceBuildScheduler(2, true);
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => (release = resolve));
+    const cancel = new AbortController();
+    const native = reserved(
+        async () => {
+            await hold;
+        },
+        true,
+        "native",
+    );
+    const cancelled = reserved(
+        async () => {
+            entered.push("classified-cancelled-provider");
+            await setMaintenanceBuildClass(true, cancel.signal);
+            entered.push("cancelled-provider-model");
+        },
+        false,
+        "cancelled",
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    const rejection = expect(cancelled).rejects.toThrow("cancelled phase");
+    cancel.abort(new Error("cancelled phase"));
+    await reserved(
+        async () => {
+            entered.push("reserved-short");
+        },
+        false,
+        "short",
+    );
+    release();
+    await Promise.all([native, rejection]);
+    expect(entered).not.toContain("cancelled-provider-model");
+    expect(entered).toContain("reserved-short");
 });

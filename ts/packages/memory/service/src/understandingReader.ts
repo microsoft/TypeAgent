@@ -10,6 +10,12 @@ import {
 } from "./indexedAnswer.js";
 import type { AnswerEvidence } from "./types.js";
 import {
+    answerEvidenceForReader,
+    influencingSourceScopeInstructions,
+    viewInterpretationInstructions,
+} from "./integratedAnswerReader.js";
+import {
+    assertReaderOriginalCitations,
     ReaderStatusMismatch,
     readWithStatusRepair,
 } from "./readerStatusRepair.js";
@@ -53,20 +59,13 @@ function claim(value: unknown, evidence: AnswerEvidence[]): UnderstandingClaim {
     if (object.role !== "memory")
         throw new Error("Unsupported understanding claim role");
     const evidenceIds = strings(object.evidenceIds, 32, 500);
-    for (const id of evidenceIds) {
+    const cited = evidenceIds.map((id) => {
         const item = evidence.find((item) => item.id === id);
         if (!item)
             throw new Error("Understanding returned an unknown evidence ID");
-        if (
-            item.kind !== "source" &&
-            ![...item.supportingEvidenceIds, ...item.opposingEvidenceIds].every(
-                (required) => evidenceIds.includes(required),
-            )
-        )
-            throw new Error(
-                "Understanding claim omitted original support or opposition",
-            );
-    }
+        return item;
+    });
+    for (const item of cited) assertReaderOriginalCitations(item, evidenceIds);
     return {
         text: text(object.text, 3000),
         evidenceIds: [...new Set(evidenceIds)],
@@ -281,7 +280,7 @@ export async function readUnderstanding(input: {
             followUps: [],
             retrievalQueries: [],
         };
-    const supplied = input.evidence.map((item) => {
+    const supplied = input.evidence.map(answerEvidenceForReader).map((item) => {
         if (item.kind !== "source") return item;
         const { synopsis: _synopsis, ...source } = item.source;
         return { ...item, source };
@@ -289,7 +288,7 @@ export async function readUnderstanding(input: {
     const messages: PromptSection[] = [
         {
             role: "system",
-            content: `${instructions} Aim for at most ${input.brief ? "700" : "1,600"} output tokens; shorter is better for simple questions. Explicitly label arithmetic or other inferred intermediate states as inference, not reported history. Concept signals use existing entity candidate IDs and only recommend useful context, not invented descriptions. ${input.allowRefinement ? "When evidence is missing, request at most two focused retrievalQueries within the same scope; otherwise return []. Use concise search keywords, not instructions such as 'find the conversation'. Include likely original wording and common abbreviations (for example JS for JavaScript) when useful; do not invent missing quantities." : "No further searches are allowed; retrievalQueries must be []."}`,
+            content: `${instructions} ${influencingSourceScopeInstructions} ${viewInterpretationInstructions} Aim for at most ${input.brief ? "700" : "1,600"} output tokens; shorter is better for simple questions. Explicitly label arithmetic or other inferred intermediate states as inference, not reported history. Concept signals use existing entity candidate IDs and only recommend useful context, not invented descriptions. ${input.allowRefinement ? "When evidence is missing, request at most two focused retrievalQueries within the same scope; otherwise return []. Use concise search keywords, not instructions such as 'find the conversation'. Include likely original wording and common abbreviations (for example JS for JavaScript) when useful; do not invent missing quantities." : "No further searches are allowed; retrievalQueries must be []."}`,
         },
         {
             role: "user",

@@ -70,7 +70,7 @@ export function assertPublicationProof(version: ViewVersion): void {
     const input = version.generation!.input!;
     if (
         input.pipeline !== "schema-defined-v1" &&
-        input.pipeline !== "host-defined-v1" &&
+        input.pipeline !== "extension-v1" &&
         (!output.inventory || !output.inventoryAudit || !output.coverage)
     )
         throw new Error(

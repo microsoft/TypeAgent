@@ -6,6 +6,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
     viewArchiveRequestSchema,
     viewBuildJobRequestSchema,
+    viewBuildContinuationRequestSchema,
     viewBuildJobSchema,
     viewBuildRequestSchema,
     viewConflictReadSchema,
@@ -341,6 +342,26 @@ export function registerViewTools(
             outputSchema: z.object({ result: viewBuildJobSchema }),
         },
         async (request) => run(() => views.cancelViewBuild(request)),
+    );
+    server.registerTool(
+        viewToolNames.refreshExtensionViews,
+        {
+            description:
+                "Discover approved extension group targets and qualify changed inputs through shared maintenance admission. Unchanged, interrupted and failed receipts are not automatically retried.",
+            inputSchema: corpus,
+            outputSchema: z.object({ result: viewBuildJobSchema.array() }),
+        },
+        async (request) => run(() => views.refreshExtensionViews(request)),
+    );
+    server.registerTool(
+        viewToolNames.continueViewBuild,
+        {
+            description:
+                "Continue an unchanged extension build with durable stages and cumulative request receipts; only host-approved cumulative budget amendments apply.",
+            inputSchema: viewBuildContinuationRequestSchema,
+            outputSchema: z.object({ result: viewBuildJobSchema }),
+        },
+        async (request) => run(() => views.continueViewBuild(request)),
     );
     server.registerTool(
         viewToolNames.retryViewBuild,

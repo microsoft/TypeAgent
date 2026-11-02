@@ -49,14 +49,17 @@ import {
 } from "@typeagent/aiclient";
 import {
     createMaintenanceBuildScheduler,
+    setMaintenanceBuildClass,
     yieldMaintenanceBuild,
+    type MaintenanceModelScheduler,
 } from "./maintenanceConcurrency.js";
 import { createLimiter } from "@typeagent/common-utils";
 import {
-    viewProviderOutput,
-    type ViewProviderResult,
-} from "./viewProviders.js";
-import { assertSupportReport } from "./viewSynthesis.js";
+    ViewExtensionRegistry,
+    ViewExtensionDeferred,
+} from "./viewExtensions.js";
+import type { ViewEligibilityReceipt } from "./viewExtensionTypes.js";
+import { createExtensionExecution } from "./viewExtensionExecution.js";
 
 export class ViewBuildStaleError extends Error {}
 
@@ -82,11 +85,7 @@ interface ViewBuildRuntimeScope {
 }
 
 export interface ViewBuildOwner extends TopicBuildOwner {
-    constructExtension?(
-        job: ViewBuildJob,
-        result: ViewBuildTargetResult,
-        signal: AbortSignal,
-    ): Promise<ViewProviderResult>;
+    assertExtensionEligible?(input: ViewBuildSnapshot): Promise<void>;
     update(
         corpusId: string,
         jobId: string,
@@ -155,6 +154,8 @@ export class ViewBuildRunner {
         reserveShortSlot = false,
         private readonly wikiAssessmentConcurrency = 1,
         prioritizeShortBuilds = !reserveShortSlot,
+        private readonly extensions?: ViewExtensionRegistry,
+        private readonly modelScheduler?: MaintenanceModelScheduler,
     ) {
         if (
             !Number.isSafeInteger(wikiAssessmentConcurrency) ||
@@ -175,10 +176,6 @@ export class ViewBuildRunner {
     public assertPersistence(jobId: string): void {
         const failure = this.failures.get(jobId);
         if (failure) throw failure.error;
-    }
-
-    public isActive(jobId: string): boolean {
-        return this.tasks.has(jobId);
     }
 
     public start(job: ViewBuildJob): void {
@@ -230,9 +227,7 @@ export class ViewBuildRunner {
                     { corpusId: job.corpusId, buildId: job.jobId },
                 ),
             job.results.some(
-                (result) =>
-                    result.snapshot.pipeline === "topics-v1" ||
-                    result.snapshot.pipeline === "host-defined-v1",
+                (result) => result.snapshot.pipeline === "topics-v1",
             ),
             job.corpusId,
         );
@@ -460,14 +455,12 @@ export class ViewBuildRunner {
         let validation = false;
         try {
             signal.throwIfAborted();
-            if (result.snapshot.pipeline === "host-defined-v1") {
-                return await this.extensionTarget(
-                    job,
-                    result,
-                    signal,
-                    jobSignal,
-                );
-            }
+            if (result.snapshot.pipeline === "extension-v1")
+                return await this.extensionTarget(job, result, signal);
+            await setMaintenanceBuildClass(
+                result.snapshot.pipeline === "topics-v1",
+                signal,
+            );
             if (result.snapshot.pipeline === "topics-v1") {
                 if (!this.owner.materializeTopics)
                     throw new Error(
@@ -536,6 +529,7 @@ export class ViewBuildRunner {
                 );
                 return true;
             }
+
             if (
                 result.snapshot.definition.kind === "timeline" &&
                 !result.snapshot.inputs.some((input) => input.records?.length)
@@ -679,14 +673,14 @@ export class ViewBuildRunner {
                 this.consolidateWikiTarget(job, result, conflicts, signal),
             );
         } catch (error) {
-            await this.failTarget(
-                job,
-                result,
+            const state = failedTargetState(
                 error,
                 signal,
                 jobSignal,
                 validation,
             );
+            if (!this.purged.has(job.jobId))
+                await this.result(job, result.viewId, state, safeError(error));
             return false;
         } finally {
             clearTimeout(timer);
@@ -699,91 +693,141 @@ export class ViewBuildRunner {
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
         signal: AbortSignal,
-        jobSignal: AbortSignal,
     ): Promise<boolean> {
-        let validation = false;
+        if (!this.extensions || !this.modelScheduler)
+            throw new Error("Extension provider execution is unavailable");
+        const registry = this.extensions;
+        const input = result.snapshot;
+        await setMaintenanceBuildClass(false, signal);
+        const provider = registry.resolve(input);
+        const update = async (
+            operation: (target: ViewBuildTargetResult) => void,
+            finishing = false,
+        ) => {
+            if (!finishing) await this.owner.assertExtensionEligible?.(input);
+            await this.owner.update(job.corpusId, job.jobId, (current) => {
+                const target = current.results.find(
+                    (entry) => entry.viewId === result.viewId,
+                );
+                if (!target || (!finishing && current.state !== "running"))
+                    throw new Error("Provider job is no longer active");
+                if (target.snapshot.fingerprint !== input.fingerprint)
+                    throw new Error("Provider job input identity changed");
+                operation(target);
+            });
+        };
+        const context = await createExtensionExecution({
+            input,
+            result,
+            provider,
+            registry,
+            signal,
+            update,
+            requestBudget: this.informationalLimits,
+            models: this.modelScheduler,
+            errorText: safeError,
+            assertEligible: () =>
+                this.owner.assertExtensionEligible?.(input) ??
+                Promise.resolve(),
+        });
+        await registry.authorize(input, "build");
+        const definition = input.definition.extension!;
+        const criteria = provider.descriptor.definitions.find(
+            (entry) => entry.id === definition.definitionId,
+        )!;
+        const receipt: ViewEligibilityReceipt = {
+            schemaVersion: 1,
+            provider: provider.descriptor.identity,
+            definitionId: definition.definitionId,
+            targetKey: definition.targetKey,
+            criteriaVersion: criteria.eligibilityVersion,
+            policyDigest: definition.policyDigest,
+            inputFingerprint: input.fingerprint,
+            mode: criteria.mode,
+            disposition: "failed",
+            reason: "Qualification did not complete",
+        };
         try {
-            if (!this.owner.constructExtension)
-                throw new Error(
-                    "Host-defined view construction is not installed",
-                );
-            await this.result(
-                job,
-                result.viewId,
-                "generating",
-                "Constructing the installed structured view",
+            const qualification = await provider.evaluateEligibility(
+                structuredClone(input),
+                criteria.mode === "decision"
+                    ? context
+                    : {
+                          ...context,
+                          complete: async () => {
+                              throw new Error(
+                                  "Static eligibility cannot invoke a model",
+                              );
+                          },
+                          decide: async () => {
+                              throw new Error(
+                                  "Static eligibility cannot invoke a decision model",
+                              );
+                          },
+                      },
             );
-            const constructed = await abortable(
-                this.owner.constructExtension(job, result, signal),
-                signal,
-            );
-            if (constructed.state !== "accepted") {
-                await this.result(
-                    job,
-                    result.viewId,
-                    constructed.state === "deferred" ? "blocked" : "failed",
-                    constructed.reason,
-                );
-                return constructed.state === "deferred";
-            }
-            validation = true;
-            const output = viewProviderOutput(
-                result.snapshot,
-                constructed.document,
-            );
-            validateConstructedGuide(result.snapshot, output);
-            assertSupportReport(constructed.support);
-            validateSupport(output, constructed.support);
-            await this.result(
-                job,
-                result.viewId,
-                "validating",
-                "Validated structured content and independent exact-source support",
-            );
-            validation = false;
-            signal.throwIfAborted();
-            await this.owner.materialize(
-                job,
-                result,
-                output,
-                output,
-                [],
-                signal,
-                publicationProof(
-                    result.snapshot.fingerprint,
-                    output,
-                    constructed.support,
-                ),
-            );
-            return true;
+            if (
+                !["eligible", "ineligible", "deferred", "failed"].includes(
+                    qualification.disposition,
+                ) ||
+                typeof qualification.reason !== "string" ||
+                !qualification.reason.trim()
+            )
+                throw new Error("Invalid provider qualification result");
+            Object.assign(receipt, qualification);
         } catch (error) {
-            await this.failTarget(
-                job,
-                result,
-                error,
-                signal,
-                jobSignal,
-                validation,
-            );
-            return false;
+            receipt.reason = safeError(error);
         }
-    }
-
-    private async failTarget(
-        job: ViewBuildJob,
-        result: ViewBuildTargetResult,
-        error: unknown,
-        signal: AbortSignal,
-        jobSignal: AbortSignal,
-        validation: boolean,
-    ): Promise<void> {
-        if (!this.purged.has(job.jobId))
+        await update((target) => {
+            target.eligibility = receipt;
+        });
+        if (receipt.disposition !== "eligible") {
             await this.result(
                 job,
                 result.viewId,
-                failedTargetState(error, signal, jobSignal, validation),
-                safeError(error),
+                receipt.disposition === "ineligible"
+                    ? "skipped"
+                    : receipt.disposition === "failed"
+                      ? "failed"
+                      : "blocked",
+                receipt.reason,
             );
+            return receipt.disposition === "ineligible";
+        }
+        await context.checkpoint("qualified");
+        await setMaintenanceBuildClass(
+            input.inputs.reduce(
+                (sum, source) => sum + source.content.length,
+                0,
+            ) > 120000,
+            context.signal,
+        );
+        await this.result(
+            job,
+            result.viewId,
+            "generating",
+            "Constructing qualified extension artifact",
+        );
+        const output = await registry.generate(input, context);
+        validateConstructedGuide(input, output);
+        if (output.content.kind !== "extension")
+            throw new Error("Extension output changed kind");
+        validateSupport(output, output.content.fidelity);
+        await registry.authorize(input, "accept");
+        await this.owner.materialize(
+            job,
+            result,
+            output,
+            output,
+            [],
+            context.signal,
+            publicationProof(
+                input.fingerprint,
+                output,
+                output.content.fidelity,
+            ),
+        );
+        return true;
     }
 
     private async validateOrRepairAnswers(
@@ -1047,7 +1091,7 @@ export class ViewBuildRunner {
         try {
             for (const [index, result] of job.results.entries()) {
                 if (
-                    result.snapshot.pipeline === "host-defined-v1" &&
+                    result.snapshot.pipeline === "extension-v1" &&
                     result.state !== "pending"
                 )
                     continue;
@@ -1131,7 +1175,8 @@ function failedTargetState(
         return "stale";
     if (
         error instanceof EditorialRejection ||
-        error instanceof ConsolidationRejection
+        error instanceof ConsolidationRejection ||
+        error instanceof ViewExtensionDeferred
     )
         return "blocked";
     if (targetSignal.aborted) return jobSignal.aborted ? "cancelled" : "failed";

@@ -22,7 +22,8 @@ export type UnderstandingModuleKind =
     | "timeline"
     | "relationships"
     | "concepts"
-    | "sources";
+    | "sources"
+    | "derivedViews";
 
 export interface UnderstandingRequest {
     requestId?: string | undefined;
@@ -135,7 +136,22 @@ export interface UnderstandingModuleRequest {
     requestId?: string | undefined;
     corpusId: string;
     snapshotId: string;
-    kind: "timeline" | "relationships" | "concepts" | "sources";
+    kind:
+        | "timeline"
+        | "relationships"
+        | "concepts"
+        | "sources"
+        | "derivedViews";
+    viewId?: string | undefined;
+    revisionId?: string | undefined;
+    layoutId?: string | undefined;
+    offset?: number | undefined;
+    limit?: number | undefined;
+    blockId?: string | undefined;
+    bodyOffset?: number | undefined;
+    citationOffset?: number | undefined;
+    citationId?: string | undefined;
+    citationBodyOffset?: number | undefined;
 }
 
 export interface UnderstandingModuleResult {
@@ -150,6 +166,8 @@ export interface UnderstandingModuleResult {
     graph?: MemoryGraphQueryResult;
     support?: { edgeId: string; items: MemoryGraphSupport[] }[];
     citations: UnderstandingCitation[];
+    derivedViews?: import("./viewExtensionUnderstanding.js").UnderstandingDerivedView[];
+    omittedViews?: number;
 }
 
 export interface MemoryUnderstandingService {
@@ -164,6 +182,16 @@ export interface MemoryUnderstandingService {
 }
 
 export interface UnderstandingHost extends MemoryGraphService {
+    derivedViews?(
+        input: UnderstandingModuleRequest,
+        evidence: AnswerEvidence[],
+        selectedEvidenceIds?: string[],
+    ): Promise<
+        Pick<
+            UnderstandingModuleResult,
+            "derivedViews" | "omittedViews" | "status" | "reason"
+        >
+    >;
     validateSource?(
         corpusId: string,
         source: NonNullable<UnderstandingRequest["source"]>,

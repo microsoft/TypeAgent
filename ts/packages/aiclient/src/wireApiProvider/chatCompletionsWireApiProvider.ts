@@ -6,6 +6,7 @@ import type { WireApi } from "@typeagent/config";
 import type { ApiSettings, CompletionUsageStats } from "../openai.js";
 import {
     createApiHeaders,
+    incompleteOutputMessage,
     verifyFilterResults,
     type FilterError,
     type FilterResult,
@@ -79,6 +80,9 @@ function flattenUsage(usage: ProviderUsage): CompletionUsageStats {
 
 function verifyStreamContentSafety(data: ChatCompletionChunk): void {
     data.choices.map((c: ChatCompletionDelta) => {
+        if (c.finish_reason === "length") {
+            throw new Error(incompleteOutputMessage);
+        }
         if (c.finish_reason === "content_filter_error") {
             const err = c.content_filter_results as FilterError;
             throw new Error(
@@ -208,6 +212,9 @@ export class ChatCompletionsWireApiProvider implements ProviderAdapter {
         const completion = data as ChatCompletion;
         if (!completion.choices || completion.choices.length === 0) {
             return error("No choices returned");
+        }
+        if (completion.choices[0].finish_reason === "length") {
+            return error(incompleteOutputMessage);
         }
         if (completion.choices[0].finish_reason === "content_filter") {
             return error("Model response blocked by content filter");

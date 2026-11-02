@@ -796,7 +796,7 @@ export function assertSynthesisOutput(
             "chronology",
             "knowledgePages",
             "schemaAnswers",
-            "structuredExplanation",
+            "extensionArtifact",
         ].includes(String(value.outcome))
     )
         errors.push("Unsupported synthesis outcome");
@@ -1016,26 +1016,21 @@ export function validateConstructedGuide(
         validateSchemaOutput(input, output);
         return;
     }
-    if (input.pipeline === "host-defined-v1") {
+    if (input.pipeline === "extension-v1") {
         if (
             output.content.kind !== "extension" ||
-            output.outcome !== "structuredExplanation"
+            output.outcome !== "extensionArtifact"
         )
-            throw new Error(
-                "Host construction requires a structured extension artifact",
-            );
-        for (const section of output.content.sections)
-            if (
-                !output.relationships.some(
-                    (edge) =>
-                        edge.predicate === "supportedBy" &&
-                        edge.from.sectionId === section.id,
-                )
-            )
-                throw new Error(
-                    `Extension section ${section.id} lacks exact supporting evidence`,
-                );
+            throw new Error("Invalid extension construction outcome");
         validateConstructedCitations(input, output);
+        for (const binding of output.content.evidence)
+            validateConstructedCitations(input, {
+                ...output,
+                content: {
+                    ...output.content,
+                    citations: [...binding.support, ...binding.opposition],
+                },
+            });
         return;
     }
     validateLegacyConstructedContent(input, output);

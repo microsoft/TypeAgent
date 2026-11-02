@@ -500,6 +500,8 @@ export const viewMethods = [
     "memoryListViewBuilds",
     "memoryCancelViewBuild",
     "memoryRetryViewBuild",
+    "memoryContinueViewBuild",
+    "memoryRefreshExtensionViews",
     "memoryGetViewConflict",
     "memoryResolveViewConflict",
     "memoryListCorpora",

@@ -1,11 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Result, success } from "typechat";
+import { Result, success, error } from "typechat";
 import type { WireApi } from "@typeagent/config";
 import type { ApiSettings, CompletionUsageStats } from "../openai.js";
 import {
     createApiHeaders,
+    incompleteOutputMessage,
     splitSystemMessages,
     usageFromInputOutput,
 } from "./shared.js";
@@ -32,6 +33,7 @@ type ResponsesUsage = {
 };
 
 type ResponsesResult = {
+    status?: string;
     output_text?: string;
     output?: ResponsesOutputItem[];
     usage?: ResponsesUsage;
@@ -97,6 +99,9 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
 
     parseResponse(data: unknown, _request: ModelRequest): Result<string> {
         const res = data as ResponsesResult;
+        if (res.status === "incomplete") {
+            return error(incompleteOutputMessage);
+        }
         if (typeof res.output_text === "string") {
             return success(res.output_text);
         }
@@ -131,6 +136,9 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
                     };
                 };
                 const piece: StreamPiece = {};
+                if (evt.type === "response.incomplete") {
+                    throw new Error(incompleteOutputMessage);
+                }
                 if (
                     evt.type === "response.output_text.delta" &&
                     typeof evt.delta === "string"

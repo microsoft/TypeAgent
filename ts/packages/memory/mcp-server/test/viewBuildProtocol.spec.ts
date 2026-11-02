@@ -10,7 +10,9 @@ import {
     FileMemoryService,
     type ViewBuildSnapshot,
     type ViewSynthesisOutput,
-    type HostViewProvider,
+    type ViewExtensionProvider,
+    extensionViewId,
+    viewExtensionDigest,
 } from "@typeagent/memory-service";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -81,23 +83,66 @@ test("authenticated MCP installs, builds and reopens provider content with scope
     );
     let completions = 0;
     let allowed = true;
-    const identity = {
-        id: "fixture.protocol",
-        version: "1",
-        implementationSha256: "a".repeat(64),
-        schemaSha256: "b".repeat(64),
+    const outputSchema = {
+        type: "object" as const,
+        properties: {
+            questionTitle: { type: "string" as const, maxLength: 200 },
+            statement: { type: "string" as const, maxLength: 2000 },
+        },
+        required: ["questionTitle", "statement"],
     };
-    const provider: HostViewProvider = {
-        identity,
-        validateInput() {},
-        validateDocument() {},
-        async construct(context) {
+    const identity = {
+        providerId: "fixture.protocol",
+        version: "1",
+        implementationDigest: "a".repeat(64),
+        inputContract: "fixture-input-v1",
+        outputContract: "fixture-output-v1",
+        schemaDigest: viewExtensionDigest(outputSchema),
+        recipeDigest: "b".repeat(64),
+    };
+    const provider: ViewExtensionProvider = {
+        descriptor: {
+            apiVersion: 1,
+            identity,
+            modelIdentity: "offline-protocol-model",
+            label: "Protocol fixture",
+            outputSchema,
+            definitions: [
+                { id: "lookup", eligibilityVersion: "1", mode: "static" },
+            ],
+            limits: {
+                maxSources: 32,
+                maxInputChars: 120000,
+                maxOutputChars: 120000,
+                maxModelCalls: 4,
+                timeoutMs: 30000,
+            },
+        },
+        authorize: async () => {
+            if (!allowed) throw new Error("Original access revoked");
+            return true;
+        },
+        evaluateEligibility: async () => ({
+            disposition: "eligible",
+            reason: "Synthetic approved input",
+        }),
+        prepare: async () => null,
+        model: {
+            completionSettings: {},
+            async complete() {
+                completions++;
+                return {
+                    success: true,
+                    data: "The lookup failed, not an empty result.",
+                };
+            },
+        },
+        async generate(input, _prepared, context) {
             const completion = await context.complete(
                 "explanation",
                 "Explain the retained result.",
             );
-            if (!completion.success) throw new Error(completion.message);
-            const source = context.input.inputs[0];
+            const source = input.inputs[0];
             const citation = {
                 sourceId: source.sourceId,
                 revisionId: source.revisionId,
@@ -108,23 +153,62 @@ test("authenticated MCP installs, builds and reopens provider content with scope
                 title: "Lookup result",
                 data: {
                     questionTitle: "What did the lookup establish?",
-                    statement: completion.data,
+                    statement: completion,
                 },
                 missingEvidence: [],
                 statements: [
                     {
                         id: "lookup",
-                        text: completion.data,
+                        text: completion,
                         citations: [citation],
                     },
                 ],
             };
-            await context.recordCandidate("explanation", document.data);
+            await context.recordCandidate!("explanation", document.data);
             await context.checkpoint("explanation", { accepted: true });
             return {
-                state: "accepted",
-                document,
-                support: {
+                kind: "extension",
+                construction: "extension-v1",
+                provider: identity,
+                title: document.title,
+                payload: document.data,
+                sections: document.statements.map((statement) => ({
+                    id: statement.id,
+                    role: "context",
+                    heading: statement.id,
+                    body: statement.text,
+                })),
+                citations: [citation],
+                evidence: [
+                    { blockId: "lookup", support: [citation], opposition: [] },
+                ],
+                inputUse: [
+                    {
+                        sourceId: source.sourceId,
+                        revisionId: source.revisionId,
+                        disposition: "represented",
+                        reason: "Synthetic original support",
+                    },
+                ],
+                presentation: {
+                    schemaVersion: 1,
+                    templateId: "document-v1",
+                    templateVersion: 1,
+                    layouts: [
+                        {
+                            id: "story",
+                            label: "Story",
+                            groups: [
+                                {
+                                    id: "lookup",
+                                    label: "Lookup",
+                                    blockIds: ["lookup"],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                fidelity: {
                     supported: true,
                     reasons: [
                         "Synthetic transport fixture, not real-data fidelity qualification",
@@ -139,7 +223,7 @@ test("authenticated MCP installs, builds and reopens provider content with scope
                     ],
                     relationships: [
                         {
-                            edgeId: "support:lookup:0",
+                            edgeId: "lookup.support.0",
                             supported: true,
                             reason: "Controlled fixture",
                         },
@@ -155,23 +239,20 @@ test("authenticated MCP installs, builds and reopens provider content with scope
             sourceSynopses: false,
             indexFactory: (_id, directory) =>
                 new FakeSemanticCorpusIndex(directory),
-            viewProviders: [provider],
-            viewProviderAuthorization: {
-                async assertAuthorized() {
-                    if (!allowed) throw new Error("Original access revoked");
-                },
-            },
-            viewProviderModel: {
-                identity: "offline-protocol-model",
-                model: {
-                    completionSettings: {},
-                    async complete() {
-                        completions++;
-                        return {
-                            success: true,
-                            data: "The lookup failed, not an empty result.",
-                        };
-                    },
+            extensionBuilds: true,
+            extensionProviders: [provider],
+            maintenanceLimits: {
+                requestBudget: {
+                    tokenizer: "offline-chars",
+                    countTokens: (text) => text.length,
+                    inputTokens: 120000,
+                    outputTokens: 2000,
+                    contextTokens: 124000,
+                    safetyTokens: 64,
+                    reservedTokens: 1000000,
+                    chatAttempts: 4,
+                    embeddingAttempts: 1,
+                    elapsedMs: 30000,
                 },
             },
         });
@@ -186,7 +267,6 @@ test("authenticated MCP installs, builds and reopens provider content with scope
     try {
         expect((await client.getCapabilities()).derivedViews).toMatchObject({
             kinds: expect.arrayContaining(["extension"]),
-            providers: [identity],
         });
         const corpus = await client.createCorpus("Provider transport fixture");
         const source = await client.ingestDocument({
@@ -200,7 +280,7 @@ test("authenticated MCP installs, builds and reopens provider content with scope
         });
         await client.waitForJob(source.jobId);
         const definition = {
-            viewId: "structured",
+            viewId: extensionViewId(identity.providerId, "lookup", "retained"),
             kind: "extension" as const,
             selector: {
                 kind: "sources" as const,
@@ -212,8 +292,12 @@ test("authenticated MCP installs, builds and reopens provider content with scope
                 ],
             },
             extension: {
-                provider: identity,
-                configuration: { inputMode: "retained" },
+                ...identity,
+                definitionId: "lookup",
+                targetKey: "retained",
+                eligibilityVersion: "1",
+                policyDigest: "c".repeat(64),
+                parameters: { inputMode: "retained" },
             },
         };
         const request = {
@@ -231,25 +315,28 @@ test("authenticated MCP installs, builds and reopens provider content with scope
             }))!;
         }
         expect(job.state).toBe("complete");
-        expect(job.results[0].providerStages).toMatchObject([
+        expect(job.results[0].providerCheckpoints).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    stage: "explanation",
+                    state: { accepted: true },
+                }),
+            ]),
+        );
+        expect(job.results[0].providerCandidates).toMatchObject([
             {
                 stage: "explanation",
-                checkpoints: [{ state: { accepted: true } }],
-                candidates: [
-                    {
-                        candidate: {
-                            questionTitle: "What did the lookup establish?",
-                        },
-                    },
-                ],
-                completions: [{ state: "succeeded" }],
+                value: { questionTitle: "What did the lookup establish?" },
             },
         ]);
-        const read = { corpusId: corpus.corpusId, viewId: "structured" };
+        expect(job.results[0].providerAttempts).toMatchObject([
+            { state: "returned" },
+        ]);
+        const read = { corpusId: corpus.corpusId, viewId: definition.viewId };
         const view = await client.getView(read);
         if (!view || view.content.kind !== "extension")
             throw new Error("Provider view missing");
-        expect(view.content.data).toMatchObject({
+        expect(view.content.payload).toMatchObject({
             questionTitle: "What did the lookup establish?",
         });
         expect(

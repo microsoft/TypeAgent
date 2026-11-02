@@ -607,6 +607,20 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
             unsupportedCapability("view builds")
         );
     }
+    public continueViewBuild(
+        request: import("@typeagent/memory-service").ViewBuildContinuationRequest,
+    ) {
+        return (
+            this.service.continueViewBuild?.(request) ??
+            unsupportedCapability("accounted view continuation")
+        );
+    }
+    public refreshExtensionViews(request: { corpusId: string }) {
+        return (
+            this.service.refreshExtensionViews?.(request) ??
+            unsupportedCapability("extension refresh")
+        );
+    }
     public retryViewBuild(request: ViewBuildJobRequest) {
         return (
             this.service.retryViewBuild?.(request) ??
@@ -1291,6 +1305,24 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             viewBuildJobSchema,
         );
     }
+    public continueViewBuild(
+        request: import("@typeagent/memory-service").ViewBuildContinuationRequest,
+    ): Promise<ViewBuildJob> {
+        return this.invoke(
+            viewToolNames.continueViewBuild,
+            request,
+            viewBuildJobSchema,
+        );
+    }
+    public refreshExtensionViews(request: {
+        corpusId: string;
+    }): Promise<ViewBuildJob[]> {
+        return this.invoke(
+            viewToolNames.refreshExtensionViews,
+            request,
+            viewBuildJobSchema.array(),
+        );
+    }
     public retryViewBuild(request: ViewBuildJobRequest): Promise<ViewBuildJob> {
         return this.invoke(
             viewToolNames.retryViewBuild,
@@ -1766,7 +1798,13 @@ function createTransport(config: MemoryMcpTransportConfig): MemoryMcpTransport {
                               signal:
                                   init?.signal == null
                                       ? AbortSignal.timeout(config.timeoutMs!)
-                                      : AbortSignal.any([
+                                      : (
+                                            AbortSignal as typeof AbortSignal & {
+                                                any(
+                                                    signals: AbortSignal[],
+                                                ): AbortSignal;
+                                            }
+                                        ).any([
                                             init.signal,
                                             AbortSignal.timeout(
                                                 config.timeoutMs!,

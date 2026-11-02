@@ -21,7 +21,8 @@ export { parseViewDraftCapability } from "./viewBuildValidation.js";
 export * from "./viewStore.js";
 export * from "./viewSynthesis.js";
 export * from "./viewTypes.js";
-export * from "./viewProviders.js";
+export * from "./viewExtensions.js";
+export * from "./viewExtensionUnderstanding.js";
 export type {
     WikiConsolidationReceipt,
     WikiConsolidationScope,
