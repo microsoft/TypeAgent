@@ -24,6 +24,8 @@ export interface KnowledgeDocument extends KnowledgeSource {
     content: string;
 }
 export interface KnowledgeHost {
+    /** Host ceiling for scheduled discovery; explicit checkpoints remain available. */
+    automaticDiscovery?: boolean | undefined;
     begin?(corpusId: string): Promise<void>;
     end?(corpusId: string): void;
     reportFailure?(corpusId: string, error: unknown): Promise<void>;
@@ -100,6 +102,7 @@ export class KnowledgeCoordinator {
     public schedule(corpusId: string): void {
         if (
             this.closed ||
+            this.host.automaticDiscovery === false ||
             this.host.activeImport(corpusId) ||
             this.checkpointCorpora.has(corpusId)
         )
@@ -120,6 +123,7 @@ export class KnowledgeCoordinator {
             this.dirtySince.delete(corpusId);
             if (
                 this.closed ||
+                this.host.automaticDiscovery === false ||
                 this.host.activeImport(corpusId) ||
                 this.checkpointCorpora.has(corpusId)
             )

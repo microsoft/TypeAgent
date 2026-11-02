@@ -850,7 +850,10 @@ export interface MemoryService
         request: MemoryEventForgetRequest,
     ): Promise<MemoryEventForgetResult>;
     search(request: MemorySearchRequest): Promise<MemorySearchResult>;
-    answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult>;
+    answer(
+        request: MemoryAnswerRequest,
+        signal?: AbortSignal,
+    ): Promise<MemoryAnswerResult>;
     getKnowledgeGraph(corpusId: string): Promise<MemoryKnowledgeGraph>;
     getCapabilities(): Promise<MemoryServiceCapabilities>;
 }
