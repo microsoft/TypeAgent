@@ -1112,8 +1112,7 @@ export function mountMemoryHubViews(
         for (const kind of supportedKinds) {
             if (
                 (kind === "wiki" && !rebuilding) ||
-                kind === "schemaView" ||
-                kind === "extension"
+                ["schemaView", "extension"].includes(kind)
             )
                 continue;
             if (rebuilding && kind !== rebuilding.content.kind) continue;
