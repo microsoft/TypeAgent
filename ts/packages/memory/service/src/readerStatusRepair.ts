@@ -18,18 +18,28 @@ export class ReaderCitationMismatch extends Error {
     }
 }
 
+export function readerCitationBundle(item: AnswerEvidence): string[] {
+    return item.kind === "source"
+        ? [item.id]
+        : [
+              ...new Set([
+                  item.id,
+                  ...item.supportingEvidenceIds,
+                  ...item.opposingEvidenceIds,
+              ]),
+          ];
+}
+
 export function assertReaderOriginalCitations(
     item: AnswerEvidence,
     evidenceIds: readonly string[],
 ) {
     if (item.kind === "source") return;
-    const missing = [
-        ...item.supportingEvidenceIds,
-        ...item.opposingEvidenceIds,
-    ].filter((id) => !evidenceIds.includes(id));
+    const required = readerCitationBundle(item);
+    const missing = required.filter((id) => !evidenceIds.includes(id));
     if (missing.length)
         throw new ReaderCitationMismatch(
-            `Reader claim citing ${item.id} omitted its original support or opposition references: ${missing.join(", ")}`,
+            `Reader claim citing ${item.id} omitted its original support or opposition references: ${missing.join(", ")}. Required same-claim evidenceIds: ${JSON.stringify(required)}`,
         );
 }
 

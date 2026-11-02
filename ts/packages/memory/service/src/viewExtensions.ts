@@ -399,7 +399,7 @@ export class ViewExtensionRegistry {
             );
             bounded(
                 descriptor.limits.maxInputChars,
-                4_000_000,
+                8_000_000,
                 "provider input bound",
             );
             bounded(
