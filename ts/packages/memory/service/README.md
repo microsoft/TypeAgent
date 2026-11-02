@@ -405,6 +405,11 @@ payloads, lineage and legacy full-read APIs are retained. The native MCP
 transport's default message limit is unchanged; neither truncation nor a larger
 transport buffer is used to admit large views.
 
+Switching layouts in an already-open extension view reuses that displayed
+revision only for the layout's own URL handoff. Exact links, explicit reopen,
+other views and later navigation still perform a fresh authorized read.
+Original-source expansion retains its independent authorization checks.
+
 ## Opt-in memory understanding
 
 Set `TYPEAGENT_MEMORY_UNDERSTANDING=true` in the host environment (or pass

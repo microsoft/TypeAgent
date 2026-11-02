@@ -354,6 +354,12 @@ test(
                 memoryListCorpora: () => client.listCorpora(),
                 memoryListSources: (request) => client.listSourcesPage(request),
             };
+            const readDetail = rpc.memoryGetView;
+            let detailReads = 0;
+            rpc.memoryGetView = async (request) => {
+                detailReads++;
+                return readDetail(request);
+            };
             const bridgePath = memoryRequire.resolve(
                 "@modelcontextprotocol/ext-apps/app-bridge",
             );
@@ -366,8 +372,9 @@ scope: () => window.fixture.corpusId, onError: (error) => document.getElementByI
 onNavigate: (route) => window.location.hash = route,
 });
 window.addEventListener("hashchange", () => {
+const destination = window.location.hash;
 const route = parseRoute(window.location.hash);
-if (route.objectId) void window.panel.show({ corpusId: route.corpusId, viewId: route.objectId, revisionId: route.viewRevisionId, pageId: route.viewPageId, layoutId: route.viewLayoutId });
+if (route.objectId) void window.panel.show({ corpusId: route.corpusId, viewId: route.objectId, revisionId: route.viewRevisionId, pageId: route.viewPageId, layoutId: route.viewLayoutId }).then(() => {if(window.location.hash === destination) window.settledRoute = destination});
 });
 await window.panel.show();
 window.hubReady = true;
@@ -384,6 +391,7 @@ iframe.srcdoc = html; window.appBridge = bridge;
                 configFile: false,
                 cacheDir: path.join(root, "vite-cache"),
                 server: {
+                    watch: null,
                     host: "127.0.0.1",
                     port: 0,
                     watch: {
@@ -538,6 +546,14 @@ iframe.srcdoc = html; window.appBridge = bridge;
                     {},
                     layout,
                 );
+                await page.waitForFunction(
+                    () => window.settledRoute === window.location.hash,
+                );
+                assert.equal(
+                    detailReads,
+                    1,
+                    "A local layout switch must not refetch the displayed revision",
+                );
             }
             const link = await page.$eval(".hub-view-extension a", (anchor) =>
                 anchor.getAttribute("href"),
@@ -546,6 +562,14 @@ iframe.srcdoc = html; window.appBridge = bridge;
             await page.evaluate((hash) => {
                 window.location.hash = hash;
             }, link);
+            await page.waitForFunction(
+                () => window.settledRoute === window.location.hash,
+            );
+            assert.equal(
+                detailReads,
+                2,
+                "A direct exact-claim link must still fetch an authorized revision",
+            );
             await page.waitForFunction(
                 () =>
                     document.querySelector(".hub-view-layout")?.dataset
@@ -557,6 +581,34 @@ iframe.srcdoc = html; window.appBridge = bridge;
                     (node) => node.dataset.revisionId,
                 ),
                 view.revisionId,
+            );
+            await page.evaluate(
+                async (view) => {
+                    [
+                        ...document.querySelectorAll(
+                            '[aria-label="View layouts"] button',
+                        ),
+                    ]
+                        .find((button) => button.textContent === "sources")
+                        .click();
+                    await window.panel.show({
+                        corpusId: view.corpusId,
+                        viewId: view.viewId,
+                        revisionId: view.revisionId,
+                        pageId: "claim",
+                        layoutId: "sources",
+                    });
+                },
+                {
+                    corpusId: view.corpusId,
+                    viewId: view.viewId,
+                    revisionId: view.revisionId,
+                },
+            );
+            assert.equal(
+                detailReads,
+                3,
+                "Explicit reopen must not reuse a consumed local layout handoff",
             );
             sdk = new Client(
                 { name: "official-browser-fixture", version: "1" },

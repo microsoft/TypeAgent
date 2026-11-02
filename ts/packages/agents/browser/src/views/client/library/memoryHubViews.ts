@@ -302,6 +302,15 @@ export function mountMemoryHubViews(
     let detailRequest:
         | { key: string; sequence: number; work: Promise<void> }
         | undefined;
+    let layoutNavigation:
+        | {
+              view: ViewVersion;
+              layoutId: string;
+              pageId: string | undefined;
+              itemKey: string | undefined;
+              sequence: number;
+          }
+        | undefined;
     let supportedKinds: ViewKind[] = ["troubleshootingGuide"];
     let maintenanceSupported = false;
     let buildsSupported = false;
@@ -704,9 +713,10 @@ export function mountMemoryHubViews(
             layoutId?: string;
         },
         current: number,
+        displayedView?: ViewVersion,
     ): Promise<void> {
         if (!(await ensureReaderCapabilities(current))) return;
-        const view = await readRouteView(target);
+        const view = displayedView ?? (await readRouteView(target));
         if (disposed || current !== sequence) return;
         if (!target.revisionId) {
             snapshot.views = [
@@ -845,6 +855,19 @@ export function mountMemoryHubViews(
     function loadDetail(
         target: Parameters<typeof renderRoute>[0],
     ): Promise<void> {
+        // Only a layout's own URL handoff can reuse its displayed revision.
+        const local = layoutNavigation;
+        layoutNavigation = undefined;
+        const displayedView =
+            local?.sequence === sequence &&
+            local.view.corpusId === target.corpusId &&
+            local.view.viewId === target.viewId &&
+            local.view.revisionId === target.revisionId &&
+            local.layoutId === target.layoutId &&
+            local.pageId === target.pageId &&
+            local.itemKey === target.itemKey
+                ? local.view
+                : undefined;
         const key = JSON.stringify(target);
         if (detailRequest?.key === key && detailRequest.sequence === sequence)
             return detailRequest.work;
@@ -857,7 +880,7 @@ export function mountMemoryHubViews(
             rbIconButton("fa-arrow-left", "Back to views", backToViews),
             viewLoadingStatus("Loading view details..."),
         );
-        const work = renderRoute(target, current)
+        const work = renderRoute(target, current, displayedView)
             .catch((error: unknown) => {
                 if (disposed || current !== sequence) return;
                 const alert = rbNode(
@@ -2045,6 +2068,16 @@ export function mountMemoryHubViews(
                     route?.layoutId,
                     (layoutId) => {
                         const destination = `#/views/${encodeURIComponent(view.corpusId)}/${encodeURIComponent(view.viewId)}/revision/${encodeURIComponent(view.revisionId)}${route?.pageId ? `/page/${encodeURIComponent(route.pageId)}` : ""}/layout/${encodeURIComponent(layoutId)}`;
+                        layoutNavigation =
+                            window.location.hash === destination
+                                ? undefined
+                                : {
+                                      view,
+                                      layoutId,
+                                      pageId: route?.pageId,
+                                      itemKey: route?.itemKey,
+                                      sequence,
+                                  };
                         if (options.onNavigate) options.onNavigate(destination);
                         else window.location.hash = destination;
                     },
