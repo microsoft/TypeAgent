@@ -27,12 +27,30 @@ export function createMemoryServiceRpcFacade(
     MemoryTopicService &
     MemoryKnowledgeService {
     return {
+        ...(service.listFrameSchemas
+            ? { listFrameSchemas: service.listFrameSchemas.bind(service) }
+            : {}),
+        ...(service.queryFrame
+            ? { queryFrame: service.queryFrame.bind(service) }
+            : {}),
+        ...(service.getFrameProjectionStatus
+            ? {
+                  getFrameProjectionStatus:
+                      service.getFrameProjectionStatus.bind(service),
+              }
+            : {}),
+        warmViewIndexes: (corpusId) =>
+            service.warmViewIndexes?.(corpusId) ??
+            unsupportedCapability("view-index warmup"),
         understand: (request) =>
             service.understand?.(request) ??
             unsupportedCapability("understanding"),
         understandingModule: (request) =>
             service.understandingModule?.(request) ??
             unsupportedCapability("understanding modules"),
+        cancelUnderstanding: (request) =>
+            service.cancelUnderstanding?.(request) ??
+            unsupportedCapability("understanding cancellation"),
         ...(service.queryKnowledgeGraph
             ? { queryKnowledgeGraph: service.queryKnowledgeGraph.bind(service) }
             : {}),
@@ -159,6 +177,12 @@ export function createMemoryServiceRpcFacade(
         retryViewBuild: (...args) =>
             service.retryViewBuild?.(...args) ??
             unsupportedCapability("view build retry"),
+        continueViewBuild: (...args) =>
+            service.continueViewBuild?.(...args) ??
+            unsupportedCapability("accounted view continuation"),
+        refreshExtensionViews: (...args) =>
+            service.refreshExtensionViews?.(...args) ??
+            unsupportedCapability("extension refresh"),
         getViewConflict: (...args) =>
             service.getViewConflict?.(...args) ??
             unsupportedCapability("view conflicts"),
@@ -173,6 +197,9 @@ export function createMemoryServiceRpcFacade(
             unsupportedCapability("source View usage"),
         getView: (...args) =>
             service.getView?.(...args) ?? unsupportedCapability("view drafts"),
+        getViewDetailPage: (request) =>
+            service.getViewDetailPage?.(request) ??
+            unsupportedCapability("paged view detail"),
         saveViewDraft: (...args) =>
             service.saveViewDraft?.(...args) ??
             unsupportedCapability("view drafts"),

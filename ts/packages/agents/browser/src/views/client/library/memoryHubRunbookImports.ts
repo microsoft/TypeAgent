@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import "./memoryHubRunbookImports.css";
 import { iconButton } from "./memoryHubUi";
 import { invokeView } from "./viewClient";
@@ -262,10 +263,9 @@ function issueText(response: RunbookImportResponse): string {
                   "Partial acquisition: supported sources were submitted; rejected selections were not imported.",
               ]
             : []),
-        ...response.acquisition.map(
-            (issue) => `${issue.state}: ${issue.member}: ${issue.reason}`,
-        ),
-        ...response.warnings,
+        ...response.acquisition
+            .filter((issue) => issue.state !== "warning")
+            .map((issue) => `${issue.state}: ${issue.member}: ${issue.reason}`),
     ].join("\n");
 }
 function ongoing(batch: MemoryBatchImport): boolean {
@@ -552,6 +552,7 @@ export function mountMemoryHubRunbookImports(
                 );
             assertUploadBody(request);
             if (request.kind !== "urls") assertAcquiredFileBounds(request);
+            hubNotifications.clear("import-result");
             status.textContent =
                 "Acquiring sources and creating a durable batch… If the response is lost, retry unchanged inputs with the same idempotency key or use Activity lookup. An admitted batch is recovered without refetching; before admission, URLs may be fetched again and may have changed.";
             const response = await invokeView(
@@ -564,6 +565,17 @@ export function mountMemoryHubRunbookImports(
                     "Import response belongs to another target corpus.",
                 );
             status.textContent = issueText(response);
+            hubNotifications.set("import-result", {
+                title: "Source imports",
+                page: "settings",
+                context: corpusId,
+                messages: [
+                    ...response.warnings,
+                    ...response.acquisition
+                        .filter((issue) => issue.state === "warning")
+                        .map((issue) => `${issue.member}: ${issue.reason}`),
+                ],
+            });
             targetCorpus = corpusId;
             activity.hidden = false;
             if (response.batch) {
@@ -600,7 +612,6 @@ export function mountMemoryHubRunbookImports(
             ),
         );
         if (member.reason) row.append(node("p", member.reason));
-        for (const warning of member.warnings) row.append(node("p", warning));
         return row;
     }
 
@@ -669,22 +680,6 @@ export function mountMemoryHubRunbookImports(
         const members = node("ul");
         members.append(...batch.members.map(memberRow));
         card.append(members);
-        for (const warning of batch.warnings ?? [])
-            card.append(node("p", warning));
-        for (const issue of batch.acquisitionIssues ?? []) {
-            if (issue.state !== "warning") continue;
-            const member = batch.members.find(
-                (member) =>
-                    member.clientKey === issue.member ||
-                    member.memberId === issue.member,
-            );
-            card.append(
-                node(
-                    "p",
-                    `Acquisition warning for ${member?.title ?? member?.displayName ?? issue.member}: ${issue.reason}`,
-                ),
-            );
-        }
         if (
             batch.members.some(
                 (member) =>
@@ -750,6 +745,32 @@ export function mountMemoryHubRunbookImports(
                     "Activity returned items from another target corpus.",
                 );
             activityStatus.textContent = `Returned records (up to the latest 100 for this collection): ${batches.length} durable import batches. These are bounded results, not collection totals. Interrupted ingestion members require explicit retry. Build views separately from ready sources.`;
+            hubNotifications.set("import-activity", {
+                title: "Import activity",
+                page: "settings",
+                context: corpusId,
+                messages: batches.flatMap((batch) => [
+                    ...(batch.warnings ?? []).map(
+                        (warning) => `${batch.batchId}: ${warning}`,
+                    ),
+                    ...batch.members.flatMap((member) =>
+                        member.warnings.map(
+                            (warning) =>
+                                `${batch.batchId} · ${member.title ?? member.displayName ?? member.memberId}: ${warning}`,
+                        ),
+                    ),
+                    ...(batch.acquisitionIssues ?? [])
+                        .filter((issue) => issue.state === "warning")
+                        .map((issue) => {
+                            const member = batch.members.find(
+                                (member) =>
+                                    member.clientKey === issue.member ||
+                                    member.memberId === issue.member,
+                            );
+                            return `${batch.batchId} · ${member?.title ?? member?.displayName ?? issue.member}: ${issue.reason}`;
+                        }),
+                ]),
+            });
             rows.replaceChildren(...batches.map(batchRow));
             if (!batches.length)
                 rows.append(node("p", "No document import batches yet."));

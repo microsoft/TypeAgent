@@ -40,6 +40,7 @@ import {
 } from "../src/schemaViewOperations.js";
 import { validateConstructedGuide } from "../src/viewSynthesis.js";
 import { FileMemoryService } from "../src/fileMemoryService.js";
+import { TypedViewStore } from "../src/viewStore.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { questionSummary } from "../src/inventory.js";
@@ -490,13 +491,14 @@ describe("ordinary-source schema lifecycle", () => {
     let fetchCalls = 0;
     let discoveryCalls = 0;
     let expectedCloseFailure: string | undefined;
+    let adapter: ViewSynthesisAdapter;
     beforeEach(async () => {
         root = await mkdtemp(path.join(os.tmpdir(), "memory-schema-views-"));
         modelCalls = 0;
         fetchCalls = 0;
         discoveryCalls = 0;
         expectedCloseFailure = undefined;
-        const adapter: ViewSynthesisAdapter = {
+        adapter = {
             identity: "offline-schema-fixture-v1",
             proposeSchema: async () => ({
                 ...schema([name]),
@@ -922,6 +924,74 @@ describe("ordinary-source schema lifecycle", () => {
         expect((await service.listSources(corpus.corpusId)).length).toBe(1);
     }, 60000);
 
+    test("opting an existing corpus into frames backfills questions without synthesis and retires rejected fields", async () => {
+        const { corpus } = await overlappingFixture();
+        await service.updateViewPublicationPolicy({
+            corpusId: corpus.corpusId,
+            expectedHead: (await service.listViews(corpus.corpusId)).head,
+            expectedRevision: (
+                await service.getViewPublicationPolicy(corpus.corpusId)
+            ).revision,
+            autoPublish: false,
+        });
+        const acquisition = await service.runAcquisitions(corpus.corpusId);
+        await waitForMemoryJob(service, acquisition[0].receipt!.jobId);
+        await answered(corpus.corpusId);
+        await service.close();
+        const calls = modelCalls;
+        service = new FileMemoryService(root, {
+            frameProjections: true,
+            informationalViews: false,
+            sourceSynopses: false,
+            discoveryPolicy: "off",
+            viewSynthesisAdapter: adapter,
+            indexFactory: (_id, directory) =>
+                new FakeSemanticCorpusIndex(directory),
+        });
+        const schemas = (
+            await service.listFrameSchemas(corpus.corpusId)
+        ).filter((schema) => schema.id.startsWith("question.answer."));
+        expect(schemas).toHaveLength(2);
+        const request = {
+            corpusId: corpus.corpusId,
+            schemaId: schemas[0].id,
+            schemaRevision: schemas[0].revision,
+            predicate: {
+                and: [{ fieldId: "value", op: "eq" as const, value: "Ada" }],
+            },
+        };
+        const selected = await service.queryFrame({
+            ...request,
+            includeUnconfirmed: true,
+        });
+        expect(selected.rows).toHaveLength(1);
+        expect(selected.rows[0].eligible).toBe(false);
+        expect(selected.rows[0].evidence).not.toHaveLength(0);
+        expect((await service.queryFrame(request)).rows).toEqual([]);
+        const question = (
+            await service.listQuestions(corpus.corpusId)
+        ).items.find(
+            (item) => `view:${item.viewId}` === selected.rows[0].ownerKey,
+        )!;
+        await service.editQuestion({
+            corpusId: corpus.corpusId,
+            viewId: question.viewId,
+            slotId: question.slot.id,
+            expectedHead: (await service.listQuestions(corpus.corpusId)).head,
+            expectedVersion: question.viewVersion,
+            edit: { kind: "approval", approval: "rejected" },
+        });
+        expect(
+            (await service.listFrameSchemas(corpus.corpusId)).some(
+                (schema) => schema.id === schemas[0].id,
+            ),
+        ).toBe(false);
+        await expect(
+            service.queryFrame({ ...request, includeUnconfirmed: true }),
+        ).rejects.toThrow("Unknown frame schema");
+        expect(modelCalls).toBe(calls);
+    }, 60000);
+
     test("an admitted upcoming ordinary source resolves questions before enrichment: zero fetches", async () => {
         const { corpus } = await overlappingFixture();
         let jobId = "";
@@ -1160,117 +1230,211 @@ describe("ordinary-source schema lifecycle", () => {
         expect(fetchCalls).toBe(0);
     }, 60000);
 
-    test("pending views reconcile later matching input, direct reads are free, and forget purges history", async () => {
-        const corpus = await service.createCorpus("Schema lifecycle");
-        const def = definition([name]);
-        def.maintenance = {
-            schemaVersion: 1,
-            scope: { mode: "scopedSources", tags: ["profile"] },
-        };
-        await settled(
-            await service.buildViews({
-                corpusId: corpus.corpusId,
-                expectedHead: (await service.listViews(corpus.corpusId)).head,
-                publication: false,
-                targets: [{ definition: def, expectedVersion: 0 }],
-            }),
-        );
-        expect(
-            (await service.listQuestions(corpus.corpusId)).items[0].details
-                .answerState,
-        ).toBe("pending");
-        const unrelated = await service.ingestDocument({
-            corpusId: corpus.corpusId,
-            source: {
-                sourceId: "other",
-                sourceType: "text",
-                title: "Unrelated",
-                text: "Unrelated data",
-                tags: ["other"],
-            },
-        });
-        await waitForMemoryJob(service, unrelated.jobId);
-        const source = await service.ingestDocument({
-            corpusId: corpus.corpusId,
-            source: {
-                sourceId: "profile",
-                sourceType: "text",
-                title: "Profile",
-                text: "Preferred name is Ada.",
-                tags: ["profile"],
-            },
-        });
-        await waitForMemoryJob(service, source.jobId);
-        for (let count = 0; count < 1000; count++) {
-            const questions = await service.listQuestions(corpus.corpusId);
-            if (questions.maintenanceError)
-                throw new Error(questions.maintenanceError);
-            if (questions.items[0].details.answerState === "answered") break;
-            await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-        const questions = await service.listQuestions(corpus.corpusId);
-        expect(questions.items[0].details.answerState).toBe("answered");
-        expect(
-            questions.items[0].details.evaluatedSources.map(
-                (source) => source.sourceId,
-            ),
-        ).toEqual(["profile"]);
-        const calls = modelCalls;
-        const page = await service.getViewPage({
-            corpusId: corpus.corpusId,
-            viewId: def.viewId,
-        });
-        expect(page.markdown).toContain("Ada");
-        await service.getView({
-            corpusId: corpus.corpusId,
-            viewId: def.viewId,
-        });
-        await service.listQuestions(corpus.corpusId);
-        expect(modelCalls).toBe(calls);
-        const publishSnapshot = await service.listViews(corpus.corpusId);
-        const current = publishSnapshot.views.find(
-            (view) => view.viewId === def.viewId,
-        )!;
-        await service.publishView({
-            corpusId: corpus.corpusId,
-            viewId: def.viewId,
-            revisionId: current.revisionId,
-            expectedHead: publishSnapshot.head!,
-            expectedVersion: current.version,
-        });
-        expect(
-            (
-                await service.searchViews({
+    test.each(["current", "stale"] as const)(
+        "pending views reconcile later matching input, direct reads are free, and forget purges history (%s publication)",
+        async (publication) => {
+            let releaseTerminal!: () => void;
+            const terminalGate = new Promise<void>(
+                (resolve) => (releaseTerminal = resolve),
+            );
+            let enteredTerminal!: (job: ViewBuildJob) => void;
+            const terminal = new Promise<ViewBuildJob>(
+                (resolve) => (enteredTerminal = resolve),
+            );
+            let held = false;
+            const updateBuild = TypedViewStore.prototype.updateViewBuild;
+            const mocks = (import.meta as ImportMeta & { jest: typeof jest })
+                .jest;
+            const update = mocks
+                .spyOn(TypedViewStore.prototype, "updateViewBuild")
+                .mockImplementation(async function (
+                    this: TypedViewStore,
+                    corpusId,
+                    jobId,
+                    change,
+                    updateFamily,
+                    expectedHead,
+                ) {
+                    const current = await this.getViewBuild(corpusId, jobId);
+                    if (
+                        !held &&
+                        current?.state === "running" &&
+                        current.results.some((result) =>
+                            result.snapshot.inputs.some(
+                                (source) => source.sourceId === "profile",
+                            ),
+                        )
+                    ) {
+                        const next = structuredClone(current);
+                        change(next);
+                        if (next.state === "complete") {
+                            held = true;
+                            enteredTerminal(current);
+                            // Hold the final receipt after the answered draft is readable.
+                            await terminalGate;
+                        }
+                    }
+                    return updateBuild.call(
+                        this,
+                        corpusId,
+                        jobId,
+                        change,
+                        updateFamily,
+                        expectedHead,
+                    );
+                });
+            try {
+                const corpus = await service.createCorpus("Schema lifecycle");
+                const def = definition([name]);
+                def.maintenance = {
+                    schemaVersion: 1,
+                    scope: { mode: "scopedSources", tags: ["profile"] },
+                };
+                await settled(
+                    await service.buildViews({
+                        corpusId: corpus.corpusId,
+                        expectedHead: (await service.listViews(corpus.corpusId))
+                            .head,
+                        publication: false,
+                        targets: [{ definition: def, expectedVersion: 0 }],
+                    }),
+                );
+                expect(
+                    (await service.listQuestions(corpus.corpusId)).items[0]
+                        .details.answerState,
+                ).toBe("pending");
+                const unrelated = await service.ingestDocument({
                     corpusId: corpus.corpusId,
-                    query: "Ada",
-                    freshness: "current",
-                    kinds: ["schemaView"],
-                })
-            ).map((match) => match.view.viewId),
-        ).toContain(def.viewId);
-        const preview = await service.previewForgetSource(
-            corpus.corpusId,
-            source.sourceId,
-        );
-        await service.forgetSource({
-            corpusId: corpus.corpusId,
-            sourceId: source.sourceId,
-            confirmationToken: preview.confirmationToken,
-        });
-        expect((await service.listQuestions(corpus.corpusId)).items).toEqual(
-            [],
-        );
-        expect(
-            await service.getViewHistory({
-                corpusId: corpus.corpusId,
-                viewId: def.viewId,
-            }),
-        ).toEqual([]);
-        await expect(
-            service.getViewPage({
-                corpusId: corpus.corpusId,
-                viewId: def.viewId,
-            }),
-        ).rejects.toThrow(/unavailable/);
-    }, 60000);
+                    source: {
+                        sourceId: "other",
+                        sourceType: "text",
+                        title: "Unrelated",
+                        text: "Unrelated data",
+                        tags: ["other"],
+                    },
+                });
+                await waitForMemoryJob(service, unrelated.jobId);
+                const source = await service.ingestDocument({
+                    corpusId: corpus.corpusId,
+                    source: {
+                        sourceId: "profile",
+                        sourceType: "text",
+                        title: "Profile",
+                        text: "Preferred name is Ada.",
+                        tags: ["profile"],
+                    },
+                });
+                await waitForMemoryJob(service, source.jobId);
+                for (let count = 0; count < 1000; count++) {
+                    const questions = await service.listQuestions(
+                        corpus.corpusId,
+                    );
+                    if (questions.maintenanceError)
+                        throw new Error(questions.maintenanceError);
+                    if (questions.items[0].details.answerState === "answered")
+                        break;
+                    await new Promise((resolve) => setTimeout(resolve, 10));
+                }
+                const questions = await service.listQuestions(corpus.corpusId);
+                expect(questions.items[0].details.answerState).toBe("answered");
+                expect(
+                    questions.items[0].details.evaluatedSources.map(
+                        (source) => source.sourceId,
+                    ),
+                ).toEqual(["profile"]);
+                const reconciliation = await terminal;
+                const beforeTerminal = await service.listViews(corpus.corpusId);
+                const answered = beforeTerminal.views.find(
+                    (view) => view.viewId === def.viewId,
+                )!;
+                expect(
+                    (await service.getViewBuild(reconciliation))!.state,
+                ).toBe("running");
+                releaseTerminal();
+                await settled(reconciliation);
+                if (publication === "stale") {
+                    await expect(
+                        service.publishView({
+                            corpusId: corpus.corpusId,
+                            viewId: def.viewId,
+                            revisionId: answered.revisionId,
+                            expectedHead: beforeTerminal.head!,
+                            expectedVersion: answered.version,
+                        }),
+                    ).rejects.toThrow(
+                        "Publication head or target revision conflict",
+                    );
+                }
+                expect((await service.drainMaintenance(15_000)).settled).toBe(
+                    true,
+                );
+                const calls = modelCalls;
+                const page = await service.getViewPage({
+                    corpusId: corpus.corpusId,
+                    viewId: def.viewId,
+                });
+                expect(page.markdown).toContain("Ada");
+                await service.getView({
+                    corpusId: corpus.corpusId,
+                    viewId: def.viewId,
+                });
+                await service.listQuestions(corpus.corpusId);
+                expect(modelCalls).toBe(calls);
+                const publishSnapshot = await service.listViews(
+                    corpus.corpusId,
+                );
+                const current = publishSnapshot.views.find(
+                    (view) => view.viewId === def.viewId,
+                )!;
+                expect(publishSnapshot.head).not.toBe(beforeTerminal.head);
+                expect(current.revisionId).toBe(answered.revisionId);
+                expect(current.version).toBe(answered.version);
+                await service.publishView({
+                    corpusId: corpus.corpusId,
+                    viewId: def.viewId,
+                    revisionId: current.revisionId,
+                    expectedHead: publishSnapshot.head!,
+                    expectedVersion: current.version,
+                });
+                expect(
+                    (
+                        await service.searchViews({
+                            corpusId: corpus.corpusId,
+                            query: "Ada",
+                            freshness: "current",
+                            kinds: ["schemaView"],
+                        })
+                    ).map((match) => match.view.viewId),
+                ).toContain(def.viewId);
+                const preview = await service.previewForgetSource(
+                    corpus.corpusId,
+                    source.sourceId,
+                );
+                await service.forgetSource({
+                    corpusId: corpus.corpusId,
+                    sourceId: source.sourceId,
+                    confirmationToken: preview.confirmationToken,
+                });
+                expect(
+                    (await service.listQuestions(corpus.corpusId)).items,
+                ).toEqual([]);
+                expect(
+                    await service.getViewHistory({
+                        corpusId: corpus.corpusId,
+                        viewId: def.viewId,
+                    }),
+                ).toEqual([]);
+                await expect(
+                    service.getViewPage({
+                        corpusId: corpus.corpusId,
+                        viewId: def.viewId,
+                    }),
+                ).rejects.toThrow(/unavailable/);
+            } finally {
+                releaseTerminal();
+                update.mockRestore();
+            }
+        },
+        60000,
+    );
 });

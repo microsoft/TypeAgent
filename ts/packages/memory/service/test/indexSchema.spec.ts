@@ -369,6 +369,17 @@ test("event reset and failed extraction retain ledger and suppression markers", 
         );
         expect(
             (await service.searchEvents({ corpusId, query: "Zephyr" })).matches,
+        ).toHaveLength(1);
+        await service["graphEventWork"].get(corpusId);
+        expect(
+            (await service.searchEvents({ corpusId, query: "Zephyr" })).matches,
+        ).toHaveLength(2);
+        const refreshedState = JSON.parse(
+            await readFile(path.join(indexRoot, "state.json"), "utf8"),
+        );
+        await rm(path.join(indexRoot, refreshedState.generation, "ready"));
+        expect(
+            (await service.searchEvents({ corpusId, query: "Zephyr" })).matches,
         ).toHaveLength(2);
         await service.forgetEvents({
             corpusId,

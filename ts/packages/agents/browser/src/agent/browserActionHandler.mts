@@ -533,6 +533,10 @@ async function initializeBrowserContext(
         throw new Error("Local view port not assigned.");
     }
 
+    void memoryServiceClient?.warmViewIndexes?.().catch((error: unknown) => {
+        console.warn("Memory background warmup could not start", error);
+    });
+
     return {
         // Use "default" session ID so the extension can connect with matching session.
         sessionId: "default",

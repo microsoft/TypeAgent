@@ -61,7 +61,12 @@ export interface DocIndexingState {
     lastIndexed: Date;
 }
 
-export interface DocMemorySettings extends MemorySettings {}
+export interface DocMemorySettings extends MemorySettings {
+    queryLanguageModel?: TypeChatLanguageModel;
+    wrapQueryTranslator?: (
+        translator: kp.SearchQueryTranslator,
+    ) => kp.SearchQueryTranslator;
+}
 
 export function createDocMemorySettings(
     embeddingCacheSize = 64,
@@ -134,11 +139,19 @@ export class DocMemory
             lastIndexed: new Date(),
         };
         this.hasKnownIndexingState = docParts.length === 0;
-        // Customize the search query translator for scoped queries
+        if (settings.queryLanguageModel)
+            this.settings.queryTranslator = kp.createSearchQueryTranslator(
+                settings.queryLanguageModel,
+            );
+        // Customize before wrapping so scoped queries retain the caller's decorator.
         customizeScopeQueryProcessing(
             this.settings.queryTranslator!,
-            this.settings.languageModel,
+            settings.queryLanguageModel ?? this.settings.languageModel,
         );
+        if (settings.wrapQueryTranslator)
+            this.settings.queryTranslator = settings.wrapQueryTranslator(
+                this.settings.queryTranslator!,
+            );
     }
 
     public override get conversation(): kp.IConversation<DocPart> {

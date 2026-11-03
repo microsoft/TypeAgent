@@ -146,6 +146,17 @@ export interface MemorySource extends SourceDocument {
     revisions: SourceRevision[];
 }
 
+export interface MemorySourceAuthorizationRequest {
+    corpusId: string;
+    sourceId: string;
+    revisionId: string;
+    /** SourceRevision.contentHash, which may be supplied by the ingestion owner. */
+    contentHash: string;
+    /** Digest of the actual retained text, using the core derived-view digest contract. */
+    retainedContentHash: string;
+    operation: "read" | "retrieve" | "expand" | "reader" | "build" | "publish";
+}
+
 export interface IngestionSource {
     authoredAt?: string;
     temporalContext?: import("@typeagent/knowpro").SourceTemporalContext;
@@ -319,6 +330,7 @@ export interface JobListRequest {
 }
 
 export interface MemorySearchRequest {
+    retrievalPolicy?: AnswerRetrievalPolicy;
     includeDiagnostics?: boolean;
     temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
     traceId?: string;
@@ -332,6 +344,10 @@ export interface MemorySearchRequest {
     dateFrom?: string;
     dateTo?: string;
     indexedFragments?: boolean;
+    frameFilter?: Omit<
+        import("./frameTypes.js").FrameQueryRequest,
+        "corpusId" | "limit" | "cursor"
+    >;
 }
 
 export interface MemoryEvidence {
@@ -352,6 +368,8 @@ export interface MemoryEvidence {
 }
 
 export interface MemorySearchResult {
+    derivedViews?: AnswerViewEvidence[];
+    omittedViewCandidates?: number;
     indexedSelection?: IndexedSelectionDiagnostics;
     query: string;
     matches: MemoryEvidence[];
@@ -372,6 +390,7 @@ export interface AnswerSourceReference {
 }
 
 export interface AnswerDerivedReference {
+    extension?: import("./viewExtensionTypes.js").ViewProviderIdentity;
     viewId: string;
     revisionId: string;
     sectionId?: string;
@@ -423,6 +442,7 @@ export type AnswerEvidence =
       });
 
 export interface IntegratedAnswerDiagnostics {
+    influencingEvidence?: AnswerEvidence[];
     sourceSelection?: IndexedSelectionDiagnostics;
     refinement?: {
         queries: string[];
@@ -441,6 +461,10 @@ export interface IntegratedAnswerDiagnostics {
 }
 
 export interface MemoryAnswerRequest {
+    evidenceSnapshotId?: string;
+    prepareOnly?: boolean;
+    deferRefinement?: boolean;
+    resumeRefinement?: boolean;
     knowledgeCheckpointId?: string;
     includeDiagnostics?: boolean;
     temporalContext?: import("@typeagent/knowpro").TemporalQueryContext;
@@ -461,6 +485,8 @@ export interface MemoryAnswerRequest {
 }
 
 export interface MemoryAnswerResult {
+    evidenceSnapshotId?: string;
+    refinementPending?: boolean;
     question: string;
     answer: string;
     mode: AnswerMode;
@@ -638,12 +664,14 @@ export interface SourceKnowledgeSuppressionRequest
 
 export interface MemoryServiceCapabilities {
     derivedViews?: {
+        extension?: import("./viewExtensionTypes.js").ViewExtensionCapabilities;
         kinds: Array<
             | "troubleshootingGuide"
             | "projectBrief"
             | "timeline"
             | "wiki"
             | "schemaView"
+            | "extension"
         >;
         drafts: true;
         history: true;
@@ -669,7 +697,9 @@ export interface MemoryServiceCapabilities {
         groundedAnswer: boolean;
         scopedKnowledgeGraphs?: boolean;
         memoryUnderstanding?: boolean;
+        memoryDocumentUnderstanding?: boolean;
         sourceSynopses?: boolean;
+        dataFrames?: boolean;
         agentSessionImportTypes?: AgentSessionImportRequest["importType"][];
     };
     warnings: string[];
@@ -714,7 +744,11 @@ export interface ProcedureVersion {
 export interface MemoryService
     extends MemoryGraphService,
         MemoryUnderstandingService {
+    listFrameSchemas?: import("./frameTypes.js").MemoryFrameService["listFrameSchemas"];
+    queryFrame?: import("./frameTypes.js").MemoryFrameService["queryFrame"];
+    getFrameProjectionStatus?: import("./frameTypes.js").MemoryFrameService["getFrameProjectionStatus"];
     initialize?(): Promise<void>;
+    warmViewIndexes?(corpusId?: string): Promise<void>;
     close?(): Promise<void>;
     deferMaintenance?(): () => void;
     getMaintenanceStatus?(): import("./maintenanceScheduler.js").MaintenanceStatus;
@@ -824,7 +858,10 @@ export interface MemoryService
         request: MemoryEventForgetRequest,
     ): Promise<MemoryEventForgetResult>;
     search(request: MemorySearchRequest): Promise<MemorySearchResult>;
-    answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult>;
+    answer(
+        request: MemoryAnswerRequest,
+        signal?: AbortSignal,
+    ): Promise<MemoryAnswerResult>;
     getKnowledgeGraph(corpusId: string): Promise<MemoryKnowledgeGraph>;
     getCapabilities(): Promise<MemoryServiceCapabilities>;
 }
@@ -1004,6 +1041,7 @@ export interface CorpusIndex {
         limit: number,
         tags?: string[],
         temporalContext?: import("@typeagent/knowpro").TemporalQueryContext,
+        sourceIds?: ReadonlySet<string>,
     ): Promise<CorpusIndexMatch[]>;
     answer?(
         query: string,

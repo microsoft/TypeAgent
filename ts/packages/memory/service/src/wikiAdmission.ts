@@ -11,7 +11,11 @@ import type {
 } from "./viewTypes.js";
 import type { IndexedSubjectIdentity } from "./types.js";
 import { compatibleSubjectIdentity, symbolicIdentity } from "./wikiGrouping.js";
-import { sameViewBuildEvidence } from "./viewMerge.js";
+import {
+    sameViewBuildEvidence,
+    viewBuildEvidenceFingerprint,
+    viewHash,
+} from "./viewMerge.js";
 import { viewSourceKey } from "./viewContent.js";
 import type { ViewCitation } from "./viewTypes.js";
 import {
@@ -32,6 +36,19 @@ export class WikiAssessmentRejection extends Error {
         super(`Wiki assessment rejected: ${code} ${JSON.stringify(details)}`);
         this.name = "WikiAssessmentRejection";
     }
+}
+
+export function wikiAssessmentKey(
+    input: ViewBuildSnapshot,
+    pages: WikiPagePurposeContext[],
+    policy: string,
+): string {
+    return viewHash({
+        recipe: "wiki-assessment-dependencies-v1",
+        evidence: viewBuildEvidenceFingerprint(input),
+        policy,
+        pages,
+    });
 }
 
 export const wikiPurposeRules = `Each page needs an independently useful explanatory purpose, not just a different label.

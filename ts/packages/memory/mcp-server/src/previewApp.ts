@@ -7,6 +7,7 @@ import { App, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps";
 import { config } from "zod/v4/core";
 import type { UnderstandingModuleResult } from "@typeagent/memory-service";
 import { previewMetaKey, type MemoryPreview } from "./previewTypes.js";
+import { renderDerivedViewModule } from "@typeagent/memory-client/derived-view-presentation";
 
 config({ jitless: true });
 const app = new App(
@@ -34,6 +35,12 @@ function renderModule(value: UnderstandingModuleResult, slot: HTMLElement) {
     slot.replaceChildren(node("h3", value.kind));
     if (value.status === "unavailable") {
         slot.append(node("p", value.reason));
+        return;
+    }
+    if (value.kind === "derivedViews") {
+        renderDerivedViewModule(value, slot, (scope) => {
+            void expand("derivedViews", slot, scope);
+        });
         return;
     }
     if (value.kind === "timeline") {
@@ -112,8 +119,16 @@ function renderModule(value: UnderstandingModuleResult, slot: HTMLElement) {
         );
 }
 async function expand(
-    kind: "sources" | "timeline" | "relationships" | "concepts",
+    kind:
+        | "sources"
+        | "timeline"
+        | "relationships"
+        | "concepts"
+        | "derivedViews",
     slot: HTMLElement,
+    scope: Partial<
+        import("@typeagent/memory-service").UnderstandingModuleRequest
+    > = {},
 ) {
     if (!preview) return;
     const version = revision;
@@ -126,6 +141,7 @@ async function expand(
                 corpusId: handle.corpusId,
                 snapshotId: handle.snapshotId,
                 kind,
+                ...scope,
             },
         });
         if (version !== revision) return;

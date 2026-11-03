@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { parseViewDraftCapability } from "./viewBuildValidation.js";
+import {
+    parseViewDraftCapability,
+    resolveTopicBuildTimeout,
+} from "./viewBuildValidation.js";
+import { resolveMaintenanceConcurrency } from "./maintenanceConcurrency.js";
 import type { FileMemoryServiceOptions } from "./fileMemoryService.js";
 import {
     validateTopicCurationSettings,
@@ -77,13 +81,30 @@ export function getConfiguredMemoryViewOptions(
     environment: Readonly<Record<string, string | undefined>> = process.env,
 ): Pick<
     FileMemoryServiceOptions,
+    | "frameProjections"
     | "viewDrafts"
+    | "extensionBuilds"
+    | "extensionDiscovery"
     | "informationalViews"
     | "decisionTopics"
     | "decisionTopicExecution"
     | "topicCuration"
     | "understanding"
+    | "topicBuildTimeoutMs"
+    | "maintenanceConcurrency"
+    | "maintenanceShortBuildReservation"
+    | "maintenanceShortBuildPriority"
+    | "wikiAssessmentConcurrency"
 > {
+    const wikiAssessmentConcurrency =
+        environment.TYPEAGENT_MEMORY_WIKI_ASSESSMENT_CONCURRENCY;
+    if (
+        wikiAssessmentConcurrency !== undefined &&
+        (!Number.isSafeInteger(Number(wikiAssessmentConcurrency)) ||
+            Number(wikiAssessmentConcurrency) < 1 ||
+            Number(wikiAssessmentConcurrency) > 4)
+    )
+        throw new Error("Invalid TYPEAGENT_MEMORY_WIKI_ASSESSMENT_CONCURRENCY");
     const execution = configuredDecisionExecution(environment);
     const topicCuration = curationSettings(environment);
     const decisionTopics =
@@ -98,6 +119,14 @@ export function getConfiguredMemoryViewOptions(
             "Generative topic settings cannot configure Decision topics",
         );
     return {
+        ...(environment.TYPEAGENT_MEMORY_DATAFRAMES === undefined
+            ? {}
+            : {
+                  frameProjections: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_DATAFRAMES,
+                      "TYPEAGENT_MEMORY_DATAFRAMES",
+                  ),
+              }),
         ...(environment.TYPEAGENT_MEMORY_UNDERSTANDING !== undefined
             ? {
                   understanding: parseViewDraftCapability(
@@ -106,11 +135,78 @@ export function getConfiguredMemoryViewOptions(
                   ),
               }
             : {}),
+        ...(environment.TYPEAGENT_MEMORY_SHORT_BUILD_PRIORITY === undefined
+            ? {}
+            : {
+                  maintenanceShortBuildPriority: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_SHORT_BUILD_PRIORITY,
+                      "TYPEAGENT_MEMORY_SHORT_BUILD_PRIORITY",
+                  ),
+              }),
+        ...(wikiAssessmentConcurrency === undefined
+            ? {}
+            : { wikiAssessmentConcurrency: Number(wikiAssessmentConcurrency) }),
+        ...(environment.TYPEAGENT_MEMORY_SHORT_BUILD_RESERVATION === undefined
+            ? {}
+            : {
+                  maintenanceShortBuildReservation: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_SHORT_BUILD_RESERVATION,
+                      "TYPEAGENT_MEMORY_SHORT_BUILD_RESERVATION",
+                  ),
+              }),
+        ...(environment.TYPEAGENT_MEMORY_VIEW_BUILD_CONCURRENCY === undefined &&
+        environment.TYPEAGENT_MEMORY_MAINTENANCE_MODEL_CONCURRENCY === undefined
+            ? {}
+            : {
+                  maintenanceConcurrency: resolveMaintenanceConcurrency({
+                      ...(environment.TYPEAGENT_MEMORY_VIEW_BUILD_CONCURRENCY ===
+                      undefined
+                          ? {}
+                          : {
+                                builds: Number(
+                                    environment.TYPEAGENT_MEMORY_VIEW_BUILD_CONCURRENCY,
+                                ),
+                            }),
+                      ...(environment.TYPEAGENT_MEMORY_MAINTENANCE_MODEL_CONCURRENCY ===
+                      undefined
+                          ? {}
+                          : {
+                                modelRequests: Number(
+                                    environment.TYPEAGENT_MEMORY_MAINTENANCE_MODEL_CONCURRENCY,
+                                ),
+                            }),
+                  }),
+              }),
+        ...(environment.TYPEAGENT_MEMORY_TOPIC_BUILD_TIMEOUT_MS === undefined
+            ? {}
+            : {
+                  topicBuildTimeoutMs: resolveTopicBuildTimeout(
+                      Number(
+                          environment.TYPEAGENT_MEMORY_TOPIC_BUILD_TIMEOUT_MS,
+                      ),
+                  ),
+              }),
         ...(execution ? { decisionTopicExecution: execution } : {}),
         ...(topicCuration ? { topicCuration } : {}),
         viewDrafts: parseViewDraftCapability(
             environment.TYPEAGENT_MEMORY_VIEW_DRAFTS,
         ),
+        ...(environment.TYPEAGENT_MEMORY_EXTENSION_BUILDS === undefined
+            ? {}
+            : {
+                  extensionBuilds: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_EXTENSION_BUILDS,
+                      "TYPEAGENT_MEMORY_EXTENSION_BUILDS",
+                  ),
+              }),
+        ...(environment.TYPEAGENT_MEMORY_EXTENSION_DISCOVERY === undefined
+            ? {}
+            : {
+                  extensionDiscovery: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_EXTENSION_DISCOVERY,
+                      "TYPEAGENT_MEMORY_EXTENSION_DISCOVERY",
+                  ),
+              }),
         informationalViews: parseViewDraftCapability(
             environment.TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS,
             "TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS",

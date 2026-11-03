@@ -20,7 +20,10 @@ import { createMemoryHubUnderstandingFunctions } from "./memoryHubUnderstanding.
 import { createMemoryHubExploreFunctions } from "./memoryHubExplore.mjs";
 import { createMemoryHubGraphFunctions } from "./memoryHubGraph.mjs";
 import { createMemoryHubKnowledgeFunctions } from "./memoryHubKnowledge.mjs";
-import { createMemoryHubSynthesizer } from "./memoryHubAnswer.mjs";
+import {
+    createMemoryHubSynthesizer,
+    createMemoryHubIntentResolver,
+} from "./memoryHubAnswer.mjs";
 import { createMemoryHubCaptureFunctions } from "./memoryHubCapture.mjs";
 import { createMemoryHubSourceOriginalFunctions } from "./memoryHubSourceOriginal.mjs";
 import { createMemoryHubViewUsageFunctions } from "./memoryHubViewUsage.mjs";
@@ -49,6 +52,7 @@ export function createViewServiceDomain(
             service,
             () => context.conversationId,
             createMemoryHubSynthesizer(),
+            createMemoryHubIntentResolver(),
         ),
         ...createMemoryHubExploreFunctions(service),
         ...createMemoryHubGraphFunctions(service),
@@ -130,8 +134,13 @@ export function createAgentInvokeHandlers(
         memoryListCorpora: () => getMemoryService().listCorpora(),
         memoryListEvents: (params) => getMemoryService().listEvents(params),
         ...createMemoryViewFunctions(getMemoryService),
-        memoryGetCorpus: ({ corpusId }) =>
-            getMemoryService().getCorpus(corpusId),
+        memoryGetCorpus: async ({ corpusId }) => {
+            const service = getMemoryService();
+            const corpus = await service.getCorpus(corpusId);
+            if (corpus && service.warmViewIndexes)
+                await service.warmViewIndexes(corpusId);
+            return corpus;
+        },
         memoryListSources: (params) =>
             getMemoryService().listSourcesPage(params),
         memoryGetSource: ({ corpusId, sourceId }) =>

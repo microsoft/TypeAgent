@@ -95,6 +95,65 @@ describe("segmented canonical event storage", () => {
         await expect(open().records()).rejects.toThrow("Corrupt");
     });
 
+    test("loaded reads and recovery finish against committed events while append is held", async () => {
+        let resume!: () => void;
+        let entered!: () => void;
+        const held = new Promise<void>((resolve) => {
+            resume = resolve;
+        });
+        const started = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        let block = false;
+        const store = new EventSegmentStore<{ key: string }>(
+            file,
+            async () => {},
+            async (point) => {
+                if (block && point === "descriptor-prepared") {
+                    entered();
+                    await held;
+                }
+            },
+        );
+        await store.append(event("first"));
+        block = true;
+        const append = store.append(event("second"));
+        await started;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+            const result = await Promise.race([
+                Promise.all([
+                    store.get("first"),
+                    store.records(),
+                    store.version(),
+                    store.suppressions(),
+                    store.recover(),
+                    store.get("second"),
+                ]),
+                new Promise<never>((_, reject) => {
+                    timer = setTimeout(
+                        () =>
+                            reject(new Error("Event reads waited for append")),
+                        1000,
+                    );
+                }),
+            ]);
+            expect(result[0]).toEqual(event("first"));
+            expect(result[1].events).toEqual([event("first")]);
+            expect(result[2].sequence).toBe(1);
+            expect(result[3]).toEqual([]);
+            expect(result[5]).toBeUndefined();
+        } finally {
+            clearTimeout(timer);
+            resume();
+            await append;
+        }
+        expect((await store.records()).events).toEqual([
+            event("first"),
+            event("second"),
+        ]);
+    });
+
     test("deletion changes eligibility without rewinding sequence and cannot restore a forgotten identity", async () => {
         const store = open();
         await store.append(event("first"));

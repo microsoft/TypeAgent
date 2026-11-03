@@ -51,6 +51,7 @@ import {
 } from "./topicDecision.js";
 import { viewHash } from "./viewMerge.js";
 import { viewSourceKey } from "./viewContent.js";
+import { yieldMaintenanceBuild } from "./maintenanceConcurrency.js";
 import {
     evidenceArray,
     evidenceRecord,
@@ -1419,6 +1420,7 @@ export async function curateTopicsWithDecision(
                 throw new Error("Decision batch planning made no progress");
             result = next.curation;
             offset = next.offset;
+            if (checkpoint) await yieldMaintenanceBuild(signal);
         }
         return result;
     });

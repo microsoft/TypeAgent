@@ -13,6 +13,7 @@ import {
     runWithSearchTiming,
     timeSearchStage,
 } from "@typeagent/knowpro";
+import { resolveMaintenanceConcurrency } from "./maintenanceConcurrency.js";
 
 export interface MaintenanceStatus {
     mode: "automatic" | "manual";
@@ -37,24 +38,63 @@ interface Work {
 export class MaintenanceScheduler {
     private readonly pending = new Map<string, Work>();
     private readonly running = new Map<string, Promise<void>>();
+    private readonly activeCorpora = new Set<string>();
     private readonly failures = new Map<string, string>();
     private readonly reportedFailures = new Map<string, string>();
     private readonly parked = new Map<string, string>();
     private readonly context = new AsyncLocalStorage<AbortSignal>();
+    private readonly workKey = new AsyncLocalStorage<string>();
+    private readonly waitingBuilds = new Set<string>();
+    private readonly resumptions = new Map<string, () => void>();
     private readonly shutdown = new AbortController();
     private timer: ReturnType<typeof setTimeout> | undefined;
     private holds = 0;
     private draining = false;
     private drainSignal: AbortSignal | undefined;
     private coalesced = 0;
+    private foregroundCount = 0;
+    private foregroundRelease: (() => void) | undefined;
+    private foregroundTimer: ReturnType<typeof setTimeout> | undefined;
+    private foregroundCooldownUntil = 0;
+
+    public async foreground<T>(work: () => Promise<T>): Promise<T> {
+        if (
+            !this.foregroundRelease &&
+            Date.now() >= this.foregroundCooldownUntil
+        ) {
+            this.foregroundRelease = this.defer();
+            this.foregroundTimer = setTimeout(() => {
+                this.releaseForeground();
+                this.foregroundCooldownUntil = Date.now() + 1000;
+            }, 10_000);
+            this.foregroundTimer.unref();
+        }
+        this.foregroundCount++;
+        try {
+            return await work();
+        } finally {
+            this.foregroundCount--;
+            if (!this.foregroundCount) this.releaseForeground();
+        }
+    }
+
+    private releaseForeground(): void {
+        if (this.foregroundTimer) clearTimeout(this.foregroundTimer);
+        this.foregroundTimer = undefined;
+        this.foregroundRelease?.();
+        this.foregroundRelease = undefined;
+    }
 
     public constructor(
         private readonly blocked: (corpusId: string) => boolean,
         private readonly mode: "automatic" | "manual" = "automatic",
         private readonly budget?: RequestBudgetLimits,
+        private readonly concurrency = 1,
+        private readonly prioritizeShortBuilds = true,
     ) {
         if (mode !== "automatic" && mode !== "manual")
             throw new Error("Unsupported maintenance execution mode");
+        resolveMaintenanceConcurrency({ builds: concurrency });
     }
 
     public get signal(): AbortSignal {
@@ -117,13 +157,24 @@ export class MaintenanceScheduler {
     }
 
     public wake(): void {
+        while (
+            this.running.size - this.waitingBuilds.size < this.concurrency &&
+            this.resumptions.size
+        ) {
+            const [key, resume] = this.resumptions.entries().next().value!;
+            this.resumptions.delete(key);
+            resume();
+        }
         if (
             this.timer ||
-            this.running.size ||
+            this.running.size - this.waitingBuilds.size >= this.concurrency ||
+            this.running.size >= 32 ||
             ![...this.pending].some(
                 ([key, work]) =>
                     !this.parked.has(key) &&
                     !this.failures.has(key) &&
+                    !this.activeCorpora.has(work.corpusId) &&
+                    this.canAdmitBuildWait(key) &&
                     !this.isDeferred(work.corpusId),
             )
         )
@@ -134,6 +185,8 @@ export class MaintenanceScheduler {
                     ([key, work]) =>
                         !this.parked.has(key) &&
                         !this.failures.has(key) &&
+                        !this.activeCorpora.has(work.corpusId) &&
+                        this.canAdmitBuildWait(key) &&
                         !this.isDeferred(work.corpusId),
                 )
                 .map(([, work]) => work.readyAt),
@@ -173,11 +226,67 @@ export class MaintenanceScheduler {
         this.parked.set(`${corpusId}:${family}`, reason);
     }
 
+    public async waitForBuild<T>(work: () => Promise<T>): Promise<T> {
+        const key = this.workKey.getStore();
+        if (!this.prioritizeShortBuilds || !key || this.waitingBuilds.has(key))
+            return work();
+        const signal = this.signal;
+        this.waitingBuilds.add(key);
+        this.wake();
+        try {
+            return await work();
+        } finally {
+            try {
+                await this.resume(key, signal);
+                signal.throwIfAborted();
+            } finally {
+                this.waitingBuilds.delete(key);
+                this.wake();
+            }
+        }
+    }
+
+    private resume(key: string, signal: AbortSignal): Promise<void> {
+        signal.throwIfAborted();
+        return new Promise((resolve, reject) => {
+            const abort = () => {
+                this.resumptions.delete(key);
+                signal.removeEventListener("abort", abort);
+                reject(signal.reason);
+                this.wake();
+            };
+            this.resumptions.set(key, () => {
+                signal.removeEventListener("abort", abort);
+                this.waitingBuilds.delete(key);
+                resolve();
+            });
+            signal.addEventListener("abort", abort, { once: true });
+            this.wake();
+        });
+    }
+
+    private canAdmitBuildWait(key: string): boolean {
+        return (
+            !this.prioritizeShortBuilds ||
+            !key.endsWith(":topics") ||
+            [...this.waitingBuilds].filter((waiting) =>
+                waiting.endsWith(":topics"),
+            ).length < this.concurrency
+        );
+    }
+
     private dispatch(): void {
+        if (
+            this.running.size - this.waitingBuilds.size >= this.concurrency ||
+            this.running.size >= 32
+        )
+            return;
         const next = [...this.pending].find(
             ([key, work]) =>
                 !this.failures.has(key) &&
                 !this.parked.has(key) &&
+                !this.activeCorpora.has(work.corpusId) &&
+                this.canAdmitBuildWait(key) &&
                 (this.draining || work.readyAt <= performance.now()) &&
                 !this.isDeferred(work.corpusId),
         );
@@ -186,46 +295,49 @@ export class MaintenanceScheduler {
             return;
         }
         const [key, work] = next;
+        this.activeCorpora.add(work.corpusId);
         const signal = this.drainSignal
             ? AbortSignal.any([this.shutdown.signal, this.drainSignal])
             : this.shutdown.signal;
         const task = Promise.resolve()
             .then(() =>
-                this.context.run(signal, () =>
-                    runWithSearchTiming(
-                        undefined,
-                        "memory.maintenance",
-                        async () => {
-                            signal.throwIfAborted();
-                            recordSearchTiming(
-                                "maintenance.queue.wait",
-                                performance.now() - work.queuedAt,
-                                {
-                                    pending: this.pending.size,
-                                    coalesced: this.coalesced,
-                                },
-                            );
-                            const execute = () =>
-                                timeSearchStage("maintenance.work", () =>
-                                    work.execute(signal),
+                this.workKey.run(key, () =>
+                    this.context.run(signal, () =>
+                        runWithSearchTiming(
+                            undefined,
+                            "memory.maintenance",
+                            async () => {
+                                signal.throwIfAborted();
+                                recordSearchTiming(
+                                    "maintenance.queue.wait",
+                                    performance.now() - work.queuedAt,
+                                    {
+                                        pending: this.pending.size,
+                                        coalesced: this.coalesced,
+                                    },
                                 );
-                            await (this.budget
-                                ? runWithRequestBudget(
-                                      new RequestBudget(this.budget),
-                                      execute,
-                                  )
-                                : execute());
-                            if (
-                                this.pending.get(key) === work &&
-                                !this.parked.has(key) &&
-                                !this.isDeferred(work.corpusId)
-                            )
-                                this.pending.delete(key);
-                        },
-                        {
-                            corpusId: work.corpusId,
-                            indexGeneration: work.generation,
-                        },
+                                const execute = () =>
+                                    timeSearchStage("maintenance.work", () =>
+                                        work.execute(signal),
+                                    );
+                                await (this.budget
+                                    ? runWithRequestBudget(
+                                          new RequestBudget(this.budget),
+                                          execute,
+                                      )
+                                    : execute());
+                                if (
+                                    this.pending.get(key) === work &&
+                                    !this.parked.has(key) &&
+                                    !this.isDeferred(work.corpusId)
+                                )
+                                    this.pending.delete(key);
+                            },
+                            {
+                                corpusId: work.corpusId,
+                                indexGeneration: work.generation,
+                            },
+                        ),
                     ),
                 ),
             )
@@ -237,9 +349,11 @@ export class MaintenanceScheduler {
             })
             .finally(() => {
                 this.running.delete(key);
+                this.activeCorpora.delete(work.corpusId);
                 this.wake();
             });
         this.running.set(key, task);
+        this.wake();
     }
 
     public status(): MaintenanceStatus {
@@ -314,6 +428,7 @@ export class MaintenanceScheduler {
 
     public async close(): Promise<void> {
         this.shutdown.abort(new Error("Memory service is closing"));
+        this.releaseForeground();
         clearTimeout(this.timer);
         this.timer = undefined;
         await Promise.all(this.running.values());

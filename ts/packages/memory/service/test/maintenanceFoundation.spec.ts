@@ -267,10 +267,22 @@ test.each(["semantic", "transient", "derivative"] as const)(
                             ["failed", "blocked"].includes(result.state),
                         ),
                 )!;
-                let retried = await service.retryViewBuild({
-                    corpusId,
-                    jobId: failed.jobId,
-                });
+                // Foreground inventory may still be pinned before maintenance committed.
+                const clock = (
+                    import.meta as ImportMeta & { jest: typeof jest }
+                ).jest;
+                const inventory = clock
+                    .spyOn(service, "listViews")
+                    .mockResolvedValue({
+                        ...(await service.listViews(corpusId)),
+                        head: failed.request.expectedHead,
+                    });
+                let retried = await service
+                    .retryViewBuild({
+                        corpusId,
+                        jobId: failed.jobId,
+                    })
+                    .finally(() => inventory.mockRestore());
                 for (
                     let attempt = 0;
                     attempt < 300 && retried.state === "running";

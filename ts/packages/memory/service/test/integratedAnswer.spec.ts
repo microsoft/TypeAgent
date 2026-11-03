@@ -3,9 +3,18 @@
 
 import type { ChatModel } from "@typeagent/aiclient";
 import {
+    runWithSearchTiming,
+    runWithSearchCancellation,
+} from "@typeagent/knowpro";
+import {
     answerIntegratedEvidence,
     type IntegratedAnswerHost,
+    type IntegratedAnswerSeed,
 } from "../src/integratedAnswer.js";
+import {
+    answerEvidenceForReader,
+    serializeAnswerEvidence,
+} from "../src/integratedAnswerReader.js";
 import type {
     AnswerDerivedEvidence,
     AnswerEvidence,
@@ -76,7 +85,7 @@ function fixture(
     views: AnswerViewEvidence[] = [view()],
     expanded = originals,
 ) {
-    const calls: AnswerEvidence[][] = [];
+    const calls: ReturnType<typeof answerEvidenceForReader>[][] = [];
     const host: IntegratedAnswerHost = {
         searchOriginal: async () => ({
             query: request.question,
@@ -103,7 +112,7 @@ function fixture(
             if (typeof content !== "string")
                 throw new Error("Expected serialized evidence");
             const envelope = JSON.parse(content) as {
-                evidence: AnswerEvidence[];
+                evidence: ReturnType<typeof answerEvidenceForReader>[];
             };
             calls.push(envelope.evidence);
             return {
@@ -119,7 +128,331 @@ function fixture(
     return { host, model, calls };
 }
 
+test("cancellation reaches the managed integrated reader as the fifth model argument", async () => {
+    const { host, model } = fixture();
+    const controller = new AbortController();
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    const reason = new Error("Caller cancelled the foreground answer");
+    model.complete = async (_prompt, _usage, _schema, _log, signal) => {
+        expect(signal).toBe(controller.signal);
+        entered();
+        return new Promise((_resolve, reject) => {
+            signal?.addEventListener("abort", () => reject(signal.reason), {
+                once: true,
+            });
+        });
+    };
+    const answer = runWithSearchCancellation(controller.signal, () =>
+        answerIntegratedEvidence(request, host, { model }),
+    );
+    const rejected = expect(answer).rejects.toBe(reason);
+    await started;
+    controller.abort(reason);
+    await rejected;
+});
+
+describe("parallel answer retrieval", () => {
+    test("views start before originals finish and preserve the prepared evidence", async () => {
+        const { host, model } = fixture();
+        const original = host.searchOriginal;
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        host.searchOriginal = async (input) => {
+            await gate;
+            return original(input);
+        };
+        let viewStarted = false;
+        const views = host.getEligibleViewMatches!;
+        host.getEligibleViewMatches = async (input) => {
+            viewStarted = true;
+            return views(input);
+        };
+        const pending = answerIntegratedEvidence(request, host, {
+            model,
+            prepareOnly: true,
+        });
+        await Promise.resolve();
+        expect(viewStarted).toBe(true);
+        release();
+        const result = await pending;
+        const expected = fixture();
+        const baseline = await answerIntegratedEvidence(
+            request,
+            expected.host,
+            { model: expected.model, prepareOnly: true },
+        );
+        expect(result).toEqual(baseline);
+    });
+
+    test("strict view failure waits for the other branch to settle", async () => {
+        const { host, model } = fixture();
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const original = host.searchOriginal;
+        host.searchOriginal = async (input) => {
+            await gate;
+            return original(input);
+        };
+        host.getEligibleViewMatches = async () => {
+            throw new Error("view failed");
+        };
+        let settled = false;
+        const pending = answerIntegratedEvidence(
+            { ...request, retrievalPolicy: "sourcesAndViews" },
+            host,
+            { model, prepareOnly: true },
+        );
+        const rejected = expect(pending).rejects.toThrow("view failed");
+        void pending.then(
+            () => {
+                settled = true;
+            },
+            () => {
+                settled = true;
+            },
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        release();
+        await rejected;
+    });
+});
+
 describe("bounded source-plus-view answering", () => {
+    test("prepared retrieval skips synthesis and is reused without repeating retrieval", async () => {
+        const { host, model, calls } = fixture();
+        const searchOriginal = host.searchOriginal.bind(host);
+        const getViews = host.getEligibleViewMatches!.bind(host);
+        let searches = 0;
+        let viewReads = 0;
+        host.searchOriginal = (input) => {
+            searches++;
+            return searchOriginal(input);
+        };
+        host.getEligibleViewMatches = (input) => {
+            viewReads++;
+            return getViews(input);
+        };
+        let seed: IntegratedAnswerSeed | undefined;
+        const prepared = await answerIntegratedEvidence(request, host, {
+            model,
+            prepareOnly: true,
+            onPrepared: (value) => {
+                seed = value;
+            },
+        });
+        expect(prepared.mode).toBe("extractive");
+        expect(calls).toHaveLength(0);
+        if (!seed) throw new Error("Prepared evidence was not retained");
+        const answer = await answerIntegratedEvidence(request, host, {
+            model,
+            seed,
+        });
+        expect(answer.answer).toBe("Launch is in May.");
+        expect(calls).toHaveLength(1);
+        expect(searches).toBe(1);
+        expect(viewReads).toBe(1);
+    });
+
+    test("defers refinement and resumes with overlapping searches, stable ordering, and one final reader", async () => {
+        const { host } = fixture();
+        let seed: IntegratedAnswerSeed | undefined;
+        let readerCalls = 0;
+        const reader = async (
+            _request: MemoryAnswerRequest,
+            evidence: AnswerEvidence[],
+            _options: unknown,
+            allowRefinement: boolean,
+        ) => {
+            readerCalls++;
+            return {
+                status: "answered" as const,
+                answer: "Launch is in May.",
+                evidenceIds: evidence.map((item) => item.id),
+                ...(allowRefinement
+                    ? { retrievalQueries: ["first", "second"] }
+                    : {}),
+            };
+        };
+        await answerIntegratedEvidence(request, host, {
+            reader,
+            deferRefinement: true,
+            onPrepared: (value) => {
+                seed = value;
+            },
+        });
+        expect(readerCalls).toBe(1);
+        if (!seed) throw new Error("Deferred evidence was not retained");
+        let release!: () => void;
+        let bothStarted!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const started = new Promise<void>((resolve) => {
+            bothStarted = resolve;
+        });
+        const queries: string[] = [];
+        host.searchOriginal = async (input) => {
+            queries.push(input.question);
+            if (queries.length === 2) bothStarted();
+            await gate;
+            return {
+                query: input.question,
+                matches: [source(input.question)],
+                warnings: [],
+                capabilitiesUsed: [],
+                indexVersion: "index1",
+            };
+        };
+        const finishing = answerIntegratedEvidence(request, host, {
+            reader,
+            seed,
+            resumeRefinement: true,
+        });
+        await started;
+        expect(queries).toEqual(["first", "second"]);
+        expect(readerCalls).toBe(1);
+        release();
+        const answer = await finishing;
+        expect(readerCalls).toBe(2);
+        expect(
+            answer.readerContext?.integratedAnswer?.refinement?.queries,
+        ).toEqual(["first", "second"]);
+    }, 10000);
+
+    test("settles sibling refinement searches before surfacing the first query's original error", async () => {
+        const { host } = fixture();
+        const failure = new Error("first failed");
+        let seed: IntegratedAnswerSeed | undefined;
+        const reader = async (
+            _request: MemoryAnswerRequest,
+            evidence: AnswerEvidence[],
+        ) => ({
+            status: "answered" as const,
+            answer: "Launch is in May.",
+            evidenceIds: evidence.map((item) => item.id),
+            retrievalQueries: ["first", "second"],
+        });
+        await answerIntegratedEvidence(request, host, {
+            reader,
+            deferRefinement: true,
+            onPrepared: (value) => {
+                seed = value;
+            },
+        });
+        if (!seed) throw new Error("Deferred evidence was not retained");
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        let siblingSettled = false;
+        host.searchOriginal = async (input) => {
+            if (input.question === "first") throw failure;
+            await gate;
+            siblingSettled = true;
+            return {
+                query: input.question,
+                matches: [],
+                warnings: [],
+                capabilitiesUsed: [],
+                indexVersion: "index1",
+            };
+        };
+        let rejected = false;
+        const finishing = answerIntegratedEvidence(request, host, {
+            reader,
+            seed,
+            resumeRefinement: true,
+        });
+        const checked = expect(finishing)
+            .rejects.toBe(failure)
+            .then(() => {
+                rejected = true;
+            });
+        await Promise.resolve();
+        expect(rejected).toBe(false);
+        release();
+        await checked;
+        expect(siblingSettled).toBe(true);
+    });
+
+    test("times both reader passes and validation without logging private inputs or changing failures", async () => {
+        const flag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        const warn = console.warn;
+        const logs: string[] = [];
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        console.warn = (line: unknown) => logs.push(String(line));
+        const { host } = fixture();
+        const reader = async (
+            _request: MemoryAnswerRequest,
+            evidence: AnswerEvidence[],
+            _options: unknown,
+            allowRefinement: boolean,
+        ) => ({
+            status: "answered" as const,
+            answer: "Launch is in May.",
+            evidenceIds: evidence.map((item) => item.id),
+            ...(allowRefinement
+                ? { retrievalQueries: ["Exact launch month"] }
+                : {}),
+        });
+        try {
+            const result = await runWithSearchTiming(
+                "latency-test",
+                "test",
+                () => answerIntegratedEvidence(request, host, { reader }),
+            );
+            expect(result.answer).toBe("Launch is in May.");
+            const stages = logs.map(
+                (line): { stage: string; traceId: string; status: string } =>
+                    JSON.parse(line.replace("[memory-search-timing] ", "")),
+            );
+            expect(stages.map((item) => item.stage)).toEqual(
+                expect.arrayContaining([
+                    "answer.originalSearch",
+                    "answer.maintainedViews",
+                    "answer.retrieve",
+                    "answer.expandSource",
+                    "answer.assemble.initial",
+                    "answer.reader.initial",
+                    "answer.refinementSearch",
+                    "answer.assemble.refined",
+                    "answer.reader.refined",
+                    "answer.validate",
+                ]),
+            );
+            expect(
+                stages.every((item) => item.traceId === "latency-test"),
+            ).toBe(true);
+            const failure = new Error("private validation failure");
+            host.validateEvidence = async () => {
+                throw failure;
+            };
+            await expect(
+                runWithSearchTiming("latency-test", "test", () =>
+                    answerIntegratedEvidence(request, host, { reader }),
+                ),
+            ).rejects.toBe(failure);
+            expect(logs.at(-1)).toContain('"status":"error"');
+            expect(logs.join("\n")).not.toContain(request.question);
+            expect(logs.join("\n")).not.toContain("Launch is in May.");
+            expect(logs.join("\n")).not.toContain(failure.message);
+        } finally {
+            console.warn = warn;
+            if (flag === undefined)
+                delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+            else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = flag;
+        }
+    });
+
     test("prioritizes focused refinement passages before applying the shared source limit", async () => {
         const initial = source("initial", "The gallery is being discussed.");
         const generic = source("generic", "General JS background.");
@@ -256,7 +589,9 @@ describe("bounded source-plus-view answering", () => {
         expect(result.citations).toEqual([source()]);
         expect(result.derivedReferences).toEqual([view().reference]);
         expect(
-            result.readerContext?.integratedAnswer?.suppliedEvidence,
+            result.readerContext?.integratedAnswer?.suppliedEvidence.map(
+                answerEvidenceForReader,
+            ),
         ).toEqual(calls[0]);
         expect(
             result.readerContext?.integratedAnswer?.selectedEvidenceIds,
@@ -494,7 +829,11 @@ describe("bounded source-plus-view answering", () => {
         };
         const result = await answerIntegratedEvidence(request, host, { model });
         expect(calls).toHaveLength(2);
-        expect(validations).toEqual(calls);
+        expect(
+            validations.map((evidence) =>
+                evidence.map(answerEvidenceForReader),
+            ),
+        ).toEqual(calls);
         expect(
             result.readerContext?.integratedAnswer?.reconstructionCount,
         ).toBe(1);
@@ -505,6 +844,69 @@ describe("bounded source-plus-view answering", () => {
             "changed before delivery after one bounded reconstruction",
         );
         expect(calls).toHaveLength(4);
+    });
+
+    test("large construction scope does not consume the reader's view budget or weaken host scope", async () => {
+        const influencingSourceIds = Array.from({ length: 165 }, (_, index) =>
+            index.toString(16).padStart(64, "0"),
+        );
+        const originals = influencingSourceIds
+            .slice(0, 6)
+            .map((id) => source(id));
+        const candidate = view({
+            reference: {
+                viewId: `extension:${"a".repeat(64)}`,
+                revisionId: "00000000-0000-4000-8000-000000000001",
+                sectionId: "takeaway.0",
+                state: "selected",
+                contractVersion: "b".repeat(64),
+                rubricVersion: "c".repeat(64),
+                extension: {
+                    providerId: "synthetic",
+                    version: "1",
+                    implementationDigest: "a".repeat(64),
+                    schemaDigest: "b".repeat(64),
+                    recipeDigest: "c".repeat(64),
+                    inputContract: "retained-facts-v1",
+                    outputContract: "story-v1",
+                },
+            },
+            text: "The retained assessment records a bounded conclusion; original qualifications and opposing evidence remain relevant.",
+            influencingSourceIds,
+            supportingSources: originals.slice(0, 3).map(reference),
+            opposingSources: [reference(originals[3])],
+        });
+        expect(JSON.stringify(candidate).length).toBeGreaterThan(12000);
+        const { host, model, calls } = fixture(originals, [candidate]);
+        let validated: AnswerEvidence[] = [];
+        host.validateEvidence = async ({ evidence }) => {
+            validated = evidence;
+            return true;
+        };
+        const result = await answerIntegratedEvidence(request, host, { model });
+        expect(result.derivedReferences).toEqual([candidate.reference]);
+        const readerView = calls[0].find((item) => item.kind === "derived");
+        expect(readerView).not.toHaveProperty("influencingSourceIds");
+        expect(readerView).toHaveProperty("influencingSourceCount", 165);
+        const hostView = validated.find((item) => item.kind === "derived");
+        expect(
+            hostView?.kind === "derived" && hostView.influencingSourceIds,
+        ).toEqual(influencingSourceIds);
+        expect(
+            result.readerContext?.integratedAnswer?.suppliedEvidence,
+        ).toEqual(validated);
+        expect(
+            serializeAnswerEvidence(request, validated).length,
+        ).toBeLessThanOrEqual(24000);
+        expect(result.citations).toEqual(
+            expect.arrayContaining(originals.slice(0, 4)),
+        );
+        const restricted = await answerIntegratedEvidence(
+            { ...request, sourceIds: originals.map((item) => item.sourceId) },
+            host,
+            { model },
+        );
+        expect(restricted.derivedReferences).toEqual([]);
     });
 
     test("bounds source fragments, derived blocks and serialized reader evidence", async () => {

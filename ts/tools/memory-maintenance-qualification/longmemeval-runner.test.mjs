@@ -13,6 +13,7 @@ import {
     executeMemoryCase,
     judgePrompt,
     officialJudgeTemplates,
+    preflightRetainedKnowledge,
     sessionSource,
 } from "./longmemeval-runner.mjs";
 import {
@@ -25,11 +26,83 @@ import {
     acknowledgeStopAfterQuestion,
     selectConstructionCases,
     createBenchmarkMemoryService,
+    createRetainedKnowledgeReader,
     recordBenchmarkArm,
     recordKnowledgeAllowance,
     continuedBenchmarkState,
+    createBenchmarkStateWriter,
+    engineIdentity,
+    recordBenchmarkAttemptFailure,
     main,
 } from "./longmemeval-live.mjs";
+
+test("startup failures do not mutate a previous invocation's active question", () => {
+    const state = {
+        currentQuestionId: "previous",
+        cases: {
+            previous: { status: "interrupted" },
+            current: { status: "ingesting" },
+        },
+    };
+    const attempt = {};
+    const error = new Error("Preflight failed");
+    const signal = new AbortController().signal;
+    recordBenchmarkAttemptFailure(state, attempt, error, signal, undefined);
+    assert.equal(state.cases.previous.status, "interrupted");
+    assert.equal(state.cases.current.status, "ingesting");
+    assert.equal(state.outcome, "FAILED_REAL_BENCHMARK");
+    assert.deepEqual(attempt.error, benchmarkFailure(error));
+    recordBenchmarkAttemptFailure(state, attempt, error, signal, "current");
+    assert.equal(state.cases.previous.status, "interrupted");
+    assert.equal(state.cases.current.status, "failed");
+});
+
+test("state publications serialize captured snapshots and retain writer failures", async () => {
+    const first = Promise.withResolvers();
+    const state = { sequence: 1 };
+    const writes = [];
+    let active = 0;
+    const persist = createBenchmarkStateWriter(
+        "unit-state",
+        state,
+        async (_file, snapshot) => {
+            assert.equal(++active, 1);
+            writes.push(snapshot);
+            if (snapshot.sequence === 1) await first.promise;
+            active--;
+        },
+    );
+    const one = persist();
+    state.sequence = 2;
+    const two = persist();
+    state.sequence = 3;
+    await Promise.resolve();
+    assert.deepEqual(writes, [{ sequence: 1 }]);
+    first.resolve();
+    await Promise.all([one, two]);
+    assert.deepEqual(writes, [{ sequence: 1 }, { sequence: 2 }]);
+    let calls = 0;
+    const failed = createBenchmarkStateWriter("unit-state", state, async () => {
+        calls++;
+        throw new Error("Writer failed");
+    });
+    await assert.rejects(failed(), /Writer failed/);
+    await assert.rejects(failed(), /Writer failed/);
+    assert.equal(calls, 1);
+});
+
+test("benchmark engine identity includes checkpoint observation implementation", async () => {
+    const files = [];
+    const before = await engineIdentity(async (file) => {
+        files.push(file);
+        return "original";
+    });
+    assert.ok(files.includes("knowledge-observer.mjs"));
+    const after = await engineIdentity(async (file) =>
+        file === "knowledge-observer.mjs" ? "changed" : "original",
+    );
+    assert.notEqual(before, after);
+});
 
 test("explicit readiness allowances remain within the product API bound", () => {
     assert.equal(benchmarkKnowledgeTimeout("10"), 600000);
@@ -370,6 +443,44 @@ test("benchmark failure diagnostics retain filesystem codes and frame locations 
     );
 });
 
+test("publication failures still close the service and restore the observer", async () => {
+    for (const failAt of [1, 2]) {
+        const state = { outcome: "PARTIAL_BOUNDED_WORK" };
+        const attempt = {};
+        const failure = new Error("Controlled publication failure");
+        let writes = 0;
+        let closed = false;
+        let restored = false;
+        const persist = createBenchmarkStateWriter(
+            "unit-state",
+            state,
+            async () => {
+                if (++writes === failAt) throw failure;
+            },
+        );
+        await assert.rejects(
+            closeBenchmarkService(
+                {
+                    close: async () => {
+                        closed = true;
+                    },
+                },
+                state,
+                attempt,
+                persist,
+                (error) => ({ name: error.name }),
+                () => {
+                    restored = true;
+                },
+            ),
+            (error) => error === failure,
+        );
+        assert.equal(closed, true);
+        assert.equal(restored, true);
+        assert.equal(attempt.supportedClose, "COMPLETE");
+    }
+});
+
 test("bounded outcome is durable before close waits, and close failures remain failures", async () => {
     const state = { outcome: "PARTIAL_BOUNDED_WORK" };
     const attempt = {};
@@ -503,6 +614,263 @@ function fixture() {
         },
     };
 }
+
+for (const outcome of ["returned", "timed-out"]) {
+    test(`required checkpoint observation retains durable readiness independently of wait ${outcome}`, async (t) => {
+        t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1000 });
+        const f = fixture();
+        const waited = Promise.withResolvers();
+        let checkpoint = {
+            checkpointId: "observed",
+            state: "running",
+            reasons: [],
+            updatedAt: "initial",
+            families: ["wiki", "topics"],
+        };
+        f.service.createKnowledgeCheckpoint = async () =>
+            structuredClone(checkpoint);
+        f.service.getKnowledgeCheckpoint = async () =>
+            structuredClone(checkpoint);
+        f.service.waitForKnowledgeCheckpoint = () => waited.promise;
+        const running = executeMemoryCase(
+            f.service,
+            construction,
+            reader,
+            reference,
+            f.record,
+            f.controls,
+        );
+        const expected =
+            outcome === "timed-out"
+                ? assert.rejects(running, /Timed out waiting/)
+                : running;
+        for (let index = 0; index < 60; index++) await Promise.resolve();
+        assert.equal(f.record.knowledgeWait.outcome, "running");
+        checkpoint = {
+            ...checkpoint,
+            state: "ready",
+            updatedAt: "durable-ready",
+        };
+        t.mock.timers.tick(30000);
+        for (let index = 0; index < 60; index++) await Promise.resolve();
+        assert.equal(f.record.knowledgeCheckpoint.state, "ready");
+        assert.equal(
+            f.record.knowledgeObservation.requiredCheckpointSatisfied,
+            true,
+        );
+        assert.equal(f.calls.answer.length, 0);
+        if (outcome === "timed-out")
+            waited.reject(
+                new Error(
+                    "Timed out waiting for knowledge checkpoint; work continues",
+                ),
+            );
+        else waited.resolve(structuredClone(checkpoint));
+        await expected;
+        assert.equal(f.record.knowledgeWait.outcome, outcome);
+        assert.equal(f.record.knowledgeCheckpoint.state, "ready");
+        assert.equal(f.record.knowledgeObservation.active, false);
+        assert.equal(f.calls.answer.length, outcome === "returned" ? 1 : 0);
+    });
+}
+
+test("retained preflight publishes independent blockers without waiting for the first corpus", async () => {
+    const first = Promise.withResolvers();
+    const records = {
+        first: { corpusId: "first" },
+        blocked: { corpusId: "blocked" },
+    };
+    const persisted = [];
+    const discovery = (receipts) => ({ discovery: { receipts } });
+    const pending = preflightRetainedKnowledge(
+        {
+            getKnowledgeStatus() {
+                throw new Error("Must use read-only committed receipts");
+            },
+        },
+        records,
+        {
+            signal: new AbortController().signal,
+            readRetainedKnowledgeStatus: (id) =>
+                id === "first"
+                    ? first.promise
+                    : Promise.resolve(
+                          discovery([
+                              { fingerprint: "failed", state: "failed" },
+                          ]),
+                      ),
+            failure: benchmarkFailure,
+            persist: async () => {
+                persisted.push(structuredClone(records));
+            },
+        },
+    );
+    for (let index = 0; index < 20; index++) await Promise.resolve();
+    assert.equal(
+        persisted[0].blocked.retainedKnowledgePreflight.attempts[0].status,
+        "blocked",
+    );
+    first.resolve(discovery([]));
+    await pending;
+    assert.equal(
+        records.first.retainedKnowledgePreflight.attempts[0].status,
+        "clear",
+    );
+    assert.equal(
+        records.blocked.retainedKnowledgePreflight.attempts[0].failedReceipts
+            .length,
+        1,
+    );
+});
+
+test("retained preflight read and persistence failures remain explicit", async () => {
+    const record = { corpusId: "failed-read" };
+    await assert.rejects(
+        preflightRetainedKnowledge(
+            {
+                getKnowledgeStatus: async () => {
+                    throw new Error("Read failed");
+                },
+            },
+            { record },
+            {
+                signal: new AbortController().signal,
+                failure: benchmarkFailure,
+                persist: async () => {
+                    throw new Error("Persistence failed");
+                },
+            },
+        ),
+        (error) => {
+            assert.ok(error instanceof AggregateError);
+            assert.match(
+                error.errors[0].message,
+                /status and persistence failed/,
+            );
+            assert.equal(
+                record.retainedKnowledgePreflight.attempts[0].status,
+                "unknown",
+            );
+            return true;
+        },
+    );
+});
+
+test("retained preflight bounds reads while a slow first corpus does not block later publications", async () => {
+    const first = Promise.withResolvers();
+    const records = Object.fromEntries(
+        Array.from({ length: 40 }, (_, index) => [
+            String(index),
+            { corpusId: String(index) },
+        ]),
+    );
+    let active = 0;
+    let peak = 0;
+    const published = [];
+    const pending = preflightRetainedKnowledge(
+        {
+            async getKnowledgeStatus(id) {
+                peak = Math.max(peak, ++active);
+                try {
+                    if (id === "0") await first.promise;
+                    else await new Promise((resolve) => setImmediate(resolve));
+                    return {
+                        discovery: {
+                            receipts: id === "1" ? [{ state: "running" }] : [],
+                        },
+                    };
+                } finally {
+                    active--;
+                }
+            },
+        },
+        records,
+        {
+            signal: new AbortController().signal,
+            failure: benchmarkFailure,
+            persist: async () => {
+                published.push(structuredClone(records));
+            },
+        },
+    );
+    try {
+        for (let index = 0; index < 60; index++)
+            await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(peak, 2);
+        assert.equal(active, 1);
+        assert.equal(published.length, 39);
+        const interrupted = records["1"].retainedKnowledgePreflight.attempts[0];
+        assert.equal(interrupted.status, "blocked");
+        assert.deepEqual(interrupted.interruptedReceipts, [
+            { state: "running" },
+        ]);
+    } finally {
+        first.resolve();
+        await pending;
+    }
+    assert.equal(published.length, 40);
+});
+
+test("a terminal observation is authoritatively refreshed before required readiness is accepted", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1000 });
+    const f = fixture();
+    const waited = Promise.withResolvers();
+    let checkpoint = {
+        checkpointId: "observed",
+        state: "ready",
+        reasons: [],
+        families: ["wiki"],
+    };
+    f.service.createKnowledgeCheckpoint = async () =>
+        structuredClone(checkpoint);
+    f.service.getKnowledgeCheckpoint = async () => structuredClone(checkpoint);
+    f.service.waitForKnowledgeCheckpoint = () => waited.promise;
+    const running = executeMemoryCase(
+        f.service,
+        construction,
+        reader,
+        reference,
+        f.record,
+        f.controls,
+    );
+    const checked = assert.rejects(running, { name: "KnowledgeNotReadyError" });
+    for (let index = 0; index < 60; index++) await Promise.resolve();
+    assert.equal(f.record.knowledgeObservation.durableState, "ready");
+    const old = structuredClone(checkpoint);
+    checkpoint = {
+        ...checkpoint,
+        state: "superseded",
+        reasons: ["Source changed"],
+    };
+    waited.resolve(old);
+    await checked;
+    assert.equal(f.record.knowledgeCheckpoint.state, "superseded");
+    assert.equal(
+        f.record.knowledgeObservation.requiredCheckpointSatisfied,
+        false,
+    );
+    assert.equal(f.calls.answer.length, 0);
+});
+
+test("the retained status reader reads committed receipts without initializing maintenance", async () => {
+    const calls = [];
+    const read = await createRetainedKnowledgeReader(
+        async () => ({
+            TypedViewStore: class {
+                constructor(root) {
+                    calls.push(root);
+                }
+                getKnowledgeState(id) {
+                    calls.push(id);
+                    return { discovery: { receipts: [] } };
+                }
+            },
+        }),
+        "isolated-store",
+    );
+    assert.deepEqual(await read("corpus"), { discovery: { receipts: [] } });
+    assert.deepEqual(calls, ["isolated-store", "corpus"]);
+});
 
 test("session projection preserves roles, dates, empty turns and repeated IDs by original position", () => {
     const first = sessionSource("case", construction.sessions[0]);

@@ -5,6 +5,8 @@ import { PromptSection, Result, success } from "typechat";
 import type { ApiSettings, CompletionUsageStats } from "../openai.js";
 import type { Filter, FilterError, FilterResult } from "./types.js";
 
+export const incompleteOutputMessage = "Model response is incomplete";
+
 export async function createApiHeaders(
     settings: ApiSettings,
 ): Promise<Result<Record<string, string>>> {

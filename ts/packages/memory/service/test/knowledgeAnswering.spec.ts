@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { FileMemoryService } from "../src/fileMemoryService.js";
+import { answerEvidenceForReader } from "../src/integratedAnswerReader.js";
 import {
     indexedLocator,
     parseIndexedLocator,
@@ -14,9 +15,11 @@ import {
 } from "../src/indexedFragments.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { hydrateSchemaAnswers } from "../src/schemaViewSynthesis.js";
-import type { AnswerEvidence, IndexedFragmentRequest } from "../src/types.js";
+import type { IndexedFragmentRequest } from "../src/types.js";
 import type { ViewBuildJob, ViewSynthesisAdapter } from "../src/viewTypes.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+
+type ReaderEvidence = ReturnType<typeof answerEvidenceForReader>;
 
 class AnsweringIndexedCorpus extends FakeSemanticCorpusIndex {
     public async readFragments(request: IndexedFragmentRequest) {
@@ -77,7 +80,7 @@ class AnsweringIndexedCorpus extends FakeSemanticCorpusIndex {
 describe("service source-plus-view answer integration", () => {
     let root: string;
     let service: FileMemoryService;
-    let readerInputs: AnswerEvidence[][];
+    let readerInputs: ReaderEvidence[][];
     let discoveryGate: Promise<void> | undefined;
     let discoveryStarted: (() => void) | undefined;
 
@@ -96,7 +99,7 @@ describe("service source-plus-view answer integration", () => {
                 if (typeof content !== "string")
                     throw new Error("Reader must receive serialized evidence");
                 const input = JSON.parse(content) as {
-                    evidence: AnswerEvidence[];
+                    evidence: ReaderEvidence[];
                     candidates?: unknown;
                 };
                 readerInputs.push(input.evidence);
@@ -185,6 +188,45 @@ describe("service source-plus-view answer integration", () => {
         await rm(root, { recursive: true, force: true });
     });
 
+    test("startup emits its own trace and shares one initialization promise", async () => {
+        const flag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        const warn = console.warn;
+        const logs: string[] = [];
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        console.warn = (line: unknown) => logs.push(String(line));
+        try {
+            const initialized = service.initialize();
+            expect(service.initialize()).toBe(initialized);
+            await initialized;
+            await service.initialize();
+            const stages = logs.map(
+                (line): { stage: string; scope: string; traceId: string } =>
+                    JSON.parse(line.replace("[memory-search-timing] ", "")),
+            );
+            expect(stages.map((item) => item.stage)).toEqual(
+                expect.arrayContaining([
+                    "service.initialize.storageLock",
+                    "service.initialize.batches",
+                    "service.initialize.changes",
+                    "service.initialize.jobs",
+                    "service.initialize",
+                ]),
+            );
+            expect(
+                stages.filter((item) => item.stage === "service.initialize"),
+            ).toHaveLength(1);
+            expect(
+                stages.every((item) => item.scope === "service.initialize"),
+            ).toBe(true);
+            expect(new Set(stages.map((item) => item.traceId)).size).toBe(1);
+        } finally {
+            console.warn = warn;
+            if (flag === undefined)
+                delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+            else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = flag;
+        }
+    });
+
     async function ingest(corpusId: string, sourceId: string, text: string) {
         const receipt = await service.ingestDocument({
             corpusId,
@@ -211,10 +253,114 @@ describe("service source-plus-view answer integration", () => {
                 expect(current.state).toBe("complete");
                 return;
             }
+
             await new Promise((resolve) => setTimeout(resolve, 10));
         }
         throw new Error("Offline schema build did not finish");
     }
+
+    test("Find and staged Understanding share validated evidence without repeated search or an initial prose call", async () => {
+        const corpus = await service.createCorpus("Prepared answer");
+        await ingest(
+            corpus.corpusId,
+            "source",
+            "Morgan leads the Harbor rollout.",
+        );
+        const search = service.search.bind(service);
+        let searches = 0;
+        service.search = (input) => {
+            searches++;
+            return search(input);
+        };
+        const question = {
+            corpusId: corpus.corpusId,
+            question: "Who leads Harbor?",
+        };
+        const prepared = await service.answer({
+            ...question,
+            prepareOnly: true,
+        });
+        expect(prepared.evidenceSnapshotId).toBeDefined();
+        const preparedId = prepared.evidenceSnapshotId;
+        if (!preparedId) throw new Error("Prepared evidence was not retained");
+        expect(readerInputs).toHaveLength(0);
+        const sources = await service.understand({
+            ...question,
+            phase: "retrieve",
+            evidenceSnapshotId: preparedId,
+        });
+        expect(sources.citations.length).toBeGreaterThan(0);
+        expect(sources.answer).toBeUndefined();
+        expect(readerInputs).toHaveLength(0);
+        const sourcesId = sources.evidenceSnapshotId;
+        if (!sourcesId) throw new Error("Source evidence was not retained");
+        const rich = await service.understand({
+            ...question,
+            phase: "initial",
+            evidenceSnapshotId: sourcesId,
+        });
+        expect(rich.answer?.summary.text).toContain("Morgan");
+        expect(readerInputs).toHaveLength(1);
+        expect(searches).toBe(1);
+        await expect(
+            service.understand({
+                ...question,
+                question: "A different question",
+                evidenceSnapshotId: preparedId,
+            }),
+        ).rejects.toThrow("scope");
+        await ingest(corpus.corpusId, "new-source", "Another Harbor update.");
+        await expect(
+            service.understand({
+                ...question,
+                evidenceSnapshotId: preparedId,
+            }),
+        ).rejects.toThrow("changed");
+    });
+
+    test("document understanding validates a ready exact revision before the real indexed pipeline", async () => {
+        const { corpusId } = await service.createCorpus("Document Harbor");
+        const receipt = await ingest(
+            corpusId,
+            "document",
+            "Morgan leads the Harbor rollout.",
+        );
+        expect(
+            (await service.getCapabilities()).features
+                .memoryDocumentUnderstanding,
+        ).toBe(true);
+        const request = {
+            corpusId,
+            question: "Who leads the Harbor rollout?",
+            source: {
+                sourceId: receipt.sourceId,
+                revisionId: receipt.revisionId,
+            },
+        };
+        const result = await service.understand(request);
+        expect(result.citations).toContainEqual(
+            expect.objectContaining({
+                kind: "source",
+                source: expect.objectContaining(request.source),
+            }),
+        );
+        await expect(
+            service.understand({
+                ...request,
+                source: {
+                    ...request.source,
+                    revisionId: "unavailable-revision",
+                },
+            }),
+        ).rejects.toThrow("exact document revision");
+        await expect(
+            service.understand({
+                ...request,
+                source: { ...request.source, sourceId: "unavailable-source" },
+            }),
+        ).rejects.toThrow("exact document revision");
+        expect(readerInputs).toHaveLength(1);
+    });
 
     test("rich understanding uses the real indexed pipeline and forget/clear purge its handles", async () => {
         const { corpusId } = await service.createCorpus("Understanding Harbor");
@@ -245,6 +391,8 @@ describe("service source-plus-view answer integration", () => {
             kind: "sources",
         });
         expect(module.status).toBe("ready");
+        const preparedId = result.evidenceSnapshotId;
+        if (!preparedId) throw new Error("Answer evidence was not retained");
         expect(readerInputs).toHaveLength(1);
         await service.understand({
             corpusId,
@@ -261,6 +409,13 @@ describe("service source-plus-view answer integration", () => {
             sourceId: receipt.sourceId,
             confirmationToken: preview.confirmationToken,
         });
+        await expect(
+            service.understand({
+                corpusId,
+                question: "Who leads the Harbor rollout?",
+                evidenceSnapshotId: preparedId,
+            }),
+        ).rejects.toThrow("expired");
         await expect(
             service.understandingModule({
                 corpusId,
@@ -370,6 +525,7 @@ describe("service source-plus-view answer integration", () => {
         expect(derived).toMatchObject({
             kind: "derived",
             selectedValue: "Morgan",
+            influencingSourceCount: 1,
             reference: {
                 viewId: current.viewId,
                 revisionId: current.revisionId,
@@ -381,6 +537,7 @@ describe("service source-plus-view answer integration", () => {
             throw new Error(
                 "Published derived evidence did not reach the reader",
             );
+        expect(derived).not.toHaveProperty("influencingSourceIds");
         expect(derived.supportingEvidenceIds.length).toBeGreaterThan(0);
         for (const id of derived.supportingEvidenceIds) {
             const original = readerInputs[0].find((item) => item.id === id);
@@ -398,9 +555,14 @@ describe("service source-plus-view answer integration", () => {
             expect(result.citations).toContainEqual(original.source);
         }
         expect(result.derivedReferences).toContainEqual(derived.reference);
+        const suppliedEvidence =
+            result.readerContext?.integratedAnswer?.suppliedEvidence;
         expect(
-            result.readerContext?.integratedAnswer?.suppliedEvidence,
-        ).toEqual(readerInputs[0]);
+            suppliedEvidence?.find((item) => item.kind === "derived"),
+        ).toMatchObject({ influencingSourceIds: ["captured"] });
+        expect(suppliedEvidence?.map(answerEvidenceForReader)).toEqual(
+            readerInputs[0],
+        );
         expect(result.warnings).toEqual([]);
     }, 30000);
 

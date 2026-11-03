@@ -9,16 +9,11 @@ import type {
 } from "@typeagent/browser-control-rpc/viewRpc";
 import type { MemoryHubReadService } from "./memoryHubQuery.mjs";
 
-export async function tryMemoryHubIntegratedAnswer(
-    service: MemoryHubReadService,
+function isIntegratedAnswerScope(
     corpora: MemoryCenterCorpus[],
     request: MemoryHubSearchRequest,
-    result: MemoryHubSearchResult,
-): Promise<boolean> {
-    if (!request.generateAnswer) return false;
-    const capability = (await service.getCapabilities()).derivedViews
-        ?.integratedAnswering;
-    const eligible =
+): boolean {
+    return (
         request.corpusId !== undefined &&
         corpora.length === 1 &&
         corpora[0].name !== conversationCorpusName &&
@@ -27,8 +22,20 @@ export async function tryMemoryHubIntegratedAnswer(
         !request.dateFrom &&
         !request.dateTo &&
         !request.viewKinds?.length &&
-        (!request.conversationScope || request.conversationScope === "none");
-    if (!capability || !eligible) {
+        (!request.conversationScope || request.conversationScope === "none")
+    );
+}
+
+export async function tryMemoryHubIntegratedAnswer(
+    service: MemoryHubReadService,
+    corpora: MemoryCenterCorpus[],
+    request: MemoryHubSearchRequest,
+    result: MemoryHubSearchResult,
+): Promise<boolean> {
+    if (!request.generateAnswer && !request.prepareUnderstanding) return false;
+    const capability = (await service.getCapabilities()).derivedViews
+        ?.integratedAnswering;
+    if (!capability || !isIntegratedAnswerScope(corpora, request)) {
         if (
             request.retrievalPolicy === "sourcesAndViews" ||
             request.knowledgeCheckpointId
@@ -46,6 +53,10 @@ export async function tryMemoryHubIntegratedAnswer(
     const answer = await service.answer({
         corpusId: corpus.corpusId,
         question: result.query,
+        ...(request.evidenceSnapshotId
+            ? { evidenceSnapshotId: request.evidenceSnapshotId }
+            : {}),
+        ...(!request.generateAnswer ? { prepareOnly: true } : {}),
         ...(request.retrievalPolicy === undefined
             ? {}
             : { retrievalPolicy: request.retrievalPolicy }),
@@ -78,36 +89,41 @@ export async function tryMemoryHubIntegratedAnswer(
             : { eventTime: source.capturedAt }),
     }));
     result.warnings.push(...answer.warnings);
+    if (answer.evidenceSnapshotId)
+        result.evidenceSnapshotId = answer.evidenceSnapshotId;
     result.warnings.push(
-        request.retrievalPolicy === "sourcesOnly"
-            ? "Sources-only diagnostic answering excludes maintained views; original evidence selection is bounded, not exhaustive."
-            : "Knowledge answering uses bounded original evidence and eligible maintained views. Ready knowledge is relative to captured coverage, not exhaustive memory.",
+        !request.generateAnswer
+            ? "Bounded evidence retrieval prepared originals and maintained knowledge without generating an answer. Understand reuses this evidence."
+            : request.retrievalPolicy === "sourcesOnly"
+              ? "Sources-only diagnostic answering excludes maintained views; original evidence selection is bounded, not exhaustive."
+              : "Knowledge answering uses bounded original evidence and eligible maintained views. Ready knowledge is relative to captured coverage, not exhaustive memory.",
     );
-    result.answer = {
-        text: answer.answer,
-        mode: answer.mode,
-        citationIds: result.matches.map((source) => source.id),
-        followUps: [],
-        ...(answer.derivedReferences === undefined
-            ? {}
-            : {
-                  derivedReferences: answer.derivedReferences.map(
-                      (reference) => ({
-                          corpusId: corpus.corpusId,
-                          ...reference,
-                      }),
-                  ),
-              }),
-        ...(answer.assertionReferences === undefined
-            ? {}
-            : {
-                  assertionReferences: answer.assertionReferences.map(
-                      (reference) => ({
-                          corpusId: corpus.corpusId,
-                          ...reference,
-                      }),
-                  ),
-              }),
-    };
+    if (request.generateAnswer)
+        result.answer = {
+            text: answer.answer,
+            mode: answer.mode,
+            citationIds: result.matches.map((source) => source.id),
+            followUps: [],
+            ...(answer.derivedReferences === undefined
+                ? {}
+                : {
+                      derivedReferences: answer.derivedReferences.map(
+                          (reference) => ({
+                              corpusId: corpus.corpusId,
+                              ...reference,
+                          }),
+                      ),
+                  }),
+            ...(answer.assertionReferences === undefined
+                ? {}
+                : {
+                      assertionReferences: answer.assertionReferences.map(
+                          (reference) => ({
+                              corpusId: corpus.corpusId,
+                              ...reference,
+                          }),
+                      ),
+                  }),
+        };
     return true;
 }

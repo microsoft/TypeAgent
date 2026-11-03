@@ -13,6 +13,7 @@ import {
     splitDocPartTextForEmbedding,
 } from "@typeagent/conversation-memory";
 import * as kp from "@typeagent/knowpro";
+import { maintenanceExtractionModel } from "./maintenanceConcurrency.js";
 import { isInitiativeSubject } from "./initiativeDiscovery.js";
 import { indexedTopicOccurrence } from "./topicIncidence.js";
 import {
@@ -644,6 +645,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
 
     private createSettings(): DocMemorySettings {
         const settings = this.settingsFactory?.() ?? createDocMemorySettings();
+        maintenanceExtractionModel(settings.languageModel);
         settings.conversationSettings.messageTextIndexSettings.splitText ??=
             splitDocPartTextForEmbedding;
         return settings;
@@ -1479,6 +1481,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         limit: number,
         tags?: string[],
         temporalContext?: kp.TemporalQueryContext,
+        sourceIds?: ReadonlySet<string>,
     ): Promise<CorpusIndexMatch[]> {
         return kp.timeSearchStage(
             "knowpro.index.search",
@@ -1487,6 +1490,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     temporalQuestion(query, temporalContext),
                     limit,
                     tags,
+                    sourceIds,
                 ),
             { limit, tagCount: tags?.length ?? 0 },
         );
@@ -1521,14 +1525,16 @@ export class KnowProCorpusIndex implements CorpusIndex {
         query: string,
         limit: number,
         tags?: string[],
+        sourceIds?: ReadonlySet<string>,
     ): Promise<CorpusIndexMatch[]> {
+        if (sourceIds?.size === 0) return [];
         const matches = new Map<number, number>();
         const memory = this.memory;
         if (memory !== undefined) {
             const options = kp.createLanguageSearchOptionsTypical();
             options.maxMessageMatches = limit;
             options.maxKnowledgeMatches = limit;
-            options.messageRangesInScope = this.eligibleRanges();
+            options.messageRangesInScope = this.eligibleRanges(sourceIds);
             const result = await kp.timeSearchStage(
                 "knowpro.index.languageSearch",
                 () =>

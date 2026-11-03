@@ -166,7 +166,21 @@ class EditorialIndex extends FakeSemanticCorpusIndex {
 }
 
 async function settled(service: FileMemoryService, corpusId: string) {
-    const maintenance = await service.drainMaintenance();
+    let maintenance = await service.drainMaintenance(15_000);
+    // Consecutive ingests can obsolete a detached read with newer work queued.
+    for (
+        let retry = 0;
+        retry < 2 &&
+        maintenance.pending.length > 0 &&
+        maintenance.failures.length > 0 &&
+        maintenance.failures.every(
+            (failure) =>
+                failure.error ===
+                "Indexed informational evidence changed during detached retrieval",
+        );
+        retry++
+    )
+        maintenance = await service.drainMaintenance(15_000);
     if (
         maintenance.reason ||
         maintenance.pending.length ||
@@ -368,6 +382,7 @@ test("actual P0 revisions automate correction/withdrawal around human edits and 
             file: string,
             sourceId: string,
         ) => {
+            await settled(service, corpusId);
             const text = await readFile(
                 path.join(originalFixtureRoot(), stage, file),
                 "utf8",

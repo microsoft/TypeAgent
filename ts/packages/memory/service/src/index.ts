@@ -5,6 +5,7 @@ export * from "./agentEdition.js";
 export * from "./agentSessionTypes.js";
 export * from "./batchImport.js";
 export * from "./fileMemoryService.js";
+export * from "./memoryPerformanceExperiments.js";
 export type { MaintenanceStatus } from "./maintenanceScheduler.js";
 export * from "./knowProCorpusIndex.js";
 export * from "./procedureMarkdown.js";
@@ -20,6 +21,9 @@ export { parseViewDraftCapability } from "./viewBuildValidation.js";
 export * from "./viewStore.js";
 export * from "./viewSynthesis.js";
 export * from "./viewTypes.js";
+export * from "./viewDetail.js";
+export * from "./viewExtensions.js";
+export * from "./viewExtensionUnderstanding.js";
 export type {
     WikiConsolidationReceipt,
     WikiConsolidationScope,
@@ -37,3 +41,4 @@ export * from "./knowledgeTypes.js";
 export * from "./schemaViewOperations.js";
 export * from "./deferredAcquisition.js";
 export type * from "./inventoryTypes.js";
+export * from "./frameTypes.js";

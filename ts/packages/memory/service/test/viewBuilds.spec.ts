@@ -14,6 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { FileMemoryService } from "../src/fileMemoryService.js";
+import { CorpusAccess } from "../src/corpusAccess.js";
 import { runMemoryViewsCli } from "../src/memoryViewsCli.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { validateBuildRequest } from "../src/viewBuildValidation.js";
@@ -1413,6 +1414,43 @@ describe("durable draft builds and explicit edit merge", () => {
             "New headroom warning",
         );
     });
+    test("retry selects its internal head under the same exclusive writer used for admission", async () => {
+        const request = await fixture();
+        generate.mockRejectedValueOnce(new Error("Synthetic provider failure"));
+        const failed = await wait(await service.buildViews(request));
+        expect(failed.state).toBe("failed");
+        const read = CorpusAccess.prototype.read;
+        const listViews = TypedViewStore.prototype.listViews;
+        const leases: boolean[] = [];
+        let corpusAccess: CorpusAccess | undefined;
+        const mocks = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+        const access = mocks
+            .spyOn(CorpusAccess.prototype, "read")
+            .mockImplementation(function <T>(
+                this: CorpusAccess,
+                operation: () => Promise<T>,
+            ): Promise<T> {
+                corpusAccess = this;
+                return (read<T>).call(this, operation);
+            });
+        await service.listViews(request.corpusId);
+        const snapshots = mocks
+            .spyOn(TypedViewStore.prototype, "listViews")
+            .mockImplementation(function (this: TypedViewStore, corpusId) {
+                leases.push(corpusAccess?.isWriting ?? false);
+                return listViews.call(this, corpusId);
+            });
+        try {
+            const retried = await wait(await service.retryViewBuild(failed));
+            expect(retried.state).toBe("complete");
+            expect(leases.length).toBeGreaterThan(0);
+            expect(leases.every(Boolean)).toBe(true);
+        } finally {
+            snapshots.mockRestore();
+            access.mockRestore();
+        }
+    });
+
     test.each(["generating", "inventorying", "checkingInventory"] as const)(
         "restart reconciles durable %s as interrupted and retry admits a new guarded build",
         async (stage) => {

@@ -3,6 +3,10 @@
 
 import type { MemoryCenterInvokeFunctions } from "@typeagent/browser-control-rpc/serviceTypes";
 import type {
+    UnderstandingRequest,
+    UnderstandingResult,
+} from "@typeagent/memory-service";
+import type {
     ViewEvent as ViewEventEnvelope,
     ViewInvokeFunctions,
     ViewMethod,
@@ -68,6 +72,71 @@ export function invokeMemory<M extends keyof MemoryCenterInvokeFunctions>(
 export async function checkViewHealth(): Promise<boolean> {
     const response = await fetch("/api/health");
     return response.ok;
+}
+
+export async function streamUnderstanding(
+    request: UnderstandingRequest,
+    onResult: (result: UnderstandingResult) => void,
+    signal: AbortSignal,
+): Promise<void> {
+    const response = await fetch("/api/views/understand", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+        signal,
+    });
+    if (!response.ok || !response.body)
+        throw new Error(
+            `Understanding stream is unavailable (${response.status})`,
+        );
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let pending = "";
+    let completed = false;
+    try {
+        for (;;) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            pending += decoder.decode(chunk.value, { stream: true });
+            if (pending.length > 512 * 1024)
+                throw new Error(
+                    "Understanding stream exceeded its frame limit",
+                );
+            let boundary: number;
+            while ((boundary = pending.indexOf("\n\n")) >= 0) {
+                const frame = pending.slice(0, boundary);
+                pending = pending.slice(boundary + 2);
+                if (!frame.startsWith("data: ")) continue;
+                const event = JSON.parse(frame.slice(6)) as
+                    | { type: "result"; data: UnderstandingResult }
+                    | { type: "complete" }
+                    | { type: "error"; error: string };
+                if (completed)
+                    throw new Error(
+                        "Understanding data arrived after completion",
+                    );
+                if (event.type === "error") throw new Error(event.error);
+                if (event.type === "result") {
+                    if (
+                        event.data.corpusId !== request.corpusId ||
+                        event.data.question !== request.question.trim()
+                    )
+                        throw new Error(
+                            "Understanding stream scope does not match",
+                        );
+                    onResult(event.data);
+                } else if (event.type === "complete") completed = true;
+                else throw new Error("Unknown understanding stream event");
+            }
+        }
+        if (!completed)
+            throw new Error(
+                "Understanding stream ended before completion; retry the question",
+            );
+    } finally {
+        await reader.cancel();
+        reader.releaseLock();
+    }
 }
 
 type ViewEvent = "importProgress" | "knowledgeExtractionProgress";

@@ -607,6 +607,15 @@ explicit inference authorization remain unchanged.
 
 ## Executing the full LongMemEval suite
 
+During required-knowledge waits, an independent observer reads the authoritative
+checkpoint every 30 seconds. Progress records separate the wait outcome from
+durable readiness and report observation age and unresolved family debt; family
+completion alone never qualifies a required checkpoint. Reads or persistence
+failures remain explicit rather than becoming successful readiness.
+Before resuming retained corpora, a read-only preflight records discovery
+failures before service initialization can admit maintenance. It does not reset
+semantic failures or automatically retry them.
+
 Derived-knowledge readiness is separate from source ingestion and the overall
 invocation allowance. `--knowledge-minutes` sets the per-case checkpoint
 execution **and** wait allowance, measured after ingestion. It defaults to

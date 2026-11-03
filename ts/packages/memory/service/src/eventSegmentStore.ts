@@ -34,6 +34,12 @@ interface Suppressions<T> {
     records: T[];
 }
 
+interface CommittedEvents<T> {
+    descriptor: EventDescriptor;
+    lookup: Map<string, EventReference>;
+    suppressions: T[];
+}
+
 const digestPattern = /^[a-f0-9]{64}$/;
 const eventFilePattern = /^(\d{16})-([a-f0-9]{64})-([a-f0-9]{64})\.jsonl$/;
 const hash = (value: string | Buffer) =>
@@ -52,6 +58,7 @@ export class EventSegmentStore<TSuppression> {
     };
     private lookup = new Map<string, EventReference>();
     private tail = Promise.resolve();
+    private committed?: CommittedEvents<TSuppression>;
     private readonly directory: string;
 
     public constructor(
@@ -65,7 +72,16 @@ export class EventSegmentStore<TSuppression> {
     }
 
     private async access<T>(operation: () => Promise<T>): Promise<T> {
-        const result = this.tail.then(operation);
+        const result = this.tail.then(async () => {
+            const result = await operation();
+            if (this.descriptor && !this.descriptor.pendingPurge)
+                this.committed = {
+                    descriptor: { ...this.descriptor },
+                    lookup: this.lookup,
+                    suppressions: this.suppression.records,
+                };
+            return result;
+        });
         this.tail = result.then(
             () => {},
             () => {},
@@ -268,16 +284,44 @@ export class EventSegmentStore<TSuppression> {
     }
 
     public recover(): Promise<void> {
+        if (this.committed && !this.descriptor?.pendingPurge)
+            return Promise.resolve();
         return this.access(async () => {
             await this.load();
         });
     }
 
+    private async readCommitted<T>(
+        operation: (snapshot: CommittedEvents<TSuppression>) => Promise<T>,
+    ): Promise<T> {
+        if (!this.committed || this.descriptor?.pendingPurge)
+            await this.recover();
+        const snapshot = this.committed;
+        if (!snapshot)
+            throw new Error("Canonical event recovery is incomplete");
+        const assertReadable = () => {
+            if (
+                this.descriptor?.pendingPurge ||
+                this.descriptor?.eligibilityRevision !==
+                    snapshot.descriptor.eligibilityRevision
+            )
+                throw new Error(
+                    "Canonical event eligibility changed; retry after purge recovery",
+                );
+        };
+        assertReadable();
+        const result = await operation(snapshot);
+        assertReadable();
+        return result;
+    }
+
     public get(eventId: string): Promise<MemoryEvent | undefined> {
-        return this.access(async () => {
-            await this.load();
-            const reference = this.lookup.get(hash(eventId));
-            return reference ? this.read(reference) : undefined;
+        return this.readCommitted(async (snapshot) => {
+            const reference = snapshot.lookup.get(hash(eventId));
+            return reference &&
+                reference.sequence <= snapshot.descriptor.sequence
+                ? this.read(reference)
+                : undefined;
         });
     }
 
@@ -285,16 +329,20 @@ export class EventSegmentStore<TSuppression> {
         events: MemoryEvent[];
         suppressions: TSuppression[];
     }> {
-        return this.access(async () => {
-            await this.load();
+        return this.readCommitted(async (snapshot) => {
             const events: MemoryEvent[] = [];
-            for (const reference of [...this.lookup.values()].sort(
-                (a, b) => a.sequence - b.sequence,
-            ))
+            // Appends share immutable references; the captured descriptor
+            // bounds visibility without copying the entire lookup on each write.
+            for (const reference of [...snapshot.lookup.values()]
+                .filter(
+                    (reference) =>
+                        reference.sequence <= snapshot.descriptor.sequence,
+                )
+                .sort((a, b) => a.sequence - b.sequence))
                 events.push(await this.read(reference));
             return {
                 events,
-                suppressions: structuredClone(this.suppression.records),
+                suppressions: structuredClone(snapshot.suppressions),
             };
         });
     }
@@ -303,8 +351,7 @@ export class EventSegmentStore<TSuppression> {
         sequence: number;
         eligibilityRevision: number;
     }> {
-        return this.access(async () => {
-            const value = await this.load();
+        return this.readCommitted(async ({ descriptor: value }) => {
             return {
                 sequence: value.sequence,
                 eligibilityRevision: value.eligibilityRevision,
@@ -313,9 +360,8 @@ export class EventSegmentStore<TSuppression> {
     }
 
     public suppressions(): Promise<TSuppression[]> {
-        return this.access(async () => {
-            await this.load();
-            return structuredClone(this.suppression.records);
+        return this.readCommitted(async (snapshot) => {
+            return structuredClone(snapshot.suppressions);
         });
     }
 

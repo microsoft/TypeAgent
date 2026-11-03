@@ -86,6 +86,8 @@ test("view and build links preserve exact revision and operation identities", ()
             corpusId: "corpus/a",
             objectId: "wiki:#1",
             viewRevisionId: "revision/old",
+            viewPageId: "claim/one",
+            viewLayoutId: "role lanes",
         },
         {
             page: "activity" as const,

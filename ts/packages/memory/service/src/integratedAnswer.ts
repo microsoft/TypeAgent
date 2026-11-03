@@ -2,9 +2,11 @@
 // Licensed under the MIT License.
 
 import type { ChatModel } from "@typeagent/aiclient";
+import { timeSearchStage } from "@typeagent/knowpro";
 import { mergeIndexedAnswerEvidence } from "./indexedAnswer.js";
 import { indexedQueryTerms } from "./indexedFragments.js";
 import {
+    answerEvidenceForReader,
     readIntegratedEvidence,
     serializeAnswerEvidence,
     type IntegratedReaderResponse,
@@ -41,6 +43,8 @@ export interface IntegratedAnswerHost {
 }
 
 export interface IntegratedAnswerOptions {
+    initialEndpoint?: string | undefined;
+    initialOutputTokens?: number;
     outputTokens?: number;
     endpoint?: string;
     model?: ChatModel;
@@ -50,6 +54,21 @@ export interface IntegratedAnswerOptions {
     /** Ceiling for serialized messages plus structured-output schema, not just evidence. */
     maxRequestChars?: number;
     reader?: IntegratedAnswerReader;
+    seed?: IntegratedAnswerSeed;
+    prepareOnly?: boolean;
+    deferRefinement?: boolean;
+    resumeRefinement?: boolean;
+    onPrepared?(seed: IntegratedAnswerSeed): void;
+}
+
+export interface IntegratedAnswerSeed {
+    leaseExpiresAt?: number | undefined;
+    prepareOnly: boolean;
+    original: MemorySearchResult;
+    views: AnswerViewEvidence[];
+    evidence: AnswerEvidence[];
+    influence: AnswerEvidence[];
+    response: IntegratedReaderResponse;
 }
 
 export type IntegratedAnswerReader = (
@@ -176,7 +195,9 @@ async function expandView(
         const key = JSON.stringify(reference);
         let pending = cache.get(key);
         if (!pending) {
-            pending = host.expandSource(reference, request);
+            pending = timeSearchStage("answer.expandSource", () =>
+                host.expandSource(reference, request),
+            );
             cache.set(key, pending);
         }
         const source = await pending;
@@ -323,7 +344,9 @@ async function assembleEvidence(
         }
         const candidate = attachView(view, expanded, evidence, selectedViews);
         const viewChars = JSON.stringify(
-            candidate.filter((item) => item.kind !== "source"),
+            candidate
+                .filter((item) => item.kind !== "source")
+                .map(answerEvidenceForReader),
         ).length;
         if (
             viewChars > Math.floor(budget.chars / 2) ||
@@ -366,21 +389,39 @@ async function retrieve(
     host: IntegratedAnswerHost,
     diagnostics: IntegratedAnswerDiagnostics,
 ) {
-    const original = await host.searchOriginal(request);
+    const originalWork = timeSearchStage("answer.originalSearch", () =>
+        host.searchOriginal(request),
+    );
+    if (request.retrievalPolicy === "sourcesOnly") {
+        const original = await originalWork;
+        if (original.indexedSelection)
+            diagnostics.sourceSelection = original.indexedSelection;
+        diagnostics.warnings.push(...original.warnings);
+        return { original, views: [] };
+    }
+    const [originalResult, viewResult] = await Promise.allSettled([
+        originalWork,
+        timeSearchStage("answer.maintainedViews", async () => {
+            if (!host.getEligibleViewMatches)
+                throw new Error(
+                    "Host does not support maintained-view retrieval",
+                );
+            return host.getEligibleViewMatches(request);
+        }),
+    ]);
+    if (originalResult.status === "rejected") throw originalResult.reason;
+    const original = originalResult.value;
     if (original.indexedSelection)
         diagnostics.sourceSelection = original.indexedSelection;
     diagnostics.warnings.push(...original.warnings);
-    if (request.retrievalPolicy === "sourcesOnly")
-        return { original, views: [] };
-    try {
-        if (!host.getEligibleViewMatches)
-            throw new Error("Host does not support maintained-view retrieval");
-        const result = await host.getEligibleViewMatches(request);
+    if (viewResult.status === "fulfilled") {
+        const result = viewResult.value;
         diagnostics.warnings.push(...(result.warnings ?? []));
         diagnostics.omittedViewCandidates = result.omittedCandidates ?? 0;
         return { original, views: result.matches };
-    } catch (error) {
-        if (request.retrievalPolicy === "sourcesAndViews") throw error;
+    } else {
+        if (request.retrievalPolicy === "sourcesAndViews")
+            throw viewResult.reason;
         diagnostics.retrievalMode = "degraded";
         diagnostics.warnings.push(
             "Maintained-view retrieval failed; returning an explicitly degraded source-only answer.",
@@ -410,14 +451,132 @@ function selectedEvidence(
     return selected;
 }
 
+async function initialResponse(
+    request: MemoryAnswerRequest,
+    evidence: AnswerEvidence[],
+    options: IntegratedAnswerOptions,
+    seed?: IntegratedAnswerSeed,
+): Promise<IntegratedReaderResponse> {
+    if (options.prepareOnly) {
+        if (seed && !seed.prepareOnly) return seed.response;
+        return {
+            status: evidence.length ? "answered" : "noAnswer",
+            answer: evidence
+                .flatMap((item) =>
+                    item.kind === "source" ? [item.source.snippet] : [],
+                )
+                .join("\n\n"),
+            evidenceIds: evidence.map((item) => item.id),
+        };
+    }
+    if (seed && options.resumeRefinement) return seed.response;
+    const read = options.reader ?? readIntegratedEvidence;
+    return timeSearchStage("answer.reader.initial", () =>
+        read(
+            request,
+            evidence,
+            {
+                ...options,
+                ...(options.initialEndpoint
+                    ? { endpoint: options.initialEndpoint }
+                    : {}),
+                ...(options.initialOutputTokens
+                    ? { outputTokens: options.initialOutputTokens }
+                    : {}),
+            },
+            true,
+        ),
+    );
+}
+
+async function refineAnswer(
+    request: MemoryAnswerRequest,
+    host: IntegratedAnswerHost,
+    options: IntegratedAnswerOptions,
+    budget: EvidenceBudget,
+    diagnostics: IntegratedAnswerDiagnostics,
+    pass: Pick<
+        IntegratedAnswerSeed,
+        "original" | "views" | "evidence" | "response"
+    >,
+) {
+    const queries = pass.response.retrievalQueries;
+    if (!queries?.length || options.deferRefinement || options.prepareOnly)
+        return pass;
+    if (queries.length > 2)
+        throw new Error("Refinement is limited to two queries");
+    const refinement: NonNullable<IntegratedAnswerDiagnostics["refinement"]> = {
+        queries,
+        initialEvidence: pass.evidence,
+        selections: [],
+    };
+    const searches = await Promise.allSettled(
+        queries.map((question, ordinal) =>
+            timeSearchStage(
+                "answer.refinementSearch",
+                () => host.searchOriginal({ ...request, question }),
+                { refinementOrdinal: ordinal + 1 },
+            ),
+        ),
+    );
+    const groups: MemoryEvidence[][] = [];
+    for (const [ordinal, searched] of searches.entries()) {
+        if (searched.status === "rejected") throw searched.reason;
+        const followup = searched.value;
+        const terms = indexedQueryTerms(queries[ordinal]);
+        const ranked = followup.matches.map((item, order) => {
+            const words = new Set(
+                item.snippet.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ??
+                    [],
+            );
+            return {
+                item,
+                order,
+                coverage: terms.filter((term) => words.has(term)).length,
+            };
+        });
+        ranked.sort((a, b) => b.coverage - a.coverage || a.order - b.order);
+        groups.push(ranked.map((entry) => entry.item));
+        diagnostics.warnings.push(...followup.warnings);
+        if (followup.indexedSelection)
+            refinement.selections.push(followup.indexedSelection);
+    }
+    groups.push(pass.original.matches);
+    const original = {
+        ...pass.original,
+        matches: mergeIndexedAnswerEvidence(
+            groups,
+            budget.sources,
+            budget.chars,
+        ),
+    };
+    diagnostics.refinement = refinement;
+    const evidence = await timeSearchStage(
+        "answer.assemble.refined",
+        () =>
+            assembleEvidence(
+                request,
+                host,
+                original.matches,
+                pass.views,
+                budget,
+                diagnostics,
+            ),
+        { reconstruction: diagnostics.reconstructionCount },
+    );
+    const read = options.reader ?? readIntegratedEvidence;
+    const response = await timeSearchStage("answer.reader.refined", () =>
+        read(request, evidence, options, false),
+    );
+    return { ...pass, original, evidence, response };
+}
+
 /** Ground an answer in originals plus exact maintained-view state, with one delivery-race retry. */
 export async function answerIntegratedEvidence(
     request: MemoryAnswerRequest,
     host: IntegratedAnswerHost,
     options: IntegratedAnswerOptions = {},
 ): Promise<MemoryAnswerResult> {
-    const read: IntegratedAnswerReader =
-        options.reader ?? readIntegratedEvidence;
     const budget = {
         chars: boundedLimit(options.maxEvidenceChars, 24000),
         sources: boundedLimit(options.maxSourceFragments, 12),
@@ -442,103 +601,120 @@ export async function answerIntegratedEvidence(
             warnings: [],
             reconstructionCount: attempt,
         };
-        const retrieved = await retrieve(request, host, diagnostics);
+        const seed = attempt === 0 ? options.seed : undefined;
+        if (seed) diagnostics.influencingEvidence = seed.influence;
+        const retrieved = seed
+            ? { original: seed.original, views: seed.views }
+            : await timeSearchStage("answer.retrieve", () =>
+                  retrieve(request, host, diagnostics),
+              );
+        if (seed) {
+            diagnostics.warnings.push(...seed.original.warnings);
+            if (seed.original.indexedSelection)
+                diagnostics.sourceSelection = seed.original.indexedSelection;
+        }
         const { views } = retrieved;
-        let original = retrieved.original;
-        let evidence = await assembleEvidence(
+        const original = retrieved.original;
+        const evidence =
+            seed && (options.resumeRefinement || options.prepareOnly)
+                ? seed.evidence
+                : await timeSearchStage(
+                      "answer.assemble.initial",
+                      () =>
+                          assembleEvidence(
+                              request,
+                              host,
+                              original.matches,
+                              views,
+                              budget,
+                              diagnostics,
+                          ),
+                      { reconstruction: attempt },
+                  );
+        const response = await initialResponse(
+            request,
+            evidence,
+            options,
+            seed,
+        );
+        const initialEvidence = evidence;
+        const finished = await refineAnswer(
             request,
             host,
-            original.matches,
-            views,
+            options,
             budget,
             diagnostics,
-        );
-        let response = await read(request, evidence, options, true);
-        const initialEvidence = evidence;
-        if (response.retrievalQueries?.length) {
-            const groups: MemoryEvidence[][] = [];
-            const refinement: NonNullable<
-                IntegratedAnswerDiagnostics["refinement"]
-            > = {
-                queries: response.retrievalQueries,
-                initialEvidence,
-                selections: [],
-            };
-            for (const question of refinement.queries) {
-                const followup = await host.searchOriginal({
-                    ...request,
-                    question,
-                });
-                const terms = indexedQueryTerms(question);
-                const ranked = followup.matches.map((item, order) => {
-                    const words = new Set(
-                        item.snippet
-                            .toLocaleLowerCase()
-                            .match(/[\p{L}\p{N}-]+/gu) ?? [],
-                    );
-                    return {
-                        item,
-                        order,
-                        coverage: terms.filter((term) => words.has(term))
-                            .length,
-                    };
-                });
-                ranked.sort(
-                    (a, b) => b.coverage - a.coverage || a.order - b.order,
-                );
-                groups.push(ranked.map((entry) => entry.item));
-                diagnostics.warnings.push(...followup.warnings);
-                if (followup.indexedSelection)
-                    refinement.selections.push(followup.indexedSelection);
-            }
-            groups.push(original.matches);
-            original = {
-                ...original,
-                matches: mergeIndexedAnswerEvidence(
-                    groups,
-                    budget.sources,
-                    budget.chars,
-                ),
-            };
-            diagnostics.refinement = refinement;
-            evidence = await assembleEvidence(
-                request,
-                host,
-                original.matches,
+            {
+                original,
                 views,
-                budget,
-                diagnostics,
-            );
-            response = await read(request, evidence, options, false);
-        }
-        const selected = selectedEvidence(evidence, response.evidenceIds);
+                evidence,
+                response,
+            },
+        );
+        const selected = selectedEvidence(
+            finished.evidence,
+            finished.response.evidenceIds,
+        );
         // Validate everything supplied, not only what the reader chose: omitted
         // context can still influence prose, and forget barriers take precedence.
         if (
-            !(await host.validateEvidence({
-                request,
-                evidence: diagnostics.refinement
-                    ? [...initialEvidence, ...evidence]
-                    : evidence,
-            }))
+            !(await timeSearchStage("answer.validate", () =>
+                host.validateEvidence({
+                    request,
+                    evidence: [
+                        ...(seed?.influence ?? []),
+                        ...(diagnostics.refinement ? initialEvidence : []),
+                        ...finished.evidence,
+                    ],
+                }),
+            ))
         )
             continue;
         const citations = selected.flatMap((item) =>
             item.kind === "source" ? [item.source] : [],
         );
-        diagnostics.suppliedEvidence = evidence;
-        diagnostics.selectedEvidenceIds = response.evidenceIds;
+        diagnostics.suppliedEvidence = finished.evidence;
+        diagnostics.selectedEvidenceIds = finished.response.evidenceIds;
+        options.onPrepared?.({
+            prepareOnly: !!options.prepareOnly && (!seed || seed.prepareOnly),
+            original: {
+                ...finished.original,
+                warnings: [
+                    ...new Set([
+                        ...finished.original.warnings,
+                        ...diagnostics.warnings,
+                    ]),
+                ],
+            },
+            views: finished.evidence.flatMap((item) =>
+                item.kind === "source" ? [] : [item],
+            ),
+            evidence: finished.evidence,
+            response: finished.response,
+            influence: [
+                ...new Map(
+                    [
+                        ...(seed?.influence ?? []),
+                        ...initialEvidence,
+                        ...finished.evidence,
+                    ].map((item) => [JSON.stringify(item), item]),
+                ).values(),
+            ],
+        });
         const sourceIds = [
             ...new Set(
-                evidence.flatMap((item) =>
+                finished.evidence.flatMap((item) =>
                     item.kind === "source" ? [item.source.sourceId] : [],
                 ),
             ),
         ];
         return {
             question: request.question,
-            answer: response.answer,
-            mode: "synthesized",
+            answer: finished.response.answer,
+            mode:
+                options.prepareOnly && (!seed || seed.prepareOnly)
+                    ? "extractive"
+                    : "synthesized",
             citations,
             derivedReferences: selected.flatMap((item) =>
                 item.kind === "derived" ? [item.reference] : [],
@@ -547,7 +723,7 @@ export async function answerIntegratedEvidence(
                 item.kind === "userAssertion" ? [item.reference] : [],
             ),
             grounded: true,
-            indexVersion: original.indexVersion,
+            indexVersion: finished.original.indexVersion,
             warnings: [...new Set(diagnostics.warnings)],
             ...(request.includeDiagnostics
                 ? {
@@ -557,14 +733,14 @@ export async function answerIntegratedEvidence(
                           retrievedMessageOrdinals: [],
                           messageOrdinals: [],
                           knowledgeMessageOrdinals: [],
-                          completedChunks: evidence.length ? 1 : 0,
+                          completedChunks: finished.evidence.length ? 1 : 0,
                           serializedContextChars: serializeAnswerEvidence(
                               request,
-                              evidence,
+                              finished.evidence,
                           ).length,
                           retrievedSourceIds: [
                               ...new Set(
-                                  original.matches
+                                  finished.original.matches
                                       .filter((item) =>
                                           sourceAllowed(item, request),
                                       )
