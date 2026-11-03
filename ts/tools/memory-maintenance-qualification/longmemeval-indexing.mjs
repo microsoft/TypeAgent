@@ -176,6 +176,8 @@ export async function preflight(pilot, product) {
         configuredProvidersApproved: false,
         acceptNoMonetaryCap: false,
         workMinutes: 15,
+        unlimitedWorkApproved: false,
+        knowledgeMinutes: 10,
         companionPreparationApproved: false,
         liveCancellationApproved: false,
         sourceInventory: pilot.manifest.inventory,
@@ -224,7 +226,11 @@ async function childAttempt(product, pilot, approval, arm) {
         "--max-questions",
         "3",
         "--work-minutes",
-        String(approval.workMinutes),
+        approval.workMinutes === null
+            ? "unlimited"
+            : String(approval.workMinutes),
+        "--knowledge-minutes",
+        String(approval.knowledgeMinutes ?? 10),
         "--authorized-live-benchmark",
         "--indexing-pilot",
         "--expected-configuration-hash",

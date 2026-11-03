@@ -44,13 +44,25 @@ export function validateCompanionSpec(spec) {
     assert.equal(spec.mode, "indexing-companion");
     assert.equal(spec.authorizedLiveBenchmark, true);
     assert.equal(spec.startupAllowanceMs, 120000);
-    assert.ok(
-        spec.workAllowanceMs >= 360000 && spec.workAllowanceMs <= 1200000,
-    );
+    if (spec.workAllowanceMs === null) {
+        assert.equal(spec.unlimitedWorkApproved, true);
+    } else {
+        assert.ok(
+            spec.workAllowanceMs >= 360000 && spec.workAllowanceMs <= 1200000,
+        );
+    }
     assert.equal(spec.resume, false);
     assert.ok(path.isAbsolute(spec.pilotDirectory));
     assert.ok(path.isAbsolute(spec.runDirectory));
     assert.match(spec.approvalHash, /^[a-f0-9]{64}$/);
+}
+
+export function companionWorkAllowance(approval) {
+    if (approval.workMinutes === null) {
+        assert.equal(approval.unlimitedWorkApproved, true);
+        return null;
+    }
+    return (approval.workMinutes + 5) * 60000;
 }
 
 export async function superviseCompanion(
@@ -78,7 +90,8 @@ export async function superviseCompanion(
         mode: "indexing-companion",
         authorizedLiveBenchmark: true,
         startupAllowanceMs: 120000,
-        workAllowanceMs: (approval.workMinutes + 5) * 60000,
+        workAllowanceMs: companionWorkAllowance(approval),
+        unlimitedWorkApproved: approval.unlimitedWorkApproved === true,
         expectedCheckpoint: {
             name: "indexing-pilot",
             hashes: pilot.manifest.checkpoint.hashes,
@@ -100,7 +113,7 @@ export async function admitCompanion(spec, approval) {
         digest(encode(approval)),
         "Approval changed",
     );
-    assert.equal(spec.workAllowanceMs, (approval.workMinutes + 5) * 60000);
+    assert.equal(spec.workAllowanceMs, companionWorkAllowance(approval));
     const root = await realpath(spec.runDirectory);
     const owner = await readJson(path.join(root, "ownership.json"));
     assert.equal(
@@ -114,13 +127,18 @@ export async function admitCompanion(spec, approval) {
         receiptId: spec.receiptId,
         workerPid: process.pid,
         admittedEpochMs,
-        workDeadlineEpochMs: admittedEpochMs + spec.workAllowanceMs,
+        workDeadlineEpochMs:
+            spec.workAllowanceMs === null
+                ? null
+                : admittedEpochMs + spec.workAllowanceMs,
         checkpointExpectationHash: checkpointExpectationHash(
             spec.expectedCheckpoint,
         ),
         compiledHashesHash: digest(encode(spec.expectedCheckpoint.hashes)),
     });
-    return AbortSignal.timeout(approval.workMinutes * 60000);
+    return approval.workMinutes === null
+        ? new AbortController().signal
+        : AbortSignal.timeout(approval.workMinutes * 60000);
 }
 
 export async function liveCancellation(modules, directory, prepared, settings) {

@@ -208,6 +208,20 @@ test("approval requires explicit provider/data permission and acceptance of fina
     assert.throws(() =>
         validateApproval({ ...approval, workMinutes: 16 }, "manifest", point),
     );
+    assert.throws(
+        () =>
+            validateApproval(
+                { ...approval, workMinutes: null },
+                "manifest",
+                point,
+            ),
+        /explicit approval/,
+    );
+    validateApproval(
+        { ...approval, workMinutes: null, unlimitedWorkApproved: true },
+        "manifest",
+        point,
+    );
 });
 
 test("provider replay has exact input/identity matching and no success-shaped fallback", async () => {
@@ -541,6 +555,14 @@ test("companion cannot silently resume or exceed the bounded allowance", () => {
     };
     validateCompanionSpec(spec);
     assert.throws(() =>
+        validateCompanionSpec({ ...spec, workAllowanceMs: null }),
+    );
+    validateCompanionSpec({
+        ...spec,
+        workAllowanceMs: null,
+        unlimitedWorkApproved: true,
+    });
+    assert.throws(() =>
         validateCompanionSpec({ ...spec, workAllowanceMs: 1200001 }),
     );
     assert.throws(() =>
@@ -579,19 +601,23 @@ test("companion startup failures retain sanitized accounting and restore the pro
         assert.ok(!encode(metrics).includes("untrusted-provider-payload"));
     }));
 
-test("companion supervision verifies ownership and admits only one bounded worker", async () =>
-    temporary(async (root) => {
-        const approvalFile = path.join(root, "fixture-approval.json");
-        const approval = { workMinutes: 1 };
-        await writeFile(approvalFile, encode(approval));
-        const worker = path.join(root, "fixture-worker.mjs");
-        const executionModule = new URL(
-            "./longmemeval-indexing-execution.mjs",
-            import.meta.url,
-        ).href;
-        await writeFile(
-            worker,
-            `
+for (const workMinutes of [1, null]) {
+    test(`companion supervision verifies ownership with work minutes ${workMinutes}`, async () =>
+        temporary(async (root) => {
+            const approvalFile = path.join(root, "fixture-approval.json");
+            const approval = {
+                workMinutes,
+                unlimitedWorkApproved: workMinutes === null,
+            };
+            await writeFile(approvalFile, encode(approval));
+            const worker = path.join(root, "fixture-worker.mjs");
+            const executionModule = new URL(
+                "./longmemeval-indexing-execution.mjs",
+                import.meta.url,
+            ).href;
+            await writeFile(
+                worker,
+                `
 import { readFile } from "node:fs/promises";
 import { admitCompanion } from ${JSON.stringify(executionModule)};
 const spec = JSON.parse(await readFile(process.argv[3], "utf8"));
@@ -599,22 +625,31 @@ const approval = JSON.parse(await readFile(spec.approvalFile, "utf8"));
 await admitCompanion(spec, approval);
 await new Promise(resolve => setTimeout(resolve, 200));
 `,
-        );
-        const pilot = { root, manifest: { checkpoint: { hashes: {} } } };
-        const outcome = await superviseCompanion(
-            pilot,
-            product,
-            approvalFile,
-            approval,
-            worker,
-        );
-        assert.equal(outcome.exit.code, 0);
-        assert.equal(outcome.phase, "admitted-work");
-        await assert.rejects(
-            superviseCompanion(pilot, product, approvalFile, approval, worker),
-            { code: "EEXIST" },
-        );
-    }));
+            );
+            const pilot = { root, manifest: { checkpoint: { hashes: {} } } };
+            const outcome = await superviseCompanion(
+                pilot,
+                product,
+                approvalFile,
+                approval,
+                worker,
+            );
+            assert.equal(outcome.exit.code, 0);
+            assert.equal(outcome.phase, "admitted-work");
+            if (workMinutes === null)
+                assert.equal(outcome.workDeadlineEpochMs, null);
+            await assert.rejects(
+                superviseCompanion(
+                    pilot,
+                    product,
+                    approvalFile,
+                    approval,
+                    worker,
+                ),
+                { code: "EEXIST" },
+            );
+        }));
+}
 
 test("pilot live commands reject absent authorization before loading provider configuration", async () =>
     temporary(async (root) => {

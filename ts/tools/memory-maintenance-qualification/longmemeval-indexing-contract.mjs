@@ -240,8 +240,22 @@ export function validateApproval(approval, manifestHash, checkpoint) {
     assert.match(approval.dependencyHash, /^[a-f0-9]{64}$/);
     assert.match(approval.embeddingConfigurationHash, /^[a-f0-9]{64}$/);
     assert.match(approval.runtimeConfigurationHash, /^[a-f0-9]{64}$/);
-    assert.ok(Number.isSafeInteger(approval.workMinutes));
-    assert.ok(approval.workMinutes >= 1 && approval.workMinutes <= 15);
+    if (approval.workMinutes === null) {
+        assert.equal(
+            approval.unlimitedWorkApproved,
+            true,
+            "Unlimited work requires explicit approval",
+        );
+    } else {
+        assert.ok(Number.isSafeInteger(approval.workMinutes));
+        assert.ok(approval.workMinutes >= 1 && approval.workMinutes <= 15);
+    }
+    if (approval.knowledgeMinutes !== undefined) {
+        assert.ok(Number.isSafeInteger(approval.knowledgeMinutes));
+        assert.ok(
+            approval.knowledgeMinutes >= 1 && approval.knowledgeMinutes <= 60,
+        );
+    }
 }
 
 export function replayTape(entries, recording = false) {

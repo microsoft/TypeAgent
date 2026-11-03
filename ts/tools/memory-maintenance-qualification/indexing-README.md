@@ -56,8 +56,13 @@ Approval binds the manifest, source/compiled/tool checkpoint, Node/platform,
 chat configuration, embedding configuration, redacted runtime configuration and
 dependency hashes. Permission
 requires `publicDatasetApproved`, `configuredProvidersApproved` and
-`acceptNoMonetaryCap` to be explicitly true. `workMinutes` is an integer from 1
-through 15. Time and question limits are **not financial limits**.
+`acceptNoMonetaryCap` to be explicitly true. `workMinutes` is normally an integer from 1
+through 15. For an explicitly authorized initial run without an overall work
+budget, set it to `null` and set `unlimitedWorkApproved` to `true`. This removes
+the work deadline in both production arms and the companion, not startup,
+request, recovery-check or knowledge-readiness failure detection. The optional
+`knowledgeMinutes` controls the existing readiness timeout from 1 through 60.
+Time and question limits are **not financial limits**.
 
 ## Run the two live production arms
 
@@ -71,9 +76,10 @@ node $tool live --product $product --directory $pilot --approval $approval --arm
 ```
 
 A0 removes `TYPEAGENT_MEMORY_PREPARED_INDEXING`; A1 sets it to `1`. Both enable
-the same timing instrumentation. Each invocation has at most three questions,
-the approved work interval, a five-minute cleanup reserve and the existing
-bounded startup policy. A1 requires a terminated A0 attempt. There is no automatic
+the same timing instrumentation. Each invocation has at most three questions
+and the existing bounded startup policy. Finite work intervals have a five-minute
+cleanup reserve; explicitly unlimited work has no overall deadline.
+A1 requires a terminated A0 attempt. There is no automatic
 retry, continuation or invocation allowance expansion.
 
 The same-revision comparison isolates preparation, not all indexing changes.
@@ -123,11 +129,11 @@ For the distinct **live** cancellation scenario, also approve
 `liveCancellationApproved`. It makes additional real model calls against a
 separate copy, cancels after a model promise starts without injecting provider
 abort, waits for outstanding work to drain and requires unchanged accepted state.
-Budget this extra work within the companion's approved interval. Without this
+For bounded runs, budget this extra work within the companion's approved interval. Without this
 permission, live cancellation is explicitly unqualified.
 
-The companion has its own existing watchdog, work signal and five-minute cleanup
-reserve. Bounded/failed attempts retain termination, observed responses and
+The companion has its own existing watchdog and work signal, with a five-minute
+cleanup reserve only for bounded runs. Failed attempts retain termination, observed responses and
 partial stores instead of claiming success. Provider requests that fail before
 a response can have unobserved usage/cost. The tool must not report that as zero.
 
