@@ -612,8 +612,11 @@ class QueryCompiler {
     ): IQueryOpExpr<SemanticRefAccumulator | undefined> {
         const boostWeight =
             this.entityTermMatchWeight / this.defaultTermMatchWeight;
-        return new q.MatchSearchTermExpr(term, (term, sr, scored) =>
-            this.boostEntities(term, sr, scored, boostWeight),
+        return new q.MatchSearchTermExpr(
+            term,
+            (term, sr, scored) =>
+                this.boostEntities(term, sr, scored, boostWeight),
+            (metadata) => metadata.knowledgeType === "entity",
         );
     }
 

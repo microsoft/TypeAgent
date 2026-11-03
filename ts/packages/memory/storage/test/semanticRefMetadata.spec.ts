@@ -89,6 +89,97 @@ describe("positional semantic-reference metadata across storage providers", () =
             ),
         ).toBe(true);
         db.prepare = originalPrepare;
+        const plan = db
+            .prepare<
+                number[],
+                { detail: string }
+            >(`EXPLAIN QUERY PLAN ${queries[0]}`)
+            .all(...Array.from({ length: 128 }, (_, ordinal) => ordinal + 1));
+        expect(
+            plan.some((row) =>
+                row.detail.includes(
+                    "SEARCH semanticRefsMetadata USING INTEGER PRIMARY KEY",
+                ),
+            ),
+        ).toBe(true);
+    });
+
+    test("public scope/kind queries preserve scores without reading SQLite knowledge JSON", async () => {
+        const collection = new SqlSemanticRefCollection(db);
+        collection.append(...refs(4));
+        const terms = new kp.TermToSemanticRefIndex();
+        for (let ordinal = 0; ordinal < 4; ordinal++)
+            terms.addTerm("synthetic", {
+                semanticRefOrdinal: ordinal,
+                score: ordinal + 1,
+            });
+        db.exec("UPDATE semanticRefs SET value = 'not JSON'");
+        const conversation: kp.IConversation = {
+            nameTag: "SQLite metadata query",
+            tags: [],
+            messages: new kp.MessageCollection(
+                Array.from({ length: 4 }, () => ({
+                    textChunks: ["synthetic"],
+                    tags: [],
+                    getKnowledge: () => undefined,
+                })),
+            ),
+            semanticRefs: collection,
+            semanticRefIndex: terms,
+            secondaryIndexes: {},
+        };
+        const result = await kp.searchConversationKnowledge(
+            conversation,
+            {
+                booleanOp: "or",
+                terms: [{ term: { text: "synthetic" } }],
+            },
+            {
+                knowledgeType: "topic",
+                textRangesInScope: [
+                    {
+                        start: { messageOrdinal: 0 },
+                        end: { messageOrdinal: 2 },
+                    },
+                ],
+            },
+            { exactMatch: true },
+        );
+        expect(result!.get("topic")!.semanticRefMatches).toEqual([
+            { semanticRefOrdinal: 1, score: 2 },
+            { semanticRefOrdinal: 0, score: 1 },
+        ]);
+        expect(() => collection.get(0)).toThrow();
+        collection.append({
+            semanticRefOrdinal: 4,
+            knowledgeType: "entity",
+            range: { start: { messageOrdinal: 0 } },
+            knowledge: { name: "synthetic", type: ["fixture"] },
+        });
+        terms.addTerm("synthetic", { semanticRefOrdinal: 4, score: 3 });
+        const search = () =>
+            kp.searchConversationKnowledge(
+                conversation,
+                { booleanOp: "or", terms: [{ term: { text: "synthetic" } }] },
+                {
+                    textRangesInScope: [
+                        {
+                            start: { messageOrdinal: 0 },
+                            end: { messageOrdinal: 2 },
+                        },
+                    ],
+                },
+                { exactMatch: true },
+            );
+        const boosted = await search();
+        expect(boosted!.get("entity")!.semanticRefMatches).toEqual([
+            { semanticRefOrdinal: 4, score: 30 },
+        ]);
+        expect(boosted!.get("topic")!.semanticRefMatches).toEqual(
+            result!.get("topic")!.semanticRefMatches,
+        );
+        db.exec("UPDATE semanticRefs SET value = 'not JSON' WHERE ordinal = 5");
+        await expect(search()).rejects.toThrow();
     });
 
     test("legacy backfill, failed append, outer rollback and retry retain count parity", () => {

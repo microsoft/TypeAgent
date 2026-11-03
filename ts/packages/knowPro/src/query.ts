@@ -681,6 +681,7 @@ export class MatchSearchTermExpr extends MatchTermExpr {
             sr: SemanticRef,
             scored: ScoredSemanticRefOrdinal,
         ) => ScoredSemanticRefOrdinal,
+        public scoreBoosterApplies?: (metadata: SemanticRefMetadata) => boolean,
     ) {
         super();
     }
@@ -721,7 +722,17 @@ export class MatchSearchTermExpr extends MatchTermExpr {
             context.textRangesInScope,
         );
         if (matches && this.scoreBooster) {
+            const metadata = this.scoreBoosterApplies
+                ? [
+                      ...getSemanticRefMetadata(
+                          context.semanticRefs,
+                          matches.map((match) => match.semanticRefOrdinal),
+                      ),
+                  ]
+                : undefined;
             for (let i = 0; i < matches.length; ++i) {
+                if (metadata && !this.scoreBoosterApplies!(metadata[i]))
+                    continue;
                 matches[i] = this.scoreBooster(
                     this.searchTerm,
                     context.getSemanticRef(matches[i].semanticRefOrdinal),
@@ -1091,7 +1102,7 @@ export class WhereSemanticRefExpr extends QueryOpExpr<SemanticRefAccumulator> {
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         const accumulator = this.sourceExpr.eval(context);
 
-        if (accumulator.size === 0) {
+        if (accumulator.size === 0 || this.predicates.length === 0) {
             return accumulator;
         }
         const filtered = new SemanticRefAccumulator(

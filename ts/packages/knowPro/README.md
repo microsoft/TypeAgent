@@ -52,6 +52,8 @@ still run sequentially.
 Semantic-reference collections may implement `getMetadataMultiple` to return
 only ordinal, range and knowledge type. Query scope/type filters use the shared
 positional adapter before hydrating knowledge that requires content matching.
+Ordinary term scoring checks entity metadata before loading name/type content
+for an entity boost; topic scoring and empty predicate lists do not hydrate.
 The adapter batches requests, preserves duplicates and caller order, and falls
 back to full references only when the capability is absent. A supported
 capability's failure propagates. The SQLite provider maintains a versioned
