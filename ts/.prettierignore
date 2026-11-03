@@ -9,6 +9,7 @@ pnpm-lock.yaml
 **/dist/*
 **/lib/*
 **/out/*
+packages/coda/dist-test/**
 **/msi-out/*
 examples/workflow/workflows/built/*
 .rollup.cache/**
