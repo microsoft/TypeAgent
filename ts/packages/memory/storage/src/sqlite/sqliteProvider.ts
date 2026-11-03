@@ -8,6 +8,10 @@ import { SqliteCollection } from "./sqliteCollection.js";
 import { createDatabase } from "./sqliteCommon.js";
 import { SqliteDataFrame } from "./sqliteDataFrame.js";
 import { sql_makeInPlaceholders } from "./sqliteCommon.js";
+import {
+    SqlitePreparedIndexStorage,
+    PreparedIndexCheckpoint,
+} from "./sqlitePreparedIndex.js";
 
 export class SqlMessageCollection<TMessage extends kp.IMessage = kp.IMessage>
     extends SqliteCollection<TMessage, kp.MessageOrdinal>
@@ -58,6 +62,13 @@ export class SqlSemanticRefCollection
                     item.knowledgeType,
                 ),
             );
+        })();
+    }
+
+    public override replaceAll(items: kp.SemanticRef[]): void {
+        this.db.transaction(() => {
+            this.db.exec(`DELETE FROM ${this.metadataTable}`);
+            super.replaceAll(items);
         })();
     }
 
@@ -166,8 +177,33 @@ export class SqliteStorageProvider
 {
     private db: sqlite.Database;
 
-    constructor(dbPath: string, createNew: boolean) {
+    constructor(
+        dbPath: string,
+        createNew: boolean,
+        private readonly preparedCheckpoint?: PreparedIndexCheckpoint,
+    ) {
         this.db = createDatabase(dbPath, createNew);
+    }
+
+    public createPreparedIndexStorage(
+        messages: kp.IMessageCollection,
+        refs: kp.ISemanticRefCollection,
+    ): kp.IPreparedIndexStorage {
+        if (
+            !(messages instanceof SqlMessageCollection) ||
+            !(refs instanceof SqlSemanticRefCollection) ||
+            !messages.isOnDatabase(this.db) ||
+            !refs.isOnDatabase(this.db)
+        )
+            throw new Error(
+                "Prepared collections must belong to this SQLite provider",
+            );
+        return new SqlitePreparedIndexStorage(
+            this.db,
+            messages,
+            refs,
+            this.preparedCheckpoint,
+        );
     }
 
     public createMessageCollection<TMessage extends kp.IMessage = kp.IMessage>(

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type * as sqlite from "better-sqlite3";
-import { dataFrame as df } from "@typeagent/knowpro";
+import { dataFrame as df, recordSearchTiming } from "@typeagent/knowpro";
 import { createDatabase } from "./sqliteCommon.js";
 
 export class SqliteFrameProjectionStore implements df.FrameProjectionStore {
@@ -14,14 +14,15 @@ export class SqliteFrameProjectionStore implements df.FrameProjectionStore {
     ) {
         this.db = createDatabase(filename, false);
         const version = this.db.pragma("user_version", { simple: true });
-        if (version !== 0 && version !== 1) {
+        if (version !== 0 && version !== 1 && version !== 2) {
             this.db.close();
             throw new Error(
                 `Unsupported frame projection database version ${String(version)}`,
             );
         }
-        this.db.transaction(() => {
-            this.db.exec(`
+        try {
+            this.db.transaction(() => {
+                this.db.exec(`
                 CREATE TABLE IF NOT EXISTS frame_schemas (
                     id TEXT NOT NULL, revision INTEGER NOT NULL, value TEXT NOT NULL,
                     PRIMARY KEY(id, revision));
@@ -51,9 +52,38 @@ export class SqliteFrameProjectionStore implements df.FrameProjectionStore {
                 CREATE INDEX IF NOT EXISTS frame_values_number
                     ON frame_values(schema_id, schema_revision, field, number_value, row_id);
                 CREATE INDEX IF NOT EXISTS frame_values_row ON frame_values(row_id);
-                PRAGMA user_version = 1;
             `);
-        })();
+                const columns = this.db.pragma("table_info(frame_rows)") as {
+                    name: string;
+                }[];
+                if (!columns.some((column) => column.name === "eligible")) {
+                    this.db.exec(
+                        "ALTER TABLE frame_rows ADD COLUMN eligible INTEGER NOT NULL DEFAULT 0",
+                    );
+                    const update = this.db.prepare(
+                        "UPDATE frame_rows SET eligible=? WHERE id=?",
+                    );
+                    let last = 0;
+                    while (true) {
+                        const rows = this.db
+                            .prepare(
+                                "SELECT id,value FROM frame_rows WHERE id>? ORDER BY id LIMIT 128",
+                            )
+                            .all(last) as { id: number; value: string }[];
+                        if (!rows.length) break;
+                        for (const row of rows) {
+                            const value: df.FrameRow = JSON.parse(row.value);
+                            update.run(Number(value.eligible), row.id);
+                            last = row.id;
+                        }
+                    }
+                }
+                this.db.pragma("user_version = 2");
+            })();
+        } catch (error) {
+            this.db.close();
+            throw error;
+        }
     }
 
     registerSchema(schema: df.FrameSchema): void {
@@ -143,7 +173,7 @@ export class SqliteFrameProjectionStore implements df.FrameProjectionStore {
                 .run(projection.ownerKey);
             this.writeSchemaReferences(projection);
             const insert = this.db.prepare(
-                "INSERT INTO frame_rows(owner,schema_id,schema_revision,item_key,value) VALUES (?,?,?,?,?)",
+                "INSERT INTO frame_rows(owner,schema_id,schema_revision,item_key,value,eligible) VALUES (?,?,?,?,?,?)",
             );
             const value = this.db.prepare(
                 "INSERT INTO frame_values VALUES (?,?,?,?,?,?)",
@@ -160,6 +190,7 @@ export class SqliteFrameProjectionStore implements df.FrameProjectionStore {
                     row.schemaRevision,
                     row.itemKey,
                     JSON.stringify(row),
+                    Number(row.eligible),
                 ).lastInsertRowid;
                 for (const [field, raw] of Object.entries(row.values)) {
                     if (df.frameRecordValue(row.valueStates, field)) continue;
@@ -276,6 +307,7 @@ export class SqliteFrameProjectionStore implements df.FrameProjectionStore {
     private queryStatement(
         schema: df.FrameSchema,
         predicate: df.FramePredicate,
+        includeUnconfirmed: boolean = true,
     ) {
         const terms = df.frameComparisons(schema, predicate);
         const params: (string | number)[] = [schema.id, schema.revision];
@@ -302,9 +334,10 @@ export class SqliteFrameProjectionStore implements df.FrameProjectionStore {
             : "and" in predicate
               ? "1"
               : "0";
-        const sql = `SELECT r.value,o.owner,o.revision,o.fingerprint FROM frame_rows r
+        const sql = `SELECT r.id,o.owner,o.revision,o.fingerprint FROM frame_rows r
             JOIN frame_owners o ON r.owner=o.owner WHERE o.state='ready'
-            AND r.schema_id=? AND r.schema_revision=? AND (${where})`;
+            AND r.schema_id=? AND r.schema_revision=? AND (${where})
+            ${includeUnconfirmed ? "" : "AND r.eligible=1"} ORDER BY r.id`;
         return { sql, params };
     }
     explainQuery(
@@ -324,26 +357,69 @@ export class SqliteFrameProjectionStore implements df.FrameProjectionStore {
         owners: ReadonlyMap<string, string>,
         includeUnconfirmed: boolean,
     ): df.FrameMatch[] {
-        const { sql, params } = this.queryStatement(schema, predicate);
+        const metadataStarted = performance.now();
+        const { sql, params } = this.queryStatement(
+            schema,
+            predicate,
+            includeUnconfirmed,
+        );
         const rows = this.db.prepare(sql).all(...params) as {
-            value: string;
+            id: number;
             owner: string;
             revision: string;
             fingerprint: string;
         }[];
-        return rows.flatMap((entry) => {
-            if (owners.get(entry.owner) !== entry.fingerprint) return [];
-            const row: df.FrameRow = JSON.parse(entry.value);
-            return includeUnconfirmed || row.eligible
-                ? [
-                      {
-                          ...row,
-                          ownerKey: entry.owner,
-                          ownerRevisionId: entry.revision,
-                      },
-                  ]
-                : [];
-        });
+        const eligible = rows.filter(
+            (entry) => owners.get(entry.owner) === entry.fingerprint,
+        );
+        recordSearchTiming(
+            "query.frame.metadata",
+            performance.now() - metadataStarted,
+            {
+                candidateRows: rows.length,
+                eligibleRows: eligible.length,
+            },
+        );
+        const exactStarted = performance.now();
+        const result: df.FrameMatch[] = [];
+        for (let start = 0; start < eligible.length; start += 128) {
+            const batch = eligible.slice(start, start + 128);
+            const values = new Map(
+                (
+                    this.db
+                        .prepare(
+                            `SELECT id,value FROM frame_rows WHERE id IN (${batch.map(() => "?").join(",")})`,
+                        )
+                        .all(...batch.map((entry) => entry.id)) as {
+                        id: number;
+                        value: string;
+                    }[]
+                ).map((entry) => [entry.id, entry.value]),
+            );
+            for (const entry of batch) {
+                const value = values.get(entry.id);
+                if (value === undefined)
+                    throw new Error("Missing frame candidate row");
+                const row: df.FrameRow = JSON.parse(value);
+                if (df.matchesFrame(row, schema, predicate))
+                    result.push({
+                        ...row,
+                        ownerKey: entry.owner,
+                        ownerRevisionId: entry.revision,
+                    });
+            }
+        }
+        recordSearchTiming(
+            "query.frame.exact",
+            performance.now() - exactStarted,
+            {
+                candidateRows: eligible.length,
+                hydrationQueries: Math.ceil(eligible.length / 128),
+                hydratedRows: eligible.length,
+                matchedRows: result.length,
+            },
+        );
+        return result;
     }
     close(): void {
         this.db.close();

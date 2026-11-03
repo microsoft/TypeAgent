@@ -110,6 +110,7 @@ describe.each([false, true])(
 
         function open(): FileMemoryService {
             return new FileMemoryService(root, {
+                frameProjections: true,
                 informationalViews: false,
                 sourceSynopses: false,
                 viewDrafts: false,
@@ -175,7 +176,7 @@ describe.each([false, true])(
             }
         });
 
-        async function ingest(): Promise<string> {
+        async function ingest(capturedAt?: string): Promise<string> {
             const { corpusId } = await service.createCorpus("Retained test");
             for (const [sourceId, text] of [
                 ["private", "FORGOTTEN_NEEDLE must be physically removed."],
@@ -188,6 +189,7 @@ describe.each([false, true])(
                         sourceType: "text",
                         title: sourceId,
                         text,
+                        ...(capturedAt === undefined ? {} : { capturedAt }),
                     },
                 });
                 await wait(result.jobId);
@@ -241,6 +243,53 @@ describe.each([false, true])(
                     ),
                 ).not.toContain("FORGOTTEN_NEEDLE");
         }
+
+        test("real KnowPro ingestion supports persisted temporal frame filtering before and after restart and forget", async () => {
+            const corpusId = await ingest("2026-11-02T00:00:00Z");
+            const query = () =>
+                service.queryFrame({
+                    corpusId,
+                    schemaId: "source",
+                    schemaRevision: 1,
+                    predicate: {
+                        and: [
+                            {
+                                fieldId: "capturedAt",
+                                op: "gte",
+                                value: {
+                                    kind: "instant",
+                                    raw: "2000-01-01T00:00:00Z",
+                                },
+                            },
+                            {
+                                fieldId: "capturedAt",
+                                op: "lt",
+                                value: {
+                                    kind: "instant",
+                                    raw: "2100-01-01T00:00:00Z",
+                                },
+                            },
+                        ],
+                    },
+                });
+            expect((await query()).rows).toHaveLength(2);
+            await service.close();
+            service = open();
+            forbidden = true;
+            expect((await query()).rows).toHaveLength(2);
+            const preview = await service.previewForgetSource(
+                corpusId,
+                "private",
+            );
+            await service.forgetSource({
+                corpusId,
+                sourceId: "private",
+                confirmationToken: preview.confirmationToken,
+            });
+            expect((await query()).rows.map((row) => row.ownerKey)).toEqual([
+                "source:retained",
+            ]);
+        });
 
         test("forget and restart reuse complete facts/vectors with both providers forbidden", async () => {
             const corpusId = await ingest();

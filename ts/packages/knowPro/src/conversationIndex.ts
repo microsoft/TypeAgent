@@ -24,10 +24,16 @@ import {
     TextIndexingResult,
     TextLocation,
     Topic,
+    PreparedIndexData,
+    IPreparedIndexStorage,
 } from "./interfaces.js";
 import { IndexingEventHandlers } from "./interfaces.js";
 import { conversation as kpLib } from "@typeagent/knowledge-processor";
-import { openai } from "@typeagent/aiclient";
+import {
+    openai,
+    embeddingIdentityKey,
+    validateEmbeddingVector,
+} from "@typeagent/aiclient";
 import { extractKnowledgeWithTemporalContext } from "./temporalKnowledge.js";
 import { facetValueToString } from "./knowledgeLib.js";
 import { createKnowledgeExtractor } from "./knowledge.js";
@@ -35,7 +41,10 @@ import {
     addToSecondaryIndexes,
     buildSecondaryIndexes,
 } from "./secondaryIndexes.js";
-import { ConversationSettings } from "./conversation.js";
+import {
+    ConversationSettings,
+    prepareConversationEmbeddings,
+} from "./conversation.js";
 import { getMessageChunkBatch, textRangeFromMessageChunk } from "./message.js";
 import { MessageCollection, SemanticRefCollection } from "./storage.js";
 import { prepareInOrder } from "./preparedIndexing.js";
@@ -44,6 +53,8 @@ import {
     RelatedTermsIndex,
     MessageTextIndex,
     addToTransientSecondaryIndexes,
+    ConversationSecondaryIndexes,
+    buildTransientSecondaryIndexes,
 } from "./secondaryIndexes.js";
 
 function addTermToIndex(
@@ -574,6 +585,7 @@ export async function buildConversationIndex(
             settings,
             0,
             eventHandler,
+            true,
         );
     }
     const indexingResult: IndexingResults = {};
@@ -660,11 +672,16 @@ async function addPreparedConversationIndex(
     settings: ConversationSettings,
     start: number,
     eventHandler?: IndexingEventHandlers,
+    rebuild = false,
 ): Promise<IndexingResults> {
     const limits = settings.preparedIndexing!;
     if (conversation.semanticRefs!.isPersistent)
-        throw new Error(
-            "Prepared indexing requires an isolated nonpersistent candidate collection",
+        return addPersistentPreparedConversationIndex(
+            conversation,
+            settings,
+            start,
+            rebuild,
+            eventHandler,
         );
     const baseRef = conversation.semanticRefs!.length;
     addMessageKnowledgeToSemanticRefIndex(conversation, start);
@@ -813,6 +830,174 @@ async function addPreparedConversationIndex(
             message: { numberCompleted: count },
         },
     };
+}
+
+function persistentPreparedStorage(
+    conversation: IConversation,
+): IPreparedIndexStorage {
+    const provider = conversation.storageProvider;
+    if (!provider?.createPreparedIndexStorage)
+        throw new Error(
+            "Persistent prepared indexing requires a prepared transaction capability",
+        );
+    return provider.createPreparedIndexStorage(
+        conversation.messages,
+        conversation.semanticRefs!,
+    );
+}
+
+function preparedCandidate(
+    conversation: IConversation,
+    settings: ConversationSettings,
+    data?: PreparedIndexData,
+): IConversation {
+    const secondary = new ConversationSecondaryIndexes(settings);
+    if (data) {
+        secondary.termToRelatedTermsIndex.deserialize(
+            data.relatedTermsIndexData,
+        );
+        if (data.messageIndexData)
+            secondary.messageIndex?.deserialize(data.messageIndexData);
+    } else if (
+        conversation.secondaryIndexes?.termToRelatedTermsIndex instanceof
+        RelatedTermsIndex
+    ) {
+        secondary.termToRelatedTermsIndex.aliases.deserialize(
+            conversation.secondaryIndexes.termToRelatedTermsIndex.aliases.serialize(),
+        );
+    }
+    return {
+        nameTag: conversation.nameTag,
+        tags: [...conversation.tags],
+        messages: new MessageCollection(conversation.messages.getAll()),
+        semanticRefs: new SemanticRefCollection(
+            data ? conversation.semanticRefs!.getAll() : [],
+        ),
+        semanticRefIndex: new TermToSemanticRefIndex(data?.semanticIndexData),
+        secondaryIndexes: secondary,
+    };
+}
+
+function validatePreparedEmbeddings(
+    data: PreparedIndexData,
+    identities: PreparedIndexData["embeddingIdentities"],
+    settings: ConversationSettings,
+): void {
+    if (
+        Object.keys(data.embeddingIdentities).length !==
+            Object.keys(identities).length ||
+        Object.entries(identities).some(
+            ([lane, identity]) =>
+                !data.embeddingIdentities[lane] ||
+                embeddingIdentityKey(identity) !==
+                    embeddingIdentityKey(data.embeddingIdentities[lane]),
+        )
+    )
+        throw new Error(
+            "Prepared embedding identity changed; rebuild the index",
+        );
+    for (const [vectors, dimensions] of [
+        [
+            data.relatedTermsIndexData.textEmbeddingData?.embeddings ?? [],
+            settings.relatedTermIndexSettings.embeddingIndexSettings
+                ?.embeddingSize,
+        ],
+        [
+            data.messageIndexData?.indexData?.embeddings ?? [],
+            settings.messageTextIndexSettings.embeddingIndexSettings
+                .embeddingSize,
+        ],
+    ] as const) {
+        if (
+            vectors.length &&
+            (!Object.keys(identities).length || dimensions === undefined)
+        )
+            throw new Error(
+                "Prepared vectors require a known embedding identity",
+            );
+        for (const vector of vectors)
+            validateEmbeddingVector(Array.from(vector), dimensions!);
+    }
+}
+
+export async function restorePreparedConversationIndex(
+    conversation: IConversation,
+    settings: ConversationSettings,
+): Promise<number | undefined> {
+    const storage = persistentPreparedStorage(conversation);
+    const snapshot = storage.capture();
+    if (!snapshot.data) return undefined;
+    const identities = await prepareConversationEmbeddings(settings);
+    validatePreparedEmbeddings(snapshot.data, identities, settings);
+    const candidate = preparedCandidate(conversation, settings, snapshot.data);
+    buildTransientSecondaryIndexes(candidate, settings);
+    if (storage.capture(false).stamp !== snapshot.stamp)
+        throw new Error("Prepared index snapshot changed during restore");
+    conversation.semanticRefIndex = candidate.semanticRefIndex;
+    conversation.secondaryIndexes = candidate.secondaryIndexes;
+    return snapshot.data.indexedMessageCount;
+}
+
+async function addPersistentPreparedConversationIndex(
+    conversation: IConversation,
+    settings: ConversationSettings,
+    start: number,
+    rebuild: boolean,
+    eventHandler?: IndexingEventHandlers,
+): Promise<IndexingResults> {
+    const storage = persistentPreparedStorage(conversation);
+    const snapshot = storage.capture(!rebuild);
+    if (
+        !rebuild &&
+        (start > (snapshot.data?.indexedMessageCount ?? 0) ||
+            (!snapshot.data && conversation.semanticRefs!.length))
+    )
+        throw new Error(
+            "Rebuild the persistent index before resuming prepared ingestion",
+        );
+    const identities = await prepareConversationEmbeddings(settings);
+    if (
+        Object.keys(identities).length === 0 &&
+        [
+            settings.relatedTermIndexSettings.embeddingIndexSettings,
+            settings.messageTextIndexSettings.embeddingIndexSettings,
+            settings.threadSettings,
+        ].some((lane) => lane?.embeddingModel !== undefined)
+    )
+        throw new Error(
+            "Persistent preparation requires known embedding identities",
+        );
+    if (snapshot.data)
+        validatePreparedEmbeddings(snapshot.data, identities, settings);
+    const candidate = preparedCandidate(conversation, settings, snapshot.data);
+    if (snapshot.data) buildTransientSecondaryIndexes(candidate, settings);
+    const result = await addPreparedConversationIndex(
+        candidate,
+        settings,
+        snapshot.data?.indexedMessageCount ?? 0,
+        eventHandler,
+    );
+    const secondary =
+        candidate.secondaryIndexes as ConversationSecondaryIndexes;
+    const data: PreparedIndexData = {
+        indexedMessageCount: candidate.messages.length,
+        semanticIndexData: (
+            candidate.semanticRefIndex as TermToSemanticRefIndex
+        ).serialize(),
+        relatedTermsIndexData: secondary.termToRelatedTermsIndex.serialize(),
+        messageIndexData: secondary.messageIndex?.serialize(),
+        embeddingIdentities: identities,
+    };
+    validatePreparedEmbeddings(data, identities, settings);
+    settings.preparedIndexing!.signal?.throwIfAborted();
+    storage.commit(snapshot.stamp, {
+        messages: candidate.messages.getAll(),
+        semanticRefs: candidate.semanticRefs!.getAll(),
+        data,
+    });
+    conversation.semanticRefIndex = candidate.semanticRefIndex;
+    conversation.secondaryIndexes = candidate.secondaryIndexes;
+    return result;
 }
 
 export type SemanticRefIndexSettings = {

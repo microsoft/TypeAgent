@@ -48,6 +48,20 @@ export class SqliteCollection<T, TOrdinal extends number>
         })();
     }
 
+    public isOnDatabase(db: sqlite.Database): boolean {
+        return this.db === db;
+    }
+
+    public replaceAll(items: T[]): void {
+        this.db.transaction(() => {
+            this.db.exec(`DELETE FROM ${this.tableName}`);
+            this.db
+                .prepare("DELETE FROM sqlite_sequence WHERE name=?")
+                .run(this.tableName);
+            this.append(...items);
+        })();
+    }
+
     public get(ordinal: TOrdinal): T {
         const actualOrdinal = ordinal + 1;
         const row = this.sql_get.get(actualOrdinal);

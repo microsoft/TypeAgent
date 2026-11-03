@@ -13,6 +13,7 @@ import {
     setRuntimeConfig,
 } from "@typeagent/aiclient";
 import * as kp from "@typeagent/knowpro";
+import * as ms from "@typeagent/memory-storage";
 import * as kpLib from "@typeagent/knowledge-processor";
 import { success } from "typechat";
 import {
@@ -148,6 +149,85 @@ describe("document embedding persistence (deterministic, offline)", () => {
             conversationSettings,
         };
     }
+
+    test.each([false, true])(
+        "SQLite email prepared receipt recovers %s external snapshot after a later durable commit",
+        async (saveOlderSnapshot) => {
+            const fileSettings = {
+                dirPath: root,
+                baseFileName: "prepared-email",
+            };
+            const config = settings();
+            config.conversationSettings.preparedIndexing = {
+                workers: 2,
+                window: 2,
+            };
+            const memory = new EmailMemory(
+                ms.sqlite.createSqlStorageProvider(
+                    root,
+                    fileSettings.baseFileName,
+                    true,
+                ),
+                config,
+            );
+            let reopened: EmailMemory | undefined;
+            try {
+                await memory.addMessages(
+                    new EmailMessage(
+                        new EmailMeta({ address: "fixture@example.test" }),
+                        "ocean",
+                        ["old-tag"],
+                    ),
+                    false,
+                );
+                if (saveOlderSnapshot) {
+                    await memory.buildIndex(undefined, false);
+                    await memory.writeToFile(fileSettings);
+                    await memory.addMessages(
+                        new EmailMessage(
+                            new EmailMeta({ address: "fixture@example.test" }),
+                            "stars",
+                            ["new-tag"],
+                        ),
+                        false,
+                    );
+                }
+                await expect(memory.buildIndex()).rejects.toThrow(
+                    "No file save settings",
+                );
+                const expected = memory.semanticRefIndex.serialize();
+                const before = calls.length;
+                memory.close();
+                const fresh = settings();
+                fresh.conversationSettings.preparedIndexing = {
+                    workers: 2,
+                    window: 2,
+                };
+                reopened = await EmailMemory.readFromFile(
+                    fileSettings,
+                    true,
+                    fresh,
+                );
+                expect(reopened).toBeDefined();
+                expect(reopened!.indexingState.lastMessageOrdinal).toBe(
+                    saveOlderSnapshot ? 1 : 0,
+                );
+                expect(reopened!.semanticRefIndex.serialize()).toEqual(
+                    expected,
+                );
+                expect(
+                    (await reopened!.buildIndex(undefined, false)).success,
+                ).toBe(true);
+                expect(reopened!.semanticRefIndex.serialize()).toEqual(
+                    expected,
+                );
+                expect(calls).toHaveLength(before);
+            } finally {
+                reopened?.close();
+                memory.close();
+            }
+        },
+    );
 
     test("scoped queries use their own model and are decorated after customization", async () => {
         let queryCalls = 0;

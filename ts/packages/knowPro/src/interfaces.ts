@@ -163,6 +163,7 @@ export type MessageTag = string | StructuredTag;
  * @template TMessage - Type of the message in the conversation.
  */
 export interface IConversation<TMessage extends IMessage = IMessage> {
+    storageProvider?: IStorageProvider;
     /**
      * Name tag for the conversation.
      */
@@ -762,7 +763,37 @@ export interface ISemanticRefCollection
     getMetadataMultiple?(ordinals: SemanticRefOrdinal[]): SemanticRefMetadata[];
 }
 
+export interface PreparedIndexData {
+    indexedMessageCount: number;
+    semanticIndexData: import("./dataFormats.js").ITermToSemanticRefIndexData;
+    relatedTermsIndexData: import("./secondaryIndexes.js").ITermsToRelatedTermsIndexData;
+    messageIndexData?:
+        | import("./messageIndex.js").IMessageTextIndexData
+        | undefined;
+    embeddingIdentities: import("./serialization.js").PersistedEmbeddingIdentities;
+}
+
+export interface PreparedIndexSnapshot {
+    stamp: string;
+    data?: PreparedIndexData;
+}
+
+export interface PreparedIndexBatch {
+    messages: IMessage[];
+    semanticRefs: SemanticRef[];
+    data: PreparedIndexData;
+}
+
+export interface IPreparedIndexStorage {
+    capture(includeIndex?: boolean): PreparedIndexSnapshot;
+    commit(expectedStamp: string, batch: PreparedIndexBatch): void;
+}
+
 export interface IStorageProvider {
+    createPreparedIndexStorage?(
+        messages: IMessageCollection,
+        semanticRefs: ISemanticRefCollection,
+    ): IPreparedIndexStorage;
     createMessageCollection<TMessage extends IMessage = IMessage>(
         serializer?: JsonSerializer<TMessage>,
     ): IMessageCollection<TMessage>;
