@@ -7,6 +7,7 @@ import { copyFile, mkdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { checkpointExpectationHash, writeJson } from "./harness.mjs";
 import { observeProvider } from "./live-stages.mjs";
+import { benchmarkFailure } from "./longmemeval-live.mjs";
 import { supervise } from "./watchdog.mjs";
 import {
     digest,
@@ -264,7 +265,7 @@ export async function recordCompanionWork(
         metrics.status = settings?.preparedIndexing.signal?.aborted
             ? "interrupted"
             : "failed";
-        metrics.failure = { name: error.name, message: error.message };
+        metrics.failure = benchmarkFailure(error);
         throw error;
     } finally {
         restore();

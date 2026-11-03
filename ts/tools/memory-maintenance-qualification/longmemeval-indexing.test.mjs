@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,6 +38,7 @@ import {
 } from "./longmemeval-indexing-lifecycle.mjs";
 import {
     liveCancellation,
+    recordCompanionWork,
     superviseCompanion,
     validateCompanionSpec,
 } from "./longmemeval-indexing-execution.mjs";
@@ -547,6 +548,36 @@ test("companion cannot silently resume or exceed the bounded allowance", () => {
     );
     assert.throws(() => validateCompanionSpec({ ...spec, resume: true }));
 });
+
+test("companion startup failures retain sanitized accounting and restore the provider observer", async () =>
+    temporary(async (root) => {
+        await mkdir(path.join(root, "companion-attempt"));
+        const fetch = globalThis.fetch;
+        await assert.rejects(
+            recordCompanionWork(
+                {},
+                path.join(root, "companion"),
+                fixture().construction[0],
+                async () => {
+                    throw new Error("untrusted-provider-payload");
+                },
+                replayTape([], true),
+                async () => {},
+                undefined,
+                async () => {},
+            ),
+            /untrusted-provider-payload/,
+        );
+        assert.equal(globalThis.fetch, fetch);
+        const metrics = JSON.parse(
+            await readFile(
+                path.join(root, "companion-attempt", "work.json"),
+                "utf8",
+            ),
+        );
+        assert.equal(metrics.status, "failed");
+        assert.ok(!encode(metrics).includes("untrusted-provider-payload"));
+    }));
 
 test("companion supervision verifies ownership and admits only one bounded worker", async () =>
     temporary(async (root) => {

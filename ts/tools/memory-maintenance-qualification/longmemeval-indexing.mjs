@@ -11,7 +11,11 @@ import { parseArgs } from "node:util";
 import { createInterface } from "node:readline";
 import { liveDependencyCheckpoint } from "./live-stages.mjs";
 import { writeJson } from "./harness.mjs";
-import { benchmarkConfiguration, loadPrepared } from "./longmemeval-live.mjs";
+import {
+    benchmarkConfiguration,
+    benchmarkFailure,
+    loadPrepared,
+} from "./longmemeval-live.mjs";
 import {
     digest,
     embeddingConfigurationHash,
@@ -181,6 +185,17 @@ export async function preflight(pilot, product) {
 
 async function childAttempt(product, pilot, approval, arm) {
     assert.ok(["A0", "A1"].includes(arm), "Choose A0 or A1");
+    for (const key of ["datasetPath", "judgePath"]) {
+        assert.equal(
+            typeof pilot.inputs[key],
+            "string",
+            `Missing frozen input: ${key}`,
+        );
+        assert.ok(
+            path.isAbsolute(pilot.inputs[key]),
+            `Frozen input must be absolute: ${key}`,
+        );
+    }
     if (arm === "A1")
         assert.ok(
             ["completed", "failed"].includes(
@@ -221,7 +236,6 @@ async function childAttempt(product, pilot, approval, arm) {
         "--expected-runtime-configuration-hash",
         approval.runtimeConfigurationHash,
     ];
-    const fd = openSync(path.join(directory, "private-output.log"), "wx");
     const started = Date.now();
     const attemptFile = path.join(directory, "attempt.json");
     const attempt = {
@@ -231,6 +245,7 @@ async function childAttempt(product, pilot, approval, arm) {
         outcome: "not-observed",
     };
     await writeNew(attemptFile, attempt);
+    const fd = openSync(path.join(directory, "private-output.log"), "wx");
     let announced;
     let buffer = "";
     let outputError;
@@ -317,7 +332,7 @@ async function childAttempt(product, pilot, approval, arm) {
         attempt.status = "completed";
     } catch (error) {
         attempt.status = "failed";
-        attempt.failure = { name: error.name, message: error.message };
+        attempt.failure = benchmarkFailure(error);
         throw error;
     } finally {
         closeSync(fd);
