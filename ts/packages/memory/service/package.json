@@ -39,6 +39,7 @@
     "@typeagent/config": "workspace:*",
     "@typeagent/conversation-memory": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
+    "@typeagent/memory-storage": "workspace:*",
     "@typeagent/textpro": "workspace:*",
     "isomorphic-git": "1.37.4",
     "node-diff3": "3.2.0",

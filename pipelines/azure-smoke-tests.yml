@@ -177,7 +177,7 @@ jobs:
       # (equivalent to the GitHub matrix's fail-fast: false).
       matrix:
         linux:
-          # Playwright 1.57 does not support the Ubuntu 26.04 latest image.
+          # Playwright 1.57 does not support ubuntu-latest's Ubuntu 26.04 image.
           image: ubuntu-24.04
         windows:
           image: windows-latest

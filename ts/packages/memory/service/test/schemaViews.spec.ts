@@ -491,13 +491,14 @@ describe("ordinary-source schema lifecycle", () => {
     let fetchCalls = 0;
     let discoveryCalls = 0;
     let expectedCloseFailure: string | undefined;
+    let adapter: ViewSynthesisAdapter;
     beforeEach(async () => {
         root = await mkdtemp(path.join(os.tmpdir(), "memory-schema-views-"));
         modelCalls = 0;
         fetchCalls = 0;
         discoveryCalls = 0;
         expectedCloseFailure = undefined;
-        const adapter: ViewSynthesisAdapter = {
+        adapter = {
             identity: "offline-schema-fixture-v1",
             proposeSchema: async () => ({
                 ...schema([name]),
@@ -921,6 +922,74 @@ describe("ordinary-source schema lifecycle", () => {
         );
         expect(fetchCalls).toBe(1);
         expect((await service.listSources(corpus.corpusId)).length).toBe(1);
+    }, 60000);
+
+    test("opting an existing corpus into frames backfills questions without synthesis and retires rejected fields", async () => {
+        const { corpus } = await overlappingFixture();
+        await service.updateViewPublicationPolicy({
+            corpusId: corpus.corpusId,
+            expectedHead: (await service.listViews(corpus.corpusId)).head,
+            expectedRevision: (
+                await service.getViewPublicationPolicy(corpus.corpusId)
+            ).revision,
+            autoPublish: false,
+        });
+        const acquisition = await service.runAcquisitions(corpus.corpusId);
+        await waitForMemoryJob(service, acquisition[0].receipt!.jobId);
+        await answered(corpus.corpusId);
+        await service.close();
+        const calls = modelCalls;
+        service = new FileMemoryService(root, {
+            frameProjections: true,
+            informationalViews: false,
+            sourceSynopses: false,
+            discoveryPolicy: "off",
+            viewSynthesisAdapter: adapter,
+            indexFactory: (_id, directory) =>
+                new FakeSemanticCorpusIndex(directory),
+        });
+        const schemas = (
+            await service.listFrameSchemas(corpus.corpusId)
+        ).filter((schema) => schema.id.startsWith("question.answer."));
+        expect(schemas).toHaveLength(2);
+        const request = {
+            corpusId: corpus.corpusId,
+            schemaId: schemas[0].id,
+            schemaRevision: schemas[0].revision,
+            predicate: {
+                and: [{ fieldId: "value", op: "eq" as const, value: "Ada" }],
+            },
+        };
+        const selected = await service.queryFrame({
+            ...request,
+            includeUnconfirmed: true,
+        });
+        expect(selected.rows).toHaveLength(1);
+        expect(selected.rows[0].eligible).toBe(false);
+        expect(selected.rows[0].evidence).not.toHaveLength(0);
+        expect((await service.queryFrame(request)).rows).toEqual([]);
+        const question = (
+            await service.listQuestions(corpus.corpusId)
+        ).items.find(
+            (item) => `view:${item.viewId}` === selected.rows[0].ownerKey,
+        )!;
+        await service.editQuestion({
+            corpusId: corpus.corpusId,
+            viewId: question.viewId,
+            slotId: question.slot.id,
+            expectedHead: (await service.listQuestions(corpus.corpusId)).head,
+            expectedVersion: question.viewVersion,
+            edit: { kind: "approval", approval: "rejected" },
+        });
+        expect(
+            (await service.listFrameSchemas(corpus.corpusId)).some(
+                (schema) => schema.id === schemas[0].id,
+            ),
+        ).toBe(false);
+        await expect(
+            service.queryFrame({ ...request, includeUnconfirmed: true }),
+        ).rejects.toThrow("Unknown frame schema");
+        expect(modelCalls).toBe(calls);
     }, 60000);
 
     test("an admitted upcoming ordinary source resolves questions before enrichment: zero fetches", async () => {

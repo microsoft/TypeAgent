@@ -12,6 +12,7 @@ import type {
     ViewExtensionCapabilities,
     ViewProviderDiscoveryInput,
 } from "./viewExtensionTypes.js";
+import { dataFrame } from "@typeagent/knowpro";
 import {
     RequestBudget,
     runWithRequestBudget,
@@ -375,6 +376,12 @@ export class ViewExtensionRegistry {
             )
                 throw new Error("Provider output schema digest mismatch");
             const id = descriptor.identity.providerId;
+            if (descriptor.indexProjection)
+                dataFrame.assertFrameDescriptorInventory(
+                    descriptor.indexProjection,
+                    id,
+                    "view",
+                );
             if (this.installed.has(id))
                 throw new Error("Duplicate provider identity");
             const definitions = new Set<string>();
