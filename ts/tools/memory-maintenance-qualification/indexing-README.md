@@ -138,6 +138,14 @@ method/input/embedding identity and preserves per-role batching capabilities.
 A replay miss or inconsistent duplicate provider output fails, never falls back
 to live inference.
 
+These are capture/replay failures, not evidence that the configured provider is
+unavailable or the index is incorrect. Guards also compare overlapping duplicate
+calls after resolution and never overwrite an inconsistent accepted recording.
+When capture fails, the accepted-prefix database and response-accounting ledger
+remain; the in-memory provider-output tape is not a resumable capture journal.
+Do not claim the fault matrix or live cancellation ran, or silently repeat paid
+work. Revise the recording-identity strategy before another approved capture.
+
 The offline portion compares workers/window 1/1 against 3/3, checks reference
 metadata and full persisted state, then hard-terminates five owned Node workers:
 before commit, after rows, after postings, after receipt and after SQL acceptance.

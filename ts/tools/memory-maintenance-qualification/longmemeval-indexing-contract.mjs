@@ -269,21 +269,36 @@ export function replayTape(entries, recording = false) {
             [...records.values()].sort((a, b) => a.key.localeCompare(b.key)),
         async invoke(method, identity, args, work) {
             const key = digest(encode({ method, identity, args }));
-            const existing = records.get(key);
             if (!recording) {
-                assert.ok(existing, `Provider replay miss: ${method}`);
+                const existing = records.get(key);
+                if (!existing)
+                    throw replayError(
+                        "EREPLAYMISS",
+                        `Provider replay miss: ${method}`,
+                    );
                 return decode(encode({ value: existing.value })).value;
             }
             calls++;
             const value = await work();
-            if (existing)
-                assert.equal(
-                    encode({ value }),
-                    encode({ value: existing.value }),
+            const existing = records.get(key);
+            if (
+                existing &&
+                encode({ value }) !== encode({ value: existing.value })
+            ) {
+                throw replayError(
+                    "EREPLAYNONDETERMINISTIC",
                     "Non-deterministic duplicate provider input cannot be replayed",
                 );
+            }
             records.set(key, { key, method, value });
             return value;
         },
     };
+}
+
+function replayError(code, message) {
+    return Object.assign(new Error(message), {
+        name: "ProviderReplayError",
+        code,
+    });
 }

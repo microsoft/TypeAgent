@@ -239,6 +239,11 @@ export async function acknowledgeStopAfterQuestion(
 export function benchmarkFailure(error) {
     return {
         ...safeFailure(error),
+        ...(error?.code === "EREPLAYNONDETERMINISTIC"
+            ? { category: "REPLAY_CAPTURE_INCONSISTENT_OUTPUT" }
+            : error?.code === "EREPLAYMISS"
+              ? { category: "REPLAY_INPUT_NOT_CAPTURED" }
+              : {}),
         ...(/^E[A-Z0-9_]+$/.test(error?.code ?? "")
             ? { code: error.code }
             : {}),

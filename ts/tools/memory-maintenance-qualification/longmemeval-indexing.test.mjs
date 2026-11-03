@@ -44,7 +44,7 @@ import {
     superviseCompanion,
     validateCompanionSpec,
 } from "./longmemeval-indexing-execution.mjs";
-import { recordBenchmarkArm } from "./longmemeval-live.mjs";
+import { benchmarkFailure, recordBenchmarkArm } from "./longmemeval-live.mjs";
 import { createTraceSummary } from "./longmemeval-indexing-traces.mjs";
 
 const product = fileURLToPath(new URL("../../", import.meta.url));
@@ -381,9 +381,50 @@ test("construction rejects question fields before creating an owned pilot", asyn
 test("recording refuses nondeterministic duplicate provider outputs", async () => {
     const tape = replayTape([], true);
     await tape.invoke("model", {}, ["same"], async () => "one");
+    assert.equal(
+        await tape.invoke("model", {}, ["same"], async () => "one"),
+        "one",
+    );
     await assert.rejects(
         tape.invoke("model", {}, ["same"], async () => "two"),
-        /Non-deterministic/,
+        (error) => {
+            assert.equal(error.code, "EREPLAYNONDETERMINISTIC");
+            assert.equal(
+                benchmarkFailure(error).category,
+                "REPLAY_CAPTURE_INCONSISTENT_OUTPUT",
+            );
+            assert.ok(!encode(benchmarkFailure(error)).includes('"two"'));
+            return true;
+        },
+    );
+    assert.equal(tape.entries()[0].value, "one");
+});
+
+test("overlapping duplicate calls cannot silently replace a recorded provider response", async () => {
+    const tape = replayTape([], true);
+    const first = Promise.withResolvers();
+    const second = Promise.withResolvers();
+    const left = tape.invoke("model", {}, ["same"], () => first.promise);
+    const right = tape.invoke("model", {}, ["same"], () => second.promise);
+    first.resolve("first");
+    await left;
+    second.resolve("different");
+    await assert.rejects(right, { code: "EREPLAYNONDETERMINISTIC" });
+    assert.equal(tape.entries()[0].value, "first");
+    assert.equal(tape.calls, 2);
+    assert.equal(
+        benchmarkFailure(new Error("Provider endpoint unavailable")).category,
+        "CONFIGURED_ROLE_OR_TRANSPORT_UNAVAILABLE",
+    );
+    await assert.rejects(
+        replayTape([]).invoke("model", {}, ["missing"]),
+        (error) => {
+            assert.equal(
+                benchmarkFailure(error).category,
+                "REPLAY_INPUT_NOT_CAPTURED",
+            );
+            return true;
+        },
     );
 });
 
