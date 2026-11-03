@@ -577,6 +577,7 @@ export type KnowledgePropertyName =
     | "topic";
 
 export type PropertySearchTerm = {
+    compareOp?: import("./queryCmp.js").ComparisonOp;
     /**
      * PropertySearch terms let you match named property, values
      * - You can  match a well known property name (name("Bach") type("book"))

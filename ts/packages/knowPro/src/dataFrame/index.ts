@@ -9,6 +9,7 @@
  */
 
 export * from "./dataFrame.js";
+export * from "./projection.js";
 export * from "./dataFrameQuery.js";
 export * from "./dataFrameConversation.js";
 export * as lang from "./dataFrameLangSearch.js";

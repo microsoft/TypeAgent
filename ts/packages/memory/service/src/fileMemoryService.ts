@@ -65,6 +65,7 @@ import {
 } from "@typeagent/knowpro";
 import { createHash, randomUUID } from "node:crypto";
 import * as filesystem from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { userInfo } from "node:os";
 import {
     questionSummary,
@@ -373,6 +374,30 @@ import {
     validateDerivedModuleScope,
 } from "./viewExtensionUnderstanding.js";
 import type { ViewExtensionProvider } from "./viewExtensionTypes.js";
+import { dataFrame as frame, createKnowledgeModel } from "@typeagent/knowpro";
+import { sqlite as memorySqlite } from "@typeagent/memory-storage";
+import { createJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+import {
+    builtinFrameSchemas,
+    descriptorFrameRows,
+    eventFrameRow,
+    frameHash,
+    jsonFrameSpans,
+    sourceFrameRows,
+    viewFrameRows,
+} from "./frameProjection.js";
+import {
+    validateFrameQueryRequest,
+    validateFrameSourceProviders,
+    validateFrameQueryTranslator,
+} from "./frameTypes.js";
+import type {
+    FrameQueryRequest,
+    FrameQueryResult,
+    FrameProjectionStatus,
+    FrameSourceProvider,
+} from "./frameTypes.js";
 import type {
     UnderstandingRequest,
     UnderstandingModuleRequest,
@@ -688,6 +713,10 @@ interface PreparedEventIndex {
 }
 
 export interface FileMemoryServiceOptions {
+    frameProjections?: boolean;
+    frameQueryTranslator?: import("./frameTypes.js").FrameQueryTranslator;
+    frameStoreFactory?: (filename: string) => frame.FrameProjectionStore;
+    sourceFrameProviders?: readonly FrameSourceProvider[];
     extensionDiscovery?: boolean;
     sourceAuthorization?(
         request: import("./types.js").MemorySourceAuthorizationRequest,
@@ -1462,6 +1491,18 @@ export class FileMemoryService
     private readonly eventIndexFactory: CorpusIndexFactory;
     private readonly capabilities: MemoryServiceCapabilities;
     private readonly viewStore: TypedViewStore;
+    private readonly frameStores = new Map<
+        string,
+        frame.FrameProjectionStore
+    >();
+    private frameOptions: Pick<
+        FileMemoryServiceOptions,
+        | "frameProjections"
+        | "frameStoreFactory"
+        | "sourceFrameProviders"
+        | "extensionProviders"
+        | "frameQueryTranslator"
+    > = {};
     private readonly knowledge: KnowledgeCoordinator;
     private readonly newCorpusDiscoveryPolicy: DiscoveryPolicy;
     private readonly knowledgeMaintenance = new Set<string>();
@@ -2179,6 +2220,9 @@ export class FileMemoryService
             commitPolicy,
         );
         this.viewStore = new TypedViewStore(rootDirectory, userInfo().username);
+        this.frameOptions = options;
+        validateFrameSourceProviders(options.sourceFrameProviders);
+        validateFrameQueryTranslator(options.frameQueryTranslator);
         this.newCorpusDiscoveryPolicy = this.viewDrafts
             ? (options.discoveryPolicy ?? "sourceObserved")
             : "off";
@@ -2986,6 +3030,9 @@ export class FileMemoryService
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<void> {
+        const frames = this.frameStore(corpusId, true);
+        frames?.retainOwners(new Set());
+        frames?.retainSchemas(new Set());
         this.understanding?.invalidate(corpusId);
         this.answerSnapshots.invalidate(corpusId);
         const removedSources = runtime.manifest.pendingCorpusClear;
@@ -3052,6 +3099,803 @@ export class FileMemoryService
         const runtime = await this.getCorpusRuntime(corpusId);
         return runtime.manifest.sources.map((source) =>
             this.toMemorySource(source),
+        );
+    }
+
+    private frameStore(
+        corpusId: string,
+        existingOnly = false,
+    ): frame.FrameProjectionStore | undefined {
+        const current = this.frameStores.get(corpusId);
+        if (current) return current;
+        const filename = path.join(
+            this.rootDirectory,
+            "corpora",
+            corpusId,
+            "frames.db",
+        );
+        if (existingOnly && !existsSync(filename)) return undefined;
+        const store =
+            this.frameOptions.frameStoreFactory?.(filename) ??
+            new memorySqlite.SqliteFrameProjectionStore(filename);
+        this.frameStores.set(corpusId, store);
+        return store;
+    }
+    private frameProviderStamp(): string {
+        return frameHash([
+            this.frameOptions.sourceFrameProviders?.map((p) => [
+                p.providerId,
+                p.version,
+                p.projections,
+            ]),
+            this.frameOptions.extensionProviders?.map((p) => p.descriptor),
+        ]);
+    }
+    private async prepareFrameSource(source: StoredSource) {
+        const revision = source.revisions.find(
+            (r) => r.revisionId === source.activeRevisionId,
+        )!;
+        const document = this.toMemorySource(source);
+        const schemas: frame.FrameSchema[] = [];
+        const checks: Array<() => Promise<boolean>> = [];
+        const providers: FrameSourceProvider[] = [];
+        const recipes: unknown[] = [];
+        for (const provider of this.frameOptions.sourceFrameProviders ?? []) {
+            if (
+                document.metadata?.frameProviderId !== provider.providerId ||
+                !provider.sourceTypes.includes(document.sourceType) ||
+                !(await provider.authorize(document))
+            )
+                continue;
+            schemas.push(...provider.projections.map((d) => d.schema));
+            recipes.push([
+                provider.providerId,
+                provider.version,
+                provider.projections,
+            ]);
+            providers.push(provider);
+            checks.push(() => provider.authorize(document));
+        }
+        let rows: frame.FrameRow[] = [];
+        let failure: string | undefined;
+        try {
+            rows = sourceFrameRows(document, revision.content);
+            if (providers.length) {
+                const payload: unknown = JSON.parse(revision.content);
+                const spans = jsonFrameSpans(revision.content);
+                for (const provider of providers)
+                    for (const descriptor of provider.projections)
+                        rows.push(
+                            ...descriptorFrameRows(
+                                payload,
+                                descriptor,
+                                (index) => {
+                                    const span = spans.get(
+                                        `${descriptor.rowsPointer}/${index}`,
+                                    );
+                                    if (!span)
+                                        throw new Error(
+                                            "Projected JSON record has no retained text anchor",
+                                        );
+                                    return {
+                                        support: [
+                                            {
+                                                sourceId: source.sourceId,
+                                                revisionId: revision.revisionId,
+                                                locator: `chars:${span.start}-${span.end}`,
+                                                excerpt: revision.content.slice(
+                                                    span.start,
+                                                    Math.min(
+                                                        span.end,
+                                                        span.start + 1000,
+                                                    ),
+                                                ),
+                                            },
+                                        ],
+                                        opposition: [],
+                                    };
+                                },
+                                true,
+                            ).map((row) => ({
+                                ...row,
+                                origin: "source" as const,
+                            })),
+                        );
+            }
+        } catch (error) {
+            failure = error instanceof Error ? error.message : String(error);
+        }
+        const owner: frame.FrameOwnerProjection = {
+            ownerKey: `source:${source.sourceId}`,
+            revisionId: revision.revisionId,
+            fingerprint: frameHash([
+                document,
+                builtinFrameSchemas,
+                recipes,
+                rows,
+            ]),
+            dependencies: [
+                { sourceId: source.sourceId, revisionId: revision.revisionId },
+            ],
+            rows,
+        };
+        return { owner, schemas, checks, failure };
+    }
+    private frameViewDependencies(
+        runtime: CorpusRuntime,
+        view: ViewVersion,
+        sources: ReadonlyMap<string, string>,
+    ) {
+        const dependencies = [
+            ...(view.generation?.input?.influenceSources ?? []),
+            ...(view.generation?.input?.inputs
+                .filter((input) => !input.evidence)
+                .map(({ sourceId, revisionId }) => ({
+                    sourceId,
+                    revisionId,
+                })) ?? []),
+            ...view.content.citations
+                .filter((citation) => !citation.evidence)
+                .map(({ sourceId, revisionId }) => ({ sourceId, revisionId })),
+        ];
+        const eventIds = [
+            ...(view.generation?.input?.influenceEvents?.map(
+                (event) => event.eventId,
+            ) ?? []),
+            ...view.content.citations.flatMap((citation) =>
+                citation.evidence ? [citation.evidence.eventId] : [],
+            ),
+        ];
+        const events = eventIds.map((id) =>
+            runtime.events.find((event) => event.eventId === id),
+        );
+        if (
+            events.some(
+                (event) =>
+                    !event ||
+                    isSuppressedEvent(runtime, event) ||
+                    event.linkedSourceIds?.some((id) => !sources.has(id)),
+            )
+        )
+            return undefined;
+        for (const event of events)
+            for (const id of event?.linkedSourceIds ?? [])
+                dependencies.push({
+                    sourceId: id,
+                    revisionId: sources.get(id)!,
+                });
+        return dependencies.some(
+            (dep) => sources.get(dep.sourceId) !== dep.revisionId,
+        )
+            ? undefined
+            : dependencies;
+    }
+    private async prepareFrameView(
+        runtime: CorpusRuntime,
+        view: ViewVersion,
+        publications: Awaited<ReturnType<TypedViewStore["listPublishedViews"]>>,
+        sources: ReadonlyMap<string, string>,
+    ) {
+        if (
+            view.state === "archived" ||
+            view.redirect ||
+            !(await this.informationalVersionEligible(view, view, true))
+        )
+            return undefined;
+        try {
+            await this.assertInfluenceEligible(view.generation?.input);
+        } catch (error) {
+            if (error instanceof ViewBuildStaleError) return undefined;
+            throw error;
+        }
+        const dependencies = this.frameViewDependencies(runtime, view, sources);
+        if (!dependencies) return undefined;
+        const publication = publications.find(
+            (p) => p.current?.viewId === view.viewId,
+        )?.publication;
+        const eligible =
+            publication?.publishedRevisionId === view.revisionId &&
+            publication.indexState === "ready" &&
+            publication.indexedRevisionId === view.revisionId &&
+            !publication.blockedReason &&
+            view.state !== "stale";
+        let projected: ReturnType<typeof viewFrameRows> = {
+            schemas: [],
+            rows: [],
+        };
+        let failure: string | undefined;
+        try {
+            projected = viewFrameRows(view, eligible);
+            if (view.content.kind === "extension") {
+                const content = view.content;
+                const provider = this.frameOptions.extensionProviders?.find(
+                    (p) =>
+                        p.descriptor.identity.providerId ===
+                            content.provider.providerId &&
+                        p.descriptor.identity.version ===
+                            content.provider.version,
+                );
+                for (const descriptor of provider?.descriptor.indexProjection ??
+                    []) {
+                    projected.schemas.push(descriptor.schema);
+                    projected.rows.push(
+                        ...descriptorFrameRows(
+                            content.payload,
+                            descriptor,
+                            (_index, record) => {
+                                if (!descriptor.blockIdPointer)
+                                    throw new Error(
+                                        "View frame projection requires a block ID selector",
+                                    );
+                                const blockId = frame.framePointer(
+                                    record,
+                                    descriptor.blockIdPointer,
+                                );
+                                const evidence = content.evidence.find(
+                                    (e) => e.blockId === blockId,
+                                );
+                                if (!evidence)
+                                    throw new Error(
+                                        "View frame record has no validated block evidence",
+                                    );
+                                return {
+                                    support: evidence.support,
+                                    opposition: evidence.opposition,
+                                };
+                            },
+                            eligible,
+                        ),
+                    );
+                }
+            }
+            for (const schema of projected.schemas)
+                frame.assertFrameSchema(schema);
+        } catch (error) {
+            failure = error instanceof Error ? error.message : String(error);
+            projected = { schemas: [], rows: [] };
+        }
+        const owner: frame.FrameOwnerProjection = {
+            ownerKey: `view:${view.viewId}`,
+            revisionId: view.revisionId,
+            fingerprint: frameHash([
+                view,
+                publication,
+                projected.schemas,
+                projected.rows,
+            ]),
+            dependencies,
+            rows: projected.rows,
+        };
+        const checks = [
+            async () => {
+                await this.assertInfluenceEligible(view.generation?.input);
+                if (
+                    !failure &&
+                    view.content.kind === "schemaView" &&
+                    frameHash(viewFrameRows(view, eligible)) !==
+                        frameHash(projected)
+                )
+                    throw new Error(
+                        "Frame question freshness changed during the read",
+                    );
+                return this.informationalVersionEligible(view, view, true);
+            },
+        ];
+        return { owner, schemas: projected.schemas, checks, failure };
+    }
+    private async collectFrameSnapshot(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ) {
+        const store = this.frameStore(corpusId)!;
+        const authoritative = frameHash([
+            runtime.manifest.sources,
+            runtime.events,
+        ]);
+        const providerStamp = this.frameProviderStamp();
+        const providerChecks: Array<() => Promise<boolean>> = [];
+        const errors = new Map<string, string>();
+        const sources = structuredClone(runtime.manifest.sources);
+        const owners: frame.FrameOwnerProjection[] = [];
+        const schemas = [...builtinFrameSchemas];
+        const authorized: StoredSource[] = [];
+        for (const source of sources) {
+            const revision = source.revisions.find(
+                (r) => r.revisionId === source.activeRevisionId,
+            );
+            if (
+                !revision ||
+                revision.state !== "ready" ||
+                !(await this.sourceAllowed(source, revision, "read"))
+            )
+                continue;
+            authorized.push(source);
+            const prepared = await this.prepareFrameSource(source);
+            owners.push(prepared.owner);
+            schemas.push(...prepared.schemas);
+            providerChecks.push(...prepared.checks);
+            if (prepared.failure)
+                errors.set(prepared.owner.ownerKey, prepared.failure);
+        }
+        for (const event of runtime.events) {
+            if (
+                isSuppressedEvent(runtime, event) ||
+                event.linkedSourceIds?.some(
+                    (id) => !authorized.some((s) => s.sourceId === id),
+                )
+            )
+                continue;
+            const dependencies = (event.linkedSourceIds ?? []).flatMap((id) => {
+                const source = authorized.find((s) => s.sourceId === id);
+                return source
+                    ? [{ sourceId: id, revisionId: source.activeRevisionId }]
+                    : [];
+            });
+            owners.push({
+                ownerKey: `event:${event.eventId}`,
+                revisionId: event.eventId,
+                fingerprint: frameHash([event, dependencies]),
+                dependencies,
+                rows: [
+                    eventFrameRow(
+                        event,
+                        eventAuthority(event) ?? event.sourceKind,
+                    ),
+                ],
+            });
+        }
+        const views =
+            this.viewDrafts || this.extensionBuilds
+                ? await this.viewStore.listViews(corpusId)
+                : undefined;
+        const publications = views
+            ? await this.viewStore.listPublishedViews(corpusId)
+            : [];
+        const allowedSources = new Map(
+            authorized.map((s) => [s.sourceId, s.activeRevisionId]),
+        );
+        for (const view of views?.views ?? []) {
+            const prepared = await this.prepareFrameView(
+                runtime,
+                view,
+                publications,
+                allowedSources,
+            );
+            if (!prepared) continue;
+            owners.push(prepared.owner);
+            schemas.push(...prepared.schemas);
+            providerChecks.push(...prepared.checks);
+            if (prepared.failure)
+                errors.set(prepared.owner.ownerKey, prepared.failure);
+        }
+        return {
+            store,
+            authoritative,
+            providerStamp,
+            providerChecks,
+            authorized,
+            owners,
+            schemas,
+            errors,
+            viewsHead: views?.head,
+        };
+    }
+    private reconcileFrameSnapshot(
+        frames: Awaited<ReturnType<FileMemoryService["collectFrameSnapshot"]>>,
+    ): void {
+        const { store, schemas, owners, errors } = frames;
+        for (const schema of schemas) store.registerSchema(schema);
+        store.retainOwners(new Set(owners.map((owner) => owner.ownerKey)));
+        const receipts = new Map(
+            store.receipts().map((receipt) => [receipt.ownerKey, receipt]),
+        );
+        for (const owner of owners) {
+            const old = receipts.get(owner.ownerKey);
+            if (
+                old?.fingerprint === owner.fingerprint &&
+                old.state === "ready" &&
+                !errors.has(owner.ownerKey)
+            )
+                continue;
+            store.stage({ ...owner, rows: [] });
+            try {
+                const failure = errors.get(owner.ownerKey);
+                if (failure) throw new Error(failure);
+                store.commit(owner);
+            } catch (error) {
+                store.fail(
+                    owner,
+                    (error instanceof Error
+                        ? error.message
+                        : String(error)
+                    ).slice(0, 2000),
+                );
+            }
+        }
+        store.retainSchemas(
+            new Set(schemas.map((s) => JSON.stringify([s.id, s.revision]))),
+        );
+    }
+    private async assertFrameSnapshot(
+        corpusId: string,
+        runtime: CorpusRuntime,
+        frames: Pick<
+            Awaited<ReturnType<FileMemoryService["collectFrameSnapshot"]>>,
+            "authoritative" | "providerStamp" | "viewsHead"
+        >,
+    ) {
+        const current = this.readScope.exit(() =>
+            frameHash([runtime.manifest.sources, runtime.events]),
+        );
+        if (current !== frames.authoritative)
+            throw new Error(
+                "Frame authoritative snapshot changed during the read",
+            );
+        if (frames.providerStamp !== this.frameProviderStamp())
+            throw new Error(
+                "Frame provider registration changed during the read",
+            );
+        if (frames.viewsHead !== undefined)
+            await this.viewStore.assertInventoryHead(
+                corpusId,
+                frames.viewsHead,
+            );
+    }
+    private async withFrameSnapshot<T>(
+        corpusId: string,
+        operation: (
+            store: frame.FrameProjectionStore,
+            owners: frame.FrameOwnerProjection[],
+            snapshot: string,
+        ) => Promise<T>,
+    ): Promise<T> {
+        if (!this.frameOptions.frameProjections)
+            throw new Error(
+                "Memory dataframe projections are disabled by this host",
+            );
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        const runtime = await this.getCorpusRuntime(corpusId);
+        const frames = await runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(corpusId, () =>
+                this.collectFrameSnapshot(corpusId, runtime),
+            ),
+        );
+        const { store, owners } = frames;
+        const receipts = new Map(
+            store.receipts().map((receipt) => [receipt.ownerKey, receipt]),
+        );
+        const schemas = [
+            ...new Map(
+                frames.schemas.map((schema) => [
+                    JSON.stringify([schema.id, schema.revision]),
+                    schema,
+                ]),
+            ).values(),
+        ].sort((a, b) =>
+            a.id < b.id ? -1 : a.id > b.id ? 1 : a.revision - b.revision,
+        );
+        const needsWrite =
+            frames.errors.size > 0 ||
+            receipts.size !== owners.length ||
+            owners.some(
+                (owner) =>
+                    receipts.get(owner.ownerKey)?.fingerprint !==
+                        owner.fingerprint ||
+                    receipts.get(owner.ownerKey)?.state !== "ready",
+            ) ||
+            frameHash(schemas) !== frameHash(store.schemas());
+        if (needsWrite)
+            await runtime.access.write(() =>
+                this.readScope.exit(() =>
+                    this.viewStore.withWritableState(() =>
+                        runtime.access.read(async () => {
+                            await this.assertFrameSnapshot(
+                                corpusId,
+                                runtime,
+                                frames,
+                            );
+                            await this.assertFrameAuthorization(frames);
+                            await this.assertFrameSnapshot(
+                                corpusId,
+                                runtime,
+                                frames,
+                            );
+                            this.reconcileFrameSnapshot(frames);
+                        }),
+                    ),
+                ),
+            );
+        return runtime.access.read(() =>
+            this.viewStore.withInventorySnapshot(corpusId, async () => {
+                await this.assertFrameSnapshot(corpusId, runtime, frames);
+                const snapshot = frameHash([
+                    frames.viewsHead,
+                    owners.map((o) => [o.ownerKey, o.fingerprint]),
+                    store.schemas(),
+                ]);
+                const result = await operation(store, owners, snapshot);
+                await this.assertFrameAuthorization(frames);
+                await this.assertFrameSnapshot(corpusId, runtime, frames);
+                return result;
+            }),
+        );
+    }
+    private async assertFrameAuthorization(
+        frames: Pick<
+            Awaited<ReturnType<FileMemoryService["collectFrameSnapshot"]>>,
+            "authorized" | "providerChecks"
+        >,
+    ) {
+        for (const source of frames.authorized) {
+            const revision = source.revisions.find(
+                (r) => r.revisionId === source.activeRevisionId,
+            )!;
+            if (!(await this.sourceAllowed(source, revision, "read")))
+                throw new Error(
+                    "Frame source authorization changed during the read",
+                );
+        }
+        for (const check of frames.providerChecks)
+            if (!(await check()))
+                throw new Error(
+                    "Frame provider authorization changed during the read",
+                );
+    }
+
+    public listFrameSchemas(corpusId: string): Promise<frame.FrameSchema[]> {
+        return this.withFrameSnapshot(corpusId, async (store) =>
+            store.schemas(),
+        );
+    }
+
+    private frameStatus(
+        store: frame.FrameProjectionStore,
+        owners: frame.FrameOwnerProjection[],
+        snapshot: string,
+    ): FrameProjectionStatus {
+        const receipts = store.receipts();
+        return {
+            version: 1,
+            snapshot,
+            owners: receipts,
+            coverage: {
+                ready: receipts.filter((r) => r.state === "ready").length,
+                pending: receipts.filter((r) => r.state === "pending").length,
+                failed: receipts.filter((r) => r.state === "failed").length,
+                unavailableValues: owners.reduce(
+                    (count, owner) =>
+                        count +
+                        owner.rows.reduce(
+                            (n, row) =>
+                                n +
+                                Object.values(row.valueStates ?? {}).filter(
+                                    (v) => v === "unavailable",
+                                ).length,
+                            0,
+                        ),
+                    0,
+                ),
+            },
+        };
+    }
+    public getFrameProjectionStatus(
+        corpusId: string,
+    ): Promise<FrameProjectionStatus> {
+        return this.withFrameSnapshot(
+            corpusId,
+            async (store, owners, snapshot) =>
+                this.frameStatus(store, owners, snapshot),
+        );
+    }
+    public async queryFrame(
+        request: FrameQueryRequest,
+    ): Promise<FrameQueryResult> {
+        validateFrameQueryRequest(request);
+        return this.withFrameSnapshot(
+            request.corpusId,
+            async (store, owners, snapshot) => {
+                const schema = store
+                    .schemas()
+                    .find(
+                        (s) =>
+                            s.id === request.schemaId &&
+                            s.revision === request.schemaRevision,
+                    );
+                if (!schema) throw new Error("Unknown frame schema revision");
+                let predicate = request.predicate ?? { and: [] };
+                if (request.query !== undefined) {
+                    if (!request.query.trim() || request.query.length > 120000)
+                        throw new Error("Invalid frame query text");
+                    const adapter = this.frameOptions.frameQueryTranslator;
+                    const translated = await this.translationCache.frame(
+                        request.corpusId,
+                        frameHash([schema, adapter?.identity]),
+                        request.query,
+                        async () => {
+                            if (adapter)
+                                return {
+                                    success: true as const,
+                                    data: await adapter.translate(
+                                        schema,
+                                        request.query!,
+                                    ),
+                                };
+                            const translator =
+                                createJsonTranslator<frame.FramePredicate>(
+                                    createKnowledgeModel(),
+                                    createTypeScriptJsonValidator<frame.FramePredicate>(
+                                        `export type Scalar = string | number | boolean | {kind: "calendar" | "instant"; raw: string};
+                                 export type Comparison = {fieldId: string; op: "eq"|"neq"|"lt"|"lte"|"gt"|"gte"; value: Scalar; unit?: string};
+                                 export type FramePredicate = {and: Comparison[]} | {or: Comparison[]};`,
+                                        "FramePredicate",
+                                    ),
+                                );
+                            return translator.translate(request.query!, [
+                                {
+                                    role: "system",
+                                    content: `Use only these admitted frame fields: ${JSON.stringify(schema)}. Preserve exact values and units. Calendar and instant domains cannot mix. Current time: ${new Date().toISOString()}.`,
+                                },
+                            ]);
+                        },
+                    );
+                    if (!translated.success)
+                        throw new Error(translated.message);
+                    predicate = translated.data;
+                }
+                frame.frameComparisons(schema, predicate);
+                const identity = frameHash([
+                    snapshot,
+                    predicate,
+                    request.schemaId,
+                    request.schemaRevision,
+                    request.sourceIds,
+                    request.includeUnconfirmed,
+                    request.repository,
+                    request.commit,
+                    request.environment,
+                ]);
+                let offset = 0;
+                if (request.cursor) {
+                    const cursor: unknown = JSON.parse(
+                        Buffer.from(request.cursor, "base64url").toString(
+                            "utf8",
+                        ),
+                    );
+                    if (
+                        !cursor ||
+                        typeof cursor !== "object" ||
+                        Reflect.get(cursor, "identity") !== identity ||
+                        Object.keys(cursor).some(
+                            (key) => !["identity", "offset"].includes(key),
+                        ) ||
+                        !Number.isSafeInteger(Reflect.get(cursor, "offset")) ||
+                        Reflect.get(cursor, "offset") < 0
+                    )
+                        throw new Error("Frame cursor is invalid or stale");
+                    offset = Reflect.get(cursor, "offset");
+                }
+                const selected = owners.filter(
+                    (owner) =>
+                        !request.sourceIds ||
+                        owner.dependencies.some((dep) =>
+                            request.sourceIds!.includes(dep.sourceId),
+                        ),
+                );
+                const stamps = new Map(
+                    selected.map((o) => [o.ownerKey, o.fingerprint]),
+                );
+                if (
+                    store
+                        .receipts()
+                        .some(
+                            (receipt) =>
+                                stamps.has(receipt.ownerKey) &&
+                                receipt.state !== "ready",
+                        )
+                )
+                    throw new Error(
+                        "Required frame projections are not ready; inspect getFrameProjectionStatus",
+                    );
+                const dependencies = new Map(
+                    selected.map((o) => [
+                        o.ownerKey,
+                        o.dependencies.map((dep) => dep.sourceId),
+                    ]),
+                );
+                const sources = new Map(
+                    owners
+                        .filter((owner) => owner.ownerKey.startsWith("source:"))
+                        .map((owner) => [
+                            owner.dependencies[0].sourceId,
+                            owner.rows.find((row) => row.schemaId === "source")
+                                ?.values,
+                        ]),
+                );
+                const eventSources = new Map(
+                    owners
+                        .filter((owner) => owner.ownerKey.startsWith("event:"))
+                        .map((owner) => [
+                            owner.revisionId,
+                            owner.dependencies.map((dep) => dep.sourceId),
+                        ]),
+                );
+                const matches = store
+                    .query(
+                        schema,
+                        predicate,
+                        stamps,
+                        request.includeUnconfirmed ?? false,
+                    )
+                    .map((row) => {
+                        const support = row.evidence.flatMap((ref) =>
+                            ref.evidence
+                                ? (eventSources.get(ref.evidence.eventId) ?? [])
+                                : [ref.sourceId],
+                        );
+                        const sourceIds = [
+                            ...new Set(
+                                support.length
+                                    ? support
+                                    : row.origin === "source"
+                                      ? (dependencies.get(row.ownerKey) ?? [])
+                                      : [],
+                            ),
+                        ];
+                        return { ...row, sourceIds };
+                    })
+                    .filter(
+                        (row) =>
+                            !request.sourceIds ||
+                            row.sourceIds.some((id) =>
+                                request.sourceIds!.includes(id),
+                            ),
+                    )
+                    .filter((row) =>
+                        (
+                            ["repository", "commit", "environment"] as const
+                        ).every((key) => {
+                            if (request[key] === undefined) return true;
+                            const value = row.values[key];
+                            if (value !== undefined)
+                                return Array.isArray(value)
+                                    ? value.includes(request[key]!)
+                                    : value === request[key];
+                            return (
+                                row.sourceIds.length > 0 &&
+                                row.sourceIds.every(
+                                    (id) =>
+                                        sources.get(id)?.[key] === request[key],
+                                )
+                            );
+                        }),
+                    )
+                    .sort(
+                        (a, b) =>
+                            a.ownerKey.localeCompare(b.ownerKey) ||
+                            a.itemKey.localeCompare(b.itemKey),
+                    );
+                if (request.cursor && offset >= matches.length)
+                    throw new Error("Frame cursor is invalid or stale");
+                const limit = request.limit ?? 50;
+                const rows = matches.slice(offset, offset + limit);
+                return {
+                    ...this.frameStatus(store, owners, snapshot),
+                    schema,
+                    predicate,
+                    rows,
+                    ...(offset + limit < matches.length
+                        ? {
+                              nextCursor: Buffer.from(
+                                  JSON.stringify({
+                                      identity,
+                                      offset: offset + limit,
+                                  }),
+                              ).toString("base64url"),
+                          }
+                        : {}),
+                };
+            },
         );
     }
 
@@ -4417,6 +5261,7 @@ export class FileMemoryService
     public async search(
         request: MemorySearchRequest,
     ): Promise<MemorySearchResult> {
+        if (request.frameFilter) return this.searchFrameFiltered(request);
         return this.foregroundRead(async () => {
             const result = await runWithSearchTiming(
                 request.traceId,
@@ -4451,6 +5296,55 @@ export class FileMemoryService
         });
     }
 
+    private async searchFrameFiltered(
+        request: MemorySearchRequest,
+    ): Promise<MemorySearchResult> {
+        const { frameFilter, ...search } = request;
+        if (
+            !frameFilter ||
+            ["corpusId", "limit", "cursor"].some((key) => key in frameFilter)
+        )
+            throw new Error("Invalid frame search filter");
+        let query: FrameQueryRequest = {
+            ...frameFilter,
+            corpusId: request.corpusId,
+            limit: 1000,
+        };
+        const sourceIds = new Set<string>();
+        let snapshot: string | undefined;
+        while (true) {
+            const page = await this.queryFrame(query);
+            if (snapshot && snapshot !== page.snapshot)
+                throw new Error(
+                    "Frame filter snapshot changed during selection",
+                );
+            snapshot = page.snapshot;
+            for (const row of page.rows)
+                for (const id of row.sourceIds)
+                    if (!search.sourceIds || search.sourceIds.includes(id))
+                        sourceIds.add(id);
+            if (!page.nextCursor) break;
+            query = {
+                ...query,
+                query: undefined,
+                predicate: page.predicate,
+                cursor: page.nextCursor,
+            };
+        }
+        const result = await this.search({
+            ...search,
+            sourceIds: [...sourceIds],
+        });
+        if (
+            (await this.getFrameProjectionStatus(request.corpusId)).snapshot !==
+            snapshot
+        )
+            throw new Error(
+                "Frame filter snapshot changed during semantic retrieval",
+            );
+        return result;
+    }
+
     private async searchDocuments(
         request: MemorySearchRequest,
     ): Promise<MemorySearchResult> {
@@ -4466,22 +5360,24 @@ export class FileMemoryService
         }
         return this.enqueueDocumentRead(request.corpusId, async (runtime) => {
             const limit = Math.max(1, Math.min(request.limit ?? 10, 100));
-            const authorized = this.sourceAuthorization
-                ? await this.authorizedSourceScope(
-                      runtime,
-                      request.sourceIds,
-                      "retrieve",
-                  )
-                : undefined;
-            let candidates: CorpusIndexMatch[] = request.indexedFragments
-                ? []
-                : await runtime.index.search(
-                      query,
-                      limit * 4,
-                      undefined,
-                      request.temporalContext,
-                      authorized,
-                  );
+            const authorized =
+                this.sourceAuthorization || request.sourceIds !== undefined
+                    ? await this.authorizedSourceScope(
+                          runtime,
+                          request.sourceIds,
+                          "retrieve",
+                      )
+                    : undefined;
+            let candidates: CorpusIndexMatch[] =
+                request.indexedFragments || request.sourceIds?.length === 0
+                    ? []
+                    : await runtime.index.search(
+                          query,
+                          limit * 4,
+                          undefined,
+                          request.temporalContext,
+                          authorized,
+                      );
             let fragmentLimited = false;
             let indexedSelection: IndexedSelectionDiagnostics | undefined;
             if (request.indexedFragments) {
@@ -4647,6 +5543,7 @@ export class FileMemoryService
                       }
                     : {}),
                 sourceSynopses: this.sourceSynopsesEnabled,
+                dataFrames: this.frameOptions.frameProjections ?? false,
                 agentSessionImportTypes: this.agentSessionImportsEnabled
                     ? ["agent-session-jsonl", "copilot-session-jsonl"]
                     : [],
@@ -14094,7 +14991,7 @@ export class FileMemoryService
             }
             return operation();
         };
-        return runtime.access.write(() =>
+        const result = await runtime.access.write(() =>
             this.readScope.exit(() =>
                 this.viewStore.withWritableState(() =>
                     timeSearchStage(`${timingStage}.work`, run, {
@@ -14104,6 +15001,22 @@ export class FileMemoryService
                 ),
             ),
         );
+        if (this.frameOptions.frameProjections && !this.closed)
+            this.maintenance.request(
+                corpusId,
+                "frames",
+                undefined,
+                async (signal) => {
+                    signal.throwIfAborted();
+                    const status =
+                        await this.getFrameProjectionStatus(corpusId);
+                    if (status.coverage.failed)
+                        throw new Error(
+                            `${status.coverage.failed} frame owner projections failed`,
+                        );
+                },
+            );
+        return result;
     }
 
     private enqueueRead<T>(
@@ -17096,6 +18009,8 @@ export class FileMemoryService
         ]);
         await warmupClosure;
         this.viewStore.closeReadCaches();
+        for (const store of this.frameStores.values()) store.close();
+        this.frameStores.clear();
         this.viewIndexes.close();
         await this.releaseLock?.();
         this.releaseLock = undefined;
@@ -17144,6 +18059,7 @@ export class FileMemoryService
         if (!removal)
             throw new Error("No authorized source removal to recover");
         const sourceId = removal.sourceId;
+        this.frameStore(corpusId, true)?.purgeDependency(sourceId);
         const affected = (await this.viewStore.listViews(corpusId)).views.map(
             (view) => view.viewId,
         );

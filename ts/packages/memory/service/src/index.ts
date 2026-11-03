@@ -41,3 +41,4 @@ export * from "./knowledgeTypes.js";
 export * from "./schemaViewOperations.js";
 export * from "./deferredAcquisition.js";
 export type * from "./inventoryTypes.js";
+export * from "./frameTypes.js";

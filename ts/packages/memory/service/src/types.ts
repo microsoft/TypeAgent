@@ -344,6 +344,10 @@ export interface MemorySearchRequest {
     dateFrom?: string;
     dateTo?: string;
     indexedFragments?: boolean;
+    frameFilter?: Omit<
+        import("./frameTypes.js").FrameQueryRequest,
+        "corpusId" | "limit" | "cursor"
+    >;
 }
 
 export interface MemoryEvidence {
@@ -695,6 +699,7 @@ export interface MemoryServiceCapabilities {
         memoryUnderstanding?: boolean;
         memoryDocumentUnderstanding?: boolean;
         sourceSynopses?: boolean;
+        dataFrames?: boolean;
         agentSessionImportTypes?: AgentSessionImportRequest["importType"][];
     };
     warnings: string[];
@@ -739,6 +744,9 @@ export interface ProcedureVersion {
 export interface MemoryService
     extends MemoryGraphService,
         MemoryUnderstandingService {
+    listFrameSchemas?: import("./frameTypes.js").MemoryFrameService["listFrameSchemas"];
+    queryFrame?: import("./frameTypes.js").MemoryFrameService["queryFrame"];
+    getFrameProjectionStatus?: import("./frameTypes.js").MemoryFrameService["getFrameProjectionStatus"];
     initialize?(): Promise<void>;
     warmViewIndexes?(corpusId?: string): Promise<void>;
     close?(): Promise<void>;

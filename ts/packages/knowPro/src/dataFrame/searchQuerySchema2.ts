@@ -9,6 +9,7 @@ export type FacetTerm = {
     facetName: string;
     // the value of the facet, such as "red", "writer"; "*" means match any facet value
     facetValue: KnownFacet | string;
+    compareOp?: "eq" | "neq" | "lt" | "lte" | "gt" | "gte";
 };
 
 // Use to find information about specific, tangible people, places, institutions or things only..
