@@ -32,6 +32,8 @@ import {
     reviewTemplate,
     validateReview,
     traceRun,
+    productionPlan,
+    productionArmEnvironment,
 } from "./longmemeval-indexing.mjs";
 import {
     measureIndexingCase,
@@ -48,6 +50,54 @@ import { benchmarkFailure, recordBenchmarkArm } from "./longmemeval-live.mjs";
 import { createTraceSummary } from "./longmemeval-indexing-traces.mjs";
 
 const product = fileURLToPath(new URL("../../", import.meta.url));
+
+test("parallel comparison freezes one full history and holds preparation constant", () => {
+    const pilot = {
+        manifest: { questionIds: ["one", "two", "three"] },
+        inputs: { comparison: "indexing-parallel", firstCaseOnly: true },
+    };
+    assert.deepEqual(productionPlan(pilot).questionIds, ["one"]);
+    for (const arm of ["A0", "A1"]) {
+        const env = productionArmEnvironment(pilot, arm, {
+            TYPEAGENT_MEMORY_PERF_EXPERIMENTS:
+                "translation-cache,indexing-parallel",
+        });
+        assert.equal(env.TYPEAGENT_MEMORY_PREPARED_INDEXING, "1");
+        assert.equal(env.TYPEAGENT_MEMORY_SEARCH_TRACE, "1");
+        assert.equal(
+            env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS,
+            arm === "A0"
+                ? "translation-cache"
+                : "translation-cache,indexing-parallel",
+        );
+    }
+    assert.throws(
+        () =>
+            productionArmEnvironment(pilot, "A1", {
+                TYPEAGENT_MEMORY_TOPIC_CONCURRENCY: "1",
+            }),
+        /default topic concurrency/,
+    );
+    assert.throws(
+        () => productionPlan({ ...pilot, inputs: { comparison: "typo" } }),
+        /Unknown/,
+    );
+    const legacy = { manifest: pilot.manifest, inputs: {} };
+    assert.deepEqual(
+        productionPlan(legacy).questionIds,
+        pilot.manifest.questionIds,
+    );
+    assert.equal(
+        productionArmEnvironment(legacy, "A0", {})
+            .TYPEAGENT_MEMORY_PREPARED_INDEXING,
+        undefined,
+    );
+    assert.equal(
+        productionArmEnvironment(legacy, "A1", {})
+            .TYPEAGENT_MEMORY_PREPARED_INDEXING,
+        "1",
+    );
+});
 function fixture() {
     const construction = categories.map((category, i) => ({
         id: `case-${i}`,

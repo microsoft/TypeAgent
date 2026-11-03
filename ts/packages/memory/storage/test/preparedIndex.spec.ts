@@ -117,6 +117,7 @@ describe("persistent ordered prepared indexing", () => {
             },
         };
         settings = kp.createConversationSettings(model, 2);
+        settings.overlapMessageEmbeddings = true;
         settings.preparedIndexing = { workers: 3, window: 3 };
         settings.semanticRefIndexSettings.knowledgeExtractor = {
             settings: { maxContextLength: 4096 },

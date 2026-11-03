@@ -48,6 +48,7 @@ import {
 import { getMessageChunkBatch, textRangeFromMessageChunk } from "./message.js";
 import { MessageCollection, SemanticRefCollection } from "./storage.js";
 import { prepareInOrder } from "./preparedIndexing.js";
+import { timeSearchStage } from "./searchTiming.js";
 import {
     buildRelatedTermsIndex,
     RelatedTermsIndex,
@@ -707,7 +708,7 @@ async function addPreparedConversationIndex(
                     release = resolve;
                 }),
             );
-        try {
+        const prepareKnowledge = async () => {
             await prerequisite;
             signal.throwIfAborted();
             const locations: TextLocation[] = message.textChunks.map(
@@ -759,6 +760,15 @@ async function addPreparedConversationIndex(
                 related.settings,
             );
             if (relatedResult.error) throw new Error(relatedResult.error);
+            signal.throwIfAborted();
+            return {
+                knowledge,
+                terms: local.semanticRefIndex!.getTerms(),
+                related: related.serialize(),
+            };
+        };
+        const prepareMessages = async () => {
+            signal.throwIfAborted();
             const messages = new MessageTextIndex(
                 settings.messageTextIndexSettings,
             );
@@ -767,12 +777,25 @@ async function addPreparedConversationIndex(
                 if (result.error) throw new Error(result.error);
             }
             signal.throwIfAborted();
-            return {
-                knowledge,
-                terms: local.semanticRefIndex!.getTerms(),
-                related: related.serialize(),
-                messages: messages.serialize(),
-            };
+            return messages.serialize();
+        };
+        const knowledgeWork = () =>
+            timeSearchStage("ingestion.unit.knowledge", prepareKnowledge);
+        const messageWork = () =>
+            timeSearchStage("ingestion.unit.messageEmbedding", prepareMessages);
+        try {
+            if (settings.overlapMessageEmbeddings) {
+                const [knowledge, messages] = await Promise.allSettled([
+                    knowledgeWork(),
+                    messageWork(),
+                ]);
+                if (knowledge.status === "rejected") throw knowledge.reason;
+                if (messages.status === "rejected") throw messages.reason;
+                signal.throwIfAborted();
+                return { ...knowledge.value, messages: messages.value };
+            }
+            const knowledge = await knowledgeWork();
+            return { ...knowledge, messages: await messageWork() };
         } finally {
             release?.();
         }

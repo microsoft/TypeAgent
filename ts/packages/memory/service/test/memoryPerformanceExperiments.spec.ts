@@ -129,6 +129,11 @@ describe("bounded serving experiments", () => {
         expect(memoryPerformanceExperiments("p2").size).toBe(5);
         expect(memoryPerformanceExperiments("p3").size).toBe(4);
         expect(memoryPerformanceExperiments("p2,p3").size).toBe(9);
+        expect(
+            memoryPerformanceExperiments("indexing-parallel").has(
+                "indexing-parallel",
+            ),
+        ).toBe(true);
         expect(() => memoryPerformanceExperiments("typo")).toThrow("Unknown");
         expect(
             () =>

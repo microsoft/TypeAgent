@@ -140,8 +140,9 @@ describe("bounded preparation and ordered isolated application", () => {
                 return success(texts.map(() => [1, 0]));
             },
         };
-        const build = async (prepared: boolean) => {
+        const build = async (prepared: boolean, overlap = false) => {
             const settings = createConversationSettings(model, 2);
+            settings.overlapMessageEmbeddings = overlap;
             settings.semanticRefIndexSettings.knowledgeExtractor = {
                 settings: { maxContextLength: 4096 },
                 extract: async () => ({
@@ -213,6 +214,7 @@ describe("bounded preparation and ordered isolated application", () => {
         const serial = await build(false);
         const concurrent = await build(true);
         expect(concurrent).toEqual(serial);
+        expect(await build(true, true)).toEqual(serial);
         expect(concurrent.related.textEmbeddingData!.textItems).toContain(
             "metadata-only",
         );
@@ -220,7 +222,7 @@ describe("bounded preparation and ordered isolated application", () => {
     });
 
     test("same-owner preparation preserves discoveries inherited by later messages", async () => {
-        const build = async (prepared: boolean) => {
+        const build = async (prepared: boolean, overlap = false) => {
             const texts = [
                 "Launch was 2024-05-01.",
                 "That was the earlier event.",
@@ -245,6 +247,7 @@ describe("bounded preparation and ordered isolated application", () => {
             second.partOrdinal = 1;
             const prompts: string[] = [];
             const settings = createConversationSettings(undefined, 2);
+            settings.overlapMessageEmbeddings = overlap;
             settings.semanticRefIndexSettings.knowledgeExtractor = {
                 settings: { maxContextLength: 4096 },
                 extract: async () => ({
@@ -307,7 +310,159 @@ describe("bounded preparation and ordered isolated application", () => {
             };
         };
         expect(await build(true)).toEqual(await build(false));
+        expect(await build(true, true)).toEqual(await build(false));
     });
+
+    test.each([false, true])(
+        "message embeddings overlap extraction only when enabled: %s",
+        async (overlap) => {
+            const extracting = deferred(),
+                embedding = deferred(),
+                release = deferred();
+            let embeddingStarted = false;
+            const model: TextEmbeddingModel = {
+                maxBatchSize: 8,
+                generateEmbedding: async () => {
+                    embeddingStarted = true;
+                    embedding.resolve();
+                    await release.promise;
+                    return success([1, 0]);
+                },
+                generateEmbeddingBatch: async (texts) => {
+                    embeddingStarted = true;
+                    embedding.resolve();
+                    await release.promise;
+                    return success(texts.map(() => [1, 0]));
+                },
+            };
+            const settings = createConversationSettings(model, 2);
+            settings.preparedIndexing = { workers: 1, window: 1 };
+            settings.overlapMessageEmbeddings = overlap;
+            const knowledge = {
+                entities: [],
+                topics: [],
+                actions: [],
+                inverseActions: [],
+            };
+            settings.semanticRefIndexSettings.knowledgeExtractor = {
+                settings: { maxContextLength: 4096 },
+                extract: async () => knowledge,
+                extractWithRetry: async () => {
+                    extracting.resolve();
+                    await release.promise;
+                    return success(knowledge);
+                },
+            };
+            const conversation: IConversation = {
+                nameTag: "overlap",
+                tags: [],
+                messages: new MessageCollection([
+                    {
+                        textChunks: ["independent text"],
+                        tags: [],
+                        getKnowledge: () => undefined,
+                    },
+                ]),
+                semanticRefs: new SemanticRefCollection(),
+                semanticRefIndex: new TermToSemanticRefIndex(),
+                secondaryIndexes: new ConversationSecondaryIndexes(settings),
+            };
+            const work = buildConversationIndex(conversation, settings);
+            try {
+                await extracting.promise;
+                if (overlap) await embedding.promise;
+                expect(embeddingStarted).toBe(overlap);
+                expect(conversation.semanticRefs!.length).toBe(0);
+            } finally {
+                release.resolve();
+                await work;
+            }
+            expect(embeddingStarted).toBe(true);
+        },
+    );
+
+    test.each(["knowledge", "embedding", "cancellation"])(
+        "overlapped preparation drains both lanes without publication on %s",
+        async (failure) => {
+            const release = deferred(),
+                both = deferred();
+            const controller = new AbortController();
+            let started = 0,
+                finished = 0,
+                settled = false;
+            const lane = async (name: string) => {
+                if (++started === 2) both.resolve();
+                await release.promise;
+                finished++;
+                if (name === failure) throw new Error(`${name} failed`);
+            };
+            const model: TextEmbeddingModel = {
+                maxBatchSize: 8,
+                generateEmbedding: async () => {
+                    await lane("embedding");
+                    return success([1, 0]);
+                },
+                generateEmbeddingBatch: async (texts) => {
+                    await lane("embedding");
+                    return success(texts.map(() => [1, 0]));
+                },
+            };
+            const settings = createConversationSettings(model, 2);
+            settings.preparedIndexing = {
+                workers: 1,
+                window: 1,
+                signal: controller.signal,
+            };
+            settings.overlapMessageEmbeddings = true;
+            const knowledge = {
+                entities: [],
+                topics: [],
+                actions: [],
+                inverseActions: [],
+            };
+            settings.semanticRefIndexSettings.knowledgeExtractor = {
+                settings: { maxContextLength: 4096 },
+                extract: async () => knowledge,
+                extractWithRetry: async () => {
+                    await lane("knowledge");
+                    return success(knowledge);
+                },
+            };
+            const conversation: IConversation = {
+                nameTag: "drain",
+                tags: [],
+                messages: new MessageCollection([
+                    {
+                        textChunks: ["text"],
+                        tags: [],
+                        getKnowledge: () => undefined,
+                    },
+                ]),
+                semanticRefs: new SemanticRefCollection(),
+                semanticRefIndex: new TermToSemanticRefIndex(),
+                secondaryIndexes: new ConversationSecondaryIndexes(settings),
+            };
+            const work = buildConversationIndex(conversation, settings);
+            const outcome = work.catch((error: unknown) => {
+                settled = true;
+                return error;
+            });
+            await both.promise;
+            if (failure === "cancellation")
+                controller.abort(new Error("cancellation failed"));
+            expect(settled).toBe(false);
+            release.resolve();
+            expect(await outcome).toBeInstanceOf(Error);
+            expect(started).toBeGreaterThanOrEqual(2);
+            expect(finished).toBe(started);
+            expect(conversation.semanticRefs!.length).toBe(0);
+            expect(
+                (
+                    conversation.secondaryIndexes as ConversationSecondaryIndexes
+                ).messageIndex!.serialize().indexData?.embeddings,
+            ).toHaveLength(0);
+        },
+    );
 
     test("window and apply spans report only operation counts", async () => {
         const previous = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;

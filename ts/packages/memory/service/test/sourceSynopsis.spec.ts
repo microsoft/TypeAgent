@@ -1038,8 +1038,9 @@ describe("inline synopsis production lifecycle", () => {
     let root: string;
     let service: FileMemoryService;
     let model: DeterministicModel;
-    function open() {
+    function open(parallel = false) {
         return new FileMemoryService(root, {
+            performanceExperiments: parallel ? "indexing-parallel" : "",
             viewDrafts: false,
             informationalViews: false,
             sourceSynopses: true,
@@ -1061,11 +1062,12 @@ describe("inline synopsis production lifecycle", () => {
         corpusId: string,
         content: string,
         expected?: string,
+        sourceId = "worksheet",
     ) {
         const result = await service.ingestDocument({
             corpusId,
             source: {
-                sourceId: "worksheet",
+                sourceId,
                 sourceType: "markdown",
                 title: "Worksheet",
                 markdown: content,
@@ -1086,17 +1088,95 @@ describe("inline synopsis production lifecycle", () => {
     async function synopsis(
         corpusId: string,
         status: SourceSynopsis["status"] = "ready",
+        sourceId = "worksheet",
     ) {
         for (let i = 0; i < 1000; i++) {
             const result = await service.getSourceSynopsis({
                 corpusId,
-                sourceId: "worksheet",
+                sourceId,
             });
             if (result.status === status) return result;
             await new Promise((resolve) => setTimeout(resolve, 10));
         }
         throw new Error(`Synopsis did not reach ${status}`);
     }
+    test.each([false, true])(
+        "independent synopsis generation is bounded and opt-in: %s",
+        async (parallel) => {
+            await service.close();
+            service = open(parallel);
+            const defer = service.deferMaintenance();
+            const corpus = await service.createCorpus("Independent synopses");
+            const gates = Array.from({ length: 3 }, () => {
+                let resolve!: () => void;
+                return {
+                    promise: new Promise<void>((done) => {
+                        resolve = done;
+                    }),
+                    resolve: () => resolve(),
+                };
+            });
+            const entered = gates.map(() => {
+                let resolve!: () => void;
+                return {
+                    promise: new Promise<void>((done) => {
+                        resolve = done;
+                    }),
+                    resolve: () => resolve(),
+                };
+            });
+            const complete = model.complete.bind(model);
+            const starts: number[] = [];
+            model.complete = async (prompt) => {
+                const index = Number(
+                    /Source (\d)/.exec(readPrompt(prompt).text)![1],
+                );
+                starts.push(index);
+                entered[index].resolve();
+                await gates[index].promise;
+                return complete(prompt);
+            };
+            try {
+                for (let index = 0; index < 3; index++)
+                    await ingest(
+                        corpus.corpusId,
+                        `Source ${index} records independent evidence.`,
+                        undefined,
+                        `source-${index}`,
+                    );
+                defer();
+                await entered[0].promise;
+                if (parallel) await entered[1].promise;
+                expect(starts).toEqual(parallel ? [0, 1] : [0]);
+                gates[0].resolve();
+                if (parallel) {
+                    await new Promise((resolve) => setTimeout(resolve, 20));
+                    expect(starts).toEqual([0, 1]);
+                } else await entered[1].promise;
+                gates[1].resolve();
+                await entered[2].promise;
+                gates[2].resolve();
+                for (let index = 0; index < 3; index++)
+                    await synopsis(corpus.corpusId, "ready", `source-${index}`);
+                await service.close();
+                service = open(parallel);
+                await service.initialize();
+                for (let index = 0; index < 3; index++)
+                    expect(
+                        (
+                            await service.getSourceSynopsis({
+                                corpusId: corpus.corpusId,
+                                sourceId: `source-${index}`,
+                            })
+                        ).status,
+                    ).toBe("ready");
+            } finally {
+                defer();
+                for (const gate of gates) gate.resolve();
+            }
+        },
+    );
+
     test("nested foreground scopes defer synopses across corpora and drain the latest revisions", async () => {
         const release = service.deferMaintenance();
         const nested = service.deferMaintenance();
@@ -1223,47 +1303,55 @@ describe("inline synopsis production lifecycle", () => {
         expect(model.calls).toHaveLength(2);
     });
 
-    test("replacement rejects a late old-revision synopsis and restarts only the new semantic input", async () => {
-        const originalComplete = model.complete.bind(model);
-        let finish: (() => void) | undefined;
-        let start: (() => void) | undefined;
-        const started = new Promise<void>((resolve) => {
-            start = resolve;
-        });
-        model.complete = async (prompt) => {
-            const output = await originalComplete(prompt);
-            start?.();
-            return new Promise<string>((resolve) => {
-                finish = () => resolve(output);
+    test.each([false, true])(
+        "replacement rejects a late old-revision synopsis with parallelism %s",
+        async (parallel) => {
+            await service.close();
+            service = open(parallel);
+            const originalComplete = model.complete.bind(model);
+            let finish: (() => void) | undefined;
+            let start: (() => void) | undefined;
+            const started = new Promise<void>((resolve) => {
+                start = resolve;
             });
-        };
-        const corpus = await service.createCorpus("replace");
-        const old = await ingest(
-            corpus.corpusId,
-            "Obsolete local median 38 ms.",
-        );
-        await started;
-        await ingest(
-            corpus.corpusId,
-            "Current sample withdrawn after duplicated tracing.",
-            old.revisionId,
-        );
-        model.complete = originalComplete;
-        finish?.();
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        const current = await service.getSource(corpus.corpusId, "worksheet");
-        expect(
-            current?.revisions.find((r) => r.revisionId === old.revisionId)
-                ?.synopsis?.status,
-        ).not.toBe("ready");
-        await service.close();
-        service = open();
-        await service.initialize();
-        const output = await synopsis(corpus.corpusId);
-        expect(output.overview).toContain("withdrawn");
-        expect(output.overview).not.toContain("38 ms");
-        expect(output.revisionId).not.toBe(old.revisionId);
-    });
+            model.complete = async (prompt) => {
+                const output = await originalComplete(prompt);
+                start?.();
+                return new Promise<string>((resolve) => {
+                    finish = () => resolve(output);
+                });
+            };
+            const corpus = await service.createCorpus("replace");
+            const old = await ingest(
+                corpus.corpusId,
+                "Obsolete local median 38 ms.",
+            );
+            await started;
+            await ingest(
+                corpus.corpusId,
+                "Current sample withdrawn after duplicated tracing.",
+                old.revisionId,
+            );
+            model.complete = originalComplete;
+            finish?.();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const current = await service.getSource(
+                corpus.corpusId,
+                "worksheet",
+            );
+            expect(
+                current?.revisions.find((r) => r.revisionId === old.revisionId)
+                    ?.synopsis?.status,
+            ).not.toBe("ready");
+            await service.close();
+            service = open(parallel);
+            await service.initialize();
+            const output = await synopsis(corpus.corpusId);
+            expect(output.overview).toContain("withdrawn");
+            expect(output.overview).not.toContain("38 ms");
+            expect(output.revisionId).not.toBe(old.revisionId);
+        },
+    );
 
     test("authorized purge recovery discards an in-flight synopsis without failing shutdown", async () => {
         const complete = model.complete.bind(model);

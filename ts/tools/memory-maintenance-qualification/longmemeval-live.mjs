@@ -77,6 +77,9 @@ export function recordBenchmarkArm(state, capabilities, resume, options = {}) {
         answerMode: "default",
         preparedIndexing:
             process.env.TYPEAGENT_MEMORY_PREPARED_INDEXING === "1",
+        indexingParallel: (process.env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS ?? "")
+            .split(",")
+            .some((name) => name.trim() === "indexing-parallel"),
         searchTrace: process.env.TYPEAGENT_MEMORY_SEARCH_TRACE === "1",
         indexingLifecycle: options.indexingPilot === true,
         caseStoreIsolation: options.indexingPilot
@@ -151,10 +154,11 @@ function validateBenchmarkSpec(spec) {
             !spec.continuation,
             "Pilot arms do not permit warm continuations",
         );
-        assert.equal(
-            spec.questionIds?.length,
-            3,
-            "Indexing pilot requires three questions",
+        assert.ok(
+            spec.questionIds?.length === 3 ||
+                (spec.indexingComparison === "indexing-parallel" &&
+                    spec.questionIds?.length === 1),
+            "Indexing pilot requires three questions, or one complete parallel-comparison history",
         );
         assert.match(spec.expectedConfigurationHash ?? "", /^[a-f0-9]{64}$/);
         assert.match(spec.expectedDependencyHash ?? "", /^[a-f0-9]{64}$/);
@@ -916,6 +920,7 @@ export async function main(args = process.argv.slice(2)) {
             "question-ids": { type: "string" },
             "knowledge-minutes": { type: "string", default: "10" },
             "indexing-pilot": { type: "boolean" },
+            "indexing-comparison": { type: "string" },
             "expected-configuration-hash": { type: "string" },
             "expected-dependency-hash": { type: "string" },
             "expected-embedding-configuration-hash": { type: "string" },
@@ -992,6 +997,7 @@ export async function main(args = process.argv.slice(2)) {
         ...(values["indexing-pilot"]
             ? {
                   indexingPilot: true,
+                  indexingComparison: values["indexing-comparison"],
                   expectedConfigurationHash:
                       values["expected-configuration-hash"],
                   expectedDependencyHash: values["expected-dependency-hash"],

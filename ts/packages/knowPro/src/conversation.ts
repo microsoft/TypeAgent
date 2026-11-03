@@ -21,6 +21,7 @@ import { SemanticRefIndexSettings } from "./conversationIndex.js";
 
 export interface ConversationSettings {
     preparedIndexing?: import("./preparedIndexing.js").PreparedIndexingSettings;
+    overlapMessageEmbeddings?: boolean;
     relatedTermIndexSettings: RelatedTermIndexSettings;
     threadSettings: TextEmbeddingIndexSettings;
     messageTextIndexSettings: MessageTextIndexSettings;

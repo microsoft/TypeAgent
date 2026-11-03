@@ -12,6 +12,7 @@ export const memoryPerformanceExperimentNames = [
     "graph-parallel",
     "foreground-priority",
     "lazy-collections",
+    "indexing-parallel",
 ] as const;
 
 export type MemoryPerformanceExperiment =
@@ -42,7 +43,7 @@ export function memoryPerformanceExperiments(
             name === "p2"
                 ? memoryPerformanceExperimentNames.slice(0, 5)
                 : name === "p3"
-                  ? memoryPerformanceExperimentNames.slice(5)
+                  ? memoryPerformanceExperimentNames.slice(5, 9)
                   : memoryPerformanceExperimentNames.filter(
                         (item) => item === name,
                     );

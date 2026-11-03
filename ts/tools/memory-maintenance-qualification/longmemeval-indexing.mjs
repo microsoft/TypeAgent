@@ -192,6 +192,51 @@ export async function preflight(pilot, product) {
     };
 }
 
+export function productionPlan(pilot) {
+    const comparison = pilot.inputs?.comparison ?? "prepared-indexing";
+    assert.ok(
+        ["prepared-indexing", "indexing-parallel"].includes(comparison),
+        "Unknown production comparison",
+    );
+    assert.ok(
+        pilot.inputs?.firstCaseOnly === undefined ||
+            typeof pilot.inputs.firstCaseOnly === "boolean",
+        "Invalid frozen first-case selection",
+    );
+    return {
+        comparison,
+        questionIds: pilot.inputs?.firstCaseOnly
+            ? pilot.manifest.questionIds.slice(0, 1)
+            : pilot.manifest.questionIds,
+    };
+}
+
+export function productionArmEnvironment(
+    pilot,
+    arm,
+    environment = process.env,
+) {
+    assert.ok(["A0", "A1"].includes(arm), "Choose A0 or A1");
+    const { comparison } = productionPlan(pilot);
+    const env = { ...environment, TYPEAGENT_MEMORY_SEARCH_TRACE: "1" };
+    if (comparison === "indexing-parallel") {
+        assert.equal(
+            env.TYPEAGENT_MEMORY_TOPIC_CONCURRENCY,
+            undefined,
+            "Parallel indexing comparison requires default topic concurrency",
+        );
+        env.TYPEAGENT_MEMORY_PREPARED_INDEXING = "1";
+        const experiments = (env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS ?? "")
+            .split(",")
+            .map((name) => name.trim())
+            .filter((name) => name && name !== "indexing-parallel");
+        if (arm === "A1") experiments.push("indexing-parallel");
+        env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS = experiments.join(",");
+    } else if (arm === "A1") env.TYPEAGENT_MEMORY_PREPARED_INDEXING = "1";
+    else delete env.TYPEAGENT_MEMORY_PREPARED_INDEXING;
+    return env;
+}
+
 async function childAttempt(product, pilot, approval, arm) {
     assert.ok(["A0", "A1"].includes(arm), "Choose A0 or A1");
     for (const key of ["datasetPath", "judgePath"]) {
@@ -215,9 +260,8 @@ async function childAttempt(product, pilot, approval, arm) {
         );
     const directory = path.join(pilot.root, arm);
     await mkdir(directory);
-    const env = { ...process.env, TYPEAGENT_MEMORY_SEARCH_TRACE: "1" };
-    if (arm === "A1") env.TYPEAGENT_MEMORY_PREPARED_INDEXING = "1";
-    else delete env.TYPEAGENT_MEMORY_PREPARED_INDEXING;
+    const plan = productionPlan(pilot);
+    const env = productionArmEnvironment(pilot, arm);
     const args = [
         path.join(toolRoot, "longmemeval-live.mjs"),
         "--product",
@@ -229,9 +273,9 @@ async function childAttempt(product, pilot, approval, arm) {
         "--output",
         directory,
         "--question-ids",
-        pilot.manifest.questionIds.join(","),
+        plan.questionIds.join(","),
         "--max-questions",
-        "3",
+        String(plan.questionIds.length),
         "--work-minutes",
         approval.workMinutes === null
             ? "unlimited"
@@ -240,6 +284,8 @@ async function childAttempt(product, pilot, approval, arm) {
         String(approval.knowledgeMinutes ?? 10),
         "--authorized-live-benchmark",
         "--indexing-pilot",
+        "--indexing-comparison",
+        plan.comparison,
         "--expected-configuration-hash",
         approval.chatConfigurationHash,
         "--expected-dependency-hash",
@@ -311,7 +357,12 @@ async function childAttempt(product, pilot, approval, arm) {
         const state = await readJson(
             path.join(announced, "benchmark-state.json"),
         );
-        assert.equal(state.arm.preparedIndexing, arm === "A1");
+        assert.equal(
+            state.arm.preparedIndexing,
+            env.TYPEAGENT_MEMORY_PREPARED_INDEXING === "1",
+        );
+        if (plan.comparison === "indexing-parallel")
+            assert.equal(state.arm.indexingParallel, arm === "A1");
         assert.equal(state.arm.searchTrace, true);
         assert.equal(state.arm.indexingLifecycle, true);
         assert.equal(state.arm.caseStoreIsolation, "fresh-store-per-case");
@@ -327,7 +378,7 @@ async function childAttempt(product, pilot, approval, arm) {
         if (state.outcome === "DIAGNOSTIC_SELECTION_COMPLETED")
             assert.equal(
                 prepared,
-                arm === "A1",
+                env.TYPEAGENT_MEMORY_PREPARED_INDEXING === "1",
                 "Ingestion traces did not confirm the requested preparation arm",
             );
         await writeNew(
@@ -559,6 +610,7 @@ export async function reportPilot(pilot) {
     if (human) validateReview(pilot, arms, human);
     return {
         schemaVersion: 1,
+        productionPlan: productionPlan(pilot),
         manifestHash: digest(encode(pilot.manifest)),
         arms,
         companion,
@@ -573,7 +625,10 @@ export async function reportPilot(pilot) {
             ? { replay: "passed", liveCancellation: companion.liveCancellation }
             : "incomplete",
         performance: "descriptive-only; no-speedup-or-tail-latency-claim",
-        pairedPerformance: pairedPerformance(arms, pilot.manifest.questionIds),
+        pairedPerformance: pairedPerformance(
+            arms,
+            productionPlan(pilot).questionIds,
+        ),
         humanReview: human ?? "not-recorded",
         actualArmOrder: arms
             .filter((arm) => arm.started)
@@ -586,7 +641,7 @@ export async function reportPilot(pilot) {
             path.join(pilot.root, "companion-attempt", "termination.json"),
         ),
         limitations: [
-            "three selected histories",
+            `${productionPlan(pilot).questionIds.length} complete selected histories scheduled for production`,
             "no official 500-question score",
             "no enforced monetary cap",
             "platform-specific until separately executed",
@@ -681,7 +736,7 @@ async function optionalJson(file) {
 }
 
 async function armReport(pilot, arm) {
-    const unobserved = pilot.manifest.questionIds.map((id) => ({
+    const unobserved = productionPlan(pilot).questionIds.map((id) => ({
         id,
         status: "unobserved",
         caseHash: null,
@@ -712,7 +767,7 @@ async function armReport(pilot, arm) {
         configuration: state.arm,
         configurationCheckpoint: state.configuration,
         actualCaseOrder: Object.keys(state.cases),
-        cases: pilot.manifest.questionIds.map((id) => {
+        cases: productionPlan(pilot).questionIds.map((id) => {
             const record = state.cases[id];
             return {
                 ...record,
@@ -734,7 +789,7 @@ export function reviewTemplate(pilot, arms) {
         arms.every((arm) =>
             arm.cases?.every((row) => row.status === "complete"),
         ),
-        "Review requires six completed live cases",
+        "Review requires all scheduled live cases to be complete",
     );
     return {
         manifestHash: digest(encode(pilot.manifest)),
@@ -840,6 +895,8 @@ async function preparePilot(values, product) {
             datasetPath: path.resolve(values.dataset),
             judgePath: judge,
             judgeSha256: digest(judgeSource),
+            comparison: values.comparison,
+            firstCaseOnly: values["first-case-only"],
         },
     );
 }
@@ -855,6 +912,8 @@ export async function main(args = process.argv.slice(2)) {
             "judge-source": { type: "string" },
             approval: { type: "string" },
             seed: { type: "string", default: "indexing-pilot-2026-11-03" },
+            comparison: { type: "string", default: "prepared-indexing" },
+            "first-case-only": { type: "boolean", default: false },
             arm: { type: "string" },
             spec: { type: "string" },
             baseline: { type: "string" },

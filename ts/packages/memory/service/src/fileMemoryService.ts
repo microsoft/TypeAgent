@@ -876,9 +876,19 @@ function configuredTopicCuration(
     options: FileMemoryServiceOptions,
     decisionTopics: boolean,
     curatedTopics: boolean,
+    parallel: boolean,
 ): TopicCurationSettings | undefined {
-    if (!options.topicCuration) return undefined;
-    validateTopicCurationSettings(options.topicCuration);
+    const parallelDefaults =
+        parallel &&
+        !decisionTopics &&
+        curatedTopics &&
+        !options.viewSynthesisAdapter?.generateTopics;
+    if (!options.topicCuration && !parallelDefaults) return undefined;
+    const settings: TopicCurationSettings = {
+        ...(parallelDefaults ? { concurrency: 2 } : {}),
+        ...options.topicCuration,
+    };
+    validateTopicCurationSettings(settings);
     if (
         decisionTopics ||
         !curatedTopics ||
@@ -887,7 +897,7 @@ function configuredTopicCuration(
         throw new Error(
             "Generative topic settings require generative curated topics without a custom generator",
         );
-    return { ...options.topicCuration };
+    return settings;
 }
 
 function now(): string {
@@ -1966,6 +1976,7 @@ export class FileMemoryService
             options,
             this.decisionTopics,
             this.curatedTopics,
+            this.experiments.has("indexing-parallel"),
         );
         this.topicPolicy = topicCurationPolicy(
             this.curatedTopics,
@@ -2424,13 +2435,20 @@ export class FileMemoryService
                 ? openai.createJsonChatModel(this.fastQueryModelEndpoint)
                 : undefined;
         if (options.indexFactory) return options.indexFactory;
-        if (!queryExperiments && !options.indexSettingsFactory)
+        if (
+            !queryExperiments &&
+            !options.indexSettingsFactory &&
+            !this.experiments.has("indexing-parallel")
+        )
             return createKnowProCorpusIndex;
         return (corpusId, directory) =>
             createKnowProCorpusIndex(corpusId, directory, () => {
                 const settings =
                     options.indexSettingsFactory?.() ??
                     createDocMemorySettings();
+                if (this.experiments.has("indexing-parallel"))
+                    settings.conversationSettings.overlapMessageEmbeddings =
+                        true;
                 if (!queryExperiments) return settings;
                 queryModel ??=
                     settings.queryLanguageModel ?? settings.languageModel;
@@ -15945,177 +15963,189 @@ export class FileMemoryService
         const runtime = await this.getCorpusRuntime(corpusId, true);
         if (runtime.manifest.authorizedSourceRemoval) return;
         const ids = runtime.manifest.sources.map((source) => source.sourceId);
-        for (const sourceId of ids) {
-            if (this.maintenance.isDeferred(corpusId)) return;
-            const capture = await this.enqueueWrite(
-                corpusId,
-                async () => {
-                    if (this.maintenance.isDeferred(corpusId)) return undefined;
-                    const current = await this.getCorpusRuntime(corpusId, true);
-                    if (current.manifest.authorizedSourceRemoval)
-                        return undefined;
-                    const candidate = structuredClone(current.manifest);
-                    const source = candidate.sources.find(
-                        (item) => item.sourceId === sourceId,
-                    );
-                    const revision = source?.revisions.find(
-                        (item) => item.revisionId === source.activeRevisionId,
-                    );
-                    if (
-                        !source ||
-                        !revision ||
-                        !this.synopsisEligible(source, revision)
-                    )
-                        return undefined;
-                    const inputHash = synopsisInputHash(
+        const concurrency = this.experiments.has("indexing-parallel") ? 2 : 1;
+        for (let offset = 0; offset < ids.length; offset += concurrency) {
+            const outcomes = await Promise.allSettled(
+                ids
+                    .slice(offset, offset + concurrency)
+                    .map((sourceId) =>
+                        this.maintainSourceSynopsis(corpusId, sourceId),
+                    ),
+            );
+            for (const outcome of outcomes)
+                if (outcome.status === "rejected") throw outcome.reason;
+        }
+    }
+
+    private async maintainSourceSynopsis(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<void> {
+        if (this.maintenance.isDeferred(corpusId)) return;
+        const capture = await this.enqueueWrite(
+            corpusId,
+            async () => {
+                if (this.maintenance.isDeferred(corpusId)) return undefined;
+                const current = await this.getCorpusRuntime(corpusId, true);
+                if (current.manifest.authorizedSourceRemoval) return undefined;
+                const candidate = structuredClone(current.manifest);
+                const source = candidate.sources.find(
+                    (item) => item.sourceId === sourceId,
+                );
+                const revision = source?.revisions.find(
+                    (item) => item.revisionId === source.activeRevisionId,
+                );
+                if (
+                    !source ||
+                    !revision ||
+                    !this.synopsisEligible(source, revision)
+                )
+                    return undefined;
+                const inputHash = synopsisInputHash(
+                    source,
+                    revision,
+                    this.sourceSynopsisIdentity(),
+                    true,
+                );
+                const prior = revision.synopsis;
+                if (
+                    prior?.inputHash === inputHash &&
+                    prior.status === "pending" &&
+                    prior.attempts >= 2
+                ) {
+                    revision.synopsis = {
+                        ...prior,
+                        status: "failed",
+                        reason: "Interrupted synopsis exhausted its automatic retry; waiting for changed input",
+                    };
+                    await this.writeManifest(corpusId, candidate);
+                    current.manifest = candidate;
+                    return undefined;
+                }
+                if (
+                    prior?.inputHash === inputHash &&
+                    (prior.status === "ready" ||
+                        prior.status === "unavailable" ||
+                        prior.attempts >= 2)
+                )
+                    return undefined;
+                const pending = this.emptySourceSynopsis(source, revision);
+                revision.synopsis = {
+                    ...pending,
+                    generatedVersion: prior?.generatedVersion ?? 0,
+                    attempts:
+                        prior?.inputHash === inputHash ? prior.attempts + 1 : 1,
+                };
+                await this.writeManifest(corpusId, candidate);
+                current.manifest = candidate;
+                return {
+                    source: structuredClone(source),
+                    revision: structuredClone(revision),
+                    inputHash,
+                };
+            },
+            true,
+        );
+        const synopsisModel = this.synopsisModel;
+        if (!capture || !synopsisModel) return;
+        const controller = new AbortController();
+        const key = `synopsis:${corpusId}:${sourceId}`;
+        this.controllers.set(key, controller);
+        const signal = AbortSignal.any([
+            controller.signal,
+            this.maintenance.signal,
+            AbortSignal.timeout(90_000),
+        ]);
+        let generated:
+            | Awaited<ReturnType<typeof generateSourceSynopsis>>
+            | undefined;
+        let failure: string | undefined;
+        let failedCoverage = capture.revision.synopsis!.coverage;
+        try {
+            generated = await abortable(
+                runWithSearchTiming(
+                    key,
+                    "memory.synopsis",
+                    () =>
+                        timeSearchStage("synopsis.generate.total", () =>
+                            generateSourceSynopsis(
+                                capture.source,
+                                capture.revision,
+                                capture.revision.content,
+                                synopsisModel,
+                                signal,
+                                (coverage) => {
+                                    failedCoverage = coverage;
+                                },
+                            ),
+                        ),
+                    {
+                        corpusId,
+                        sourceId,
+                        revisionId: capture.revision.revisionId,
+                    },
+                ),
+                signal,
+            );
+        } catch (error) {
+            failure = safeError(error);
+        } finally {
+            this.controllers.delete(key);
+        }
+        if (this.closed) return;
+        await this.enqueueWrite(
+            corpusId,
+            async () => {
+                const current = await this.getCorpusRuntime(corpusId, true);
+                if (current.manifest.authorizedSourceRemoval) return;
+                const candidate = structuredClone(current.manifest);
+                const source = candidate.sources.find(
+                    (item) => item.sourceId === sourceId,
+                );
+                const revision = source?.revisions.find(
+                    (item) => item.revisionId === capture.revision.revisionId,
+                );
+                if (
+                    !source ||
+                    !revision ||
+                    !this.synopsisEligible(source, revision) ||
+                    synopsisInputHash(
                         source,
                         revision,
                         this.sourceSynopsisIdentity(),
                         true,
-                    );
-                    const prior = revision.synopsis;
-                    if (
-                        prior?.inputHash === inputHash &&
-                        prior.status === "pending" &&
-                        prior.attempts >= 2
-                    ) {
-                        revision.synopsis = {
-                            ...prior,
-                            status: "failed",
-                            reason: "Interrupted synopsis exhausted its automatic retry; waiting for changed input",
-                        };
-                        await this.writeManifest(corpusId, candidate);
-                        current.manifest = candidate;
-                        return undefined;
-                    }
-                    if (
-                        prior?.inputHash === inputHash &&
-                        (prior.status === "ready" ||
-                            prior.status === "unavailable" ||
-                            prior.attempts >= 2)
-                    )
-                        return undefined;
-                    const pending = this.emptySourceSynopsis(source, revision);
+                    ) !== capture.inputHash
+                )
+                    return;
+                await this.assertInfluenceEligible({
+                    corpusId,
+                    influenceSources:
+                        capture.revision.synopsis!.influenceSources,
+                });
+                const detail = revision.synopsis!;
+                if (generated)
                     revision.synopsis = {
-                        ...pending,
-                        generatedVersion: prior?.generatedVersion ?? 0,
-                        attempts:
-                            prior?.inputHash === inputHash
-                                ? prior.attempts + 1
-                                : 1,
+                        ...detail,
+                        ...generated,
+                        status: "ready",
+                        generatedAt: now(),
+                        generatedVersion: detail.generatedVersion + 1,
                     };
-                    await this.writeManifest(corpusId, candidate);
-                    current.manifest = candidate;
-                    return {
-                        source: structuredClone(source),
-                        revision: structuredClone(revision),
-                        inputHash,
+                else
+                    revision.synopsis = {
+                        ...detail,
+                        status: "failed",
+                        reason: failure ?? "Synopsis generation failed",
+                        coverage: failedCoverage,
+                        limitations: [
+                            "Generation failed; scan counts describe submitted input, not accepted semantic coverage.",
+                        ],
                     };
-                },
-                true,
-            );
-            const synopsisModel = this.synopsisModel;
-            if (!capture || !synopsisModel) continue;
-            const controller = new AbortController();
-            const key = `synopsis:${corpusId}:${sourceId}`;
-            this.controllers.set(key, controller);
-            const signal = AbortSignal.any([
-                controller.signal,
-                this.maintenance.signal,
-                AbortSignal.timeout(90_000),
-            ]);
-            let generated:
-                | Awaited<ReturnType<typeof generateSourceSynopsis>>
-                | undefined;
-            let failure: string | undefined;
-            let failedCoverage = capture.revision.synopsis!.coverage;
-            try {
-                generated = await abortable(
-                    runWithSearchTiming(
-                        key,
-                        "memory.synopsis",
-                        () =>
-                            timeSearchStage("synopsis.generate.total", () =>
-                                generateSourceSynopsis(
-                                    capture.source,
-                                    capture.revision,
-                                    capture.revision.content,
-                                    synopsisModel,
-                                    signal,
-                                    (coverage) => {
-                                        failedCoverage = coverage;
-                                    },
-                                ),
-                            ),
-                        {
-                            corpusId,
-                            sourceId,
-                            revisionId: capture.revision.revisionId,
-                        },
-                    ),
-                    signal,
-                );
-            } catch (error) {
-                failure = safeError(error);
-            } finally {
-                this.controllers.delete(key);
-            }
-            if (this.closed) return;
-            await this.enqueueWrite(
-                corpusId,
-                async () => {
-                    const current = await this.getCorpusRuntime(corpusId, true);
-                    if (current.manifest.authorizedSourceRemoval) return;
-                    const candidate = structuredClone(current.manifest);
-                    const source = candidate.sources.find(
-                        (item) => item.sourceId === sourceId,
-                    );
-                    const revision = source?.revisions.find(
-                        (item) =>
-                            item.revisionId === capture.revision.revisionId,
-                    );
-                    if (
-                        !source ||
-                        !revision ||
-                        !this.synopsisEligible(source, revision) ||
-                        synopsisInputHash(
-                            source,
-                            revision,
-                            this.sourceSynopsisIdentity(),
-                            true,
-                        ) !== capture.inputHash
-                    )
-                        return;
-                    await this.assertInfluenceEligible({
-                        corpusId,
-                        influenceSources:
-                            capture.revision.synopsis!.influenceSources,
-                    });
-                    const detail = revision.synopsis!;
-                    if (generated)
-                        revision.synopsis = {
-                            ...detail,
-                            ...generated,
-                            status: "ready",
-                            generatedAt: now(),
-                            generatedVersion: detail.generatedVersion + 1,
-                        };
-                    else
-                        revision.synopsis = {
-                            ...detail,
-                            status: "failed",
-                            reason: failure ?? "Synopsis generation failed",
-                            coverage: failedCoverage,
-                            limitations: [
-                                "Generation failed; scan counts describe submitted input, not accepted semantic coverage.",
-                            ],
-                        };
-                    await this.writeManifest(corpusId, candidate);
-                    current.manifest = candidate;
-                },
-                true,
-            );
-        }
+                await this.writeManifest(corpusId, candidate);
+                current.manifest = candidate;
+            },
+            true,
+        );
     }
 
     private collectEventSuppressions(

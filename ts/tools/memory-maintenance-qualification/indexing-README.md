@@ -66,6 +66,29 @@ Time and question limits are **not financial limits**.
 
 ## Run the two live production arms
 
+For a same-build comparison of the three parallelization changes, prepare a
+**new** pilot with `--comparison indexing-parallel`. Both arms then enable
+prepared indexing. A0 removes only the `indexing-parallel` performance experiment;
+A1 enables it. Other inherited performance experiments remain identical.
+An explicit `TYPEAGENT_MEMORY_TOPIC_CONCURRENCY` is rejected rather than
+silently overriding the treatment. Each recorded arm includes `indexingParallel`.
+
+Add `--first-case-only` to freeze one complete history for this comparison.
+This schedules the first deterministically selected case in both arms, without
+trimming any session or turn. The other two histories remain available for the
+independent companion lanes but are not scheduled production cases. Reports
+record the comparison and scheduled IDs. This is a bundled intervention, not
+an attribution of savings to each change or an official accuracy run.
+
+```powershell
+node $tool prepare --product $product --directory $pilot --dataset $dataset --judge-source $judge --comparison indexing-parallel --first-case-only
+node $tool preflight --product $product --directory $pilot
+```
+
+Authorize the new frozen checkpoint separately. Overall unlimited work does
+not remove the existing finite production knowledge-readiness timeout; failures
+and completed ingestion timings remain distinct from successful readiness.
+
 Use the approved JSON path below. The tool does not infer approval from this
 guide, the implementation request or an existing model configuration.
 
@@ -75,19 +98,21 @@ node $tool live --product $product --directory $pilot --approval $approval --arm
 node $tool live --product $product --directory $pilot --approval $approval --arm A1
 ```
 
-A0 removes `TYPEAGENT_MEMORY_PREPARED_INDEXING`; A1 sets it to `1`. Both enable
+For the default `prepared-indexing` comparison, A0 removes
+`TYPEAGENT_MEMORY_PREPARED_INDEXING`; A1 sets it to `1`. Both enable
 the same timing instrumentation. Each invocation has at most three questions
 and the existing bounded startup policy. Finite work intervals have a five-minute
 cleanup reserve; explicitly unlimited work has no overall deadline.
 A1 requires a terminated A0 attempt. There is no automatic
 retry, continuation or invocation allowance expansion.
 
-The same-revision comparison isolates preparation, not all indexing changes.
+The default same-revision comparison isolates preparation, not all indexing changes.
 The frozen schedule runs A0 then A1, rather than interleaving cases. Report this
 ordering confound. Actual case order, effective service capabilities, model
 receipts, provider responses, source mappings, answer, reader evidence, citations
 and pinned-prompt judge outcomes remain in private artifacts. Full completed
-arms must show preparation stages present only in A1.
+arms in the default comparison must show preparation stages present only in A1.
+In the parallel comparison they must be present in both arms.
 Each case uses a fresh store. Model/process/provider/OS caches are not certified
 cold; the three cases within an arm still share a process.
 
