@@ -9,6 +9,7 @@ import {
 import { z } from "zod";
 import { viewProviderIdentitySchema } from "./viewProtocol.js";
 import { schemaValueSchema } from "./schemaViewProtocol.js";
+import { frameSearchFilterSchema } from "./frameProtocol.js";
 
 export const memoryToolNames = {
     corpusCreate: "memory_corpus_create",
@@ -543,6 +544,7 @@ export const eventForgetResultSchema = z.object({
 });
 
 export const searchRequestSchema = z.object({
+    frameFilter: frameSearchFilterSchema.optional(),
     retrievalPolicy: z.enum(["sourcesOnly", "sourcesAndViews"]).optional(),
     indexedFragments: z.boolean().optional(),
     corpusId: identifierSchema,
@@ -939,6 +941,7 @@ export const capabilitiesSchema = z.object({
         memoryUnderstanding: z.boolean().optional(),
         memoryDocumentUnderstanding: z.boolean().optional(),
         sourceSynopses: z.boolean().optional(),
+        dataFrames: z.boolean().optional(),
         agentSessionImportTypes: z
             .enum(["agent-session-jsonl", "copilot-session-jsonl"])
             .array()

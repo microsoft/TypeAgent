@@ -48,34 +48,37 @@ export class SqliteDataFrame implements kp.dataFrame.IDataFrame {
         columnValue: kp.dataFrame.DataFrameValue,
         op: kp.ComparisonOp,
     ): kp.dataFrame.DataFrameRow[] | undefined {
-        const stmt = this.sqlGet(columnName, op);
         const rows: kp.dataFrame.DataFrameRow[] = [];
+        if (!this.columns.has(columnName))
+            throw new Error(`Column ${columnName} not found in ${this.name}`);
+        if (columnValue === undefined) return undefined;
+        const stmt = this.sqlGet(columnName, op);
         for (const row of stmt.iterate(columnValue)) {
             rows.push(this.toDataFrameRow(row));
         }
-        return rows;
+        return rows.length ? rows : undefined;
     }
 
     public findRows(
         searchTerms: kp.dataFrame.DataFrameTermGroup,
     ): kp.dataFrame.DataFrameRow[] | undefined {
         const dfRows: kp.dataFrame.DataFrameRow[] = [];
-        const stmt = this.queryRows(searchTerms);
-        for (const row of stmt.iterate()) {
+        const { stmt, values } = this.queryRows(searchTerms);
+        for (const row of stmt.iterate(...values)) {
             dfRows.push(this.toDataFrameRow(row));
         }
-        return dfRows;
+        return dfRows.length ? dfRows : undefined;
     }
 
     public findSources(
         searchTerms: kp.dataFrame.DataFrameTermGroup,
     ): kp.dataFrame.RowSourceRef[] | undefined {
         const sources: kp.dataFrame.RowSourceRef[] = [];
-        const stmt = this.queryRows(searchTerms);
-        for (const row of stmt.iterate()) {
+        const { stmt, values } = this.queryRows(searchTerms);
+        for (const row of stmt.iterate(...values)) {
             sources.push(this.deserializeSourceRef(row as SqliteDataFrameRow));
         }
-        return sources;
+        return sources.length ? sources : undefined;
     }
 
     public *[Symbol.iterator](): Iterator<kp.dataFrame.DataFrameRow> {
@@ -87,19 +90,58 @@ export class SqliteDataFrame implements kp.dataFrame.IDataFrame {
         }
     }
 
-    private queryRows(
-        searchTerms: kp.dataFrame.DataFrameTermGroup,
-    ): sqlite.Statement {
-        let sql = `SELECT sourceRef from ${this.name} WHERE `;
+    private queryRows(searchTerms: kp.dataFrame.DataFrameTermGroup): {
+        stmt: sqlite.Statement;
+        values: (string | number)[];
+    } {
+        const values = searchTerms.terms.map((term) => {
+            const def = this.columns.get(term.columnName);
+            if (!def)
+                throw new Error(`Unknown dataframe column ${term.columnName}`);
+            if (def.type === "string") return term.columnValue.term.text;
+            const number = Number(term.columnValue.term.text);
+            if (!term.columnValue.term.text.trim() || !Number.isFinite(number))
+                throw new Error(
+                    `Invalid numeric dataframe value for ${term.columnName}`,
+                );
+            return number;
+        });
+        let sql = `SELECT * from ${quoteIdentifier(this.name)} WHERE `;
         const where = dataFrameTermGroupToSql(searchTerms, this.columns);
+        if (searchTerms.booleanOp === "or_max" && searchTerms.terms.length) {
+            const hits = searchTerms.terms
+                .map(
+                    (term) =>
+                        `CASE WHEN ${dataFrameSearchTermToSql(term, this.columns.get(term.columnName)!)} THEN 1 ELSE 0 END`,
+                )
+                .join(" + ");
+            return {
+                stmt: this.db.prepare(`WITH matched AS (
+                    SELECT *, (${hits}) AS df_hits FROM ${quoteIdentifier(this.name)}
+                ) SELECT * FROM matched WHERE df_hits>0 AND df_hits=(SELECT MAX(df_hits) FROM matched)`),
+                values,
+            };
+        }
         sql += where;
-        return this.db.prepare(sql);
+        return { stmt: this.db.prepare(sql), values };
     }
 
     private toDataFrameRow(row: unknown): kp.dataFrame.DataFrameRow {
+        const record: kp.dataFrame.DataFrameRecord = {};
+        const data = row as Record<string, unknown>;
+        for (const name of this.columns.keys()) {
+            const value = data[name];
+            if (
+                value !== null &&
+                typeof value !== "number" &&
+                typeof value !== "string"
+            )
+                throw new Error(`Invalid stored dataframe value for ${name}`);
+            record[name] = value === null ? undefined : value;
+        }
         return {
             sourceRef: this.deserializeSourceRef(row as SqliteDataFrameRow),
-            record: row as kp.dataFrame.DataFrameRecord,
+            record,
         };
     }
 
@@ -110,10 +152,10 @@ export class SqliteDataFrame implements kp.dataFrame.IDataFrame {
     }
 
     private getAddValues(row: kp.dataFrame.DataFrameRow) {
-        const values: any[] = [];
+        const values: (string | number | null)[] = [];
         values.push(this.serializeSourceRef(row.sourceRef));
         for (const colName of this.recordColumnNames) {
-            values.push(row.record[colName]);
+            values.push(row.record[colName] ?? null);
         }
         return values;
     }
@@ -128,17 +170,17 @@ export class SqliteDataFrame implements kp.dataFrame.IDataFrame {
     }
 
     private sqlGet(columnName: string, op: kp.ComparisonOp) {
-        const sql = `SELECT * from ${this.name} WHERE ${columnName} ${comparisonOpToSql(op)} ?`;
+        const sql = `SELECT * from ${quoteIdentifier(this.name)} WHERE ${quoteIdentifier(columnName)} ${comparisonOpToSql(op)} ?`;
         return this.db.prepare(sql);
     }
 
     private sqlGetAll() {
-        return this.db.prepare(`SELECT * FROM ${this.name}`);
+        return this.db.prepare(`SELECT * FROM ${quoteIdentifier(this.name)}`);
     }
 
     private sqlAdd() {
         const columnNames = ["sourceRef", ...this.recordColumnNames];
-        const sql = `INSERT INTO ${this.name} (${columnNames.join(", ")}) VALUES (${sql_makeInPlaceholders(columnNames.length)})`;
+        const sql = `INSERT INTO ${quoteIdentifier(this.name)} (${columnNames.map(quoteIdentifier).join(", ")}) VALUES (${sql_makeInPlaceholders(columnNames.length)})`;
         return this.db.prepare(sql);
     }
 
@@ -174,16 +216,17 @@ export function dataFrameTermGroupToSql(
         clauses.push(dataFrameSearchTermToSql(searchTerm, colDef));
     }
     const boolOp = boolOpToSql(group);
-    return clauses.length > 1 ? `(${clauses.join(boolOp)})` : clauses[0];
+    return clauses.length > 1
+        ? `(${clauses.join(boolOp)})`
+        : (clauses[0] ?? "0");
 }
 
 export function dataFrameSearchTermToSql(
     term: kp.dataFrame.DataFrameSearchTerm,
-    colDef: kp.dataFrame.DataFrameColumnDef,
+    _colDef: kp.dataFrame.DataFrameColumnDef,
 ): string {
     const op = comparisonOpToSql(term.compareOp ?? kp.ComparisonOp.Eq);
-    const val = searchTermToSql(term.columnValue, colDef);
-    return `${term.columnName} ${op} ${val}`;
+    return `${quoteIdentifier(term.columnName)} ${op} ?`;
 }
 
 export function searchTermToSql(
@@ -192,9 +235,11 @@ export function searchTermToSql(
 ): string {
     const valueText = valueTerm.term.text;
     if (columnDef.type === "number") {
-        return valueText;
+        if (!valueText.trim() || !Number.isFinite(Number(valueText)))
+            throw new Error("Invalid numeric dataframe value");
+        return String(Number(valueText));
     }
-    return `'${valueText}'`;
+    return `'${valueText.replaceAll("'", "''")}'`;
 }
 
 export function boolOpToSql(group: kp.dataFrame.DataFrameTermGroup): string {
@@ -222,6 +267,7 @@ export function comparisonOpToSql(op: kp.ComparisonOp): string {
         case kp.ComparisonOp.Neq:
             return "!=";
     }
+    throw new Error(`Invalid dataframe comparison operator ${op}`);
 }
 
 export function dataFrameToSchemaSql(
@@ -237,7 +283,7 @@ export function dataFrameToSchemaSql(
     for (const [columnName, columnDef] of colDefs) {
         columns.push(columnDefToSchemaSql(columnName, columnDef));
     }
-    const schemaSql = `CREATE TABLE IF NOT EXISTS ${dfName} (\n${columns.join(", \n")}\n)`;
+    const schemaSql = `CREATE TABLE IF NOT EXISTS ${quoteIdentifier(dfName)} (\n${columns.join(", \n")}\n)`;
     return schemaSql;
 }
 
@@ -261,7 +307,7 @@ function columnDefToSchemaSql(
     columnName: string,
     columnDef: kp.dataFrame.DataFrameColumnDef,
 ): string {
-    let sql = columnName;
+    let sql = quoteIdentifier(columnName);
     if (columnDef.type === "string") {
         sql += " TEXT";
     } else {
@@ -279,6 +325,12 @@ function columnDefToIndexSql(
     columnName: string,
     columnDef: kp.dataFrame.DataFrameColumnDef,
 ) {
-    const sql = `CREATE INDEX IF NOT EXISTS idx_${columnName} ON ${dfName} (${columnName});`;
+    const sql = `CREATE INDEX IF NOT EXISTS ${quoteIdentifier(`idx_${dfName}_${columnName}`)} ON ${quoteIdentifier(dfName)} (${quoteIdentifier(columnName)});`;
     return sql;
+}
+
+function quoteIdentifier(name: string): string {
+    if (!name || name.includes("\0"))
+        throw new Error("Invalid dataframe identifier");
+    return `"${name.replaceAll('"', '""')}"`;
 }

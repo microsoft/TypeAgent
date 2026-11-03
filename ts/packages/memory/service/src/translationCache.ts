@@ -10,6 +10,18 @@ import {
 import type { Result } from "typechat";
 
 export class TranslationCache {
+    public frame<T>(
+        corpusId: string,
+        schemaIdentity: string,
+        question: string,
+        load: () => Promise<Result<T>>,
+    ): Promise<Result<T>> {
+        return this.translate(
+            corpusId,
+            [schemaIdentity, "frame-v1", question],
+            load,
+        );
+    }
     private readonly entries = new Map<
         string,
         {

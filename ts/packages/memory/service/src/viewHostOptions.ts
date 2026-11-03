@@ -81,6 +81,7 @@ export function getConfiguredMemoryViewOptions(
     environment: Readonly<Record<string, string | undefined>> = process.env,
 ): Pick<
     FileMemoryServiceOptions,
+    | "frameProjections"
     | "viewDrafts"
     | "extensionBuilds"
     | "extensionDiscovery"
@@ -118,6 +119,14 @@ export function getConfiguredMemoryViewOptions(
             "Generative topic settings cannot configure Decision topics",
         );
     return {
+        ...(environment.TYPEAGENT_MEMORY_DATAFRAMES === undefined
+            ? {}
+            : {
+                  frameProjections: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_DATAFRAMES,
+                      "TYPEAGENT_MEMORY_DATAFRAMES",
+                  ),
+              }),
         ...(environment.TYPEAGENT_MEMORY_UNDERSTANDING !== undefined
             ? {
                   understanding: parseViewDraftCapability(

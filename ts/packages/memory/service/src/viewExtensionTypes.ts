@@ -176,6 +176,7 @@ export interface ViewExtensionProvider {
         modelIdentity?: string;
         label: string;
         outputSchema: ViewPayloadSchema;
+        indexProjection?: import("@typeagent/knowpro").dataFrame.FrameProjectionDescriptor[];
         definitions: Array<{
             id: string;
             eligibilityVersion: string;

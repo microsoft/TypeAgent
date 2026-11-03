@@ -1736,6 +1736,89 @@ process.stdout.write(JSON.stringify(allowed && request.sourceId !== denied));`,
         return { corpus, request, options };
     }
 
+    test("admitted view frame declarations backfill validated block evidence without regeneration", async () => {
+        const fake = provider();
+        const payloadSchema: ViewPayloadSchema = {
+            type: "object",
+            properties: {
+                items: {
+                    type: "array",
+                    items: {
+                        type: "object",
+                        properties: {
+                            id: { type: "string", maxLength: 100 },
+                            blockId: { type: "string", maxLength: 100 },
+                            duration: { type: "number" },
+                        },
+                        required: ["id", "blockId", "duration"],
+                    },
+                    maxItems: 10,
+                },
+            },
+            required: ["items"],
+        };
+        fake.installed.descriptor.outputSchema = payloadSchema;
+        fake.installed.descriptor.identity.schemaDigest =
+            viewHash(payloadSchema);
+        fake.installed.descriptor.indexProjection = [
+            {
+                schema: {
+                    id: "synthetic-recap.duration",
+                    revision: 1,
+                    description: "Retained synthetic durations",
+                    fields: { duration: { type: "number", unit: "ms" } },
+                },
+                rowsPointer: "/items",
+                itemKeyPointer: "/id",
+                blockIdPointer: "/blockId",
+                fields: { duration: "/duration" },
+            },
+        ];
+        const generate = fake.installed.generate;
+        fake.installed.generate = async (...args) => ({
+            ...(await generate(...args)),
+            payload: {
+                items: [{ id: "sample", blockId: "claim", duration: 40 }],
+            },
+        });
+        const { corpus, request, options } = await setup(
+            fake.installed,
+            1,
+            {},
+            ["Retained completed status with limitations; duration is 40 ms."],
+        );
+        expect(
+            (await settled(service, await service.buildViews(request))).state,
+        ).toBe("complete");
+        await service.close();
+        service = new FileMemoryService(root, {
+            ...options,
+            frameProjections: true,
+        });
+        const result = await service.queryFrame({
+            corpusId: corpus.corpusId,
+            schemaId: "synthetic-recap.duration",
+            schemaRevision: 1,
+            predicate: {
+                and: [
+                    { fieldId: "duration", op: "gte", value: 30, unit: "ms" },
+                ],
+            },
+            includeUnconfirmed: true,
+        });
+        expect(result.rows).toHaveLength(1);
+        expect(result.rows[0].eligible).toBe(false);
+        expect(result.rows[0].evidence[0].sourceId).toBe("source-0");
+        expect(result.rows[0].granularity).toBe("record");
+        expect(fake.calls()).toBe(1);
+        fake.revoke();
+        expect(
+            (await service.listFrameSchemas(corpus.corpusId)).some(
+                (schema) => schema.id === "synthetic-recap.duration",
+            ),
+        ).toBe(false);
+    });
+
     test("failed materialization replays retained model stages after restart without another request", async () => {
         const fake = provider();
         const generate = fake.installed.generate;
