@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=20e6508ac26b47ad3c97ff2797ca79a0a1779cd83be53e5cd17940faf03c5e31 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=8826178e5e51bc43cbe08c8077ea30082ed6b0b4a1a5fb439f749a80796df644 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/memory-service — AI-generated documentation
@@ -27,16 +27,19 @@ Transport-independent memory corpus service
 - `./procedure-markdown` → [./dist/procedureMarkdown.js](./dist/procedureMarkdown.js)
 - `./procedureMarkdown` → [./dist/procedureMarkdown.js](./dist/procedureMarkdown.js)
 - `./view-text` → [./dist/viewText.js](./dist/viewText.js)
+- `./view-types` → [./dist/viewTypes.js](./dist/viewTypes.js)
 
 ### Dependencies
 
 Workspace:
 
 - [@typeagent/aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
 - [@typeagent/config](../../../packages/config/README.md)
 - [@typeagent/conversation-memory](../../../packages/memory/conversation/README.md)
 - [@typeagent/knowledge-processor](../../../packages/knowledgeProcessor/README.md)
 - [@typeagent/knowpro](../../../packages/knowPro/README.md)
+- [@typeagent/memory-storage](../../../packages/memory/storage/README.md)
 - [@typeagent/textpro](../../../packages/textPro/README.md)
 
 External: `isomorphic-git`, `node-diff3`, `proper-lockfile`, `typechat`
@@ -57,6 +60,7 @@ External: `isomorphic-git`, `node-diff3`, `proper-lockfile`, `typechat`
 
 - [./src/indexSchema.ts](./src/indexSchema.ts)
 - [./src/index.ts](./src/index.ts)
+- [./src/acquisitionTypes.ts](./src/acquisitionTypes.ts)
 - [./src/agentEdition.ts](./src/agentEdition.ts)
 - [./src/agentEditionValidation.ts](./src/agentEditionValidation.ts)
 - [./src/agentSessionDistillation.ts](./src/agentSessionDistillation.ts)
@@ -64,23 +68,21 @@ External: `isomorphic-git`, `node-diff3`, `proper-lockfile`, `typechat`
 - [./src/agentSessionStore.ts](./src/agentSessionStore.ts)
 - [./src/agentSessionTypes.ts](./src/agentSessionTypes.ts)
 - [./src/batchImport.ts](./src/batchImport.ts)
-- [./src/benchmarkBridge.ts](./src/benchmarkBridge.ts)
-- _…and 68 more under `./src/`._
+- _…and 117 more under `./src/`._
 
 ### Environment variables
 
-_7 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_6 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `TYPEAGENT_BENCHMARK_COMMIT_DOCUMENTS`
 - `TYPEAGENT_BENCHMARK_MAINTENANCE_MODE`
 - `TYPEAGENT_BENCHMARK_MODEL`
-- `TYPEAGENT_EMBEDDING_MODEL`
-- `TYPEAGENT_EMBEDDING_PROVIDER`
-- `TYPEAGENT_EMBEDDING_SIZE`
+- `TYPEAGENT_MEMORY_FAST_MODEL`
+- `TYPEAGENT_MEMORY_PERF_EXPERIMENTS`
 - `TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT`
 
 ---
 
-_Auto-generated against commit `73fbbd085b9f687f05f7b8036f0e2c66ac7f0355` on `2026-10-24T18:29:20.864Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-service docs:verify-links` to spot-check._
+_Auto-generated against commit `d02797d2124bca889e9c5f72f136a72602875db1` on `2026-11-03T18:34:45.428Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-service docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
