@@ -38,7 +38,15 @@ export const macosCompatibilitySuites = [
     },
 ];
 
-export function localTestCommands(profile, root) {
+export function localTestCommands(profile, root, workspaceConcurrency = 3) {
+    if (
+        !Number.isSafeInteger(workspaceConcurrency) ||
+        workspaceConcurrency < 1
+    ) {
+        throw new Error(
+            "TYPEAGENT_TEST_WORKSPACE_CONCURRENCY must be a positive safe integer.",
+        );
+    }
     if (profile === "full") {
         return [
             {
@@ -48,7 +56,7 @@ export function localTestCommands(profile, root) {
                     "--no-bail",
                     "--no-sort",
                     "--stream",
-                    "--workspace-concurrency=3",
+                    `--workspace-concurrency=${workspaceConcurrency}`,
                     "run",
                     "test:local",
                 ],
@@ -81,9 +89,10 @@ export function runLocalTestPackages({
     profile,
     root,
     pnpmPath,
+    workspaceConcurrency = 3,
     run = spawnSync,
 }) {
-    const commands = localTestCommands(profile, root);
+    const commands = localTestCommands(profile, root, workspaceConcurrency);
     if (!pnpmPath || !fs.existsSync(pnpmPath)) {
         throw new Error("Run local package tests through pnpm run.");
     }
@@ -125,5 +134,8 @@ if (
         profile: process.env.TYPEAGENT_TEST_PROFILE ?? "full",
         root: process.cwd(),
         pnpmPath: process.env.npm_execpath,
+        workspaceConcurrency: Number(
+            process.env.TYPEAGENT_TEST_WORKSPACE_CONCURRENCY ?? "3",
+        ),
     });
 }

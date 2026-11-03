@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -84,6 +85,74 @@ test("full profile preserves the existing workspace selection and concurrency", 
             ],
         },
     ]);
+});
+
+test("full profile can serialize packages without changing test selection", () => {
+    const expected = localTestCommands("full", root);
+    expected[0].args = expected[0].args.map((arg) =>
+        arg === "--workspace-concurrency=3" ? "--workspace-concurrency=1" : arg,
+    );
+    assert.deepEqual(localTestCommands("full", root, 1), expected);
+});
+
+test("invalid workspace concurrency fails before launching any package", () => {
+    for (const workspaceConcurrency of [
+        0,
+        -1,
+        1.5,
+        NaN,
+        Infinity,
+        Number.MAX_SAFE_INTEGER + 1,
+    ]) {
+        assert.throws(
+            () =>
+                runLocalTestPackages({
+                    profile: "full",
+                    root,
+                    pnpmPath: process.execPath,
+                    workspaceConcurrency,
+                    run: () => assert.fail("Must not start invalid commands"),
+                }),
+            /TYPEAGENT_TEST_WORKSPACE_CONCURRENCY/,
+        );
+    }
+});
+
+test("the command-line runner forwards the pipeline concurrency environment", (t) => {
+    const directory = fs.mkdtempSync(
+        path.join(os.tmpdir(), "typeagent-concurrency-"),
+    );
+    t.after(() => fs.rmSync(directory, { force: true, recursive: true }));
+    const pnpmPath = path.join(directory, "pnpm.cjs");
+    fs.writeFileSync(
+        pnpmPath,
+        "process.stdout.write(JSON.stringify(process.argv.slice(2)));",
+    );
+    const result = spawnSync(
+        process.execPath,
+        [
+            fileURLToPath(
+                new URL("../runLocalTestPackages.mjs", import.meta.url),
+            ),
+        ],
+        {
+            cwd: root,
+            env: {
+                ...process.env,
+                npm_execpath: pnpmPath,
+                TYPEAGENT_TEST_PROFILE: "full",
+                TYPEAGENT_TEST_WORKSPACE_CONCURRENCY: "1",
+            },
+            encoding: "utf8",
+            timeout: 30000,
+        },
+    );
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(
+        JSON.parse(result.stdout),
+        localTestCommands("full", root, 1)[0].args,
+    );
 });
 
 test("compatibility selection is explicit, unique, and references existing source tests", () => {
