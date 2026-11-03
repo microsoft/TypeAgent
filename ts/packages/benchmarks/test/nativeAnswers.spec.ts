@@ -249,6 +249,34 @@ describe("native answer baseline", () => {
         ).toHaveLength(2);
     });
 
+    test.each([undefined, null])(
+        "rejects a missing saved response without regenerating legacy receipts (%p)",
+        async (response) => {
+            await runNativeAnswers(options, open);
+            const file = path.join(
+                options.output,
+                "receipts",
+                `${bytesHash(dataset.questions[0].id)}.json`,
+            );
+            await saveJson(file, {
+                ...object(JSON.parse(await readFile(file, "utf8"))),
+                response,
+            });
+            await rm(`${file}.attempt.json`);
+            const before = await readFile(file);
+            await expect(runNativeAnswers(options, open)).rejects.toThrow(
+                "Saved answer receipt has no native response",
+            );
+            expect(await readFile(file)).toEqual(before);
+            expect(
+                calls.filter((call) => call.operation === "answer"),
+            ).toHaveLength(1);
+            expect(
+                calls.filter((call) => call.operation === "generate"),
+            ).toHaveLength(1);
+        },
+    );
+
     test.each([
         new Error("Synthetic answer failure"),
         new BenchmarkResponseError(

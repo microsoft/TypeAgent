@@ -476,7 +476,10 @@ async function evaluateNativeAnswer(
             receipt.questionId !== question.id)
     )
         throw new Error("Answer receipt fingerprint/question mismatch");
-    if (receipt && receipt.response === undefined)
+    if (
+        receipt &&
+        (receipt.response === undefined || receipt.response === null)
+    )
         throw new Error("Saved answer receipt has no native response");
     const started = performance.now();
     const response =
