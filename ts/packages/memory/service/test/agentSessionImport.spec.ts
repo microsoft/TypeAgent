@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { AgentSessionStore } from "../src/agentSessionStore.js";
+import { sourceFrameRows } from "../src/frameProjection.js";
 import type {
     AgentSessionDistillationModel,
     AgentSessionImportRequest,
@@ -368,6 +369,16 @@ describe("opt-in long-running session import", () => {
             evidence.excerpt,
         );
         expect(evidence.eventId).toBe("e1");
+        const source = await service.getSource(corpusId, evidence.sourceId);
+        const eventRow = sourceFrameRows(source!, original.content).find(
+            (row) =>
+                row.schemaId === "source.event" && row.values.eventId === "e1",
+        )!;
+        expect(eventRow.values.authority).toBe("producerReported");
+        expect(eventRow.values.repository).toBe(first.repository);
+        expect(eventRow.values.commit).toBe(first.commit);
+        expect(eventRow.values.outcome).toBe("unknown");
+        expect(eventRow.evidence[0].excerpt).toBe(evidence.excerpt);
         expect(
             (await service.searchAgentMemories({ corpusId, query: "pnpm" }))
                 .memories,

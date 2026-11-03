@@ -1494,6 +1494,94 @@ const handlers: CommandHandlerTable = {
                 );
             },
         ),
+        frames: {
+            description: "Query typed source and view projections",
+            commands: {
+                list: noParameters(
+                    "List admitted frame schemas",
+                    async (context) => {
+                        if (!context.service.listFrameSchemas)
+                            throw new Error(
+                                "Memory dataframes are not supported",
+                            );
+                        return markdown(
+                            await context.service.listFrameSchemas(
+                                requireActiveCorpus(context),
+                            ),
+                        );
+                    },
+                ),
+                status: noParameters(
+                    "Show frame readiness and unavailable values",
+                    async (context) => {
+                        if (!context.service.getFrameProjectionStatus)
+                            throw new Error(
+                                "Memory dataframes are not supported",
+                            );
+                        return markdown(
+                            await context.service.getFrameProjectionStatus(
+                                requireActiveCorpus(context),
+                            ),
+                        );
+                    },
+                ),
+                query: parameters(
+                    {
+                        args: {
+                            schemaId: {
+                                description: "Schema ID from frames list",
+                            },
+                            query: {
+                                description: "Natural-language frame predicate",
+                                implicitQuotes: true,
+                            },
+                        },
+                        flags: {
+                            schemaRevision: {
+                                description:
+                                    "Exact schema revision from frames list",
+                                type: "number",
+                            },
+                            limit: {
+                                description: "Page size (1-1000)",
+                                type: "number",
+                            },
+                            includeUnconfirmed: {
+                                description:
+                                    "Include unconfirmed or unpublished items",
+                                default: false,
+                            },
+                        },
+                    },
+                    async (context, params) => {
+                        if (!context.service.queryFrame)
+                            throw new Error(
+                                "Memory dataframes are not supported",
+                            );
+                        const schemaRevision = optionalNumber(
+                            flags(params).schemaRevision,
+                        );
+                        if (schemaRevision === undefined)
+                            throw new Error("Frame schemaRevision is required");
+                        return markdown(
+                            await context.service.queryFrame({
+                                corpusId: requireActiveCorpus(context),
+                                schemaId: stringValue(
+                                    args(params).schemaId,
+                                    "schemaId",
+                                ),
+                                schemaRevision,
+                                query: stringValue(args(params).query, "query"),
+                                limit: optionalNumber(flags(params).limit),
+                                includeUnconfirmed: booleanValue(
+                                    flags(params).includeUnconfirmed,
+                                ),
+                            }),
+                        );
+                    },
+                ),
+            },
+        },
         search: parameters(
             {
                 args: {
@@ -1626,6 +1714,30 @@ async function executeMemoryAction(
                 state,
                 action.parameters.question,
                 action.parameters.limit,
+            );
+        case "listMemoryFrames":
+            if (!state.service.listFrameSchemas)
+                throw new Error("Memory dataframes are not supported");
+            return markdown(
+                await state.service.listFrameSchemas(
+                    requireActiveCorpus(state),
+                ),
+            );
+        case "queryMemoryFrame":
+            if (!state.service.queryFrame)
+                throw new Error("Memory dataframes are not supported");
+            return markdown(
+                await state.service.queryFrame({
+                    corpusId: requireActiveCorpus(state),
+                    schemaId: action.parameters.schemaId,
+                    schemaRevision: action.parameters.schemaRevision,
+                    sourceIds: action.parameters.sourceIds,
+                    repository: action.parameters.repository,
+                    commit: action.parameters.commit,
+                    environment: action.parameters.environment,
+                    query: action.parameters.query,
+                    limit: action.parameters.limit,
+                }),
             );
     }
 }

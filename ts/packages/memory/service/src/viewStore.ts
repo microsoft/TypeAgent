@@ -303,6 +303,13 @@ export class TypedViewStore {
         active: boolean;
     }>();
 
+    public async assertInventoryHead(
+        corpusId: string,
+        head: string | null,
+    ): Promise<void> {
+        await this.history(corpusId).assertHead(head);
+    }
+
     public async withInventorySnapshot<T>(
         corpusId: string,
         operation: () => Promise<T>,
