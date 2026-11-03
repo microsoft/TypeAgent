@@ -31,7 +31,9 @@ import {
     indexedTextHash,
     parseIndexedLocator,
     selectIndexedFragments,
+    applyIndexedBlockPolicy,
     type IndexedBlock,
+    type IndexedFragmentPolicy,
 } from "./indexedFragments.js";
 import type {
     CorpusIndex,
@@ -463,7 +465,7 @@ function parseDocParts(document: IndexedDocument): DocPart[] {
     return parts;
 }
 
-function toDocParts(document: IndexedDocument): DocPart[] {
+export function toDocParts(document: IndexedDocument): DocPart[] {
     const temporal: kp.SourceTemporalContext = document.revision
         .temporalContext ?? {
         version: 1,
@@ -641,6 +643,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         private readonly corpusId: string,
         private readonly indexDirectory: string,
         private readonly settingsFactory?: () => DocMemorySettings,
+        private readonly fragmentPolicy?: IndexedFragmentPolicy,
     ) {}
 
     private createSettings(): DocMemorySettings {
@@ -935,6 +938,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         )
             this.addConversationNeighbors(memory, eligible, scores);
         const blocks = [...this.indexedBlocks(memory, scores)];
+        const policy = request.query ? this.fragmentPolicy : undefined;
         if (postingScores)
             this.fragmentScoreDiagnostics(
                 blocks,
@@ -944,7 +948,13 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 highest,
             );
         const selection = selectIndexedFragments(
-            blocks.sort((a, b) => b.score - a.score),
+            applyIndexedBlockPolicy(policy, request, blocks, () =>
+                [...this.indexedBlocks(memory)].filter(
+                    (block) =>
+                        block.messageOrdinal !== undefined &&
+                        eligible.has(block.messageOrdinal),
+                ),
+            ).sort((a, b) => b.score - a.score),
             {
                 ...request,
                 terms: request.query
@@ -958,6 +968,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
                       ]
                     : request.terms,
             },
+            policy,
         );
         selection.limited ||= followed.limited;
         if (selection.diagnostics)
@@ -2052,6 +2063,12 @@ export function createKnowProCorpusIndex(
     corpusId: string,
     indexDirectory: string,
     settingsFactory?: () => DocMemorySettings,
+    fragmentPolicy?: IndexedFragmentPolicy,
 ): CorpusIndex {
-    return new KnowProCorpusIndex(corpusId, indexDirectory, settingsFactory);
+    return new KnowProCorpusIndex(
+        corpusId,
+        indexDirectory,
+        settingsFactory,
+        fragmentPolicy,
+    );
 }

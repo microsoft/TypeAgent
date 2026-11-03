@@ -43,6 +43,21 @@ const gemma = {
 const catalog: ConfigTree = { minilm, gemma };
 
 describe("named embedding catalog", () => {
+    let warnings: unknown[][];
+    let originalWarn: typeof console.warn;
+
+    beforeEach(() => {
+        warnings = [];
+        originalWarn = console.warn;
+        console.warn = (...args: unknown[]) => {
+            warnings.push(args);
+        };
+    });
+
+    afterEach(() => {
+        console.warn = originalWarn;
+    });
+
     test("catalog alone is inert and legacy inference remains unchanged", () => {
         const config = buildConfig(flatten({ embeddingModels: catalog }));
         expect(config.embedding).toBeUndefined();
@@ -62,6 +77,7 @@ describe("named embedding catalog", () => {
                 }),
             ),
         ).toBeUndefined();
+        expect(warnings).toHaveLength(0);
     });
 
     test("selects a profile without materializing a legacy embedding section", () => {
@@ -77,6 +93,7 @@ describe("named embedding catalog", () => {
             configToEnv(config).TYPEAGENT_EMBEDDING_PROVIDER,
         ).toBeUndefined();
         expect(buildConfig(configToEnv(config))).toEqual(config);
+        expect(warnings).toHaveLength(0);
     });
 
     test("none disables embeddings without requiring a catalog", () => {
@@ -193,7 +210,7 @@ describe("named embedding catalog", () => {
     });
 
     test.each(["provider", "model", "modalities", "size", "localFilesOnly"])(
-        "rejects selector mixed with legacy %s even for none",
+        "warns and honors named selection over legacy %s, including none",
         (field) => {
             const values: ConfigTree = {
                 provider: "azure",
@@ -202,16 +219,54 @@ describe("named embedding catalog", () => {
                 size: 1536,
                 localFilesOnly: false,
             };
-            expect(() =>
-                buildConfig(
-                    flatten({
-                        defaultEmbeddingModel: "none",
-                        embedding: { [field]: values[field] },
-                    }),
+            for (const selector of ["none", "gemma"]) {
+                const flat = flatten({
+                    embeddingModels: catalog,
+                    defaultEmbeddingModel: selector,
+                    embedding: { [field]: values[field] },
+                });
+                const config = buildConfig(flat);
+                const expected =
+                    selector === "none" ? { provider: "none" } : gemma;
+                expect(resolveEmbeddingConfig(config)).toEqual(expected);
+                expect(config.embedding).toEqual({ [field]: values[field] });
+                expect(
+                    resolveEmbeddingConfig(buildConfig(configToEnv(config))),
+                ).toEqual(expected);
+                for (const tree of [
+                    envToYamlTree(flat),
+                    flatEnvToConfigTree(flat),
+                ]) {
+                    expect(tree.defaultEmbeddingModel).toBe(selector);
+                    expect(
+                        resolveEmbeddingConfig(buildConfig(flatten(tree))),
+                    ).toEqual(expected);
+                }
+            }
+            expect(warnings.length).toBeGreaterThan(0);
+            expect(
+                warnings.every(
+                    (warning) =>
+                        warning.length === 1 &&
+                        warning[0] ===
+                            "Warning: legacy embedding overrides are ignored when defaultEmbeddingModel is set; migrate embedding fields into embeddingModels and remove embedding",
                 ),
-            ).toThrow(/migrate/);
+            ).toBe(true);
         },
     );
+
+    test("legacy overrides never rescue an unknown named selector", () => {
+        expect(() =>
+            buildConfig(
+                flatten({
+                    embeddingModels: catalog,
+                    defaultEmbeddingModel: "missing",
+                    embedding: { provider: "azure" },
+                }),
+            ),
+        ).toThrow("unknown embedding model alias");
+        expect(warnings.length).toBeGreaterThan(0);
+    });
 
     test("Azure definitions reference provider-owned deployment pools", () => {
         const azure: ConfigTree = {

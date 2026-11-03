@@ -91,8 +91,8 @@ export function resolveEmbeddingConfig(
         config.embedding &&
         Object.values(config.embedding).some((value) => value !== undefined)
     ) {
-        throw new Error(
-            "defaultEmbeddingModel cannot be combined with legacy embedding overrides; migrate embedding fields into embeddingModels and remove embedding",
+        console.warn(
+            "Warning: legacy embedding overrides are ignored when defaultEmbeddingModel is set; migrate embedding fields into embeddingModels and remove embedding",
         );
     }
     if (selector === "none") return { provider: "none" };

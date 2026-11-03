@@ -32,9 +32,17 @@ export function tokenChunks(text: string, size = 512): string[] {
         );
     return chunks;
 }
-const words = (text: string) =>
+export const bm25Terms = (text: string) =>
     text.toLowerCase().trim().split(/\s+/u).filter(Boolean);
+const words = bm25Terms;
+export interface Bm25Scorer {
+    (query: string): number[];
+    scoreTexts(query: string, texts: readonly string[]): number[];
+}
 export function bm25Scores(documents: string[], query: string): number[] {
+    return createBm25Scorer(documents)(query);
+}
+export function createBm25Scorer(documents: string[]): Bm25Scorer {
     if (!documents.length) throw new Error("No BM25 documents");
     const tokens = documents.map(words),
         average =
@@ -59,17 +67,42 @@ export function bm25Scores(documents: string[], query: string): number[] {
         (0.25 * [...idfs.values()].reduce((sum, value) => sum + value, 0)) /
         idfs.size;
     for (const [word, idf] of idfs) if (idf < 0) idfs.set(word, epsilon);
-    return counts.map((count, index) =>
-        words(query).reduce((score, word) => {
-            const frequency = count.get(word) ?? 0;
-            return (
-                score +
-                ((idfs.get(word) ?? 0) * frequency * 2.5) /
-                    (frequency +
-                        1.5 * (0.25 + (0.75 * tokens[index].length) / average))
-            );
-        }, 0),
-    );
+    const scoreCounts = (
+        query: string,
+        items: Map<string, number>[],
+        lengths: number[],
+    ): number[] =>
+        items.map((count, index) =>
+            words(query).reduce((score, word) => {
+                const frequency = count.get(word) ?? 0;
+                return (
+                    score +
+                    ((idfs.get(word) ?? 0) * frequency * 2.5) /
+                        (frequency +
+                            1.5 * (0.25 + (0.75 * lengths[index]) / average))
+                );
+            }, 0),
+        );
+    const scorer = (query: string): number[] =>
+        scoreCounts(
+            query,
+            counts,
+            tokens.map((items) => items.length),
+        );
+    scorer.scoreTexts = (query: string, texts: readonly string[]) => {
+        const items = texts.map(words);
+        return scoreCounts(
+            query,
+            items.map((terms) => {
+                const count = new Map<string, number>();
+                for (const term of terms)
+                    count.set(term, (count.get(term) ?? 0) + 1);
+                return count;
+            }),
+            items.map((terms) => terms.length),
+        );
+    };
+    return scorer;
 }
 export function bm25Retrieve(
     documents: Document[],
