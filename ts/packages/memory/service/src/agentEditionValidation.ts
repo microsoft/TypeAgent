@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { canonicalJsonValue } from "./canonicalJson.js";
 import {
     normalizeRunbookBindingArguments,
     validateRunbookArgumentReadiness,
@@ -139,20 +140,8 @@ export interface AgentEdition {
 
 export const agentEditionMarkdownMarker = "<!-- typeagent-agent-edition:1 -->";
 
-function sortedJson(value: unknown): unknown {
-    if (Array.isArray(value)) return value.map(sortedJson);
-    if (value !== null && typeof value === "object") {
-        return Object.fromEntries(
-            Object.entries(value as Record<string, unknown>)
-                .sort(([left], [right]) => left.localeCompare(right))
-                .map(([key, child]) => [key, sortedJson(child)]),
-        );
-    }
-    return value;
-}
-
 export function canonicalizeProcedure(value: unknown): string {
-    return `${JSON.stringify(sortedJson(value), undefined, 2)}\n`;
+    return `${JSON.stringify(canonicalJsonValue(value), undefined, 2)}\n`;
 }
 
 export function getProcedureEvidenceReferences(
