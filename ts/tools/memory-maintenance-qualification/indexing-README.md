@@ -91,6 +91,30 @@ arms must show preparation stages present only in A1.
 Each case uses a fresh store. Model/process/provider/OS caches are not certified
 cold; the three cases within an arm still share a process.
 
+Production raw spans remain in the owned stdout/stderr logs.
+`indexing-traces.json` contains stage summaries, not every raw span:
+counts, status counts, elapsed-time extrema/totals and numeric metadata extrema.
+Memory and serialized output scale with the stage/metadata schema rather than
+the number of events. Summed nested/overlapping spans are not wall time.
+The companion retains its raw spans in `qualification-traces.jsonl` and returns
+the same bounded `traceSummaries`. Logging overhead remains part of observed
+elapsed time.
+
+If an older driver failed while serializing an oversized trace array, preserve
+its failed attempt and source checkpoint. Offline collection requires no
+provider approval and makes no inference calls:
+
+```powershell
+node $tool collect-traces --directory $pilot --arm A0
+node $tool collect-traces --directory $pilot --arm A1
+```
+
+This only writes a new trace-summary artifact after termination. It does not
+repair a failed live case, change its outcome, overwrite its ledger or pretend
+the original attempt used the newer driver. Record the postprocessing revision
+separately. A later companion execution needs its own fresh manifest/checkpoint
+when the driver changed; do not bypass the original checkpoint guard.
+
 Each case also closes/reopens the original service and compares source-only
 retrieval/revision eligibility. A closed-store clone receives destructive
 forget/clear probes, including reopening after each operation. The original

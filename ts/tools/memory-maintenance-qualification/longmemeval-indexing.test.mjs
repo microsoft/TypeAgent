@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { constants } from "node:buffer";
 import test from "node:test";
 import { mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -26,10 +27,11 @@ import {
     main,
     pairedPerformance,
     qualifyCompanion,
-    readTraceLogs,
+    readTraceSummaries,
     reportPilot,
     reviewTemplate,
     validateReview,
+    traceRun,
 } from "./longmemeval-indexing.mjs";
 import {
     measureIndexingCase,
@@ -43,6 +45,7 @@ import {
     validateCompanionSpec,
 } from "./longmemeval-indexing-execution.mjs";
 import { recordBenchmarkArm } from "./longmemeval-live.mjs";
+import { createTraceSummary } from "./longmemeval-indexing-traces.mjs";
 
 const product = fileURLToPath(new URL("../../", import.meta.url));
 function fixture() {
@@ -293,12 +296,14 @@ test(
                     32,
                 );
                 assert.ok(
-                    qualified.spans.some(
+                    qualified.traceSummaries.some(
                         (span) => span.stage === "ingestion.sqlite.commit",
                     ),
                 );
                 assert.ok(
-                    !encode(qualified.spans).includes("repeated-official-id"),
+                    !encode(qualified.traceSummaries).includes(
+                        "repeated-official-id",
+                    ),
                 );
                 const cancellation = settings(modules);
                 cancellation.preparedIndexing = {
@@ -440,17 +445,183 @@ test("malformed traces fail explicitly and timings remain outside source content
     temporary(async (root) => {
         await writeFile(
             path.join(root, "stderr-fixture.log"),
-            'irrelevant\n[memory-search-timing] {"stage":"ingestion.unit.prepare","durationMs":1}\n',
+            'irrelevant\n[memory-search-timing] {"stage":"ingestion.unit.prepare","elapsedMs":1}\n',
         );
         assert.equal(
-            (await readTraceLogs(root))[0].stage,
+            (await readTraceSummaries(root))[0].stage,
             "ingestion.unit.prepare",
         );
         await writeFile(
             path.join(root, "stderr-fixture.log"),
             "[memory-search-timing] invalid\n",
         );
-        await assert.rejects(readTraceLogs(root), SyntaxError);
+        await assert.rejects(readTraceSummaries(root), SyntaxError);
+    }));
+
+test("trace memory and output depend on stage schema, not event count or source content", () => {
+    const collector = createTraceSummary();
+    const span = {
+        stage: "ingestion.unit.prepare",
+        elapsedMs: 1,
+        status: "ok",
+        metadata: { inFlight: 3, source: "x".repeat(4 * 1024 * 1024) },
+    };
+    const count = 256;
+    assert.ok(
+        count * JSON.stringify(span).length > constants.MAX_STRING_LENGTH,
+    );
+    for (let i = 0; i < count; i++) collector.add(span);
+    const summary = collector.summaries();
+    assert.equal(summary.length, 1);
+    assert.equal(summary[0].spanCount, count);
+    assert.equal(summary[0].totalElapsedMs, count);
+    assert.deepEqual(summary[0].statusCounts, { ok: count });
+    assert.equal(summary[0].numericMetadata.inFlight.max, 3);
+    assert.ok(JSON.stringify(summary).length < 1024);
+});
+
+test("trace summaries preserve failures, extrema, unknowns and snapshot independence", () => {
+    const collector = createTraceSummary();
+    collector.add({
+        stage: "query",
+        elapsedMs: 5,
+        metadata: { candidates: 2 },
+    });
+    const first = collector.summaries();
+    collector.add({
+        stage: "query",
+        elapsedMs: 1,
+        status: "error",
+        metadata: { candidates: 4 },
+    });
+    const [summary] = collector.summaries();
+    assert.equal(summary.spanCount, 2);
+    assert.equal(summary.minElapsedMs, 1);
+    assert.equal(summary.maxElapsedMs, 5);
+    assert.equal(summary.totalElapsedMs, 6);
+    assert.deepEqual(summary.statusCounts, { unobserved: 1, error: 1 });
+    assert.deepEqual(summary.numericMetadata.candidates, {
+        observations: 2,
+        min: 2,
+        max: 4,
+    });
+    assert.equal(first[0].numericMetadata.candidates.max, 2);
+});
+
+test("malformed numeric timing evidence fails rather than becoming a zero measurement", () => {
+    const collector = createTraceSummary();
+    assert.throws(() => collector.add({ stage: "query", elapsedMs: -1 }));
+    assert.throws(() =>
+        collector.add({ stage: "query", elapsedMs: undefined }),
+    );
+    assert.throws(() => collector.add({ stage: "", elapsedMs: 0 }));
+    assert.throws(() =>
+        collector.add({
+            stage: "query",
+            elapsedMs: 1,
+            metadata: { highWater: Infinity },
+        }),
+    );
+});
+
+test("companion traces preserve raw records and restore hooks on success and failure", async () =>
+    temporary(async (root) => {
+        const warn = console.warn;
+        const previous = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        const kp = { runWithSearchTiming: async (_id, _scope, work) => work() };
+        const emit = () =>
+            console.warn(
+                '[memory-search-timing] {"stage":"ingestion.unit.prepare","elapsedMs":1,"status":"ok"}',
+            );
+        const file = path.join(root, "raw.jsonl");
+        const result = await traceRun(
+            kp,
+            () => {
+                emit();
+                emit();
+                return "done";
+            },
+            file,
+        );
+        assert.equal(result.result, "done");
+        assert.equal(result.traceSummaries[0].spanCount, 2);
+        assert.equal(result.rawTraceFile, "raw.jsonl");
+        assert.equal(
+            (await readFile(file, "utf8")).trim().split("\n").length,
+            2,
+        );
+        const failed = path.join(root, "failed.jsonl");
+        await assert.rejects(
+            traceRun(
+                kp,
+                () => {
+                    emit();
+                    throw new Error("fixture");
+                },
+                failed,
+            ),
+            /fixture/,
+        );
+        assert.equal(
+            JSON.parse((await readFile(failed, "utf8")).trim()).stage,
+            "ingestion.unit.prepare",
+        );
+        assert.equal(console.warn, warn);
+        assert.equal(process.env.TYPEAGENT_MEMORY_SEARCH_TRACE, previous);
+    }));
+
+test("offline trace recovery preserves failed ledgers and rejects active or unknown arms", async () =>
+    temporary(async (root) => {
+        const directory = path.join(root, "pilot");
+        await freezePilot(directory, fixture(), "fixed", {});
+        for (const [arm, status] of [
+            ["A0", "failed"],
+            ["A1", "running"],
+        ]) {
+            const state = path.join(directory, arm, "run");
+            await mkdir(state, { recursive: true });
+            await writeFile(
+                path.join(directory, arm, "attempt.json"),
+                encode({ status, stateDirectory: "run" }),
+            );
+            await writeFile(
+                path.join(state, "benchmark-state.json"),
+                encode({ cases: {}, arm: {} }),
+            );
+            await writeFile(
+                path.join(state, "stderr-fixture.log"),
+                '[memory-search-timing] {"stage":"ingestion.unit.prepare","elapsedMs":1}\n',
+            );
+        }
+        const ledger = path.join(directory, "A0", "attempt.json");
+        const before = await readFile(ledger, "utf8");
+        await main(["collect-traces", "--directory", directory, "--arm", "A0"]);
+        const collected = JSON.parse(
+            await readFile(
+                path.join(directory, "A0", "indexing-traces.json"),
+                "utf8",
+            ),
+        );
+        assert.equal(collected[0].spanCount, 1);
+        assert.equal(await readFile(ledger, "utf8"), before);
+        await assert.rejects(
+            main(["collect-traces", "--directory", directory, "--arm", "A0"]),
+            { code: "EEXIST" },
+        );
+        await assert.rejects(
+            main(["collect-traces", "--directory", directory, "--arm", "A1"]),
+            /after arm termination/,
+        );
+        await assert.rejects(
+            main([
+                "collect-traces",
+                "--directory",
+                directory,
+                "--arm",
+                "unknown",
+            ]),
+            /Unknown frozen arm/,
+        );
     }));
 
 test("case metrics retain failure measurements and do not alter non-pilot behavior", async () => {

@@ -3,7 +3,13 @@
 
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { closeSync, createReadStream, openSync, writeSync } from "node:fs";
+import {
+    closeSync,
+    createReadStream,
+    openSync,
+    writeFileSync,
+    writeSync,
+} from "node:fs";
 import { mkdir, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -49,6 +55,7 @@ import {
     recordCompanionWork,
     superviseCompanion,
 } from "./longmemeval-indexing-execution.mjs";
+import { createTraceSummary } from "./longmemeval-indexing-traces.mjs";
 
 const toolRoot = fileURLToPath(new URL(".", import.meta.url));
 const defaultProduct = fileURLToPath(new URL("../../", import.meta.url));
@@ -313,8 +320,8 @@ async function childAttempt(product, pilot, approval, arm) {
             outcome: state.outcome,
             stateDirectory: relative,
         });
-        const traces = await readTraceLogs(announced);
-        const prepared = traces.some(
+        const traceSummaries = await readTraceSummaries(announced);
+        const prepared = traceSummaries.some(
             (span) => span.stage === "ingestion.unit.prepare",
         );
         if (state.outcome === "DIAGNOSTIC_SELECTION_COMPLETED")
@@ -323,7 +330,10 @@ async function childAttempt(product, pilot, approval, arm) {
                 arm === "A1",
                 "Ingestion traces did not confirm the requested preparation arm",
             );
-        await writeNew(path.join(directory, "indexing-traces.json"), traces);
+        await writeNew(
+            path.join(directory, "indexing-traces.json"),
+            traceSummaries,
+        );
         attempt.preparedTraceObserved = prepared;
         assert.equal(
             termination.code,
@@ -347,17 +357,31 @@ async function childAttempt(product, pilot, approval, arm) {
     }
 }
 
-export async function traceRun(kp, work) {
+export async function traceRun(kp, work, traceFile) {
     const trace = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
     const warn = console.warn;
-    const spans = [];
+    const collector = createTraceSummary();
+    const fd = traceFile === undefined ? undefined : openSync(traceFile, "wx");
+    const chunks = [];
+    let buffered = 0;
+    const flush = () => {
+        if (fd !== undefined && chunks.length) {
+            writeFileSync(fd, chunks.join(""));
+            chunks.length = 0;
+            buffered = 0;
+        }
+    };
     console.warn = (...args) => {
         const line = String(args[0]);
-        if (line.startsWith("[memory-search-timing] "))
-            spans.push(
-                JSON.parse(line.slice("[memory-search-timing] ".length)),
-            );
-        else Reflect.apply(warn, console, args);
+        if (line.startsWith("[memory-search-timing] ")) {
+            const json = line.slice("[memory-search-timing] ".length);
+            collector.add(JSON.parse(json));
+            if (fd !== undefined) {
+                chunks.push(json + "\n");
+                buffered += json.length + 1;
+                if (buffered >= 65536) flush();
+            }
+        } else Reflect.apply(warn, console, args);
     };
     process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
     try {
@@ -367,18 +391,27 @@ export async function traceRun(kp, work) {
                 "indexing-companion",
                 work,
             ),
-            spans,
+            traceSummaries: collector.summaries(),
+            rawTraceFile:
+                traceFile === undefined ? null : path.basename(traceFile),
         };
     } finally {
         console.warn = warn;
         if (trace === undefined)
             delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
         else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = trace;
+        if (fd !== undefined) {
+            try {
+                flush();
+            } finally {
+                closeSync(fd);
+            }
+        }
     }
 }
 
-export async function readTraceLogs(directory) {
-    const records = [];
+export async function readTraceSummaries(directory) {
+    const collector = createTraceSummary();
     const marker = "[memory-search-timing] ";
     const files = (await readdir(directory))
         .filter((name) => /^(stderr|stdout)-.*\.log$/.test(name))
@@ -393,12 +426,12 @@ export async function readTraceLogs(directory) {
                 crlfDelay: Infinity,
             }))
                 if (line.startsWith(marker))
-                    records.push(JSON.parse(line.slice(marker.length)));
+                    collector.add(JSON.parse(line.slice(marker.length)));
         } finally {
             stream.destroy();
         }
     }
-    return records;
+    return collector.summaries();
 }
 
 export async function qualifyCompanion(
@@ -413,21 +446,35 @@ export async function qualifyCompanion(
         digest(encode(construction)),
         "Captured preparation belongs to another history",
     );
-    const traced = await traceRun(modules.kp, async () => ({
-        frameInventory: frameInventory(modules, construction),
-        frameEdges: frameEdges(modules),
-        frameSnapshot: frameSnapshot(
-            modules,
-            path.join(directory, "frame-snapshot.db"),
-        ),
-        normalization: normalizationEdges(modules),
-        replay: await verifyReplay(modules, directory, prepared, replayTape),
-        crashes: await recoveryMatrix(modules, product, directory, prepared),
-        preparation: await preparationFaults(modules, directory, prepared),
-        restore: await restoreFaults(modules, directory, prepared),
-    }));
+    const traced = await traceRun(
+        modules.kp,
+        async () => ({
+            frameInventory: frameInventory(modules, construction),
+            frameEdges: frameEdges(modules),
+            frameSnapshot: frameSnapshot(
+                modules,
+                path.join(directory, "frame-snapshot.db"),
+            ),
+            normalization: normalizationEdges(modules),
+            replay: await verifyReplay(
+                modules,
+                directory,
+                prepared,
+                replayTape,
+            ),
+            crashes: await recoveryMatrix(
+                modules,
+                product,
+                directory,
+                prepared,
+            ),
+            preparation: await preparationFaults(modules, directory, prepared),
+            restore: await restoreFaults(modules, directory, prepared),
+        }),
+        path.join(directory, "qualification-traces.jsonl"),
+    );
     return {
-        schemaVersion: 1,
+        schemaVersion: 2,
         providerMode: "provider-replay",
         ...traced,
         liveCancellation: "not-run-requires-separate-approval",
@@ -675,7 +722,7 @@ async function armReport(pilot, arm) {
             };
         }),
         providerRequests: state.providerRequests,
-        traces: await optionalJson(
+        traceSummaries: await optionalJson(
             path.join(pilot.root, arm, "indexing-traces.json"),
         ),
         artifacts: relative,
@@ -837,6 +884,30 @@ export async function main(args = process.argv.slice(2)) {
         },
         companion: () => runCompanion(pilot, product, values.approval),
         frames: () => compareFrames(pilot, product, values.baseline),
+        "collect-traces": async () => {
+            const arms = values.arm ? [values.arm] : pilot.manifest.schedule;
+            for (const arm of arms) {
+                assert.ok(
+                    pilot.manifest.schedule.includes(arm),
+                    "Unknown frozen arm",
+                );
+                const recorded = await armReport(pilot, arm);
+                assert.ok(
+                    recorded.artifacts,
+                    "Arm has no owned state directory",
+                );
+                assert.ok(
+                    ["completed", "failed"].includes(recorded.status),
+                    "Collect traces only after arm termination",
+                );
+                await writeNew(
+                    path.join(pilot.root, arm, "indexing-traces.json"),
+                    await readTraceSummaries(
+                        path.join(pilot.root, arm, recorded.artifacts),
+                    ),
+                );
+            }
+        },
         "review-template": async () =>
             writeNew(
                 path.join(pilot.root, "review-template.json"),
