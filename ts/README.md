@@ -139,7 +139,7 @@ Here is an example of the minimal `config.local.yaml` targeting OpenAI:
 openAI:
   default:
     organization: <organization id>
-    apiKey: <service key>
+    apiKey: <key>
     endpoint: https://api.openai.com/v1/chat/completions
     model: gpt-4o
     responseFormat: true
@@ -308,6 +308,22 @@ package is a standalone Jest suite.
 Shared and standalone Jest configurations use one worker when `CI=true`, and
 disable their Jest cache when `TYPEAGENT_JEST_NO_CACHE=true` during package
 retries. These settings do not change local worker defaults.
+
+Full-profile package tests normally run three workspaces at once. Set
+`TYPEAGENT_TEST_WORKSPACE_CONCURRENCY` to a positive integer to change that
+limit; `1` serializes packages without changing test selection or the root
+script phase. The publishing pipeline uses `1` on its hosted test agent to
+avoid memory contention between the larger suites. This does not change
+Jest's per-package worker settings or the macOS compatibility selection.
+
+Compiled [Coda test](./packages/coda/src/test/) output in
+`packages/coda/dist-test` is excluded from formatting. The TypeScript test
+sources remain checked.
+
+The Azure DevOps smoke pipeline uses Ubuntu 24.04, a supported image for the
+installed Playwright release, rather than following `ubuntu-latest` image
+changes. Ubuntu 26.04 reached that label before the pinned Playwright release
+supported it.
 
 #### macOS blocking and nightly coverage
 

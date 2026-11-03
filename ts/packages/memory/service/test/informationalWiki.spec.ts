@@ -458,6 +458,236 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         );
     }
 
+    test("exact native wiki reads can disable corpus-wide contextual expansion without changing the default", async () => {
+        maintenanceMode = "manual";
+        await service.close();
+        service = open();
+        const { corpusId } = await service.createCorpus("Scoped native reader");
+        await add(
+            corpusId,
+            "original",
+            "acquisition owner approval withheld; cutover remains unauthorized.",
+        );
+        const source = (await service.getSource(corpusId, "original"))!;
+        const snapshot = await service.listViews(corpusId);
+        const job = await service.buildViews({
+            corpusId,
+            expectedHead: snapshot.head,
+            publication: false,
+            targets: [
+                {
+                    expectedVersion: 0,
+                    definition: {
+                        viewId: "scoped-wiki",
+                        kind: "wiki",
+                        selector: {
+                            kind: "sources",
+                            sources: [
+                                {
+                                    sourceId: "original",
+                                    revisionId: source.activeRevisionId!,
+                                },
+                            ],
+                        },
+                        wiki: {
+                            construction: "informational-wiki-v1",
+                            query: "acquisition",
+                            aliases: [],
+                            excludedSourceIds: [],
+                        },
+                    },
+                },
+            ],
+        });
+        expect((await waitForViewBuild(service, job)).state).toBe("complete");
+        const current = (await service.listViews(corpusId)).views[0];
+        const store = service["viewStore"];
+        const originalList = store.listViews;
+        let contextualReads = 0;
+        store.listViews = (...args: Parameters<typeof originalList>) => {
+            contextualReads++;
+            return originalList.apply(store, args);
+        };
+        const exact = await service.getView({
+            corpusId,
+            viewId: current.viewId,
+            revisionId: current.revisionId,
+            includeContext: false,
+        });
+        expect(exact?.revisionId).toBe(current.revisionId);
+        expect(exact?.content).toEqual(current.content);
+        expect(exact).not.toHaveProperty("relatedArticles");
+        expect(contextualReads).toBe(0);
+        await service.getView({
+            corpusId,
+            viewId: current.viewId,
+            revisionId: current.revisionId,
+        });
+        expect(contextualReads).toBeGreaterThan(0);
+        store.listViews = originalList;
+    });
+
+    test.each(["wiki", "project"] as const)(
+        "explicit unpublished %s build remains unindexed through inspection/edit/restart until manual publication",
+        async (kind) => {
+            maintenanceMode = "manual";
+            rehearsalBudget = false;
+            await service.close();
+            service = open();
+            const { corpusId } = await service.createCorpus("Draft governance");
+            await add(
+                corpusId,
+                "original",
+                "Acquisition owner approval is withheld.",
+            );
+            const source = (await service.getSource(corpusId, "original"))!;
+            const definition = (viewId: string) => ({
+                viewId,
+                kind:
+                    kind === "wiki"
+                        ? ("wiki" as const)
+                        : ("projectBrief" as const),
+                selector: {
+                    kind: "sources" as const,
+                    sources: [
+                        {
+                            sourceId: "original",
+                            revisionId: source.activeRevisionId!,
+                        },
+                    ],
+                },
+                ...(kind === "wiki"
+                    ? {
+                          wiki: {
+                              construction: "informational-wiki-v1" as const,
+                              query: "Acquisition",
+                              aliases: [],
+                              excludedSourceIds: [],
+                          },
+                      }
+                    : {
+                          projectSummary: {
+                              construction:
+                                  "informational-project-summary-v1" as const,
+                              query: "Acquisition",
+                              aliases: [],
+                              excludedSourceIds: [],
+                          },
+                      }),
+            });
+            const admitted = await service.buildViews({
+                corpusId,
+                expectedHead: (await service.listViews(corpusId)).head,
+                publication: false,
+                targets: [
+                    {
+                        expectedVersion: 0,
+                        definition: definition("unpublished"),
+                    },
+                ],
+            });
+            const complete = await waitForViewBuild(service, admitted);
+            expect(complete.state).toBe("complete");
+            expect(
+                complete.results[0].snapshot.publicationPolicy,
+            ).toMatchObject({
+                buildOverride: false,
+                origin: "build",
+                autoPublish: false,
+            });
+            const assertUnpublished = async () => {
+                const current = (await service.getView({
+                    corpusId,
+                    viewId: "unpublished",
+                    includeContext: false,
+                }))!;
+                expect(current.state).toBe("draft");
+                const publication = await service.getViewPublication({
+                    corpusId,
+                    viewId: current.viewId,
+                });
+                expect(publication.publishedRevisionId).toBeUndefined();
+                expect(publication.indexedRevisionId).toBeUndefined();
+                expect(publication.indexState).toBe("absent");
+                expect(
+                    await service.searchViews({
+                        corpusId,
+                        query: "Acquisition",
+                        freshness: "current",
+                    }),
+                ).toEqual([]);
+                await expect(
+                    service["viewStore"].makeInformationalVisible(current),
+                ).rejects.toThrow("explicit draft-only build override");
+                return current;
+            };
+            let current = await assertUnpublished();
+            await service.listViews(corpusId);
+            await service.getView({ corpusId, viewId: current.viewId });
+            const edited = await service.saveViewDraft({
+                corpusId,
+                viewId: current.viewId,
+                expectedHead: (await service.listViews(corpusId)).head,
+                expectedVersion: current.version,
+                definition: derivedDefinitionInput(current),
+                content: current.content,
+                relationships: authoredRelationships(current),
+            });
+            expect(
+                edited.version.generation?.input?.publicationPolicy
+                    ?.buildOverride,
+            ).toBe(false);
+            await assertUnpublished();
+            await service.close();
+            service = open();
+            current = await assertUnpublished();
+            const normal = await service.buildViews({
+                corpusId,
+                expectedHead: (await service.listViews(corpusId)).head,
+                targets: [
+                    { expectedVersion: 0, definition: definition("normal") },
+                ],
+            });
+            expect((await waitForViewBuild(service, normal)).state).toBe(
+                "complete",
+            );
+            const normalPublication = await service.getViewPublication({
+                corpusId,
+                viewId: "normal",
+            });
+            expect(normalPublication.publishedRevisionId).toBeDefined();
+            expect(normalPublication.indexState).toBe("ready");
+            const normalView = (await service.getView({
+                corpusId,
+                viewId: "normal",
+            }))!;
+            expect(
+                normalView.relatedArticles?.some(
+                    (article) => article.viewId === "unpublished",
+                ),
+            ).toBe(false);
+            const manual = await service.publishView({
+                corpusId,
+                viewId: current.viewId,
+                revisionId: current.revisionId,
+                expectedHead: (await service.listViews(corpusId)).head!,
+                expectedVersion: current.version,
+            });
+            expect(manual.publishedRevisionId).toBe(current.revisionId);
+            expect(manual.indexedRevisionId).toBe(current.revisionId);
+            expect(manual.indexState).toBe("ready");
+            expect(
+                (
+                    await service.searchViews({
+                        corpusId,
+                        query: "Acquisition",
+                        freshness: "current",
+                    })
+                ).some((match) => match.view.viewId === current.viewId),
+            ).toBe(true);
+        },
+    );
+
     test("public draft summary authorship is protected against a substantive new generated proposal", async () => {
         const { corpusId } = await service.createCorpus("Human summary");
         await update(corpusId, "pause");
@@ -2185,6 +2415,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             "role",
             "The accountable_role is the service role responsible for approval; accountable role does not mean review owner.",
         );
+        await service.close();
         const store = new TypedViewStore(root);
         const family = await store.getWikiFamily(corpusId);
         family.descriptors = [
@@ -2200,6 +2431,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             },
         ];
         await store.saveWikiFamily(corpusId, family);
+        service = open();
         const resumed = await update(corpusId, "resume");
         expect(resumed.job?.request.targets).toHaveLength(1);
         await update(corpusId, "pause");

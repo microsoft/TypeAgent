@@ -149,6 +149,44 @@ describe("document embedding persistence (deterministic, offline)", () => {
         };
     }
 
+    test("scoped queries use their own model and are decorated after customization", async () => {
+        let queryCalls = 0;
+        let wrappedCalls = 0;
+        const translated = {
+            searchExpressions: [
+                {
+                    rewrittenQuery: "form fields",
+                    filters: [{ searchTerms: ["form", "fields"] }],
+                },
+            ],
+        };
+        const configured = settings();
+        configured.queryLanguageModel = {
+            async complete() {
+                queryCalls++;
+                return success(JSON.stringify(translated));
+            },
+        };
+        configured.wrapQueryTranslator = (translator) => {
+            const translate = translator.translate2;
+            if (!translate) throw new Error("Scoped translation is missing");
+            return {
+                ...translator,
+                translate2: async (...args) => {
+                    wrappedCalls++;
+                    return translate(...args);
+                },
+            };
+        };
+        const memory = new DocMemory("query-role", [], configured);
+        const result =
+            await memory.settings.queryTranslator!.translate2!("form fields");
+        expect(result).toEqual(success(translated));
+        expect(queryCalls).toBe(1);
+        expect(wrappedCalls).toBe(1);
+        expect(extractionCalls).toBe(0);
+    });
+
     function part(text: string, topic: string): DocPart {
         return new DocPart(
             text,

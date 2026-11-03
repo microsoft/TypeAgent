@@ -52,6 +52,38 @@ export class MaintenanceScheduler {
     private draining = false;
     private drainSignal: AbortSignal | undefined;
     private coalesced = 0;
+    private foregroundCount = 0;
+    private foregroundRelease: (() => void) | undefined;
+    private foregroundTimer: ReturnType<typeof setTimeout> | undefined;
+    private foregroundCooldownUntil = 0;
+
+    public async foreground<T>(work: () => Promise<T>): Promise<T> {
+        if (
+            !this.foregroundRelease &&
+            Date.now() >= this.foregroundCooldownUntil
+        ) {
+            this.foregroundRelease = this.defer();
+            this.foregroundTimer = setTimeout(() => {
+                this.releaseForeground();
+                this.foregroundCooldownUntil = Date.now() + 1000;
+            }, 10_000);
+            this.foregroundTimer.unref();
+        }
+        this.foregroundCount++;
+        try {
+            return await work();
+        } finally {
+            this.foregroundCount--;
+            if (!this.foregroundCount) this.releaseForeground();
+        }
+    }
+
+    private releaseForeground(): void {
+        if (this.foregroundTimer) clearTimeout(this.foregroundTimer);
+        this.foregroundTimer = undefined;
+        this.foregroundRelease?.();
+        this.foregroundRelease = undefined;
+    }
 
     public constructor(
         private readonly blocked: (corpusId: string) => boolean,
@@ -396,6 +428,7 @@ export class MaintenanceScheduler {
 
     public async close(): Promise<void> {
         this.shutdown.abort(new Error("Memory service is closing"));
+        this.releaseForeground();
         clearTimeout(this.timer);
         this.timer = undefined;
         await Promise.all(this.running.values());

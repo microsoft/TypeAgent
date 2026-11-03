@@ -7,6 +7,7 @@ import type {
 } from "@typeagent/browser-control-rpc/viewRpc";
 import type { MemoryCenterPage } from "@typeagent/browser-control-rpc/serviceTypes";
 import { invokeView } from "./viewClient";
+import { hubNotifications } from "./memoryHubNotifications";
 import "./memoryHubPhase2.css";
 
 export type MemoryHubChangesOptions = {
@@ -41,9 +42,6 @@ export function mountMemoryHubChanges(
         "phase2-status",
     );
     status.setAttribute("role", "status");
-    const warning = element("div", undefined, "phase2-warning");
-    warning.hidden = true;
-    warning.setAttribute("role", "status");
     const rows = element("div", undefined, "phase2-results");
     const controls = element("div", undefined, "phase2-controls");
     const refreshButton = element("button", "Refresh changes");
@@ -53,7 +51,7 @@ export function mountMemoryHubChanges(
         button.type = "button";
     previous.disabled = next.disabled = true;
     controls.append(refreshButton, previous, next);
-    root.append(title, explanation, status, warning, rows, controls);
+    root.append(title, explanation, status, rows, controls);
     host.append(root);
     let page:
         | (MemoryCenterPage<MemoryHubChangeReceipt> & {
@@ -89,10 +87,15 @@ export function mountMemoryHubChanges(
                 .filter((item) => item.outcome === "committed")
                 .map(receipt),
         );
-        warning.hidden = !page.errors.length;
-        warning.textContent = page.errors.length
-            ? `Partial change history:\n${page.errors.map((error) => `${error.corpusId} · ${error.operation}: ${error.message}`).join("\n")}`
-            : "";
+        hubNotifications.set("changes", {
+            title: "Change history",
+            page: "activity",
+            context: options.scope() ?? "All memory",
+            messages: page.errors.map(
+                (error) =>
+                    `${error.corpusId} · ${error.operation}: ${error.message}`,
+            ),
+        });
         status.textContent = `Page ${pageIndex + 1} · ${page.total} receipts${page.errors.length ? " from available corpora; totals may be incomplete" : ""}`;
         if (!page.items.length)
             rows.append(

@@ -26,6 +26,7 @@ export type * from "./memoryGraphViewTypes.js";
 export type * from "./runbookImportViewTypes.js";
 
 export type MemoryHubSearchRequest = {
+    intent?: "auto" | "find" | "ask";
     evidenceSnapshotId?: string;
     prepareUnderstanding?: boolean;
     query: string;
@@ -45,6 +46,7 @@ export type MemoryHubSearchRequest = {
         | "timeline"
         | "wiki"
         | "schemaView"
+        | "extension"
     >;
 };
 
@@ -69,7 +71,8 @@ export type MemoryHubEvidence = {
         | "projectBrief"
         | "timeline"
         | "wiki"
-        | "schemaView";
+        | "schemaView"
+        | "extension";
     viewVersion?: number;
     viewProvenance?: ViewVersion["provenance"];
     review?: "unreviewed";
@@ -100,6 +103,7 @@ export type MemoryHubAnswer = {
 };
 
 export type MemoryHubSearchResult = {
+    resolvedIntent?: "find" | "ask";
     evidenceSnapshotId?: string;
     query: string;
     matches: MemoryHubEvidence[];
@@ -312,6 +316,10 @@ export type MemoryHubFunctions = {
     memoryHubUnderstandingModule(
         params: UnderstandingModuleRequest,
     ): Promise<UnderstandingModuleResult>;
+    memoryHubCancelUnderstanding(params: {
+        corpusId: string;
+        requestId: string;
+    }): Promise<boolean>;
     memoryHubViewUsedBy(
         params: ViewSourceUsageRequest,
     ): Promise<ViewSourceUsagePage>;
@@ -430,6 +438,7 @@ export type ViewMethod = keyof ViewInvokeFunctions;
 export const viewMethods = [
     "memoryHubUnderstand",
     "memoryHubUnderstandingModule",
+    "memoryHubCancelUnderstanding",
     "memoryHubGraph",
     "memoryHubGraphSupport",
     "memoryHubGraphEvent",
@@ -491,6 +500,8 @@ export const viewMethods = [
     "memoryListViewBuilds",
     "memoryCancelViewBuild",
     "memoryRetryViewBuild",
+    "memoryContinueViewBuild",
+    "memoryRefreshExtensionViews",
     "memoryGetViewConflict",
     "memoryResolveViewConflict",
     "memoryListCorpora",

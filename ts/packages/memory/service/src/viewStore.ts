@@ -13,6 +13,8 @@ import type {
 
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { timeSearchStage } from "@typeagent/knowpro";
+import { ImmutableReadCache } from "./immutableReadCache.js";
 import { readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -205,6 +207,26 @@ function validateIdentifier(kind: string, value: string): void {
 }
 
 export class TypedViewStore {
+    private readonly inventoryCache =
+        new ImmutableReadCache<ViewReadProjection>("view.inventory");
+    private readonly publishedCache = new ImmutableReadCache<
+        {
+            current: ViewVersion;
+            view: ViewVersion | undefined;
+            publication: ViewPublicationStatus;
+        }[]
+    >("view.published");
+
+    public invalidateReadCaches(corpusId?: string): void {
+        this.inventoryCache.invalidate(corpusId);
+        this.publishedCache.invalidate(corpusId);
+    }
+
+    public closeReadCaches(): void {
+        this.inventoryCache.close();
+        this.publishedCache.close();
+    }
+
     public async getKnowledgeState(corpusId: string): Promise<KnowledgeStatus> {
         const { state } = await this.readSnapshot(corpusId);
         return structuredClone(
@@ -281,6 +303,13 @@ export class TypedViewStore {
         active: boolean;
     }>();
 
+    public async assertInventoryHead(
+        corpusId: string,
+        head: string | null,
+    ): Promise<void> {
+        await this.history(corpusId).assertHead(head);
+    }
+
     public async withInventorySnapshot<T>(
         corpusId: string,
         operation: () => Promise<T>,
@@ -295,30 +324,45 @@ export class TypedViewStore {
         const committed = this.committedScope();
         const committedHead =
             committed?.corpusId === corpusId ? committed.head : undefined;
+        const assertCurrent = this.inventoryCache.guard(corpusId);
         await history.assertReadable();
-        const { head, value } =
-            committedHead === null
-                ? { head: null, value: undefined }
-                : committedHead === undefined
-                  ? await history.readEntry<ViewReadProjection>(
-                        viewReadProjectionEntry,
-                    )
-                  : await history.readEntry<ViewReadProjection>(
-                        viewReadProjectionEntry,
-                        committedHead,
-                    );
-        let projection = value;
-        if (!projection) {
-            const state: ViewStoreState = head
-                ? (await history.read(head)).state
-                : { views: {} };
-            projection = {
-                ...viewReadProjection(state),
-                versions: state.views,
-                ...(state.conflicts ? { conflicts: state.conflicts } : {}),
-            };
-        }
-        freezeSnapshot(projection);
+        const head =
+            committedHead === undefined
+                ? await history.readHead()
+                : committedHead;
+        assertCurrent();
+        const projection = await this.inventoryCache.get(
+            JSON.stringify([corpusId, head]),
+            corpusId,
+            () =>
+                timeSearchStage("view.inventory.load", async () => {
+                    let value = head
+                        ? (
+                              await history.readEntry<ViewReadProjection>(
+                                  viewReadProjectionEntry,
+                                  head,
+                              )
+                          ).value
+                        : undefined;
+                    if (!value) {
+                        const state: ViewStoreState = head
+                            ? (await history.read(head)).state
+                            : { views: {} };
+                        value = {
+                            ...viewReadProjection(state),
+                            versions: state.views,
+                            ...(state.conflicts
+                                ? { conflicts: state.conflicts }
+                                : {}),
+                        };
+                    }
+                    freezeSnapshot(value);
+                    return {
+                        value,
+                        bytes: Buffer.byteLength(JSON.stringify(value), "utf8"),
+                    };
+                }),
+        );
         const scope = { corpusId, head, projection, active: true };
         return this.inventoryRead.run(scope, async () => {
             try {
@@ -762,10 +806,12 @@ export class TypedViewStore {
         if (
             current?.revisionId !== version.revisionId ||
             current.state !== "draft" ||
-            !informationalView(current.content)
+            !informationalView(current.content) ||
+            current.generation?.input?.publicationPolicy?.buildOverride ===
+                false
         )
             throw new Error(
-                "Informational visibility requires the exact current page",
+                "Informational visibility requires the exact current page without an explicit draft-only build override",
             );
         const publication: ViewPublicationStatus = {
             viewId: version.viewId,
@@ -1244,8 +1290,11 @@ export class TypedViewStore {
         jobId: string,
         update: (job: ViewBuildJob) => void,
         updateWikiFamily?: (family: WikiFamilyState) => void,
+        expectedHead?: string | null,
     ): Promise<ViewBuildJob> {
         const { head, state } = await this.history(corpusId).read();
+        if (expectedHead !== undefined && head !== expectedHead)
+            throw new Error("View build continuation head conflict");
         const job = state.builds?.[jobId];
         if (!job)
             throw new Error(
@@ -2151,6 +2200,7 @@ export class TypedViewStore {
         corpusId: string,
         sourceId: string,
     ): Promise<void> {
+        this.invalidateReadCaches(corpusId);
         this.expireReadSnapshot();
         await this.history(corpusId).purge(
             sourceId,
@@ -2184,6 +2234,7 @@ export class TypedViewStore {
     ): Promise<void> {
         if (!eventIds.length) return;
         for (const id of eventIds) assertViewIdentifier("event ID", id);
+        this.invalidateReadCaches(corpusId);
         this.expireReadSnapshot();
         await this.history(corpusId).purge(
             JSON.stringify({
@@ -2197,6 +2248,7 @@ export class TypedViewStore {
     }
 
     public async clearDerivedViews(corpusId: string): Promise<void> {
+        this.invalidateReadCaches(corpusId);
         const history = this.history(corpusId);
         const { state } = await history.read();
         if (
@@ -2222,6 +2274,7 @@ export class TypedViewStore {
     }
 
     public async recover(corpusId: string): Promise<void> {
+        this.invalidateReadCaches(corpusId);
         this.expireReadSnapshot();
         await this.history(corpusId).recoverPurge(
             (state, id) => this.sanitize(state, id),
@@ -2371,6 +2424,37 @@ export class TypedViewStore {
     }
 
     public async listPublishedViews(corpusId: string) {
+        const scope = this.committedScope();
+        if (scope?.corpusId === corpusId) {
+            const history = this.history(corpusId);
+            const assertCurrent = this.publishedCache.guard(corpusId);
+            await history.assertReadable();
+            assertCurrent();
+            const value = await this.publishedCache.get(
+                JSON.stringify([corpusId, scope.head]),
+                corpusId,
+                () =>
+                    timeSearchStage("view.published.load", async () => {
+                        const value = await this.readPublishedViews(corpusId);
+                        freezeSnapshot(value);
+                        return {
+                            value,
+                            bytes: Buffer.byteLength(
+                                JSON.stringify(value),
+                                "utf8",
+                            ),
+                        };
+                    }),
+            );
+            await history.assertReadable();
+            return timeSearchStage("view.published.clone", () =>
+                structuredClone(value),
+            );
+        }
+        return this.readPublishedViews(corpusId);
+    }
+
+    private async readPublishedViews(corpusId: string) {
         const { state } = await this.readSnapshot(corpusId);
         return structuredClone(
             Object.entries(state.views).map(([viewId, versions]) => {

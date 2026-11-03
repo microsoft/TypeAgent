@@ -130,7 +130,7 @@ test("settings edit only changed fields, preserve future defaults, show errors, 
         enableNotifications: false,
     });
     expect(host.textContent).toContain("saved on this browser");
-    expect(host.textContent).toContain("does not control");
+    expect(host.textContent).toContain("does not disable warnings");
     localStorage.setItem(key, "{bad");
     mounted.show();
     expect(host.textContent).toContain("View preferences unavailable");

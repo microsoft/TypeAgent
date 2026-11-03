@@ -10,11 +10,459 @@ for host integration, or [Derived Views](../../../docs/architecture/memory/deriv
 for document construction and editing. The sections below describe service
 contracts and operational behavior.
 
+## Retained ingestion jobs
+
+Corpus status, paginated job lists, individual job reads, restart recovery and
+forgotten-source diagnostic cleanup share a pool of at most 16 concurrent
+job-file reads per service instance. Large retained histories must not open all
+job files at once. Filtering, ordering and pagination remain unchanged;
+unreadable or corrupt job files still fail explicitly rather than producing
+an apparently empty or complete result.
+
+## Host-registered extension Views
+
+Hosts can inject `extensionProviders: ViewExtensionProvider[]` and explicitly
+set `extensionBuilds: true`. `TYPEAGENT_MEMORY_EXTENSION_BUILDS=true` is parsed
+by `getConfiguredMemoryViewOptions`; it does not load provider code. Registration
+validates the versioned descriptor and output schema without invoking a model.
+`getCapabilities().derivedViews.extension` reports installed definitions.
+
+Provider-only hosts may retain `viewDrafts: false` and
+`informationalViews: false`. Existing source-only defaults are unchanged.
+Model-backed providers require the existing `informationalBudget`, or
+`maintenanceLimits.requestBudget`, and use the shared maintenance model
+admission and cooperative build checkpoints. Static eligibility cannot call a
+model; construction may do so only through the admitted provider context.
+
+Use `maintenanceLimits.requestBudget` for an extension/maintenance-only
+envelope. It governs shared maintenance and provider work, not ordinary source
+ingestion, reindexing or answer reads. `informationalBudget` retains its legacy
+opt-in rehearsal scope, including those original-source operations; it is not
+an extension-only setting. Both options preserve configured provider request
+constraints, model admission and native source authorization.
+
+For an uncapped chat request, output reservation uses the configured provider
+capacity, not the prompt's requested final-answer length. The default Luna
+capacity is 128,000 output tokens. An envelope with `outputTokens: 32768`
+therefore rejects even a small uncapped request before dispatch. Set an approved
+envelope that truthfully accommodates provider capacity or retain the rejection;
+the service never silently increases limits, changes models or inserts an
+unsupported completion cap. Cumulative reservations must accommodate the same
+capacity. Capacity-related endpoint errors use the
+[AI client's bounded recovery](../../aiclient/README.md#completion-limits-and-reasoning):
+one retry at a reported lower capacity, or half the reservation if none is
+reported. Each physical attempt retains its reservation and outcome. Existing
+extension continuation cannot increase per-request limits.
+
+Use exported `viewExtensionDigest` for descriptor and manifest hashes and
+`extensionViewId(providerId, definitionId, targetKey)` for the stable grouped
+target. The digest hashes pretty-printed canonical JSON with a final newline, including JSON quoting for string
+values; it is not a raw file-byte hash. Explicit `buildViews` requests use `kind: "extension"` and the exact
+versioned definition. The legacy direct selector still accepts at most 32
+references. Larger selections require `sourceManifest`: an ingested immutable
+manifest revision plus the complete expanded member list and content hashes.
+The manifest root and every member remain dependencies; no input is truncated.
+Providers can opt into a complete-source proof bound up to 8,000,000
+characters through `limits.maxInputChars`. Smaller declared bounds remain
+enforced. This limits the native original-source snapshot, not the model
+prompt: a provider can prepare a smaller extraction packet. Model-token
+budgets, source-count limits and output limits remain independent.
+
+Accepted structured payloads, readable sections, template bindings, fidelity
+proofs, qualification receipts and revisions live in the corpus View store.
+Extension artifacts are read-only. Publication is a separate existing
+`publishView` operation, not permission supplied by eligibility.
+Extension projection coalesces only identical predicate/from/to relationships.
+For each block and role, citations sharing one source/revision are attached to
+one edge; all exact locators/excerpts and original evidence bindings remain.
+The edge keeps `<blockId>.support.<firstCitationIndex>` or
+`<blockId>.opposition.<firstCitationIndex>`, where the index is the first occurrence
+in that role's original citation array. IDs can have gaps: sources `[A, A, B, A]`
+produce `support.0` and `support.2`, retaining all four citations. Different
+blocks, roles or source/revision endpoints are not merged.
+
+Fidelity relationship receipts must cover exactly these emitted coalesced IDs,
+including opposition, and inspect all citations bound to each edge. Extra
+per-citation edge receipts fail unchanged exact-coverage validation. Apps/source
+expansion citation IDs still use every original `<blockId>.<role>.<citationIndex>`;
+they are not renumbered or removed when semantic edges coalesce.
+
+`ViewPayloadSchema` supports objects, arrays, bounded strings, primitive
+values and `type: "union"` with 2–8 variants. For a nullable field, use a string
+variant and `{ type: "null" }`; no opaque JSON string or sentinel is necessary.
+Both strict wire codecs and runtime validation enforce these contracts.
+
+### Managed execution and validation
+
+Providers may set `descriptor.modelIdentity` to a nonempty identifier for the
+admitted model configuration. It participates in the retained input fingerprint;
+changing it prevents an in-flight build or continuation from mixing model
+configurations. Omitting it preserves the existing extension identity behavior.
+
+The supplied context includes `assertEligible()`, which rechecks the exact
+source snapshot and current provider authorization. The host also performs
+these checks inside queued model admission, after model completion, and before
+checkpoint/candidate writes and construction acceptance. Work uses the existing
+shared maintenance scheduler, request accounting and durable extension journal.
+
+An optional `provider.validateContent(input, content)` can reconstruct and
+validate domain-specific artifacts beyond schema and fidelity checks. It runs
+before acceptance and again on exact reads, including cold reopen, and before
+publication. A failed validation never falls back to another artifact or
+regenerates content during a read. Independent generation and review stages
+remain provider-owned and can use existing checkpoint/candidate receipts.
+Construction may throw `ViewExtensionDeferred` to retain a blocked target;
+other construction failures remain failures and never produce accepted content.
+
+Explicit `publication: false` remains draft-only, including informational
+builds, edits and restart recovery. Exact reads can set `includeContext: false`
+to omit related-article and redirect expansion; that flag does not bypass
+authorization or content validation. `automaticKnowledgeDiscovery: false`
+disables scheduled knowledge discovery even when a retained corpus policy
+would otherwise permit it; explicit operations remain available.
+
+Unmerged legacy managed-provider records (`host-defined-v1`, nested
+`extension.provider`/`configuration`, or extension content without
+`construction: "extension-v1"`) are incompatible with this canonical contract.
+They require an explicit rebuild. No automatic migration, revision/grant
+rewriting or reinterpretation is performed.
+
+Foreground `answer(request, signal?)` accepts an optional abort signal. MCP
+request cancellation reaches the same service boundary, prevents a completed
+answer from returning after cancellation, and leaves background jobs intact.
+The typed in-process and MCP clients forward the same optional signal.
+
+### Qualification, automatic refresh and accounted continuation
+
+Static and native decision-model qualification persist distinct `eligible`,
+`ineligible`, `deferred` and `failed` receipts. Only positive qualification
+proceeds to construction; qualification is not authorization, readiness or
+publication. Static qualification cannot call a model, although its admitted
+construction can. Set `provider.model` and, when needed, `provider.decisionModel`;
+there is no separate host extension-model option.
+
+Optional `provider.discover({ corpusId, sources })` returns
+`ViewDefinitionInput[]`. Sources include exact revision, retained-content digest,
+title, type and optional metadata. Metadata alone is not trusted: an application
+provider must authenticate its installed approved manifests before grouping.
+One stable `(providerId, definitionId, targetKey)` identifies a group, not each
+record or layout. Conflicting duplicate targets fail.
+
+`extensionDiscovery: true`, or
+`TYPEAGENT_MEMORY_EXTENSION_DISCOVERY=true`, separately opts into source-ready
+and startup qualification through existing maintenance. It requires extension
+builds; provider registration itself invokes neither discovery nor models.
+`refreshExtensionViews({ corpusId })` uses the same admission path explicitly.
+Unchanged inputs/definition/policy skip rebuilding; changed dependencies become
+stale and rebuild. Interrupted or failed unchanged jobs are not hidden retries.
+Manual maintenance mode and ingestion barriers remain effective. Periodic
+provider refresh is not implemented.
+
+Providers call `context.complete(stage, prompt, jsonSchema?)`,
+`context.decide(stage, request)`, and `context.checkpoint(stage, state?)`, not
+direct HTTP. Classification uses short-work admission; long construction
+changes the same lease's class. First-party model admission, reserved short
+capacity, burst fairness, corpus ownership, cancellation and cooperative yielding
+are shared. `context.recordCandidate(stage, value)` persists intermediate JSON;
+`context.resume` exposes candidates and checkpoints after restart.
+
+Returned stage outputs are stored before delivery and replay only for identical
+stage/prompt/schema fingerprints. `providerRequests` records each physical SDK
+retry reservation and outcome; a reservation-persistence failure prevents
+dispatch. `providerAttempts`, candidates, checkpoints, cumulative elapsed time,
+original limits and audited host-budget amendments stay on the build receipt.
+Physical reservations follow the AI client's `RequestBudgetReceipt`: token
+counts and estimate accounting are required, but an estimator name is not a
+per-request field. MCP accepts reservations without `tokenizer` and preserves
+an optional name when supplied; it does not invent one. The named estimator
+remains in the build's `providerLimits`.
+Unreported usage remains unknown, not zero.
+
+Extension document blocks use the shared `viewDocumentSectionRoles` vocabulary
+in both native validation and MCP. It includes `decisions` and `context` without
+relaxing the narrower role rules for first-party guides. Specialized event,
+page and question sections remain confined to their respective view kinds.
+The browser-safe `@typeagent/memory-service/view-types` export exposes this
+vocabulary without loading the native service or its Node-only dependencies.
+
+`continueViewBuild({ corpusId, jobId, expectedHead })` resumes the same
+extension-only job and input scope. An explicitly increased host cumulative
+budget permits accounted continuation without resetting prior reservations.
+Per-request input/output/context and safety limits cannot be raised this way.
+Counters, interrupted attempts and successful returned stages survive restart.
+Mixed first-party/extension jobs require separate first-party retry. Completed,
+stale or purged targets are not resurrected by continuation.
+
+### Original authorization and the native private-host connection
+
+The optional neutral host callback is:
+
+```typescript
+sourceAuthorization: async ({
+  corpusId,
+  sourceId,
+  revisionId,
+  contentHash,
+  retainedContentHash,
+  operation,
+}: MemorySourceAuthorizationRequest): Promise<boolean> => {
+  return checkCurrentApproval({
+    corpusId,
+    sourceId,
+    revisionId,
+    contentHash: retainedContentHash,
+  });
+};
+```
+
+`contentHash` is the stored ingestion revision hash; `retainedContentHash`
+is `viewExtensionDigest` of the actual retained text. Operations are
+`read | retrieve | expand | reader | build | publish`. With no callback, existing
+behavior is unchanged. Otherwise only `true` admits a source; callback failures
+fail closed. Original retrieval, exact expansion, reader dispatch/return,
+construction and publication recheck approval. Provider authorization also
+rechecks every manifest member and root through generic, cached and MCP paths.
+
+Callback invocations are serialized per service instance, including concurrent
+builds and reads. Large manifests therefore wait for authorization instead of
+overflowing a host's bounded worker queue. Every request still checks current
+approval; grants are not cached. Denial and errors release the slot without
+becoming successful authorization.
+
+Azure `LARGE REQUEST` warnings use stderr rather than stdout so large prompts
+do not introduce non-protocol lines into stdio MCP responses.
+
+Set `TYPEAGENT_MEMORY_CONNECTION_CONFIG` before starting the native agent
+server/Hub. Its private JSON file is a `MemoryMcpTransportConfig`, for example:
+
+```json
+{
+  "kind": "stdio",
+  "command": "node",
+  "args": ["<approved-provider-host-entrypoint>"],
+  "cwd": "<approved-private-workspace>"
+}
+```
+
+The existing HTTP form `{ "kind": "http", "url": "<host-endpoint>",
+"headers": { ... } }` also works. Keep credentials in the private configuration;
+never log it. Relative stdio `cwd` resolves against the configuration file.
+Both standalone and in-process native servers select this connection. Invalid
+explicit configuration fails rather than creating/falling back to the native
+instance's unrelated corpus store.
+
+From `ts`, before starting the intended native server:
+
+```powershell
+if (Test-Path $PROFILE) { . $PROFILE }
+$env:TYPEAGENT_MEMORY_CONNECTION_CONFIG = (Resolve-Path $connectionFile).Path
+pnpm --filter agent-server run start
+```
+
+Do not expect an already-running server to reload its memory connection. Use
+the existing host/instance lifecycle rather than stopping an unrelated server.
+
+### Build, publish, Ask, Explain and official Apps
+
+The service facade, typed client and MCP expose the same requests:
+
+```typescript
+const job = await client.buildViews({
+  corpusId,
+  expectedHead: (await client.listViews(corpusId)).head,
+  publication: false,
+  targets: [{ expectedVersion: 0, definition }],
+});
+// Inspect getViewBuild({ corpusId, jobId: job.jobId }) until settled.
+// Require the intended successful target and fidelity before publishing.
+const view = await client.getView({ corpusId, viewId: definition.viewId });
+if (!view) throw new Error("Expected corpus artifact is unavailable");
+const publication = await client.publishView({
+  corpusId,
+  viewId: view.viewId,
+  revisionId: view.revisionId,
+  expectedVersion: view.version,
+  expectedHead: (await client.listViews(corpusId)).head,
+});
+if (
+  publication.indexState !== "ready" ||
+  publication.indexedRevisionId !== view.revisionId
+)
+  throw new Error("Publication is not yet indexed; inspect/retry its receipt");
+await client.search({ corpusId, query: question });
+await client.answer({ corpusId, question, retrievalPolicy: "sourcesAndViews" });
+const explanation = await client.understand({
+  corpusId,
+  question,
+  retrievalPolicy: "sourcesAndViews",
+});
+await client.understandingModule({
+  corpusId,
+  snapshotId: explanation.snapshotId,
+  kind: "derivedViews",
+  viewId: view.viewId,
+  revisionId: view.revisionId,
+  layoutId,
+});
+```
+
+`definition` is the installed versioned extension identity plus its stable
+definition/group key, parameters and exact selector. Larger selections use the
+immutable ingested `sourceManifest` root and its complete expanded list, bounded
+at 4,096 members. Every member participates in authorization and invalidation.
+
+MCP equivalents are `memory_views_build`, `memory_view_build_get`,
+`memory_view_build_continue`, `memory_view_extension_refresh`,
+`memory_view_get`, `memory_view_publish`, `memory_search`, `memory_answer`,
+`memory_understand` and `memory_understanding_module`. Ordinary Search/Ask and
+rich Explain admit only current authorized published blocks, expand original
+support/opposition and retain reader-selected claim/source IDs. Original sources
+and their derived layouts are not independent corroboration.
+Default Explain retains its reader-selected answer and derived modules. At each
+evidence-validation boundary it checks every distinct exact original snippet
+first, then validates each distinct view/revision and its complete dependencies
+once, rather than repeating identical native authorization for every block.
+No authorization result is retained across reader return, Understanding snapshot
+validation or module reads. A revoked dependency blocks return even when it was
+not selected as an answer citation.
+Derived-view module reads use those complete checks before and after assembling
+their exact-revision response. The assembly step separately checks the provider's
+read permission without repeating the full dependency sweep between those
+boundaries. Each later expansion runs both complete checks again; authorization
+is not cached between requests. Original-source expansion also retains its
+independent source authorization.
+Build completion and publication do not alone establish indexed readiness.
+`retryViewIndex` / `memory_view_index_retry` repairs publication indexing without
+regenerating the stored artifact.
+
+`reindexSource(corpusId, sourceId)` / `memory_source_reindex` and
+`reindexCorpus(corpusId)` / `memory_corpus_reindex` rebuild committed active source
+revisions without ingesting new content or changing their identities. They do
+not retry failed ingestion jobs. A pre-commit ingestion failure preserves its
+job/error record but does not commit the candidate source revision. Diagnostic
+source/revision IDs on that job do not establish retained corpus content:
+reindexing an empty corpus remains empty, and source reindex rejects an unknown
+source. Recovery of such content requires separately authorized resubmission
+from the unchanged approved input; there is no failed-job recovery endpoint.
+
+Set `understanding: true` (or `TYPEAGENT_MEMORY_UNDERSTANDING=true`) and use
+`MemoryServiceHost.start(service, { previews: true })` to enable the existing
+official `memory_preview` / `memory_preview_expand` path. The version-1
+`derivedViews` module uses the same fixed safe renderer as native Understanding.
+Module-only inspection uses `selection: { mode: "only", modules: ["derivedViews"] }`;
+matching stored claims not selected by an answer are explicitly labeled.
+
+An Apps-capable SDK client advertises the official extension
+`{ extensions: { [EXTENSION_ID]: { mimeTypes: [RESOURCE_MIME_TYPE] } } }`.
+The same tool requests work without that capability, returning text/citations:
+
+```typescript
+const preview = await sdk.callTool({
+  name: "memory_preview",
+  arguments: {
+    corpusId,
+    question,
+    retrievalPolicy: "sourcesAndViews",
+    selection: { mode: "only", modules: ["derivedViews"] },
+  },
+});
+const { snapshotId } = (
+  preview.structuredContent as {
+    result: { snapshotId: string };
+  }
+).result;
+await sdk.callTool({
+  name: "memory_preview_expand",
+  arguments: {
+    corpusId,
+    snapshotId,
+    kind: "derivedViews",
+    viewId,
+    revisionId,
+    layoutId,
+    blockId,
+    bodyOffset: 1600,
+  },
+});
+await sdk.callTool({
+  name: "memory_preview_expand",
+  arguments: {
+    corpusId,
+    snapshotId,
+    kind: "derivedViews",
+    viewId,
+    revisionId,
+    layoutId,
+    blockId,
+    citationId,
+  },
+});
+```
+
+Expansion pins `corpusId`, `snapshotId`, `viewId`, `revisionId` and `layoutId`;
+`blockId`, `bodyOffset`, `citationOffset`, `citationId` and `citationBodyOffset`
+expand only that stored claim and its bound original source. The block limit is
+1–8; claim/source text pages contain at most 1,600/1,000 UTF-16 characters.
+Layouts, pagination and expansion never repeat summarization. Omission counts,
+unsupported scopes/versions, expiry and revoked sources are explicit.
+Negotiation, CSP, renderer/resource byte ceilings and non-Apps text/citations
+remain on the existing preview stack.
+
+Native Views provides inventory, provider qualification, read-only detail and
+four fixed templates: `document-v1`, `grouped-cards-v1`, `table-v1`,
+`sources-v1`. Pinned routes use
+`#/views/<corpus>/<view>/revision/<revision>/page/<claim>/layout/<layout>`.
+No model HTML, executable layouts or downloaded renderer code is accepted.
+
+Offline Windows qualification exercises actual service/client/authenticated MCP,
+native Chromium Hub HTTP RPC and official SDK AppBridge with the packaged CSP
+iframe, including original-source expansion and warmed/cached revocation.
+Run `pnpm run test:views:derived-browser` in `packages/agents/browser` after the
+full root build; use an installed Chromium or set
+`TYPEAGENT_BROWSER_EXECUTABLE`. This is a synthetic host fixture, not an actual
+private deployment, live-model quality result or cross-platform qualification.
+Linux/WSL Node validation and private application/live evaluation remain separate.
+
+## Paged view details
+
+Use view summaries for inventory and `getViewDetailPage`
+(`memory_view_detail_page`) for complete large artifacts. Each response contains
+at most 262144 JSON characters, with corpus/view/revision identity, a SHA-256
+digest, total character count, offset and optional next offset. Continuations
+must carry the returned revision, digest and projection. Every page uses the ordinary
+authorized exact-view read; access changes fail rather than returning cached
+proof without validation.
+
+The default `complete` projection preserves the entire stored artifact.
+Explicit `presentation` projection omits only `generation.input`, the embedded
+construction snapshot; it preserves all view content, presentation layouts,
+citations, relationships, generation output and validation metadata. Native Hub
+uses presentation details instead of downloading every original build input.
+The canonical corpus revision is unchanged, and complete paging remains
+available for inspection of that snapshot. Neither projection bypasses
+authorization of the complete original-source dependency set.
+
+The typed client's `readViewDetail` assembles and schema-validates all pages,
+verifies identity, offsets, length and the complete digest, and returns nothing
+partial on failure. Complete reads are bounded to 33554432 characters.
+Native Hub uses this path behind its existing detail interaction; layout
+selection and original-source inspection are unchanged. Complete corpus
+payloads, lineage and legacy full-read APIs are retained. The native MCP
+transport's default message limit is unchanged; neither truncation nor a larger
+transport buffer is used to admit large views.
+
+Switching layouts in an already-open extension view reuses that displayed
+revision only for the layout's own URL handoff. Exact links, explicit reopen,
+other views and later navigation still perform a fresh authorized read.
+Original-source expansion retains its independent authorization checks.
+
 ## Opt-in memory understanding
 
 Set `TYPEAGENT_MEMORY_UNDERSTANDING=true` in the host environment (or pass
 `understanding: true` to `FileMemoryService`) to advertise
-`features.memoryUnderstanding`. `understand` and `understandingModule` reuse
+`features.memoryUnderstanding` and `features.memoryDocumentUnderstanding`.
+Both optional boolean flags are preserved by the public capability codec and
+advertised MCP output schema. `understand` and `understandingModule` reuse
 the existing indexed original/Views retrieval, support closure, refinement
 and access validation. Existing search/answer contracts and defaults do not change.
 
@@ -32,11 +480,99 @@ Module-only requests do not invoke the prose reader.
 
 Snapshots are service-local: 64 entries, 8 MiB total, 512 KiB per entry, with
 absolute 15-minute expiry. Corpus clear, source forgetting and close purge
-cached bodies. Parent/module reads revalidate all influencing evidence and
+cached bodies. Oversized serialized snapshots are additionally accounted as a
+retained object graph: shared evidence objects count once, without removing any
+body or lineage identifiers. Distinct objects remain separately charged, even
+when equal; cycles and genuinely oversized entries still fail. Response and
+model-request wire limits are unchanged. Parent/module reads revalidate all influencing evidence and
 index versions. Handles do not replace authorization or provide per-chat-session
 isolation; this is the existing local single-principal service boundary.
 Enable `TYPEAGENT_MEMORY_SEARCH_TRACE=1` for redacted rich-stage timing,
 reader-call counts and response-byte/module counts, not prompt/source text.
+
+### Serving performance experiments
+
+These are opt-in experiments, not recommended production defaults. Set
+`TYPEAGENT_MEMORY_PERF_EXPERIMENTS` to a comma-separated switch list, or pass
+`performanceExperiments` to `FileMemoryService`. Unknown names fail explicitly.
+`p2` expands to the first five switches below; `p3` expands to the last four.
+
+| Switch                | Behavior                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fast-models`         | Separate fast query translation and initial reading; refinement and ingestion extraction retain their existing models. Requires an explicitly configured `TYPEAGENT_MEMORY_FAST_MODEL` or `fastQueryModelEndpoint`. Injected reader models retain precedence. Custom index factories are rejected rather than silently ignoring translation experiments. |
+| `brief-reader`        | A 700-token soft initial target with unchanged structured output and grounding requirements.                                                                                                                                                                                                                                                             |
+| `source-preview`      | An optional model-free, provisional lexical source phase before semantic retrieval. At most six 600-character fragments; not a validated answer or a usable follow-on/module handle.                                                                                                                                                                     |
+| `refinement-fallback` | Revalidate and retain an initial explanation only after an explicitly retryable model failure/deadline. Return `refinementFailed: true`, incomplete/partial status and warnings. Privacy, cancellation, scope and malformed-output errors still fail.                                                                                                    |
+| `translation-cache`   | Completed successes only, keyed by corpus, fixed model, schema, exact question and full prompt context. Five-minute expiry; at most 128 entries / 1 MiB payload / 64 KiB per entry. Relative-date questions bypass caching; privacy changes and close purge it. Concurrent callers retain independent cancellation.                                      |
+| `evidence-leases`     | Tolerate unrelated index-version changes for at most 120 seconds from original preparation, only after complete exact-evidence revalidation. Later phases cannot renew the lease. Forget, clear, suppression and changed references remain immediate. This is not whole-index MVCC.                                                                      |
+| `graph-parallel`      | Existing graph projections plus ordered support queries at concurrency two. All siblings settle before a failed batch leaves scope.                                                                                                                                                                                                                      |
+| `foreground-priority` | Defer new background maintenance for a shared maximum ten seconds, with a one-second cooldown under sustained requests. Does not cancel running work or defer explicit writes.                                                                                                                                                                           |
+| `lazy-collections`    | Single-flight per-collection recovery on first access, with pending removal/clear recovery still eager. Unopened collections join completion-paced background warmup rather than all loading during discovery.                                                                                                                                           |
+
+Fast model deployments also need verified `modelRequestConstraints` context,
+input and full output capacities for uncapped request admission. A soft reader
+target is not a provider-output reservation. The shipped `gpt_5_4_mini`
+capacities follow the provider's published limits; explicitly configured
+overrides remain authoritative. Document-scoped query translation uses its own
+model and applies cache decoration after its scoped schema is installed, without
+changing the ingestion/extraction model.
+Fast query models retain the default JSON-output mode; selecting a faster model
+does not remove that safeguard.
+For independent role experiments, `initialReaderModelEndpoint` overrides only
+initial Search/Ask and Understanding reading, not query translation, extraction
+or deeper refinement. Injected reader models still take precedence. For example,
+retain fast query translation while selecting the ordinary reader endpoint.
+The native agent-server host accepts
+`TYPEAGENT_MEMORY_INITIAL_READER_MODEL_ENDPOINT` for this override and validates
+that it names a configured endpoint. Its existing
+`TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT` selects the deeper answer/View model
+independently. Neither setting changes the fast query model or ingestion model.
+Hosts that customize built-in document settings can use `indexSettingsFactory`;
+their extraction model, validators and embedding batches are retained while
+serving roles and decorators are applied. The ordinary agent-server host uses
+this path. Opaque `indexFactory` implementations still reject query experiments,
+and supplying both factories is invalid.
+
+For browser SSE previews, use the same environment switches in the service and
+browser gateway. The gateway omits the preview RPC when disabled. Direct clients
+may explicitly request `phase: "preview"` only from an enabled host; provisional
+results have `provisional: true`, no answer and no prepared evidence handle.
+
+Both readers allow one same-model regeneration when the returned status conflicts
+with its factual citations/sections or omits a view's original citations.
+The model receives an explicit `requiredEvidenceIds` bundle for each view and
+the complete required bundle in repair feedback. The host never invents missing
+citations or accepts a repeated omission. The same evidence, cancellation/deadline and
+serialized request limits still apply. The regenerated response is fully parsed
+and revalidated; invalid references, malformed JSON, privacy changes and other
+failures are not silently accepted or converted into a successful answer.
+`memory.reader.statusRepair` records the exceptional extra model call.
+
+Extension-view lookup uses bounded indexed fragments when available, matching
+the existing informational-wiki path rather than relying solely on a semantic
+search rewrite of a long question. Every returned block includes its view title
+and retains exact support/opposition, publication freshness and authorization.
+
+The [latency runner](../../../tools/memory-maintenance-qualification/search-latency-benchmark.mts)
+accepts `--experiments`, `--fast-model`, `--initial-reader-model`, `--answer-model`, `--paths`, `--understanding-rounds`
+and optional `--retain-answers`. Opt-in `--retain-model-responses` also saves
+private model output, bounded to 65,536 characters per chat response, in
+`provider-responses.jsonl`; it never records request headers or prompts.
+`--answer-model` sets the service's existing `viewModelEndpoint` and the Hub
+synthesizer endpoint. Set both reader flags to compare all answer stages using
+one model while keeping query translation fixed. Ingestion/View maintenance
+is disabled in these benchmark runs, not a separately measured model role.
+Provider timing, usage and private diagnostics support Chat Completions and
+Responses API endpoints.
+Responses API reader requests preserve JSON schemas through `text.format`,
+including strict output requirements; plain JSON-object requests retain JSON
+mode. Configured Terra deployments have provider-capacity metadata for existing
+request admission, without imposing a new generation-token cap.
+Private files are written outside measurement intervals; do not publish them.
+Repeated questions overestimate general translation-cache hit rates.
+The [local experiment tool](../../../tools/memory-maintenance-qualification/serving-local-experiments.mts)
+compares eager/lazy startup and fixture JSON parsing versus a local worker with
+full-result cloning. It prohibits network calls and does not ship a storage worker.
 
 ## Scoped knowledge graphs and read inventories
 
@@ -315,6 +851,11 @@ derived-view indexing also schedules extraction completions through this pool
 within maintenance scope; foreground extraction and embeddings are not included.
 Custom injected adapters and index/settings factories remain responsible for
 their own request scheduling.
+
+Foreground reads may use an older committed generation while maintenance runs.
+Retrying a failed View build selects its history head and target versions inside
+the admission writer rather than reusing that foreground inventory head.
+Explicit build requests still enforce the caller's `expectedHead`.
 
 `topicBuildTimeoutMs` (`TYPEAGENT_MEMORY_TOPIC_BUILD_TIMEOUT_MS`) retains the
 3,000,000 ms topic-target default and accepts integers from 1 to 3,600,000.
@@ -619,6 +1160,11 @@ snapshot; actual qualification runs still require an explicit fixture root.
 No generated memory stores, recordings, provider responses or run receipts are
 included in these fixtures.
 
+The source-plus-view integration fixture checks reader evidence separately from
+host diagnostics. Readers receive `influencingSourceCount`, while diagnostics
+retain complete `influencingSourceIds`. Original supporting passages, citation
+references and the remaining evidence fields must match on both paths.
+
 ### Memory quality evaluation
 
 The [offline quality tools](../../../tools/memory-maintenance-qualification/quality-README.md)
@@ -726,7 +1272,7 @@ In CI, Jest runs this package in one worker and recycles it between suites when
 its idle heap exceeds 1 GB. This bounds accumulated ESM module state on Node 22
 without increasing test timeouts or skipping coverage.
 
-The [memory-regression workflow](../../../../../.github/workflows/memory-regression.yml)
+The [memory-regression workflow](../../../../.github/workflows/memory-regression.yml)
 runs both suites every Monday at 08:23 UTC and on manual dispatch, on Ubuntu,
 Windows and macOS with Node 24.22.1. Each OS uploads Jest JSON results, including
 individual test durations. No model credentials or external fixture checkout
@@ -822,6 +1368,12 @@ shutdown. Full-input limits and stopped retries remain enforced; changed
 evidence or a successful explicit retry clears the diagnostic. Unexpected
 schema-maintenance errors, including exhausted head/version conflicts, still
 fail shutdown.
+
+For explicit or schema-reconciliation builds, wait for a successful terminal
+build receipt before capturing the exact head, version and revision to publish.
+An answered page alone is not a completion barrier: the final build receipt can
+advance the history head without changing the view revision.
+
 Shutdown cancels their linked work before releasing storage. A provider that
 ignores cancellation must still be drained before storage ownership is released.
 
@@ -1052,6 +1604,29 @@ and one reader call, so aggregate retrieval and provider cost can increase;
 per-search indexed reads remain bounded at 32,000 characters. Diagnostics retain
 both reader contexts and the refinement queries and selection receipts. The
 product and qualification harness use this same answer path.
+
+Ask and Explain retain complete influencing-source identifiers for eligibility,
+deduplication, validation and diagnostics, but send only their distinct source
+count to the model. Opaque construction-scope IDs are not original passages or
+independent observations. Required supporting and opposing passages, exact
+view references and evidence IDs remain in the reader envelope. View-budget
+checks use that same serialized representation, so large-scope views do not
+lose their reader allocation to host-only lineage metadata. Existing evidence,
+source-count and complete-request limits are unchanged.
+
+Readers permit one logged regeneration for an inconsistent status or an omitted
+original-citation bundle, using the same evidence and request limits. Explain
+requires every claim citing a view to include that view's supporting and
+opposing evidence IDs in that same claim. Ask retains its selected-view original
+reference requirement. A second failure, unknown reference, malformed response,
+transport failure or cancellation remains an error; the host never repairs
+citations by attaching them to an unchanged model claim.
+
+When a question requests a supplied maintained view's interpretation, both
+readers are guided to describe and cite that artifact with its required
+originals, rather than silently substitute a source-only answer. This does not
+make the interpretation independent confirmation or require unrelated views
+in source-focused answers. Missing matching views must remain explicit.
 
 The bounded refinement also applies to integrated source-plus-view answers,
 including `sourcesOnly`. Follow-up searches retain the original access scope

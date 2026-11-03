@@ -4,8 +4,11 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
+    viewDetailPageRequestSchema,
+    viewDetailPageSchema,
     viewArchiveRequestSchema,
     viewBuildJobRequestSchema,
+    viewBuildContinuationRequestSchema,
     viewBuildJobSchema,
     viewBuildRequestSchema,
     viewConflictReadSchema,
@@ -249,6 +252,35 @@ export function registerViewTools(
         async ({ corpusId }) => run(() => views.listViews(corpusId)),
     );
     server.registerTool(
+        viewToolNames.getViewDetailPage,
+        {
+            description:
+                "Read bounded JSON slices of a view revision. Complete projection retains build inputs; presentation retains all view content and citations without the embedded build input snapshot. Follow every nextOffset with the same projection, revisionId and digest. An individual slice is not a complete view. Each page rechecks original access. Prefer summaries for inventory.",
+            inputSchema: viewDetailPageRequestSchema,
+            outputSchema: z.object({ result: viewDetailPageSchema.nullable() }),
+        },
+        async (request) =>
+            run(async () => {
+                if (!views.getViewDetailPage)
+                    throw new Error("Paged view detail is unavailable");
+                return (
+                    (await views.getViewDetailPage({
+                        corpusId: request.corpusId,
+                        viewId: request.viewId,
+                        ...(request.revisionId !== undefined
+                            ? { revisionId: request.revisionId }
+                            : {}),
+                        ...(request.includeContext !== undefined
+                            ? { includeContext: request.includeContext }
+                            : {}),
+                        offset: request.offset,
+                        digest: request.digest,
+                        projection: request.projection,
+                    })) ?? null
+                );
+            }),
+    );
+    server.registerTool(
         viewToolNames.getView,
         {
             description: "Inspect exact draft view revision.",
@@ -341,6 +373,26 @@ export function registerViewTools(
             outputSchema: z.object({ result: viewBuildJobSchema }),
         },
         async (request) => run(() => views.cancelViewBuild(request)),
+    );
+    server.registerTool(
+        viewToolNames.refreshExtensionViews,
+        {
+            description:
+                "Discover approved extension group targets and qualify changed inputs through shared maintenance admission. Unchanged, interrupted and failed receipts are not automatically retried.",
+            inputSchema: corpus,
+            outputSchema: z.object({ result: viewBuildJobSchema.array() }),
+        },
+        async (request) => run(() => views.refreshExtensionViews(request)),
+    );
+    server.registerTool(
+        viewToolNames.continueViewBuild,
+        {
+            description:
+                "Continue an unchanged extension build with durable stages and cumulative request receipts; only host-approved cumulative budget amendments apply.",
+            inputSchema: viewBuildContinuationRequestSchema,
+            outputSchema: z.object({ result: viewBuildJobSchema }),
+        },
+        async (request) => run(() => views.continueViewBuild(request)),
     );
     server.registerTool(
         viewToolNames.retryViewBuild,

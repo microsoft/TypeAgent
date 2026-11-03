@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { hubNotifications } from "./memoryHubNotifications";
 import type {
     MemoryQuestion,
     QuestionEdit,
@@ -75,8 +76,6 @@ export function mountMemoryHubQuestions(
     const status = rbChip("");
     status.setAttribute("role", "status");
     const total = rbNode("span", "Loading...", "hub-list-total");
-    const notice = rbNode("div", undefined, "hub-notice");
-    notice.hidden = true;
     const list = rbNode("div", undefined, "hub-qlist");
     const inspector = rbNode(
         "article",
@@ -194,7 +193,7 @@ export function mountMemoryHubQuestions(
     card.setAttribute("aria-label", "Questions list");
     const cardHead = rbNode("div", undefined, "section-heading");
     cardHead.append(rbNode("h2", "Questions"), total);
-    card.append(cardHead, notice, filters, list, pagination);
+    card.append(cardHead, filters, list, pagination);
     host.append(head, chips, card, reader, author, panel, knowledgePanel);
 
     function setDetailMode(detail: boolean) {
@@ -485,7 +484,6 @@ export function mountMemoryHubQuestions(
         );
     }
     function renderNotice() {
-        notice.replaceChildren();
         const lines = [
             ...failureLines,
             ...[...inventories.entries()].flatMap(([corpusId, inventory]) =>
@@ -496,13 +494,12 @@ export function mountMemoryHubQuestions(
                     : [],
             ),
         ];
-        notice.hidden = !lines.length;
-        for (const line of lines) {
-            const row = rbNode("p");
-            row.title = line;
-            row.append(icon("fa-triangle-exclamation"), line);
-            notice.append(row);
-        }
+        hubNotifications.set("questions", {
+            title: "Questions",
+            page: "questions",
+            context: options.scope() ?? "All memory",
+            messages: lines,
+        });
     }
     function renderList() {
         list.replaceChildren();
@@ -1242,7 +1239,7 @@ export function mountMemoryHubQuestions(
             }
         } catch (error) {
             inventories = new Map();
-            notice.hidden = true;
+            hubNotifications.clear("questions");
             acquisitions.clear();
             knowledge.clear();
             list.replaceChildren();
@@ -1261,7 +1258,7 @@ export function mountMemoryHubQuestions(
         schemaViewsSupported = supported;
         if (!supported) {
             inventories = new Map();
-            notice.hidden = true;
+            hubNotifications.clear("questions");
             acquisitions.clear();
             knowledge.clear();
             list.replaceChildren();

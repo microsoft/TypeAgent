@@ -7,13 +7,29 @@ import type { FileMemoryServiceOptions } from "@typeagent/memory-service";
 export function getConfiguredViewModelOptions(
     environment: Readonly<Record<string, string | undefined>> = process.env,
     hasEndpoint: (endpoint: string) => boolean = openai.hasChatModelEndpoint,
-): Pick<FileMemoryServiceOptions, "viewModelEndpoint"> {
+): Pick<
+    FileMemoryServiceOptions,
+    "viewModelEndpoint" | "initialReaderModelEndpoint"
+> {
     const endpoint =
         environment.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT?.trim() || undefined;
-    if (endpoint === undefined) return {};
-    if (!hasEndpoint(endpoint))
+    const initialReader =
+        environment.TYPEAGENT_MEMORY_INITIAL_READER_MODEL_ENDPOINT;
+    if (endpoint !== undefined && !hasEndpoint(endpoint))
         throw new Error(
             "The configured memory View model endpoint is not available.",
         );
-    return { viewModelEndpoint: endpoint };
+    if (
+        initialReader !== undefined &&
+        (!initialReader.trim() || !hasEndpoint(initialReader.trim()))
+    )
+        throw new Error(
+            "The configured memory initial reader model endpoint is not available.",
+        );
+    return {
+        ...(endpoint ? { viewModelEndpoint: endpoint } : {}),
+        ...(initialReader !== undefined
+            ? { initialReaderModelEndpoint: initialReader.trim() }
+            : {}),
+    };
 }

@@ -7,6 +7,9 @@ import {
     validateRunbookCatalogIdentity,
 } from "@typeagent/memory-service/agent-edition-validation";
 import { z } from "zod";
+import { viewProviderIdentitySchema } from "./viewProtocol.js";
+import { schemaValueSchema } from "./schemaViewProtocol.js";
+import { frameSearchFilterSchema } from "./frameProtocol.js";
 
 export const memoryToolNames = {
     corpusCreate: "memory_corpus_create",
@@ -541,6 +544,8 @@ export const eventForgetResultSchema = z.object({
 });
 
 export const searchRequestSchema = z.object({
+    frameFilter: frameSearchFilterSchema.optional(),
+    retrievalPolicy: z.enum(["sourcesOnly", "sourcesAndViews"]).optional(),
     indexedFragments: z.boolean().optional(),
     corpusId: identifierSchema,
     query: z.string().min(1),
@@ -553,7 +558,101 @@ export const searchRequestSchema = z.object({
     dateTo: z.string().datetime({ offset: true }).optional(),
 });
 
+const temporalValueSchema = z.strictObject({
+    raw: z.string().max(8192),
+    kind: z.enum(["instant", "floating", "calendar"]),
+    precision: z.enum([
+        "year",
+        "month",
+        "day",
+        "minute",
+        "second",
+        "millisecond",
+    ]),
+    localDateTime: z.string().max(8192),
+    instantUtc: z.string().max(8192).optional(),
+    offsetMinutes: z.number().finite().optional(),
+});
+const temporalDateEvidenceSchema = z.strictObject({
+    id: z.string(),
+    role: z.enum(["messageTime", "eventTime"]),
+    locator: z.string(),
+    value: temporalValueSchema,
+    quote: z.string().optional(),
+    chunkOrdinal: z.number().int().nonnegative().optional(),
+});
+const messageTemporalContextSchema = z.strictObject({
+    version: z.literal(1),
+    sourceRevisionId: z.string(),
+    contextHash: z.string(),
+    sourceContextHash: z.string().optional(),
+    ownerId: z.string(),
+    role: z.string().optional(),
+    partOrdinal: z.number().int().nonnegative().optional(),
+    sourceSpan: z.strictObject({
+        start: z.number().int().nonnegative(),
+        end: z.number().int().nonnegative(),
+    }),
+    messageTime: temporalValueSchema.optional(),
+    inheritedDateEvidence: temporalDateEvidenceSchema.array(),
+    discoveredDateEvidence: temporalDateEvidenceSchema.array().optional(),
+    rejectedDateAnchors: z
+        .strictObject({
+            chunkOrdinal: z.number().int().nonnegative(),
+            anchorOrdinal: z.number().int().nonnegative(),
+            reason: z.enum([
+                "empty-quote",
+                "quote-not-found",
+                "ambiguous-quote",
+                "date-not-in-quote",
+                "invalid-date",
+            ]),
+        })
+        .array()
+        .optional(),
+    eventMentions: z
+        .strictObject({
+            chunkOrdinal: z.number().int().nonnegative().optional(),
+            text: z.string(),
+            start: z.number().int().nonnegative(),
+            end: z.number().int().nonnegative(),
+            role: z.literal("eventTime"),
+            value: temporalValueSchema.optional(),
+            anchorId: z.string().optional(),
+            resolution: z.enum(["resolved", "missing-anchor", "ambiguous"]),
+        })
+        .array()
+        .optional(),
+});
+
 export const searchResultSchema = z.object({
+    derivedViews: z
+        .lazy(() => {
+            const {
+                id: _id,
+                supportingEvidenceIds: _support,
+                opposingEvidenceIds: _opposition,
+                ...base
+            } = answerViewEvidenceBase;
+            return z
+                .discriminatedUnion("kind", [
+                    z.strictObject({
+                        ...base,
+                        kind: z.literal("derived"),
+                        reference: answerDerivedReferenceSchema,
+                        authorship: z.literal("informational"),
+                    }),
+                    z.strictObject({
+                        ...base,
+                        kind: z.literal("userAssertion"),
+                        reference: answerAssertionReferenceSchema,
+                    }),
+                ])
+                .array()
+                .max(1000);
+        })
+        .optional(),
+    omittedViewCandidates: z.number().int().nonnegative().optional(),
     query: z.string(),
     matches: z.array(
         z.object({
@@ -570,6 +669,7 @@ export const searchResultSchema = z.object({
             synopsis: sourceSynopsisPreviewSchema.optional(),
             capturedAt: z.string().optional(),
             indexedAt: z.string(),
+            temporalContext: messageTemporalContextSchema.optional(),
         }),
     ),
     warnings: z.array(z.string()),
@@ -594,24 +694,7 @@ export const answerRequestSchema = z.strictObject({
     temporalContext: z
         .strictObject({
             referenceTime: z
-                .union([
-                    z.string().min(1).max(8192),
-                    z.strictObject({
-                        raw: z.string().max(8192),
-                        kind: z.enum(["instant", "floating", "calendar"]),
-                        precision: z.enum([
-                            "year",
-                            "month",
-                            "day",
-                            "minute",
-                            "second",
-                            "millisecond",
-                        ]),
-                        localDateTime: z.string().max(8192),
-                        instantUtc: z.string().max(8192).optional(),
-                        offsetMinutes: z.number().finite().optional(),
-                    }),
-                ])
+                .union([z.string().min(1).max(8192), temporalValueSchema])
                 .optional(),
             availabilityPolicy: z
                 .enum(["supplied-history", "as-of"])
@@ -621,6 +704,7 @@ export const answerRequestSchema = z.strictObject({
 });
 
 export const answerDerivedReferenceSchema = z.strictObject({
+    extension: viewProviderIdentitySchema.optional(),
     viewId: identifierSchema,
     revisionId: identifierSchema,
     sectionId: identifierSchema.optional(),
@@ -643,6 +727,8 @@ const answerSourceReferenceSchema = z.strictObject({
 const answerViewEvidenceBase = {
     id: z.string().min(1).max(8192),
     text: z.string().max(120000),
+    selectedValue: schemaValueSchema.optional(),
+    alternatives: schemaValueSchema.array().max(1000).optional(),
     influencingSourceIds: identifierSchema.array().max(100000),
     supportingSources: answerSourceReferenceSchema.array().max(1000),
     opposingSources: answerSourceReferenceSchema.array().max(1000),
@@ -788,6 +874,36 @@ export const knowledgeGraphSchema = z.object({
 export const capabilitiesSchema = z.object({
     derivedViews: z
         .object({
+            extension: z
+                .strictObject({
+                    apiVersion: z.literal(1),
+                    sourceManifestVersion: z.literal(1),
+                    templateVersion: z.literal(1),
+                    providers: z
+                        .strictObject({
+                            identity: z.strictObject({
+                                providerId: z.string(),
+                                version: z.string(),
+                                implementationDigest: z.string(),
+                                inputContract: z.string(),
+                                outputContract: z.string(),
+                                schemaDigest: z.string(),
+                                recipeDigest: z.string(),
+                            }),
+                            label: z.string(),
+                            definitions: z
+                                .strictObject({
+                                    id: z.string(),
+                                    eligibilityVersion: z.string(),
+                                    mode: z.enum(["static", "decision"]),
+                                })
+                                .array()
+                                .max(64),
+                        })
+                        .array()
+                        .max(64),
+                })
+                .optional(),
             knowledge: z.boolean().optional(),
             integratedAnswering: z.boolean().optional(),
             kinds: z
@@ -797,6 +913,7 @@ export const capabilitiesSchema = z.object({
                     "timeline",
                     "wiki",
                     "schemaView",
+                    "extension",
                 ])
                 .array(),
             drafts: z.literal(true),
@@ -822,7 +939,9 @@ export const capabilitiesSchema = z.object({
         groundedAnswer: z.boolean(),
         scopedKnowledgeGraphs: z.boolean().optional(),
         memoryUnderstanding: z.boolean().optional(),
+        memoryDocumentUnderstanding: z.boolean().optional(),
         sourceSynopses: z.boolean().optional(),
+        dataFrames: z.boolean().optional(),
         agentSessionImportTypes: z
             .enum(["agent-session-jsonl", "copilot-session-jsonl"])
             .array()

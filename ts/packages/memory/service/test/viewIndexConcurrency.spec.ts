@@ -576,7 +576,11 @@ describe("detached view index preparation", () => {
             1,
         );
         pending.resume.resolve();
-        expect((await publication).value?.indexState).toBe("ready");
+        const published = await publication;
+        expect(published.error).toBeUndefined();
+        expect(published.value).toEqual(
+            expect.objectContaining({ indexState: "ready" }),
+        );
         expect(await stagedFiles()).toEqual([]);
         expect(directories[0]).toContain("view-search-index-staging");
     });

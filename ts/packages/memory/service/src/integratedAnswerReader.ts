@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { ChatModel } from "@typeagent/aiclient";
+import { currentSearchAbortSignal } from "@typeagent/knowpro";
 import {
     createIndexedAnswerModel,
     indexedEvidenceGroundingInstructions,
@@ -9,6 +10,12 @@ import {
     indexedRetrievalQueries,
 } from "./indexedAnswer.js";
 import { normalizeQueryTemporalContext } from "./temporalContext.js";
+import {
+    assertReaderOriginalCitations,
+    readerCitationBundle,
+    ReaderStatusMismatch,
+    readWithStatusRepair,
+} from "./readerStatusRepair.js";
 import type { AnswerEvidence, MemoryAnswerRequest } from "./types.js";
 
 export interface IntegratedReaderResponse {
@@ -18,6 +25,22 @@ export interface IntegratedReaderResponse {
     retrievalQueries?: string[];
 }
 
+export const influencingSourceScopeInstructions =
+    "influencingSourceCount is the number of distinct sources in a view's full construction scope, not independent observations or a count of supplied original passages. Complete identifiers remain with the host; cite only the supplied evidence IDs and original passages.";
+
+export const viewInterpretationInstructions =
+    "When the question requests a supplied maintained view's interpretation, treat that view as the requested artifact: explain and cite its interpretation together with its required supportingEvidenceIds and opposingEvidenceIds. Each view's requiredEvidenceIds is the complete citation bundle, including its own ID. Copy that entire array into evidenceIds for every claim citing that view; do not select a subset or put its originals only in another claim. Attribute the view as a derived interpretation, not independent confirmation. Do not silently replace a requested view interpretation with a source-only answer or drop its citation to avoid the original-citation requirement. If no matching view was supplied, state that limitation without inventing one. Availability alone does not require citing unrelated views.";
+
+export function answerEvidenceForReader(item: AnswerEvidence) {
+    if (item.kind === "source") return item;
+    const { influencingSourceIds, ...view } = item;
+    return {
+        ...view,
+        influencingSourceCount: new Set(influencingSourceIds).size,
+        requiredEvidenceIds: readerCitationBundle(item),
+    };
+}
+
 export function serializeAnswerEvidence(
     request: MemoryAnswerRequest,
     evidence: AnswerEvidence[],
@@ -25,7 +48,7 @@ export function serializeAnswerEvidence(
     return JSON.stringify({
         question: request.question,
         temporalContext: normalizeQueryTemporalContext(request.temporalContext),
-        evidence,
+        evidence: evidence.map(answerEvidenceForReader),
     });
 }
 
@@ -66,7 +89,17 @@ function parseReaderResponse(
         return id;
     });
     if ((value.status === "answered") !== evidenceIds.length > 0)
-        throw new Error("Integrated answer status and references disagree");
+        throw new ReaderStatusMismatch(
+            "Integrated answer status and references disagree",
+        );
+    for (const item of evidence) {
+        if (
+            evidenceIds.includes(item.id) &&
+            item.kind === "derived" &&
+            item.reference.state === "selected"
+        )
+            assertReaderOriginalCitations(item, evidenceIds);
+    }
     const retrievalQueries = indexedRetrievalQueries(
         "retrievalQueries" in value ? value.retrievalQueries : [],
         value.status,
@@ -103,7 +136,7 @@ export async function readIntegratedEvidence(
         },
         {
             role: "system",
-            content: indexedEvidenceRetrievalInstructions,
+            content: `${indexedEvidenceRetrievalInstructions} ${influencingSourceScopeInstructions} ${viewInterpretationInstructions}`,
         },
         {
             role: "user",
@@ -123,7 +156,7 @@ export async function readIntegratedEvidence(
                     items: { type: "string", minLength: 1, maxLength: 240 },
                     maxItems: 2,
                 },
-                answer: { type: "string" },
+                answer: { type: "string", minLength: 1, maxLength: 12000 },
                 evidenceIds: {
                     type: "array",
                     items: {
@@ -136,15 +169,32 @@ export async function readIntegratedEvidence(
         },
     } satisfies NonNullable<Parameters<ChatModel["complete"]>[2]>;
     const maxRequestChars = options.maxRequestChars ?? 32000;
-    if (
-        !Number.isFinite(maxRequestChars) ||
-        maxRequestChars < 0 ||
-        JSON.stringify({ messages, jsonSchema }).length > maxRequestChars
-    )
-        throw new Error(
-            "Complete integrated reader request exceeds the serialized request budget",
-        );
-    const result = await model.complete(messages, undefined, jsonSchema);
-    if (!result.success) throw new Error(result.message);
-    return parseReaderResponse(result.data, evidence);
+    const signal = currentSearchAbortSignal();
+    return readWithStatusRepair(
+        async (feedback) => {
+            const prompt = feedback
+                ? [...messages, { role: "system" as const, content: feedback }]
+                : messages;
+            if (
+                !Number.isFinite(maxRequestChars) ||
+                maxRequestChars < 0 ||
+                JSON.stringify({ messages: prompt, jsonSchema }).length >
+                    maxRequestChars
+            )
+                throw new Error(
+                    "Complete integrated reader request exceeds the serialized request budget",
+                );
+            const result = await model.complete(
+                prompt,
+                undefined,
+                jsonSchema,
+                undefined,
+                signal,
+            );
+            if (!result.success) throw new Error(result.message);
+            return result.data;
+        },
+        (data) => parseReaderResponse(data, evidence),
+        signal,
+    );
 }

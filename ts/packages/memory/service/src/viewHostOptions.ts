@@ -81,7 +81,10 @@ export function getConfiguredMemoryViewOptions(
     environment: Readonly<Record<string, string | undefined>> = process.env,
 ): Pick<
     FileMemoryServiceOptions,
+    | "frameProjections"
     | "viewDrafts"
+    | "extensionBuilds"
+    | "extensionDiscovery"
     | "informationalViews"
     | "decisionTopics"
     | "decisionTopicExecution"
@@ -116,6 +119,14 @@ export function getConfiguredMemoryViewOptions(
             "Generative topic settings cannot configure Decision topics",
         );
     return {
+        ...(environment.TYPEAGENT_MEMORY_DATAFRAMES === undefined
+            ? {}
+            : {
+                  frameProjections: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_DATAFRAMES,
+                      "TYPEAGENT_MEMORY_DATAFRAMES",
+                  ),
+              }),
         ...(environment.TYPEAGENT_MEMORY_UNDERSTANDING !== undefined
             ? {
                   understanding: parseViewDraftCapability(
@@ -180,6 +191,22 @@ export function getConfiguredMemoryViewOptions(
         viewDrafts: parseViewDraftCapability(
             environment.TYPEAGENT_MEMORY_VIEW_DRAFTS,
         ),
+        ...(environment.TYPEAGENT_MEMORY_EXTENSION_BUILDS === undefined
+            ? {}
+            : {
+                  extensionBuilds: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_EXTENSION_BUILDS,
+                      "TYPEAGENT_MEMORY_EXTENSION_BUILDS",
+                  ),
+              }),
+        ...(environment.TYPEAGENT_MEMORY_EXTENSION_DISCOVERY === undefined
+            ? {}
+            : {
+                  extensionDiscovery: parseViewDraftCapability(
+                      environment.TYPEAGENT_MEMORY_EXTENSION_DISCOVERY,
+                      "TYPEAGENT_MEMORY_EXTENSION_DISCOVERY",
+                  ),
+              }),
         informationalViews: parseViewDraftCapability(
             environment.TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS,
             "TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS",

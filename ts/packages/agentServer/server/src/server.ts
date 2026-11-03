@@ -44,7 +44,7 @@ import {
     ConversationManager,
     createConversationManager,
 } from "./conversationManager.js";
-import { createDurableMemoryService } from "./durableMemoryService.js";
+import { createConfiguredMemoryService } from "./memoryConnection.js";
 import { resolveAgentServerHost } from "./listenHost.js";
 import { createRunbookHostCapabilities } from "./runbookCapabilities.js";
 import { createLocalSkillServices } from "./skillCatalog.js";
@@ -352,7 +352,7 @@ async function main() {
         debugStartup("developer mode enabled at startup (--dev)");
     }
     debugStartup("starting instance memory service");
-    const memoryService = createDurableMemoryService(
+    const memoryService = await createConfiguredMemoryService(
         path.join(instanceDir, "memory"),
     );
     const memoryServiceHost = await MemoryServiceHost.start(memoryService, {

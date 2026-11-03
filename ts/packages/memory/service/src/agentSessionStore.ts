@@ -580,6 +580,12 @@ export class AgentSessionStore {
                             sessionId: stored.receipt.sessionId,
                             episodeId: episode.episodeId,
                             ...stored.scope,
+                            events: episode.events.map((event) => ({
+                                ...event,
+                                span: episode.spans.find(
+                                    (span) => span.eventId === event.id,
+                                ),
+                            })),
                         },
                     },
                 },
