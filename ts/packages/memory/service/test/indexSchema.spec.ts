@@ -184,7 +184,10 @@ test("document reset replays canonical content and never copies an unmarked gene
                     "utf8",
                 ),
             ),
-        ).toEqual(JSON.parse(descriptor("documents")));
+        ).toEqual({
+            ...JSON.parse(descriptor("documents")),
+            termNormalizationVersion: 2,
+        });
         const initialRebuilds = counts.rebuild;
         await service.close();
         service = new FileMemoryService(root, {

@@ -1,5 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import {
+    currentTermNormalizationVersion,
+    normalizeSearchTerm,
+    type TermNormalizationVersion,
+    validateTermNormalizationVersion,
+} from "./termNormalization.js";
 
 import {
     IConversation,
@@ -31,7 +37,14 @@ import {
 } from "./secondaryIndexes.js";
 import { ConversationSettings } from "./conversation.js";
 import { getMessageChunkBatch, textRangeFromMessageChunk } from "./message.js";
-import { SemanticRefCollection } from "./storage.js";
+import { MessageCollection, SemanticRefCollection } from "./storage.js";
+import { prepareInOrder } from "./preparedIndexing.js";
+import {
+    buildRelatedTermsIndex,
+    RelatedTermsIndex,
+    MessageTextIndex,
+    addToTransientSecondaryIndexes,
+} from "./secondaryIndexes.js";
 
 function addTermToIndex(
     index: ITermToSemanticRefIndex,
@@ -414,8 +427,14 @@ function verifyHasSemanticRefIndex(conversation: IConversation) {
  */
 export class TermToSemanticRefIndex implements ITermToSemanticRefIndex {
     private map: Map<string, ScoredSemanticRefOrdinal[]> = new Map();
+    public normalizationVersion: TermNormalizationVersion;
 
     constructor(data?: ITermToSemanticRefIndexData | undefined) {
+        this.normalizationVersion = validateTermNormalizationVersion(
+            data
+                ? (data.normalizationVersion ?? 1)
+                : currentTermNormalizationVersion,
+        );
         if (data !== undefined) {
             this.deserialize(data);
         }
@@ -443,9 +462,28 @@ export class TermToSemanticRefIndex implements ITermToSemanticRefIndex {
             };
         }
         term = this.prepareTerm(term);
+        if (!term) {
+            console.warn(
+                "knowPro: extracted search term normalizes to empty; term was not indexed",
+            );
+            return term;
+        }
         const existing = this.map.get(term);
         if (existing != undefined) {
-            existing.push(semanticRefIndex);
+            const duplicate =
+                this.normalizationVersion === 2
+                    ? existing.find(
+                          (posting) =>
+                              posting.semanticRefOrdinal ===
+                              semanticRefIndex.semanticRefOrdinal,
+                      )
+                    : undefined;
+            if (duplicate)
+                duplicate.score = Math.max(
+                    duplicate.score,
+                    semanticRefIndex.score,
+                );
+            else existing.push(semanticRefIndex);
         } else {
             this.map.set(term, [semanticRefIndex]);
         }
@@ -457,7 +495,14 @@ export class TermToSemanticRefIndex implements ITermToSemanticRefIndex {
     }
 
     removeTerm(term: string, semanticRefIndex: number): void {
-        this.map.delete(this.prepareTerm(term));
+        const key = this.prepareTerm(term);
+        const postings = this.map
+            .get(key)
+            ?.filter(
+                (posting) => posting.semanticRefOrdinal !== semanticRefIndex,
+            );
+        if (postings?.length) this.map.set(key, postings);
+        else this.map.delete(key);
     }
 
     removeTermIfEmpty(term: string): void {
@@ -472,16 +517,18 @@ export class TermToSemanticRefIndex implements ITermToSemanticRefIndex {
         for (const [term, semanticRefOrdinals] of this.map) {
             items.push({ term, semanticRefOrdinals });
         }
-        return { items };
+        return { items, normalizationVersion: this.normalizationVersion };
     }
 
     deserialize(data: ITermToSemanticRefIndexData): void {
+        this.normalizationVersion = validateTermNormalizationVersion(
+            data.normalizationVersion ?? 1,
+        );
+        this.map.clear();
         for (const termData of data.items) {
             if (termData && termData.term) {
-                this.map.set(
-                    this.prepareTerm(termData.term),
-                    termData.semanticRefOrdinals,
-                );
+                for (const posting of termData.semanticRefOrdinals)
+                    this.addTerm(termData.term, { ...posting });
             }
         }
     }
@@ -491,7 +538,7 @@ export class TermToSemanticRefIndex implements ITermToSemanticRefIndex {
      * @param term
      */
     private prepareTerm(term: string): string {
-        return term.toLowerCase();
+        return normalizeSearchTerm(term, this.normalizationVersion);
     }
 }
 
@@ -520,6 +567,15 @@ export async function buildConversationIndex(
     settings: ConversationSettings,
     eventHandler?: IndexingEventHandlers,
 ): Promise<IndexingResults> {
+    if (settings.preparedIndexing) {
+        beginIndexing(conversation);
+        return addPreparedConversationIndex(
+            conversation,
+            settings,
+            0,
+            eventHandler,
+        );
+    }
     const indexingResult: IndexingResults = {};
 
     addMessageKnowledgeToSemanticRefIndex(conversation, 0);
@@ -557,6 +613,15 @@ export async function addToConversationIndex(
     semanticRefOrdinalStartAt: SemanticRefOrdinal,
     eventHandler?: IndexingEventHandlers,
 ): Promise<IndexingResults> {
+    if (settings.preparedIndexing) {
+        beginIndexing(conversation);
+        return addPreparedConversationIndex(
+            conversation,
+            settings,
+            messageOrdinalStartAt,
+            eventHandler,
+        );
+    }
     const indexingResult: IndexingResults = {};
     const termsAdded = new Set<string>();
 
@@ -588,6 +653,166 @@ export async function addToConversationIndex(
         );
     }
     return indexingResult;
+}
+
+async function addPreparedConversationIndex(
+    conversation: IConversation,
+    settings: ConversationSettings,
+    start: number,
+    eventHandler?: IndexingEventHandlers,
+): Promise<IndexingResults> {
+    const limits = settings.preparedIndexing!;
+    if (conversation.semanticRefs!.isPersistent)
+        throw new Error(
+            "Prepared indexing requires an isolated nonpersistent candidate collection",
+        );
+    const baseRef = conversation.semanticRefs!.length;
+    addMessageKnowledgeToSemanticRefIndex(conversation, start);
+    const extractor = settings.semanticRefIndexSettings.autoExtractKnowledge
+        ? (settings.semanticRefIndexSettings.knowledgeExtractor ??
+          createKnowledgeExtractor())
+        : undefined;
+    const predecessors = new Map<string, Promise<void>>();
+    const count = conversation.messages.length - start;
+    const prepare = async (sequence: number, signal: AbortSignal) => {
+        const ordinal = start + sequence;
+        const message = conversation.messages.get(ordinal);
+        const temporal = message.metadata?.temporalContext;
+        const key =
+            temporal &&
+            JSON.stringify([temporal.sourceRevisionId, temporal.ownerId]);
+        const prerequisite = key ? predecessors.get(key) : undefined;
+        let release: (() => void) | undefined;
+        if (key)
+            predecessors.set(
+                key,
+                new Promise<void>((resolve) => {
+                    release = resolve;
+                }),
+            );
+        try {
+            await prerequisite;
+            signal.throwIfAborted();
+            const locations: TextLocation[] = message.textChunks.map(
+                (_, chunkOrdinal) => ({
+                    messageOrdinal: ordinal,
+                    chunkOrdinal,
+                }),
+            );
+            const results = extractor
+                ? await extractKnowledgeWithTemporalContext(
+                      conversation.messages,
+                      locations,
+                      extractor,
+                  )
+                : [];
+            const knowledge = results.map((result) => {
+                if (!result.success) throw new Error(result.message);
+                return filterKnowledge(
+                    result.data,
+                    settings.semanticRefIndexSettings.knowledgeValidator,
+                );
+            });
+            signal.throwIfAborted();
+            const local: IConversation = {
+                nameTag: conversation.nameTag,
+                tags: [],
+                messages: new MessageCollection([message]),
+                semanticRefs: new SemanticRefCollection(),
+                semanticRefIndex: new TermToSemanticRefIndex({
+                    normalizationVersion:
+                        conversation.semanticRefIndex?.normalizationVersion ??
+                        1,
+                    items: [],
+                }),
+                secondaryIndexes: {},
+            };
+            addMessageKnowledgeToSemanticRefIndex(local, 0);
+            knowledge.forEach((value, chunk) =>
+                addKnowledgeToSemanticRefIndex(local, 0, chunk, value),
+            );
+            const related = new RelatedTermsIndex({
+                ...settings.relatedTermIndexSettings,
+                normalizationVersion:
+                    conversation.semanticRefIndex?.normalizationVersion ?? 1,
+            });
+            local.secondaryIndexes!.termToRelatedTermsIndex = related;
+            const relatedResult = await buildRelatedTermsIndex(
+                local,
+                related.settings,
+            );
+            if (relatedResult.error) throw new Error(relatedResult.error);
+            const messages = new MessageTextIndex(
+                settings.messageTextIndexSettings,
+            );
+            if (messages.isEmbeddingEnabled) {
+                const result = await messages.addMessages([message]);
+                if (result.error) throw new Error(result.error);
+            }
+            signal.throwIfAborted();
+            return {
+                knowledge,
+                terms: local.semanticRefIndex!.getTerms(),
+                related: related.serialize(),
+                messages: messages.serialize(),
+            };
+        } finally {
+            release?.();
+        }
+    };
+    let completedUpto: TextLocation | undefined;
+    await prepareInOrder(count, limits, prepare, (unit, sequence) => {
+        const ordinal = start + sequence;
+        unit.knowledge.forEach((knowledge, chunkOrdinal) => {
+            addKnowledgeToSemanticRefIndex(
+                conversation,
+                ordinal,
+                chunkOrdinal,
+                knowledge,
+            );
+            completedUpto = { messageOrdinal: ordinal, chunkOrdinal };
+            if (
+                eventHandler?.onKnowledgeExtracted?.(
+                    completedUpto,
+                    knowledge,
+                ) === false
+            )
+                throw new Error(
+                    "Prepared indexing cancelled by knowledge handler",
+                );
+        });
+        const related = conversation.secondaryIndexes?.termToRelatedTermsIndex;
+        if (!(related instanceof RelatedTermsIndex))
+            throw new Error(
+                "Prepared indexing requires the KnowPro related-term index",
+            );
+        related.addPreparedData(unit.related, unit.terms);
+        const messages = conversation.secondaryIndexes?.messageIndex;
+        if (messages !== undefined) {
+            if (!(messages instanceof MessageTextIndex))
+                throw new Error(
+                    "Prepared indexing requires the KnowPro message index",
+                );
+            messages.addPreparedData(unit.messages, ordinal);
+        }
+    });
+    const related = conversation.secondaryIndexes?.termToRelatedTermsIndex;
+    if (related instanceof RelatedTermsIndex)
+        related.orderPreparedTerms(conversation.semanticRefIndex!.getTerms());
+    const transient = addToTransientSecondaryIndexes(
+        conversation,
+        settings,
+        start,
+        baseRef,
+    );
+    return {
+        semanticRefs: { completedUpto },
+        secondaryIndexResults: {
+            ...transient,
+            relatedTerms: { numberCompleted: count },
+            message: { numberCompleted: count },
+        },
+    };
 }
 
 export type SemanticRefIndexSettings = {
@@ -731,7 +956,7 @@ export function addMessageKnowledgeToSemanticRefIndex(
     }
 }
 
-function filterKnowledge(
+export function filterKnowledge(
     knowledge: kpLib.KnowledgeResponse,
     knowledgeValidator?: KnowledgeValidator,
 ) {

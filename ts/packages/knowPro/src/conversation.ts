@@ -17,6 +17,7 @@ import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
 import { SemanticRefIndexSettings } from "./conversationIndex.js";
 
 export interface ConversationSettings {
+    preparedIndexing?: import("./preparedIndexing.js").PreparedIndexingSettings;
     relatedTermIndexSettings: RelatedTermIndexSettings;
     threadSettings: TextEmbeddingIndexSettings;
     messageTextIndexSettings: MessageTextIndexSettings;

@@ -30,6 +30,7 @@ import {
     SemanticRefSearchResult,
     ISemanticRefCollection,
     StructuredTag,
+    SemanticRefMetadata,
 } from "./interfaces.js";
 import {
     Match,
@@ -46,7 +47,7 @@ import {
     PropertyNames,
 } from "./propertyIndex.js";
 import { conversation as kpLib } from "@typeagent/knowledge-processor";
-import { collections, NormalizedEmbedding } from "@typeagent/agent-runtime";
+import { NormalizedEmbedding } from "@typeagent/agent-runtime";
 import { facetValueToString } from "./knowledgeLib.js";
 import {
     isInDateRange,
@@ -63,6 +64,8 @@ import {
 } from "./message.js";
 import { matchesTemporalRange, parseTemporalValue } from "./temporal.js";
 import type { TemporalQueryRange } from "./temporalSchema.js";
+import { getSemanticRefMetadata } from "./storage.js";
+import { normalizeSearchTerm } from "./termNormalization.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     // TODO: also require secondary indices, once we have removed non-index based retrieval to test
@@ -116,7 +119,9 @@ function getMatchingTermForText(
     text: string,
 ): Term | undefined {
     // Do case-INSENSITIVE comparisons, since stored entities may have different case
-    if (collections.stringEquals(text, searchTerm.term.text, false)) {
+    const version = searchTerm.term.normalizationVersion ?? 2;
+    const key = normalizeSearchTerm(text, version);
+    if (key === normalizeSearchTerm(searchTerm.term.text, version)) {
         return searchTerm.term;
     }
     if (
@@ -124,7 +129,7 @@ function getMatchingTermForText(
         searchTerm.relatedTerms.length > 0
     ) {
         for (const relatedTerm of searchTerm.relatedTerms) {
-            if (collections.stringEquals(text, relatedTerm.text, false)) {
+            if (key === normalizeSearchTerm(relatedTerm.text, version)) {
                 return relatedTerm;
             }
         }
@@ -378,21 +383,22 @@ export function lookupTerm(
     rangesInScope?: TextRangesInScope,
     ktype?: KnowledgeType,
 ): ScoredSemanticRefOrdinal[] | undefined {
-    if (rangesInScope) {
-        // If rangesInScope has no actual text ranges, then lookups can't possibly match
-        return lookupTermFiltered(
-            semanticRefIndex,
-            term,
-            semanticRefs,
-            (sr) => {
-                if (ktype && sr.knowledgeType !== ktype) {
-                    return false;
-                }
-                return rangesInScope.isRangeInScope(sr.range);
-            },
-        );
+    const matches = semanticRefIndex.lookupTerm(term.text);
+    if (!matches || (!rangesInScope && !ktype)) return matches;
+    const filtered: ScoredSemanticRefOrdinal[] = [];
+    let position = 0;
+    for (const metadata of getSemanticRefMetadata(
+        semanticRefs,
+        matches.map((match) => match.semanticRefOrdinal),
+    )) {
+        const match = matches[position++];
+        if (
+            (!ktype || metadata.knowledgeType === ktype) &&
+            (!rangesInScope || rangesInScope.isRangeInScope(metadata.range))
+        )
+            filtered.push(match);
     }
-    return semanticRefIndex.lookupTerm(term.text);
+    return filtered;
 }
 
 export function lookupProperty(
@@ -411,22 +417,17 @@ export function lookupProperty(
         propertyName: propertySearchTerm.propertyName,
         propertyValue: { term: valueTerm },
     };
-    return lookupTermFiltered(
+    const candidates = lookupTerm(
         semanticRefIndex,
         valueTerm,
         semanticRefs,
-        (semanticRef) => {
-            const inScope = rangesInScope
-                ? rangesInScope.isRangeInScope(semanticRef.range)
-                : true;
-            return (
-                inScope &&
-                matchPropertySearchTermToSemanticRef(
-                    propertySearchTerm,
-                    semanticRef,
-                )
-            );
-        },
+        rangesInScope,
+    );
+    return candidates?.filter((candidate) =>
+        matchPropertySearchTermToSemanticRef(
+            propertySearchTerm,
+            semanticRefs.get(candidate.semanticRefOrdinal),
+        ),
     );
 }
 
@@ -435,7 +436,10 @@ export function* lookupKnowledgeType(
     ktype: KnowledgeType,
     textRangesInScope?: TextRangesInScope,
 ): IterableIterator<ScoredSemanticRefOrdinal> {
-    for (const sr of semanticRefs) {
+    for (const sr of getSemanticRefMetadata(
+        semanticRefs,
+        Array.from({ length: semanticRefs.length }, (_, ordinal) => ordinal),
+    )) {
         if (sr.knowledgeType === ktype) {
             if (
                 textRangesInScope !== undefined &&
@@ -1093,11 +1097,36 @@ export class WhereSemanticRefExpr extends QueryOpExpr<SemanticRefAccumulator> {
         const filtered = new SemanticRefAccumulator(
             accumulator.searchTermMatches,
         );
-        filtered.setMatches(
-            accumulator.getMatches((match) =>
-                this.evalPredicates(context, this.predicates, match),
-            ),
+        const metadataPredicates = this.predicates.filter(
+            (predicate) => predicate.evalMetadata !== undefined,
         );
+        const contentPredicates = this.predicates.filter(
+            (predicate) => predicate.evalMetadata === undefined,
+        );
+        if (metadataPredicates.length === 0) {
+            filtered.setMatches(
+                accumulator.getMatches((match) =>
+                    this.evalPredicates(context, contentPredicates, match),
+                ),
+            );
+            return filtered;
+        }
+        const matches = [...accumulator.getMatches()];
+        let position = 0;
+        for (const metadata of getSemanticRefMetadata(
+            context.semanticRefs,
+            matches.map((match) => match.value),
+        )) {
+            const match = matches[position++];
+            if (
+                metadataPredicates.every((predicate) =>
+                    predicate.evalMetadata!(context, metadata),
+                ) &&
+                (contentPredicates.length === 0 ||
+                    this.evalPredicates(context, contentPredicates, match))
+            )
+                filtered.setMatch(match);
+        }
         return filtered;
     }
 
@@ -1118,25 +1147,23 @@ export class WhereSemanticRefExpr extends QueryOpExpr<SemanticRefAccumulator> {
 
 export interface IQuerySemanticRefPredicate {
     eval(context: QueryEvalContext, semanticRef: SemanticRef): boolean;
-}
-
-function matchPredicates(
-    context: QueryEvalContext,
-    predicates: IQuerySemanticRefPredicate[],
-    semanticRef: SemanticRef,
-) {
-    for (let i = 0; i < predicates.length; ++i) {
-        if (!predicates[i].eval(context, semanticRef)) {
-            return false;
-        }
-    }
-    return true;
+    evalMetadata?(
+        context: QueryEvalContext,
+        semanticRef: SemanticRefMetadata,
+    ): boolean;
 }
 
 export class KnowledgeTypePredicate implements IQuerySemanticRefPredicate {
     constructor(public type: KnowledgeType) {}
 
     public eval(context: QueryEvalContext, semanticRef: SemanticRef): boolean {
+        return semanticRef.knowledgeType === this.type;
+    }
+
+    public evalMetadata(
+        context: QueryEvalContext,
+        semanticRef: SemanticRefMetadata,
+    ): boolean {
         return semanticRef.knowledgeType === this.type;
     }
 }
@@ -1297,9 +1324,13 @@ export class TextRangesPredicateSelector implements IQueryTextRangeSelector {
         }
         if (this.predicates && this.predicates.length > 0) {
             const textRangesInScope = new TextRangeCollection();
-            for (const inScopeRef of semanticRefs.getSemanticRefs(
+            const selected = new WhereSemanticRefExpr(
+                { eval: () => semanticRefs! },
+                this.predicates,
+            ).eval(context);
+            for (const inScopeRef of getSemanticRefMetadata(
                 context.semanticRefs,
-                (sr) => matchPredicates(context, this.predicates, sr),
+                [...selected.getMatches()].map((match) => match.value),
             )) {
                 textRangesInScope.addRange(inScopeRef.range);
             }
@@ -1317,10 +1348,11 @@ export class TextRangesWithTagSelector implements IQueryTextRangeSelector {
         semanticRefs: SemanticRefAccumulator,
     ): TextRangeCollection | undefined {
         let textRangesInScope: TextRangeCollection | undefined;
-        for (const inScopeRef of semanticRefs.getSemanticRefs(
+        for (const inScopeRef of getSemanticRefMetadata(
             context.semanticRefs,
-            (sr) => sr.knowledgeType === "tag",
+            [...semanticRefs.getMatches()].map((match) => match.value),
         )) {
+            if (inScopeRef.knowledgeType !== "tag") continue;
             textRangesInScope ??= new TextRangeCollection();
             textRangesInScope.addRange(inScopeRef.range);
         }
@@ -1337,8 +1369,10 @@ export class TextRangesFromSemanticRefsSelector
         const matches = this.sourceExpr.eval(context);
         const rangesInScope = new TextRangeCollection();
         if (matches.size > 0) {
-            for (const match of matches.getMatches()) {
-                const semanticRef = context.getSemanticRef(match.value);
+            for (const semanticRef of getSemanticRefMetadata(
+                context.semanticRefs,
+                [...matches.getMatches()].map((match) => match.value),
+            )) {
                 rangesInScope.addRange(semanticRef.range);
             }
         }
@@ -1699,15 +1733,15 @@ function messageMatchesFromKnowledgeMatches(
         if (matchesByType && matchesByType.semanticRefMatches.length > 0) {
             knowledgeTypeHitCount++;
             const typeMessages = new MessageAccumulator();
-            for (const match of matchesByType.semanticRefMatches) {
-                typeMessages.addMessagesForSemanticRef(
-                    semanticRefs.get(match.semanticRefOrdinal),
-                    match.score,
-                );
-                messageMatches.addMessagesForSemanticRef(
-                    semanticRefs.get(match.semanticRefOrdinal),
-                    match.score,
-                );
+            const matches = matchesByType.semanticRefMatches;
+            let position = 0;
+            for (const metadata of getSemanticRefMetadata(
+                semanticRefs,
+                matches.map((match) => match.semanticRefOrdinal),
+            )) {
+                const match = matches[position++];
+                typeMessages.addMessagesForSemanticRef(metadata, match.score);
+                messageMatches.addMessagesForSemanticRef(metadata, match.score);
             }
             for (const match of typeMessages.getMatches()) {
                 typeHits.set(match.value, (typeHits.get(match.value) ?? 0) + 1);

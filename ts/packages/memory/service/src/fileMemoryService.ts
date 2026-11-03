@@ -194,6 +194,7 @@ import { writeRunbookJson as persistRunbookJson } from "./durableRunbookJson.js"
 
 import {
     classifyIndexSchema,
+    indexTermNormalizationVersion,
     indexFingerprint,
     stampIndexSchema,
     type IndexKind,
@@ -12791,8 +12792,32 @@ export class FileMemoryService
             const index = this.indexFactory(corpusId, directory);
             try {
                 await mkdir(directory, { recursive: true });
-                const rebuild = () =>
-                    index.rebuild(capture.documents, bounded, async () => {});
+                const rebuild = async () => {
+                    const upgrade =
+                        capture.baseGeneration !== undefined &&
+                        (await indexTermNormalizationVersion(
+                            this.indexDirectory(
+                                corpusId,
+                                capture.baseGeneration,
+                            ),
+                        )) === 1;
+                    if (
+                        upgrade &&
+                        index.rebuildRetained &&
+                        (await index.rebuildRetained(
+                            capture.runtime.index,
+                            capture.documents,
+                            bounded,
+                            async () => {},
+                        ))
+                    )
+                        return;
+                    await index.rebuild(
+                        capture.documents,
+                        bounded,
+                        async () => {},
+                    );
+                };
                 await timeSearchStage("reindex.prepare", () =>
                     this.wikiBudget
                         ? runWithRequestBudget(
@@ -12894,8 +12919,15 @@ export class FileMemoryService
             const rebuild = async () => {
                 const documents = this.activeDocuments(candidateManifest);
                 if (
-                    candidateManifest.sources.length <
-                        runtime.manifest.sources.length &&
+                    (candidateManifest.sources.length <
+                        runtime.manifest.sources.length ||
+                        (runtime.manifest.indexGeneration !== undefined &&
+                            (await indexTermNormalizationVersion(
+                                this.indexDirectory(
+                                    corpusId,
+                                    runtime.manifest.indexGeneration,
+                                ),
+                            )) === 1)) &&
                     candidateIndex.rebuildRetained &&
                     (await candidateIndex.rebuildRetained(
                         runtime.index,

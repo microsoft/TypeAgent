@@ -18,6 +18,7 @@ export interface IConversationData<TMessage = any> {
 // persistent form of a term index
 export interface ITermToSemanticRefIndexData {
     items: ITermToSemanticRefIndexItem[];
+    normalizationVersion?: import("./termNormalization.js").TermNormalizationVersion;
 }
 
 export interface ITermToSemanticRefIndexItem {

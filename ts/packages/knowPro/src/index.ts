@@ -4,6 +4,7 @@ export * from "./temporal.js";
 export * from "./temporalSchema.js";
 
 export * from "./interfaces.js";
+export * from "./termNormalization.js";
 export * from "./conversation.js";
 export * from "./conversationIndex.js";
 export * from "./secondaryIndexes.js";

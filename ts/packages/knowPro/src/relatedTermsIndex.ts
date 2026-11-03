@@ -1,5 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import {
+    normalizeSearchTerm,
+    type TermNormalizationVersion,
+    validateTermNormalizationVersion,
+} from "./termNormalization.js";
 
 import { collections } from "@typeagent/agent-runtime";
 import { IConversation, ListIndexingResult, Term } from "./interfaces.js";
@@ -35,9 +40,27 @@ import {
 export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
 
-    constructor() {}
+    constructor(
+        private readonly normalizationVersion: TermNormalizationVersion = 2,
+    ) {}
 
     public addRelatedTerm(termText: string, relatedTerm: Term | Term[]) {
+        termText = normalizeSearchTerm(termText, this.normalizationVersion);
+        relatedTerm = Array.isArray(relatedTerm)
+            ? relatedTerm.map((term) => ({
+                  ...term,
+                  text: normalizeSearchTerm(
+                      term.text,
+                      this.normalizationVersion,
+                  ),
+              }))
+            : {
+                  ...relatedTerm,
+                  text: normalizeSearchTerm(
+                      relatedTerm.text,
+                      this.normalizationVersion,
+                  ),
+              };
         if (Array.isArray(relatedTerm)) {
             for (const related of relatedTerm) {
                 this.map.addUnique(
@@ -56,11 +79,13 @@ export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     }
 
     public lookupTerm(term: string): Term[] | undefined {
-        return this.map.get(term);
+        return this.map.get(
+            normalizeSearchTerm(term, this.normalizationVersion),
+        );
     }
 
     public removeTerm(term: string): void {
-        this.map.delete(term);
+        this.map.delete(normalizeSearchTerm(term, this.normalizationVersion));
     }
 
     public clear(): void {
@@ -79,7 +104,10 @@ export class TermToRelatedTermsMap implements ITermToRelatedTerms {
         if (data) {
             if (data.relatedTerms) {
                 for (const dataItem of data.relatedTerms) {
-                    this.map.set(dataItem.termText, dataItem.relatedTerms);
+                    this.addRelatedTerm(
+                        dataItem.termText,
+                        dataItem.relatedTerms,
+                    );
                 }
             }
         }
@@ -88,6 +116,7 @@ export class TermToRelatedTermsMap implements ITermToRelatedTerms {
 
 export type RelatedTermIndexSettings = {
     embeddingIndexSettings?: TextEmbeddingIndexSettings | undefined;
+    normalizationVersion?: TermNormalizationVersion;
 };
 
 export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
@@ -99,24 +128,57 @@ export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
         | undefined;
 
     constructor(public settings: RelatedTermIndexSettings) {
-        this.aliasMap = new TermToRelatedTermsMap();
+        this.aliasMap = new TermToRelatedTermsMap(
+            settings.normalizationVersion,
+        );
         if (settings.embeddingIndexSettings) {
             if (settings.embeddingIndexSettings.embeddingModel !== undefined) {
                 this.embeddingIndex = new TermEmbeddingIndex(
                     settings.embeddingIndexSettings,
+                    undefined,
+                    settings.normalizationVersion,
                 );
                 this.fuzzyTermIndex = this.embeddingIndex;
             } else {
                 // No embedding provider: fall back to Levenshtein edit-distance
                 // fuzzy matching so related-term expansion still works (with
                 // reduced recall) instead of being disabled entirely.
-                this.fuzzyTermIndex = new TermEditDistanceIndex();
+                this.fuzzyTermIndex = new TermEditDistanceIndex(
+                    [],
+                    settings.normalizationVersion,
+                );
             }
         }
     }
 
     public get aliases(): TermToRelatedTermsMap {
         return this.aliasMap;
+    }
+
+    public addPreparedData(
+        data: ITermsToRelatedTermsIndexData,
+        terms: string[],
+    ): void {
+        if (
+            (data.normalizationVersion ?? 1) !==
+            (this.settings.normalizationVersion ?? 2)
+        )
+            throw new Error(
+                "Prepared related terms use a different normalization generation",
+            );
+        if (data.textEmbeddingData) {
+            if (!this.embeddingIndex)
+                throw new Error(
+                    "Prepared related-term vectors require an embedding index",
+                );
+            this.embeddingIndex.addPreparedData(data.textEmbeddingData);
+        } else if (this.fuzzyTermIndex instanceof TermEditDistanceIndex) {
+            this.fuzzyTermIndex.addPreparedTerms(terms);
+        }
+    }
+
+    public orderPreparedTerms(terms: string[]): void {
+        this.embeddingIndex?.orderPreparedTerms(terms);
     }
 
     public get fuzzyIndex():
@@ -128,6 +190,7 @@ export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
 
     public serialize(): ITermsToRelatedTermsIndexData {
         return {
+            normalizationVersion: this.settings.normalizationVersion ?? 2,
             aliasData: this.aliasMap.serialize(),
             textEmbeddingData: this.embeddingIndex?.serialize(),
         };
@@ -135,8 +198,21 @@ export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
 
     public deserialize(data?: ITermsToRelatedTermsIndexData): void {
         if (data) {
+            this.settings = {
+                ...this.settings,
+                normalizationVersion: validateTermNormalizationVersion(
+                    data.normalizationVersion ?? 1,
+                ),
+            };
+            if (!this.embeddingIndex && this.settings.embeddingIndexSettings)
+                this.fuzzyTermIndex = new TermEditDistanceIndex(
+                    [],
+                    this.settings.normalizationVersion,
+                );
             if (data.aliasData) {
-                this.aliasMap = new TermToRelatedTermsMap();
+                this.aliasMap = new TermToRelatedTermsMap(
+                    this.settings.normalizationVersion,
+                );
                 this.aliasMap.deserialize(data.aliasData);
             }
             if (
@@ -147,6 +223,8 @@ export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
             ) {
                 this.embeddingIndex = new TermEmbeddingIndex(
                     this.settings.embeddingIndexSettings,
+                    undefined,
+                    this.settings.normalizationVersion,
                 );
                 this.embeddingIndex.deserialize(data.textEmbeddingData);
                 this.fuzzyTermIndex = this.embeddingIndex;
@@ -336,6 +414,7 @@ export class TermEmbeddingIndex
     constructor(
         public settings: TextEmbeddingIndexSettings,
         data?: ITextEmbeddingIndexData,
+        private readonly normalizationVersion: TermNormalizationVersion = 2,
     ) {
         this.settings = { ...settings, lookupRole: "document" };
         this.embeddingIndex = new TextEmbeddingIndex(this.settings);
@@ -349,6 +428,9 @@ export class TermEmbeddingIndex
         terms: string[],
         eventHandler?: IndexingEventHandlers,
     ): Promise<ListIndexingResult> {
+        terms = terms.map((term) =>
+            normalizeSearchTerm(term, this.normalizationVersion),
+        );
         const newTerms = [...new Set(terms)].filter(
             (term) => !this.textPositions.has(term),
         );
@@ -372,13 +454,47 @@ export class TermEmbeddingIndex
         };
     }
 
+    public addPreparedData(data: ITextEmbeddingIndexData): void {
+        if (data.textItems.length !== data.embeddings.length)
+            throw new Error(
+                "Prepared related terms and vectors are misaligned",
+            );
+        data.embeddings.forEach((embedding) => {
+            if (
+                embedding.length !== this.settings.embeddingSize ||
+                !embedding.every(Number.isFinite)
+            )
+                throw new Error("Invalid prepared term embedding");
+        });
+        for (const [index, term] of data.textItems.entries()) {
+            if (this.textPositions.has(term)) continue;
+            this.textPositions.set(term, this.textArray.length);
+            this.textArray.push(term);
+            this.embeddingIndex.addPreparedEmbeddings([data.embeddings[index]]);
+        }
+    }
+
+    public orderPreparedTerms(terms: string[]): void {
+        const ordered = terms.filter((term) => this.textPositions.has(term));
+        if (ordered.length !== this.textArray.length)
+            throw new Error(
+                "Prepared term order does not cover the embedding index",
+            );
+        const embeddings = ordered.map((term) =>
+            this.embeddingIndex.get(this.textPositions.get(term)!),
+        );
+        this.textArray = ordered;
+        this.embeddingIndex.deserialize(embeddings);
+        this.rebuildTextPositions();
+    }
+
     public async lookupTerm(
         text: string,
         maxMatches?: number,
         minScore?: number,
     ): Promise<Term[]> {
         const matches = await this.embeddingIndex.getIndexesOfNearest(
-            text,
+            normalizeSearchTerm(text, this.normalizationVersion),
             maxMatches,
             minScore,
         );
@@ -392,7 +508,9 @@ export class TermEmbeddingIndex
     ): Promise<Term[][]> {
         const matchesList =
             await this.embeddingIndex.getIndexesOfNearestMultiple(
-                texts,
+                texts.map((text) =>
+                    normalizeSearchTerm(text, this.normalizationVersion),
+                ),
                 maxMatches,
                 minScore,
             );
@@ -404,6 +522,7 @@ export class TermEmbeddingIndex
     }
 
     public removeTerm(term: string): void {
+        term = normalizeSearchTerm(term, this.normalizationVersion);
         const indexOf = this.textPositions.get(term);
         if (indexOf !== undefined) {
             this.textArray.splice(indexOf, 1);
@@ -480,8 +599,15 @@ export class TermEditDistanceIndex
     extends TextEditDistanceIndex
     implements ITermToRelatedTermsFuzzy, TextEmbeddingCache
 {
-    constructor(textArray: string[] = []) {
-        super(textArray);
+    constructor(
+        textArray: string[] = [],
+        private readonly normalizationVersion: TermNormalizationVersion = 2,
+    ) {
+        super(
+            textArray.map((text) =>
+                normalizeSearchTerm(text, normalizationVersion),
+            ),
+        );
     }
 
     /**
@@ -493,10 +619,19 @@ export class TermEditDistanceIndex
     }
 
     public async addTerms(terms: string[]): Promise<ListIndexingResult> {
-        this.textArray.push(...terms);
+        this.textArray.push(
+            ...terms.map((term) =>
+                normalizeSearchTerm(term, this.normalizationVersion),
+            ),
+        );
         return {
             numberCompleted: terms.length,
         };
+    }
+
+    public addPreparedTerms(terms: string[]): void {
+        for (const term of terms)
+            if (!this.textArray.includes(term)) this.textArray.push(term);
     }
 
     public async lookupTerm(
@@ -505,7 +640,7 @@ export class TermEditDistanceIndex
         thresholdScore?: number,
     ): Promise<Term[]> {
         const matches = await super.getNearest(
-            text,
+            normalizeSearchTerm(text, this.normalizationVersion),
             maxMatches,
             thresholdScore,
         );
@@ -518,7 +653,9 @@ export class TermEditDistanceIndex
         thresholdScore?: number,
     ): Promise<Term[][]> {
         const matches = await super.getNearestMultiple(
-            textArray,
+            textArray.map((text) =>
+                normalizeSearchTerm(text, this.normalizationVersion),
+            ),
             maxMatches,
             thresholdScore,
         );

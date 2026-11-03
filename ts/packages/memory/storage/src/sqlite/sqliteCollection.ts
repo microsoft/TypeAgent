@@ -8,8 +8,7 @@ import { sql_makeInPlaceholders } from "./sqliteCommon.js";
 export class SqliteCollection<T, TOrdinal extends number>
     implements kp.ICollection<T, TOrdinal>
 {
-    private db: sqlite.Database;
-    private count: number;
+    protected db: sqlite.Database;
     private sql_get: sqlite.Statement;
     private sql_append: sqlite.Statement;
     private sql_getAll: sqlite.Statement;
@@ -32,7 +31,6 @@ export class SqliteCollection<T, TOrdinal extends number>
         this.sql_append = this.sqlAppend();
         this.sql_getAll = this.sqlGetAll();
         this.sql_slice = this.sqlSlice();
-        this.count = this.loadCount();
     }
 
     public get isPersistent(): boolean {
@@ -40,13 +38,14 @@ export class SqliteCollection<T, TOrdinal extends number>
     }
 
     public get length(): number {
-        return this.count;
+        // Read the transaction's count, including after an outer rollback.
+        return this.loadCount();
     }
 
     public append(...items: T[]): void {
-        for (const item of items) {
-            this.appendObject(item);
-        }
+        this.db.transaction(() => {
+            for (const item of items) this.appendObject(item);
+        })();
     }
 
     public get(ordinal: TOrdinal): T {
@@ -54,7 +53,7 @@ export class SqliteCollection<T, TOrdinal extends number>
         const row = this.sql_get.get(actualOrdinal);
         if (row === undefined) {
             throw new Error(
-                `Ordinal ${ordinal} not found. Collection length is ${this.count}`,
+                `Ordinal ${ordinal} not found. Collection length is ${this.length}`,
             );
         }
         return this.deserializeObject(row);
@@ -65,21 +64,27 @@ export class SqliteCollection<T, TOrdinal extends number>
     }
 
     public getMultiple(ordinals: TOrdinal[]): T[] {
-        const actualOrdinals: number[] = new Array<number>(ordinals.length);
-        for (let i = 0; i < ordinals.length; ++i) {
-            actualOrdinals[i] = ordinals[i] + 1;
-        }
-        const placeholder = sql_makeInPlaceholders(ordinals.length);
-        const sql = this.db.prepare(
-            `SELECT value FROM ${this.tableName} WHERE ordinal IN (${placeholder})`,
-        );
-        const objects = this.rowsToArray(sql.iterate(...actualOrdinals));
-        if (objects.length !== ordinals.length) {
-            throw new Error(
-                `Expected ${ordinals.length} ordinals, found ${objects.length}`,
+        const byOrdinal = new Map<number, T>();
+        const unique = [...new Set(ordinals)];
+        for (let start = 0; start < unique.length; start += 128) {
+            const batch = unique.slice(start, start + 128);
+            const sql = this.db.prepare(
+                `SELECT ordinal, value FROM ${this.tableName} WHERE ordinal IN (${sql_makeInPlaceholders(batch.length)})`,
             );
+            for (const row of sql.iterate(
+                ...batch.map((ordinal) => ordinal + 1),
+            )) {
+                const data = row as CollectionRow;
+                byOrdinal.set(data.ordinal - 1, this.deserializeObject(data));
+            }
         }
-        return objects;
+        return ordinals.map((ordinal) => {
+            if (!Number.isSafeInteger(ordinal) || !byOrdinal.has(ordinal))
+                throw new Error(
+                    `Ordinal ${ordinal} not found. Collection length is ${this.length}`,
+                );
+            return byOrdinal.get(ordinal)!;
+        });
     }
 
     public getAll(): T[] {
@@ -111,7 +116,7 @@ export class SqliteCollection<T, TOrdinal extends number>
             LIMIT 1
         `);
         const row = sql.get();
-        const count = row ? (row as any).count : 0;
+        const count = row ? (row as { count: number }).count : 0;
         return count;
     }
 
@@ -120,7 +125,6 @@ export class SqliteCollection<T, TOrdinal extends number>
             ? this.serializer.serialize(obj)
             : JSON.stringify(obj);
         this.sql_append.run(json);
-        this.count++;
     }
 
     private deserializeObject(row: unknown): T {
