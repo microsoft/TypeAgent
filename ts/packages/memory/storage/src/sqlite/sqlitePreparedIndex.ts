@@ -3,6 +3,7 @@
 
 import type * as sqlite from "better-sqlite3";
 import type * as kp from "@typeagent/knowpro";
+import { timeSearchStage } from "@typeagent/knowpro";
 import { createHash } from "node:crypto";
 import { SqliteCollection } from "./sqliteCollection.js";
 
@@ -89,22 +90,32 @@ export class SqlitePreparedIndexStorage implements kp.IPreparedIndexStorage {
         const data = JSON.stringify(batch.data, (_key, value: unknown) =>
             value instanceof Float32Array ? Array.from(value) : value,
         );
-        this.db.transaction(() => {
-            if (this.capture(false).stamp !== expectedStamp)
-                throw new Error("Prepared index snapshot is stale");
-            if (batch.messages.length !== this.messages.length)
-                throw new Error(
-                    "Prepared batch cannot drop accepted source messages",
-                );
-            this.messages.replaceAll(batch.messages);
-            this.refs.replaceAll(batch.semanticRefs);
-            this.checkpoint?.("rows");
-            // Postings and vectors share one versioned artifact; publication is its receipt.
-            this.db
-                .prepare(`INSERT OR REPLACE INTO ${this.table} VALUES(1,1,?,?)`)
-                .run(this.sourceStamp(), data);
-            this.checkpoint?.("postings");
-            this.checkpoint?.("receipt");
-        })();
+        timeSearchStage(
+            "ingestion.sqlite.commit",
+            () =>
+                this.db.transaction(() => {
+                    if (this.capture(false).stamp !== expectedStamp)
+                        throw new Error("Prepared index snapshot is stale");
+                    if (batch.messages.length !== this.messages.length)
+                        throw new Error(
+                            "Prepared batch cannot drop accepted source messages",
+                        );
+                    this.messages.replaceAll(batch.messages);
+                    this.refs.replaceAll(batch.semanticRefs);
+                    this.checkpoint?.("rows");
+                    // Postings and vectors share one versioned artifact; publication is its receipt.
+                    this.db
+                        .prepare(
+                            `INSERT OR REPLACE INTO ${this.table} VALUES(1,1,?,?)`,
+                        )
+                        .run(this.sourceStamp(), data);
+                    this.checkpoint?.("postings");
+                    this.checkpoint?.("receipt");
+                })(),
+            {
+                messageCount: batch.messages.length,
+                semanticRefCount: batch.semanticRefs.length,
+            },
+        );
     }
 }

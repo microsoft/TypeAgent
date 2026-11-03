@@ -319,6 +319,42 @@ describe("persistent ordered prepared indexing", () => {
         ).toHaveLength(1);
     });
 
+    test("commit duration and bounded preparation diagnostics contain counts, not source text", async () => {
+        const trace = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        const warn = console.warn;
+        const logs: string[] = [];
+        console.warn = (...args: unknown[]) => {
+            logs.push(String(args[0]));
+        };
+        try {
+            process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+            await kp.runWithSearchTiming(undefined, "prepared-fixture", () =>
+                kp.buildConversationIndex(conversation, settings),
+            );
+            const line = logs.find((line) =>
+                line.includes('"stage":"ingestion.sqlite.commit"'),
+            );
+            expect(line).toBeDefined();
+            const event = JSON.parse(
+                line!.replace("[memory-search-timing] ", ""),
+            );
+            expect(event.metadata).toEqual({
+                messageCount: 3,
+                semanticRefCount: conversation.semanticRefs!.length,
+            });
+            expect(event.elapsedMs).toBeGreaterThanOrEqual(0);
+            expect(logs.some((line) => line.includes('"highWater":3'))).toBe(
+                true,
+            );
+            expect(logs.join("\n")).not.toContain("metadata-term");
+        } finally {
+            console.warn = warn;
+            if (trace === undefined)
+                delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+            else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = trace;
+        }
+    });
+
     test("serial and concurrent persistent preparation publish identical postings, vectors and coordinates", async () => {
         await kp.buildConversationIndex(conversation, settings);
         const concurrent = state();

@@ -357,69 +357,71 @@ export class SqliteFrameProjectionStore implements df.FrameProjectionStore {
         owners: ReadonlyMap<string, string>,
         includeUnconfirmed: boolean,
     ): df.FrameMatch[] {
-        const metadataStarted = performance.now();
-        const { sql, params } = this.queryStatement(
-            schema,
-            predicate,
-            includeUnconfirmed,
-        );
-        const rows = this.db.prepare(sql).all(...params) as {
-            id: number;
-            owner: string;
-            revision: string;
-            fingerprint: string;
-        }[];
-        const eligible = rows.filter(
-            (entry) => owners.get(entry.owner) === entry.fingerprint,
-        );
-        recordSearchTiming(
-            "query.frame.metadata",
-            performance.now() - metadataStarted,
-            {
-                candidateRows: rows.length,
-                eligibleRows: eligible.length,
-            },
-        );
-        const exactStarted = performance.now();
-        const result: df.FrameMatch[] = [];
-        for (let start = 0; start < eligible.length; start += 128) {
-            const batch = eligible.slice(start, start + 128);
-            const values = new Map(
-                (
-                    this.db
-                        .prepare(
-                            `SELECT id,value FROM frame_rows WHERE id IN (${batch.map(() => "?").join(",")})`,
-                        )
-                        .all(...batch.map((entry) => entry.id)) as {
-                        id: number;
-                        value: string;
-                    }[]
-                ).map((entry) => [entry.id, entry.value]),
+        return this.db.transaction(() => {
+            const metadataStarted = performance.now();
+            const { sql, params } = this.queryStatement(
+                schema,
+                predicate,
+                includeUnconfirmed,
             );
-            for (const entry of batch) {
-                const value = values.get(entry.id);
-                if (value === undefined)
-                    throw new Error("Missing frame candidate row");
-                const row: df.FrameRow = JSON.parse(value);
-                if (df.matchesFrame(row, schema, predicate))
-                    result.push({
-                        ...row,
-                        ownerKey: entry.owner,
-                        ownerRevisionId: entry.revision,
-                    });
+            const rows = this.db.prepare(sql).all(...params) as {
+                id: number;
+                owner: string;
+                revision: string;
+                fingerprint: string;
+            }[];
+            const eligible = rows.filter(
+                (entry) => owners.get(entry.owner) === entry.fingerprint,
+            );
+            recordSearchTiming(
+                "query.frame.metadata",
+                performance.now() - metadataStarted,
+                {
+                    candidateRows: rows.length,
+                    eligibleRows: eligible.length,
+                },
+            );
+            const exactStarted = performance.now();
+            const result: df.FrameMatch[] = [];
+            for (let start = 0; start < eligible.length; start += 128) {
+                const batch = eligible.slice(start, start + 128);
+                const values = new Map(
+                    (
+                        this.db
+                            .prepare(
+                                `SELECT id,value FROM frame_rows WHERE id IN (${batch.map(() => "?").join(",")})`,
+                            )
+                            .all(...batch.map((entry) => entry.id)) as {
+                            id: number;
+                            value: string;
+                        }[]
+                    ).map((entry) => [entry.id, entry.value]),
+                );
+                for (const entry of batch) {
+                    const value = values.get(entry.id);
+                    if (value === undefined)
+                        throw new Error("Missing frame candidate row");
+                    const row: df.FrameRow = JSON.parse(value);
+                    if (df.matchesFrame(row, schema, predicate))
+                        result.push({
+                            ...row,
+                            ownerKey: entry.owner,
+                            ownerRevisionId: entry.revision,
+                        });
+                }
             }
-        }
-        recordSearchTiming(
-            "query.frame.exact",
-            performance.now() - exactStarted,
-            {
-                candidateRows: eligible.length,
-                hydrationQueries: Math.ceil(eligible.length / 128),
-                hydratedRows: eligible.length,
-                matchedRows: result.length,
-            },
-        );
-        return result;
+            recordSearchTiming(
+                "query.frame.exact",
+                performance.now() - exactStarted,
+                {
+                    candidateRows: eligible.length,
+                    hydrationQueries: Math.ceil(eligible.length / 128),
+                    hydratedRows: eligible.length,
+                    matchedRows: result.length,
+                },
+            );
+            return result;
+        })();
     }
     close(): void {
         this.db.close();

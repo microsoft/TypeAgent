@@ -30,7 +30,9 @@ scalar candidates. Version 2 backfills row eligibility transactionally on open.
 Current-owner and eligibility metadata filter candidates before bounded full-row
 hydration and the shared exact predicate. `TYPEAGENT_MEMORY_SEARCH_TRACE=1`
 records metadata/exact-stage durations and candidate, hydration-query and match
-counts without recording predicate or source text.
+counts without recording predicate or source text. Both query phases share a
+read snapshot, including when another connection replaces an owner concurrently.
+Prepared commits also report transaction duration and accepted row counts.
 
 ## Trademarks
 

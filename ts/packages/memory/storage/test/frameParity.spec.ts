@@ -562,6 +562,14 @@ test("temporal candidates preserve half-open exact bounds and metadata excludes 
                 hydrationQueries: 1,
                 matchedRows: 2,
             });
+            expect(
+                runWithSearchTiming(undefined, "frame-fixture", () =>
+                    store.query(schema, { and: [] }, owners, true),
+                ),
+            ).toHaveLength(4096);
+            expect(
+                traces.some((line) => line.includes('"hydrationQueries":32')),
+            ).toBe(true);
         } finally {
             console.warn = warn;
             if (trace === undefined)
@@ -586,6 +594,70 @@ test("temporal candidates preserve half-open exact bounds and metadata excludes 
         sql.close();
         store.close();
         memory.close();
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test("metadata selection and full-row hydration share a SQLite snapshot across concurrent replacement", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "frame-snapshot-"));
+    const filename = path.join(root, "frames.db");
+    const sql = createDatabase(filename, false);
+    sql.pragma("journal_mode=WAL");
+    const reader = new SqliteFrameProjectionStore(filename);
+    const writer = new SqliteFrameProjectionStore(filename);
+    const trace = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+    const warn = console.warn;
+    let replaced = false;
+    const previous = projection("previous", [10]);
+    const next = projection("next", [20]);
+    try {
+        reader.registerSchema(schema);
+        reader.stage(previous);
+        reader.commit(previous);
+        console.warn = (...args: unknown[]) => {
+            if (
+                !replaced &&
+                String(args[0]).includes('"stage":"query.frame.metadata"')
+            ) {
+                replaced = true;
+                writer.stage(next);
+                writer.commit(next);
+            }
+        };
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        const rows = runWithSearchTiming(
+            undefined,
+            "frame-snapshot-fixture",
+            () =>
+                reader.query(
+                    schema,
+                    { and: [] },
+                    new Map([[previous.ownerKey, previous.fingerprint]]),
+                    false,
+                ),
+        );
+        expect(replaced).toBe(true);
+        expect(
+            rows.map((row) => [row.ownerRevisionId, row.values.amount]),
+        ).toEqual([["previous", 10]]);
+        expect(
+            reader
+                .query(
+                    schema,
+                    { and: [] },
+                    new Map([[next.ownerKey, next.fingerprint]]),
+                    false,
+                )
+                .map((row) => row.values.amount),
+        ).toEqual([20]);
+    } finally {
+        console.warn = warn;
+        if (trace === undefined)
+            delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = trace;
+        reader.close();
+        writer.close();
+        sql.close();
         rmSync(root, { recursive: true, force: true });
     }
 });
