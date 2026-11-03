@@ -278,6 +278,7 @@ export async function executeMemoryCase(
     controls,
 ) {
     const { persist, signal, waitForMemoryJob, judge, role } = controls;
+    const ingestionStart = performance.now();
     const plan = construction.sessions.map((session) =>
         sessionSource(construction.id, session),
     );
@@ -323,8 +324,16 @@ export async function executeMemoryCase(
         delete record.inFlight;
         await persist();
     }
-    if (!record.hypothesis)
+    record.ingestionMilliseconds =
+        (record.ingestionMilliseconds ?? 0) +
+        performance.now() -
+        ingestionStart;
+    if (!record.hypothesis) {
+        const knowledgeStart = performance.now();
         await prepareKnowledge(service, construction, record, controls);
+        record.knowledgeReadinessMilliseconds =
+            performance.now() - knowledgeStart;
+    }
     const question = reader.question;
     const temporalContext = {
         referenceTime: reader.question_date,

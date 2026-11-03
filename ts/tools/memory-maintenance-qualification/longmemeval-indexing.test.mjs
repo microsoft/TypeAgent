@@ -1,0 +1,694 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import assert from "node:assert/strict";
+import test from "node:test";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+    categories,
+    digest,
+    embeddingConfigurationHash,
+    encode,
+    freezePilot,
+    openPilot,
+    replayTape,
+    selectPilot,
+    validateApproval,
+} from "./longmemeval-indexing-contract.mjs";
+import {
+    capturePreparation,
+    productModules,
+} from "./longmemeval-indexing-storage.mjs";
+import {
+    main,
+    pairedPerformance,
+    qualifyCompanion,
+    readTraceLogs,
+    reportPilot,
+    reviewTemplate,
+    validateReview,
+} from "./longmemeval-indexing.mjs";
+import {
+    measureIndexingCase,
+    startIndexingCase,
+    verifyIndexingLifecycle,
+} from "./longmemeval-indexing-lifecycle.mjs";
+import {
+    liveCancellation,
+    superviseCompanion,
+    validateCompanionSpec,
+} from "./longmemeval-indexing-execution.mjs";
+import { recordBenchmarkArm } from "./longmemeval-live.mjs";
+
+const product = fileURLToPath(new URL("../../", import.meta.url));
+function fixture() {
+    const construction = categories.map((category, i) => ({
+        id: `case-${i}`,
+        cutoff: "2026/01/03 (Sat) 00:00",
+        sessions: [
+            {
+                id: "repeated-official-id",
+                position: 0,
+                date: "2026/01/01 (Thu) 12:00",
+                turns: [
+                    { role: "user", content: "first" },
+                    { role: "assistant", content: "second" },
+                ],
+            },
+            {
+                id: "repeated-official-id",
+                position: 1,
+                date: "2026/01/02 (Fri) 12:00",
+                turns: [
+                    { role: "user", content: "third" },
+                    { role: "assistant", content: "" },
+                ],
+            },
+        ],
+    }));
+    return {
+        manifest: {
+            originalRowHashes: categories.map((category, i) => ({
+                id: `case-${i}`,
+                category,
+            })),
+            provenance: "synthetic-no-quality-claim",
+        },
+        construction,
+        readerOnly: {
+            questions: construction.map((row) => ({
+                question_id: row.id,
+                question: "EVALUATOR_ONLY_QUESTION",
+            })),
+        },
+        evaluatorOnly: {
+            references: construction.map((row) => ({
+                question_id: row.id,
+                answer: "EVALUATOR_ONLY_ANSWER",
+            })),
+        },
+    };
+}
+async function temporary(work) {
+    const root = await mkdtemp(path.join(os.tmpdir(), "indexing-pilot-test-"));
+    try {
+        return await work(root);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+}
+function settings(modules) {
+    const model = (role = "document") => ({
+        maxBatchSize: role === "document" ? 16 : 7,
+        embeddingIdentity: {
+            schemaVersion: 1,
+            provider: "offline-fixture",
+            model: "pilot-test",
+            revision: "1",
+            dimensions: 2,
+            task: role,
+            prompt: role,
+            pooling: "mean",
+            normalization: "l2",
+            preprocessing: "fixture",
+            artifactHash: "a".repeat(64),
+        },
+        forRole: model,
+        generateEmbedding: async () => ({ success: true, data: [1, 0] }),
+        generateEmbeddingBatch: async (texts) => ({
+            success: true,
+            data: texts.map(() => [1, 0]),
+        }),
+    });
+    const value = modules.kp.createConversationSettings(model(), 2);
+    value.semanticRefIndexSettings.knowledgeExtractor = {
+        settings: { maxContextLength: 4096 },
+        extract: async (text) => ({
+            entities: [],
+            topics: [text],
+            actions: [],
+            inverseActions: [],
+        }),
+        extractWithRetry: async (text) => ({
+            success: true,
+            data: {
+                entities: [],
+                topics: [text],
+                actions: [],
+                inverseActions: [],
+            },
+        }),
+    };
+    return value;
+}
+
+test("selection freezes three categories without using question/reference labels", async () =>
+    temporary(async (root) => {
+        const prepared = fixture();
+        const selected = selectPilot(prepared, "fixed");
+        const reordered = structuredClone(prepared);
+        reordered.manifest.originalRowHashes.reverse();
+        assert.deepEqual(selectPilot(reordered, "fixed").ids, selected.ids);
+        assert.ok(!encode(selected.construction).includes("EVALUATOR_ONLY"));
+        assert.equal(selected.construction[0].sessions.length, 2);
+        const directory = path.join(root, "pilot");
+        await freezePilot(directory, prepared, "fixed", {
+            revision: "fixture",
+        });
+        const opened = await openPilot(directory);
+        assert.deepEqual(opened.construction, selected.construction);
+        await assert.rejects(
+            freezePilot(directory, prepared, "fixed", {}),
+            /EEXIST/,
+        );
+        const sourceFile = path.join(directory, "construction.json");
+        await writeFile(
+            sourceFile,
+            (await readFile(sourceFile, "utf8")).replace("first", "tampered"),
+        );
+        await assert.rejects(openPilot(directory), /Assertion/);
+    }));
+
+test("approval requires explicit provider/data permission and acceptance of financial-cap limitations", () => {
+    const point = { revision: "fixture" };
+    const approval = {
+        schemaVersion: 1,
+        manifestHash: "manifest",
+        checkpointHash: digest(encode(point)),
+        publicDatasetApproved: true,
+        configuredProvidersApproved: true,
+        acceptNoMonetaryCap: true,
+        chatConfigurationHash: "a".repeat(64),
+        dependencyHash: "b".repeat(64),
+        workMinutes: 15,
+        embeddingConfigurationHash: "c".repeat(64),
+        runtimeConfigurationHash: "d".repeat(64),
+    };
+    validateApproval(approval, "manifest", point);
+    for (const field of [
+        "publicDatasetApproved",
+        "configuredProvidersApproved",
+        "acceptNoMonetaryCap",
+    ])
+        assert.throws(() =>
+            validateApproval(
+                { ...approval, [field]: false },
+                "manifest",
+                point,
+            ),
+        );
+    assert.throws(
+        () => validateApproval(approval, "another", point),
+        /approved manifest/,
+    );
+    assert.throws(() =>
+        validateApproval({ ...approval, workMinutes: 16 }, "manifest", point),
+    );
+});
+
+test("provider replay has exact input/identity matching and no success-shaped fallback", async () => {
+    const tape = replayTape([], true);
+    await tape.invoke("embedding", { model: "one" }, ["text"], async () => ({
+        success: true,
+        data: [1, 0],
+    }));
+    const replay = replayTape(tape.entries());
+    assert.deepEqual(
+        await replay.invoke("embedding", { model: "one" }, ["text"]),
+        { success: true, data: [1, 0] },
+    );
+    await assert.rejects(
+        replay.invoke("embedding", { model: "two" }, ["text"]),
+        /replay miss/,
+    );
+    await assert.rejects(
+        replay.invoke("embedding", { model: "one" }, ["changed"]),
+        /replay miss/,
+    );
+    assert.equal(replay.calls, 0);
+});
+
+test(
+    "same real SQLite history passes serial/concurrent replay, frames, cancellation, stale input and five hard crashes",
+    { timeout: 120000 },
+    async () =>
+        temporary(async (root) => {
+            const fetch = globalThis.fetch;
+            globalThis.fetch = () => {
+                throw new Error(
+                    "Offline benchmark tests must not use a provider",
+                );
+            };
+            try {
+                const modules = await productModules(product);
+                const construction = fixture().construction[0];
+                const directory = path.join(root, "companion");
+                const tape = replayTape([], true);
+                const prepared = await capturePreparation(
+                    modules,
+                    directory,
+                    construction,
+                    settings(modules),
+                    tape,
+                );
+                assert.deepEqual(prepared.artifact.maxBatchSizes.message, {
+                    document: 16,
+                    query: 7,
+                });
+                const qualified = await qualifyCompanion(
+                    modules,
+                    product,
+                    directory,
+                    construction,
+                    prepared,
+                );
+                assert.equal(qualified.result.crashes.length, 5);
+                assert.equal(qualified.result.preparation.length, 3);
+                assert.equal(qualified.result.restore.length, 2);
+                assert.equal(qualified.result.frameSnapshot.status, "passed");
+                assert.deepEqual(
+                    qualified.result.replay.map((row) => row.acceptedHash),
+                    [prepared.acceptedHash, prepared.acceptedHash],
+                );
+                assert.equal(
+                    qualified.result.frameEdges.eligibility[1].parsedRows,
+                    32,
+                );
+                assert.ok(
+                    qualified.spans.some(
+                        (span) => span.stage === "ingestion.sqlite.commit",
+                    ),
+                );
+                assert.ok(
+                    !encode(qualified.spans).includes("repeated-official-id"),
+                );
+                const cancellation = settings(modules);
+                cancellation.preparedIndexing = {
+                    workers: 3,
+                    window: 3,
+                    signal: AbortSignal.timeout(60000),
+                };
+                const ready = Promise.withResolvers();
+                const release = Promise.withResolvers();
+                const extract =
+                    cancellation.semanticRefIndexSettings.knowledgeExtractor
+                        .extractWithRetry;
+                cancellation.semanticRefIndexSettings.knowledgeExtractor.extractWithRetry =
+                    async (...args) => {
+                        ready.resolve();
+                        await release.promise;
+                        return extract(...args);
+                    };
+                let settled = false;
+                const work = liveCancellation(
+                    modules,
+                    directory,
+                    prepared,
+                    cancellation,
+                ).finally(() => {
+                    settled = true;
+                });
+                try {
+                    await ready.promise;
+                    assert.equal(
+                        settled,
+                        false,
+                        "In-flight fixture model work was not awaited",
+                    );
+                } finally {
+                    release.resolve();
+                }
+                assert.equal((await work).outstanding, 0);
+            } finally {
+                globalThis.fetch = fetch;
+            }
+        }),
+);
+
+test("frozen evaluator and private input paths are integrity checked", async () =>
+    temporary(async (root) => {
+        for (const file of ["evaluator.json", "inputs.json"]) {
+            const directory = path.join(root, file);
+            await freezePilot(
+                directory,
+                fixture(),
+                "fixed",
+                {},
+                { datasetPath: "fixture" },
+            );
+            await writeFile(path.join(directory, file), "{}");
+            await assert.rejects(openPilot(directory), /changed/);
+        }
+    }));
+
+test("construction rejects question fields before creating an owned pilot", async () =>
+    temporary(async (root) => {
+        const prepared = fixture();
+        prepared.construction[0].sessions[0].turns[0].question =
+            "leaked question";
+        await assert.rejects(
+            freezePilot(path.join(root, "bad"), prepared, "fixed", {}),
+        );
+        await assert.rejects(
+            readFile(path.join(root, "bad", "ownership.json")),
+            { code: "ENOENT" },
+        );
+    }));
+
+test("recording refuses nondeterministic duplicate provider outputs", async () => {
+    const tape = replayTape([], true);
+    await tape.invoke("model", {}, ["same"], async () => "one");
+    await assert.rejects(
+        tape.invoke("model", {}, ["same"], async () => "two"),
+        /Non-deterministic/,
+    );
+});
+
+test("embedding configuration hash binds configuration and targets without returning their values", () => {
+    const client = {
+        getEmbeddingProvider: () => "fixture",
+        getEmbeddingSize: () => 2,
+        getRuntimeConfig: () => ({ model: "one" }),
+    };
+    const config = { resolveEmbeddingConfig: (value) => value };
+    const original = embeddingConfigurationHash(client, config);
+    client.getRuntimeConfig = () => ({ model: "two" });
+    assert.notEqual(embeddingConfigurationHash(client, config), original);
+    assert.match(original, /^[a-f0-9]{64}$/);
+});
+
+test("review records bind all six exact case/evidence hashes and retain disagreements", async () =>
+    temporary(async (root) => {
+        await freezePilot(path.join(root, "pilot"), fixture(), "fixed", {});
+        const pilot = await openPilot(path.join(root, "pilot"));
+        const arms = pilot.manifest.schedule.map((arm) => ({
+            arm,
+            cases: pilot.manifest.questionIds.map((id) => ({
+                id,
+                status: "complete",
+                caseHash: digest(id + arm),
+            })),
+        }));
+        const review = reviewTemplate(pilot, arms);
+        assert.throws(
+            () => validateReview(pilot, arms, review),
+            /not declared/,
+        );
+        review.independentReviewDeclared = true;
+        for (const row of review.cases)
+            Object.assign(row, {
+                citationSupported: true,
+                referenceConsistent: true,
+                judgeAgreement: true,
+            });
+        validateReview(pilot, arms, review);
+        const changed = structuredClone(review);
+        changed.cases[0].caseHash = "changed";
+        assert.throws(
+            () => validateReview(pilot, arms, changed),
+            /different case/,
+        );
+        review.cases[0].judgeAgreement = false;
+        assert.throws(
+            () => validateReview(pilot, arms, review),
+            /Explain judge/,
+        );
+        review.cases[0].notes =
+            "Fixture disagreement, not a measured model result";
+        validateReview(pilot, arms, review);
+    }));
+
+test("malformed traces fail explicitly and timings remain outside source content", async () =>
+    temporary(async (root) => {
+        await writeFile(
+            path.join(root, "stderr-fixture.log"),
+            'irrelevant\n[memory-search-timing] {"stage":"ingestion.unit.prepare","durationMs":1}\n',
+        );
+        assert.equal(
+            (await readTraceLogs(root))[0].stage,
+            "ingestion.unit.prepare",
+        );
+        await writeFile(
+            path.join(root, "stderr-fixture.log"),
+            "[memory-search-timing] invalid\n",
+        );
+        await assert.rejects(readTraceLogs(root), SyntaxError);
+    }));
+
+test("case metrics retain failure measurements and do not alter non-pilot behavior", async () => {
+    const original = {};
+    assert.equal(
+        await measureIndexingCase(original, false, async () => 42),
+        42,
+    );
+    assert.deepEqual(original, {});
+    const failed = {};
+    await assert.rejects(
+        measureIndexingCase(failed, true, async () => {
+            throw new Error("expected");
+        }),
+        /expected/,
+    );
+    assert.ok(failed.indexingMetrics.elapsedMs >= 0);
+    assert.equal(failed.indexingMetrics.gcPauseMs, null);
+});
+
+test("paired ratios count only complete comparable pairs and never turn missing durations into zero", () => {
+    const arms = ["A0", "A1"].map((arm) => ({
+        arm,
+        status: "completed",
+        cases: [
+            {
+                id: "complete",
+                status: "complete",
+                answerMilliseconds: arm === "A0" ? 20 : 10,
+            },
+            {
+                id: "partial",
+                status: arm === "A0" ? "failed" : "complete",
+                answerMilliseconds: 5,
+            },
+        ],
+    }));
+    const result = pairedPerformance(arms, ["complete", "partial", "missing"]);
+    assert.equal(result.pairs[0].measurements.answerMs.ratioA0overA1, 2);
+    assert.equal(result.pairs[1].measurements.answerMs.ratioA0overA1, null);
+    assert.equal(result.pairs[2].measurements.answerMs.A0, null);
+    assert.deepEqual(result.medians.answerMs, {
+        comparedPairs: 1,
+        medianRatioA0overA1: 2,
+    });
+    assert.equal(result.medians.ingestionMs.comparedPairs, 0);
+});
+
+test("each pilot case starts a distinct empty store without changing ordinary benchmark stores", async () =>
+    temporary(async (root) => {
+        let closed = 0;
+        const previous = {
+            close: async () => {
+                closed++;
+            },
+        };
+        const open = async (store) => ({
+            store,
+            initialize: async () => {},
+            close: async () => {
+                closed++;
+            },
+        });
+        const context = {
+            enabled: false,
+            store: root,
+            runDirectory: root,
+            open,
+        };
+        assert.deepEqual(await startIndexingCase(previous, context), {
+            service: previous,
+            store: root,
+        });
+        assert.equal(closed, 0);
+        context.enabled = true;
+        const first = await startIndexingCase(previous, context);
+        const second = await startIndexingCase(first.service, context);
+        assert.notEqual(first.store, second.store);
+        assert.equal(closed, 2);
+    }));
+
+test("unknown commands fail before attempting provider configuration", async () =>
+    temporary(async (root) => {
+        const directory = path.join(root, "pilot");
+        await freezePilot(directory, fixture(), "fixed", {});
+        await assert.rejects(
+            main(["unknown", "--directory", directory]),
+            /Commands:/,
+        );
+    }));
+
+test("companion cannot silently resume or exceed the bounded allowance", () => {
+    const spec = {
+        mode: "indexing-companion",
+        authorizedLiveBenchmark: true,
+        startupAllowanceMs: 120000,
+        workAllowanceMs: 1200000,
+        resume: false,
+        pilotDirectory: product,
+        runDirectory: product,
+        approvalHash: "a".repeat(64),
+    };
+    validateCompanionSpec(spec);
+    assert.throws(() =>
+        validateCompanionSpec({ ...spec, workAllowanceMs: 1200001 }),
+    );
+    assert.throws(() =>
+        validateCompanionSpec({ ...spec, authorizedLiveBenchmark: false }),
+    );
+    assert.throws(() => validateCompanionSpec({ ...spec, resume: true }));
+});
+
+test("companion supervision verifies ownership and admits only one bounded worker", async () =>
+    temporary(async (root) => {
+        const approvalFile = path.join(root, "fixture-approval.json");
+        const approval = { workMinutes: 1 };
+        await writeFile(approvalFile, encode(approval));
+        const worker = path.join(root, "fixture-worker.mjs");
+        const executionModule = new URL(
+            "./longmemeval-indexing-execution.mjs",
+            import.meta.url,
+        ).href;
+        await writeFile(
+            worker,
+            `
+import { readFile } from "node:fs/promises";
+import { admitCompanion } from ${JSON.stringify(executionModule)};
+const spec = JSON.parse(await readFile(process.argv[3], "utf8"));
+const approval = JSON.parse(await readFile(spec.approvalFile, "utf8"));
+await admitCompanion(spec, approval);
+await new Promise(resolve => setTimeout(resolve, 200));
+`,
+        );
+        const pilot = { root, manifest: { checkpoint: { hashes: {} } } };
+        const outcome = await superviseCompanion(
+            pilot,
+            product,
+            approvalFile,
+            approval,
+            worker,
+        );
+        assert.equal(outcome.exit.code, 0);
+        assert.equal(outcome.phase, "admitted-work");
+        await assert.rejects(
+            superviseCompanion(pilot, product, approvalFile, approval, worker),
+            { code: "EEXIST" },
+        );
+    }));
+
+test("pilot live commands reject absent authorization before loading provider configuration", async () =>
+    temporary(async (root) => {
+        const directory = path.join(root, "pilot");
+        await freezePilot(directory, fixture(), "fixed", {});
+        await assert.rejects(
+            main(["live", "--directory", directory, "--arm", "A0"]),
+            /separate approval JSON/,
+        );
+    }));
+
+test("missing live arms are incomplete, not zero-cost or successful quality results", async () =>
+    temporary(async (root) => {
+        await freezePilot(path.join(root, "pilot"), fixture(), "fixed", {});
+        const report = await reportPilot(
+            await openPilot(path.join(root, "pilot")),
+        );
+        assert.equal(report.correctness, "incomplete");
+        assert.equal(report.recovery, "incomplete");
+        assert.equal(report.arms.length, 2);
+        assert.ok(report.arms.every((arm) => !("providerRequests" in arm)));
+    }));
+
+test("live arm identity rejects a changed preparation flag on resume", () => {
+    const previous = process.env.TYPEAGENT_MEMORY_PREPARED_INDEXING;
+    const state = {};
+    try {
+        delete process.env.TYPEAGENT_MEMORY_PREPARED_INDEXING;
+        recordBenchmarkArm(state, { features: {} }, false, {
+            indexingPilot: true,
+        });
+        process.env.TYPEAGENT_MEMORY_PREPARED_INDEXING = "1";
+        assert.throws(
+            () =>
+                recordBenchmarkArm(state, { features: {} }, true, {
+                    indexingPilot: true,
+                }),
+            /configuration changed/,
+        );
+    } finally {
+        if (previous === undefined)
+            delete process.env.TYPEAGENT_MEMORY_PREPARED_INDEXING;
+        else process.env.TYPEAGENT_MEMORY_PREPARED_INDEXING = previous;
+    }
+});
+
+test("lifecycle probes use a separate destructive copy and leave the official corpus intact", async () => {
+    const source = { activeRevisionId: "revision" };
+    const evidence = {
+        sourceId: "source",
+        revisionId: "revision",
+        locator: "turn:0",
+    };
+    const make = () => {
+        let removed = false;
+        return {
+            search: async () => ({ matches: removed ? [] : [evidence] }),
+            close: async () => {},
+            initialize: async () => {},
+            getSource: async () => (removed ? undefined : source),
+            previewForgetSource: async () => ({ confirmationToken: "token" }),
+            forgetSource: async () => {
+                removed = true;
+            },
+            clearCorpus: async () => {
+                removed = true;
+            },
+        };
+    };
+    const original = make();
+    const copy = make();
+    const result = await verifyIndexingLifecycle(
+        original,
+        async () => original,
+        async () => ({ service: copy, reopen: async () => copy }),
+        "corpus",
+        "question",
+        new AbortController().signal,
+    );
+    assert.equal(result.result.restart, "passed");
+    assert.equal(result.result.forget, "passed");
+    assert.equal(result.result.clear, "passed");
+    assert.deepEqual((await original.search()).matches, [evidence]);
+});
+
+test("lifecycle closes its clone when opening the original fails", async () => {
+    let closed = 0;
+    await assert.rejects(
+        verifyIndexingLifecycle(
+            { search: async () => ({ matches: [] }), close: async () => {} },
+            async () => {
+                throw new Error("reopen failed");
+            },
+            async () => ({
+                service: {
+                    close: async () => {
+                        closed++;
+                    },
+                },
+            }),
+            "corpus",
+            "question",
+            new AbortController().signal,
+        ),
+        /reopen failed/,
+    );
+    assert.equal(closed, 1);
+});
