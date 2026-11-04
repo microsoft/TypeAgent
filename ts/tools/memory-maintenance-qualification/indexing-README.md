@@ -68,8 +68,9 @@ Time and question limits are **not financial limits**.
 
 For a same-build comparison of the three parallelization changes, prepare a
 **new** pilot with `--comparison indexing-parallel`. Both arms then enable
-prepared indexing. A0 removes only the `indexing-parallel` performance experiment;
-A1 enables it. Other inherited performance experiments remain identical.
+prepared indexing. A0 removes the bundled and all three individual indexing
+parallel experiments; A1 enables the bundle. Other inherited performance
+experiments remain identical.
 An explicit `TYPEAGENT_MEMORY_TOPIC_CONCURRENCY` is rejected rather than
 silently overriding the treatment. Each recorded arm includes `indexingParallel`.
 
@@ -88,6 +89,36 @@ node $tool preflight --product $product --directory $pilot
 Authorize the new frozen checkpoint separately. Overall unlimited work does
 not remove the existing finite production knowledge-readiness timeout; failures
 and completed ingestion timings remain distinct from successful readiness.
+
+### Prepare independent treatments without running inference
+
+Use a new directory and `--comparison indexing-ablation --first-case-only` to
+freeze four sequential conditions: `A0` (all parallel treatments off), `T1`
+(topic-only), `S1` (synopsis-only), `E1` (embedding-only). Every condition enables
+prepared indexing and uses the same complete first history with fresh stores.
+The runner refuses another arm order or an inherited topic-concurrency override.
+It removes inherited individual/bundled indexing treatments before selecting
+exactly the requested one. Recorded `indexingTreatments` describe configuration;
+provider/stage traces remain necessary to establish actual execution.
+
+```powershell
+node $tool prepare --product $product --directory $pilot --dataset $dataset --judge-source $judge --comparison indexing-ablation --first-case-only
+node $tool preflight --product $product --directory $pilot
+```
+
+These commands do not run inference. A new approved checkpoint is required
+before any `live` command. The tooling will not retry failed arms, add rounds or
+combine treatments. Each later arm requires a terminated immediately preceding
+arm. Reports compare each singleton to `A0` separately and leave incomplete
+case/arm ratios null.
+
+The production source loop now requires the local service's corpus-scoped topic
+hold, records `topicMaintenanceCoalesced`, and releases it in `finally` before
+readiness. Both arms/conditions use this orchestration. It preserves synopsis
+and other-corpus eligibility rather than globally pausing maintenance. This is
+a new engine revision and cannot be substituted into an older frozen pilot.
+Structured readiness observations retain checkpoint state separately from safe
+target diagnostics and unavailable visibility.
 
 Use the approved JSON path below. The tool does not infer approval from this
 guide, the implementation request or an existing model configuration.

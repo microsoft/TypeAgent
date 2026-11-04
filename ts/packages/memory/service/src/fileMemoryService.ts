@@ -564,7 +564,7 @@ const eventAuthorities: ReadonlySet<string> = new Set<MemoryEventAuthority>([
 
 type KnowledgeMaintenanceResult = Pick<
     KnowledgeCheckpoint,
-    "viewIds" | "jobIds" | "state" | "reasons" | "viewRevisions"
+    "viewIds" | "jobIds" | "state" | "reasons" | "viewRevisions" | "diagnostics"
 >;
 
 function knowledgeMaintenanceResult(
@@ -580,6 +580,7 @@ function knowledgeMaintenanceResult(
             "ready",
         ),
         reasons: results.flatMap((result) => result.reasons),
+        diagnostics: results.flatMap((result) => result.diagnostics ?? []),
         viewIds: [...new Set(results.flatMap((result) => result.viewIds))],
         jobIds: [...new Set(results.flatMap((result) => result.jobIds))],
     };
@@ -1976,7 +1977,7 @@ export class FileMemoryService
             options,
             this.decisionTopics,
             this.curatedTopics,
-            this.experiments.has("indexing-parallel"),
+            this.experiments.has("topic-parallel"),
         );
         this.topicPolicy = topicCurationPolicy(
             this.curatedTopics,
@@ -2438,7 +2439,7 @@ export class FileMemoryService
         if (
             !queryExperiments &&
             !options.indexSettingsFactory &&
-            !this.experiments.has("indexing-parallel")
+            !this.experiments.has("embedding-parallel")
         )
             return createKnowProCorpusIndex;
         return (corpusId, directory) =>
@@ -2446,7 +2447,7 @@ export class FileMemoryService
                 const settings =
                     options.indexSettingsFactory?.() ??
                     createDocMemorySettings();
-                if (this.experiments.has("indexing-parallel"))
+                if (this.experiments.has("embedding-parallel"))
                     settings.conversationSettings.overlapMessageEmbeddings =
                         true;
                 if (!queryExperiments) return settings;
@@ -2791,6 +2792,11 @@ export class FileMemoryService
 
     public deferMaintenance(): () => void {
         return this.maintenance.defer();
+    }
+
+    public deferTopicMaintenance(corpusId: string): () => void {
+        validateIdentifier("corpus ID", corpusId);
+        return this.maintenance.deferFamily(corpusId, "topics");
     }
 
     public getMaintenanceStatus(): MaintenanceStatus {
@@ -6357,12 +6363,16 @@ export class FileMemoryService
     ): Promise<KnowledgeStatus> {
         await this.requireViews(corpusId);
         const status = await this.viewStore.getKnowledgeState(corpusId);
-        for (let index = 0; index < status.checkpoints.length; index++)
+        for (let index = 0; index < status.checkpoints.length; index++) {
             if (status.checkpoints[index].state === "ready")
                 status.checkpoints[index] = await this.knowledge.get({
                     corpusId,
                     checkpointId: status.checkpoints[index].checkpointId,
                 });
+            status.checkpoints[index] = await this.withKnowledgeDiagnostics(
+                status.checkpoints[index],
+            );
+        }
         return status;
     }
 
@@ -6377,21 +6387,39 @@ export class FileMemoryService
         request: KnowledgeCheckpointRequest,
     ): Promise<KnowledgeCheckpoint> {
         await this.requireViews(request.corpusId);
-        return this.knowledge.create(request);
+        return this.withKnowledgeDiagnostics(
+            await this.knowledge.create(request),
+        );
     }
 
     public async getKnowledgeCheckpoint(
         request: KnowledgeCheckpointRead,
     ): Promise<KnowledgeCheckpoint> {
         await this.requireViews(request.corpusId);
-        return this.knowledge.get(request);
+        return this.withKnowledgeDiagnostics(await this.knowledge.get(request));
     }
 
     public async waitForKnowledgeCheckpoint(
         request: KnowledgeCheckpointWait,
     ): Promise<KnowledgeCheckpoint> {
         await this.requireViews(request.corpusId);
-        return this.knowledge.wait(request);
+        return this.withKnowledgeDiagnostics(
+            await this.knowledge.wait(request),
+        );
+    }
+
+    private async withKnowledgeDiagnostics(
+        checkpoint: KnowledgeCheckpoint,
+    ): Promise<KnowledgeCheckpoint> {
+        if (!checkpoint.jobIds.length) return checkpoint;
+        const diagnostics = await this.viewStore.getKnowledgeBuildDiagnostics(
+            checkpoint.corpusId,
+            checkpoint.jobIds,
+        );
+        return {
+            ...checkpoint,
+            diagnostics: [...(checkpoint.diagnostics ?? []), ...diagnostics],
+        };
     }
 
     private async admitKnowledgeQuestion(
@@ -6871,6 +6899,15 @@ export class FileMemoryService
                 reasons: [
                     `View ${view.viewId} depends on evidence outside the captured scope`,
                 ],
+                diagnostics: [
+                    {
+                        phase: "maintenance",
+                        family: "questions",
+                        viewId: view.viewId,
+                        state: "partial",
+                        code: "scope-incomplete",
+                    },
+                ],
             };
         }
         const plan = await this.planViewMaintenance({
@@ -6879,7 +6916,20 @@ export class FileMemoryService
         });
         const target = plan.targets[0];
         if (target.state === "blocked")
-            return { ...result, state: "blocked", reasons: [target.reason] };
+            return {
+                ...result,
+                state: "blocked",
+                reasons: [target.reason],
+                diagnostics: [
+                    {
+                        phase: "maintenance",
+                        family: "questions",
+                        viewId: view.viewId,
+                        state: "blocked",
+                        code: "target-blocked",
+                    },
+                ],
+            };
         if (target.state === "rebuild") {
             const build = await this.maintainViews({
                 corpusId,
@@ -6927,6 +6977,15 @@ export class FileMemoryService
                     ...result,
                     state: "failed",
                     reasons: [publication.reason],
+                    diagnostics: [
+                        {
+                            phase: "publication",
+                            family: "questions",
+                            viewId: current.viewId,
+                            state: "failed",
+                            code: "publication-incomplete",
+                        },
+                    ],
                 };
         }
         result.viewIds.push(view.viewId);
@@ -6960,6 +7019,14 @@ export class FileMemoryService
                 state: "partial",
                 reasons: [
                     `${family} corpus family includes sources outside checkpoint scope`,
+                ],
+                diagnostics: [
+                    {
+                        phase: "maintenance",
+                        family,
+                        state: "partial",
+                        code: "scope-incomplete",
+                    },
                 ],
             };
         }
@@ -7014,6 +7081,14 @@ export class FileMemoryService
                     ...result,
                     state: "blocked",
                     reasons: [familyState.error],
+                    diagnostics: [
+                        {
+                            phase: "maintenance",
+                            family,
+                            state: "blocked",
+                            code: "family-blocked",
+                        },
+                    ],
                 };
             if (!familyState.dirty) return result;
             const snapshot = await this.listViews(corpusId);
@@ -7057,6 +7132,14 @@ export class FileMemoryService
                     reasons: [
                         `${family} maintenance made no progress; pending content remains deferred`,
                     ],
+                    diagnostics: [
+                        {
+                            phase: "maintenance",
+                            family,
+                            state: "partial",
+                            code: "maintenance-deferred",
+                        },
+                    ],
                 };
         }
         if ((await this.viewStore.getWikiFamily(corpusId, family)).dirty)
@@ -7065,6 +7148,14 @@ export class FileMemoryService
                 state: "partial",
                 reasons: [
                     `${family} maintenance cursor remains after bounded checkpoint work`,
+                ],
+                diagnostics: [
+                    {
+                        phase: "maintenance",
+                        family,
+                        state: "partial",
+                        code: "maintenance-deferred",
+                    },
                 ],
             };
         return result;
@@ -11319,7 +11410,7 @@ export class FileMemoryService
                     corpusId,
                     async () => {
                         if (
-                            this.maintenance.isDeferred(corpusId) ||
+                            this.maintenance.isDeferred(corpusId, "topics") ||
                             runtime.manifest.authorizedSourceRemoval
                         )
                             return;
@@ -11333,7 +11424,8 @@ export class FileMemoryService
                             this.topicFingerprint(runtime),
                         );
                         if (!topicFamilyCanSchedule(family)) return;
-                        if (this.maintenance.isDeferred(corpusId)) return;
+                        if (this.maintenance.isDeferred(corpusId, "topics"))
+                            return;
                         return this.maintainTopics(
                             runtime,
                             {
@@ -15963,7 +16055,7 @@ export class FileMemoryService
         const runtime = await this.getCorpusRuntime(corpusId, true);
         if (runtime.manifest.authorizedSourceRemoval) return;
         const ids = runtime.manifest.sources.map((source) => source.sourceId);
-        const concurrency = this.experiments.has("indexing-parallel") ? 2 : 1;
+        const concurrency = this.experiments.has("synopsis-parallel") ? 2 : 1;
         for (let offset = 0; offset < ids.length; offset += concurrency) {
             const outcomes = await Promise.allSettled(
                 ids

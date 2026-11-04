@@ -9,6 +9,7 @@ import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { hydrateSchemaAnswers } from "../src/schemaViewSynthesis.js";
 import type { ViewSynthesisAdapter } from "../src/viewTypes.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { knowledgeBuildDiagnostics } from "../src/knowledgeDiagnostics.js";
 
 test.each([
     { producerComplete: false, candidateCount: 45 },
@@ -131,12 +132,62 @@ test.each([
                 producerComplete ? Math.ceil(candidateCount / 12) : 3,
             );
             expect(done.viewIds).toEqual([]);
+            expect(
+                done.diagnostics?.some(
+                    (entry) =>
+                        entry.code === "target-skipped" &&
+                        entry.family === "wiki",
+                ),
+            ).toBe(true);
             expect((await service.listViews(corpusId)).views).toEqual([]);
             expect(assessed).toHaveLength(
                 producerComplete ? candidateCount : 36,
             );
             expect(new Set(assessed).size).toBe(assessed.length);
             if (producerComplete && candidateCount === 45) {
+                const job = await service.getViewBuild({
+                    corpusId,
+                    jobId: done.jobIds[0],
+                });
+                if (!job) throw new Error("Expected persisted readiness job");
+                const target = job.results[0];
+                const mixed = knowledgeBuildDiagnostics({
+                    ...job,
+                    results: [
+                        {
+                            ...target,
+                            state: "blocked",
+                            missingEvidence: ["Private evidence detail"],
+                        },
+                        {
+                            ...target,
+                            state: "skipped",
+                            reason: "Private assessment",
+                        },
+                        { ...target, state: "stale" },
+                    ],
+                });
+                expect(mixed.map((entry) => entry.code)).toEqual([
+                    "evidence-incomplete",
+                    "target-skipped",
+                    "target-stale",
+                ]);
+                expect(JSON.stringify(mixed)).not.toContain("Private");
+                expect(
+                    (
+                        await service.getKnowledgeCheckpoint({
+                            corpusId,
+                            checkpointId: done.checkpointId,
+                        })
+                    ).diagnostics,
+                ).toEqual(done.diagnostics);
+                expect(
+                    (
+                        await service.getKnowledgeStatus(corpusId)
+                    ).checkpoints.find(
+                        (entry) => entry.checkpointId === done.checkpointId,
+                    )?.diagnostics,
+                ).toEqual(done.diagnostics);
                 const unchanged = await service.maintainViews({
                     corpusId,
                     expectedHead: (await service.listViews(corpusId)).head,

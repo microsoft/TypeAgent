@@ -1038,9 +1038,14 @@ describe("inline synopsis production lifecycle", () => {
     let root: string;
     let service: FileMemoryService;
     let model: DeterministicModel;
-    function open(parallel = false) {
+    function open(parallel: boolean | string = false) {
         return new FileMemoryService(root, {
-            performanceExperiments: parallel ? "indexing-parallel" : "",
+            performanceExperiments:
+                typeof parallel === "string"
+                    ? parallel
+                    : parallel
+                      ? "indexing-parallel"
+                      : "",
             viewDrafts: false,
             informationalViews: false,
             sourceSynopses: true,
@@ -1100,7 +1105,7 @@ describe("inline synopsis production lifecycle", () => {
         }
         throw new Error(`Synopsis did not reach ${status}`);
     }
-    test.each([false, true])(
+    test.each([false, true, "synopsis-parallel"])(
         "independent synopsis generation is bounded and opt-in: %s",
         async (parallel) => {
             await service.close();
@@ -1303,7 +1308,7 @@ describe("inline synopsis production lifecycle", () => {
         expect(model.calls).toHaveLength(2);
     });
 
-    test.each([false, true])(
+    test.each([false, true, "synopsis-parallel"])(
         "replacement rejects a late old-revision synopsis with parallelism %s",
         async (parallel) => {
             await service.close();

@@ -11,6 +11,32 @@ export const categories = [
     "knowledge-update",
     "multi-session",
 ];
+export const parallelTreatmentNames = [
+    "topic-parallel",
+    "synopsis-parallel",
+    "embedding-parallel",
+];
+export function indexingTreatments(environment = process.env) {
+    const names = (environment.TYPEAGENT_MEMORY_PERF_EXPERIMENTS ?? "")
+        .split(",")
+        .map((name) => name.trim());
+    return parallelTreatmentNames.filter(
+        (name) => names.includes("indexing-parallel") || names.includes(name),
+    );
+}
+export function productionSchedule(comparison = "prepared-indexing") {
+    assert.ok(
+        [
+            "prepared-indexing",
+            "indexing-parallel",
+            "indexing-ablation",
+        ].includes(comparison),
+        "Unknown production comparison",
+    );
+    return comparison === "indexing-ablation"
+        ? ["A0", "T1", "S1", "E1"]
+        : ["A0", "A1"];
+}
 export const digest = (value) =>
     createHash("sha256").update(value).digest("hex");
 export const encode = (value) =>
@@ -135,6 +161,13 @@ export async function freezePilot(
     checkpoint,
     inputs = {},
 ) {
+    const schedule = productionSchedule(inputs.comparison);
+    if (inputs.comparison === "indexing-ablation")
+        assert.equal(
+            inputs.firstCaseOnly,
+            true,
+            "Ablation requires one complete frozen history",
+        );
     const selected = selectPilot(prepared, seed);
     validateConstruction(selected.construction);
     await mkdir(directory);
@@ -170,7 +203,7 @@ export async function freezePilot(
         })),
         dateInterpretation:
             "Naive official dates interpreted as UTC; original date retained",
-        schedule: ["A0", "A1"],
+        schedule,
         financialCap: "not-enforced-by-this-runner",
         reviewRubricVersion: 1,
         requiredHumanChecks: [

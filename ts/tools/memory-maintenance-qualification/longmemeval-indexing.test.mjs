@@ -34,6 +34,7 @@ import {
     traceRun,
     productionPlan,
     productionArmEnvironment,
+    treatmentPerformance,
 } from "./longmemeval-indexing.mjs";
 import {
     measureIndexingCase,
@@ -50,6 +51,71 @@ import { benchmarkFailure, recordBenchmarkArm } from "./longmemeval-live.mjs";
 import { createTraceSummary } from "./longmemeval-indexing-traces.mjs";
 
 const product = fileURLToPath(new URL("../../", import.meta.url));
+
+test("singleton ablations remove inherited treatments and preserve frozen order", () => {
+    const pilot = {
+        manifest: {
+            questionIds: ["one", "two", "three"],
+            schedule: ["A0", "T1", "S1", "E1"],
+        },
+        inputs: { comparison: "indexing-ablation", firstCaseOnly: true },
+    };
+    assert.deepEqual(productionPlan(pilot).schedule, pilot.manifest.schedule);
+    for (const [arm, expected] of [
+        ["A0", ""],
+        ["T1", "topic-parallel"],
+        ["S1", "synopsis-parallel"],
+        ["E1", "embedding-parallel"],
+    ]) {
+        const env = productionArmEnvironment(pilot, arm, {
+            TYPEAGENT_MEMORY_PERF_EXPERIMENTS:
+                "indexing-parallel,topic-parallel,synopsis-parallel,embedding-parallel,translation-cache",
+        });
+        assert.equal(env.TYPEAGENT_MEMORY_PREPARED_INDEXING, "1");
+        assert.equal(
+            env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS,
+            ["translation-cache", expected].filter(Boolean).join(","),
+        );
+    }
+    assert.throws(() => productionArmEnvironment(pilot, "A1", {}), /frozen/);
+    assert.throws(
+        () =>
+            productionPlan({
+                ...pilot,
+                manifest: {
+                    ...pilot.manifest,
+                    schedule: ["A0", "S1", "T1", "E1"],
+                },
+            }),
+        /schedule/,
+    );
+    const arms = ["A0", "T1", "S1", "E1"].map((arm) => ({
+        arm,
+        status: arm === "E1" ? "failed" : "completed",
+        cases: [
+            {
+                id: "one",
+                status: arm === "E1" ? "interrupted" : "complete",
+                ingestionMilliseconds: arm === "A0" ? 20 : 10,
+            },
+        ],
+    }));
+    assert.equal(
+        treatmentPerformance(arms, ["one"], "T1").medians.ingestionMs
+            .medianRatioControlOverTreatment,
+        2,
+    );
+    assert.equal(
+        treatmentPerformance(arms, ["one"], "E1").medians.ingestionMs
+            .comparedPairs,
+        0,
+    );
+    assert.equal(
+        treatmentPerformance(arms, ["one"], "E1").pairs[0].measurements
+            .ingestionMs.ratioControlOverTreatment,
+        null,
+    );
+});
 
 test("parallel comparison freezes one full history and holds preparation constant", () => {
     const pilot = {
@@ -224,6 +290,35 @@ test("selection freezes three categories without using question/reference labels
             (await readFile(sourceFile, "utf8")).replace("first", "tampered"),
         );
         await assert.rejects(openPilot(directory), /Assertion/);
+    }));
+
+test("freezing an ablation persists four independent conditions and one complete production history", async () =>
+    temporary(async (root) => {
+        const inputs = { comparison: "indexing-ablation", firstCaseOnly: true };
+        const directory = path.join(root, "ablation");
+        await freezePilot(
+            directory,
+            fixture(),
+            "fixed",
+            { revision: "fixture" },
+            inputs,
+        );
+        const pilot = await openPilot(directory);
+        assert.deepEqual(pilot.manifest.schedule, ["A0", "T1", "S1", "E1"]);
+        assert.equal(productionPlan(pilot).questionIds.length, 1);
+        assert.equal(pilot.construction.length, 3);
+        assert.equal(pilot.construction[0].sessions.length, 2);
+        assert.deepEqual(pilot.inputs, inputs);
+        await assert.rejects(
+            freezePilot(
+                path.join(root, "invalid"),
+                fixture(),
+                "fixed",
+                {},
+                { ...inputs, firstCaseOnly: false },
+            ),
+            /one complete frozen history/,
+        );
     }));
 
 test("approval requires explicit provider/data permission and acceptance of financial-cap limitations", () => {

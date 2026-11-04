@@ -36,7 +36,10 @@ import {
     measureIndexingCase,
     startIndexingCase,
 } from "./longmemeval-indexing-lifecycle.mjs";
-import { assertPilotProviderConfiguration } from "./longmemeval-indexing-contract.mjs";
+import {
+    assertPilotProviderConfiguration,
+    indexingTreatments,
+} from "./longmemeval-indexing-contract.mjs";
 
 const datasetSha256 =
     "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442";
@@ -80,6 +83,7 @@ export function recordBenchmarkArm(state, capabilities, resume, options = {}) {
         indexingParallel: (process.env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS ?? "")
             .split(",")
             .some((name) => name.trim() === "indexing-parallel"),
+        indexingTreatments: indexingTreatments(),
         searchTrace: process.env.TYPEAGENT_MEMORY_SEARCH_TRACE === "1",
         indexingLifecycle: options.indexingPilot === true,
         caseStoreIsolation: options.indexingPilot
@@ -156,7 +160,9 @@ function validateBenchmarkSpec(spec) {
         );
         assert.ok(
             spec.questionIds?.length === 3 ||
-                (spec.indexingComparison === "indexing-parallel" &&
+                (["indexing-parallel", "indexing-ablation"].includes(
+                    spec.indexingComparison,
+                ) &&
                     spec.questionIds?.length === 1),
             "Indexing pilot requires three questions, or one complete parallel-comparison history",
         );

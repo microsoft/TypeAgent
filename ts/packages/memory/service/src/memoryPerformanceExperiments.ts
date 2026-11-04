@@ -13,6 +13,9 @@ export const memoryPerformanceExperimentNames = [
     "foreground-priority",
     "lazy-collections",
     "indexing-parallel",
+    "topic-parallel",
+    "synopsis-parallel",
+    "embedding-parallel",
 ] as const;
 
 export type MemoryPerformanceExperiment =
@@ -50,6 +53,11 @@ export function memoryPerformanceExperiments(
         if (!names.length)
             throw new Error(`Unknown memory performance experiment: ${name}`);
         for (const item of names) result.add(item);
+    }
+    if (result.has("indexing-parallel")) {
+        result.add("topic-parallel");
+        result.add("synopsis-parallel");
+        result.add("embedding-parallel");
     }
     return result;
 }

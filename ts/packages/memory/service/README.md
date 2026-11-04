@@ -511,6 +511,9 @@ selected separately.
 | `foreground-priority` | Defer new background maintenance for a shared maximum ten seconds, with a one-second cooldown under sustained requests. Does not cancel running work or defer explicit writes.                                                                                                                                                                                                                                                                                                                                               |
 | `lazy-collections`    | Single-flight per-collection recovery on first access, with pending removal/clear recovery still eager. Unopened collections join completion-paced background warmup rather than all loading during discovery.                                                                                                                                                                                                                                                                                                               |
 | `indexing-parallel`   | Default generative topic speculation at concurrency two (explicit topic settings retain precedence); two independent source synopses per batch; isolated prepared message embeddings overlap knowledge extraction. Source publication and topic commits remain serialized, stale inputs are revalidated, and started siblings settle before failure leaves scope. Embedding overlap requires `TYPEAGENT_MEMORY_PREPARED_INDEXING=1` and the built-in corpus index; legacy indexing and custom index factories are unchanged. |
+| `topic-parallel`      | Only the topic-speculation component of `indexing-parallel`; explicit topic settings still take precedence.                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `synopsis-parallel`   | Only the bounded two-source synopsis component of `indexing-parallel`.                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `embedding-parallel`  | Only the prepared-message embedding overlap component of `indexing-parallel`; prepared indexing and the built-in index remain prerequisites.                                                                                                                                                                                                                                                                                                                                                                                 |
 
 Fast model deployments also need verified `modelRequestConstraints` context,
 input and full output capacities for uncapped request admission. A soft reader
@@ -672,6 +675,28 @@ discovery and three page-pass behavior. Continuation does not bypass the
 persisted hourly discovery allowance, retry failed discovery implicitly, or
 turn partial/failed coverage into `ready`. No progress, exhausted allowances,
 disabled families, deadlines and failed builds remain explicit.
+
+Checkpoint `diagnostics` add safe phase/family/job/target identifiers and enum
+codes without source passages, provider responses or assessment text. Discovery
+and terminal checkpoint codes persist with the checkpoint. Public get/wait/status
+reads also derive target diagnostics from persisted job receipts, including
+`jobUpdatedAt`; these can reflect progress after the checkpoint timestamp.
+`target-skipped` is not a blocking evidence failure. `evidence-incomplete`,
+blocked targets, unavailable jobs and disabled families remain distinguishable.
+Diagnostics never substitute for the authoritative checkpoint state. A waiter
+timeout leaves work running and does not become a checkpoint deadline failure.
+
+Knowledge-state and individual-job reads select fields from existing history
+payload manifests instead of hydrating unrelated retained builds. Legacy state
+files still use full reads. Pinned read scopes, independent returned objects,
+integrity checks for selected payloads and privacy quarantine remain enforced.
+Timing reports distinguish full logical `stateBytes` from the uncompressed
+`payloadBytesRead`/`payloadsRead` actually hydrated. Small-state blobs may still
+contain several fields. Current inventory projections retain safe per-job
+diagnostics, so status polling does not hydrate retained job snapshots to
+classify targets. Legacy projections fall back to selected job reads until the
+next normal write refreshes them. Full mutations and prior-state comparison still hydrate
+the complete state; this does not remove all history amplification.
 
 Completed discovery receipts are not made partial by an obsolete deferral
 reason. Successful low-utility wiki skips remain complete build outcomes;
@@ -1344,6 +1369,15 @@ and one coalesced latest-generation request. Pending work is reconstructed from
 durable source/family state after restart, not from an in-memory timer journal.
 Reconciliation does not enqueue duplicate passes behind an occupied corpus.
 Privacy removal and eligibility checks are never postponed by this policy.
+
+For an explicitly finite sequence of independently awaited source jobs, use the
+local in-process `deferTopicMaintenance(corpusId)` instead. Its nestable,
+idempotent release holds only that corpus's autonomous topic admission; synopsis,
+other families and other corpora remain eligible. Already-running work still
+owns/drains its workers and retains stale-generation rejection. Always release
+in `finally`, before requesting readiness. Held pending families appear in
+maintenance `deferred` status; a drain can return `reason: "paused"` without
+claiming settlement. The closure is a local orchestration API, not an RPC token.
 
 Non-privacy segment collection uses the same coalesced queue and admission
 guards. Manual mode, foreground holds and shutdown may leave that cleanup

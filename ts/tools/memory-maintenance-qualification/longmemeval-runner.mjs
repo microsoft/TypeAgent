@@ -288,41 +288,51 @@ export async function executeMemoryCase(
         plan,
         record,
     );
-    for (const entry of plan.slice(applied)) {
-        signal.throwIfAborted();
-        role(`ingestion:${construction.id}`);
-        const admitted = await reconcileLiveSource(
-            service,
-            record.corpusId,
-            entry,
-            record.mappings[entry.sourceKey],
-            entry.source,
-            true,
+    if (typeof service.deferTopicMaintenance !== "function")
+        throw new Error(
+            "Production benchmark requires scoped topic scheduling",
         );
-        record.inFlight = {
-            phase: entry.phase,
-            sourceKey: entry.sourceKey,
-            fixtureSha256: entry.sha256,
-            ...admitted,
-        };
-        await persist();
-        const job = admitted.jobId
-            ? await waitForMemoryJob(service, admitted.jobId, {
-                  signal,
-              })
-            : admitted;
-        assert.equal(
-            job.state,
-            "complete",
-            `Benchmark ingestion did not complete: ${job.state}`,
-        );
-        record.operations.push({ ...record.inFlight, state: "complete" });
-        record.mappings[entry.sourceKey] = {
-            sourceId: admitted.sourceId,
-            revisionId: admitted.revisionId,
-        };
-        delete record.inFlight;
-        await persist();
+    const releaseTopics = service.deferTopicMaintenance(record.corpusId);
+    record.topicMaintenanceCoalesced = true;
+    try {
+        for (const entry of plan.slice(applied)) {
+            signal.throwIfAborted();
+            role(`ingestion:${construction.id}`);
+            const admitted = await reconcileLiveSource(
+                service,
+                record.corpusId,
+                entry,
+                record.mappings[entry.sourceKey],
+                entry.source,
+                true,
+            );
+            record.inFlight = {
+                phase: entry.phase,
+                sourceKey: entry.sourceKey,
+                fixtureSha256: entry.sha256,
+                ...admitted,
+            };
+            await persist();
+            const job = admitted.jobId
+                ? await waitForMemoryJob(service, admitted.jobId, {
+                      signal,
+                  })
+                : admitted;
+            assert.equal(
+                job.state,
+                "complete",
+                `Benchmark ingestion did not complete: ${job.state}`,
+            );
+            record.operations.push({ ...record.inFlight, state: "complete" });
+            record.mappings[entry.sourceKey] = {
+                sourceId: admitted.sourceId,
+                revisionId: admitted.revisionId,
+            };
+            delete record.inFlight;
+            await persist();
+        }
+    } finally {
+        releaseTopics();
     }
     record.ingestionMilliseconds =
         (record.ingestionMilliseconds ?? 0) +

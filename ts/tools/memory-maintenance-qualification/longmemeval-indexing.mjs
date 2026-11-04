@@ -33,6 +33,9 @@ import {
     runtimeConfigurationHash,
     validateApproval,
     writeNew,
+    indexingTreatments,
+    parallelTreatmentNames,
+    productionSchedule,
 } from "./longmemeval-indexing-contract.mjs";
 import {
     productModules,
@@ -194,10 +197,13 @@ export async function preflight(pilot, product) {
 
 export function productionPlan(pilot) {
     const comparison = pilot.inputs?.comparison ?? "prepared-indexing";
-    assert.ok(
-        ["prepared-indexing", "indexing-parallel"].includes(comparison),
-        "Unknown production comparison",
-    );
+    const schedule = productionSchedule(comparison);
+    if (pilot.manifest.schedule)
+        assert.deepEqual(
+            pilot.manifest.schedule,
+            schedule,
+            "Frozen arm schedule changed",
+        );
     assert.ok(
         pilot.inputs?.firstCaseOnly === undefined ||
             typeof pilot.inputs.firstCaseOnly === "boolean",
@@ -205,6 +211,7 @@ export function productionPlan(pilot) {
     );
     return {
         comparison,
+        schedule,
         questionIds: pilot.inputs?.firstCaseOnly
             ? pilot.manifest.questionIds.slice(0, 1)
             : pilot.manifest.questionIds,
@@ -216,10 +223,10 @@ export function productionArmEnvironment(
     arm,
     environment = process.env,
 ) {
-    assert.ok(["A0", "A1"].includes(arm), "Choose A0 or A1");
-    const { comparison } = productionPlan(pilot);
+    const { comparison, schedule } = productionPlan(pilot);
+    assert.ok(schedule.includes(arm), "Choose a frozen production arm");
     const env = { ...environment, TYPEAGENT_MEMORY_SEARCH_TRACE: "1" };
-    if (comparison === "indexing-parallel") {
+    if (comparison !== "prepared-indexing") {
         assert.equal(
             env.TYPEAGENT_MEMORY_TOPIC_CONCURRENCY,
             undefined,
@@ -229,8 +236,19 @@ export function productionArmEnvironment(
         const experiments = (env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS ?? "")
             .split(",")
             .map((name) => name.trim())
-            .filter((name) => name && name !== "indexing-parallel");
-        if (arm === "A1") experiments.push("indexing-parallel");
+            .filter(
+                (name) =>
+                    name &&
+                    name !== "indexing-parallel" &&
+                    !parallelTreatmentNames.includes(name),
+            );
+        const treatment = {
+            A1: "indexing-parallel",
+            T1: "topic-parallel",
+            S1: "synopsis-parallel",
+            E1: "embedding-parallel",
+        }[arm];
+        if (treatment) experiments.push(treatment);
         env.TYPEAGENT_MEMORY_PERF_EXPERIMENTS = experiments.join(",");
     } else if (arm === "A1") env.TYPEAGENT_MEMORY_PREPARED_INDEXING = "1";
     else delete env.TYPEAGENT_MEMORY_PREPARED_INDEXING;
@@ -238,7 +256,9 @@ export function productionArmEnvironment(
 }
 
 async function childAttempt(product, pilot, approval, arm) {
-    assert.ok(["A0", "A1"].includes(arm), "Choose A0 or A1");
+    const plan = productionPlan(pilot);
+    const ordinal = plan.schedule.indexOf(arm);
+    assert.ok(ordinal >= 0, "Choose a frozen production arm");
     for (const key of ["datasetPath", "judgePath"]) {
         assert.equal(
             typeof pilot.inputs[key],
@@ -250,17 +270,23 @@ async function childAttempt(product, pilot, approval, arm) {
             `Frozen input must be absolute: ${key}`,
         );
     }
-    if (arm === "A1")
+    if (ordinal > 0)
         assert.ok(
             ["completed", "failed"].includes(
-                (await readJson(path.join(pilot.root, "A0", "attempt.json")))
-                    .status,
+                (
+                    await readJson(
+                        path.join(
+                            pilot.root,
+                            plan.schedule[ordinal - 1],
+                            "attempt.json",
+                        ),
+                    )
+                ).status,
             ),
-            "Run the frozen A0 attempt before A1",
+            "Run the preceding frozen arm first",
         );
     const directory = path.join(pilot.root, arm);
     await mkdir(directory);
-    const plan = productionPlan(pilot);
     const env = productionArmEnvironment(pilot, arm);
     const args = [
         path.join(toolRoot, "longmemeval-live.mjs"),
@@ -363,6 +389,7 @@ async function childAttempt(product, pilot, approval, arm) {
         );
         if (plan.comparison === "indexing-parallel")
             assert.equal(state.arm.indexingParallel, arm === "A1");
+        assert.deepEqual(state.arm.indexingTreatments, indexingTreatments(env));
         assert.equal(state.arm.searchTrace, true);
         assert.equal(state.arm.indexingLifecycle, true);
         assert.equal(state.arm.caseStoreIsolation, "fresh-store-per-case");
@@ -625,10 +652,21 @@ export async function reportPilot(pilot) {
             ? { replay: "passed", liveCancellation: companion.liveCancellation }
             : "incomplete",
         performance: "descriptive-only; no-speedup-or-tail-latency-claim",
-        pairedPerformance: pairedPerformance(
-            arms,
-            productionPlan(pilot).questionIds,
-        ),
+        pairedPerformance:
+            productionPlan(pilot).comparison === "indexing-ablation"
+                ? Object.fromEntries(
+                      pilot.manifest.schedule
+                          .slice(1)
+                          .map((arm) => [
+                              arm,
+                              treatmentPerformance(
+                                  arms,
+                                  productionPlan(pilot).questionIds,
+                                  arm,
+                              ),
+                          ]),
+                  )
+                : pairedPerformance(arms, productionPlan(pilot).questionIds),
         humanReview: human ?? "not-recorded",
         actualArmOrder: arms
             .filter((arm) => arm.started)
@@ -645,7 +683,7 @@ export async function reportPilot(pilot) {
             "no official 500-question score",
             "no enforced monetary cap",
             "platform-specific until separately executed",
-            "Arm-level A0 then A1 order, not case-interleaved",
+            `Frozen arm order ${pilot.manifest.schedule.join(" then ")}, not case-interleaved`,
             "Raw answer latencies only; no pilot p95",
             "Provider transport failures may have unobserved cost",
         ],
@@ -715,6 +753,50 @@ export function pairedPerformance(arms, ids) {
         interpretation:
             "Descriptive paired ratios only; null for missing/incomplete or zero denominator. No significance or population-speedup claim.",
         cache: "Fresh store per case; processes shared within each arm and provider/model/OS caches uncontrolled.",
+    };
+}
+export function treatmentPerformance(arms, ids, treatment) {
+    assert.ok(
+        ["T1", "S1", "E1"].includes(treatment),
+        "Unknown singleton treatment",
+    );
+    const paired = pairedPerformance(
+        arms
+            .filter((arm) => ["A0", treatment].includes(arm.arm))
+            .map((arm) => ({
+                ...arm,
+                arm: arm.arm === treatment ? "A1" : "A0",
+            })),
+        ids,
+    );
+    return {
+        controlArm: "A0",
+        treatmentArm: treatment,
+        scheduledCasePairs: paired.scheduledCasePairs,
+        pairs: paired.pairs.map((pair) => ({
+            ...pair,
+            measurements: Object.fromEntries(
+                Object.entries(pair.measurements).map(([name, value]) => [
+                    name,
+                    {
+                        control: value.A0,
+                        treatment: value.A1,
+                        ratioControlOverTreatment: value.ratioA0overA1,
+                    },
+                ]),
+            ),
+        })),
+        medians: Object.fromEntries(
+            Object.entries(paired.medians).map(([name, value]) => [
+                name,
+                {
+                    comparedPairs: value.comparedPairs,
+                    medianRatioControlOverTreatment: value.medianRatioA0overA1,
+                },
+            ]),
+        ),
+        interpretation: paired.interpretation,
+        cache: paired.cache,
     };
 }
 function observedDuration(value) {
