@@ -134,8 +134,16 @@ test("actual fresh compiled live imports/public APIs and production job handle c
         return import(pathToFileURL(path.join(productRoot, relative)).href);
     });
 
-    assert.ok(loaded.includes("packages\\memory\\service\\dist\\rpcFacade.js"));
-    assert.ok(!loaded.includes("packages\\memory\\client\\dist\\index.js"));
+    assert.ok(
+        loaded.includes(
+            path.join("packages", "memory", "service", "dist", "rpcFacade.js"),
+        ),
+    );
+    assert.ok(
+        !loaded.includes(
+            path.join("packages", "memory", "client", "dist", "index.js"),
+        ),
+    );
     const status = {
         jobId: "compiled-job-handle-control",
         state: "complete",

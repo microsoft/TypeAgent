@@ -254,7 +254,9 @@ export async function loadLiveContract(load) {
     };
     const contract = {};
     for (const [file, names] of Object.entries(imports)) {
-        const module = await load(`packages\\memory\\service\\dist\\${file}`);
+        const module = await load(
+            path.join("packages", "memory", "service", "dist", file),
+        );
         for (const name of names) {
             assert.equal(
                 typeof module[name],
@@ -265,13 +267,22 @@ export async function loadLiveContract(load) {
         }
     }
     for (const [file, names] of [
-        ["packages\\config\\dist\\index.js", ["loadConfigSync"]],
         [
-            "packages\\aiclient\\dist\\index.js",
+            path.join("packages", "config", "dist", "index.js"),
+            ["loadConfigSync"],
+        ],
+        [
+            path.join("packages", "aiclient", "dist", "index.js"),
             ["initRuntimeConfigFromProcessEnv"],
         ],
         [
-            "packages\\memory\\conversation\\dist\\memory.js",
+            path.join(
+                "packages",
+                "memory",
+                "conversation",
+                "dist",
+                "memory.js",
+            ),
             ["createMemorySettings"],
         ],
     ]) {
