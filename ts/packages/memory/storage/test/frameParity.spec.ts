@@ -5,6 +5,7 @@ import {
     dataFrame as df,
     ComparisonOp,
     createPropertySearchTerm,
+    runWithSearchTiming,
 } from "@typeagent/knowpro";
 import { SqliteDataFrame } from "../src/sqlite/sqliteDataFrame.js";
 import { SqliteFrameProjectionStore } from "../src/sqlite/sqliteFrameProjection.js";
@@ -485,5 +486,221 @@ test("SQLite rollback restores rows and receipt, allowing retry on the same prov
         ).toHaveLength(3);
     } finally {
         store.close();
+    }
+});
+
+test("temporal candidates preserve half-open exact bounds and metadata excludes stale/unconfirmed full rows", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "frame-metadata-"));
+    const filename = path.join(root, "frames.db");
+    const store = new SqliteFrameProjectionStore(filename);
+    const sql = createDatabase(filename, false);
+    const memory = new df.MemoryFrameProjectionStore();
+    try {
+        for (const target of [store, memory]) target.registerSchema(schema);
+        const owner = projection(
+            "current",
+            Array.from({ length: 4096 }, (_, i) => i),
+        );
+        owner.rows.forEach((row, i) => {
+            row.values.instant = {
+                kind: "instant",
+                raw: new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(),
+            };
+            row.eligible = i < 32;
+        });
+        for (const target of [store, memory]) {
+            target.stage(owner);
+            target.commit(owner);
+        }
+        const bounds: df.FramePredicate = {
+            and: [
+                {
+                    fieldId: "instant",
+                    op: "gte",
+                    value: { kind: "instant", raw: "2026-01-01T00:01:00Z" },
+                },
+                {
+                    fieldId: "instant",
+                    op: "lt",
+                    value: { kind: "instant", raw: "2026-01-01T00:03:00Z" },
+                },
+            ],
+        };
+        const owners = new Map([[owner.ownerKey, owner.fingerprint]]);
+        expect(store.query(schema, bounds, owners, false)).toEqual(
+            memory.query(schema, bounds, owners, false),
+        );
+        expect(
+            store
+                .query(schema, bounds, owners, false)
+                .map((row) => row.itemKey),
+        ).toEqual(["1", "2"]);
+        expect(store.explainQuery(schema, bounds).join("\n")).toContain(
+            "frame_values_number",
+        );
+        const trace = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        const warn = console.warn;
+        const traces: string[] = [];
+        console.warn = (...args: unknown[]) => {
+            traces.push(String(args[0]));
+        };
+        try {
+            process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+            runWithSearchTiming(undefined, "frame-fixture", () =>
+                store.query(schema, bounds, owners, false),
+            );
+            const event = traces.find((line) =>
+                line.includes('"stage":"query.frame.exact"'),
+            );
+            expect(event).toBeDefined();
+            expect(
+                JSON.parse(event!.replace("[memory-search-timing] ", ""))
+                    .metadata,
+            ).toMatchObject({
+                candidateRows: 2,
+                hydratedRows: 2,
+                hydrationQueries: 1,
+                matchedRows: 2,
+            });
+            expect(
+                runWithSearchTiming(undefined, "frame-fixture", () =>
+                    store.query(schema, { and: [] }, owners, true),
+                ),
+            ).toHaveLength(4096);
+            expect(
+                traces.some((line) => line.includes('"hydrationQueries":32')),
+            ).toBe(true);
+        } finally {
+            console.warn = warn;
+            if (trace === undefined)
+                delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+            else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = trace;
+        }
+        sql.exec("UPDATE frame_rows SET value='not JSON' WHERE eligible=0");
+        expect(store.query(schema, { and: [] }, owners, false)).toHaveLength(
+            32,
+        );
+        sql.exec("UPDATE frame_rows SET value='not JSON'");
+        expect(
+            store.query(
+                schema,
+                { and: [] },
+                new Map([[owner.ownerKey, "obsolete"]]),
+                false,
+            ),
+        ).toEqual([]);
+        expect(() => store.query(schema, bounds, owners, false)).toThrow();
+    } finally {
+        sql.close();
+        store.close();
+        memory.close();
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test("metadata selection and full-row hydration share a SQLite snapshot across concurrent replacement", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "frame-snapshot-"));
+    const filename = path.join(root, "frames.db");
+    const sql = createDatabase(filename, false);
+    sql.pragma("journal_mode=WAL");
+    const reader = new SqliteFrameProjectionStore(filename);
+    const writer = new SqliteFrameProjectionStore(filename);
+    const trace = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+    const warn = console.warn;
+    let replaced = false;
+    const previous = projection("previous", [10]);
+    const next = projection("next", [20]);
+    try {
+        reader.registerSchema(schema);
+        reader.stage(previous);
+        reader.commit(previous);
+        console.warn = (...args: unknown[]) => {
+            if (
+                !replaced &&
+                String(args[0]).includes('"stage":"query.frame.metadata"')
+            ) {
+                replaced = true;
+                writer.stage(next);
+                writer.commit(next);
+            }
+        };
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        const rows = runWithSearchTiming(
+            undefined,
+            "frame-snapshot-fixture",
+            () =>
+                reader.query(
+                    schema,
+                    { and: [] },
+                    new Map([[previous.ownerKey, previous.fingerprint]]),
+                    false,
+                ),
+        );
+        expect(replaced).toBe(true);
+        expect(
+            rows.map((row) => [row.ownerRevisionId, row.values.amount]),
+        ).toEqual([["previous", 10]]);
+        expect(
+            reader
+                .query(
+                    schema,
+                    { and: [] },
+                    new Map([[next.ownerKey, next.fingerprint]]),
+                    false,
+                )
+                .map((row) => row.values.amount),
+        ).toEqual([20]);
+    } finally {
+        console.warn = warn;
+        if (trace === undefined)
+            delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = trace;
+        reader.close();
+        writer.close();
+        sql.close();
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test("version-one frame metadata is backfilled on open and failed backfill is retryable", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "frame-migration-"));
+    const filename = path.join(root, "frames.db");
+    let store = new SqliteFrameProjectionStore(filename);
+    const owner = projection("legacy");
+    store.registerSchema(schema);
+    store.stage(owner);
+    store.commit(owner);
+    store.close();
+    const sql = createDatabase(filename, false);
+    try {
+        sql.exec(
+            "ALTER TABLE frame_rows DROP COLUMN eligible; PRAGMA user_version=1",
+        );
+        const row = sql
+            .prepare("SELECT id,value FROM frame_rows LIMIT 1")
+            .get() as { id: number; value: string };
+        sql.prepare("UPDATE frame_rows SET value='broken' WHERE id=?").run(
+            row.id,
+        );
+        expect(() => new SqliteFrameProjectionStore(filename)).toThrow();
+        expect(sql.pragma("user_version", { simple: true })).toBe(1);
+        sql.prepare("UPDATE frame_rows SET value=? WHERE id=?").run(
+            row.value,
+            row.id,
+        );
+        store = new SqliteFrameProjectionStore(filename);
+        expect(
+            store.query(
+                schema,
+                { and: [] },
+                new Map([[owner.ownerKey, owner.fingerprint]]),
+                false,
+            ),
+        ).toHaveLength(3);
+        expect(sql.pragma("user_version", { simple: true })).toBe(2);
+    } finally {
+        store.close();
+        sql.close();
+        rmSync(root, { recursive: true, force: true });
     }
 });

@@ -24,6 +24,7 @@ import {
 import { retryFilesystemPublication } from "./filesystemPublication.js";
 import { assertViewIdentifier } from "./viewContent.js";
 import { ViewHistory, type HistorySnapshot } from "./viewHistory.js";
+import { selectViewStateField } from "./viewHistoryPayloads.js";
 import {
     inventoryCoverage,
     inventoryEvidence,
@@ -91,7 +92,9 @@ import type {
 import type {
     KnowledgeStatus,
     KnowledgeDiscoveryState,
+    KnowledgeDiagnostic,
 } from "./knowledgeTypes.js";
+import { knowledgeBuildDiagnostics } from "./knowledgeDiagnostics.js";
 
 interface ViewStoreState {
     knowledge?: KnowledgeStatus;
@@ -228,9 +231,11 @@ export class TypedViewStore {
     }
 
     public async getKnowledgeState(corpusId: string): Promise<KnowledgeStatus> {
-        const { state } = await this.readSnapshot(corpusId);
+        const knowledge = await this.readStateField<KnowledgeStatus>(corpusId, [
+            "knowledge",
+        ]);
         return structuredClone(
-            state.knowledge ?? {
+            knowledge ?? {
                 discovery: {
                     version: 1,
                     policy: "off",
@@ -537,6 +542,31 @@ export class TypedViewStore {
         if (scope) scope.active = false;
         const inventory = this.inventoryRead.getStore();
         if (inventory) inventory.active = false;
+    }
+
+    private async readStateField<T>(
+        corpusId: string,
+        keys: readonly string[],
+    ): Promise<T | undefined> {
+        const scope = this.readOperation.getStore();
+        if (scope?.active && scope.corpusId === corpusId) {
+            const value = selectViewStateField(
+                (await this.readSnapshot(corpusId)).state,
+                keys,
+            );
+            return structuredClone(value) as T | undefined;
+        }
+        const committed = this.committedScope();
+        const inventory = this.inventoryRead.getStore();
+        const head =
+            committed?.corpusId === corpusId
+                ? committed.head
+                : inventory?.active && inventory.corpusId === corpusId
+                  ? inventory.head
+                  : undefined;
+        if (head === null) return undefined;
+        const { value } = await this.history(corpusId).readField<T>(keys, head);
+        return value;
     }
 
     public async getViewVersions(
@@ -1092,8 +1122,44 @@ export class TypedViewStore {
         jobId: string,
     ): Promise<ViewBuildJob | undefined> {
         assertViewIdentifier("build job ID", jobId);
-        const { state } = await this.readSnapshot(corpusId);
-        return structuredClone(state.builds?.[jobId]);
+        return this.readStateField<ViewBuildJob>(corpusId, ["builds", jobId]);
+    }
+
+    public async getKnowledgeBuildDiagnostics(
+        corpusId: string,
+        jobIds: readonly string[],
+    ): Promise<KnowledgeDiagnostic[]> {
+        if (this.needsInventorySnapshot(corpusId))
+            return this.withInventoryRead(corpusId, () =>
+                this.getKnowledgeBuildDiagnostics(corpusId, jobIds),
+            );
+        const builds = new Map(
+            this.inventory(corpusId)?.builds.map((build) => [
+                build.jobId,
+                build,
+            ]),
+        );
+        const result: KnowledgeDiagnostic[] = [];
+        for (const jobId of jobIds) {
+            const projected = builds.get(jobId)?.diagnostics;
+            if (projected !== undefined) result.push(...projected);
+            else {
+                const job = await this.getViewBuild(corpusId, jobId);
+                result.push(
+                    ...(job
+                        ? knowledgeBuildDiagnostics(job)
+                        : [
+                              {
+                                  phase: "maintenance" as const,
+                                  jobId,
+                                  state: "unavailable" as const,
+                                  code: "job-unavailable" as const,
+                              },
+                          ]),
+                );
+            }
+        }
+        return structuredClone(result);
     }
 
     public async admitViewBuild(

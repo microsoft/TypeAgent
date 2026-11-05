@@ -94,6 +94,27 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         return this.messageCount;
     }
 
+    public addPreparedData(
+        data: IMessageTextIndexData,
+        messageOrdinal: number,
+    ): void {
+        if (!this.isEmbeddingEnabled) return;
+        if (
+            this.messageCount !== messageOrdinal ||
+            data.messageCount !== 1 ||
+            !data.indexData
+        )
+            throw new Error("Prepared message ordinals are not contiguous");
+        this.textLocationIndex.addPreparedData({
+            embeddings: data.indexData.embeddings,
+            textLocations: data.indexData.textLocations.map((location) => ({
+                ...location,
+                messageOrdinal,
+            })),
+        });
+        this.messageCount++;
+    }
+
     /**
      * True only when an embedding model is available. When false, message
      * semantic search is disabled and callers fall back to non-embedding

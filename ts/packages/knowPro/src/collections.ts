@@ -23,6 +23,7 @@ import {
 import { Batch, compareTextRange, isInTextRange } from "./common.js";
 import { ScoredTextLocation } from "./textLocationIndex.js";
 import { getCountOfMessagesInCharBudget } from "./message.js";
+import { getSemanticRefMetadata } from "./storage.js";
 
 /**
  * A matched value. Includes statistics for the quality and frequency of the match
@@ -419,8 +420,13 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
         semanticRefs: ISemanticRefCollection,
     ): Map<KnowledgeType, SemanticRefAccumulator> {
         const groups = new Map<KnowledgeType, SemanticRefAccumulator>();
-        for (const match of this.getMatches()) {
-            const semanticRef = semanticRefs.get(match.value);
+        const matches = [...this.getMatches()];
+        let position = 0;
+        for (const semanticRef of getSemanticRefMetadata(
+            semanticRefs,
+            matches.map((match) => match.value),
+        )) {
+            const match = matches[position++];
             let group = groups.get(semanticRef.knowledgeType);
             if (group === undefined) {
                 group = new SemanticRefAccumulator();
@@ -437,12 +443,14 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
         rangesInScope: TextRangesInScope,
     ) {
         const accumulator = new SemanticRefAccumulator(this.searchTermMatches);
-        for (const match of this.getMatches()) {
-            if (
-                rangesInScope.isRangeInScope(
-                    semanticRefs.get(match.value).range,
-                )
-            ) {
+        const matches = [...this.getMatches()];
+        let position = 0;
+        for (const metadata of getSemanticRefMetadata(
+            semanticRefs,
+            matches.map((match) => match.value),
+        )) {
+            const match = matches[position++];
+            if (rangesInScope.isRangeInScope(metadata.range)) {
                 accumulator.setMatch(match);
             }
         }
@@ -520,7 +528,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
     }
 
     public addMessagesForSemanticRef(
-        semanticRef: SemanticRef,
+        semanticRef: Pick<SemanticRef, "range">,
         score: number,
     ): void {
         const messageOrdinalStart = semanticRef.range.start.messageOrdinal;

@@ -66,6 +66,22 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
         return this.embeddingIndex.size;
     }
 
+    public addPreparedData(data: ITextToTextLocationIndexData): void {
+        if (data.textLocations.length !== data.embeddings.length)
+            throw new Error(
+                "Prepared text locations and vectors are misaligned",
+            );
+        for (const embedding of data.embeddings) {
+            if (
+                embedding.length !== this.settings.embeddingSize ||
+                !embedding.every(Number.isFinite)
+            )
+                throw new Error("Invalid prepared message embedding");
+        }
+        this.embeddingIndex.push(data.embeddings);
+        this.textLocations.push(...data.textLocations);
+    }
+
     public get(pos: number): TextEmbeddingLocation {
         return this.textLocations[pos];
     }

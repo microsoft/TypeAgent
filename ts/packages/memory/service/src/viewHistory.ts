@@ -17,6 +17,7 @@ import {
 } from "./viewHistoryRecords.js";
 import {
     readViewStatePayloads,
+    selectViewStateField,
     viewStatePayloadPath,
     writeViewStatePayloads,
 } from "./viewHistoryPayloads.js";
@@ -206,6 +207,32 @@ export class ViewHistory<T> {
         if ((await this.head()) !== expected)
             throw new Error("View history changed during read operation");
         await this.assertReadable();
+    }
+
+    public async readField<R>(
+        keys: readonly string[],
+        oid?: string,
+    ): Promise<{ head: string | null; value: R | undefined }> {
+        await this.assertReadable();
+        const head = oid ?? (await this.head());
+        if (!head) return { head, value: undefined };
+        const { tree } = await git.readTree({ ...this.options(), oid: head });
+        const entry = tree.find(
+            (entry) =>
+                entry.path === viewStatePayloadPath && entry.type === "tree",
+        );
+        if (entry) {
+            const { state } = await readViewStatePayloads<R | undefined>(
+                this.options(),
+                entry,
+                keys,
+            );
+            await this.assertReadable();
+            return { head, value: state };
+        }
+        const value = selectViewStateField((await this.read(head)).state, keys);
+        await this.assertReadable();
+        return { head, value: value as R | undefined };
     }
 
     public async commit(

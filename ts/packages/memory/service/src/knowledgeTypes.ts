@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type { QuestionSlot } from "./schemaViewTypes.js";
-import type { ViewCitation } from "./viewTypes.js";
+import type { ViewCitation, ViewBuildResultState } from "./viewTypes.js";
 
 export type DiscoveryPolicy = "off" | "suggest" | "sourceObserved";
 export type KnowledgeFamily = "questions" | "wiki" | "projects" | "topics";
@@ -80,6 +80,32 @@ export type KnowledgeCheckpointState =
     | "failed"
     | "superseded"
     | "cancelled";
+export interface KnowledgeDiagnostic {
+    phase: "checkpoint" | "discovery" | "maintenance" | "publication";
+    family?: KnowledgeFamily;
+    jobId?: string;
+    jobUpdatedAt?: string;
+    viewId?: string;
+    state: KnowledgeCheckpointState | ViewBuildResultState | "unavailable";
+    code:
+        | `target-${ViewBuildResultState}`
+        | "evidence-incomplete"
+        | "job-unavailable"
+        | "family-disabled"
+        | "evidence-changed"
+        | "discovery-running"
+        | "discovery-failed"
+        | "discovery-incomplete"
+        | "maintenance-running"
+        | "checkpoint-deadline"
+        | "checkpoint-cancelled"
+        | "checkpoint-failed"
+        | "checkpoint-superseded"
+        | "scope-incomplete"
+        | "family-blocked"
+        | "maintenance-deferred"
+        | "publication-incomplete";
+}
 export interface KnowledgeCheckpoint {
     version: 1;
     checkpointId: string;
@@ -98,6 +124,7 @@ export interface KnowledgeCheckpoint {
     discoveryFingerprints: string[];
     coverage: { inspectedSources: number; deferredSources: number };
     reasons: string[];
+    diagnostics?: KnowledgeDiagnostic[];
 }
 export interface KnowledgeCheckpointRead {
     corpusId: string;

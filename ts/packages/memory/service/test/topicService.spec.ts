@@ -217,8 +217,9 @@ describe("production topic service vertical slice", () => {
             return synthesis.generateTopicSummary!(...args);
         }
     }
-    function open() {
+    function open(sourceSynopses = true) {
         return new FileMemoryService(directory, {
+            sourceSynopses,
             indexFactory: (_corpusId, directory) => new TopicIndex(directory),
             viewSynthesisAdapter: Object.freeze(new PrototypeAdapter()),
             sourceSynopsisModel: {
@@ -559,6 +560,60 @@ describe("production topic service vertical slice", () => {
             release();
             hold = undefined;
             entered = undefined;
+        }
+    }, 60000);
+
+    test("finite production admits only the final topic generation after nested holds release", async () => {
+        await service.close();
+        service = open(false);
+        const { corpusId } = await service.createCorpus("Finite production");
+        const outer = service.deferTopicMaintenance(corpusId);
+        const inner = service.deferTopicMaintenance(corpusId);
+        try {
+            for (const sourceId of ["first", "second"]) {
+                const job = await service.ingestDocument({
+                    corpusId,
+                    source: {
+                        sourceId,
+                        sourceType: "text",
+                        title: sourceId,
+                        text: "Command lifetime differs from held lease lifetime.",
+                    },
+                });
+                expect(
+                    (
+                        await waitForMemoryJob(service, job.jobId, {
+                            pollIntervalMs: 10,
+                        })
+                    ).state,
+                ).toBe("complete");
+                await new Promise((resolve) => setTimeout(resolve, 1250));
+                expect(calls).toBe(0);
+                expect(await service.listViewBuilds(corpusId)).toEqual([]);
+            }
+            outer();
+            outer();
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            expect(calls).toBe(0);
+            inner();
+            expect((await service.drainMaintenance(10000)).failures).toEqual(
+                [],
+            );
+            expect(calls).toBe(1);
+            const jobs = await service.listViewBuilds(corpusId);
+            expect(jobs).toHaveLength(1);
+            expect(jobs[0].state).toBe("complete");
+            expect(
+                new Set(
+                    jobs[0].results[0].snapshot.topicInput?.occurrences.map(
+                        (entry) => entry.sourceId,
+                    ),
+                ),
+            ).toEqual(new Set(["first", "second"]));
+            expect(jobs[0].results[0].state).not.toBe("stale");
+        } finally {
+            outer();
+            inner();
         }
     }, 60000);
 

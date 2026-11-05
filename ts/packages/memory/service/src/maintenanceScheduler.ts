@@ -29,6 +29,7 @@ export interface MaintenanceStatus {
 
 interface Work {
     corpusId: string;
+    family: string;
     generation: string | undefined;
     execute: (signal: AbortSignal) => Promise<void>;
     queuedAt: number;
@@ -49,6 +50,7 @@ export class MaintenanceScheduler {
     private readonly shutdown = new AbortController();
     private timer: ReturnType<typeof setTimeout> | undefined;
     private holds = 0;
+    private readonly familyHolds = new Map<string, number>();
     private draining = false;
     private drainSignal: AbortSignal | undefined;
     private coalesced = 0;
@@ -101,10 +103,12 @@ export class MaintenanceScheduler {
         return this.context.getStore() ?? this.shutdown.signal;
     }
 
-    public isDeferred(corpusId: string): boolean {
+    public isDeferred(corpusId: string, family?: string): boolean {
         return (
             this.shutdown.signal.aborted ||
             this.holds > 0 ||
+            (family !== undefined &&
+                this.familyHolds.has(`${corpusId}:${family}`)) ||
             (this.mode === "manual" && !this.draining) ||
             this.blocked(corpusId)
         );
@@ -118,6 +122,21 @@ export class MaintenanceScheduler {
             if (released) return;
             released = true;
             this.holds--;
+            this.wake();
+        };
+    }
+
+    public deferFamily(corpusId: string, family: string): () => void {
+        this.shutdown.signal.throwIfAborted();
+        const key = `${corpusId}:${family}`;
+        this.familyHolds.set(key, (this.familyHolds.get(key) ?? 0) + 1);
+        let released = false;
+        return () => {
+            if (released) return;
+            released = true;
+            const remaining = this.familyHolds.get(key)! - 1;
+            if (remaining) this.familyHolds.set(key, remaining);
+            else this.familyHolds.delete(key);
             this.wake();
         };
     }
@@ -140,6 +159,7 @@ export class MaintenanceScheduler {
         const queuedAt = prior?.queuedAt ?? performance.now();
         this.pending.set(key, {
             corpusId,
+            family,
             generation,
             execute,
             queuedAt,
@@ -175,7 +195,7 @@ export class MaintenanceScheduler {
                     !this.failures.has(key) &&
                     !this.activeCorpora.has(work.corpusId) &&
                     this.canAdmitBuildWait(key) &&
-                    !this.isDeferred(work.corpusId),
+                    !this.isDeferred(work.corpusId, work.family),
             )
         )
             return;
@@ -187,7 +207,7 @@ export class MaintenanceScheduler {
                         !this.failures.has(key) &&
                         !this.activeCorpora.has(work.corpusId) &&
                         this.canAdmitBuildWait(key) &&
-                        !this.isDeferred(work.corpusId),
+                        !this.isDeferred(work.corpusId, work.family),
                 )
                 .map(([, work]) => work.readyAt),
         );
@@ -288,7 +308,7 @@ export class MaintenanceScheduler {
                 !this.activeCorpora.has(work.corpusId) &&
                 this.canAdmitBuildWait(key) &&
                 (this.draining || work.readyAt <= performance.now()) &&
-                !this.isDeferred(work.corpusId),
+                !this.isDeferred(work.corpusId, work.family),
         );
         if (!next) {
             this.wake();
@@ -329,7 +349,7 @@ export class MaintenanceScheduler {
                                 if (
                                     this.pending.get(key) === work &&
                                     !this.parked.has(key) &&
-                                    !this.isDeferred(work.corpusId)
+                                    !this.isDeferred(work.corpusId, work.family)
                                 )
                                     this.pending.delete(key);
                             },
@@ -373,7 +393,15 @@ export class MaintenanceScheduler {
                     error,
                 }),
             ),
-            deferred: [...this.parked].map(([key, reason]) => ({
+            deferred: [
+                ...this.parked,
+                ...[...this.familyHolds.keys()]
+                    .filter((key) => this.pending.has(key))
+                    .map((key): [string, string] => [
+                        key,
+                        "Explicit producer holds this maintenance family",
+                    ]),
+            ].map(([key, reason]) => ({
                 key,
                 reason,
             })),
@@ -412,11 +440,19 @@ export class MaintenanceScheduler {
                 if (
                     !this.running.size &&
                     this.pending.size &&
-                    [...this.pending.keys()].every((key) =>
-                        this.parked.has(key),
+                    [...this.pending.keys()].every(
+                        (key) =>
+                            this.parked.has(key) || this.familyHolds.has(key),
                     )
                 )
-                    return { ...this.status(), reason: "budget" };
+                    return {
+                        ...this.status(),
+                        reason: [...this.pending.keys()].some((key) =>
+                            this.familyHolds.has(key),
+                        )
+                            ? "paused"
+                            : "budget",
+                    };
                 await delay(10);
             }
             return this.status();

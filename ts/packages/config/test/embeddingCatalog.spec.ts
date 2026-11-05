@@ -177,7 +177,7 @@ describe("named embedding catalog", () => {
         { ...minilm, localFilesOnly: "false" },
         { ...minilm, maxPending: 0 },
         { ...minilm, cacheDir: 2 },
-        { ...minilm, apiKey: "not-a-credential" },
+        { ...minilm, apiKey: "test" },
         { ...minilm, deployment: "embedding" },
         {
             provider: "openai",

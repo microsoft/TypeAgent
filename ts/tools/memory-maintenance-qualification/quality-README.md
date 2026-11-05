@@ -3,6 +3,8 @@
 For the separate frozen topic-curation tool, including its explicitly authorized
 live mode, see [Frozen topic-curation replay](topic-curation-README.md).
 The offline-only scope below describes the quality utilities on this page.
+For separately authorized indexing, recovery and performance diagnostics, see
+[Small LongMemEval indexing benchmark](indexing-README.md).
 
 This lane adds **offline evaluation utilities**, not a memory implementation,
 inference runner, factual judge, or new lifecycle harness. It makes no model calls,

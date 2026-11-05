@@ -3,7 +3,11 @@
 
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { isSegmentedJson } from "@typeagent/knowpro";
+import {
+    isSegmentedJson,
+    validateTermNormalizationVersion,
+    type TermNormalizationVersion,
+} from "@typeagent/knowpro";
 
 export type IndexKind = "documents" | "conversation-events" | "views";
 
@@ -11,6 +15,7 @@ export interface IndexSchema {
     indexSchemaVersion: 1;
     engine: "knowpro";
     indexKind: IndexKind;
+    termNormalizationVersion: TermNormalizationVersion;
 }
 
 const schemaFileName = "index-schema.json";
@@ -136,6 +141,13 @@ export async function classifyIndexSchema(
     if (descriptor.indexSchemaVersion < 1) {
         return "reset";
     }
+    if ("termNormalizationVersion" in descriptor) {
+        if (typeof descriptor.termNormalizationVersion !== "number")
+            throw new Error(
+                `Invalid term normalization version in '${filePath}'`,
+            );
+        validateTermNormalizationVersion(descriptor.termNormalizationVersion);
+    }
     if (
         !("engine" in descriptor) ||
         descriptor.engine !== "knowpro" ||
@@ -174,10 +186,33 @@ export async function stampIndexSchema(
         indexSchemaVersion: 1,
         engine: "knowpro",
         indexKind,
+        // An appended copy of a legacy generation keeps its legacy postings.
+        termNormalizationVersion: await indexTermNormalizationVersion(
+            directory,
+            2,
+        ),
     };
     await writeFile(
         path.join(directory, schemaFileName),
         `${JSON.stringify(descriptor)}\n`,
         "utf8",
+    );
+}
+
+export async function indexTermNormalizationVersion(
+    directory: string,
+    missing: TermNormalizationVersion = 1,
+): Promise<TermNormalizationVersion> {
+    let descriptor: { termNormalizationVersion?: number };
+    try {
+        descriptor = JSON.parse(
+            await readFile(path.join(directory, schemaFileName), "utf8"),
+        );
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return missing;
+        throw error;
+    }
+    return validateTermNormalizationVersion(
+        descriptor.termNormalizationVersion ?? 1,
     );
 }
