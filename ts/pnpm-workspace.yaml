@@ -89,6 +89,9 @@ supportedArchitectures:
 
 overrides:
   "@azure/core-xml": ">=1.5.0 <2.0.0"
+  # Azure Identity 4.10 uses browser APIs removed in MSAL Browser 5.
+  "@azure/identity": ">=4.13.1 <5.0.0"
+  "@azure/msal-browser": ">=5.25.1 <6.0.0"
   # Transformers 3.x still pins an older sharp image backend.
   "@huggingface/transformers@3>sharp": ">=0.35.4 <0.36.0"
   "express>path-to-regexp": "0.1.13"
