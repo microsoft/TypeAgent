@@ -143,9 +143,11 @@ From GitHub Actions, manually run **build-ts** on the candidate branch with
 gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <candidate-branch> -f fanout_experiment=true
 ```
 
-The reusable `ci-fanout-experiment.yml` builds memory service and its dependency
-graph once on each of Ubuntu and Windows using Node 24.22.1. It uploads compiled
-`dist` outputs and a manifest containing the exact source SHA, lockfile hash,
+The reusable `ci-fanout-experiment.yml` builds memory client and its dependency
+graph (including memory service) once on each of Ubuntu and Windows using
+Node 24.22.1. Service tests dynamically import the client's compiled view protocol,
+so selecting the service alone does not provide their complete runtime closure.
+It uploads compiled `dist` outputs and a manifest containing the exact source SHA, lockfile hash,
 OS/architecture, Node/ABI, output hashes, and the complete Jest spec inventory.
 Only manifest-listed files are staged into a new runner-temp directory before
 upload, avoiding recursive artifact globs through workspace dependencies.
