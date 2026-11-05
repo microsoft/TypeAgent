@@ -187,7 +187,7 @@ export function createViewServiceHost(
             const timeout = setTimeout(
                 () =>
                     fail(new Error("Browser views service creation timed out")),
-                10_000,
+                30_000,
             );
             child.on("message", onMessage);
             child.once("error", onError);

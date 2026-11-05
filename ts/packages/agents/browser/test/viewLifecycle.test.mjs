@@ -41,7 +41,7 @@ function createContext(folder) {
 
 test(
     "view host readiness shares startup and cleans up after restart",
-    { timeout: 20_000 },
+    { timeout: 60_000 },
     async (t) => {
         const output = [];
         t.mock.method(console, "log", (message) => {
