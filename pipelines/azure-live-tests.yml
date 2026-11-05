@@ -1,0 +1,91 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Register separately from the required smoke pipeline. See pipelines/README.md.
+name: live-tests-$(Date:yyyyMMdd)$(Rev:.r)
+
+parameters:
+  - name: validateCandidate
+    displayName: Allow a manually queued candidate-branch validation
+    type: boolean
+    default: false
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - ts
+      - pipelines/azure-live-tests.yml
+      - pipelines/include-prepare-repo.yml
+      - pipelines/include-install-pnpm.yml
+
+pr: none
+
+schedules:
+  - cron: "43 9 * * *"
+    displayName: Daily live integration
+    branches:
+      include:
+        - main
+    always: true
+
+variables:
+  - name: buildDirectory
+    value: $(Build.SourcesDirectory)/ts
+  - name: nodeVersion
+    value: "24.22.1"
+  - name: NODE_OPTIONS
+    value: --max_old_space_size=8192
+
+jobs:
+  - job: live_tests
+    displayName: Live integration tests (Linux)
+    condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), and(eq(variables['Build.Reason'], 'Manual'), eq(${{ parameters.validateCandidate }}, true), startsWith(variables['Build.SourceBranch'], 'refs/heads/'))))
+    timeoutInMinutes: 90
+    cancelTimeoutInMinutes: 5
+    pool:
+      vmImage: ubuntu-24.04
+    steps:
+      - template: include-prepare-repo.yml
+        parameters:
+          buildDirectory: $(buildDirectory)
+          nodeVersion: $(nodeVersion)
+          registry: $(REGISTRY)
+
+      - script: |
+          sudo apt-get update
+          sudo apt-get install -y libsecret-1-0
+        displayName: Install libsecret-1-0
+
+      - script: |
+          pnpm exec playwright install --with-deps
+        displayName: Install Playwright Browsers
+        workingDirectory: $(buildDirectory)/packages/shell
+
+      - script: |
+          pnpm run build
+        displayName: Build
+        workingDirectory: $(buildDirectory)
+
+      - task: AzureCLI@2
+        displayName: Live Tests (Linux)
+        timeoutInMinutes: 60
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: bash
+          scriptLocation: inlineScript
+          workingDirectory: $(buildDirectory)
+          inlineScript: |
+            set -euo pipefail
+            unset AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_FEDERATED_TOKEN_FILE
+            node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
+            npm run test:live
+
+      - pwsh: |
+          node -e "const fs = require('node:fs'); for (const file of ['.env', 'config.local.yaml']) fs.rmSync(file, { force: true });"
+        displayName: Clean up Keys
+        workingDirectory: $(buildDirectory)
+        condition: always()
