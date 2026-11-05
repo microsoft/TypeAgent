@@ -7,6 +7,11 @@ name: build-ts
 
 on:
   workflow_dispatch:
+    inputs:
+      fanout_experiment:
+        description: Run build-once / memory-test fan-out qualification instead of the normal matrix
+        type: boolean
+        default: false
   schedule:
     - cron: "17 8 * * *"
   push:
@@ -29,7 +34,14 @@ env:
   NODE_OPTIONS: --max_old_space_size=8192
 
 jobs:
+  fanout_experiment:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_experiment }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-fanout-experiment.yml
+
   build_ts:
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.fanout_experiment }}
     strategy:
       fail-fast: false
       matrix:
