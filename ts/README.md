@@ -45,8 +45,8 @@ In this directory:
 The [workspace overrides](./pnpm-workspace.yaml) require MCP SDK 1.32.0 or
 later and keep Milkdown's Vue runtime and server renderer on the patched
 3.5.x line. Direct MCP consumers also declare the patched SDK minimum so
-standalone installs do not depend on workspace overrides. The shell pins
-Electron 41.10.7; the markdown editor requires ProseMirror View 1.42.3 or later.
+standalone installs do not depend on workspace overrides. The shell uses
+Electron 45.1.0; the markdown editor requires ProseMirror View 1.42.3 or later.
 Memory previews use plain text when the client has not advertised HTML support,
 including when the SDK has no client capabilities available.
 The packaged HTML renderer preserves UTF-8 characters to stay within its
