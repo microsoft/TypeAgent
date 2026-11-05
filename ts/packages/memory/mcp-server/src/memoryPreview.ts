@@ -279,6 +279,10 @@ export function registerMemoryPreview(
     supportsHtml?: () => boolean,
 ): void {
     const ui = { resourceUri: previewResourceUri };
+    const clientUiCapability = () => {
+        const extensions = server.server.getClientCapabilities().extensions;
+        return getUiCapability(extensions ? { extensions } : {});
+    };
     const safe = async (
         operation: () => Promise<CallToolResult>,
     ): Promise<CallToolResult> => {
@@ -314,9 +318,7 @@ export function registerMemoryPreview(
                 if (!service.understand)
                     throw new Error("Memory understanding is not supported");
                 const result = await service.understand(request);
-                const capable = getUiCapability(
-                    server.server.getClientCapabilities(),
-                );
+                const capable = clientUiCapability();
                 return previewToolResult(
                     result,
                     supportsHtml
@@ -346,9 +348,9 @@ export function registerMemoryPreview(
                     await service.understandingModule(request),
                     supportsHtml
                         ? supportsHtml()
-                        : getUiCapability(
-                              server.server.getClientCapabilities(),
-                          )?.mimeTypes?.includes(RESOURCE_MIME_TYPE) === true,
+                        : clientUiCapability()?.mimeTypes?.includes(
+                              RESOURCE_MIME_TYPE,
+                          ) === true,
                 );
             }),
     );
