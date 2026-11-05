@@ -468,6 +468,13 @@ test("a wait deadline does not cancel the captured work", async () => {
             f.coordinator.wait({ ...request, timeoutMs: 20 }),
         ).rejects.toThrow("work continues");
         expect((await f.coordinator.get(request)).state).toBe("running");
+        expect((await f.coordinator.get(request)).diagnostics).toEqual([
+            {
+                phase: "maintenance",
+                state: "running",
+                code: "maintenance-running",
+            },
+        ]);
         release();
         expect((await f.coordinator.wait(request)).state).toBe("ready");
     } finally {
@@ -721,6 +728,30 @@ test("required disabled families block qualification explicitly", async () => {
         });
         expect(done.state).toBe("blocked");
         expect(done.reasons.join(" ")).toContain("wiki");
+        expect(done.diagnostics).toEqual([
+            {
+                phase: "checkpoint",
+                family: "wiki",
+                state: "blocked",
+                code: "family-disabled",
+            },
+        ]);
+        const restored = fixture();
+        restored.restore(
+            JSON.parse(JSON.stringify(f.state())) as KnowledgeStatus,
+        );
+        try {
+            expect(
+                (
+                    await restored.coordinator.get({
+                        corpusId: "corpus",
+                        checkpointId: checkpoint.checkpointId,
+                    })
+                ).diagnostics,
+            ).toEqual(done.diagnostics);
+        } finally {
+            await restored.coordinator.close();
+        }
         expect(f.discoveries()).toBe(0);
     } finally {
         await f.coordinator.close();
@@ -960,6 +991,13 @@ test("checkpoint deadline aborts discovery and reports failure", async () => {
         });
         expect(done.state).toBe("failed");
         expect(done.reasons.join(" ")).toContain("deadline");
+        expect(done.diagnostics).toEqual([
+            {
+                phase: "checkpoint",
+                state: "failed",
+                code: "checkpoint-deadline",
+            },
+        ]);
     } finally {
         await f.coordinator.close();
     }

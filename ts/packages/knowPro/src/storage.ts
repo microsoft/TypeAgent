@@ -13,7 +13,9 @@ import {
     ISemanticRefCollection,
     IReadonlyCollection,
     JsonSerializer,
+    SemanticRefMetadata,
 } from "./interfaces.js";
+import { timeSearchStage } from "./searchTiming.js";
 
 export class Collection<T, TOrdinal extends number>
     implements ICollection<T, TOrdinal>
@@ -69,6 +71,84 @@ export class SemanticRefCollection
 {
     constructor(semanticRefs?: SemanticRef[]) {
         super(semanticRefs);
+    }
+
+    public getMetadataMultiple(
+        ordinals: SemanticRefOrdinal[],
+    ): SemanticRefMetadata[] {
+        return ordinals.map((ordinal) => {
+            validateSemanticRefOrdinal(this, ordinal);
+            const { semanticRefOrdinal, range, knowledgeType } =
+                this.items[ordinal];
+            return { semanticRefOrdinal, range, knowledgeType };
+        });
+    }
+}
+
+export function validateSemanticRefOrdinal(
+    collection: ISemanticRefCollection,
+    ordinal: number,
+): void {
+    if (
+        !Number.isSafeInteger(ordinal) ||
+        ordinal < 0 ||
+        ordinal >= collection.length
+    )
+        throw new Error(
+            `Ordinal ${ordinal} not found. Collection length is ${collection.length}`,
+        );
+}
+
+export function* getSemanticRefMetadata(
+    collection: ISemanticRefCollection,
+    ordinals: SemanticRefOrdinal[],
+): IterableIterator<SemanticRefMetadata> {
+    for (let start = 0; start < ordinals.length; start += 128) {
+        const batch = ordinals.slice(start, start + 128);
+        for (const ordinal of batch)
+            if (!Number.isSafeInteger(ordinal) || ordinal < 0)
+                throw new Error(
+                    `Invalid semantic-reference ordinal ${ordinal}`,
+                );
+        if (!collection.getMetadataMultiple)
+            batch.forEach((ordinal) =>
+                validateSemanticRefOrdinal(collection, ordinal),
+            );
+        const records = timeSearchStage(
+            collection.getMetadataMultiple
+                ? "query.metadata.read"
+                : "query.knowledge.read",
+            () =>
+                collection.getMetadataMultiple
+                    ? collection.getMetadataMultiple(batch)
+                    : collection
+                          .getMultiple(batch)
+                          .map(
+                              ({
+                                  semanticRefOrdinal,
+                                  range,
+                                  knowledgeType,
+                              }) => ({
+                                  semanticRefOrdinal,
+                                  range,
+                                  knowledgeType,
+                              }),
+                          ),
+            {
+                items: batch.length,
+                fullHydrations: collection.getMetadataMultiple
+                    ? 0
+                    : batch.length,
+            },
+        );
+        if (
+            records.length !== batch.length ||
+            records.some(
+                (record, index) => record?.semanticRefOrdinal !== batch[index],
+            )
+        )
+            throw new Error("Semantic-reference metadata is not positional");
+        yield* records;
     }
 }
 

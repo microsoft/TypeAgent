@@ -8,6 +8,61 @@ import {
     yieldMaintenanceBuild,
 } from "../src/maintenanceConcurrency.js";
 
+test("nested corpus-family holds coalesce topics without blocking synopsis or other corpora", async () => {
+    const scheduler = new MaintenanceScheduler(() => false, "manual");
+    const first = scheduler.deferFamily("held", "topics");
+    const second = scheduler.deferFamily("held", "topics");
+    const order: string[] = [];
+    try {
+        scheduler.request("held", "topics", "g1", async () => {
+            order.push("obsolete");
+        });
+        scheduler.request("held", "synopsis", "g1", async () => {
+            order.push("synopsis");
+        });
+        scheduler.request("other", "topics", "g1", async () => {
+            order.push("other");
+        });
+        scheduler.request("held", "topics", "g2", async () => {
+            order.push("current");
+        });
+        const paused = await scheduler.drain(5000);
+        expect(paused.reason).toBe("paused");
+        expect(order).toEqual(["synopsis", "other"]);
+        expect(paused.deferred).toEqual([
+            {
+                key: "held:topics",
+                reason: "Explicit producer holds this maintenance family",
+            },
+        ]);
+        first();
+        first();
+        expect((await scheduler.drain(5000)).reason).toBe("paused");
+        second();
+        expect((await scheduler.drain(5000)).settled).toBe(true);
+        expect(order).toEqual(["synopsis", "other", "current"]);
+    } finally {
+        first();
+        second();
+        await scheduler.close();
+    }
+});
+
+test("an unrelated producer hold does not relabel parked budget debt as paused", async () => {
+    const scheduler = new MaintenanceScheduler(() => false, "manual");
+    const release = scheduler.deferFamily("other", "topics");
+    try {
+        scheduler.request("corpus", "wiki", "g1", async () => {
+            throw new Error("Parked work must not start");
+        });
+        scheduler.park("corpus", "wiki", "Budget exhausted");
+        expect((await scheduler.drain(5000)).reason).toBe("budget");
+    } finally {
+        release();
+        await scheduler.close();
+    }
+});
+
 test("a passive callback reacquires capacity before continuing after its build returns", async () => {
     const scheduler = new MaintenanceScheduler(() => false, "manual");
     let finishBuild!: () => void;

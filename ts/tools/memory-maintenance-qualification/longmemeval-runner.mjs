@@ -579,12 +579,31 @@ export async function executeMemoryCase(
     controls,
 ) {
     const { persist, signal, judge, role } = controls;
+    const ingestionStart = performance.now();
     const plan = construction.sessions.map((session) =>
         sessionSource(construction.id, session),
     );
-    await importHistory(service, construction, plan, record, controls);
-    if (!record.hypothesis)
+    if (typeof service.deferTopicMaintenance !== "function")
+        throw new Error(
+            "Production benchmark requires scoped topic scheduling",
+        );
+    const releaseTopics = service.deferTopicMaintenance(record.corpusId);
+    record.topicMaintenanceCoalesced = true;
+    try {
+        await importHistory(service, construction, plan, record, controls);
+    } finally {
+        releaseTopics();
+    }
+    record.ingestionMilliseconds =
+        (record.ingestionMilliseconds ?? 0) +
+        performance.now() -
+        ingestionStart;
+    if (!record.hypothesis) {
+        const knowledgeStart = performance.now();
         await prepareKnowledge(service, construction, record, controls);
+        record.knowledgeReadinessMilliseconds =
+            performance.now() - knowledgeStart;
+    }
     const question = reader.question;
     const temporalContext = {
         referenceTime: reader.question_date,

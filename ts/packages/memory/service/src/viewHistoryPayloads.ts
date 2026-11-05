@@ -27,11 +27,37 @@ interface Manifest {
 }
 interface Decoded {
     manifest: Manifest;
-    state: Json;
+    state: Json | undefined;
     values: WeakMap<Node, Json>;
+    payloadBytesRead: number;
+    payloadsRead: number;
 }
 
 class NonPlainJson extends Error {}
+
+export function selectViewStateField(
+    value: unknown,
+    keys: readonly string[],
+): unknown {
+    for (const key of keys)
+        value =
+            value !== null &&
+            typeof value === "object" &&
+            Object.prototype.hasOwnProperty.call(value, key)
+                ? (value as Record<string, unknown>)[key]
+                : undefined;
+    return value;
+}
+
+function selectPayloadNode(root: Node, selection: readonly string[]) {
+    let node: Node | undefined = root;
+    const remaining = [...selection];
+    while (node && remaining.length && "object" in node) {
+        const key = remaining.shift()!;
+        node = node.object.find(([name]) => name === key)?.[1];
+    }
+    return { node, remaining };
+}
 
 function plainContainer(object: object, ancestors: Set<object>): void {
     const prototype = Object.getPrototypeOf(object);
@@ -240,6 +266,7 @@ function logicalBytes(node: Node): number {
 async function decode(
     options: PayloadGitOptions,
     entry: TreeEntry,
+    selection: readonly string[] = [],
 ): Promise<Decoded> {
     try {
         if (entry.type !== "tree") throw new Error("Invalid payload tree");
@@ -273,6 +300,14 @@ async function decode(
             else node.object.forEach(([, child]) => gather(child));
         };
         gather(manifest.root);
+        const { node: selected, remaining } = selectPayloadNode(
+            manifest.root,
+            selection,
+        );
+        if (selection.length) {
+            references.clear();
+            if (selected) gather(selected);
+        }
         const pending = [...references];
         let next = 0;
         const reads = await Promise.allSettled(
@@ -318,7 +353,19 @@ async function decode(
             values.set(node, value);
             return value;
         };
-        return { manifest, state: visit(manifest.root), values };
+        return {
+            manifest,
+            state: selectViewStateField(
+                selected ? visit(selected) : undefined,
+                remaining,
+            ) as Json | undefined,
+            values,
+            payloadBytesRead: [...blobs.values()].reduce(
+                (sum, bytes) => sum + bytes.byteLength,
+                0,
+            ),
+            payloadsRead: blobs.size,
+        };
     } catch (error) {
         throw payloadError(error);
     }
@@ -327,14 +374,18 @@ async function decode(
 export async function readViewStatePayloads<T>(
     options: PayloadGitOptions,
     entry: TreeEntry,
+    selection: readonly string[] = [],
 ): Promise<{ state: T; stateBytes: number }> {
     const started = performance.now();
-    const decoded = await decode(options, entry);
+    const decoded = await decode(options, entry, selection);
     recordSearchTiming(
         "view.history.payload.read",
         performance.now() - started,
         {
             stateBytes: decoded.manifest.stateBytes,
+            payloadBytesRead: decoded.payloadBytesRead,
+            payloadsRead: decoded.payloadsRead,
+            selected: selection.length > 0,
         },
     );
     return {
@@ -500,6 +551,8 @@ export async function writeViewStatePayloads(
             payloadReferences: leaves.size,
             normalizationMs,
             priorReadMs,
+            priorPayloadBytesRead: old?.payloadBytesRead ?? 0,
+            priorPayloadsRead: old?.payloadsRead ?? 0,
         },
     );
     return entry;

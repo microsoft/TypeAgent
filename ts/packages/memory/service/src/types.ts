@@ -751,6 +751,7 @@ export interface MemoryService
     warmViewIndexes?(corpusId?: string): Promise<void>;
     close?(): Promise<void>;
     deferMaintenance?(): () => void;
+    deferTopicMaintenance?(corpusId: string): () => void;
     getMaintenanceStatus?(): import("./maintenanceScheduler.js").MaintenanceStatus;
     drainMaintenance?(
         timeoutMs?: number,

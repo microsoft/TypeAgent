@@ -94,6 +94,7 @@ export function checkpointObservation(checkpoint, summary) {
         observedEpochMs: Date.now(),
         checkpointUpdatedAt: checkpoint.updatedAt ?? null,
         durableState: checkpoint.state,
+        diagnostics: checkpoint.diagnostics ?? null,
         requiredCheckpointSatisfied:
             checkpoint.state === "ready" &&
             !checkpoint.requiredFailures?.length,

@@ -35,6 +35,8 @@ import {
     TimestampToTextRangeIndex,
 } from "./timestampIndex.js";
 
+export { RelatedTermsIndex, buildRelatedTermsIndex, MessageTextIndex };
+
 export async function buildSecondaryIndexes(
     conversation: IConversation,
     conversationSettings: ConversationSettings,
@@ -156,6 +158,7 @@ export class ConversationSecondaryIndexes
 }
 
 export interface ITermsToRelatedTermsIndexData {
+    normalizationVersion?: import("./termNormalization.js").TermNormalizationVersion;
     aliasData?: ITermToRelatedTermsData | undefined;
     textEmbeddingData?: ITextEmbeddingIndexData | undefined;
 }

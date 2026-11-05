@@ -12,6 +12,10 @@ export const memoryPerformanceExperimentNames = [
     "graph-parallel",
     "foreground-priority",
     "lazy-collections",
+    "indexing-parallel",
+    "topic-parallel",
+    "synopsis-parallel",
+    "embedding-parallel",
 ] as const;
 
 export type MemoryPerformanceExperiment =
@@ -42,13 +46,18 @@ export function memoryPerformanceExperiments(
             name === "p2"
                 ? memoryPerformanceExperimentNames.slice(0, 5)
                 : name === "p3"
-                  ? memoryPerformanceExperimentNames.slice(5)
+                  ? memoryPerformanceExperimentNames.slice(5, 9)
                   : memoryPerformanceExperimentNames.filter(
                         (item) => item === name,
                     );
         if (!names.length)
             throw new Error(`Unknown memory performance experiment: ${name}`);
         for (const item of names) result.add(item);
+    }
+    if (result.has("indexing-parallel")) {
+        result.add("topic-parallel");
+        result.add("synopsis-parallel");
+        result.add("embedding-parallel");
     }
     return result;
 }

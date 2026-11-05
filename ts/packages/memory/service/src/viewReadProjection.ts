@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import { buildSummary } from "./inventory.js";
+import { knowledgeBuildDiagnostics } from "./knowledgeDiagnostics.js";
+import type { KnowledgeDiagnostic } from "./knowledgeTypes.js";
 import type { ViewBuildSummary } from "./inventoryTypes.js";
 import { viewBuildEvidenceFingerprint } from "./viewMerge.js";
 import type { WikiFamilyState } from "./viewStore.js";
@@ -17,6 +19,7 @@ export const viewReadProjectionEntry = "view-read-projection.json";
 export const viewReadProjectionVersion = 1;
 
 export interface ViewInventoryBuild extends Omit<ViewBuildSummary, "results"> {
+    diagnostics?: KnowledgeDiagnostic[];
     results: Array<
         ViewBuildSummary["results"][number] & {
             inputFingerprint: string;
@@ -54,6 +57,7 @@ export function viewReadProjection(state: {
             const summary = buildSummary(job);
             return {
                 ...summary,
+                diagnostics: knowledgeBuildDiagnostics(job),
                 results: summary.results.map((result, index) => {
                     const target = job.results[index]!;
                     return {

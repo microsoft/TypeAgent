@@ -603,9 +603,40 @@ const reference = {
     answer_session_ids: ["repeated-official-id"],
 };
 
+test("production scopes release on successful ingestion, failure and cancellation", async () => {
+    for (const outcome of ["success", "failure", "cancelled"]) {
+        const f = fixture();
+        const controller = new AbortController();
+        f.controls.signal = controller.signal;
+        if (outcome === "cancelled")
+            f.controls.persist = async () =>
+                controller.abort(new Error("Producer cancelled"));
+        if (outcome === "failure")
+            f.controls.waitForMemoryJob = async () => {
+                throw new Error("Producer failed");
+            };
+        const pending = executeMemoryCase(
+            f.service,
+            construction,
+            reader,
+            reference,
+            f.record,
+            f.controls,
+        );
+        if (outcome === "success") await pending;
+        else await assert.rejects(pending, /Producer/);
+        assert.deepEqual(f.calls.topicScopes, [
+            { corpusId: "corpus", state: "held" },
+            { corpusId: "corpus", state: "released" },
+        ]);
+        assert.equal(f.record.topicMaintenanceCoalesced, true);
+    }
+});
+
 function fixture() {
     const sources = [];
     const calls = {
+        topicScopes: [],
         ingestion: [],
         batches: [],
         search: [],
@@ -615,6 +646,11 @@ function fixture() {
     };
     let batch;
     const service = {
+        deferTopicMaintenance(corpusId) {
+            calls.topicScopes.push({ corpusId, state: "held" });
+            return () =>
+                calls.topicScopes.push({ corpusId, state: "released" });
+        },
         listSources: async () => sources,
         ingestDocument: async ({ source }) => {
             calls.ingestion.push(source);

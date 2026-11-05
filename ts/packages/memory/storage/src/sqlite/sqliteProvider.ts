@@ -7,6 +7,11 @@ import path from "path";
 import { SqliteCollection } from "./sqliteCollection.js";
 import { createDatabase } from "./sqliteCommon.js";
 import { SqliteDataFrame } from "./sqliteDataFrame.js";
+import { sql_makeInPlaceholders } from "./sqliteCommon.js";
+import {
+    SqlitePreparedIndexStorage,
+    PreparedIndexCheckpoint,
+} from "./sqlitePreparedIndex.js";
 
 export class SqlMessageCollection<TMessage extends kp.IMessage = kp.IMessage>
     extends SqliteCollection<TMessage, kp.MessageOrdinal>
@@ -26,12 +31,144 @@ export class SqlSemanticRefCollection
     extends SqliteCollection<kp.SemanticRef, kp.SemanticRefOrdinal>
     implements kp.ISemanticRefCollection
 {
+    private readonly metadataTable: string;
+    private readonly schemaTable: string;
     constructor(
         db: sqlite.Database,
         tableName: string = "semanticRefs",
         ensureExists: boolean = true,
     ) {
         super(db, undefined, tableName, ensureExists);
+        this.metadataTable = `${tableName}Metadata`;
+        this.schemaTable = `${this.metadataTable}Schema`;
+        this.ensureMetadata();
+    }
+
+    public override append(...items: kp.SemanticRef[]): void {
+        this.db.transaction(() => {
+            const start = this.length;
+            items.forEach((item, index) => {
+                if (item.semanticRefOrdinal !== start + index)
+                    throw new Error(
+                        "Semantic-reference ordinal must match collection position",
+                    );
+            });
+            super.append(...items);
+            const insert = this.metadataInsert();
+            items.forEach((item) =>
+                insert.run(
+                    item.semanticRefOrdinal + 1,
+                    JSON.stringify(item.range),
+                    item.knowledgeType,
+                ),
+            );
+        })();
+    }
+
+    public override replaceAll(items: kp.SemanticRef[]): void {
+        this.db.transaction(() => {
+            this.db.exec(`DELETE FROM ${this.metadataTable}`);
+            super.replaceAll(items);
+        })();
+    }
+
+    public getMetadataMultiple(
+        ordinals: kp.SemanticRefOrdinal[],
+    ): kp.SemanticRefMetadata[] {
+        const byOrdinal = new Map<number, kp.SemanticRefMetadata>();
+        const unique = [...new Set(ordinals)];
+        for (let start = 0; start < unique.length; start += 128) {
+            const batch = unique.slice(start, start + 128);
+            const sql = this.db.prepare(
+                `SELECT ordinal, range, knowledgeType FROM ${this.metadataTable} WHERE ordinal IN (${sql_makeInPlaceholders(batch.length)})`,
+            );
+            for (const row of sql.iterate(
+                ...batch.map((ordinal) => ordinal + 1),
+            )) {
+                const data = row as {
+                    ordinal: number;
+                    range: string;
+                    knowledgeType: kp.KnowledgeType;
+                };
+                byOrdinal.set(data.ordinal - 1, {
+                    semanticRefOrdinal: data.ordinal - 1,
+                    range: JSON.parse(data.range),
+                    knowledgeType: data.knowledgeType,
+                });
+            }
+        }
+        return ordinals.map((ordinal) => {
+            if (!Number.isSafeInteger(ordinal) || !byOrdinal.has(ordinal))
+                throw new Error(
+                    `Ordinal ${ordinal} not found. Collection length is ${this.length}`,
+                );
+            return byOrdinal.get(ordinal)!;
+        });
+    }
+
+    private metadataInsert(): sqlite.Statement {
+        return this.db.prepare(
+            `INSERT INTO ${this.metadataTable} (ordinal, range, knowledgeType) VALUES (?, ?, ?)`,
+        );
+    }
+
+    private ensureMetadata(): void {
+        this.db.exec(`CREATE TABLE IF NOT EXISTS ${this.schemaTable} (
+            id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL, state TEXT NOT NULL)`);
+        const schema = this.db
+            .prepare(
+                `SELECT version, state FROM ${this.schemaTable} WHERE id = 1`,
+            )
+            .get() as { version: number; state: string } | undefined;
+        if (schema && schema.version !== 1)
+            throw new Error(
+                "Unsupported semantic-reference metadata schema version",
+            );
+        if (schema?.state === "complete") return;
+        try {
+            this.db.transaction(() => {
+                this.db.exec(`CREATE TABLE IF NOT EXISTS ${this.metadataTable} (
+                    ordinal INTEGER PRIMARY KEY, range TEXT NOT NULL, knowledgeType TEXT NOT NULL)`);
+                this.db.exec(`DELETE FROM ${this.metadataTable}`);
+                const insert = this.metadataInsert();
+                const select = this.db.prepare(
+                    `SELECT ordinal, value FROM ${this.tableName} WHERE ordinal > ? ORDER BY ordinal LIMIT 128`,
+                );
+                let last = 0;
+                while (true) {
+                    const rows = select.all(last) as {
+                        ordinal: number;
+                        value: string;
+                    }[];
+                    if (!rows.length) break;
+                    for (const data of rows) {
+                        const ref: kp.SemanticRef = JSON.parse(data.value);
+                        if (ref.semanticRefOrdinal !== data.ordinal - 1)
+                            throw new Error(
+                                "Invalid persisted semantic-reference ordinal",
+                            );
+                        insert.run(
+                            data.ordinal,
+                            JSON.stringify(ref.range),
+                            ref.knowledgeType,
+                        );
+                        last = data.ordinal;
+                    }
+                }
+                this.db
+                    .prepare(
+                        `INSERT OR REPLACE INTO ${this.schemaTable} VALUES (1, 1, 'complete')`,
+                    )
+                    .run();
+            })();
+        } catch (error) {
+            this.db
+                .prepare(
+                    `INSERT OR REPLACE INTO ${this.schemaTable} VALUES (1, 1, 'failed')`,
+                )
+                .run();
+            throw error;
+        }
     }
 }
 
@@ -40,8 +177,33 @@ export class SqliteStorageProvider
 {
     private db: sqlite.Database;
 
-    constructor(dbPath: string, createNew: boolean) {
+    constructor(
+        dbPath: string,
+        createNew: boolean,
+        private readonly preparedCheckpoint?: PreparedIndexCheckpoint,
+    ) {
         this.db = createDatabase(dbPath, createNew);
+    }
+
+    public createPreparedIndexStorage(
+        messages: kp.IMessageCollection,
+        refs: kp.ISemanticRefCollection,
+    ): kp.IPreparedIndexStorage {
+        if (
+            !(messages instanceof SqlMessageCollection) ||
+            !(refs instanceof SqlSemanticRefCollection) ||
+            !messages.isOnDatabase(this.db) ||
+            !refs.isOnDatabase(this.db)
+        )
+            throw new Error(
+                "Prepared collections must belong to this SQLite provider",
+            );
+        return new SqlitePreparedIndexStorage(
+            this.db,
+            messages,
+            refs,
+            this.preparedCheckpoint,
+        );
     }
 
     public createMessageCollection<TMessage extends kp.IMessage = kp.IMessage>(
