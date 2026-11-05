@@ -13,6 +13,7 @@ const bundle = await build({
     format: "iife",
     platform: "browser",
     target: "es2022",
+    charset: "utf8",
 });
 const script = bundle.outputFiles[0].text.replaceAll("</script", "<\\/script");
 const css = `body{font:14px/1.5 var(--font-sans,system-ui);color:var(--color-text-primary,#202124);background:var(--color-background-primary,#fff);margin:16px;overflow-wrap:anywhere}button{font:inherit;color:inherit;background:var(--color-background-secondary,#f4f4f4);border:1px solid var(--color-border-primary,#999);border-radius:8px;padding:6px 10px;margin:4px;cursor:pointer}button:focus-visible{outline:2px solid currentColor;outline-offset:2px}h2{font-size:1.2rem}section{border-top:1px solid var(--color-border-primary,#aaa);padding-top:8px;margin-top:12px}small{display:block}pre{white-space:pre-wrap}ol,ul{padding-left:22px}`;

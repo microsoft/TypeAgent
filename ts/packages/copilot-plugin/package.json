@@ -31,7 +31,7 @@
     "unregister": "copilot plugin uninstall typeagent"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@typeagent/agent-harness-hooks": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
