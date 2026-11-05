@@ -580,13 +580,15 @@ describe("source dataframe lifecycle", () => {
             /changed|forget|remov|privacy|read/i,
         );
         await entered;
-        const forgotten = service.forgetSource({
-            corpusId,
-            sourceId: "forgotten",
-            confirmationToken: preview.confirmationToken,
-        });
-        release();
-        await forgotten;
+        try {
+            await service.forgetSource({
+                corpusId,
+                sourceId: "forgotten",
+                confirmationToken: preview.confirmationToken,
+            });
+        } finally {
+            release();
+        }
         await rejected;
         expect(
             store!

@@ -143,38 +143,55 @@ test("credential-shaped compiled outputs and empty discovery are rejected", () =
 });
 
 function reports() {
-    return ["linux", "win32"].flatMap((platform) => {
-        const expectedTests = [1, 2, 3, 4].map((number) => `test-${number}`);
-        return ["1", "2", "3", "4", "control"].map((group) => {
-            const files =
-                group === "control" ? expectedTests : [`test-${group}`];
-            return {
-                sha,
-                platform,
-                group,
-                manifestHash: platform,
-                expectedTests,
-                exitCode: 0,
-                success: true,
-                elapsedMs: group === "control" ? 400 : 100,
-                files,
-                outcomes: files.map((name) =>
-                    JSON.stringify([name, "assertion", "passed"]),
-                ),
-            };
-        });
-    });
+    return ["linux", "win32", "darwin"].flatMap((platform) =>
+        ["v22.23.4", "v24.22.1", "v26.12.1"].flatMap((node) => {
+            const expectedTests = [1, 2, 3, 4].map(
+                (number) => `test-${number}`,
+            );
+            return ["1", "2", "3", "4", "control"].map((group) => {
+                const files =
+                    group === "control" ? expectedTests : [`test-${group}`];
+                return {
+                    sha,
+                    platform,
+                    node,
+                    group,
+                    manifestHash: `${platform}-${node}`,
+                    expectedTests,
+                    exitCode: 0,
+                    success: true,
+                    elapsedMs: group === "control" ? 400 : 100,
+                    files,
+                    outcomes: files.map((name) =>
+                        JSON.stringify([name, "assertion", "passed"]),
+                    ),
+                };
+            });
+        }),
+    );
 }
 
 test("qualification checks complete shard inventories and control assertion outcomes", () => {
     assert.deepEqual(
         qualify(reports(), sha).map((row) => row.slowestShardMs),
-        [100, 100],
+        Array(9).fill(100),
     );
 });
 
 for (const [name, change] of [
     ["missing/cancelled shard", (rows) => rows.pop()],
+    [
+        "wrong Node version",
+        (rows) => {
+            rows[0].node = "v24.0.0";
+        },
+    ],
+    [
+        "wrong OS",
+        (rows) => {
+            rows[0].platform = "unknown";
+        },
+    ],
     [
         "duplicate shard",
         (rows) => {
@@ -288,6 +305,7 @@ test("test runners install native dependencies but never rebuild shared product 
     assert.deepEqual(experiment.jobs.build.strategy.matrix.os, [
         "ubuntu-latest",
         "windows-latest",
+        "macos-latest",
     ]);
     assert.equal(
         experiment.jobs.build.steps.find((step) =>
@@ -295,6 +313,26 @@ test("test runners install native dependencies but never rebuild shared product 
         ).run,
         'npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep',
     );
+    assert.deepEqual(
+        experiment.jobs.build.strategy.matrix.version,
+        workflow("build-ts").jobs.build_ts.strategy.matrix.version,
+    );
+    assert.deepEqual(
+        experiment.jobs.test.strategy.matrix.version,
+        experiment.jobs.build.strategy.matrix.version,
+    );
+    assert.deepEqual(
+        experiment.jobs.test.strategy.matrix.os,
+        experiment.jobs.build.strategy.matrix.os,
+    );
+    for (const job of ["build", "test"]) {
+        assert.equal(
+            experiment.jobs[job].steps.find((step) =>
+                step.uses?.startsWith("actions/setup-node@"),
+            ).with["node-version"],
+            "${{ matrix.version }}",
+        );
+    }
     assert.equal(
         experiment.jobs.build.steps.find((step) =>
             step.uses?.startsWith("actions/upload-artifact@"),
@@ -318,10 +356,73 @@ test("test runners install native dependencies but never rebuild shared product 
     assert.match(commands, /ciFanoutExperiment.mjs test/);
     assert.doesNotMatch(commands, /fluid-build|run build|getKeys/);
     assert.equal(experiment.jobs.qualification.if, "always()");
-    assert.deepEqual(experiment.jobs.qualification.needs, ["build", "test"]);
+    assert.deepEqual(experiment.jobs.qualification.needs, [
+        "analysis",
+        "build",
+        "test",
+    ]);
     assert.ok(
         experiment.jobs.qualification.steps.some((step) =>
             step.if?.includes("needs.test.result != 'success'"),
         ),
+    );
+});
+
+test("platform-independent analysis runs once and remains blocking", () => {
+    const experiment = workflow("ci-fanout-experiment");
+    const analysis = experiment.jobs.analysis;
+    assert.equal(analysis.strategy, undefined);
+    assert.ok(analysis.steps.some((step) => step.run === "npm run lint"));
+    assert.equal(
+        experiment.jobs.build.steps.some((step) => step.run === "npm run lint"),
+        false,
+    );
+    assert.ok(
+        experiment.jobs.qualification.steps.some((step) =>
+            step.if?.includes("needs.analysis.result != 'success'"),
+        ),
+    );
+});
+
+test("full qualification preserves remaining packages, script retries and Linux UI tests", () => {
+    const experiment = workflow("ci-fanout-experiment");
+    const steps = experiment.jobs.build.steps;
+    const testStep = steps.find((step) =>
+        step.name?.startsWith("Test remaining packages"),
+    );
+    assert.equal(testStep.env.TYPEAGENT_TEST_PROFILE, "full-without-memory");
+    assert.match(testStep.run, /runTestLocalWithSummary.mjs/);
+    assert.match(testStep.run, /exit \$LASTEXITCODE/);
+    assert.equal(
+        testStep.env.TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS,
+        workflow("build-ts").jobs.build_ts.steps.find(
+            (step) => step.name === "Test",
+        ).env.TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS,
+    );
+    const ui = steps.find(
+        (step) => step.name === "UI tests (requires display)",
+    );
+    assert.equal(ui.if, "runner.os == 'Linux'");
+    assert.match(ui.run, /npm run test:ui/);
+    assert.match(ui.run, /trap .*EXIT/);
+    const buildArtifact = steps.find((step) =>
+        step.uses?.startsWith("actions/upload-artifact@"),
+    );
+    const download = experiment.jobs.test.steps.find((step) =>
+        step.uses?.startsWith("actions/download-artifact@"),
+    );
+    const workspaceBuild = steps.find((step) =>
+        step.name?.startsWith("Build remaining workspace"),
+    );
+    assert.equal(workspaceBuild.run, "pnpm run build");
+    assert.ok(steps.indexOf(buildArtifact) < steps.indexOf(workspaceBuild));
+    assert.ok(steps.indexOf(workspaceBuild) < steps.indexOf(testStep));
+    assert.equal(buildArtifact.with.name, download.with.name);
+    assert.match(buildArtifact.with.name, /matrix.version/);
+    assert.match(
+        experiment.jobs.test.steps.find((step) =>
+            step.uses?.startsWith("actions/upload-artifact@"),
+        ).with.name,
+        /matrix.version/,
     );
 });

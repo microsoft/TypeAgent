@@ -133,8 +133,8 @@ remain rollout requirements.
 
 ## GitHub build/test fan-out qualification
 
-This is an opt-in experiment, not a replacement for required checks or the full
-test matrix. It needs no Azure service connection or model keys.
+This is an opt-in qualification, not a replacement for required checks. It
+exercises the full manual-run OS/Node matrix without Azure access or model keys.
 
 From GitHub Actions, manually run **build-ts** on the candidate branch with
 `fanout_experiment` checked, or use:
@@ -143,11 +143,22 @@ From GitHub Actions, manually run **build-ts** on the candidate branch with
 gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <candidate-branch> -f fanout_experiment=true
 ```
 
-The reusable `ci-fanout-experiment.yml` builds memory client and its dependency
-graph (including memory service) once on each of Ubuntu and Windows using
-Node 24.22.1. Service tests dynamically import the client's compiled view protocol,
-so selecting the service alone does not provide their complete runtime closure.
-It uploads compiled `dist` outputs and a manifest containing the exact source SHA, lockfile hash,
+The reusable `ci-fanout-experiment.yml` builds the memory-client dependency
+closure first for each combination of Ubuntu, Windows and macOS with Node
+22.23.4, 24.22.1 and 26.12.1. This includes the client's compiled view protocol
+dynamically imported by memory-service tests. It fingerprints and uploads that
+small runtime closure before incrementally building the rest of the workspace;
+shared dependencies are reused, and unrelated application bundles are not
+uploaded to memory-only consumers. Each producer also runs all non-memory package scripts
+through the existing retry harness, the root script and memory-quality phases,
+and Linux UI tests. Chained/non-Jest package phases remain intact. Platform-
+independent formatting and lint run once in a separate blocking analysis job.
+
+The `full-without-memory` test profile differs from `full` by exactly one pnpm
+filter excluding `@typeagent/memory-service`; it is used only by qualification
+producers. It does not change default local or required CI selections.
+
+Each producer uploads compiled `dist` outputs and a manifest containing the exact source SHA, lockfile hash,
 OS/architecture, Node/ABI, output hashes, and the complete Jest spec inventory.
 Only manifest-listed files are staged into a new runner-temp directory before
 upload, avoiding recursive artifact globs through workspace dependencies.
@@ -155,15 +166,24 @@ Dependencies and credential files are not uploaded.
 
 Fresh test runners install their own native dependencies, restore only matching
 outputs, verify the manifest, and run memory-service Jest specs without rebuilding.
-Four file-level shards and an unsharded control consume the same per-OS artifact.
-The experiment caps concurrent test runners at four; controls intentionally add
-qualification cost and are not proposed as permanent gating jobs.
+Four file-level shards and an unsharded control consume the same per-OS/Node
+artifact. All nine toolchain combinations must report, giving 45 memory-test
+reports. Artifact and result names include Node versions to prevent collisions.
+The experiment caps concurrent memory-test runners at twelve; controls
+intentionally add qualification cost and are not proposed as permanent gating
+jobs. The current matrix dependency waits for all producers, including their
+remaining tests, before starting consumers. This is safe qualification scheduling,
+not the final optimized production job graph.
 
-The final qualification rejects missing, failed, cancelled or skipped work,
+The final qualification rejects missing, failed, cancelled or skipped analysis,
+producer or consumer work,
 mixed artifacts, missing/duplicate test files, and differences between control
 and sharded assertion identities and outcomes. Parameterized test names must be
 deterministic across runners; use fixed fixtures rather than clock-derived values.
-The collector does not normalize away differing assertion names.
+The collector does not normalize away differing assertion names. Memory
+shards/controls intentionally do not retry: qualification must expose initial
+outcome differences. Existing retries are preserved for the remaining packages;
+integrating memory retries into a production fan-out gate remains a rollout gate.
 Its summary reports test-process timings only;
 use job/step timings separately for build, dependency setup, artifact transfer,
 queue delay, and runner cost. One run is functional qualification, not proof of
@@ -171,6 +191,38 @@ a 30-minute full merge gate or a statistically established speedup.
 
 Normal PR, main, merge-group, scheduled, and default manual `build-ts` behavior
 remains unchanged, including all supported Node versions and macOS coverage.
-This first experiment covers **memory service only**: other packages, root script
-phases, non-Jest adapters, retries and required-check migration are later work.
-Do not treat the experiment as equivalent full-repository coverage.
+Compared with the first memory-only experiment, the candidate now runs the other
+workspace phases and all supported toolchains as well. This is source-level
+coverage wiring, not a claim that hosted equivalence or latency qualification has
+passed. Do not enable it as a required gate until repeated clean hosted runs
+validate selections, runtime closure, native dependencies, outcomes and complete
+wall time, and memory retry/reporting semantics and required-check migration are
+implemented. Keep the existing nine `build_ts` check names and macOS
+compatibility/nightly policy during that migration.
+
+### Measuring complete CI duration
+
+From `ts/`, collect read-only timing evidence for explicit comparable run IDs:
+
+```powershell
+node tools\scripts\ciDurationReport.mjs --repo microsoft/TypeAgent --run <baseline-run-id> --run <candidate-run-id> > ci-duration-report.json
+```
+
+The command requires authenticated `gh` access. It reads active default-branch
+required-check rules, paginates GitHub jobs/checks/statuses, and includes every
+attempt of each selected workflow run. Reports distinguish latest-attempt wall
+time, elapsed time since the first attempt, summed GitHub runner execution, and
+the observed span until all required checks finish. Azure-backed GitHub checks
+contribute to the required-check span, but not GitHub runner cost.
+
+Missing, queued or running required checks leave the all-required duration
+unknown, not green. Failed and cancelled runs remain in the output and outcome
+counts; successful-duration distributions are explicitly labeled. p50 uses the
+median and p95 uses nearest rank. Individual job/step timings remain available
+for attribution. Queue delay and in-process test-retry time are not inferred.
+
+Rules and latest check results are sampled at reporting time, so this is not a
+historical reconstruction of branch protection. In particular, main pushes may
+lack PR-only required checks; use comparable PR/merge-group runs for gate
+comparisons. Verify source/coverage equivalence separately and retain reports
+outside source control. A small successful sample is not a p95 performance claim.

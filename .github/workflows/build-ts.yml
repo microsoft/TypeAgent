@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       fanout_experiment:
-        description: Run build-once / memory-test fan-out qualification instead of the normal matrix
+        description: Qualify full-workspace builds/tests with memory-test fan-out instead of the normal matrix
         type: boolean
         default: false
   schedule:

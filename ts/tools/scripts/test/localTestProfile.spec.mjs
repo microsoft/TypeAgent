@@ -95,6 +95,26 @@ test("full profile can serialize packages without changing test selection", () =
     assert.deepEqual(localTestCommands("full", root, 1), expected);
 });
 
+test("fan-out remainder excludes only memory service and retains complete package scripts", () => {
+    const full = localTestCommands("full", root);
+    const remainder = localTestCommands("full-without-memory", root);
+    assert.equal(remainder.length, 1);
+    assert.equal(
+        remainder[0].args.filter((arg) => arg.startsWith("--filter")).length,
+        1,
+    );
+    assert.ok(
+        remainder[0].args.includes("--filter=!@typeagent/memory-service"),
+    );
+    assert.deepEqual(
+        remainder.map(({ cwd, args }) => ({
+            cwd,
+            args: args.filter((arg) => !arg.startsWith("--filter")),
+        })),
+        full,
+    );
+});
+
 test("invalid workspace concurrency fails before launching any package", () => {
     for (const workspaceConcurrency of [
         0,

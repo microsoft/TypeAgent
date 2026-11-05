@@ -211,7 +211,12 @@ test("source following preserves authenticated human title/note units during act
     const { service, corpusId, old } = await initial(root);
     try {
         await changeFamily(service, corpusId, "pause");
-        const content = structuredClone(old.content);
+        const snapshot = await settleConsolidation(service, corpusId);
+        const current = snapshot.views.find(
+            (view) => view.viewId === old.viewId,
+        );
+        if (!current) throw new Error("Expected paused Wiki draft");
+        const content = structuredClone(current.content);
         if (content.kind !== "wiki")
             throw new Error("Expected actual Wiki content");
         content.title = "My overlap navigation";
@@ -219,11 +224,11 @@ test("source following preserves authenticated human title/note units during act
         await service.saveViewDraft({
             corpusId,
             viewId: old.viewId,
-            expectedHead: (await service.listViews(corpusId)).head,
-            expectedVersion: old.version,
-            definition: derivedDefinitionInput(old),
+            expectedHead: snapshot.head,
+            expectedVersion: current.version,
+            definition: derivedDefinitionInput(current),
             content,
-            relationships: authoredRelationships(old),
+            relationships: authoredRelationships(current),
         });
         await sourceFollowingStage(service, corpusId, "t1");
         await changeFamily(service, corpusId, "resume");

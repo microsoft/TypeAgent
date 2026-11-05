@@ -176,7 +176,9 @@ test("CI tests Node 22, 24 and 26 while single-version jobs pin Node 24", () => 
                 if (version === "${{ matrix.version }}") {
                     assert.deepEqual(
                         job.strategy.matrix.version,
-                        file === "build-ts.yml"
+                        ["build-ts.yml", "ci-fanout-experiment.yml"].includes(
+                            file,
+                        )
                             ? supportedVersions
                             : [pinnedBuildVersion],
                         file,

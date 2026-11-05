@@ -11,6 +11,8 @@ import { fileURLToPath } from "node:url";
 const manifestName = "ci-fanout-manifest.json";
 const packagePath = "packages/memory/service";
 const groups = ["1", "2", "3", "4", "control"];
+const platforms = ["linux", "win32", "darwin"];
+const nodes = ["v22.23.4", "v24.22.1", "v26.12.1"];
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const portable = (value) => value.split(path.sep).join("/");
 
@@ -158,65 +160,64 @@ export function stageArtifact(root, manifest, directory) {
 export function qualify(reports, sha) {
     assert.equal(
         reports.length,
-        10,
-        "Expected four shards and a control per OS",
+        platforms.length * nodes.length * groups.length,
+        "Expected four shards and a control per supported OS/Node",
     );
-    const summary = [];
-    for (const platform of ["linux", "win32"]) {
-        const selected = reports.filter(
-            (report) => report.platform === platform,
-        );
-        assert.deepEqual(
-            selected.map((report) => report.group).sort(),
-            [...groups].sort(),
-        );
-        const control = selected.find((report) => report.group === "control");
-        for (const report of selected) {
-            assert.equal(report.sha, sha, "Result SHA mismatch");
-            assert.equal(
-                report.manifestHash,
-                control.manifestHash,
-                "Mixed build artifacts",
-            );
-            assert.equal(report.exitCode, 0, "Failed test process");
-            assert.equal(report.success, true, "Unsuccessful Jest result");
-            assert.ok(
-                Number.isFinite(report.elapsedMs) && report.elapsedMs > 0,
-            );
-            assert.deepEqual(report.expectedTests, control.expectedTests);
-        }
-        assert.ok(control.expectedTests.length > 0);
+    return platforms.flatMap((platform) =>
+        nodes.map((node) => qualifyTarget(reports, sha, platform, node)),
+    );
+}
+
+function qualifyTarget(reports, sha, platform, node) {
+    const selected = reports.filter(
+        (report) => report.platform === platform && report.node === node,
+    );
+    assert.deepEqual(
+        selected.map((report) => report.group).sort(),
+        [...groups].sort(),
+    );
+    const control = selected.find((report) => report.group === "control");
+    for (const report of selected) {
+        assert.equal(report.sha, sha, "Result SHA mismatch");
         assert.equal(
-            new Set(control.expectedTests).size,
-            control.expectedTests.length,
+            report.manifestHash,
+            control.manifestHash,
+            "Mixed build artifacts",
         );
-        assert.deepEqual([...control.files].sort(), control.expectedTests);
-        const shards = selected.filter((report) => report.group !== "control");
-        assert.deepEqual(
-            shards.flatMap((report) => report.files).sort(),
-            control.expectedTests,
-        );
-        assert.deepEqual(
-            shards.flatMap((report) => report.outcomes).sort(),
-            [...control.outcomes].sort(),
-            "Control/shard test outcomes differ",
-        );
-        assert.ok(control.outcomes.length > 0, "No test assertions reported");
-        summary.push({
-            platform,
-            files: control.files.length,
-            assertions: control.outcomes.length,
-            controlMs: control.elapsedMs,
-            slowestShardMs: Math.max(
-                ...shards.map((report) => report.elapsedMs),
-            ),
-            shardProcessMs: shards.reduce(
-                (sum, report) => sum + report.elapsedMs,
-                0,
-            ),
-        });
+        assert.equal(report.exitCode, 0, "Failed test process");
+        assert.equal(report.success, true, "Unsuccessful Jest result");
+        assert.ok(Number.isFinite(report.elapsedMs) && report.elapsedMs > 0);
+        assert.deepEqual(report.expectedTests, control.expectedTests);
     }
-    return summary;
+    assert.ok(control.expectedTests.length > 0);
+    assert.equal(
+        new Set(control.expectedTests).size,
+        control.expectedTests.length,
+    );
+    assert.deepEqual([...control.files].sort(), control.expectedTests);
+    const shards = selected.filter((report) => report.group !== "control");
+    assert.deepEqual(
+        shards.flatMap((report) => report.files).sort(),
+        control.expectedTests,
+    );
+    assert.deepEqual(
+        shards.flatMap((report) => report.outcomes).sort(),
+        [...control.outcomes].sort(),
+        "Control/shard test outcomes differ",
+    );
+    assert.ok(control.outcomes.length > 0, "No test assertions reported");
+    return {
+        platform,
+        node,
+        files: control.files.length,
+        assertions: control.outcomes.length,
+        controlMs: control.elapsedMs,
+        slowestShardMs: Math.max(...shards.map((report) => report.elapsedMs)),
+        shardProcessMs: shards.reduce(
+            (sum, report) => sum + report.elapsedMs,
+            0,
+        ),
+    };
 }
 
 function jestArgs(root, args) {
@@ -239,7 +240,10 @@ function runGroup(root, sha, group, directory) {
         `Verified ${manifest.files.length} compiled outputs from ${sha}; running ${process.platform} group ${group}.`,
     );
     fs.mkdirSync(directory, { recursive: true });
-    const stem = path.join(directory, `${process.platform}-${group}`);
+    const stem = path.join(
+        directory,
+        `${process.platform}-${process.versions.node}-${group}`,
+    );
     const args = ["--json", `--outputFile=${stem}.jest.json`];
     if (group !== "control") args.push(`--shard=${group}/4`);
     const start = Date.now();
@@ -255,6 +259,7 @@ function runGroup(root, sha, group, directory) {
     const report = {
         sha,
         platform: process.platform,
+        node: process.version,
         group,
         manifestHash: digest(manifestBytes),
         expectedTests: manifest.tests,
@@ -344,12 +349,12 @@ function main() {
                     process.env.GITHUB_STEP_SUMMARY,
                     "## Memory-service fan-out qualification\n\n" +
                         "Test-process timings only; excludes build, install, artifact transfer and queue delay.\n\n" +
-                        "| OS | Files | Assertions | Control (s) | Slowest shard (s) | Sum of shards (s) |\n" +
-                        "|---|---:|---:|---:|---:|---:|\n" +
+                        "| OS | Node | Files | Assertions | Control (s) | Slowest shard (s) | Sum of shards (s) |\n" +
+                        "|---|---|---:|---:|---:|---:|---:|\n" +
                         summary
                             .map(
                                 (row) =>
-                                    `| ${row.platform} | ${row.files} | ${row.assertions} | ${(row.controlMs / 1000).toFixed(1)} | ${(row.slowestShardMs / 1000).toFixed(1)} | ${(row.shardProcessMs / 1000).toFixed(1)} |`,
+                                    `| ${row.platform} | ${row.node} | ${row.files} | ${row.assertions} | ${(row.controlMs / 1000).toFixed(1)} | ${(row.slowestShardMs / 1000).toFixed(1)} | ${(row.shardProcessMs / 1000).toFixed(1)} |`,
                             )
                             .join("\n") +
                         "\n",

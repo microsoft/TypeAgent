@@ -47,7 +47,7 @@ export function localTestCommands(profile, root, workspaceConcurrency = 3) {
             "TYPEAGENT_TEST_WORKSPACE_CONCURRENCY must be a positive safe integer.",
         );
     }
-    if (profile === "full") {
+    if (profile === "full" || profile === "full-without-memory") {
         return [
             {
                 cwd: root,
@@ -57,6 +57,9 @@ export function localTestCommands(profile, root, workspaceConcurrency = 3) {
                     "--no-sort",
                     "--stream",
                     `--workspace-concurrency=${workspaceConcurrency}`,
+                    ...(profile === "full-without-memory"
+                        ? ["--filter=!@typeagent/memory-service"]
+                        : []),
                     "run",
                     "test:local",
                 ],
