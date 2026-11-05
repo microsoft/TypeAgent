@@ -139,11 +139,6 @@ jobs:
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
           npm run code-debt -- --gate --base "origin/${{ github.base_ref }}"
-      - name: Restore better-sqlite3 for Node.js
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        working-directory: ts
-        run: |
-          pnpm run postinstall:better-sqlite3-node-restore
       # macOS gates use an explicit compatibility selection. Scheduled and
       # manual runs retain full macOS coverage on all supported Node versions.
       - name: Test

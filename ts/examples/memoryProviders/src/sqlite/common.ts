@@ -2,10 +2,7 @@
 // Licensed under the MIT License.
 
 import Database, * as sqlite from "better-sqlite3";
-import fs from "node:fs";
 import { ValueDataType, ValueType } from "@typeagent/knowledge-processor";
-import { createRequire } from "node:module";
-import path from "node:path";
 import { removeFile } from "@typeagent/agent-runtime";
 export type AssignedId<T> = {
     id: T;
@@ -14,23 +11,6 @@ export type AssignedId<T> = {
 
 export type BooleanRow = {};
 
-function getDbOptions() {
-    if (process?.versions?.electron !== undefined) {
-        return undefined;
-    }
-    const r = createRequire(import.meta.url);
-    const betterSqlitePath = r.resolve("better-sqlite3/package.json");
-    const nativeBinding = path.join(
-        betterSqlitePath,
-        "../prebuild-node/better_sqlite3.node",
-    );
-    // Fall back to default (build/Release) when prebuild-node doesn't exist
-    if (!fs.existsSync(nativeBinding)) {
-        return undefined;
-    }
-    return { nativeBinding };
-}
-
 export async function createDatabase(
     filePath: string,
     createNew: boolean,
@@ -38,7 +18,7 @@ export async function createDatabase(
     if (createNew) {
         await deleteDatabase(filePath);
     }
-    const db = new Database(filePath, getDbOptions());
+    const db = new Database(filePath);
     db.pragma("journal_mode = WAL");
     return db;
 }

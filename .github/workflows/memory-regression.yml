@@ -58,8 +58,6 @@ jobs:
         run: |
           if (Test-Path $PROFILE) { . $PROFILE }
           pnpm run build @typeagent/memory-service
-      - name: Restore better-sqlite3 for Node.js
-        run: pnpm run postinstall:better-sqlite3-node-restore
       - name: Memory correctness tests
         timeout-minutes: 30
         run: pnpm --filter @typeagent/memory-service run test:local --runInBand --json --outputFile=memory-local-results.json

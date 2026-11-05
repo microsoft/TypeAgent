@@ -128,7 +128,7 @@ test("SQLite dependencies and the prebuild installer support every supported Nod
         if (dependency) {
             assert.deepEqual(
                 dependency,
-                { specifier: "12.11.1", version: "12.11.1" },
+                { specifier: "13.0.3", version: "13.0.3" },
                 importer,
             );
         }
@@ -152,7 +152,7 @@ test("SQLite dependencies and the prebuild installer support every supported Nod
         assert.ok(
             semver.satisfies(
                 version,
-                lock.packages["better-sqlite3@12.11.1"].engines.node,
+                lock.packages["better-sqlite3@13.0.3"].engines.node,
             ),
         );
     }
