@@ -616,6 +616,9 @@ body. Transport/body failures remain failures and retain a receipt; raw network
 messages, endpoints and request bodies are not copied into these diagnostics.
 Header latency is not full response-processing or CPU time. The frozen model
 configuration includes the sanitized pool membership, not only its first member.
+Indexing-pilot preflight, approval validation and worker admission use that same
+identity. Regenerate approvals created before pool membership was included;
+changed member models, endpoints or request constraints invalidate approval.
 
 Set `TYPEAGENT_MEMORY_SEARCH_TRACE=1` before an explicitly authorized run to retain
 the existing native stage spans in worker stderr. The arm records this setting

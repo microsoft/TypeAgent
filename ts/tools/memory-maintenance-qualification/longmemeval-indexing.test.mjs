@@ -17,12 +17,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     categories,
+    assertPilotProviderConfiguration,
     digest,
     embeddingConfigurationHash,
     encode,
     freezePilot,
     openPilot,
     replayTape,
+    runtimeConfigurationHash,
     selectPilot,
     validateApproval,
 } from "./longmemeval-indexing-contract.mjs";
@@ -55,10 +57,78 @@ import {
     superviseCompanion,
     validateCompanionSpec,
 } from "./longmemeval-indexing-execution.mjs";
-import { benchmarkFailure, recordBenchmarkArm } from "./longmemeval-live.mjs";
+import {
+    benchmarkFailure,
+    benchmarkProviderConfiguration,
+    recordBenchmarkArm,
+} from "./longmemeval-live.mjs";
 import { createTraceSummary } from "./longmemeval-indexing-traces.mjs";
 
 const product = fileURLToPath(new URL("../../", import.meta.url));
+
+test("pilot approval and worker share a sanitized identity for every pool member", () => {
+    const primary = {
+        provider: "offline",
+        modelName: "primary",
+        endpoint: "https://primary.invalid",
+        requestConstraints: { outputTokens: 100 },
+        apiKey: "not-an-exported-field",
+    };
+    const fallback = {
+        ...primary,
+        modelName: "fallback",
+        endpoint: "https://fallback.invalid",
+    };
+    const client = {
+        openai: {
+            getChatModelSettings: () => primary,
+            getChatModelPool: () => ({
+                members: [{ settings: primary }, { settings: fallback }],
+            }),
+        },
+        getEmbeddingProvider: () => "offline",
+        getEmbeddingSize: () => 2,
+        getRuntimeConfig: () => ({}),
+    };
+    const config = {
+        resolveEmbeddingConfig: () => ({}),
+        redactTree: (value) => value,
+    };
+    const approved = benchmarkProviderConfiguration(client);
+    const spec = {
+        indexingPilot: true,
+        expectedConfigurationHash: digest(encode(approved)),
+        expectedEmbeddingConfigurationHash: embeddingConfigurationHash(
+            client,
+            config,
+        ),
+        expectedRuntimeConfigurationHash: runtimeConfigurationHash(
+            client,
+            config,
+        ),
+    };
+    assert.equal(approved.poolMembers.length, 2);
+    assert.ok(!encode(approved).includes(primary.apiKey));
+    assert.ok(!encode(approved).includes(primary.endpoint));
+    assert.ok(!encode(approved).includes(fallback.endpoint));
+    assertPilotProviderConfiguration(
+        spec,
+        client,
+        config,
+        benchmarkProviderConfiguration(client),
+    );
+    fallback.requestConstraints = { outputTokens: 101 };
+    assert.throws(
+        () =>
+            assertPilotProviderConfiguration(
+                spec,
+                client,
+                config,
+                benchmarkProviderConfiguration(client),
+            ),
+        /Approved provider configuration changed/,
+    );
+});
 
 test("singleton ablations remove inherited treatments and preserve frozen order", () => {
     const pilot = {

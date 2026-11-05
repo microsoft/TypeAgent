@@ -374,6 +374,15 @@ export function benchmarkConfiguration(settings) {
     };
 }
 
+export function benchmarkProviderConfiguration(client) {
+    return {
+        ...benchmarkConfiguration(client.openai.getChatModelSettings()),
+        poolMembers: client.openai
+            .getChatModelPool()
+            .members.map(({ settings }) => benchmarkConfiguration(settings)),
+    };
+}
+
 export function observedJudgeModel(events, firstRequest) {
     const model = events
         .slice(firstRequest)
@@ -680,11 +689,7 @@ async function runWorker(spec) {
     const client = await load("packages\\aiclient\\dist\\index.js");
     config.loadConfigSync();
     client.initRuntimeConfigFromProcessEnv();
-    const settings = client.openai.getChatModelSettings();
-    const configuration = benchmarkConfiguration(settings);
-    configuration.poolMembers = client.openai
-        .getChatModelPool()
-        .members.map(({ settings: member }) => benchmarkConfiguration(member));
+    const configuration = benchmarkProviderConfiguration(client);
     assertPilotProviderConfiguration(spec, client, config, configuration);
     if (seeded)
         assert.deepEqual(
