@@ -161,7 +161,10 @@ qualification cost and are not proposed as permanent gating jobs.
 
 The final qualification rejects missing, failed, cancelled or skipped work,
 mixed artifacts, missing/duplicate test files, and differences between control
-and sharded assertion outcomes. Its summary reports test-process timings only;
+and sharded assertion identities and outcomes. Parameterized test names must be
+deterministic across runners; use fixed fixtures rather than clock-derived values.
+The collector does not normalize away differing assertion names.
+Its summary reports test-process timings only;
 use job/step timings separately for build, dependency setup, artifact transfer,
 queue delay, and runner cost. One run is functional qualification, not proof of
 a 30-minute full merge gate or a statistically established speedup.

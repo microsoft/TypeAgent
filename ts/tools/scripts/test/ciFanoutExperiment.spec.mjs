@@ -218,6 +218,14 @@ for (const [name, change] of [
         },
     ],
     [
+        "changed assertion identity",
+        (rows) => {
+            rows[0].outcomes = [
+                JSON.stringify(["test-1", "different assertion", "passed"]),
+            ];
+        },
+    ],
+    [
         "changed assertion outcome",
         (rows) => {
             rows[0].outcomes = ["failed"];
