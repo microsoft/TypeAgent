@@ -14,6 +14,11 @@ import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { IPropertyToSemanticRefIndex } from "./interfaces.js";
 import { TextRangesInScope } from "./collections.js";
 import { facetValueToString } from "./knowledgeLib.js";
+import {
+    normalizeSearchTerm,
+    type TermNormalizationVersion,
+} from "./termNormalization.js";
+import { getSemanticRefMetadata } from "./storage.js";
 
 export enum PropertyNames {
     EntityName = "name",
@@ -84,21 +89,30 @@ export function addActionPropertiesToIndex(
         action.verbs.join(" "),
         semanticRefOrdinal,
     );
-    if (action.subjectEntityName !== "none") {
+    if (
+        action.subjectEntityName !== undefined &&
+        action.subjectEntityName !== "none"
+    ) {
         propertyIndex.addProperty(
             PropertyNames.Subject,
             action.subjectEntityName,
             semanticRefOrdinal,
         );
     }
-    if (action.objectEntityName !== "none") {
+    if (
+        action.objectEntityName !== undefined &&
+        action.objectEntityName !== "none"
+    ) {
         propertyIndex.addProperty(
             PropertyNames.Object,
             action.objectEntityName,
             semanticRefOrdinal,
         );
     }
-    if (action.indirectObjectEntityName !== "none") {
+    if (
+        action.indirectObjectEntityName !== undefined &&
+        action.indirectObjectEntityName !== "none"
+    ) {
         propertyIndex.addProperty(
             PropertyNames.IndirectObject,
             action.indirectObjectEntityName,
@@ -110,6 +124,11 @@ export function addActionPropertiesToIndex(
 export function buildPropertyIndex(
     conversation: IConversation,
 ): ListIndexingResult {
+    if (conversation.secondaryIndexes)
+        conversation.secondaryIndexes.propertyToSemanticRefIndex =
+            new PropertyIndex(
+                conversation.semanticRefIndex?.normalizationVersion,
+            );
     return addToPropertyIndex(conversation, 0);
 }
 
@@ -119,7 +138,9 @@ export function addToPropertyIndex(
 ): ListIndexingResult {
     if (conversation.secondaryIndexes && conversation.semanticRefs) {
         conversation.secondaryIndexes.propertyToSemanticRefIndex ??=
-            new PropertyIndex();
+            new PropertyIndex(
+                conversation.semanticRefIndex?.normalizationVersion,
+            );
         const propertyIndex =
             conversation.secondaryIndexes.propertyToSemanticRefIndex;
         const semanticRefs = conversation.semanticRefs;
@@ -170,7 +191,9 @@ export function addToPropertyIndex(
 export class PropertyIndex implements IPropertyToSemanticRefIndex {
     private map: Map<string, ScoredSemanticRefOrdinal[]> = new Map();
 
-    constructor() {}
+    constructor(
+        private readonly normalizationVersion: TermNormalizationVersion = 2,
+    ) {}
 
     get size(): number {
         return this.map.size;
@@ -222,11 +245,14 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
      * @param termText
      */
     private prepareTermText(termText: string): string {
-        return termText.toLowerCase();
+        return normalizeSearchTerm(termText, this.normalizationVersion);
     }
 
     private toPropertyTermText(name: string, value: string) {
-        return makePropertyTermText(name, value);
+        return makePropertyTermText(
+            normalizeSearchTerm(name, this.normalizationVersion),
+            normalizeSearchTerm(value, this.normalizationVersion),
+        );
     }
 
     private termTextToNameValue(termText: string): [string, string] {
@@ -243,11 +269,17 @@ export function lookupPropertyInPropertyIndex(
 ): ScoredSemanticRefOrdinal[] | undefined {
     let scoredRefs = propertyIndex.lookupProperty(propertyName, propertyValue);
     if (scoredRefs && scoredRefs.length > 0 && rangesInScope) {
-        scoredRefs = scoredRefs.filter((sr) =>
-            rangesInScope.isRangeInScope(
-                semanticRefs.get(sr.semanticRefOrdinal).range,
-            ),
-        );
+        const matches = scoredRefs;
+        scoredRefs = [];
+        let position = 0;
+        for (const metadata of getSemanticRefMetadata(
+            semanticRefs,
+            matches.map((match) => match.semanticRefOrdinal),
+        )) {
+            const match = matches[position++];
+            if (rangesInScope.isRangeInScope(metadata.range))
+                scoredRefs.push(match);
+        }
     }
     return scoredRefs;
 }

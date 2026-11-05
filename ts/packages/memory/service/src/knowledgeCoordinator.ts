@@ -66,7 +66,12 @@ export interface KnowledgeHost {
     ): Promise<
         Pick<
             KnowledgeCheckpoint,
-            "viewIds" | "jobIds" | "state" | "reasons" | "viewRevisions"
+            | "viewIds"
+            | "jobIds"
+            | "state"
+            | "reasons"
+            | "viewRevisions"
+            | "diagnostics"
         >
     >;
     enabledFamilies(): KnowledgeFamily[];
@@ -537,7 +542,16 @@ export class KnowledgeCoordinator {
         );
         try {
             await this.host.begin?.(checkpoint.corpusId);
-            await this.change(checkpoint, { state: "running" });
+            await this.change(checkpoint, {
+                state: "running",
+                diagnostics: [
+                    {
+                        phase: "discovery",
+                        state: "running",
+                        code: "discovery-running",
+                    },
+                ],
+            });
             const unavailable = checkpoint.families.filter(
                 (family) => !this.host.enabledFamilies().includes(family),
             );
@@ -547,6 +561,12 @@ export class KnowledgeCoordinator {
                     reasons: [
                         `Required knowledge families are disabled: ${unavailable.join(", ")}`,
                     ],
+                    diagnostics: unavailable.map((family) => ({
+                        phase: "checkpoint",
+                        family,
+                        state: "blocked",
+                        code: "family-disabled",
+                    })),
                 });
                 return;
             }
@@ -560,6 +580,13 @@ export class KnowledgeCoordinator {
                 await this.change(checkpoint, {
                     state: "superseded",
                     reasons: ["Captured evidence changed before maintenance"],
+                    diagnostics: [
+                        {
+                            phase: "checkpoint",
+                            state: "superseded",
+                            code: "evidence-changed",
+                        },
+                    ],
                 });
                 return;
             }
@@ -567,6 +594,13 @@ export class KnowledgeCoordinator {
             await this.change(checkpoint, {
                 coverage: discovery.coverage,
                 discoveryFingerprints: discovery.fingerprints,
+                diagnostics: [
+                    {
+                        phase: "maintenance",
+                        state: "running",
+                        code: "maintenance-running",
+                    },
+                ],
             });
             const result = await this.host.maintain(
                 checkpoint,
@@ -588,11 +622,52 @@ export class KnowledgeCoordinator {
                     ...discovery.reasons,
                     ...(!stillCurrent ? ["Captured evidence changed"] : []),
                 ],
+                diagnostics: [
+                    ...(result.diagnostics ?? []),
+                    ...(discoveryErrors.length
+                        ? [
+                              {
+                                  phase: "discovery" as const,
+                                  state: "failed" as const,
+                                  code: "discovery-failed" as const,
+                              },
+                          ]
+                        : []),
+                    ...(discovery.limited
+                        ? [
+                              {
+                                  phase: "discovery" as const,
+                                  state: "partial" as const,
+                                  code: "discovery-incomplete" as const,
+                              },
+                          ]
+                        : []),
+                    ...(!stillCurrent
+                        ? [
+                              {
+                                  phase: "checkpoint" as const,
+                                  state: "superseded" as const,
+                                  code: "evidence-changed" as const,
+                              },
+                          ]
+                        : []),
+                ],
             });
         } catch (error) {
             await this.change(checkpoint, {
                 state: this.closed ? "cancelled" : "failed",
                 reasons: [message(error)],
+                diagnostics: [
+                    {
+                        phase: "checkpoint",
+                        state: this.closed ? "cancelled" : "failed",
+                        code: this.closed
+                            ? "checkpoint-cancelled"
+                            : controller.signal.aborted
+                              ? "checkpoint-deadline"
+                              : "checkpoint-failed",
+                    },
+                ],
             });
         } finally {
             this.host.end?.(checkpoint.corpusId);
@@ -729,6 +804,14 @@ export class KnowledgeCoordinator {
         ) {
             const update = {
                 state: "superseded" as const,
+                diagnostics: [
+                    ...(checkpoint.diagnostics ?? []),
+                    {
+                        phase: "checkpoint" as const,
+                        state: "superseded" as const,
+                        code: "checkpoint-superseded" as const,
+                    },
+                ],
                 reasons: [
                     ...checkpoint.reasons,
                     "Captured source or maintained view revision changed",

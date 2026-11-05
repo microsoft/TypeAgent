@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { normalizeSearchTerm } from "./termNormalization.js";
 
 /**
  * INTERNAL LIBRARY
@@ -133,7 +134,8 @@ export function createSearchTerms(terms: string[]): SearchTerm[] {
 function parseSearchTerm(text: string): SearchTerm | undefined {
     let termStrings = splitTermValues(text, ";");
     if (termStrings.length > 0) {
-        termStrings = termStrings.map((t) => t.toLowerCase());
+        // Keep legacy keys intact until the query compiler selects the committed generation.
+        termStrings = termStrings.map((t) => normalizeSearchTerm(t, 1));
         const searchTerm: SearchTerm = {
             term: { text: termStrings[0] },
         };

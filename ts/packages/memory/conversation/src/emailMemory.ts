@@ -124,6 +124,7 @@ export class EmailMemory
         try {
             this.beginIndexing();
 
+            await this.restorePreparedIndex();
             const messageOrdinalStartAt =
                 this.indexingState.lastMessageOrdinal + 1;
             if (messageOrdinalStartAt < this.messages.length) {
@@ -244,7 +245,8 @@ export class EmailMemory
             )) as EmailMemoryData | undefined;
             if (data) {
                 await memory.deserialize(data);
-            } else {
+                await memory.restorePreparedIndex();
+            } else if (!(await memory.restorePreparedIndex())) {
                 memory.close();
                 return undefined;
             }
@@ -276,6 +278,24 @@ export class EmailMemory
 
     protected override getPersistentEmbeddingCache() {
         return this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
+    }
+
+    private async restorePreparedIndex(): Promise<boolean> {
+        if (
+            !this.settings.conversationSettings.preparedIndexing ||
+            !this.semanticRefs.isPersistent
+        )
+            return false;
+        const count = await kp.restorePreparedConversationIndex(
+            this,
+            this.settings.conversationSettings,
+        );
+        if (count === undefined) return false;
+        this.indexingState.lastMessageOrdinal = count - 1;
+        this.indexingState.lastSemanticRefOrdinal =
+            this.semanticRefs.length - 1;
+        this.updateStaticMaps();
+        return true;
     }
 
     private updateIndexingState(): void {

@@ -319,7 +319,9 @@ describe("retained-source index projection", () => {
         }).data!;
         expect(projected.messages).toHaveLength(1);
         expect(projected.semanticRefs).toEqual([]);
-        expect(projected.relatedTermsIndexData).toEqual({});
+        expect(projected.relatedTermsIndexData).toEqual({
+            normalizationVersion: 2,
+        });
         expect(projected.messageIndexData!.messageCount).toBe(1);
         expect(projected.messageIndexData!.indexData!.embeddings).toEqual([]);
     });

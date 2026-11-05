@@ -8,7 +8,13 @@ import {
     ListIndexingResult,
     MessageOrdinal,
 } from "./interfaces.js";
-import { matchesTemporalRange, parseTemporalValue } from "./temporal.js";
+import {
+    matchesTemporalRange,
+    parseTemporalValue,
+    temporalValues,
+    validateTemporalValue,
+} from "./temporal.js";
+import { timeSearchStage } from "./searchTiming.js";
 import type {
     MessageTemporalContext,
     TemporalQueryRange,
@@ -34,6 +40,9 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
             "messageTime" | "eventMentions" | "discoveredDateEvidence"
         >
     >();
+    private candidates = new Map<string, { ordinal: number; key: string }[]>();
+    private candidatesDirty = false;
+    private contextOrder = new Map<number, number>();
 
     constructor() {}
 
@@ -41,13 +50,94 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         ordinal: number,
         context: MessageTemporalContext,
     ): void {
-        this.temporal.set(ordinal, context);
+        for (const dimension of ["message", "event"] as const)
+            for (const value of temporalValues(context, dimension))
+                if (value) validateTemporalValue(value);
+        if (!this.contextOrder.has(ordinal))
+            this.contextOrder.set(ordinal, this.contextOrder.size);
+        this.temporal.set(ordinal, structuredClone(context));
+        this.candidatesDirty = true;
     }
 
     public lookupTemporalRange(range: TemporalQueryRange) {
-        return [...this.temporal]
-            .filter(([, context]) => matchesTemporalRange(context, range))
-            .map(([ordinal]) => textRangeFromMessageChunk(ordinal));
+        // Validate even an empty index, using the authoritative query contract.
+        matchesTemporalRange(undefined, range);
+        this.ensureCandidates();
+        const entries =
+            this.candidates.get(`${range.dimension}:${range.domain}`) ?? [];
+        const boundKey = (raw: string) => {
+            const value = parseTemporalValue(raw);
+            return range.domain === "instant"
+                ? value.instantUtc!
+                : value.localDateTime;
+        };
+        const start = boundKey(range.start);
+        const end = range.end === undefined ? undefined : boundKey(range.end);
+        // Use the matcher's lexical ordering, including extended UTC years.
+        const upper = end === undefined ? undefined : `${end}\uffff`;
+        const from = this.lowerBound(entries, start);
+        const to =
+            upper === undefined
+                ? entries.length
+                : this.lowerBound(entries, upper);
+        const ordinals = new Set(
+            entries.slice(from, to).map((entry) => entry.ordinal),
+        );
+        return timeSearchStage(
+            "query.temporal.exact",
+            () =>
+                [...ordinals]
+                    .sort(
+                        (a, b) =>
+                            this.contextOrder.get(a)! -
+                            this.contextOrder.get(b)!,
+                    )
+                    .filter((ordinal) =>
+                        matchesTemporalRange(this.temporal.get(ordinal), range),
+                    )
+                    .map((ordinal) => textRangeFromMessageChunk(ordinal)),
+            {
+                candidateContexts: ordinals.size,
+                totalContexts: this.temporal.size,
+            },
+        );
+    }
+
+    private lowerBound(entries: { key: string }[], key: string): number {
+        let low = 0;
+        let high = entries.length;
+        while (low < high) {
+            const middle = (low + high) >>> 1;
+            if (entries[middle].key < key) low = middle + 1;
+            else high = middle;
+        }
+        return low;
+    }
+
+    private ensureCandidates(): void {
+        if (!this.candidatesDirty) return;
+        this.candidates.clear();
+        for (const [ordinal, context] of this.temporal)
+            for (const dimension of ["message", "event"] as const)
+                for (const value of temporalValues(context, dimension)) {
+                    if (!value) continue;
+                    for (const domain of ["instant", "calendar"] as const) {
+                        const key =
+                            domain === "instant"
+                                ? value.instantUtc
+                                : value.localDateTime;
+                        if (key === undefined) continue;
+                        const name = `${dimension}:${domain}`;
+                        const entries = this.candidates.get(name) ?? [];
+                        entries.push({ ordinal, key });
+                        this.candidates.set(name, entries);
+                    }
+                }
+        for (const entries of this.candidates.values())
+            entries.sort((a, b) =>
+                a.key < b.key ? -1 : a.key > b.key ? 1 : a.ordinal - b.ordinal,
+            );
+        this.candidatesDirty = false;
     }
 
     /**
@@ -97,10 +187,13 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
             return false;
         }
         const timestampDate = new Date(timestamp);
-        if (!this.temporal.has(messageOrdinal))
+        if (!this.temporal.has(messageOrdinal)) {
+            this.contextOrder.set(messageOrdinal, this.contextOrder.size);
             this.temporal.set(messageOrdinal, {
                 messageTime: parseTemporalValue(timestamp),
             });
+            this.candidatesDirty = true;
+        }
         const entry: TimestampedTextRange = {
             range: textRangeFromMessageChunk(messageOrdinal),
             // This string is formatted to be lexically sortable
@@ -121,6 +214,9 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
     public clear(): void {
         this.ranges = [];
         this.temporal.clear();
+        this.candidates.clear();
+        this.candidatesDirty = false;
+        this.contextOrder.clear();
     }
 
     private compareTimestampedRange(
