@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=069ad808fcc4af8633036bd0756ad50cbad9ec67b5cdccca4f718506b8f24196 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=f4868a8486e0ad1231ff913a39963c0ed3fe5dc9281469e86814c5678dc100d6 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/memory-mcp-server — AI-generated documentation
@@ -31,7 +31,7 @@ Workspace:
 - [@typeagent/memory-client](../../../packages/memory/client/README.md)
 - [@typeagent/memory-service](../../../packages/memory/service/README.md)
 
-External: `@modelcontextprotocol/sdk`, `zod`
+External: `@modelcontextprotocol/ext-apps`, `@modelcontextprotocol/sdk`, `zod`
 
 ### Used by
 
@@ -39,16 +39,18 @@ External: `@modelcontextprotocol/sdk`, `zod`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/memoryMcpServer.ts`, `./src/memoryServiceHost.ts`, …and 2 more under `./src/`.
+`./src/index.ts`, `./src/agentSessionTools.ts`, `./src/graphTools.ts`, …and 14 more under `./src/`.
 
 ### Environment variables
 
-_1 environment variable referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_3 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `TYPEAGENT_MEMORY_DIR`
+- `TYPEAGENT_MEMORY_PREVIEWS`
+- `TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT`
 
 ---
 
-_Auto-generated against commit `698fc097c4b8743475487a6ec91e80c3a0ac4f25` on `2026-09-22T17:27:42.286Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-mcp-server docs:verify-links` to spot-check._
+_Auto-generated against commit `dfbb1dd26cd55181537e3d66daacfa5821e02f18` on `2026-11-01T08:18:02.889Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-mcp-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
