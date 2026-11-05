@@ -1,10 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { loadConfigSync } from "@typeagent/config";
+import { loadConfigSync, resolveEmbeddingConfig } from "@typeagent/config";
 import {
+    getRuntimeConfig,
     initRuntimeConfigFromProcessEnv,
     openai,
+    tryCreateEmbeddingModel,
     type ChatModel,
 } from "@typeagent/aiclient";
 import { createInterface } from "node:readline";
@@ -16,6 +18,13 @@ import { waitForMemoryJob } from "./rpcFacade.js";
 import type { MemoryService, MemoryEventSender } from "./types.js";
 import { getConfiguredMemoryViewOptions } from "./viewHostOptions.js";
 import { configuredTopicDecisionIdentity } from "./topicDecision.js";
+import { createKnowProCorpusIndex, toDocParts } from "./knowProCorpusIndex.js";
+import type { IndexedFragmentPolicy } from "./indexedFragments.js";
+export type {
+    IndexedBlock,
+    IndexedFragmentPolicy,
+    IndexedWindowCandidate,
+} from "./indexedFragments.js";
 export { writeRunbookJson as writeBenchmarkJson } from "./durableRunbookJson.js";
 
 export class BenchmarkResponseError extends Error {
@@ -26,6 +35,12 @@ export class BenchmarkResponseError extends Error {
         super(message);
         this.name = "BenchmarkResponseError";
     }
+}
+
+export function createBenchmarkEmbeddingModel() {
+    loadConfigSync();
+    initRuntimeConfigFromProcessEnv();
+    return tryCreateEmbeddingModel();
 }
 
 function parseModelResponse(data: string) {
@@ -126,6 +141,10 @@ export class BenchmarkBridge {
                     maxResponseChars: 24000,
                     indexedFragments: true,
                 });
+            case "retrievalSearch":
+                return this.retrievalSearch(request);
+            case "retrievalSource":
+                return this.retrievalSource(request);
             case "searchEvents":
                 return this.service.searchEvents({
                     corpusId: text(request.corpusId, "corpusId"),
@@ -135,12 +154,21 @@ export class BenchmarkBridge {
                     query: text(request.query, "query"),
                     limit: positiveLimit(request.limit, 10),
                 });
-            case "answer":
+            case "answer": {
+                if (
+                    request.includeDiagnostics !== undefined &&
+                    typeof request.includeDiagnostics !== "boolean"
+                )
+                    throw new Error("Expected boolean includeDiagnostics");
                 return this.service.answer({
                     corpusId: text(request.corpusId, "corpusId"),
                     question: text(request.question, "question"),
                     answerMode: "synthesized",
+                    ...(request.includeDiagnostics === undefined
+                        ? {}
+                        : { includeDiagnostics: request.includeDiagnostics }),
                 });
+            }
             case "generate": {
                 if (!this.model)
                     throw new Error("No benchmark model configured");
@@ -172,6 +200,88 @@ export class BenchmarkBridge {
                     `Unsupported benchmark operation: ${operation}`,
                 );
         }
+    }
+
+    private async retrievalSearch(request: Record<string, unknown>) {
+        if (request.surface !== "ordinary" && request.surface !== "indexed")
+            throw new Error("Retrieval surface must be ordinary or indexed");
+        if (
+            !Number.isSafeInteger(request.maxResponseChars) ||
+            typeof request.maxResponseChars !== "number" ||
+            request.maxResponseChars < 1
+        )
+            throw new Error("Expected positive maxResponseChars");
+        return this.service.search({
+            corpusId: text(request.corpusId, "corpusId"),
+            query: text(request.query, "query"),
+            limit: positiveLimit(request.limit, 100),
+            maxResponseChars: request.maxResponseChars,
+            indexedFragments: request.surface === "indexed",
+            retrievalPolicy: "sourcesOnly",
+            includeDiagnostics: true,
+        });
+    }
+
+    private async retrievalSource(request: Record<string, unknown>) {
+        const corpusId = text(request.corpusId, "corpusId");
+        const sourceId = text(request.sourceId, "sourceId");
+        const source = await this.service.getSource(corpusId, sourceId);
+        const revision = source?.revisions.find(
+            (item) =>
+                item.revisionId === source.activeRevisionId &&
+                item.state === "ready",
+        );
+        if (!source || !revision)
+            throw new Error("Retrieval source is not ready");
+        if (source.sourceType !== "text")
+            throw new Error("Span benchmark requires literal text sources");
+        let content = "";
+        let page;
+        do {
+            page = await this.service.getSourceContent({
+                corpusId,
+                sourceId,
+                revisionId: revision.revisionId,
+                offset: content.length,
+                maxChars: 100_000,
+            });
+            if (
+                page.offset !== content.length ||
+                (page.truncated && !page.content)
+            )
+                throw new Error("Invalid source-content pagination");
+            content += page.content;
+        } while (page.truncated);
+        const parts = toDocParts({
+            source,
+            revision,
+            content,
+            pipeline: revision.pipeline ?? { mode: "content" },
+        });
+        let offset = 0;
+        const blocks = parts.map((part) => {
+            const value = part.textChunks.join("\n");
+            const start = offset;
+            offset += value.length;
+            if (content.slice(start, offset) !== value)
+                throw new Error(
+                    "Indexed text does not round-trip to literal source",
+                );
+            return {
+                start,
+                end: offset,
+                sha256: createHash("sha256").update(value).digest("hex"),
+            };
+        });
+        if (offset !== content.length)
+            throw new Error("Incomplete indexed source map");
+        return {
+            sourceId,
+            revisionId: revision.revisionId,
+            contentHash: createHash("sha256").update(content).digest("hex"),
+            totalChars: content.length,
+            blocks,
+        };
     }
 
     private async ingest(request: Record<string, unknown>) {
@@ -331,7 +441,16 @@ export class BenchmarkBridge {
     }
 }
 
-export async function createBenchmarkRuntime(store: string) {
+export interface BenchmarkRuntimeOptions {
+    indexedFragmentPolicy?: (
+        corpusId: string,
+    ) => IndexedFragmentPolicy | undefined;
+}
+
+export async function createBenchmarkRuntime(
+    store: string,
+    options: BenchmarkRuntimeOptions = {},
+) {
     loadConfigSync();
     initRuntimeConfigFromProcessEnv();
     const mode = process.env.TYPEAGENT_BENCHMARK_MAINTENANCE_MODE ?? "manual";
@@ -347,10 +466,22 @@ export async function createBenchmarkRuntime(store: string) {
         admissionWaitMs: 250,
     };
     const viewOptions = getConfiguredMemoryViewOptions();
+    const policyForCorpus = options.indexedFragmentPolicy;
     const service = new FileMemoryService(resolve(store), {
         ...viewOptions,
         maintenanceMode: mode,
         ingestionCommitPolicy,
+        ...(policyForCorpus
+            ? {
+                  indexFactory: (corpusId: string, directory: string) =>
+                      createKnowProCorpusIndex(
+                          corpusId,
+                          directory,
+                          undefined,
+                          policyForCorpus(corpusId),
+                      ),
+              }
+            : {}),
     });
     try {
         const bridge = configuredBenchmarkBridge(service, {
@@ -376,7 +507,7 @@ export async function createBenchmarkRuntime(store: string) {
     }
 }
 
-function configuredBenchmarkBridge(
+export function configuredBenchmarkBridge(
     service: MemoryService,
     processingPolicy: Record<string, unknown>,
 ) {
@@ -387,22 +518,25 @@ function configuredBenchmarkBridge(
     const settings = openai.getChatModelSettings(
         process.env.TYPEAGENT_BENCHMARK_MODEL,
     );
-    const modelName =
-        ("modelName" in settings && settings.modelName) ||
-        /deployments\/([^/]+)/.exec(new URL(settings.endpoint).pathname)?.[1];
-    if (!modelName)
-        throw new Error("Cannot identify configured benchmark model");
+    const modelName = chatModelName(settings);
+    const native = openai.getChatModelSettings();
     return new BenchmarkBridge(service, model, {
         modelId: `${settings.provider}:${modelName}`,
+        nativeAnswerModelId: `${native.provider}:${chatModelName(native)}`,
         configurationFingerprint: createHash("sha256")
             .update(
                 JSON.stringify({
                     provider: settings.provider,
                     modelName,
                     endpoint: settings.endpoint,
-                    embeddingProvider: process.env.TYPEAGENT_EMBEDDING_PROVIDER,
-                    embeddingModel: process.env.TYPEAGENT_EMBEDDING_MODEL,
-                    embeddingSize: process.env.TYPEAGENT_EMBEDDING_SIZE,
+                    nativeReader: {
+                        provider: native.provider,
+                        modelName: chatModelName(native),
+                        endpoint: native.endpoint,
+                        wireApi: native.wireApi,
+                        requestConstraints: native.requestConstraints,
+                    },
+                    embedding: resolveEmbeddingConfig(getRuntimeConfig()),
                     processingPolicy,
                 }),
             )
@@ -412,6 +546,17 @@ function configuredBenchmarkBridge(
         evidenceLimit: 12,
         evidenceCharacters: 24000,
     });
+}
+
+function chatModelName(
+    settings: ReturnType<typeof openai.getChatModelSettings>,
+) {
+    const modelName =
+        ("modelName" in settings && settings.modelName) ||
+        /deployments\/([^/]+)/.exec(new URL(settings.endpoint).pathname)?.[1];
+    if (!modelName)
+        throw new Error("Cannot identify configured benchmark model");
+    return modelName;
 }
 
 export async function runBenchmarkBridge(args: string[]): Promise<void> {

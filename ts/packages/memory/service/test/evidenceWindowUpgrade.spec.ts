@@ -63,10 +63,10 @@ async function prePolicyClasses(directory: string) {
     const currentFragments = pathToFileURL(
         path.join(compiled, "indexedFragments.js"),
     ).href;
-    // Preserve the frozen selector while supplying the current host's query-term API.
+    // Preserve the frozen selector while supplying the current host's helper APIs.
     await writeFile(
         path.join(directory, "indexedFragments.js"),
-        `${compiledWindows}\nexport { indexedQueryTerms } from ${JSON.stringify(currentFragments)};\n`,
+        `${compiledWindows}\nexport { applyIndexedBlockPolicy, indexedQueryTerms } from ${JSON.stringify(currentFragments)};\n`,
     );
     const recipeFile = path.join(directory, "informationalView.js");
     const recipe = await readFile(recipeFile, "utf8");
