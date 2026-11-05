@@ -526,7 +526,15 @@ describe("ordinary-source schema lifecycle", () => {
             generate: async (input) => {
                 modelCalls++;
                 return hydrateSchemaAnswers(input, {
-                    answers: input.inputs.length ? [raw("Ada")] : [],
+                    answers: input.definition
+                        .schemaView!.slots.filter(
+                            (slot) => slot.approval === "approved",
+                        )
+                        .map((slot) =>
+                            input.inputs.length && slot.id === "name"
+                                ? raw("Ada")
+                                : { slotId: slot.id, candidates: [] },
+                        ),
                 });
             },
             validate: async (_input, output) => ({

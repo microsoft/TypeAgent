@@ -716,8 +716,13 @@ Models that disable response formatting retain the existing JSON-prompt path;
 host validation still rejects invalid responses on both paths.
 
 Configured question discovery requires a contiguous subject phrase in one of
-the proposal's cited passages. An unresolved subject permits one logged repair
-against the same frozen evidence, followed by full validation. That extra call
+the proposal's cited passages. An unresolved subject or typed-proposal shape
+failure permits one shared, logged repair against the same frozen evidence,
+followed by full validation. A typed repair must preserve proposal count;
+it cannot silently discard invalid proposals or add unrelated ones. Detailed
+validator feedback is private to the correction request; public errors/logs
+retain only a diagnostic fingerprint, character count and proposal count.
+The rejected response and diagnostic are not evidence. That extra call
 reserves another persisted hourly allowance before dispatch; exhausted budgets,
 repeated invalid output and unrelated errors remain failures. The existing
 per-window timeout and hourly cap are not increased.
@@ -873,7 +878,13 @@ defaults to 24 and accepts 1..24. Hosts can opt in through
 `TYPEAGENT_MEMORY_MAINTENANCE_MODEL_CONCURRENCY`. Invalid settings fail explicitly.
 Automatic maintenance and view builds preserve per-corpus ordering while
 allowing independent corpora to use the configured build slots. Same-corpus
-jobs wait before taking a slot. The default configured view, topic, source
+page jobs wait before taking a slot. With more than one build slot, an explicit
+knowledge checkpoint can prepare its independent topic snapshot concurrently
+with Wiki/project pages after question maintenance. Topic jobs have a separate
+per-corpus lane; page jobs remain ordered. Commits still use the corpus writer,
+and source eligibility/fingerprints are rechecked before materialization.
+Readiness joins both lanes and retains failures from either; the default single
+slot remains serial. The default configured view, topic, source
 synopsis and Decision models share the service's model-request pool. Default
 derived-view indexing also schedules extraction completions through this pool
 within maintenance scope; foreground extraction and embeddings are not included.
@@ -1143,6 +1154,31 @@ incomparable. No timezone is inferred from ingestion time. Each support keeps
 its own chronology when equal candidate values coalesce; a candidate-level
 timestamp is not invented across incompatible clocks.
 
+Rendered local chronology is a source-local ordering anchor, not an assertion
+that an action occurred or became effective at that time. A session header
+does not establish an individual turn's timestamp. Absolute `effectiveAt`
+values are rendered separately, as are date-only `support.sourceRecordedDate`
+values; recording dates alone do not choose a `mostRecent` winner.
+
+Configured synthesis separates factual `passageIds` from
+`chronologyPassageIds`, including date headers. Persisted support records carry
+`role: "value" | "chronology" | "valueAndChronology"`; a passage can serve both
+roles when the evidence warrants it. Chronology binds to factual reports from
+the same retained source/revision. Multiple factual passages can jointly support
+a record; a header alone cannot support its value. Chronology-only citations
+remain in aggregate provenance for access checks and source removal, but do
+not confer factual authority or independent-support votes. Final auditing checks
+both roles. Existing stored/custom-adapter records without roles retain their
+legacy joint-evidence semantics; they are not automatically reclassified.
+Configured native generation and repair require explicit bindings.
+
+Typed candidate values are rendered using JSON serialization. Delimiters around
+scalar strings or record fields are not verbatim-source quotation claims.
+The audit permits faithful paraphrases only with unchanged, unambiguous facts,
+speaker/referents, attribution and qualifications. Explicit verbatim-quotation
+claims inside a value must still match cited wording. This audit contract does
+not change persisted values or canonical body rendering.
+
 Historical value changes are separate dated observations, not automatically
 opposing evidence. Confirmation, authority, independent-support and freshness
 requirements remain in force. A complete but unsupported schema-answer audit
@@ -1155,9 +1191,16 @@ Silence in an excerpt does not establish that an entire source has no decision.
 Repair adds the actual supporting passages or narrows unsupported clauses while
 preserving supported competing history; an unresolved aggregate answer does not
 exempt its candidates from these checks.
-Rendered source-derived answers explicitly describe historical observations and
-show their source times or unknown chronology. Maintenance freshness is not
-present-day verification of the observed fact.
+Rendered source-derived answers describe what the cited sources state, not
+independently verified occurrences or current-day status. Source statements
+can include facts, intentions, hypotheticals or illustrative examples. Preserve
+that scope in discovery questions and candidate answers: example figures do
+not answer a question requiring actual recorded events. If no retained evidence
+answers that question, it has no answer candidates (an empty collection stays
+`pending`); an explicitly example-scoped question can still retain the example
+values. Nonempty collections retain their existing `partial` coverage state.
+Original sources remain intact. Maintenance freshness does not verify a source
+claim.
 
 Wiki assessment repair reports omitted fragment ordinals and invalid witness
 ordinals. A coverage witness must quote a contiguous, verbatim substring of
@@ -1552,6 +1595,11 @@ Agent revisions use `memory-view-generator` authorship, not authenticated human 
 Deliberate human title/text/annotation edits are protected at existing reliable
 edit units. Genuine overlapping changes create the existing recoverable conflict;
 unrelated targets continue and routine supported corrections remain automatic.
+Canonical Wiki contributions use the same editorial merge as normal rebuilds:
+unprotected titles may advance with the generated candidate, while deliberate
+human title edits remain protected and genuine conflicts require resolution.
+The host does not retain an old unedited title against a different generated
+base or manufacture a human edit to account for that difference.
 
 `saveViewDraft` accepts optional `unlockProtection: string[]` with unchanged
 content, definition and relationships plus the current head/version guards.
@@ -2097,6 +2145,24 @@ Automatic discovery admits distinct new subjects, recognizes already-covered
 evidence, contributes to existing eligible articles or records ambiguity without
 inventing an identity. Generated-article consolidation is separately guarded;
 historically human-edited/protected pages cannot be retired automatically.
+Standalone admission checks independent utility first: sparse passing mentions
+defer even when multiple existing pages repeat their incidental facts.
+Only useful candidates proceed to canonical coverage/contribution/ambiguity
+checks; competing same-purpose pages still require explicit review. Canonical
+contribution coverage checks are not standalone admission and remain mandatory.
+Native assessments explicitly distinguish evidence-only utility deferrals from
+canonical-context-dependent deferrals. Evidence-only receipts survive canonical
+page changes, but changed indexed evidence, subject/selector, model or admission
+policy requires reassessment. Legacy or context-dependent deferrals retain the
+full nominated-page dependency check. This does not infer cache scope from the
+reason text, reuse coverage/ambiguity against changed pages, or bypass source
+freshness checks.
+Native canonical comparisons select host-labelled verbatim prose witnesses
+instead of retyping quotations. The host resolves IDs only against the selected
+current page and still applies the existing exact-prose, scope and mandatory
+distinction checks. Stored assessments retain exact quotation text. Article
+construction receives construction instructions, not standalone admission
+directives to return assessment dispositions.
 Stable IDs, citations, generated bases, explicit edits, conflicts and redirects
 are retained by the owning store, not an independent Wiki service.
 

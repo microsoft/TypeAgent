@@ -64,6 +64,15 @@ export interface FrameQueryResult extends FrameProjectionStatus {
     rows: Array<df.FrameMatch & { sourceIds: string[] }>;
     nextCursor?: string | undefined;
 }
+export function framePredicateTypeScript(schema: df.FrameSchema): string {
+    df.assertFrameSchema(schema);
+    const fields = Object.keys(schema.fields)
+        .map((id) => JSON.stringify(id))
+        .join(" | ");
+    return `export type Scalar = string | number | boolean | {kind: "calendar" | "instant"; raw: string};
+export type Comparison = {fieldId: ${fields}; op: "eq"|"neq"|"lt"|"lte"|"gt"|"gte"; value: Scalar; unit?: string};
+export type FramePredicate = {and: Comparison[]} | {or: Comparison[]};`;
+}
 export function validateFrameSourceProviders(
     providers: readonly FrameSourceProvider[] = [],
 ): void {

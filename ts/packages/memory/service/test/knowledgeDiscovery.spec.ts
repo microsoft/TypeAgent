@@ -21,6 +21,7 @@ import {
 import {
     parseCorpusQuestionDiscovery,
     parseSynthesisJson,
+    CorpusDiscoveryContractRejection,
 } from "../src/schemaViewSynthesis.js";
 import {
     questionBody,
@@ -83,6 +84,135 @@ function response(
 function proposal(): CorpusQuestionProposal {
     return parseCorpusQuestionDiscovery(input, response())[0];
 }
+
+test("typed discovery diagnostics expose only safe metadata outside the repair request", () => {
+    const diagnostic = "synthetic-private-diagnostic-marker";
+    const error = new CorpusDiscoveryContractRejection(diagnostic, 1);
+    expect(error.repairDiagnostic()).toBe(diagnostic);
+    expect(error.diagnosticId).toMatch(/^[a-f0-9]{64}$/);
+    expect(error.diagnosticCharacters).toBe(diagnostic.length);
+    expect(error.message).toContain(error.diagnosticId);
+    expect(String(error)).not.toContain(diagnostic);
+    expect(JSON.stringify(error)).not.toContain(diagnostic);
+});
+
+test.each([
+    "valid",
+    "typed-again",
+    "subject-after-typed",
+    "typed-after-subject",
+    "drop",
+    "quota",
+    "abort",
+] as const)(
+    "configured discovery shares one repair allowance for %s",
+    async (mode) => {
+        const entry = {
+            subject: "Harbor",
+            reason: "Persistent rollout ownership",
+            slot,
+            passageIds: [passage.passageId],
+            utility: {
+                consumerValue: 2,
+                substance: 2,
+                novelty: 2,
+                durability: 2,
+            },
+        };
+        const invalid = {
+            ...entry,
+            utility: { ...entry.utility, consumerValue: "invalid" },
+        };
+        const invalidSubject = { ...entry, subject: "Harbor ownership" };
+        const first = response([
+            mode === "typed-after-subject" ? invalidSubject : invalid,
+        ]);
+        const second = response(
+            mode === "drop"
+                ? []
+                : [
+                      mode === "typed-again" || mode === "typed-after-subject"
+                          ? invalid
+                          : mode === "subject-after-typed"
+                            ? invalidSubject
+                            : entry,
+                  ],
+        );
+        const original = structuredClone(input);
+        const controller = new AbortController();
+        let calls = 0;
+        let reservations = 0;
+        const model: ChatModel = {
+            completionSettings: {},
+            complete: async (messages) => {
+                calls++;
+                if (typeof messages === "string")
+                    throw new Error("Expected structured discovery request");
+                const payload = JSON.parse(String(messages[1].content));
+                if (calls === 2) {
+                    expect(payload.passages).toEqual(input.passages);
+                    expect(payload.existingQuestions).toEqual(
+                        input.existingQuestions,
+                    );
+                    expect(payload.fingerprint).toBe(input.fingerprint);
+                    expect(payload.rejectedResponse).toEqual(first);
+                    if (mode !== "typed-after-subject") {
+                        expect(typeof payload.validationDiagnostic).toBe(
+                            "string",
+                        );
+                        expect(
+                            payload.validationDiagnostic.length,
+                        ).toBeGreaterThan(0);
+                        expect(String(messages[0].content)).toContain(
+                            "another rejection is final",
+                        );
+                    }
+                }
+                return {
+                    success: true,
+                    data: JSON.stringify(calls === 1 ? first : second),
+                };
+            },
+        };
+        const adapter = createConfiguredViewSynthesisAdapter(
+            undefined,
+            undefined,
+            model,
+        );
+        const result = adapter.discoverCorpusQuestions!(
+            input,
+            controller.signal,
+            async () => {
+                reservations++;
+                if (mode === "quota")
+                    throw new Error("repair budget exhausted");
+                if (mode === "abort") controller.abort();
+            },
+        );
+        if (mode === "valid") {
+            const proposals = await result;
+            expect(proposals).toHaveLength(1);
+            expect(proposals[0].slot.discoveryCitations[0].excerpt).toBe(
+                passage.excerpt,
+            );
+        } else {
+            const reason =
+                mode === "quota"
+                    ? "repair budget exhausted"
+                    : mode === "drop"
+                      ? "cannot change the proposal count"
+                      : mode === "subject-after-typed"
+                        ? "subject is not resolvable"
+                        : mode === "abort"
+                          ? "aborted"
+                          : "typed proposal validation failed";
+            await expect(result).rejects.toThrow(reason);
+        }
+        expect(calls).toBe(mode === "quota" || mode === "abort" ? 1 : 2);
+        expect(reservations).toBe(1);
+        expect(input).toEqual(original);
+    },
+);
 
 test.each([false, true])(
     "configured discovery repairs exact cited-subject grounding once; repeatedInvalid=%s",

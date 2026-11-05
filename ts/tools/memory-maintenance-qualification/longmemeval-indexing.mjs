@@ -18,7 +18,7 @@ import { createInterface } from "node:readline";
 import { liveDependencyCheckpoint } from "./live-stages.mjs";
 import { writeJson } from "./harness.mjs";
 import {
-    benchmarkConfiguration,
+    benchmarkProviderConfiguration,
     benchmarkFailure,
     loadPrepared,
 } from "./longmemeval-live.mjs";
@@ -131,9 +131,7 @@ async function approved(pilot, product, approvalFile) {
     const modules = await productModules(product);
     modules.config.loadConfigSync();
     modules.client.initRuntimeConfigFromProcessEnv();
-    const configured = benchmarkConfiguration(
-        modules.client.openai.getChatModelSettings(),
-    );
+    const configured = benchmarkProviderConfiguration(modules.client);
     assert.equal(
         digest(encode(configured)),
         approval.chatConfigurationHash,
@@ -167,11 +165,7 @@ export async function preflight(pilot, product) {
         manifestHash: digest(encode(pilot.manifest)),
         checkpointHash: digest(encode(pilot.manifest.checkpoint)),
         chatConfigurationHash: digest(
-            encode(
-                benchmarkConfiguration(
-                    modules.client.openai.getChatModelSettings(),
-                ),
-            ),
+            encode(benchmarkProviderConfiguration(modules.client)),
         ),
         dependencyHash: digest(encode(await liveDependencyCheckpoint(product))),
         embeddingConfigurationHash: embeddingConfigurationHash(

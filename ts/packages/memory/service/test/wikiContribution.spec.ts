@@ -21,6 +21,7 @@ import {
 import { viewSourceKey } from "../src/viewContent.js";
 import { derivedDefinitionInput } from "../src/viewRelationships.js";
 import { mergeView, recordViewEdits, viewHash } from "../src/viewMerge.js";
+import { mergeEditorialView } from "../src/viewEditorial.js";
 import { ViewBuildStaleError } from "../src/viewBuilds.js";
 import { TypedViewStore } from "../src/viewStore.js";
 import type { IndexedFragmentRequest, IndexedDocument } from "../src/types.js";
@@ -352,7 +353,7 @@ test("covered requires explicit actual prose for every fragment; contribution re
     );
 });
 
-test("canonical contribution preserves editorial title, taxonomy, note and exclusions through the real merge helper", () => {
+test("canonical contribution preserves protected title, taxonomy, note and exclusions through the shared editorial merge", () => {
     const input = snapshot(),
         page = canonical();
     const context = wikiPageContext(input, page);
@@ -364,7 +365,7 @@ test("canonical contribution preserves editorial title, taxonomy, note and exclu
     const candidate = hydrateInformational(combined, {
         summary: "Grounded reference summary.",
         status: "partial",
-        title: "Generated title",
+        title: page.content.title,
         prose: `${oldFact}\n\n${contrast}`,
         limits: "Bounded",
         citationIds: ["f0", "f1"],
@@ -378,7 +379,7 @@ test("canonical contribution preserves editorial title, taxonomy, note and exclu
     details.taxonomy = "system";
     edited.definition.wiki!.excludedSourceIds = ["not-cited"];
     edited.edits = recordViewEdits(page, edited.content, [], "human");
-    const merged = mergeView(edited, candidate, combined.inputs);
+    const merged = mergeEditorialView(edited, candidate, combined.inputs);
     expect(merged.conflicts).toEqual([]);
     expect(merged.output.content.title).toBe("Human canonical title");
     expect(merged.output.content.sections[0].details).toMatchObject({
@@ -388,6 +389,27 @@ test("canonical contribution preserves editorial title, taxonomy, note and exclu
     expect(edited.definition.wiki!.excludedSourceIds).toEqual(["not-cited"]);
     expect(merged.output.content.sections[0].body).toContain(oldFact);
     expect(merged.output.content.sections[0].body).toContain(contrast);
+    const retitled = structuredClone(candidate);
+    retitled.content.title = "Incompatible generated title";
+    const conflict = mergeEditorialView(edited, retitled, combined.inputs);
+    expect(conflict.conflicts).toContain("title");
+    expect(conflict.output.content.title).toBe("Human canonical title");
+    expect(edited.content.title).toBe("Human canonical title");
+});
+
+test("canonical contribution still rejects an untracked title change", () => {
+    const page = canonical();
+    page.content.title = "Untracked title";
+    const candidate = {
+        content: structuredClone(page.generation!.content),
+        relationships: [],
+        outcome: "knowledgePages" as const,
+        missingEvidence: [],
+    };
+    const merged = mergeEditorialView(page, candidate, page.content.citations);
+    expect(merged.conflicts).toContain("untracked:title");
+    expect(page.edits).toBeUndefined();
+    expect(page.content.title).toBe("Untracked title");
 });
 
 test("synthetic host coverage rejects truncated prose even when every claimed witness is visible", () => {
@@ -636,6 +658,7 @@ async function maintainFamily(
 async function rehearsal(
     mode:
         | "success"
+        | "title-refresh"
         | "missing"
         | "provider"
         | "conflict"
@@ -675,7 +698,10 @@ async function rehearsal(
             return assessment(
                 input,
                 pages[0],
-                input.wikiContribution ? "covered" : "contribute",
+                input.wikiContribution ||
+                    (mode === "title-refresh" && generated >= 3)
+                    ? "covered"
+                    : "contribute",
             );
         },
         generate: async (input: ViewBuildSnapshot) => {
@@ -685,7 +711,13 @@ async function rehearsal(
                 .map((fragment) => fragment.excerpt)
                 .join("\n\n");
             if (input.wikiContribution) {
-                expect(input.expectedVersion).toBe(mode === "conflict" ? 2 : 1);
+                expect(input.expectedVersion).toBe(
+                    mode === "title-refresh"
+                        ? generated - 1
+                        : mode === "conflict"
+                          ? 2
+                          : 1,
+                );
                 expect(prose).toContain(oldFact);
                 expect(prose).toContain(contrast);
                 if (mode === "provider")
@@ -743,7 +775,10 @@ async function rehearsal(
             return hydrateInformational(input, {
                 summary: "Grounded reference summary.",
                 status: "partial",
-                title: "Connection lease",
+                title:
+                    mode === "title-refresh" && generated > 1
+                        ? `Connection lease and command execution ${generated}`
+                        : "Connection lease",
                 prose,
                 limits: "Selected evidence; no universal default or leak proof",
                 citationIds: input.inputs
@@ -899,7 +934,7 @@ async function rehearsal(
                 revision,
             );
             expect([generated, assessed]).toEqual(calls);
-        } else if (mode !== "success") {
+        } else if (mode !== "success" && mode !== "title-refresh") {
             expect(result.state).toBe(
                 mode === "stale"
                     ? "stale"
@@ -955,6 +990,36 @@ async function rehearsal(
             expect(current[0].content.sections[0].body).toContain(oldFact);
             expect(current[0].content.sections[0].body).toContain(contrast);
             expect(current[0].content.citations).toHaveLength(2);
+            if (mode === "title-refresh") {
+                expect(current[0].content.title).toBe(
+                    "Connection lease and command execution 2",
+                );
+                expect(current[0].generation!.content.title).toBe(
+                    current[0].content.title,
+                );
+                expect(current[0].edits).toEqual([]);
+                adapter.identity = "offline-contribution-title-refresh";
+                const refresh = await maintainFamily(
+                    service,
+                    corpusId,
+                    "wiki",
+                    "rebuild",
+                );
+                const rebuilt = await terminal(service, refresh.job);
+                expect(rebuilt.state).toBe("complete");
+                expect(rebuilt.results[0].conflictId).toBeUndefined();
+                expect(generated).toBe(3);
+                const refreshed = (await service.listViews(corpusId)).views[0];
+                expect(refreshed.version).toBe(3);
+                expect(refreshed.content.title).toBe(
+                    "Connection lease and command execution 3",
+                );
+                expect(refreshed.generation!.content.title).toBe(
+                    refreshed.content.title,
+                );
+                expect(refreshed.edits).toEqual([]);
+                expect(refreshed.actor).toBe("memory-view-generator");
+            }
         }
         const before = [generated, assessed];
         await service.close();
@@ -979,6 +1044,7 @@ async function rehearsal(
 
 test.each([
     "success",
+    "title-refresh",
     "missing",
     "provider",
     "conflict",
