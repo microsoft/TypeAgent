@@ -280,7 +280,7 @@ export function registerMemoryPreview(
 ): void {
     const ui = { resourceUri: previewResourceUri };
     const clientUiCapability = () => {
-        const extensions = server.server.getClientCapabilities().extensions;
+        const extensions = server.server.getClientCapabilities()?.extensions;
         return getUiCapability(extensions ? { extensions } : {});
     };
     const safe = async (
