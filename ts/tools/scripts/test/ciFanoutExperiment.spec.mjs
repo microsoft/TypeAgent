@@ -6,13 +6,16 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import vm from "node:vm";
 import yaml from "js-yaml";
 import {
     createManifest,
     verifyManifest,
     stageArtifact,
     qualify,
+    memoryTestSelection,
 } from "../ciFanoutExperiment.mjs";
+import { localTestCommands } from "../runLocalTestPackages.mjs";
 
 const sha = "a".repeat(40);
 const spec = "packages/memory/service/dist/test/example.spec.js";
@@ -46,6 +49,70 @@ test("compiled manifest round-trips without dependencies or credential files", (
         assert.deepEqual(manifest.tests, [spec]);
         verifyManifest(root, sha, manifest);
     });
+});
+
+test("workspace artifacts reuse transport verification but cannot masquerade as memory artifacts", () => {
+    fixture((root, write) => {
+        const test = "packages/dispatcher/dispatcher/dist/test/example.spec.js";
+        write(test, "synthetic workspace test");
+        const manifest = createManifest(root, sha, [test], "workspace");
+        verifyManifest(root, sha, manifest, "workspace");
+        assert.throws(
+            () => verifyManifest(root, sha, manifest),
+            /scope mismatch/,
+        );
+        assert.throws(
+            () => createManifest(root, sha, [test]),
+            /compiled memory/,
+        );
+        verifyManifest(
+            root,
+            sha,
+            createManifest(root, sha, [], "workspace"),
+            "workspace",
+        );
+        assert.throws(() => createManifest(root, sha, [], "unknown"), /scope/);
+    });
+});
+
+test("macOS memory discovery and execution select only the existing compatibility suites", () => {
+    fixture((root, write) => {
+        const compatibility = localTestCommands("macos-compat", root);
+        const memory = compatibility.find(
+            ({ cwd }) => cwd === path.resolve(root, "packages/memory/service"),
+        );
+        for (const file of memory.args.slice(3)) {
+            write(path.relative(root, file), "synthetic compatibility test");
+        }
+        const selection = memoryTestSelection(root, "darwin");
+        assert.deepEqual(selection, memory.args.slice(2));
+        assert.equal(selection[0], "--runTestsByPath");
+        assert.equal(selection.length, 6);
+        const remainder = localTestCommands(
+            "macos-compat-without-memory",
+            root,
+        );
+        assert.deepEqual(
+            [
+                ...selection.slice(1),
+                ...remainder.flatMap(({ args }) => args.slice(3)),
+            ].sort(),
+            compatibility.flatMap(({ args }) => args.slice(3)).sort(),
+        );
+        fs.rmSync(selection[1]);
+        assert.throws(
+            () => memoryTestSelection(root, "darwin"),
+            /ENOENT|Missing compiled/,
+        );
+    });
+});
+
+test("Linux and Windows memory discovery and execution retain the complete spec selection", () => {
+    for (const platform of ["linux", "win32"]) {
+        assert.deepEqual(memoryTestSelection("unused", platform), [
+            "--testPathPattern=.*[.]spec[.]js",
+        ]);
+    }
 });
 
 test("staged payload restores into a fresh consumer without dependency scanning", () => {
@@ -347,6 +414,7 @@ test("test runners install native dependencies but never rebuild shared product 
         "control",
     ]);
     assert.equal(experiment.jobs.test.needs, "build");
+    assert.equal(experiment.jobs.test.strategy["max-parallel"], 45);
     assert.equal(experiment.jobs.test.strategy.fail_fast, undefined);
     assert.equal(experiment.jobs.test.strategy["fail-fast"], false);
     const commands = experiment.jobs.test.steps
@@ -360,6 +428,9 @@ test("test runners install native dependencies but never rebuild shared product 
         "analysis",
         "build",
         "test",
+        "workspace_build",
+        "remainder",
+        "package_partitions",
     ]);
     assert.ok(
         experiment.jobs.qualification.steps.some((step) =>
@@ -384,13 +455,23 @@ test("platform-independent analysis runs once and remains blocking", () => {
     );
 });
 
-test("full qualification preserves remaining packages, script retries and Linux UI tests", () => {
+test("qualification preserves gated platform selections, script retries and Linux UI tests", () => {
     const experiment = workflow("ci-fanout-experiment");
-    const steps = experiment.jobs.build.steps;
+    const steps = experiment.jobs.remainder.steps;
     const testStep = steps.find((step) =>
         step.name?.startsWith("Test remaining packages"),
     );
-    assert.equal(testStep.env.TYPEAGENT_TEST_PROFILE, "full-without-memory");
+    for (const os of ["Linux", "Windows", "macOS"]) {
+        assert.equal(
+            vm.runInNewContext(
+                testStep.env.TYPEAGENT_TEST_PROFILE.slice(3, -2),
+                {
+                    runner: { os },
+                },
+            ),
+            os === "macOS" ? "macos-compat-without-memory" : "fanout-remainder",
+        );
+    }
     assert.match(testStep.run, /runTestLocalWithSummary.mjs/);
     assert.match(testStep.run, /exit \$LASTEXITCODE/);
     assert.equal(
@@ -405,18 +486,12 @@ test("full qualification preserves remaining packages, script retries and Linux 
     assert.equal(ui.if, "runner.os == 'Linux'");
     assert.match(ui.run, /npm run test:ui/);
     assert.match(ui.run, /trap .*EXIT/);
-    const buildArtifact = steps.find((step) =>
+    const buildArtifact = experiment.jobs.build.steps.find((step) =>
         step.uses?.startsWith("actions/upload-artifact@"),
     );
     const download = experiment.jobs.test.steps.find((step) =>
         step.uses?.startsWith("actions/download-artifact@"),
     );
-    const workspaceBuild = steps.find((step) =>
-        step.name?.startsWith("Build remaining workspace"),
-    );
-    assert.equal(workspaceBuild.run, "pnpm run build");
-    assert.ok(steps.indexOf(buildArtifact) < steps.indexOf(workspaceBuild));
-    assert.ok(steps.indexOf(workspaceBuild) < steps.indexOf(testStep));
     assert.equal(buildArtifact.with.name, download.with.name);
     assert.match(buildArtifact.with.name, /matrix.version/);
     assert.match(
@@ -424,5 +499,83 @@ test("full qualification preserves remaining packages, script retries and Linux 
             step.uses?.startsWith("actions/upload-artifact@"),
         ).with.name,
         /matrix.version/,
+    );
+});
+
+test("memory producers never wait for or run non-memory builds or tests", () => {
+    const jobs = workflow("ci-fanout-experiment").jobs;
+    assert.equal(jobs.build.needs, undefined);
+    assert.equal(jobs.workspace_build.needs, undefined);
+    const memoryCommands = jobs.build.steps
+        .map((step) => step.run ?? "")
+        .join("\n");
+    assert.doesNotMatch(
+        memoryCommands,
+        /pnpm run build|runTestLocalWithSummary|ciPackagePartitions/,
+    );
+    assert.equal(jobs.test.needs, "build");
+    const workspaceCommands = jobs.workspace_build.steps
+        .map((step) => step.run ?? "")
+        .join("\n");
+    assert.match(workspaceCommands, /pnpm run build/);
+    assert.match(workspaceCommands, /ciPackagePartitions.mjs prepare/);
+    assert.doesNotMatch(
+        workspaceCommands,
+        /runTestLocalWithSummary|ciPackagePartitions.mjs test/,
+    );
+    for (const name of ["remainder", "package_partitions"]) {
+        assert.equal(jobs[name].needs, "workspace_build");
+        const commands = jobs[name].steps
+            .map((step) => step.run ?? "")
+            .join("\n");
+        assert.doesNotMatch(commands, /pnpm run build|fluid-build/);
+        const download = jobs[name].steps.find((step) =>
+            step.uses?.startsWith("actions/download-artifact@"),
+        );
+        assert.equal(
+            download.with.name,
+            jobs.workspace_build.steps.find((step) =>
+                step.uses?.startsWith("actions/upload-artifact@"),
+            ).with.name,
+        );
+    }
+    assert.deepEqual(jobs.package_partitions.strategy.matrix.os, [
+        "ubuntu-latest",
+        "windows-latest",
+    ]);
+    assert.deepEqual(jobs.package_partitions.strategy.matrix.group, [
+        "1",
+        "2",
+        "3",
+        "4",
+    ]);
+    assert.equal(
+        jobs.package_partitions.steps.find((step) =>
+            step.name?.startsWith("Test duration-balanced"),
+        ).env.TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS,
+        jobs.remainder.steps.find((step) =>
+            step.name?.startsWith("Test remaining"),
+        ).env.TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS,
+    );
+    assert.deepEqual(
+        jobs.remainder.strategy.matrix.os,
+        jobs.build.strategy.matrix.os,
+    );
+    assert.deepEqual(
+        jobs.workspace_build.strategy.matrix.os,
+        jobs.build.strategy.matrix.os,
+    );
+    assert.ok(
+        jobs.qualification.steps.findIndex((step) =>
+            step.name?.startsWith("Reject failed"),
+        ) <
+            jobs.qualification.steps.findIndex((step) =>
+                step.uses?.startsWith("actions/download-artifact@"),
+            ),
+    );
+    assert.ok(
+        jobs.qualification.steps.some((step) =>
+            step.run?.includes("ciPackagePartitions.mjs aggregate"),
+        ),
     );
 });

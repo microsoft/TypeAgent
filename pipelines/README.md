@@ -134,7 +134,9 @@ remain rollout requirements.
 ## GitHub build/test fan-out qualification
 
 This is an opt-in qualification, not a replacement for required checks. It
-exercises the full manual-run OS/Node matrix without Azure access or model keys.
+exercises all supported OS/Node targets without Azure access or model keys.
+Its test selections match normal gating: full Linux/Windows coverage and the
+existing minimal macOS compatibility suites, not full macOS package tests.
 
 From GitHub Actions, manually run **build-ts** on the candidate branch with
 `fanout_experiment` checked, or use:
@@ -147,19 +149,42 @@ The reusable `ci-fanout-experiment.yml` builds the memory-client dependency
 closure first for each combination of Ubuntu, Windows and macOS with Node
 22.23.4, 24.22.1 and 26.12.1. This includes the client's compiled view protocol
 dynamically imported by memory-service tests. It fingerprints and uploads that
-small runtime closure before incrementally building the rest of the workspace;
-shared dependencies are reused, and unrelated application bundles are not
-uploaded to memory-only consumers. Each producer also runs all non-memory package scripts
-through the existing retry harness, the root script and memory-quality phases,
-and Linux UI tests. Chained/non-Jest package phases remain intact. Platform-
-independent formatting and lint run once in a separate blocking analysis job.
+small runtime closure and then finishes. It does not build the remaining
+workspace or run non-memory tests, and does not depend on those jobs.
+Unrelated application bundles are not uploaded to memory-only consumers.
+
+An independent `workspace_build` matrix builds the workspace once per OS/Node
+and publishes a fingerprinted compiled-output artifact and partition plan.
+`remainder` and `package_partitions` consume matching outputs without rebuilding;
+they never gate the memory consumers. The full workspace payload intentionally
+trades transfer/storage for avoiding repeated builds: the validated local payload
+was 614 MiB across 15,128 files. Its new hosted transfer and verification costs
+must be measured, not assumed free or equivalent to the small memory artifact.
+
+Linux/Windows remainder jobs exclude memory service, dispatcher and default agent
+provider. Dispatcher/provider files run in four duration-balanced groups per
+OS/Node, only on Linux/Windows. macOS remainder jobs retain exactly the eight
+non-memory compatibility suites; no full dispatcher/provider partitions run there.
+Remainder jobs use the existing retry harness and retain root script and
+memory-quality phases, with UI tests on Linux. Chained/non-Jest package phases
+remain intact. Platform-independent formatting and lint run once in a separate
+blocking analysis job.
 
 The `full-without-memory` test profile differs from `full` by exactly one pnpm
 filter excluding `@typeagent/memory-service`; it is used only by qualification
-producers. It does not change default local or required CI selections.
+legacy memory-only remainders. The new `fanout-remainder` profile additionally
+excludes exactly `agent-dispatcher` and `default-agent-provider`, which must pass
+their separate partitions. On macOS, `macos-compat-without-memory` reuses the
+existing compatibility list minus its five memory-service suites. Those five
+suites are selected explicitly for both memory discovery and shard/control
+execution; the full memory-service inventory is used only on Linux/Windows.
+The remainder and memory selections together equal the existing 13-suite macOS
+compatibility selection. Missing compiled compatibility suites fail explicitly.
+Default local and required CI selections, including full normal scheduled/manual
+runs outside qualification, are unchanged.
 
 Each producer uploads compiled `dist` outputs and a manifest containing the exact source SHA, lockfile hash,
-OS/architecture, Node/ABI, output hashes, and the complete Jest spec inventory.
+OS/architecture, Node/ABI, output hashes, and the complete selected Jest spec inventory.
 Only manifest-listed files are staged into a new runner-temp directory before
 upload, avoiding recursive artifact globs through workspace dependencies.
 Dependencies and credential files are not uploaded.
@@ -169,11 +194,38 @@ outputs, verify the manifest, and run memory-service Jest specs without rebuildi
 Four file-level shards and an unsharded control consume the same per-OS/Node
 artifact. All nine toolchain combinations must report, giving 45 memory-test
 reports. Artifact and result names include Node versions to prevent collisions.
-The experiment caps concurrent memory-test runners at twelve; controls
+The experiment permits all 45 memory-test runners concurrently; actual
+organization/OS runner capacity can still queue them. Controls
 intentionally add qualification cost and are not proposed as permanent gating
-jobs. The current matrix dependency waits for all producers, including their
-remaining tests, before starting consumers. This is safe qualification scheduling,
-not the final optimized production job graph.
+jobs. The memory matrix waits only for the memory build matrix, not workspace
+builds, remaining tests or package partitions.
+
+Dispatcher/provider groups use a deterministic longest-processing-time-first
+plan seeded from hosted per-file Linux/Windows timings. Missing timing entries
+are explicitly reported and weighted by the observed package median, not treated
+as measured zero-cost tests. Plans cover each discovered eligible file exactly
+once, preserve the provider's existing ignored suite, and fail if package script
+or lifecycle assumptions change. Consumers check the restored inventory against
+fresh discovery. Failed files get up to two serial, fresh-process, no-cache
+retries; all attempt JSON and new per-file timings are uploaded. Retry-only
+successes remain visible. Qualification requires all 48 package reports in
+addition to the 45 memory comparisons and successful analysis, build and
+remainder jobs.
+
+Refresh the seed from hosted logs or downloaded `.partition.json` reports:
+
+```powershell
+node tools\scripts\ciPackagePartitions.mjs profile <source-run-id> <windows-log> <linux-log>
+```
+
+Local Windows/Node 24 execution discovered 147 dispatcher and 61 provider files.
+All four combined groups passed on their first attempt: 6,277 assertions passed
+and 371 were reported pending/skipped under the existing test conditions.
+Combined package execution took 92.0-112.4 seconds per group, excluding build,
+consumer setup, artifact verification and discovery. These local measurements
+are not hosted CI wall-clock evidence. The checked-in seed still uses the
+61 hosted observations; all 208 local per-file timings were retained separately,
+not mixed into a profile attributed to the hosted run.
 
 The final qualification rejects missing, failed, cancelled or skipped analysis,
 producer or consumer work,
@@ -188,6 +240,26 @@ Its summary reports test-process timings only;
 use job/step timings separately for build, dependency setup, artifact transfer,
 queue delay, and runner cost. One run is functional qualification, not proof of
 a 30-minute full merge gate or a statistically established speedup.
+
+### Ten-minute target
+
+Ten minutes is a target, not a result of this change. A low-confidence planning
+range is 25-40 minutes for qualification with unsharded controls, or 20-30 minutes
+for a future control-free gate with the current cold builds and remainder path.
+Neither range includes a guarantee about runner queues, new workspace artifact
+transfer or unrelated required checks. Recalibrate from clean hosted runs.
+The earlier Windows path spent about 11 minutes in setup/build before testing;
+the previous unsharded Windows memory control alone took about 17 minutes.
+
+A ten-minute gate needs a measured budget such as at most one minute of
+queue/setup, three minutes building, five minutes in the slowest parallel test
+lane (including consumer setup/transfer), and one minute aggregating/finishing.
+That requires faster or safely cached builds, measured runtime-closure transfer,
+enough runner concurrency, further remainder/root-test optimization as measured,
+and keeping comparison controls out of normal gating after qualification.
+All-required-check latency also depends on completing the separately gated
+Azure live-test cutover; shortening this workflow alone does not establish a
+ten-minute complete CI gate.
 
 Normal PR, main, merge-group, scheduled, and default manual `build-ts` behavior
 remains unchanged, including all supported Node versions and macOS coverage.

@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { partitionPackages } from "./lib/ciTestPartitions.mjs";
 
 export const macosCompatibilitySuites = [
     {
@@ -47,7 +48,7 @@ export function localTestCommands(profile, root, workspaceConcurrency = 3) {
             "TYPEAGENT_TEST_WORKSPACE_CONCURRENCY must be a positive safe integer.",
         );
     }
-    if (profile === "full" || profile === "full-without-memory") {
+    if (["full", "full-without-memory", "fanout-remainder"].includes(profile)) {
         return [
             {
                 cwd: root,
@@ -57,8 +58,13 @@ export function localTestCommands(profile, root, workspaceConcurrency = 3) {
                     "--no-sort",
                     "--stream",
                     `--workspace-concurrency=${workspaceConcurrency}`,
-                    ...(profile === "full-without-memory"
+                    ...(profile !== "full"
                         ? ["--filter=!@typeagent/memory-service"]
+                        : []),
+                    ...(profile === "fanout-remainder"
+                        ? Object.values(partitionPackages).map(
+                              ({ name }) => `--filter=!${name}`,
+                          )
                         : []),
                     "run",
                     "test:local",
@@ -66,26 +72,35 @@ export function localTestCommands(profile, root, workspaceConcurrency = 3) {
             },
         ];
     }
-    if (profile !== "macos-compat") {
+    if (
+        profile !== "macos-compat" &&
+        profile !== "macos-compat-without-memory"
+    ) {
         throw new Error(`Unknown TYPEAGENT_TEST_PROFILE: ${profile}`);
     }
-    return macosCompatibilitySuites.map(({ directory, files }) => ({
-        cwd: path.resolve(root, directory),
-        args: [
-            "run",
-            "jest-esm",
-            "--runTestsByPath",
-            ...files.map((file) =>
-                path.resolve(
-                    root,
-                    directory,
-                    "dist",
-                    "test",
-                    `${file}.spec.js`,
+    return macosCompatibilitySuites
+        .filter(
+            ({ directory }) =>
+                profile !== "macos-compat-without-memory" ||
+                directory !== "packages/memory/service",
+        )
+        .map(({ directory, files }) => ({
+            cwd: path.resolve(root, directory),
+            args: [
+                "run",
+                "jest-esm",
+                "--runTestsByPath",
+                ...files.map((file) =>
+                    path.resolve(
+                        root,
+                        directory,
+                        "dist",
+                        "test",
+                        `${file}.spec.js`,
+                    ),
                 ),
-            ),
-        ],
-    }));
+            ],
+        }));
 }
 
 export function runLocalTestPackages({
@@ -99,7 +114,10 @@ export function runLocalTestPackages({
     if (!pnpmPath || !fs.existsSync(pnpmPath)) {
         throw new Error("Run local package tests through pnpm run.");
     }
-    if (profile === "macos-compat") {
+    if (
+        profile === "macos-compat" ||
+        profile === "macos-compat-without-memory"
+    ) {
         for (const { args } of commands) {
             for (const file of args.slice(3)) {
                 if (!fs.statSync(file).isFile()) {

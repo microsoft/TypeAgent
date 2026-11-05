@@ -115,6 +115,34 @@ test("fan-out remainder excludes only memory service and retains complete packag
     );
 });
 
+test("macOS fan-out remainder preserves exactly the non-memory compatibility suites", () => {
+    const full = localTestCommands("macos-compat", root);
+    const remainder = localTestCommands("macos-compat-without-memory", root);
+    assert.deepEqual(
+        remainder,
+        full.filter(
+            ({ cwd }) => cwd !== path.resolve(root, "packages/memory/service"),
+        ),
+    );
+    assert.equal(remainder.length, 4);
+    assert.equal(remainder.flatMap(({ args }) => args.slice(3)).length, 8);
+});
+
+test("partitioned remainder removes exactly memory, dispatcher and provider package scripts", () => {
+    const remainder = localTestCommands("fanout-remainder", root);
+    assert.deepEqual(
+        remainder[0].args.filter((arg) => arg.startsWith("--filter=")),
+        [
+            "--filter=!@typeagent/memory-service",
+            "--filter=!agent-dispatcher",
+            "--filter=!default-agent-provider",
+        ],
+    );
+    assert.deepEqual(
+        remainder[0].args.filter((arg) => !arg.startsWith("--filter=")),
+        localTestCommands("full", root)[0].args,
+    );
+});
 test("invalid workspace concurrency fails before launching any package", () => {
     for (const workspaceConcurrency of [
         0,
@@ -217,20 +245,24 @@ test("unknown profiles fail instead of silently selecting a different suite", ()
     assert.throws(() => localTestCommands("macos-typo", root), /Unknown/);
 });
 
-test("compatibility validates compiled files before running any package", (t) => {
-    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-profile-"));
-    t.after(() => fs.rmSync(empty, { force: true, recursive: true }));
-    assert.throws(
-        () =>
-            runLocalTestPackages({
-                profile: "macos-compat",
-                root: empty,
-                pnpmPath: process.execPath,
-                run: () => assert.fail("Must not start with missing tests"),
-            }),
-        /ENOENT|Missing compiled/,
-    );
-});
+for (const profile of ["macos-compat", "macos-compat-without-memory"]) {
+    test(`${profile} validates compiled files before running any package`, (t) => {
+        const empty = fs.mkdtempSync(
+            path.join(os.tmpdir(), "typeagent-profile-"),
+        );
+        t.after(() => fs.rmSync(empty, { force: true, recursive: true }));
+        assert.throws(
+            () =>
+                runLocalTestPackages({
+                    profile,
+                    root: empty,
+                    pnpmPath: process.execPath,
+                    run: () => assert.fail("Must not start with missing tests"),
+                }),
+            /ENOENT|Missing compiled/,
+        );
+    });
+}
 
 test("profile runner preserves errors and invokes pnpm without shell interpolation", () => {
     const calls = [];

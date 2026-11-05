@@ -7,6 +7,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { localTestCommands } from "./runLocalTestPackages.mjs";
+import { partitionPackages } from "./lib/ciTestPartitions.mjs";
 
 const manifestName = "ci-fanout-manifest.json";
 const packagePath = "packages/memory/service";
@@ -74,8 +76,15 @@ function identity(root, sha) {
     };
 }
 
-export function createManifest(root, sha, tests) {
-    assert.ok(tests.length > 0, "Empty test inventory");
+export function createManifest(root, sha, tests, scope = "memory") {
+    assert.ok(
+        ["memory", "workspace"].includes(scope),
+        "Unknown artifact scope",
+    );
+    assert.ok(
+        scope === "workspace" || tests.length > 0,
+        "Empty test inventory",
+    );
     assert.equal(
         new Set(tests).size,
         tests.length,
@@ -88,7 +97,12 @@ export function createManifest(root, sha, tests) {
     for (const test of tests) {
         outputPath(test);
         assert.ok(
-            test.startsWith(`${packagePath}/dist/test/`) &&
+            (scope === "memory"
+                ? [packagePath]
+                : Object.values(partitionPackages).map(
+                      ({ directory }) => directory,
+                  )
+            ).some((directory) => test.startsWith(`${directory}/dist/test/`)) &&
                 test.endsWith(".spec.js") &&
                 files.some((file) => file.path === test),
             `Test is not a compiled memory-service spec: ${test}`,
@@ -96,19 +110,21 @@ export function createManifest(root, sha, tests) {
     }
     return {
         version: 1,
+        scope,
         ...identity(root, sha),
         files,
         tests: [...tests].sort(),
     };
 }
 
-export function verifyManifest(root, sha, manifest) {
+export function verifyManifest(root, sha, manifest, scope = "memory") {
     assert.equal(manifest.version, 1);
+    assert.equal(manifest.scope, scope, "Artifact scope mismatch");
     for (const [key, value] of Object.entries(identity(root, sha))) {
         assert.equal(manifest[key], value, `Artifact ${key} mismatch`);
     }
     assert.ok(manifest.files.length > 0);
-    assert.ok(manifest.tests.length > 0);
+    assert.ok(scope === "workspace" || manifest.tests.length > 0);
     assert.equal(new Set(manifest.tests).size, manifest.tests.length);
     for (const file of manifest.files) {
         const parts = outputPath(file.path);
@@ -131,7 +147,12 @@ export function verifyManifest(root, sha, manifest) {
     for (const test of manifest.tests) {
         outputPath(test);
         assert.ok(
-            test.startsWith(`${packagePath}/dist/test/`) &&
+            (scope === "memory"
+                ? [packagePath]
+                : Object.values(partitionPackages).map(
+                      ({ directory }) => directory,
+                  )
+            ).some((directory) => test.startsWith(`${directory}/dist/test/`)) &&
                 test.endsWith(".spec.js"),
         );
         assert.ok(manifest.files.some((file) => file.path === test));
@@ -143,7 +164,7 @@ export function stageArtifact(root, manifest, directory) {
         !fs.existsSync(directory),
         "Artifact staging directory must be new",
     );
-    verifyManifest(root, manifest.sha, manifest);
+    verifyManifest(root, manifest.sha, manifest, manifest.scope);
     fs.mkdirSync(directory, { recursive: true });
     for (const file of manifest.files) {
         const parts = outputPath(file.path);
@@ -220,12 +241,27 @@ function qualifyTarget(reports, sha, platform, node) {
     };
 }
 
+export function memoryTestSelection(root, platform = process.platform) {
+    if (platform !== "darwin") return ["--testPathPattern=.*[.]spec[.]js"];
+    const selection = localTestCommands("macos-compat", root).find(
+        ({ cwd }) => cwd === path.resolve(root, packagePath),
+    );
+    assert.ok(selection, "Missing macOS memory compatibility selection");
+    for (const file of selection.args.slice(3)) {
+        assert.ok(
+            fs.statSync(file).isFile(),
+            `Missing compiled compatibility suite: ${file}`,
+        );
+    }
+    return selection.args.slice(2);
+}
+
 function jestArgs(root, args) {
     return [
         "--no-warnings",
         "--experimental-vm-modules",
         path.join(root, packagePath, "node_modules/jest/bin/jest.js"),
-        "--testPathPattern=.*[.]spec[.]js",
+        ...memoryTestSelection(root),
         "--runInBand",
         ...args,
     ];
