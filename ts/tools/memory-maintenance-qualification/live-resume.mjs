@@ -174,12 +174,15 @@ export async function validateLiveResumeSources(
     corpusId,
     plan,
     receipt,
+    { allowUnacknowledgedSources = false } = {},
 ) {
     const completed = completedLiveOperations(plan, receipt);
     const next = plan[completed];
     const sources = await service.listSources(corpusId);
     const allowedUris = new Set(
-        plan.slice(0, completed + 1).map((entry) => entry.canonicalUri),
+        plan
+            .slice(0, allowUnacknowledgedSources ? plan.length : completed + 1)
+            .map((entry) => entry.canonicalUri),
     );
     for (const source of sources) {
         assert.ok(
@@ -192,6 +195,19 @@ export async function validateLiveResumeSources(
             1,
             "Canonical source identity is not unique",
         );
+        if (allowUnacknowledgedSources && source.activeRevisionId) {
+            const entry = plan.find(
+                (item) => item.canonicalUri === source.canonicalUri,
+            );
+            const revision = source.revisions.find(
+                (item) => item.revisionId === source.activeRevisionId,
+            );
+            assert.equal(
+                revision?.contentHash,
+                entry.sha256,
+                "Retained batch content changed",
+            );
+        }
     }
     for (const [key, mapping] of Object.entries(receipt.mappings)) {
         const source = sources.find(

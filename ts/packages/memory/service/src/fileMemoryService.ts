@@ -95,6 +95,7 @@ import type {
     KnowledgeCheckpointWait,
     KnowledgeDiscoveryUpdate,
     KnowledgeFamily,
+    KnowledgeFamilyFailure,
     KnowledgeStatus,
 } from "./knowledgeTypes.js";
 import { knowledgeLimits } from "./knowledgeTypes.js";
@@ -284,13 +285,13 @@ import { inventoryEvidence } from "./viewInventoryCoverage.js";
 import {
     resolveViewMaintenance,
     validateMaintenanceDefinition,
+    configuredSchemaAdmission,
 } from "./viewMaintenance.js";
 import {
     assertMaintenanceMembership,
     validateMaintenanceRequest,
 } from "./viewMaintenanceValidation.js";
 import {
-    mergeView,
     sameViewBuildEvidence,
     viewHash,
     viewBuildEvidenceFingerprint,
@@ -301,6 +302,7 @@ import {
     editorialArticle,
     editorialProtection,
     isEditorialUnlockSuccessor,
+    mergeEditorialView,
     relatedEditorialArticles,
     unlockEditorialProtection,
 } from "./viewEditorial.js";
@@ -388,6 +390,7 @@ import {
     viewFrameRows,
 } from "./frameProjection.js";
 import {
+    framePredicateTypeScript,
     validateFrameQueryRequest,
     validateFrameSourceProviders,
     validateFrameQueryTranslator,
@@ -427,6 +430,8 @@ import {
     parseWikiAssessment,
     wikiPageContext,
     wikiAssessmentKey,
+    wikiUtilityDeferralKey,
+    evidenceOnlyWikiDeferral,
 } from "./wikiAdmission.js";
 import {
     refreshWikiContributionInput,
@@ -584,6 +589,17 @@ function knowledgeMaintenanceResult(
         viewIds: [...new Set(results.flatMap((result) => result.viewIds))],
         jobIds: [...new Set(results.flatMap((result) => result.jobIds))],
     };
+}
+
+function knowledgeBuildState(
+    job: ViewBuildJob,
+): "ready" | "failed" | "partial" {
+    if (job.state === "complete") return "ready";
+    return job.results.some((result) =>
+        ["failed", "blocked", "conflicted"].includes(result.state),
+    )
+        ? "failed"
+        : "partial";
 }
 
 class SchemaMaintenanceBlockedError extends Error {}
@@ -1517,6 +1533,7 @@ export class FileMemoryService
     private readonly knowledge: KnowledgeCoordinator;
     private readonly newCorpusDiscoveryPolicy: DiscoveryPolicy;
     private readonly knowledgeMaintenance = new Set<string>();
+    private readonly concurrentKnowledgeTopics: boolean;
     private readonly acquisition: DeferredAcquisitionCoordinator;
     private readonly acquisitionPolicy: FileMemoryServiceOptions["acquisition"];
     private readonly assetStore: RevisionAssetStore;
@@ -1895,6 +1912,7 @@ export class FileMemoryService
         const maintenanceConcurrency = resolveMaintenanceConcurrency(
             options.maintenanceConcurrency,
         );
+        this.concurrentKnowledgeTopics = maintenanceConcurrency.builds > 1;
         const prioritizeShortBuilds = resolveMaintenanceBuildPriority(
             options.maintenanceShortBuildReservation,
             options.maintenanceShortBuildPriority,
@@ -2366,8 +2384,12 @@ export class FileMemoryService
                 this.admitKnowledgeQuestion(corpusId, input, proposal, signal),
             route: (corpusId, sources) =>
                 this.routeKnowledgeSources(corpusId, sources),
-            maintain: (checkpoint, signal) =>
-                this.maintainKnowledgeCheckpoint(checkpoint, signal),
+            maintain: (checkpoint, signal, reportFailure) =>
+                this.maintainKnowledgeCheckpoint(
+                    checkpoint,
+                    signal,
+                    reportFailure,
+                ),
             enabledFamilies: () => [
                 ...(this.viewDrafts ? ["questions" as const] : []),
                 ...(this.informationalWikiEnabled
@@ -3749,16 +3771,14 @@ export class FileMemoryService
                                 createJsonTranslator<frame.FramePredicate>(
                                     createKnowledgeModel(),
                                     createTypeScriptJsonValidator<frame.FramePredicate>(
-                                        `export type Scalar = string | number | boolean | {kind: "calendar" | "instant"; raw: string};
-                                 export type Comparison = {fieldId: string; op: "eq"|"neq"|"lt"|"lte"|"gt"|"gte"; value: Scalar; unit?: string};
-                                 export type FramePredicate = {and: Comparison[]} | {or: Comparison[]};`,
+                                        framePredicateTypeScript(schema),
                                         "FramePredicate",
                                     ),
                                 );
                             return translator.translate(request.query!, [
                                 {
                                     role: "system",
-                                    content: `Use only these admitted frame fields: ${JSON.stringify(schema)}. Preserve exact values and units. Calendar and instant domains cannot mix. Current time: ${new Date().toISOString()}.`,
+                                    content: `Use only these admitted frame fields: ${JSON.stringify(schema)}. fieldId must be an exact key of fields; never prefix it with the schema ID or invent a qualified field name. Named states and statuses are literal values for state/status fields; do not substitute empty strings for them. Preserve exact values and units. Calendar and instant domains cannot mix. Current time: ${new Date().toISOString()}.`,
                                 },
                             ]);
                         },
@@ -6766,9 +6786,26 @@ export class FileMemoryService
     private async maintainKnowledgeCheckpoint(
         checkpoint: KnowledgeCheckpoint,
         signal: AbortSignal,
+        reportFailure: (
+            failure: Omit<KnowledgeFamilyFailure, "observedAt">,
+        ) => Promise<void>,
     ): Promise<KnowledgeMaintenanceResult> {
         const { corpusId } = checkpoint;
         const results: KnowledgeMaintenanceResult[] = [];
+        const retainResult = async (
+            family: KnowledgeFamily,
+            result: KnowledgeMaintenanceResult,
+        ) => {
+            results.push(result);
+            if (result.state === "failed" || result.state === "blocked")
+                await reportFailure({
+                    family,
+                    state: result.state,
+                    reasons: result.reasons,
+                    jobIds: result.jobIds,
+                    viewIds: result.viewIds,
+                });
+        };
         const pipelines = new Set(
             checkpoint.families.map(
                 (family) =>
@@ -6814,16 +6851,13 @@ export class FileMemoryService
                     )
                         continue;
                     results.push({
-                        state:
-                            finished.state === "complete" ? "ready" : "failed",
+                        // Joined work is reconciled by the fresh family plans below.
+                        state: "ready",
                         jobIds: [job.jobId],
                         viewIds: finished.results
                             .filter((entry) => entry.revisionId)
                             .map((entry) => entry.viewId),
-                        reasons:
-                            finished.state === "complete"
-                                ? []
-                                : finished.results.map((entry) => entry.reason),
+                        reasons: [],
                     });
                 }
             }
@@ -6841,7 +6875,8 @@ export class FileMemoryService
                         ),
                 );
                 for (const view of questions) {
-                    results.push(
+                    await retainResult(
+                        "questions",
                         await this.maintainKnowledgeQuestion(
                             checkpoint,
                             view,
@@ -6850,15 +6885,54 @@ export class FileMemoryService
                     );
                 }
             }
-            for (const family of checkpoint.families)
-                if (family !== "questions")
-                    results.push(
+            const maintainPages = async () => {
+                for (const family of checkpoint.families)
+                    if (family === "wiki" || family === "projects")
+                        await retainResult(
+                            family,
+                            await this.maintainKnowledgeFamily(
+                                checkpoint,
+                                family,
+                                signal,
+                            ),
+                        );
+            };
+            const maintainTopics = async () => {
+                if (checkpoint.families.includes("topics"))
+                    await retainResult(
+                        "topics",
                         await this.maintainKnowledgeFamily(
                             checkpoint,
-                            family,
+                            "topics",
                             signal,
                         ),
                     );
+            };
+            if (this.concurrentKnowledgeTopics) {
+                const settled = await Promise.allSettled([
+                    maintainPages(),
+                    maintainTopics(),
+                ]);
+                const errors = settled.flatMap((entry) =>
+                    entry.status === "rejected" ? [entry.reason] : [],
+                );
+                if (errors.length)
+                    throw new AggregateError(
+                        errors,
+                        "Knowledge family maintenance failed",
+                    );
+            } else {
+                for (const family of checkpoint.families)
+                    if (family !== "questions")
+                        await retainResult(
+                            family,
+                            await this.maintainKnowledgeFamily(
+                                checkpoint,
+                                family,
+                                signal,
+                            ),
+                        );
+            }
             const result = knowledgeMaintenanceResult(results);
             const snapshot = await this.listViews(corpusId);
             result.viewRevisions = snapshot.views
@@ -6951,7 +7025,7 @@ export class FileMemoryService
                 if (finished.state !== "complete")
                     return {
                         ...result,
-                        state: "failed",
+                        state: knowledgeBuildState(finished),
                         reasons: finished.results.map((entry) => entry.reason),
                     };
             }
@@ -7046,14 +7120,15 @@ export class FileMemoryService
             return result;
         const job = await this.rebuildTopics(corpusId);
         result.jobIds.push(job.jobId);
-        if (
-            (await this.waitKnowledgeBuild(job, signal, checkpoint)).state !==
-            "complete"
-        )
+        const finished = await this.waitKnowledgeBuild(job, signal, checkpoint);
+        if (finished.state !== "complete")
             return {
                 ...result,
-                state: "failed",
-                reasons: ["Topic maintenance did not complete"],
+                state: knowledgeBuildState(finished),
+                reasons: [
+                    "Topic maintenance did not complete",
+                    ...finished.results.map((entry) => entry.reason),
+                ],
             };
         return result;
     }
@@ -7091,12 +7166,15 @@ export class FileMemoryService
                     ],
                 };
             if (!familyState.dirty) return result;
-            const snapshot = await this.listViews(corpusId);
-            const build = await this.maintainViews({
-                corpusId,
-                expectedHead: snapshot.head,
-                family,
-                operation: "update",
+            const build = await this.enqueueWrite(corpusId, async () => {
+                const snapshot = await this.viewStore.listViews(corpusId);
+                const runtime = await this.getCorpusRuntime(corpusId);
+                return this.maintainWikiFamily(runtime, {
+                    corpusId,
+                    expectedHead: snapshot.head,
+                    family,
+                    operation: "update",
+                });
             });
             const progressed =
                 build.job && !result.jobIds.includes(build.job.jobId);
@@ -7115,7 +7193,7 @@ export class FileMemoryService
                 if (finished.state !== "complete")
                     return {
                         ...result,
-                        state: "failed",
+                        state: knowledgeBuildState(finished),
                         reasons: finished.results.map((entry) => entry.reason),
                     };
             }
@@ -7178,6 +7256,9 @@ export class FileMemoryService
                     if (["pending", "running"].includes(checkpoint.state)) {
                         checkpoint.state = "cancelled";
                         checkpoint.reasons = [
+                            ...(checkpoint.requiredFailures ?? []).flatMap(
+                                (failure) => failure.reasons,
+                            ),
                             "Knowledge work was interrupted by service restart",
                         ];
                     }
@@ -9431,7 +9512,8 @@ export class FileMemoryService
                 this.viewAdapter,
                 input,
                 candidate,
-                (candidate) => mergeView(current, candidate, input.inputs),
+                (candidate) =>
+                    mergeEditorialView(current, candidate, input.inputs),
                 signal,
             ),
             signal,
@@ -9663,10 +9745,15 @@ export class FileMemoryService
                 const canonical = pages.find(
                     (page) => page.viewId === assessment.canonicalViewId,
                 );
-                const currentPages = await timeSearchStage(
-                    "wiki.assessment.pages.recheck",
-                    () => this.wikiAdmissionPages(result.snapshot),
-                );
+                const utilityOnly =
+                    !result.snapshot.wikiContribution &&
+                    evidenceOnlyWikiDeferral(assessment);
+                const currentPages = utilityOnly
+                    ? pages
+                    : await timeSearchStage(
+                          "wiki.assessment.pages.recheck",
+                          () => this.wikiAdmissionPages(result.snapshot),
+                      );
                 const assessmentKey = wikiAssessmentKey(
                     result.snapshot,
                     pages,
@@ -9729,6 +9816,17 @@ export class FileMemoryService
                                       reason: deferredWikiAdmission,
                                       assessmentKey,
                                       assessmentJobId: job.jobId,
+                                      ...(utilityOnly
+                                          ? {
+                                                utilityEvidenceKey:
+                                                    wikiUtilityDeferralKey(
+                                                        result.snapshot,
+                                                        this.wikiAdmissionContext(
+                                                            [],
+                                                        ),
+                                                    ),
+                                            }
+                                          : {}),
                                   };
                           }
                         : undefined,
@@ -10161,7 +10259,20 @@ export class FileMemoryService
         await this.applyInformationalFamilyOperation(request, family);
         if (!family.enabled) return this.viewStore.recordViewMaintenance(plan);
         const active = await this.viewStore.listViewInventoryBuilds(corpusId);
-        if (active.some((job) => job.state === "running"))
+        if (
+            active.some(
+                (job) =>
+                    job.state === "running" &&
+                    !(
+                        this.concurrentKnowledgeTopics &&
+                        this.knowledgeMaintenance.has(corpusId) &&
+                        job.results.every(
+                            (result) =>
+                                result.snapshot.pipeline === "topics-v1",
+                        )
+                    ),
+            )
+        )
             return this.viewStore.recordViewMaintenance(plan);
         if (
             !family.dirty &&
@@ -10385,21 +10496,31 @@ export class FileMemoryService
         input: ViewBuildSnapshot,
         descriptor: WikiFamilyState["descriptors"][number],
     ): Promise<boolean> {
-        const key = descriptor.admission?.assessmentKey;
+        const utilityKey = descriptor.admission?.utilityEvidenceKey;
+        const key = utilityKey ?? descriptor.admission?.assessmentKey;
         if (
             !key ||
             key !==
-                wikiAssessmentKey(
-                    input,
-                    await this.wikiAdmissionPages(input),
-                    this.wikiAdmissionContext([]),
-                )
+                (utilityKey
+                    ? wikiUtilityDeferralKey(
+                          input,
+                          this.wikiAdmissionContext([]),
+                      )
+                    : wikiAssessmentKey(
+                          input,
+                          await this.wikiAdmissionPages(input),
+                          this.wikiAdmissionContext([]),
+                      ))
         )
             return false;
-        recordSearchTiming("wiki.assessment.retained", 0, {
-            retained: true,
-            fingerprint: key,
-        });
+        recordSearchTiming(
+            utilityKey ? "wiki.utility.retained" : "wiki.assessment.retained",
+            0,
+            {
+                retained: true,
+                fingerprint: key,
+            },
+        );
         return true;
     }
 
@@ -10448,12 +10569,18 @@ export class FileMemoryService
                     fingerprint: receipt.assessmentKey,
                 });
             } else if (
-                receipt.assessmentKey !==
-                wikiAssessmentKey(
-                    result.snapshot,
-                    nominateWikiPages(result.snapshot, views, identities),
-                    this.wikiAdmissionContext([]),
-                )
+                receipt.utilityEvidenceKey
+                    ? receipt.utilityEvidenceKey !==
+                      wikiUtilityDeferralKey(
+                          result.snapshot,
+                          this.wikiAdmissionContext([]),
+                      )
+                    : receipt.assessmentKey !==
+                      wikiAssessmentKey(
+                          result.snapshot,
+                          nominateWikiPages(result.snapshot, views, identities),
+                          this.wikiAdmissionContext([]),
+                      )
             ) {
                 invalid.add(descriptor.viewId);
             }
@@ -10905,6 +11032,24 @@ export class FileMemoryService
         ];
     }
 
+    private assertCompleteViewInputBound(
+        definition: ViewDefinitionInput,
+        inputs: ViewRetainedInput[],
+    ): void {
+        if (
+            definition.kind !== "extension" &&
+            !configuredSchemaAdmission(
+                definition,
+                this.viewAdapter.schemaRequestAdmission,
+            ) &&
+            inputs.reduce((count, input) => count + input.content.length, 0) >
+                120_000
+        )
+            throw new Error(
+                "Complete view inputs exceed 120000 UTF-16 characters; no truncation applied",
+            );
+    }
+
     private async snapshotViewTarget(
         corpusId: string,
         target: ViewBuildTarget,
@@ -10963,14 +11108,7 @@ export class FileMemoryService
                 );
             inputs.push(timelineEventInput(event, bounds ?? {}));
         }
-        if (
-            target.definition.kind !== "extension" &&
-            inputs.reduce((count, input) => count + input.content.length, 0) >
-                120_000
-        )
-            throw new Error(
-                "Complete view inputs exceed 120000 UTF-16 characters; no truncation applied",
-            );
+        this.assertCompleteViewInputBound(target.definition, inputs);
         const snapshot = {
             corpusId,
             actor: userInfo().username,
@@ -11022,6 +11160,13 @@ export class FileMemoryService
                 : {}),
         };
         const frozen = { ...snapshot, fingerprint: viewHash(snapshot) };
+        if (
+            configuredSchemaAdmission(
+                frozen.definition,
+                this.viewAdapter.schemaRequestAdmission,
+            )
+        )
+            await this.viewAdapter.schemaRequestAdmission!.validate(frozen);
         await this.authorizeExtensionSnapshot(frozen);
         return frozen;
     }
@@ -11247,7 +11392,15 @@ export class FileMemoryService
             request.operation,
         );
         const jobs = await this.viewStore.listViewBuilds(request.corpusId);
-        const running = jobs.find((job) => job.state === "running");
+        const running = jobs.find(
+            (job) =>
+                job.state === "running" &&
+                (!this.concurrentKnowledgeTopics ||
+                    !this.knowledgeMaintenance.has(request.corpusId) ||
+                    job.results.some(
+                        (result) => result.snapshot.pipeline === "topics-v1",
+                    )),
+        );
         if (running || !family.enabled) {
             await this.viewStore.saveTopicFamily(request.corpusId, family);
             return this.viewStore.recordViewMaintenance(
@@ -11613,9 +11766,12 @@ export class FileMemoryService
 
     public async buildViews(request: ViewBuildRequest): Promise<ViewBuildJob> {
         validateBuildRequest(request);
-        await this.requireViews(request.corpusId);
+        const runtime = await this.requireViews(request.corpusId);
         this.assertViewBuildEnabled(request);
-        const existing = (await this.listViewBuilds(request.corpusId)).find(
+        const jobs = await runtime.access.read(() =>
+            this.viewStore.listViewBuilds(request.corpusId),
+        );
+        const existing = jobs.find(
             (job) =>
                 viewHash(job.request) === viewHash(request) &&
                 job.results.every(
@@ -11633,6 +11789,7 @@ export class FileMemoryService
                 ),
         );
         if (existing) {
+            await this.authorizeBuildReceipt(existing);
             for (const result of existing.results) {
                 if (result.snapshot.pipeline !== "extension-v1") continue;
                 await this.assertInfluenceEligible(result.snapshot);
@@ -11731,6 +11888,7 @@ export class FileMemoryService
             bounds ?? {},
             current,
             viewHash(events),
+            this.viewAdapter.schemaRequestAdmission,
         );
         if (plan.state === "pinned") return plan;
         if (events.some((event) => !event))

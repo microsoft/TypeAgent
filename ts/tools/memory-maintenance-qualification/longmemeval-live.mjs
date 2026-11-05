@@ -44,8 +44,9 @@ import {
 const datasetSha256 =
     "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442";
 const datasetRevision = "98d7416c24c778c2fee6e6f3006e7a073259d48f";
-const workAllowanceMs = 65 * 60 * 1000;
 const cleanupReserveMs = 5 * 60 * 1000;
+const maximumWorkMinutes = 360;
+const workAllowanceMs = maximumWorkMinutes * 60000 + cleanupReserveMs;
 const seed = "typeagent-longmemeval-full-2026-10-20";
 const productFactory =
     "packages\\agentServer\\server\\dist\\durableMemoryService.js";
@@ -77,6 +78,21 @@ export function recordBenchmarkArm(state, capabilities, resume, options = {}) {
         ),
         ingestion:
             "One Markdown source per original session position; dates, roles and turn text preserved",
+        topicCuration: {
+            inputTokenTarget:
+                process.env.TYPEAGENT_MEMORY_TOPIC_INPUT_TOKENS ?? null,
+            concurrency: process.env.TYPEAGENT_MEMORY_TOPIC_CONCURRENCY ?? null,
+            priorContextFraction:
+                process.env.TYPEAGENT_MEMORY_TOPIC_PRIOR_FRACTION ?? null,
+        },
+        wikiAssessmentConcurrency: Number(
+            process.env.TYPEAGENT_MEMORY_WIKI_ASSESSMENT_CONCURRENCY ?? 1,
+        ),
+        maintenanceBuildConcurrency: Number(
+            process.env.TYPEAGENT_MEMORY_VIEW_BUILD_CONCURRENCY ?? 1,
+        ),
+        nativeTimingEnabled: process.env.TYPEAGENT_MEMORY_SEARCH_TRACE === "1",
+        questionViewInputAdmission: "configured-complete-request-v1",
         answerMode: "default",
         preparedIndexing:
             process.env.TYPEAGENT_MEMORY_PREPARED_INDEXING === "1",
@@ -202,8 +218,10 @@ export function benchmarkInvocationAllowance(value) {
     if (value === "unlimited") return null;
     const minutes = Number(value);
     assert.ok(
-        Number.isSafeInteger(minutes) && minutes >= 1 && minutes <= 60,
-        "Invocation work minutes must be an integer from 1 to 60, or unlimited",
+        Number.isSafeInteger(minutes) &&
+            minutes >= 1 &&
+            minutes <= maximumWorkMinutes,
+        `Invocation work minutes must be an integer from 1 to ${maximumWorkMinutes}, or unlimited`,
     );
     return minutes * 60000 + cleanupReserveMs;
 }
@@ -353,6 +371,15 @@ export function benchmarkConfiguration(settings) {
             : { modelName: settings.modelName }),
         endpointHash: digest(settings.endpoint),
         requestConstraints: settings.requestConstraints,
+    };
+}
+
+export function benchmarkProviderConfiguration(client) {
+    return {
+        ...benchmarkConfiguration(client.openai.getChatModelSettings()),
+        poolMembers: client.openai
+            .getChatModelPool()
+            .members.map(({ settings }) => benchmarkConfiguration(settings)),
     };
 }
 
@@ -662,8 +689,7 @@ async function runWorker(spec) {
     const client = await load("packages\\aiclient\\dist\\index.js");
     config.loadConfigSync();
     client.initRuntimeConfigFromProcessEnv();
-    const settings = client.openai.getChatModelSettings();
-    const configuration = benchmarkConfiguration(settings);
+    const configuration = benchmarkProviderConfiguration(client);
     assertPilotProviderConfiguration(spec, client, config, configuration);
     if (seeded)
         assert.deepEqual(
@@ -687,7 +713,14 @@ async function runWorker(spec) {
                   Math.max(1, attempt.workDeadlineEpochMs - Date.now()),
               );
     let role = "benchmark-startup";
-    const restoreObserver = observeProvider(state.providerRequests, () => role);
+    const { currentSearchTraceId } = await load(
+        "packages\\knowPro\\dist\\index.js",
+    );
+    const restoreObserver = observeProvider(
+        state.providerRequests,
+        () => role,
+        currentSearchTraceId,
+    );
     let serviceStore = path.join(spec.runDirectory, "isolated-store");
     const openService = (root) =>
         createBenchmarkMemoryService(load, root, (receipt) =>

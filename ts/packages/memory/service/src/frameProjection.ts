@@ -89,11 +89,28 @@ export const builtinFrameSchemas = [
         incident: string,
         capacity: string,
     }),
-    schema("project.owner", {
-        responsibility: string,
-        state: string,
-        owner: string,
-    }),
+    schema(
+        "project.owner",
+        {
+            responsibility: {
+                ...string,
+                description:
+                    "Label of the work or responsibility, not its assignment state",
+            },
+            state: {
+                ...string,
+                description:
+                    'Assignment state: "known", "unknown", or "unassigned". Use state to find unassigned responsibilities.',
+            },
+            owner: {
+                ...string,
+                description:
+                    "Name of the assigned person; absent or null when no owner is known. Assignment states are not owner names.",
+            },
+        },
+        "Project responsibilities and owner assignment states",
+        2,
+    ),
     schema("project.milestone", {
         status: string,
         date: { type: "calendar", optional: true },
@@ -201,52 +218,57 @@ function retainedSourceEventRows(
 ): df.FrameRow[] {
     const rows: df.FrameRow[] = [];
     const events: unknown = Reflect.get(agent, "events");
-    if (Array.isArray(events)) {
-        for (const event of events) {
-            if (
-                !event ||
-                typeof event !== "object" ||
-                typeof event.id !== "string" ||
-                typeof event.kind !== "string"
-            )
-                throw new Error("Invalid retained agent frame event");
-            const record: df.FrameRow["values"] = {
-                eventId: event.id,
-                kind: event.kind,
-                authority: "producerReported",
+    if (!Array.isArray(events)) return rows;
+    for (const event of events) {
+        if (
+            !event ||
+            typeof event !== "object" ||
+            typeof event.id !== "string" ||
+            typeof event.kind !== "string"
+        )
+            throw new Error("Invalid retained agent frame event");
+        const record: df.FrameRow["values"] = {
+            eventId: event.id,
+            kind: event.kind,
+            authority: "producerReported",
+        };
+        for (const key of [
+            "role",
+            "agentId",
+            "taskId",
+            "turnId",
+            "callId",
+            "outcome",
+            "sessionId",
+        ] as const)
+            if (typeof event[key] === "string") record[key] = event[key];
+        if (
+            !record.sessionId &&
+            typeof Reflect.get(agent, "sessionId") === "string"
+        )
+            record.sessionId = Reflect.get(agent, "sessionId");
+        for (const key of ["repository", "commit", "environment"] as const)
+            if (values[key] !== undefined) record[key] = values[key];
+        const timestamp = time(event.timestamp, "instant");
+        if (timestamp !== undefined) record.timestamp = timestamp;
+        const span: unknown = Reflect.get(event, "span");
+        const evidence = retainedEventEvidence(
+            source,
+            span,
+            event.text,
+            retainedText,
+        );
+        const projected: df.FrameRow = {
+            ...row("source.event", event.id, record, true, evidence),
+            origin: "source",
+            granularity: evidence.length ? "record" : "source",
+        };
+        if (event.outcome === "unknown")
+            projected.valueStates = {
+                ...projected.valueStates,
+                outcome: "unknown",
             };
-            for (const key of [
-                "role",
-                "agentId",
-                "taskId",
-                "turnId",
-                "callId",
-                "outcome",
-                "sessionId",
-            ] as const)
-                if (typeof event[key] === "string") record[key] = event[key];
-            if (
-                !record.sessionId &&
-                typeof Reflect.get(agent, "sessionId") === "string"
-            )
-                record.sessionId = Reflect.get(agent, "sessionId");
-            for (const key of ["repository", "commit", "environment"] as const)
-                if (values[key] !== undefined) record[key] = values[key];
-            const timestamp = time(event.timestamp, "instant");
-            if (timestamp !== undefined) record.timestamp = timestamp;
-            const span: unknown = Reflect.get(event, "span");
-            const evidence = retainedEventEvidence(
-                source,
-                span,
-                event.text,
-                retainedText,
-            );
-            rows.push({
-                ...row("source.event", event.id, record, true, evidence),
-                origin: "source",
-                granularity: evidence.length ? "record" : "source",
-            });
-        }
+        rows.push(projected);
     }
     return rows;
 }

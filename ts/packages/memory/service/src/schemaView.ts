@@ -347,7 +347,9 @@ export function independentSupport(
 ): number | undefined {
     const known = candidate.support.filter(
         (support) =>
-            support.independenceKey && support.derivedFrom.length === 0,
+            support.role !== "chronology" &&
+            support.independenceKey &&
+            support.derivedFrom.length === 0,
     );
     return known.length
         ? new Set(
@@ -369,11 +371,19 @@ function eligibleCandidate(
             candidate.review === "confirmed") &&
         (candidate.origin === "user" ||
             !slot.rubric.authoritySourceIds.length ||
-            candidate.citations.some((citation) =>
+            valueCitations(candidate).some((citation) =>
                 slot.rubric.authoritySourceIds.includes(citation.sourceId),
             )) &&
         (!slot.rubric.requireConfirmation || candidate.review === "confirmed")
     );
+}
+
+function valueCitations(candidate: AnswerCandidate): ViewCitation[] {
+    return candidate.support.some((support) => support.role !== undefined)
+        ? candidate.support
+              .filter((support) => support.role !== "chronology")
+              .map((support) => support.citation)
+        : candidate.citations;
 }
 
 function candidateEffectiveTime(
@@ -383,10 +393,11 @@ function candidateEffectiveTime(
     const times = candidate.support
         .filter(
             (support) =>
-                !slot.rubric.authoritySourceIds.length ||
-                slot.rubric.authoritySourceIds.includes(
-                    support.citation.sourceId,
-                ),
+                support.role !== "value" &&
+                (!slot.rubric.authoritySourceIds.length ||
+                    slot.rubric.authoritySourceIds.includes(
+                        support.citation.sourceId,
+                    )),
         )
         .flatMap((support) => {
             const time = chronologyTime(support);
@@ -559,7 +570,7 @@ export function questionBody(
         `Answer state: ${details.answerState}; review: ${details.reviewState}; maintenance freshness: ${details.freshness}.`,
         ...(selected.some((candidate) => candidate.origin !== "user")
             ? [
-                  "Retained-source answers report historical observations only, not verified present-day status. Maintenance freshness is not evidence that a past observation remains true today.",
+                  "Retained-source answers report what the cited sources state, not independent verification of events or present-day status. Factual, tentative and illustrative scope must be preserved. Maintenance freshness is not evidence that a source claim is true today.",
               ]
             : []),
         ...(slot.cardinality === "collection"
@@ -585,12 +596,23 @@ function candidateTemporalContext(candidate: AnswerCandidate): string {
         ...new Set(
             observations.map((observation) =>
                 observation.localChronology
-                    ? `${observation.localChronology.timestamp} (local chronology: ${observation.localChronology.scope}; timezone unspecified)`
-                    : (observation.effectiveAt ?? "unknown observation time"),
+                    ? `Source-local chronology anchor (report ordering only, not occurrence/effective or turn-level time): ${observation.localChronology.timestamp} (local chronology: ${observation.localChronology.scope}; timezone unspecified)`
+                    : `Occurrence/effective chronology: ${observation.effectiveAt ?? "unknown occurrence/effective time"}`,
             ),
         ),
     ];
-    return `Source observation times: ${times.join("; ")}.\n`;
+    const recordedDates = [
+        ...new Set(
+            candidate.support.flatMap((support) =>
+                support.sourceRecordedDate ? [support.sourceRecordedDate] : [],
+            ),
+        ),
+    ];
+    return `${times.join(".\n")}.\n${
+        recordedDates.length
+            ? `Source recording dates (not occurrence dates; no timezone inferred): ${recordedDates.join("; ")}.\n`
+            : "Source recording date is not bound in this candidate; an unknown occurrence time does not establish that the source is undated.\n"
+    }`;
 }
 
 export function questionSection(
@@ -722,6 +744,8 @@ function validateCandidateSupport(candidate: AnswerCandidate): void {
             support,
             [
                 "citation",
+                "role",
+                "sourceRecordedDate",
                 "independenceKey",
                 "assertionOwner",
                 "effectiveAt",
@@ -736,15 +760,92 @@ function validateCandidateSupport(candidate: AnswerCandidate): void {
             )
         )
             throw new Error("Support must reference a candidate citation");
+        if (
+            support.role !== undefined &&
+            !["value", "chronology", "valueAndChronology"].includes(
+                support.role,
+            )
+        )
+            throw new Error("Invalid candidate support role");
         uniqueStrings(support.derivedFrom, "support derivation");
         if (support.effectiveAt !== undefined)
             validateIsoTimestamp("support effective time", support.effectiveAt);
         validateLocalChronology(support);
+        if (support.sourceRecordedDate !== undefined)
+            validateSourceRecordedDate(support.sourceRecordedDate);
         if (support.independenceKey !== undefined)
             boundedText(support.independenceKey, "Independence key", 200);
         if (support.assertionOwner !== undefined)
             boundedText(support.assertionOwner, "Assertion owner", 200);
     }
+    if (candidate.support.some((support) => support.role !== undefined))
+        validateExplicitSupport(candidate);
+}
+
+function validateExplicitSupport(candidate: AnswerCandidate): void {
+    const values = valueCitations(candidate);
+    if (
+        !values.length ||
+        candidate.support.some((support) => support.role === undefined)
+    )
+        throw new Error(
+            "Explicit support requires factual bindings without mixed legacy roles",
+        );
+    for (const support of candidate.support) {
+        const hasTime =
+            support.sourceRecordedDate !== undefined ||
+            support.effectiveAt !== undefined ||
+            support.localChronology !== undefined;
+        if (support.role === "value" && hasTime)
+            throw new Error(
+                "Chronology metadata requires a chronology support role",
+            );
+        if (
+            support.role !== "value" &&
+            !values.some(
+                (value) =>
+                    viewSourceKey(value) === viewSourceKey(support.citation),
+            )
+        )
+            throw new Error(
+                "Chronology must bind to factual support from the same source revision",
+            );
+    }
+    if (
+        candidate.citations.some(
+            (citation) =>
+                !candidate.support.some(
+                    (support) =>
+                        viewHash(citation) === viewHash(support.citation),
+                ),
+        )
+    )
+        throw new Error(
+            "Every explicit candidate citation requires a support role",
+        );
+    if (
+        (candidate.effectiveAt || candidate.localChronology) &&
+        !candidate.support.some(
+            (support) =>
+                support.role !== "value" &&
+                viewHash([support.effectiveAt, support.localChronology]) ===
+                    viewHash([
+                        candidate.effectiveAt,
+                        candidate.localChronology,
+                    ]),
+        )
+    )
+        throw new Error(
+            "Candidate chronology requires matching explicit support",
+        );
+}
+
+export function validateSourceRecordedDate(
+    value: unknown,
+): asserts value is string {
+    if (typeof value !== "string" || !/^\d{4}-\d\d-\d\d$/.test(value))
+        throw new Error("Invalid source recording date");
+    validateIsoTimestamp("source recording date", `${value}T00:00:00Z`);
 }
 
 function validateLocalChronology(

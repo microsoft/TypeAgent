@@ -16,6 +16,10 @@ export interface RequestConstraintReceipt {
     inputTokens: number;
     outputTokens: number;
     safetyTokens: number;
+    /** Declared provider ceilings, not measured usage or inferred model defaults. */
+    declaredLimits?: Readonly<
+        Pick<ModelRequestConstraints, "inputTokens" | "contextTokens">
+    >;
 }
 
 function tokenUpperBound(text: string): number {
@@ -108,5 +112,17 @@ export function checkSerializedRequestConstraints(
         inputTokens,
         outputTokens,
         safetyTokens: chat || decision ? safetyTokens : 0,
+        ...(constraints
+            ? {
+                  declaredLimits: {
+                      ...(constraints.inputTokens !== undefined
+                          ? { inputTokens: constraints.inputTokens }
+                          : {}),
+                      ...(constraints.contextTokens !== undefined
+                          ? { contextTokens: constraints.contextTokens }
+                          : {}),
+                  },
+              }
+            : {}),
     };
 }
