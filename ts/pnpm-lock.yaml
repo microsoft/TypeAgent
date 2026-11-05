@@ -6,6 +6,8 @@ settings:
 
 overrides:
   '@azure/core-xml': '>=1.5.0 <2.0.0'
+  '@azure/identity': '>=4.13.1 <5.0.0'
+  '@azure/msal-browser': '>=5.25.1 <6.0.0'
   '@huggingface/transformers@3>sharp': '>=0.35.4 <0.36.0'
   express>path-to-regexp: 0.1.13
   fast-xml-parser: '>=5.5.7 <6.0.0'
@@ -178,7 +180,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@26.6.5)(ts-node@10.9.2(@types/node@26.6.5)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@26.6.5)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -853,10 +855,10 @@ importers:
     dependencies:
       '@azure/ai-projects':
         specifier: ^2.2.0
-        version: 2.2.0(ws@8.22.0)(zod@3.25.76)
+        version: 2.2.0(ws@8.21.3)(zod@3.25.76)
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.14.0
       '@typeagent/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/typeagent
@@ -1746,8 +1748,8 @@ importers:
   packages/agentServer/server:
     dependencies:
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.14.0
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
@@ -1861,8 +1863,8 @@ importers:
   packages/agents/agentUtils/graphUtils:
     dependencies:
       '@azure/identity':
-        specifier: ^4.9.1
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.14.0
       '@azure/identity-broker':
         specifier: ^1.4.0
         version: 1.4.0
@@ -1874,7 +1876,7 @@ importers:
         version: 1.2.0
       '@microsoft/microsoft-graph-client':
         specifier: ^3.0.7
-        version: 3.0.7(@azure/identity@4.10.0)
+        version: 3.0.7(@azure/identity@4.14.0)
       '@typeagent/agent-runtime':
         specifier: workspace:*
         version: link:../../../typeagent
@@ -4021,8 +4023,8 @@ importers:
   packages/aiclient:
     dependencies:
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.14.0
       '@github/copilot-sdk':
         specifier: 1.0.13
         version: 1.0.13
@@ -4089,8 +4091,8 @@ importers:
         specifier: ^3.726.0
         version: 3.1004.0(@aws-sdk/client-s3@3.1004.0)
       '@azure/identity':
-        specifier: ^4.9.1
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.14.0
       '@azure/storage-blob':
         specifier: ^12.26.0
         version: 12.27.0
@@ -4180,8 +4182,8 @@ importers:
         specifier: ^2.2.0
         version: 2.2.0(ws@8.22.0)(zod@3.25.76)
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.14.0
       '@typeagent/agent-runtime':
         specifier: workspace:*
         version: link:../typeagent
@@ -4760,8 +4762,8 @@ importers:
   packages/config:
     dependencies:
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.14.0
       '@azure/keyvault-secrets':
         specifier: ^4.9.0
         version: 4.11.2
@@ -5197,8 +5199,8 @@ importers:
         specifier: ^4.2.1
         version: 4.9.1(@azure/core-client@1.10.1)
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.14.0
       '@github/copilot-sdk':
         specifier: 1.0.13
         version: 1.0.13
@@ -6327,8 +6329,8 @@ importers:
   packages/shell:
     dependencies:
       '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.14.0
       '@azure/msal-node-extensions':
         specifier: ^1.5.0
         version: 1.5.13
@@ -7222,8 +7224,8 @@ importers:
         specifier: ^9.0.0
         version: 9.0.0
       '@azure/identity':
-        specifier: ^4.9.1
-        version: 4.10.0
+        specifier: '>=4.13.1 <5.0.0'
+        version: 4.14.0
       '@azure/keyvault-certificates':
         specifier: ^4.9.0
         version: 4.10.3
@@ -7733,10 +7735,6 @@ packages:
     resolution: {integrity: sha512-ZYr6iiE6d/Tkt4jck0cQv9grZ1BR4u5LXJmB1vblU/WGIHspO6Bv3TJMvQat2sQSOG4Wz7busgg0pajP4gNJzA==}
     engines: {node: '>=18.0.0'}
 
-  '@azure/identity@4.10.0':
-    resolution: {integrity: sha512-iT53Sre2NJK6wzMWnvpjNiR3md597LZ3uK/5kQD2TkrY9vqhrY5bt2KwELNjkOWQ9n8S/92knj/QEykTtjMNqQ==}
-    engines: {node: '>=18.0.0'}
-
   '@azure/identity@4.14.0':
     resolution: {integrity: sha512-8utCLdTZn14CiAe0HW4JbtzUMsc0mdDwnjUvStFMrR4IxQP8S2eL9zVAdplpfORVJGYmidZElpeXRYjJQ4UyUw==}
     engines: {node: '>=22.0.0'}
@@ -7772,10 +7770,6 @@ packages:
   '@azure/maps-common@1.0.0-beta.2':
     resolution: {integrity: sha512-PB9GlnfojcQ4nf9WXdQvWeAk7gm8P74o+Z5IHz5YLK/W+3vrNrmVVVuFpGOvCPrLjag50UinaZsMBtPtxoiobg==}
     engines: {node: '>=14.0.0'}
-
-  '@azure/msal-browser@4.12.0':
-    resolution: {integrity: sha512-WD1lmVWchg7wn1mI7Tr4v7QPyTwK+8Nuyje3jRpOFENLRLEBsdK8VVdTw3C+TypZmYn4cOAdj3zREnuFXgvfIA==}
-    engines: {node: '>=0.8.0'}
 
   '@azure/msal-browser@5.25.1':
     resolution: {integrity: sha512-NDW2/bz2Pz71EJAlhSw+jg1kpRIWtrzj0gCzcHuG1u7iLvSOHpUc5lICkDA9x0bbeityxTneiunSBluvS+/y4w==}
@@ -14459,8 +14453,11 @@ packages:
   fast-levenshtein@3.0.0:
     resolution: {integrity: sha512-hKKNajm46uNmTlhHSyZkmToAc56uZJwYq7yrciZjqOxnlfQwERDQJmHPUp7m1m9wx8vgOe8IaCKZ5Kv2k1DdCQ==}
 
-  fast-uri@3.1.9:
-    resolution: {integrity: sha512-hS/0Wt3Ya043oKXs0sIxrMpKQITXhMLIrVAKKXi4gozGC9v7YRWVnXIZzjNPTO02M9BdxLCWqK1yRXgNziVyJQ==}
+  fast-uri@3.1.6:
+    resolution: {integrity: sha512-7Ical1vFEMr0onbVzEDIreM22I4khW+fzyQPwvAFWBp1iwdshSZRsL4jjRvPG9JP1uiqMHRto+YU6R2/CzDz5Q==}
+
+  fast-uri@3.1.8:
+    resolution: {integrity: sha512-GZMtZUTNRpOVIECoXwLNZS5xUGE+mVNbTB8h/7Rwh2TFWcBQiPzTgyZi05BF9UMZKkLJv8XBRJTlU7zg8+ZfMg==}
 
   fast-xml-builder@1.2.0:
     resolution: {integrity: sha512-00aAWieqff+ZJhsXA4g1g7M8k+7AYoMUUHF+/zFb5U6Uv/P0Vl4QZo84/IcufzYalLuEj9928bXN9PbbFzMF0Q==}
@@ -15814,6 +15811,9 @@ packages:
   jose@5.10.0:
     resolution: {integrity: sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==}
 
+  jose@6.2.12:
+    resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
+
   jose@6.2.13:
     resolution: {integrity: sha512-7TIg10ZE1x82YediN+lcrPNvGMKge9yFHQD+Qho/b8y2adfugU3AsvvHfxV0fzyFllT6l9xCjf4RWY9g/Z9PJQ==}
 
@@ -17003,10 +17003,6 @@ packages:
 
   onnxruntime-web@1.31.0-dev.20260914-8d85527a0:
     resolution: {integrity: sha512-Iy7rtadoBgxS/LLvDr3QW38DB1PNXRnr0GJMcL0TAt7c9qjgVQl83UlGCVyeAnK2InpmW8Uc3PL8XIuqtDeF6g==}
-
-  open@10.1.0:
-    resolution: {integrity: sha512-mnkeQ1qP5Ue2wd+aivTD3NHd/lZ96Lu0jgf0pwktLPtx6cTZiH7tyeGRRHs0zX0rbrahXPnXlUnbeXyaBBuIaw==}
-    engines: {node: '>=18'}
 
   open@10.1.2:
     resolution: {integrity: sha512-cxN6aIDPz6rm8hbebcP7vrQNhvRcveZoJU72Y7vskh4oIm+BZwBECnx5nTmrlres1Qapvx27Qo1Auukpf8PKXw==}
@@ -20594,6 +20590,27 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  '@azure/ai-projects@2.2.0(ws@8.21.3)(zod@3.25.76)':
+    dependencies:
+      '@azure-rest/core-client': 2.4.0
+      '@azure/abort-controller': 2.1.2
+      '@azure/core-auth': 1.10.1
+      '@azure/core-lro': 3.2.0
+      '@azure/core-paging': 1.6.2
+      '@azure/core-rest-pipeline': 1.22.2
+      '@azure/core-sse': 2.2.0
+      '@azure/core-tracing': 1.3.1
+      '@azure/core-util': 1.13.1
+      '@azure/identity': 4.14.0
+      '@azure/logger': 1.3.0
+      '@azure/storage-blob': 12.27.0
+      openai: 6.41.0(ws@8.21.3)(zod@3.25.76)
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+      - ws
+      - zod
+
   '@azure/ai-projects@2.2.0(ws@8.22.0)(zod@3.25.76)':
     dependencies:
       '@azure-rest/core-client': 2.4.0
@@ -20823,7 +20840,7 @@ snapshots:
   '@azure/identity-broker@1.4.0':
     dependencies:
       '@azure/core-auth': 1.10.1
-      '@azure/identity': 4.10.0
+      '@azure/identity': 4.14.0
       '@azure/msal-node': 5.2.0
       '@azure/msal-node-extensions': 5.5.2
       tslib: 2.8.1
@@ -20833,26 +20850,10 @@ snapshots:
   '@azure/identity-cache-persistence@1.2.0':
     dependencies:
       '@azure/core-auth': 1.9.0
-      '@azure/identity': 4.10.0
+      '@azure/identity': 4.14.0
       '@azure/msal-node': 3.5.3
       '@azure/msal-node-extensions': 1.5.32
       keytar: 7.9.0
-      tslib: 2.8.1
-    transitivePeerDependencies:
-      - supports-color
-
-  '@azure/identity@4.10.0':
-    dependencies:
-      '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.9.0
-      '@azure/core-client': 1.9.2
-      '@azure/core-rest-pipeline': 1.20.0
-      '@azure/core-tracing': 1.2.0
-      '@azure/core-util': 1.11.0
-      '@azure/logger': 1.2.0
-      '@azure/msal-browser': 4.12.0
-      '@azure/msal-node': 3.5.3
-      open: 10.1.0
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -20967,10 +20968,6 @@ snapshots:
       '@azure/core-rest-pipeline': 1.25.0
     transitivePeerDependencies:
       - supports-color
-
-  '@azure/msal-browser@4.12.0':
-    dependencies:
-      '@azure/msal-common': 15.6.0
 
   '@azure/msal-browser@5.25.1':
     dependencies:
@@ -23178,12 +23175,12 @@ snapshots:
     dependencies:
       '@chevrotain/types': 11.1.2
 
-  '@microsoft/microsoft-graph-client@3.0.7(@azure/identity@4.10.0)':
+  '@microsoft/microsoft-graph-client@3.0.7(@azure/identity@4.14.0)':
     dependencies:
       '@babel/runtime': 7.27.0
       tslib: 2.6.2
     optionalDependencies:
-      '@azure/identity': 4.10.0
+      '@azure/identity': 4.14.0
 
   '@microsoft/microsoft-graph-types@2.40.0': {}
 
@@ -26549,14 +26546,14 @@ snapshots:
   ajv@8.18.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.9
+      fast-uri: 3.1.6
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
   ajv@8.20.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.9
+      fast-uri: 3.1.8
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
@@ -27685,6 +27682,21 @@ snapshots:
   crc@3.8.0:
     dependencies:
       buffer: 5.7.1
+
+  create-jest@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@26.6.5)(typescript@5.4.5)):
+    dependencies:
+      '@jest/types': 29.6.3
+      chalk: 4.1.2
+      exit: 0.1.2
+      graceful-fs: 4.2.11
+      jest-config: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@26.6.5)(typescript@5.4.5))
+      jest-util: 29.7.0
+      prompts: 2.4.2
+    transitivePeerDependencies:
+      - '@types/node'
+      - babel-plugin-macros
+      - supports-color
+      - ts-node
 
   create-jest@29.7.0(@types/node@22.20.5)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5)):
     dependencies:
@@ -29186,7 +29198,9 @@ snapshots:
     dependencies:
       fastest-levenshtein: 1.0.16
 
-  fast-uri@3.1.9: {}
+  fast-uri@3.1.6: {}
+
+  fast-uri@3.1.8: {}
 
   fast-xml-builder@1.2.0:
     dependencies:
@@ -30561,6 +30575,25 @@ snapshots:
       - babel-plugin-macros
       - supports-color
 
+  jest-cli@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@26.6.5)(typescript@5.4.5)):
+    dependencies:
+      '@jest/core': 29.7.0(ts-node@10.9.2(@types/node@26.6.5)(typescript@5.4.5))
+      '@jest/test-result': 29.7.0
+      '@jest/types': 29.6.3
+      chalk: 4.1.2
+      create-jest: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@26.6.5)(typescript@5.4.5))
+      exit: 0.1.2
+      import-local: 3.2.0
+      jest-config: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@26.6.5)(typescript@5.4.5))
+      jest-util: 29.7.0
+      jest-validate: 29.7.0
+      yargs: 17.7.3
+    transitivePeerDependencies:
+      - '@types/node'
+      - babel-plugin-macros
+      - supports-color
+      - ts-node
+
   jest-cli@29.7.0(@types/node@22.20.5)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5)):
     dependencies:
       '@jest/core': 29.7.0(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
@@ -30617,6 +30650,37 @@ snapshots:
       - babel-plugin-macros
       - supports-color
       - ts-node
+
+  jest-config@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@26.6.5)(typescript@5.4.5)):
+    dependencies:
+      '@babel/core': 7.29.7
+      '@jest/test-sequencer': 29.7.0
+      '@jest/types': 29.6.3
+      babel-jest: 29.7.0(@babel/core@7.29.7)
+      chalk: 4.1.2
+      ci-info: 3.9.0
+      deepmerge: 4.3.1
+      glob: 7.2.3
+      graceful-fs: 4.2.11
+      jest-circus: 29.7.0
+      jest-environment-node: 29.7.0
+      jest-get-type: 29.6.3
+      jest-regex-util: 29.6.3
+      jest-resolve: 29.7.0
+      jest-runner: 29.7.0
+      jest-util: 29.7.0
+      jest-validate: 29.7.0
+      micromatch: 4.0.8
+      parse-json: 5.2.0
+      pretty-format: 29.7.0
+      slash: 3.0.0
+      strip-json-comments: 3.1.1
+    optionalDependencies:
+      '@types/node': 22.20.1
+      ts-node: 10.9.2(@types/node@26.6.5)(typescript@5.4.5)
+    transitivePeerDependencies:
+      - babel-plugin-macros
+      - supports-color
 
   jest-config@29.7.0(@types/node@22.20.5)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5)):
     dependencies:
@@ -31009,6 +31073,18 @@ snapshots:
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
+  jest@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@26.6.5)(typescript@5.4.5)):
+    dependencies:
+      '@jest/core': 29.7.0(ts-node@10.9.2(@types/node@26.6.5)(typescript@5.4.5))
+      '@jest/types': 29.6.3
+      import-local: 3.2.0
+      jest-cli: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@26.6.5)(typescript@5.4.5))
+    transitivePeerDependencies:
+      - '@types/node'
+      - babel-plugin-macros
+      - supports-color
+      - ts-node
+
   jest@29.7.0(@types/node@22.20.5)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5)):
     dependencies:
       '@jest/core': 29.7.0(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
@@ -31050,6 +31126,8 @@ snapshots:
   jju@1.4.0: {}
 
   jose@5.10.0: {}
+
+  jose@6.2.12: {}
 
   jose@6.2.13: {}
 
@@ -32647,13 +32725,6 @@ snapshots:
       onnxruntime-common: 1.31.0-dev.20260911-2a43ec07e
       platform: 1.3.6
       protobufjs: 7.6.5
-
-  open@10.1.0:
-    dependencies:
-      default-browser: 5.5.0
-      define-lazy-prop: 3.0.0
-      is-inside-container: 1.0.0
-      is-wsl: 3.1.1
 
   open@10.1.2:
     dependencies:
