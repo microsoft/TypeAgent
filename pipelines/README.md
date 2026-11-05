@@ -130,3 +130,40 @@ node --test tools\scripts\test\liveTestsPipeline.spec.mjs tools\scripts\test\smo
 These checks do not authenticate, fetch keys, call models, or validate Azure
 service-connection permissions. Azure-side validation and a real pipeline run
 remain rollout requirements.
+
+## GitHub build/test fan-out qualification
+
+This is an opt-in experiment, not a replacement for required checks or the full
+test matrix. It needs no Azure service connection or model keys.
+
+From GitHub Actions, manually run **build-ts** on the candidate branch with
+`fanout_experiment` checked, or use:
+
+```powershell
+gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <candidate-branch> -f fanout_experiment=true
+```
+
+The reusable `ci-fanout-experiment.yml` builds memory service and its dependency
+graph once on each of Ubuntu and Windows using Node 24.22.1. It uploads compiled
+`dist` outputs and a manifest containing the exact source SHA, lockfile hash,
+OS/architecture, Node/ABI, output hashes, and the complete Jest spec inventory.
+Dependencies and credential files are not uploaded.
+
+Fresh test runners install their own native dependencies, restore only matching
+outputs, verify the manifest, and run memory-service Jest specs without rebuilding.
+Four file-level shards and an unsharded control consume the same per-OS artifact.
+The experiment caps concurrent test runners at four; controls intentionally add
+qualification cost and are not proposed as permanent gating jobs.
+
+The final qualification rejects missing, failed, cancelled or skipped work,
+mixed artifacts, missing/duplicate test files, and differences between control
+and sharded assertion outcomes. Its summary reports test-process timings only;
+use job/step timings separately for build, dependency setup, artifact transfer,
+queue delay, and runner cost. One run is functional qualification, not proof of
+a 30-minute full merge gate or a statistically established speedup.
+
+Normal PR, main, merge-group, scheduled, and default manual `build-ts` behavior
+remains unchanged, including all supported Node versions and macOS coverage.
+This first experiment covers **memory service only**: other packages, root script
+phases, non-Jest adapters, retries and required-check migration are later work.
+Do not treat the experiment as equivalent full-repository coverage.
