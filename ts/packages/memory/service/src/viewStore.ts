@@ -140,6 +140,7 @@ export interface WikiFamilyState {
             reason: string;
             assessmentKey?: string;
             assessmentJobId?: string;
+            utilityEvidenceKey?: string;
         };
     }>;
 }

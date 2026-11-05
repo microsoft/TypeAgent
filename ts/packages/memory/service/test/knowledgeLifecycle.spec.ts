@@ -9,6 +9,8 @@ import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { hydrateSchemaAnswers } from "../src/schemaViewSynthesis.js";
 import type { ViewSynthesisAdapter } from "../src/viewTypes.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { createTopicSnapshot } from "../src/topicGeneration.js";
+import { indexedTopicOccurrence } from "../src/topicIncidence.js";
 
 test.each([
     { producerComplete: false, candidateCount: 45 },
@@ -185,6 +187,197 @@ test.each([
     90000,
 );
 
+test.each([
+    { builds: 1, topicFailure: false, changeSource: false },
+    { builds: 2, topicFailure: false, changeSource: false },
+    { builds: 2, topicFailure: true, changeSource: false },
+    { builds: 2, topicFailure: false, changeSource: true },
+])(
+    "checkpoint topic/page overlap builds=$builds failure=$topicFailure sourceChange=$changeSource",
+    async ({ builds, topicFailure, changeSource }) => {
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "memory-checkpoint-overlap-"),
+        );
+        const latch = () => {
+            let release!: () => void;
+            const promise = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            return { promise, release };
+        };
+        const wikiStarted = latch();
+        const topicStarted = latch();
+        const wikiGate = latch();
+        const topicGate = latch();
+        let topicEntered = false;
+        class OverlapIndex extends FakeSemanticCorpusIndex {
+            async listSubjects() {
+                return {
+                    total: 1,
+                    items: [
+                        {
+                            term: "Harbor rollout",
+                            postingCount: 1,
+                            sourceIds: ["source"],
+                        },
+                    ],
+                };
+            }
+            override async getKnowledgeGraph() {
+                return {
+                    entities: [],
+                    relationships: [],
+                    topics: [
+                        {
+                            name: "Harbor rollout",
+                            sourceIds: ["source"],
+                            mentionCount: 1,
+                        },
+                    ],
+                };
+            }
+            async readFragments() {
+                const document = this.documents[0];
+                return {
+                    fragments: [
+                        {
+                            sourceId: document.source.sourceId,
+                            revisionId: document.revision.revisionId,
+                            snippet: document.content,
+                            locator: `indexed:0:${document.revision.contentHash}:0-${document.content.length}`,
+                            score: 1,
+                        },
+                    ],
+                    readChars: document.content.length,
+                    limited: false,
+                };
+            }
+            async getTopicOccurrences() {
+                return this.documents.map((document) =>
+                    indexedTopicOccurrence(
+                        {
+                            sourceId: document.source.sourceId,
+                            revisionId: document.revision.revisionId,
+                            blockOrdinal: 0,
+                            text: document.content,
+                            score: 1,
+                        },
+                        "Harbor rollout",
+                        0,
+                    ),
+                );
+            }
+        }
+        const service = new FileMemoryService(root, {
+            maintenanceMode: "manual",
+            sourceSynopses: false,
+            maintenanceConcurrency: { builds },
+            indexFactory: (_corpusId, directory) => new OverlapIndex(directory),
+            viewSynthesisAdapter: {
+                identity: "offline-independent-topics",
+                generate: async () => {
+                    throw new Error("Sparse evidence must not generate prose");
+                },
+                validate: async () => {
+                    throw new Error("Sparse evidence must not validate prose");
+                },
+                assessWikiSubject: async (_input, _pages, signal) => {
+                    wikiStarted.release();
+                    await wikiGate.promise;
+                    signal.throwIfAborted();
+                    return {
+                        disposition: "defer",
+                        deferBasis: "evidence",
+                        purpose: "Passing reference",
+                        reason: "Insufficient standalone utility",
+                        canonicalViewId: "",
+                        sharedFragmentIds: [],
+                        essentialDistinctions: [],
+                        ambiguousViewIds: [],
+                    };
+                },
+                generateTopics: async (input, signal) => {
+                    topicEntered = true;
+                    topicStarted.release();
+                    await topicGate.promise;
+                    signal.throwIfAborted();
+                    if (topicFailure)
+                        throw new Error("TOPIC_ORGANIZATION_FAILED");
+                    return createTopicSnapshot(input, input.model);
+                },
+            },
+        });
+        try {
+            const { corpusId } = await service.createCorpus("Overlap");
+            const source = {
+                sourceId: "source",
+                sourceType: "text" as const,
+                title: "Harbor rollout",
+                text: "Harbor rollout is mentioned in passing.",
+            };
+            const ingest = await service.ingestDocument({ corpusId, source });
+            await waitForMemoryJob(service, ingest.jobId);
+            const checkpoint = await service.createKnowledgeCheckpoint({
+                corpusId,
+                families: ["wiki", "topics"],
+                producerComplete: true,
+                timeoutMs: 20000,
+            });
+            await wikiStarted.promise;
+            if (builds === 1) {
+                expect(topicEntered).toBe(false);
+                wikiGate.release();
+            }
+            await topicStarted.promise;
+            if (builds === 2) {
+                const jobs = await service.listViewBuilds(corpusId);
+                expect(
+                    jobs.filter((job) => job.state === "running"),
+                ).toHaveLength(2);
+            }
+            if (changeSource) {
+                const changed = await service.ingestDocument({
+                    corpusId,
+                    source: {
+                        ...source,
+                        text: "Harbor rollout now has a new scope.",
+                    },
+                });
+                await waitForMemoryJob(service, changed.jobId);
+            }
+            wikiGate.release();
+            topicGate.release();
+            const done = await service.waitForKnowledgeCheckpoint({
+                corpusId,
+                checkpointId: checkpoint.checkpointId,
+                timeoutMs: 20000,
+            });
+            expect(done.state).toBe(
+                changeSource ? "superseded" : topicFailure ? "failed" : "ready",
+            );
+            if (topicFailure)
+                expect(
+                    done.requiredFailures?.some(
+                        (failure) =>
+                            failure.family === "topics" &&
+                            failure.reasons.some((reason) =>
+                                reason.includes("TOPIC_ORGANIZATION_FAILED"),
+                            ),
+                    ),
+                ).toBe(true);
+            if (!changeSource && !topicFailure)
+                expect(done.jobIds).toHaveLength(2);
+            expect((await service.listViews(corpusId)).views).toEqual([]);
+        } finally {
+            wikiGate.release();
+            topicGate.release();
+            await service.close();
+            await rm(root, { recursive: true, force: true });
+        }
+    },
+    30000,
+);
+
 describe("source-only knowledge bootstrap lifecycle", () => {
     let root: string;
     let service: FileMemoryService;
@@ -311,6 +504,108 @@ describe("source-only knowledge bootstrap lifecycle", () => {
             timeoutMs: 15000,
         });
     }
+
+    test("failed required questions are actionable while independent topic work and ordinary waits continue", async () => {
+        await service.close();
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        let entered!: () => void;
+        const started = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        let topicCompleted = false;
+        class TopicIndex extends FakeSemanticCorpusIndex {
+            async getTopicOccurrences(sourceIds: ReadonlySet<string>) {
+                return this.documents
+                    .filter((document) =>
+                        sourceIds.has(document.source.sourceId),
+                    )
+                    .map((document) =>
+                        indexedTopicOccurrence(
+                            {
+                                sourceId: document.source.sourceId,
+                                revisionId: document.revision.revisionId,
+                                blockOrdinal: 0,
+                                text: document.content,
+                                score: 1,
+                            },
+                            "Harbor rollout",
+                            0,
+                        ),
+                    );
+            }
+        }
+        service = new FileMemoryService(root, {
+            maintenanceMode: "manual",
+            sourceSynopses: false,
+            viewSynthesisAdapter: {
+                ...adapter,
+                generate: async () => {
+                    throw new Error("QUESTION_SELECTION_FAILED");
+                },
+                generateTopics: async (input, signal) => {
+                    entered();
+                    await gate;
+                    signal.throwIfAborted();
+                    const snapshot = createTopicSnapshot(input, input.model);
+                    for (const node of snapshot.nodes) {
+                        node.summary = node.citations[0].excerpt;
+                        node.citations = node.citations.slice(0, 1);
+                        node.summaryState = "ready";
+                    }
+                    topicCompleted = true;
+                    return snapshot;
+                },
+            },
+            indexFactory: (_corpusId, directory) => new TopicIndex(directory),
+        });
+        try {
+            const { corpusId } = await ingest();
+            const checkpoint = await service.createKnowledgeCheckpoint({
+                corpusId,
+                families: ["questions", "topics"],
+                producerComplete: true,
+                timeoutMs: 15000,
+            });
+            const request = {
+                corpusId,
+                checkpointId: checkpoint.checkpointId,
+                timeoutMs: 15000,
+            };
+            const early = await service.waitForKnowledgeCheckpoint({
+                ...request,
+                failOnRequiredFailure: true,
+            });
+            expect(early.state).toBe("running");
+            expect(early.requiredFailures?.[0].family).toBe("questions");
+            expect(early.requiredFailures?.[0].reasons.join("; ")).toContain(
+                "QUESTION_SELECTION_FAILED",
+            );
+            await started;
+            let ordinaryReturned = false;
+            const ordinary = service
+                .waitForKnowledgeCheckpoint(request)
+                .then((value) => {
+                    ordinaryReturned = true;
+                    return value;
+                });
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            expect(ordinaryReturned).toBe(false);
+            expect(topicCompleted).toBe(false);
+            release();
+            const done = await ordinary;
+            expect(topicCompleted).toBe(true);
+            expect(done.state).toBe("failed");
+            expect(done.reasons.join("; ")).toContain(
+                "QUESTION_SELECTION_FAILED",
+            );
+            expect(done.requiredFailures?.[0].jobIds).toHaveLength(1);
+        } finally {
+            release();
+        }
+    });
 
     test("standalone ingestion defers discovery until the ingestion queue becomes idle", async () => {
         const corpus = await ingest("Hello.");
@@ -447,6 +742,31 @@ describe("source-only knowledge bootstrap lifecycle", () => {
         expect(checkpoint.state).toBe("ready");
         expect(checkpoint.excludedFamilies).toContain("topics");
         expect(checkpoint.jobIds).not.toContain(unrelated.jobId);
+    }, 30000);
+
+    test("a stale joined build cannot poison current successfully maintained questions", async () => {
+        const corpus = await ingest();
+        await prepare(corpus.corpusId);
+        const joined = structuredClone(
+            (await service.listViewBuilds(corpus.corpusId))[0],
+        );
+        joined.jobId = "superseded-prior-job";
+        joined.state = "running";
+        const finished = structuredClone(joined);
+        finished.state = "failed";
+        finished.results = finished.results.map((result) => ({
+            ...result,
+            state: "stale",
+            reason: "A newer question build superseded this job",
+        }));
+        service.listViewBuilds = async () => [joined];
+        const getViewBuild = service.getViewBuild.bind(service);
+        service.getViewBuild = async (request) =>
+            request.jobId === joined.jobId ? finished : getViewBuild(request);
+        const checkpoint = await prepare(corpus.corpusId);
+        expect(checkpoint.state).toBe("ready");
+        expect(checkpoint.requiredFailures).toBeUndefined();
+        expect(checkpoint.reasons).toEqual([]);
     }, 30000);
 
     test("checkpoint status pins maintained revisions and expires after a question edit", async () => {

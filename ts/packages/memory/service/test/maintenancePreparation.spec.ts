@@ -12,6 +12,8 @@ import type {
 
 test.each([
     { lanes: 1, mode: "ordered" },
+    { lanes: 3, mode: "ordered" },
+    { lanes: 3, mode: "stale" },
     { lanes: 4, mode: "ordered" },
     { lanes: 4, mode: "stale" },
     { lanes: 4, mode: "unchanged" },

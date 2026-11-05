@@ -5,6 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { readFileSync } from "node:fs";
+import { createTypeScriptJsonValidator } from "typechat/ts";
 import { dataFrame as df, type TemporalQueryContext } from "@typeagent/knowpro";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import {
@@ -14,6 +15,7 @@ import {
     viewFrameRows,
 } from "../src/frameProjection.js";
 import {
+    framePredicateTypeScript,
     validateFrameSourceProviders,
     type FrameSourceProvider,
 } from "../src/frameTypes.js";
@@ -44,6 +46,41 @@ const provider: FrameSourceProvider = {
     projections: [descriptor],
     authorize: async () => true,
 };
+test("frame translation schema admits only exact declared field IDs", () => {
+    const validator = createTypeScriptJsonValidator<df.FramePredicate>(
+        framePredicateTypeScript(descriptor.schema),
+        "FramePredicate",
+    );
+    expect(
+        validator.validate({
+            and: [{ fieldId: "duration", op: "gte", value: 30, unit: "ms" }],
+        }).success,
+    ).toBe(true);
+    expect(
+        validator.validate({
+            and: [
+                {
+                    fieldId: "measurements.performance.duration",
+                    op: "gte",
+                    value: 30,
+                    unit: "ms",
+                },
+            ],
+        }).success,
+    ).toBe(false);
+    const dotted = createTypeScriptJsonValidator<df.FramePredicate>(
+        framePredicateTypeScript({
+            ...descriptor.schema,
+            fields: { "value.city": { type: "string" } },
+        }),
+        "FramePredicate",
+    );
+    expect(
+        dotted.validate({
+            and: [{ fieldId: "value.city", op: "eq", value: "Dublin" }],
+        }).success,
+    ).toBe(true);
+});
 class ScopedIndex extends FakeSemanticCorpusIndex {
     public override async search(
         query: string,
@@ -248,6 +285,26 @@ describe("source dataframe lifecycle", () => {
         expect(header.values.authoredAt).toBeUndefined();
         denied.clear();
         expect((await query()).rows).toHaveLength(1);
+    });
+    test("unknown imported outcomes do not satisfy ordinary comparisons", async () => {
+        await ingest("reported-events", [], "Reported events", {
+            agentSession: {
+                sessionId: "session",
+                events: [
+                    { id: "missing", kind: "message", outcome: "unknown" },
+                    { id: "success", kind: "verification", outcome: "success" },
+                ],
+            },
+        });
+        const result = await service.queryFrame({
+            corpusId,
+            schemaId: "source.event",
+            schemaRevision: 1,
+            predicate: {
+                and: [{ fieldId: "outcome", op: "neq", value: "failure" }],
+            },
+        });
+        expect(result.rows.map((item) => item.itemKey)).toEqual(["success"]);
     });
     test("definition revisions add fields from retained payload without re-ingestion", async () => {
         await ingest("existing", [

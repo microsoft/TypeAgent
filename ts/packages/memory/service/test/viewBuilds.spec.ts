@@ -13,7 +13,10 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { FileMemoryService } from "../src/fileMemoryService.js";
+import {
+    FileMemoryService,
+    type FileMemoryServiceOptions,
+} from "../src/fileMemoryService.js";
 import { CorpusAccess } from "../src/corpusAccess.js";
 import { runMemoryViewsCli } from "../src/memoryViewsCli.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
@@ -370,8 +373,11 @@ describe("durable draft builds and explicit edit merge", () => {
         Promise<ViewSupportReport>,
         [ViewBuildSnapshot, ViewSynthesisOutput, AbortSignal]
     >;
-    const open = () =>
+    const open = (
+        sourceAuthorization?: FileMemoryServiceOptions["sourceAuthorization"],
+    ) =>
         new FileMemoryService(root, {
+            ...(sourceAuthorization ? { sourceAuthorization } : {}),
             informationalViews: false,
             discoveryPolicy: "off",
             indexFactory: (_id, directory) =>
@@ -506,6 +512,59 @@ describe("durable draft builds and explicit edit merge", () => {
             }),
         );
     }
+    test("replacement rebuild ignores unrelated inaccessible receipts but authorizes a deduplicated receipt", async () => {
+        const request = await fixture();
+        await service.close();
+        let authorized = true;
+        service = open(async () => authorized);
+        const prior = await wait(await service.buildViews(request));
+        const replacement = await service.ingestDocument({
+            corpusId: request.corpusId,
+            source: {
+                sourceId: "evidence",
+                sourceType: "text",
+                title: "Current synthetic diagnostic record",
+                text: "Inspect pressure. Preserve approval boundaries. No verified resolution. This record replaces the earlier diagnostic record.",
+            },
+        });
+        expect((await waitForMemoryJob(service, replacement.jobId)).state).toBe(
+            "complete",
+        );
+        await expect(service.getViewBuild(prior)).rejects.toThrow(
+            "Retained build receipt source bodies are not authorized",
+        );
+        const snapshot = await service.listViews(request.corpusId);
+        const next: ViewBuildRequest = {
+            ...request,
+            expectedHead: snapshot.head,
+            targets: [
+                {
+                    expectedVersion: snapshot.views[0].version,
+                    definition: {
+                        ...request.targets[0].definition,
+                        selector: {
+                            kind: "sources",
+                            sources: [
+                                {
+                                    sourceId: replacement.sourceId,
+                                    revisionId: replacement.revisionId,
+                                },
+                            ],
+                        },
+                    },
+                },
+            ],
+        };
+        const rebuilt = await wait(await service.buildViews(next));
+        expect(rebuilt.state).toBe("complete");
+        expect((await service.buildViews(next)).jobId).toBe(rebuilt.jobId);
+        expect(generate).toHaveBeenCalledTimes(2);
+        authorized = false;
+        await expect(service.buildViews(next)).rejects.toThrow(
+            "Retained build receipt source bodies are not authorized",
+        );
+        expect(generate).toHaveBeenCalledTimes(2);
+    });
     async function edit(view: ViewVersion, body: string): Promise<ViewVersion> {
         const content = structuredClone(
             view.content,

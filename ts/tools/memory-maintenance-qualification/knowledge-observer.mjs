@@ -20,6 +20,7 @@ export function abortableObservation(work, signal) {
 }
 
 export function knowledgeWaitOutcome(error, signal) {
+    if (error.code === "EKNOWLEDGENOTREADY") return "failed";
     if (signal.aborted) return "interrupted";
     return error.message ===
         "Timed out waiting for knowledge checkpoint; work continues"
@@ -27,8 +28,39 @@ export function knowledgeWaitOutcome(error, signal) {
         : "failed";
 }
 
+export function knowledgeReadinessError(checkpoint) {
+    const reasons = [
+        ...new Set([
+            ...checkpoint.reasons,
+            ...(checkpoint.requiredFailures ?? []).flatMap(
+                (failure) => failure.reasons,
+            ),
+        ]),
+    ];
+    const error = new Error(
+        `Knowledge is not ready: ${checkpoint.state}; ${reasons.join("; ")}`,
+    );
+    error.name = "KnowledgeNotReadyError";
+    error.code = "EKNOWLEDGENOTREADY";
+    if (checkpoint.requiredFailures?.length)
+        error.cause = structuredClone(checkpoint.requiredFailures);
+    return error;
+}
+
 function familyProgress(checkpoint, summary) {
     return (checkpoint.families ?? []).map((family) => {
+        const failures = checkpoint.requiredFailures?.filter(
+            (failure) => failure.family === family,
+        );
+        if (failures?.length)
+            return {
+                family,
+                state: "blocked",
+                evidence: "required-family-failure",
+                reason: failures
+                    .flatMap((failure) => failure.reasons)
+                    .join("; "),
+            };
         if (checkpoint.state === "ready")
             return { family, state: "complete", evidence: "checkpoint-ready" };
         const status =
@@ -62,7 +94,10 @@ export function checkpointObservation(checkpoint, summary) {
         observedEpochMs: Date.now(),
         checkpointUpdatedAt: checkpoint.updatedAt ?? null,
         durableState: checkpoint.state,
-        requiredCheckpointSatisfied: checkpoint.state === "ready",
+        requiredCheckpointSatisfied:
+            checkpoint.state === "ready" &&
+            !checkpoint.requiredFailures?.length,
+        requiredFailures: structuredClone(checkpoint.requiredFailures ?? []),
         completedFamilies: families
             .filter((entry) => entry.state === "complete")
             .map((entry) => entry.family),
@@ -132,7 +167,10 @@ export function createCheckpointObserver(service, record, controls) {
                 "Authoritative knowledge checkpoint is unavailable or changed",
             );
             if (stopped || signal.aborted) return;
-            if (service.listViewSummaries)
+            if (
+                service.listViewSummaries &&
+                !checkpoint.requiredFailures?.length
+            )
                 summary = await service.listViewSummaries({
                     corpusId: record.corpusId,
                     pageSize: 1,
@@ -169,7 +207,9 @@ export function createCheckpointObserver(service, record, controls) {
             staleAfterEpochMs: observedEpochMs + 60000,
             familyObservedEpochMs: summary ? Date.now() : null,
             active:
-                !settled && ["pending", "running"].includes(checkpoint.state),
+                !settled &&
+                !checkpoint.requiredFailures?.length &&
+                ["pending", "running"].includes(checkpoint.state),
         });
         try {
             await controls.persist();
@@ -183,7 +223,11 @@ export function createCheckpointObserver(service, record, controls) {
             });
             throw error;
         }
-        if (!["pending", "running"].includes(checkpoint.state)) settle();
+        if (
+            checkpoint.requiredFailures?.length ||
+            !["pending", "running"].includes(checkpoint.state)
+        )
+            settle();
     };
     const refresh = () => {
         tail = tail.then(read);

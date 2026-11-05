@@ -7,6 +7,7 @@ import type {
     ViewDefinitionInput,
     ViewVersion,
     ViewSourceSelector,
+    ViewSynthesisAdapter,
 } from "./viewTypes.js";
 import type {
     ViewMaintenanceDefinition,
@@ -151,6 +152,7 @@ export function resolveViewMaintenance(
     bounds: ViewBuildBounds,
     current?: ViewVersion,
     eventFingerprint?: string,
+    schemaRequestAdmission?: ViewSynthesisAdapter["schemaRequestAdmission"],
 ): ViewMaintenanceTargetPlan {
     validateMaintenanceDefinition(definition);
     const target = {
@@ -167,7 +169,12 @@ export function resolveViewMaintenance(
     const selected = sources
         .filter((source) => maintenanceScopeMatches(maintenance, source))
         .sort((a, b) => a.sourceId.localeCompare(b.sourceId));
-    const blocker = membershipBlocker(definition, maintenance, selected);
+    const blocker = membershipBlocker(
+        definition,
+        maintenance,
+        selected,
+        schemaRequestAdmission,
+    );
     if (blocker) return { ...target, state: "blocked", reason: blocker };
     const dependencies = selected.map((source) => {
         const revision = source.revisions.find(
@@ -254,10 +261,22 @@ export function resolveViewMaintenance(
     };
 }
 
+export function configuredSchemaAdmission(
+    definition: Pick<ViewDefinitionInput, "kind">,
+    admission: ViewSynthesisAdapter["schemaRequestAdmission"],
+): boolean {
+    return (
+        definition.kind === "schemaView" &&
+        admission?.kind === "configured-complete-request-v1" &&
+        typeof admission.validate === "function"
+    );
+}
+
 function membershipBlocker(
     definition: ViewDefinitionInput,
     maintenance: ViewMaintenanceDefinition,
     selected: MaintenanceSource[],
+    schemaRequestAdmission: ViewSynthesisAdapter["schemaRequestAdmission"],
 ): string | undefined {
     if (
         maintenance.scope.mode === "currentSources" &&
@@ -280,7 +299,8 @@ function membershipBlocker(
         revisions.reduce(
             (count, revision) => count + revision!.content.length,
             0,
-        ) > 120_000
+        ) > 120_000 &&
+        !configuredSchemaAdmission(definition, schemaRequestAdmission)
     )
         return "Complete input exceeds 120000 characters; no truncation";
     return undefined;

@@ -674,6 +674,13 @@ export interface ViewSupportReport {
 }
 export interface ViewSynthesisAdapter {
     identity: string;
+    /** Inspect complete configured schema-generation wire requests, without inference.
+     * Implementations must also inspect every schema audit and repair before dispatch.
+     */
+    schemaRequestAdmission?: {
+        kind: "configured-complete-request-v1";
+        validate(input: ViewBuildSnapshot): void | Promise<void>;
+    };
     repairSchemaAnswers?(
         input: ViewBuildSnapshot,
         output: ViewSynthesisOutput,
@@ -777,6 +784,7 @@ export interface WikiPagePurposeContext {
 }
 export interface WikiSubjectAssessment {
     disposition: "distinct" | "covered" | "contribute" | "ambiguous" | "defer";
+    deferBasis?: "evidence" | "canonical-context";
     purpose: string;
     reason: string;
     /** Empty for distinct/ambiguous; covered/contribute name a supplied current page. */

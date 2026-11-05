@@ -24,6 +24,7 @@ import {
     validateAnswerValue,
     validateQuestionSlot,
     validateSchemaViewDefinition,
+    validateSourceRecordedDate,
 } from "./schemaView.js";
 import {
     evidenceArray,
@@ -90,7 +91,13 @@ let corpusDiscoveryValidator:
     | ReturnType<typeof createTypeScriptJsonValidator<{ proposals: unknown[] }>>
     | undefined;
 
-export function schemaAnswerResponse(): StructuredOutputJsonSchema {
+export function schemaAnswerResponse(
+    input: ViewBuildSnapshot,
+): StructuredOutputJsonSchema {
+    const approvedIds = input.definition.schemaView?.slots
+        .filter((slot) => slot.approval === "approved")
+        .map((slot) => slot.id);
+    if (!approvedIds) throw new Error("Missing frozen schema definition");
     const refs = { type: "array", items: { type: "string" }, maxItems: 32 };
     return {
         name: "schema_view_answers",
@@ -100,11 +107,17 @@ export function schemaAnswerResponse(): StructuredOutputJsonSchema {
             properties: {
                 answers: {
                     type: "array",
-                    maxItems: schemaViewLimits.slots,
+                    minItems: approvedIds.length,
+                    maxItems: approvedIds.length,
                     items: {
                         type: "object",
                         properties: {
-                            slotId: { type: "string" },
+                            slotId: {
+                                type: "string",
+                                ...(approvedIds.length
+                                    ? { enum: approvedIds }
+                                    : {}),
+                            },
                             candidates: {
                                 type: "array",
                                 maxItems: schemaViewLimits.candidates,
@@ -113,6 +126,11 @@ export function schemaAnswerResponse(): StructuredOutputJsonSchema {
                                     properties: {
                                         valueJson: { type: "string" },
                                         effectiveAt: { type: "string" },
+                                        sourceRecordedDate: {
+                                            type: "string",
+                                            pattern:
+                                                "^(?:|\\d{4}-\\d{2}-\\d{2})$",
+                                        },
                                         localTimestamp: {
                                             type: "string",
                                             pattern:
@@ -123,14 +141,17 @@ export function schemaAnswerResponse(): StructuredOutputJsonSchema {
                                             maxLength: 200,
                                         },
                                         passageIds: refs,
+                                        chronologyPassageIds: refs,
                                         opposingPassageIds: refs,
                                     },
                                     required: [
                                         "valueJson",
                                         "effectiveAt",
+                                        "sourceRecordedDate",
                                         "localTimestamp",
                                         "localTimeScope",
                                         "passageIds",
+                                        "chronologyPassageIds",
                                         "opposingPassageIds",
                                     ],
                                     additionalProperties: false,
@@ -158,6 +179,7 @@ function citation({
 export function hydrateSchemaAnswers(
     input: ViewBuildSnapshot,
     raw: unknown,
+    requireEvidenceRoles = false,
 ): ViewSynthesisOutput {
     const schema = input.definition.schemaView;
     if (!schema) throw new Error("Missing frozen schema definition");
@@ -179,6 +201,11 @@ export function hydrateSchemaAnswers(
         )
     )
         throw new Error("Model answered a non-approved or unknown question");
+    if (
+        answers.length !==
+        schema.slots.filter((slot) => slot.approval === "approved").length
+    )
+        throw new Error("One answer is required for every approved slot");
     const sections = schema.slots.map((slot) => {
         const answer = answers.find((entry) => entry.slotId === slot.id);
         const candidates = evidenceArray(
@@ -193,6 +220,17 @@ export function hydrateSchemaAnswers(
             const citations = resolvePassages(raw.passageIds, passages).map(
                 citation,
             );
+            if (requireEvidenceRoles && raw.chronologyPassageIds === undefined)
+                throw new Error(
+                    "Explicit chronology passage bindings are required",
+                );
+            const chronologyCitations =
+                raw.chronologyPassageIds === undefined
+                    ? undefined
+                    : resolvePassages(
+                          evidenceArray(raw.chronologyPassageIds, 32),
+                          passages,
+                      ).map(citation);
             const opposingCitations = resolvePassages(
                 raw.opposingPassageIds,
                 passages,
@@ -211,44 +249,13 @@ export function hydrateSchemaAnswers(
                 typeof itemKey !== "string"
             )
                 throw new Error("Collection item has no stable identity");
-            if (typeof raw.effectiveAt !== "string")
-                throw new Error(
-                    "Candidate effective time is required, empty when unknown",
-                );
-            const effectiveAt = raw.effectiveAt || undefined;
-            const localTimestamp = raw.localTimestamp ?? "";
-            const localTimeScope = raw.localTimeScope ?? "";
-            if (
-                typeof localTimestamp !== "string" ||
-                typeof localTimeScope !== "string" ||
-                Boolean(localTimestamp) !== Boolean(localTimeScope) ||
-                (effectiveAt && localTimestamp)
-            )
-                throw new Error("Invalid candidate chronology binding");
-            const localChronology = localTimestamp
-                ? { timestamp: localTimestamp, scope: localTimeScope }
-                : undefined;
-            const support = citations.map((citation) => {
-                const source = input.inputs.find(
-                    (source) =>
-                        viewSourceKey(source) === viewSourceKey(citation),
-                )!;
-                return {
-                    citation,
-                    ...(effectiveAt ? { effectiveAt } : {}),
-                    ...(localChronology ? { localChronology } : {}),
-                    ...(source.assertionLineage?.owner
-                        ? { assertionOwner: source.assertionLineage.owner }
-                        : {}),
-                    ...(source.assertionLineage?.independenceKey
-                        ? {
-                              independenceKey:
-                                  source.assertionLineage.independenceKey,
-                          }
-                        : {}),
-                    derivedFrom: source.assertionLineage?.derivedFrom ?? [],
-                };
-            });
+            const time = answerChronology(raw);
+            const support = answerSupport(
+                input,
+                citations,
+                chronologyCitations,
+                time,
+            );
             return {
                 id: candidateIdentity(
                     candidateValue,
@@ -258,10 +265,15 @@ export function hydrateSchemaAnswers(
                 ...(typeof itemKey === "string" ? { itemKey } : {}),
                 origin: "source",
                 review: "unreviewed",
-                citations,
+                citations: dedup([
+                    ...citations,
+                    ...(chronologyCitations ?? []),
+                ]),
                 opposingCitations,
-                ...(effectiveAt ? { effectiveAt } : {}),
-                ...(localChronology ? { localChronology } : {}),
+                ...(time.effectiveAt ? { effectiveAt: time.effectiveAt } : {}),
+                ...(time.localChronology
+                    ? { localChronology: time.localChronology }
+                    : {}),
                 derivedFrom: [
                     ...new Set(support.flatMap((entry) => entry.derivedFrom)),
                 ],
@@ -343,8 +355,91 @@ export function hydrateSchemaAnswers(
     };
 }
 
+type AnswerChronology = Pick<
+    AnswerCandidate,
+    "effectiveAt" | "localChronology"
+> & {
+    sourceRecordedDate?: string;
+};
+
+function answerChronology(raw: Record<string, unknown>): AnswerChronology {
+    if (typeof raw.effectiveAt !== "string")
+        throw new Error(
+            "Candidate effective time is required, empty when unknown",
+        );
+    const effectiveAt = raw.effectiveAt || undefined;
+    const sourceRecordedDate =
+        raw.sourceRecordedDate === undefined ? "" : raw.sourceRecordedDate;
+    if (sourceRecordedDate !== "")
+        validateSourceRecordedDate(sourceRecordedDate);
+    const localTimestamp = raw.localTimestamp ?? "";
+    const localTimeScope = raw.localTimeScope ?? "";
+    if (
+        typeof localTimestamp !== "string" ||
+        typeof localTimeScope !== "string" ||
+        Boolean(localTimestamp) !== Boolean(localTimeScope) ||
+        (effectiveAt && localTimestamp)
+    )
+        throw new Error("Invalid candidate chronology binding");
+    return {
+        ...(effectiveAt ? { effectiveAt } : {}),
+        ...(sourceRecordedDate ? { sourceRecordedDate } : {}),
+        ...(localTimestamp
+            ? {
+                  localChronology: {
+                      timestamp: localTimestamp,
+                      scope: localTimeScope,
+                  },
+              }
+            : {}),
+    };
+}
+
+function answerSupport(
+    input: ViewBuildSnapshot,
+    values: ViewCitation[],
+    chronology: ViewCitation[] | undefined,
+    time: AnswerChronology,
+): AnswerCandidate["support"] {
+    if (chronology && Object.keys(time).length && !chronology.length)
+        throw new Error(
+            "Chronology metadata requires an explicit passage binding",
+        );
+    const valueIds = new Set(values.map(viewHash));
+    const chronologyIds = new Set(chronology?.map(viewHash));
+    return dedup([...values, ...(chronology ?? [])]).map((citation) => {
+        const isValue = valueIds.has(viewHash(citation));
+        const isChronology = chronologyIds.has(viewHash(citation));
+        const source = input.inputs.find(
+            (source) => viewSourceKey(source) === viewSourceKey(citation),
+        )!;
+        return {
+            citation,
+            ...(chronology
+                ? {
+                      role: isValue
+                          ? isChronology
+                              ? ("valueAndChronology" as const)
+                              : ("value" as const)
+                          : ("chronology" as const),
+                  }
+                : {}),
+            ...(!chronology || isChronology ? time : {}),
+            ...(source.assertionLineage?.owner
+                ? { assertionOwner: source.assertionLineage.owner }
+                : {}),
+            ...(source.assertionLineage?.independenceKey
+                ? { independenceKey: source.assertionLineage.independenceKey }
+                : {}),
+            derivedFrom: source.assertionLineage?.derivedFrom ?? [],
+        };
+    });
+}
+
 function mergeCandidateChronology(candidate: AnswerCandidate): void {
-    const supports = candidate.support;
+    const supports = candidate.support.filter(
+        (support) => support.role !== "value",
+    );
     delete candidate.effectiveAt;
     delete candidate.localChronology;
     const scopes = new Set(
@@ -481,6 +576,30 @@ export class CorpusDiscoveryRejection extends Error {
     }
 }
 
+export class CorpusDiscoveryContractRejection extends Error {
+    readonly diagnosticId: string;
+    readonly diagnosticCharacters: number;
+    #diagnostic: string;
+
+    constructor(
+        diagnostic: string,
+        public readonly proposalCount: number,
+    ) {
+        const diagnosticId = viewHash(diagnostic);
+        super(
+            `Corpus question discovery nested json: typed proposal validation failed (diagnostic ${diagnosticId}; ${diagnostic.length} characters)`,
+        );
+        this.name = "CorpusDiscoveryContractRejection";
+        this.diagnosticId = diagnosticId;
+        this.diagnosticCharacters = diagnostic.length;
+        this.#diagnostic = diagnostic;
+    }
+
+    repairDiagnostic(): string {
+        return this.#diagnostic;
+    }
+}
+
 export const corpusDiscoveryRules = `${schemaAuthoringRules}
 Discover reusable information worth maintaining from ORIGINAL passages, without an existing view or future query.
 Return exactly one outer JSON object {json:string}. Its json string must encode exactly one complete JSON array of {subject:string,reason:string,slot:QuestionSlot,passageIds:string[],utility:{consumerValue:number,substance:number,novelty:number,durability:number}}, NOT a view definition.
@@ -497,6 +616,7 @@ candidate rather than inventing a difference in schema or temporal policy.
 Subject must be a verbatim contiguous phrase in the title or excerpt of at least one of THAT proposal's cited passages. Case and punctuation may differ, but do not paraphrase, add possessives, expand names or combine words from different passages. Prefer a concrete domain entity, project, or topic phrase over bare conversational speaker labels such as "User" or "Assistant" whenever a specific phrase appears in the passage or title. Keep question text concise (at most 240 characters).
 Distribute proposals across distinct sources and subjects in the window rather than emitting multiple redundant slots from a single transcript.
 Identify stated properties, persistent projects/decisions, source-explicit unresolved decisions or defensibly keyed collections.
+Preserve factuality in question wording. A hypothetical or illustrative example does not establish actual user records or observed history. If an example has independent reusable value, a question may explicitly ask about that example; do not imply that its events actually happened.
 Do not invent generic profile questions or unknown fields merely because the source does not mention them.
 Use original passage IDs only. Do not supply answers, candidate values, citations, invented offsets or admission metadata.
 Existing contracts and rejected identities suppress equivalent proposals. Subject identity, property/event, cardinality and temporal intent matter more than wording.
@@ -528,8 +648,9 @@ export function parseCorpusQuestionDiscovery(
     );
     const typed = corpusDiscoveryValidator.validate({ proposals });
     if (!typed.success)
-        throw new Error(
-            "Corpus question discovery nested json: typed proposal validation failed",
+        throw new CorpusDiscoveryContractRejection(
+            typed.message,
+            proposals.length,
         );
     const identities = new Set(input.existingQuestions);
     const normalize = (text: string) =>

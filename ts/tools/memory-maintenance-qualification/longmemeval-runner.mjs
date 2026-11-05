@@ -3,15 +3,13 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import {
-    reconcileLiveSource,
-    validateLiveResumeSources,
-} from "./live-resume.mjs";
+import { validateLiveResumeSources } from "./live-resume.mjs";
 import {
     abortableObservation,
     checkpointObservation,
     createCheckpointObserver,
     knowledgeWaitOutcome,
+    knowledgeReadinessError,
 } from "./knowledge-observer.mjs";
 
 export const officialJudgeSha256 =
@@ -93,6 +91,299 @@ export function sessionSource(caseId, session) {
     };
 }
 
+export const historyBatchByteLimit = 8 * 1024 * 1024;
+
+export function historyBatchRequests(corpusId, plan, sources = []) {
+    const fingerprint = digest(
+        JSON.stringify(plan.map((entry) => entry.source)),
+    );
+    const requests = [];
+    let request;
+    for (const entry of plan) {
+        const document = {
+            source: {
+                ...entry.source,
+                sourceId:
+                    sources.find(
+                        (source) => source.canonicalUri === entry.canonicalUri,
+                    )?.sourceId ?? `longmemeval-${digest(entry.canonicalUri)}`,
+            },
+            pipeline: { updatePolicy: "skipIfUnchanged" },
+        };
+        const key = `history:${digest(entry.sourceKey)}`;
+        const next = () => ({
+            corpusId,
+            idempotencyKey: `longmemeval:${
+                requests.length
+                    ? digest(`${fingerprint}:${requests.length}`)
+                    : fingerprint
+            }`,
+            documentKeys: [key],
+            documents: [document],
+        });
+        const candidate = request && {
+            ...request,
+            documentKeys: [...request.documentKeys, key],
+            documents: [...request.documents, document],
+        };
+        if (
+            candidate &&
+            candidate.documents.length <= 50 &&
+            Buffer.byteLength(JSON.stringify(candidate)) <=
+                historyBatchByteLimit
+        ) {
+            request = candidate;
+            requests[requests.length - 1] = request;
+        } else {
+            request = next();
+            assert.ok(
+                Buffer.byteLength(JSON.stringify(request)) <=
+                    historyBatchByteLimit,
+                `History session ${entry.sourceKey} exceeds the durable batch 8 MB request limit`,
+            );
+            requests.push(request);
+        }
+    }
+    return { fingerprint, requests };
+}
+
+function activeHistoryBatch(batch) {
+    return ["running", "cancelling"].includes(batch.state);
+}
+
+function historyImportState(groups) {
+    if (groups.some(activeHistoryBatch)) return "running";
+    if (groups.some((group) => group.state === "pending")) return "pending";
+    if (groups.every((group) => group.state === "complete")) return "complete";
+    if (groups.length === 1) return groups[0].state;
+    return groups.every((group) =>
+        ["complete", "cancelled"].includes(group.state),
+    )
+        ? "cancelled"
+        : "partial";
+}
+
+async function pauseHistoryImport(signal) {
+    let timer;
+    try {
+        await abortableObservation(
+            new Promise((resolve) => {
+                timer = setTimeout(resolve, 250);
+            }),
+            signal,
+        );
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function cancelHistoryImports(service, groups, retain) {
+    const errors = [];
+    for (const [index, group] of groups.entries()) {
+        if (!activeHistoryBatch(group) || !group.batchId) continue;
+        try {
+            assert.equal(typeof service.cancelBatchImport, "function");
+            await retain(index, await service.cancelBatchImport(group.batchId));
+        } catch (error) {
+            errors.push(error);
+        }
+    }
+    return errors;
+}
+
+async function importHistory(service, construction, plan, record, controls) {
+    assert.equal(
+        typeof service.startBatchImport,
+        "function",
+        "Durable batch imports are unavailable",
+    );
+    assert.equal(
+        typeof service.getBatchImport,
+        "function",
+        "Durable batch status reads are unavailable",
+    );
+    const applied = await validateLiveResumeSources(
+        service,
+        record.corpusId,
+        plan,
+        record,
+        { allowUnacknowledgedSources: true },
+    );
+    if (applied === plan.length && !record.batchImport) return;
+    const { signal, persist } = controls;
+    signal.throwIfAborted();
+    controls.role(`ingestion:${construction.id}`);
+    const { fingerprint, requests } = historyBatchRequests(
+        record.corpusId,
+        plan,
+        await service.listSources(record.corpusId),
+    );
+    const retained = record.batchImport;
+    if (retained)
+        assert.equal(
+            retained.fingerprint,
+            fingerprint,
+            "Benchmark batch input changed",
+        );
+    const previous = retained?.batches ?? (retained?.batchId ? [retained] : []);
+    assert.ok(
+        previous.length <= requests.length,
+        "Benchmark batch groups changed",
+    );
+    const groups = requests.map((request, index) => {
+        const group = previous[index];
+        if (group?.idempotencyKey)
+            assert.equal(group.idempotencyKey, request.idempotencyKey);
+        return {
+            state: "pending",
+            members: [],
+            ...structuredClone(group),
+            idempotencyKey: request.idempotencyKey,
+            documentKeys: request.documentKeys,
+        };
+    });
+    const publish = async () => {
+        record.batchImport = {
+            ...(groups.length === 1 ? groups[0] : {}),
+            fingerprint,
+            state: historyImportState(groups),
+            members: structuredClone(groups.flatMap((group) => group.members)),
+            batches: structuredClone(groups),
+        };
+        const byKey = new Map(
+            groups.flatMap((group) =>
+                group.members.map((member) => [
+                    member.clientKey,
+                    { ...member, batchId: group.batchId },
+                ]),
+            ),
+        );
+        const actual = await service.listSources(record.corpusId);
+        for (const entry of plan.slice(record.operations.length)) {
+            const member = byKey.get(`history:${digest(entry.sourceKey)}`);
+            if (!member) break;
+            if (!["complete", "duplicate"].includes(member.state)) break;
+            const source = actual.find(
+                (item) => item.sourceId === member.sourceId,
+            );
+            assert.equal(source?.canonicalUri, entry.canonicalUri);
+            const revision = source.revisions.find(
+                (item) => item.revisionId === member.revisionId,
+            );
+            assert.equal(source.activeRevisionId, member.revisionId);
+            assert.equal(revision?.contentHash, entry.sha256);
+            assert.equal(
+                revision?.state,
+                "ready",
+                "Batch revision is not ready",
+            );
+            record.operations.push({
+                phase: entry.phase,
+                sourceKey: entry.sourceKey,
+                fixtureSha256: entry.sha256,
+                sourceId: member.sourceId,
+                revisionId: member.revisionId,
+                jobId: member.jobId,
+                batchId: member.batchId,
+                state: "complete",
+            });
+            record.mappings[entry.sourceKey] = {
+                sourceId: member.sourceId,
+                revisionId: member.revisionId,
+            };
+        }
+        delete record.inFlight;
+        await persist();
+    };
+    const retain = async (index, status) => {
+        const group = groups[index];
+        assert.equal(status.corpusId, record.corpusId);
+        assert.equal(status.members.length, requests[index].documents.length);
+        if (group.batchId) assert.equal(status.batchId, group.batchId);
+        const keys = new Set(status.members.map((member) => member.clientKey));
+        assert.equal(
+            keys.size,
+            group.documentKeys.length,
+            "Batch member keys changed",
+        );
+        for (const key of group.documentKeys)
+            assert.ok(keys.has(key), "Required batch member is missing");
+        Object.assign(group, structuredClone(status));
+        await publish();
+    };
+    const admit = async (index) => {
+        signal.throwIfAborted();
+        let batch = await service.startBatchImport(requests[index]);
+        await retain(index, batch);
+        signal.throwIfAborted();
+        if (
+            retained &&
+            ["partial", "failed", "cancelled", "interrupted"].includes(
+                batch.state,
+            )
+        ) {
+            assert.equal(
+                typeof service.retryBatchImport,
+                "function",
+                "Interrupted benchmark batch cannot be retried",
+            );
+            batch = await service.retryBatchImport(batch.batchId);
+            await retain(index, batch);
+        }
+    };
+    await publish();
+    signal.throwIfAborted();
+    try {
+        let next = 0;
+        while (next < requests.length || groups.some(activeHistoryBatch)) {
+            // Admit bounded groups before joining work; the service holds
+            // automatic maintenance while any of these imports is active.
+            while (
+                next < requests.length &&
+                groups.filter(activeHistoryBatch).length < 4
+            ) {
+                await admit(next++);
+            }
+            if (!groups.some(activeHistoryBatch)) continue;
+            await pauseHistoryImport(signal);
+            for (const [index, group] of groups.entries())
+                if (activeHistoryBatch(group))
+                    await retain(
+                        index,
+                        await service.getBatchImport(group.batchId),
+                    );
+            signal.throwIfAborted();
+        }
+        assert.equal(
+            record.batchImport.state,
+            "complete",
+            `Benchmark batch did not complete: ${record.batchImport.state}; ${record.batchImport.members
+                .filter(
+                    (member) =>
+                        !["complete", "duplicate"].includes(member.state),
+                )
+                .map(
+                    (member) =>
+                        `${member.clientKey}: ${member.state}: ${member.reason ?? ""}`,
+                )
+                .join("; ")}`,
+        );
+        assert.equal(record.operations.length, plan.length);
+    } catch (error) {
+        const cancellationErrors = await cancelHistoryImports(
+            service,
+            groups,
+            retain,
+        );
+        if (cancellationErrors.length)
+            throw new AggregateError(
+                [signal.aborted ? signal.reason : error, ...cancellationErrors],
+                "Benchmark batch cancellation could not be retained",
+            );
+        throw signal.aborted ? signal.reason : error;
+    }
+}
+
 async function prepareKnowledge(service, construction, record, controls) {
     if (!service.createKnowledgeCheckpoint) return;
     assert.equal(typeof service.waitForKnowledgeCheckpoint, "function");
@@ -129,7 +420,13 @@ async function prepareKnowledge(service, construction, record, controls) {
         waitController.signal,
     ]);
     const observed = observer?.done.then(
-        () => undefined,
+        () => {
+            if (!record.knowledgeCheckpoint.requiredFailures?.length)
+                return undefined;
+            const error = knowledgeReadinessError(record.knowledgeCheckpoint);
+            waitController.abort(error);
+            return error;
+        },
         (error) => {
             waitController.abort(error);
             return error;
@@ -148,6 +445,7 @@ async function prepareKnowledge(service, construction, record, controls) {
                     corpusId: record.corpusId,
                     checkpointId: record.knowledgeCheckpoint.checkpointId,
                     timeoutMs,
+                    failOnRequiredFailure: true,
                 }),
                 waitSignal,
             );
@@ -180,15 +478,18 @@ async function prepareKnowledge(service, construction, record, controls) {
             }
         }
         await controls.persist();
-        if (waitError) throw waitError;
-        if (record.knowledgeCheckpoint.state !== "ready") {
-            const error = new Error(
-                `Knowledge is not ready: ${record.knowledgeCheckpoint.state}; ${record.knowledgeCheckpoint.reasons.join("; ")}`,
-            );
-            error.name = "KnowledgeNotReadyError";
-            error.code = "EKNOWLEDGENOTREADY";
-            throw error;
+        if (waitError) {
+            if (record.knowledgeCheckpoint.requiredFailures?.length)
+                waitError.cause ??= knowledgeReadinessError(
+                    record.knowledgeCheckpoint,
+                );
+            throw waitError;
         }
+        if (
+            record.knowledgeCheckpoint.state !== "ready" ||
+            record.knowledgeCheckpoint.requiredFailures?.length
+        )
+            throw knowledgeReadinessError(record.knowledgeCheckpoint);
     } catch (error) {
         executionError = error;
         throw error;
@@ -277,52 +578,11 @@ export async function executeMemoryCase(
     record,
     controls,
 ) {
-    const { persist, signal, waitForMemoryJob, judge, role } = controls;
+    const { persist, signal, judge, role } = controls;
     const plan = construction.sessions.map((session) =>
         sessionSource(construction.id, session),
     );
-    const applied = await validateLiveResumeSources(
-        service,
-        record.corpusId,
-        plan,
-        record,
-    );
-    for (const entry of plan.slice(applied)) {
-        signal.throwIfAborted();
-        role(`ingestion:${construction.id}`);
-        const admitted = await reconcileLiveSource(
-            service,
-            record.corpusId,
-            entry,
-            record.mappings[entry.sourceKey],
-            entry.source,
-            true,
-        );
-        record.inFlight = {
-            phase: entry.phase,
-            sourceKey: entry.sourceKey,
-            fixtureSha256: entry.sha256,
-            ...admitted,
-        };
-        await persist();
-        const job = admitted.jobId
-            ? await waitForMemoryJob(service, admitted.jobId, {
-                  signal,
-              })
-            : admitted;
-        assert.equal(
-            job.state,
-            "complete",
-            `Benchmark ingestion did not complete: ${job.state}`,
-        );
-        record.operations.push({ ...record.inFlight, state: "complete" });
-        record.mappings[entry.sourceKey] = {
-            sourceId: admitted.sourceId,
-            revisionId: admitted.revisionId,
-        };
-        delete record.inFlight;
-        await persist();
-    }
+    await importHistory(service, construction, plan, record, controls);
     if (!record.hypothesis)
         await prepareKnowledge(service, construction, record, controls);
     const question = reader.question;

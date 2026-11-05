@@ -80,6 +80,14 @@ export type KnowledgeCheckpointState =
     | "failed"
     | "superseded"
     | "cancelled";
+export interface KnowledgeFamilyFailure {
+    family: KnowledgeFamily;
+    state: "failed" | "blocked";
+    reasons: string[];
+    viewIds: string[];
+    jobIds: string[];
+    observedAt: string;
+}
 export interface KnowledgeCheckpoint {
     version: 1;
     checkpointId: string;
@@ -98,6 +106,7 @@ export interface KnowledgeCheckpoint {
     discoveryFingerprints: string[];
     coverage: { inspectedSources: number; deferredSources: number };
     reasons: string[];
+    requiredFailures?: KnowledgeFamilyFailure[];
 }
 export interface KnowledgeCheckpointRead {
     corpusId: string;
@@ -105,6 +114,8 @@ export interface KnowledgeCheckpointRead {
 }
 export interface KnowledgeCheckpointWait extends KnowledgeCheckpointRead {
     timeoutMs?: number;
+    /** Return known required failures without cancelling independent maintenance. */
+    failOnRequiredFailure?: boolean;
 }
 export interface KnowledgeStatus {
     discovery: KnowledgeDiscoveryState;

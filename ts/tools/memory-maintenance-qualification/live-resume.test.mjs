@@ -97,6 +97,42 @@ test("a ready commit absent from the ledger is recovered without any ingestion",
     assert.equal(value.recovery, "ready-commit-without-ledger-acknowledgement");
 });
 
+test("batch resume accepts every planned unacknowledged source but rejects altered later members", async () => {
+    const plan = [
+        entry,
+        { ...entry, sourceKey: "second", canonicalUri: "fixture://two" },
+    ];
+    const sources = [
+        retained(),
+        {
+            ...retained(),
+            canonicalUri: plan[1].canonicalUri,
+            sourceId: "second",
+        },
+    ];
+    const service = { listSources: async () => sources };
+    const pending = { operations: [], mappings: {} };
+    await assert.rejects(
+        validateLiveResumeSources(service, "corpus", plan, pending),
+        /Unexpected retained source/,
+    );
+    assert.equal(
+        await validateLiveResumeSources(service, "corpus", plan, pending, {
+            allowUnacknowledgedSources: true,
+        }),
+        0,
+    );
+    sources[1].revisions = [
+        { revisionId: "revision", contentHash: "altered", state: "ready" },
+    ];
+    await assert.rejects(
+        validateLiveResumeSources(service, "corpus", plan, pending, {
+            allowUnacknowledgedSources: true,
+        }),
+        /Retained batch content changed/,
+    );
+});
+
 test("an in-flight revision waits for its existing paginated job without duplicating ingestion", async () => {
     const seen = [];
     const value = await reconcileLiveSource(
