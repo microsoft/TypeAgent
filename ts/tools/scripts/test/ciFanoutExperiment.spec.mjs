@@ -247,6 +247,12 @@ test("test runners install native dependencies but never rebuild shared product 
         "ubuntu-latest",
         "windows-latest",
     ]);
+    assert.match(
+        experiment.jobs.build.steps.find((step) =>
+            step.name?.startsWith("Build memory service"),
+        ).run,
+        /fluid-build.*-t build --dep$/,
+    );
     assert.deepEqual(experiment.jobs.test.strategy.matrix.group, [
         "1",
         "2",

@@ -45,7 +45,7 @@ jobs:
       - name: Install native dependencies for this runner
         run: pnpm install --frozen-lockfile --strict-peer-dependencies
       - name: Build memory service and its dependencies once
-        run: npm exec --no -- fluid-build "^@typeagent/memory-service$" -t build
+        run: npm exec --no -- fluid-build "^@typeagent/memory-service$" -t build --dep
       - name: Discover tests and fingerprint compiled outputs
         run: node tools/scripts/ciFanoutExperiment.mjs create
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
