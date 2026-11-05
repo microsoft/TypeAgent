@@ -240,7 +240,10 @@ including unused profiles. Selection never inherits another alias's fields.
 `TYPEAGENT_DEFAULT_EMBEDDING_MODEL` overrides selection and
 `TYPEAGENT_EMBEDDING_MODELS` supplies a JSON catalog layer. YAML, flat env, typed
 config, shim and importer preserve the full catalog, not just the selected entry.
-Do not combine a selector with legacy `embedding:` fields or
-`TYPEAGENT_EMBEDDING_*` single-model overrides: migrate those fields into a named
-definition and remove the old overrides. Provider connection settings may coexist.
+When a selector is set, legacy `embedding:` fields and
+`TYPEAGENT_EMBEDDING_*` single-model overrides produce a warning and do not affect
+the selected definition, including `none`. Migrate those fields into a named
+definition and remove the old overrides. Without a selector, legacy behavior is
+unchanged. Invalid catalogs and unknown selectors still fail explicitly.
+Provider connection settings may coexist.
 Switching the selected model requires a server restart.
