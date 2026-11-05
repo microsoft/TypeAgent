@@ -212,6 +212,12 @@ test("wiki prompt keeps retrieval identity independent of labels and separates p
         "Assess standalone admission even when no current pages exist",
     );
     expect(instructions).toContain("exact shared fragment IDs");
-    expect(instructions).toContain("actual page prose");
+    expect(instructions).toContain(
+        "Canonical page prose is supplied as ordered proseWitnesses",
+    );
+    expect(instructions).toContain("the host binds its exact text");
+    expect(instructions).toContain(
+        "Keep canonicalExcerpt empty in native output",
+    );
     expect(instructions).toContain("ALL essential distinctions");
 });
