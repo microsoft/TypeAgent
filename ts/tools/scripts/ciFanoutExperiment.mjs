@@ -136,6 +136,25 @@ export function verifyManifest(root, sha, manifest) {
     }
 }
 
+export function stageArtifact(root, manifest, directory) {
+    assert.ok(
+        !fs.existsSync(directory),
+        "Artifact staging directory must be new",
+    );
+    verifyManifest(root, manifest.sha, manifest);
+    fs.mkdirSync(directory, { recursive: true });
+    for (const file of manifest.files) {
+        const parts = outputPath(file.path);
+        const destination = path.join(directory, ...parts);
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        fs.copyFileSync(path.join(root, ...parts), destination);
+    }
+    fs.writeFileSync(
+        path.join(directory, manifestName),
+        JSON.stringify(manifest, null, 2),
+    );
+}
+
 export function qualify(reports, sha) {
     assert.equal(
         reports.length,
@@ -275,10 +294,11 @@ function main() {
         sha,
         "Checkout does not match the candidate SHA",
     );
-    const directory = path.join(
-        process.env.RUNNER_TEMP ?? root,
-        "fanout-results",
+    assert.ok(
+        process.env.RUNNER_TEMP,
+        "RUNNER_TEMP is required for CI artifacts",
     );
+    const directory = path.join(process.env.RUNNER_TEMP, "fanout-results");
     switch (process.argv[2]) {
         case "create": {
             const tests = JSON.parse(
@@ -295,9 +315,10 @@ function main() {
                 ),
             ).map((name) => portable(path.relative(root, name)));
             const manifest = createManifest(root, sha, tests);
-            fs.writeFileSync(
-                path.join(root, manifestName),
-                JSON.stringify(manifest, null, 2),
+            stageArtifact(
+                root,
+                manifest,
+                path.join(process.env.RUNNER_TEMP, "fanout-build"),
             );
             console.log(
                 `Discovered ${tests.length} test files; fingerprinted ${manifest.files.length} compiled outputs from ${sha}.`,

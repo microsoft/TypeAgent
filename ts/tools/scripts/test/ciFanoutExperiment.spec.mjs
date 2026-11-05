@@ -10,6 +10,7 @@ import yaml from "js-yaml";
 import {
     createManifest,
     verifyManifest,
+    stageArtifact,
     qualify,
 } from "../ciFanoutExperiment.mjs";
 
@@ -45,6 +46,39 @@ test("compiled manifest round-trips without dependencies or credential files", (
         assert.deepEqual(manifest.tests, [spec]);
         verifyManifest(root, sha, manifest);
     });
+});
+
+test("staged payload restores into a fresh consumer without dependency scanning", () => {
+    fixture((root) =>
+        fixture((consumer) => {
+            const manifest = createManifest(root, sha, [spec]);
+            const directory = path.join(consumer, "payload");
+            stageArtifact(root, manifest, directory);
+            assert.equal(
+                fs.existsSync(path.join(directory, "node_modules")),
+                false,
+            );
+            assert.equal(fs.existsSync(path.join(directory, ".npmrc")), false);
+            assert.deepEqual(
+                JSON.parse(
+                    fs.readFileSync(
+                        path.join(directory, "ci-fanout-manifest.json"),
+                        "utf8",
+                    ),
+                ),
+                manifest,
+            );
+            fs.copyFileSync(
+                path.join(root, "pnpm-lock.yaml"),
+                path.join(directory, "pnpm-lock.yaml"),
+            );
+            verifyManifest(directory, sha, manifest);
+            assert.throws(
+                () => stageArtifact(root, manifest, directory),
+                /must be new/,
+            );
+        }),
+    );
 });
 
 for (const key of ["sha", "platform", "arch", "node", "abi", "lockHash"]) {
@@ -252,6 +286,12 @@ test("test runners install native dependencies but never rebuild shared product 
             step.name?.startsWith("Build memory service"),
         ).run,
         /fluid-build.*-t build --dep$/,
+    );
+    assert.equal(
+        experiment.jobs.build.steps.find((step) =>
+            step.uses?.startsWith("actions/upload-artifact@"),
+        ).with.path,
+        "${{ runner.temp }}/fanout-build",
     );
     assert.deepEqual(experiment.jobs.test.strategy.matrix.group, [
         "1",

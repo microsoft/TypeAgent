@@ -147,6 +147,8 @@ The reusable `ci-fanout-experiment.yml` builds memory service and its dependency
 graph once on each of Ubuntu and Windows using Node 24.22.1. It uploads compiled
 `dist` outputs and a manifest containing the exact source SHA, lockfile hash,
 OS/architecture, Node/ABI, output hashes, and the complete Jest spec inventory.
+Only manifest-listed files are staged into a new runner-temp directory before
+upload, avoiding recursive artifact globs through workspace dependencies.
 Dependencies and credential files are not uploaded.
 
 Fresh test runners install their own native dependencies, restore only matching

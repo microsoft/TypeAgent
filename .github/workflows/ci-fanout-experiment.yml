@@ -51,10 +51,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fanout-build-${{ matrix.os }}-node24-${{ github.sha }}
-          path: |
-            ts/**/dist/**
-            !ts/**/node_modules/**
-            ts/ci-fanout-manifest.json
+          path: ${{ runner.temp }}/fanout-build
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
