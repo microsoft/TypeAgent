@@ -224,6 +224,8 @@ The companion has its own existing watchdog and work signal, with a five-minute
 cleanup reserve only for bounded runs. Failed attempts retain termination, observed responses and
 partial stores instead of claiming success. Provider requests that fail before
 a response can have unobserved usage/cost. The tool must not report that as zero.
+Ownership checks compare resolved directories, so a symlink or Windows junction
+to the same pilot directory is accepted; a different directory is not.
 
 ## Frame correctness and optional historical comparison
 

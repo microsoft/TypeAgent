@@ -120,7 +120,7 @@ export async function admitCompanion(spec, approval) {
         root,
         path.join(await realpath(spec.pilotDirectory), "companion-attempt"),
     );
-    assert.equal(owner.runDirectory, root);
+    assert.equal(await realpath(owner.runDirectory), root);
     assert.equal(owner.receiptId, spec.receiptId);
     const admittedEpochMs = Date.now();
     await writeNew(path.join(root, "admitted.json"), {

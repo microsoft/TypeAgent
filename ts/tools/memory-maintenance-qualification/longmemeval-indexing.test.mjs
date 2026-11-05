@@ -4,7 +4,14 @@
 import assert from "node:assert/strict";
 import { constants } from "node:buffer";
 import test from "node:test";
-import { mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import {
+    mkdir,
+    mkdtemp,
+    rm,
+    readFile,
+    symlink,
+    writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,6 +49,7 @@ import {
     verifyIndexingLifecycle,
 } from "./longmemeval-indexing-lifecycle.mjs";
 import {
+    admitCompanion,
     liveCancellation,
     recordCompanionWork,
     superviseCompanion,
@@ -959,22 +967,34 @@ test("companion startup failures retain sanitized accounting and restore the pro
     }));
 
 for (const workMinutes of [1, null]) {
-    test(`companion supervision verifies ownership with work minutes ${workMinutes}`, async () =>
-        temporary(async (root) => {
-            const approvalFile = path.join(root, "fixture-approval.json");
-            const approval = {
-                workMinutes,
-                unlimitedWorkApproved: workMinutes === null,
-            };
-            await writeFile(approvalFile, encode(approval));
-            const worker = path.join(root, "fixture-worker.mjs");
-            const executionModule = new URL(
-                "./longmemeval-indexing-execution.mjs",
-                import.meta.url,
-            ).href;
-            await writeFile(
-                worker,
-                `
+    for (const alias of [false, true]) {
+        test(`companion supervision verifies ownership with work minutes ${workMinutes} and directory alias ${alias}`, async () =>
+            temporary(async (root) => {
+                let pilotRoot = root;
+                if (alias) {
+                    const target = path.join(root, "pilot-target");
+                    await mkdir(target);
+                    pilotRoot = path.join(root, "pilot-alias");
+                    await symlink(
+                        target,
+                        pilotRoot,
+                        process.platform === "win32" ? "junction" : "dir",
+                    );
+                }
+                const approvalFile = path.join(root, "fixture-approval.json");
+                const approval = {
+                    workMinutes,
+                    unlimitedWorkApproved: workMinutes === null,
+                };
+                await writeFile(approvalFile, encode(approval));
+                const worker = path.join(root, "fixture-worker.mjs");
+                const executionModule = new URL(
+                    "./longmemeval-indexing-execution.mjs",
+                    import.meta.url,
+                ).href;
+                await writeFile(
+                    worker,
+                    `
 import { readFile } from "node:fs/promises";
 import { admitCompanion } from ${JSON.stringify(executionModule)};
 const spec = JSON.parse(await readFile(process.argv[3], "utf8"));
@@ -982,31 +1002,64 @@ const approval = JSON.parse(await readFile(spec.approvalFile, "utf8"));
 await admitCompanion(spec, approval);
 await new Promise(resolve => setTimeout(resolve, 200));
 `,
-            );
-            const pilot = { root, manifest: { checkpoint: { hashes: {} } } };
-            const outcome = await superviseCompanion(
-                pilot,
-                product,
-                approvalFile,
-                approval,
-                worker,
-            );
-            assert.equal(outcome.exit.code, 0);
-            assert.equal(outcome.phase, "admitted-work");
-            if (workMinutes === null)
-                assert.equal(outcome.workDeadlineEpochMs, null);
-            await assert.rejects(
-                superviseCompanion(
+                );
+                const pilot = {
+                    root: pilotRoot,
+                    manifest: { checkpoint: { hashes: {} } },
+                };
+                const outcome = await superviseCompanion(
                     pilot,
                     product,
                     approvalFile,
                     approval,
                     worker,
-                ),
-                { code: "EEXIST" },
-            );
-        }));
+                );
+                assert.equal(outcome.exit.code, 0);
+                assert.equal(outcome.phase, "admitted-work");
+                if (workMinutes === null)
+                    assert.equal(outcome.workDeadlineEpochMs, null);
+                await assert.rejects(
+                    superviseCompanion(
+                        pilot,
+                        product,
+                        approvalFile,
+                        approval,
+                        worker,
+                    ),
+                    { code: "EEXIST" },
+                );
+            }));
+    }
 }
+
+test("companion admission rejects ownership of a different directory", async () =>
+    temporary(async (root) => {
+        const directory = path.join(root, "companion-attempt");
+        await mkdir(directory);
+        const approval = { workMinutes: 1 };
+        const receiptId = "offline-ownership-fixture";
+        await writeFile(
+            path.join(directory, "ownership.json"),
+            encode({ receiptId, runDirectory: root }),
+        );
+        await assert.rejects(
+            admitCompanion(
+                {
+                    mode: "indexing-companion",
+                    authorizedLiveBenchmark: true,
+                    startupAllowanceMs: 120000,
+                    workAllowanceMs: 360000,
+                    resume: false,
+                    pilotDirectory: root,
+                    runDirectory: directory,
+                    approvalHash: digest(encode(approval)),
+                    receiptId,
+                },
+                approval,
+            ),
+            { code: "ERR_ASSERTION" },
+        );
+    }));
 
 test("pilot live commands reject absent authorization before loading provider configuration", async () =>
     temporary(async (root) => {
