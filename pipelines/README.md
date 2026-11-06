@@ -321,18 +321,22 @@ use job/step timings separately for build, dependency setup, artifact transfer,
 queue delay, and runner cost. One run is functional qualification, not proof of
 a 30-minute full merge gate or a statistically established speedup.
 
-### Ten-minute target
+### Measured duration and next targets
 
-Ten minutes is a target, not a result of this change. The last hosted baseline
-lasted 32m42s and failed on a native dependency download, skipping the memory
-matrix; it is not a successful full-coverage timing result. These graph changes
-remove measured cross-target waits of up to 7.17 minutes and isolate the
-10.20-13.28-minute Windows remainder package phases, but their new hosted
-makespan is still unmeasured. Cold build steps previously took 2.27-7.72 minutes;
-an earlier unsharded Windows memory control alone took about 17 minutes.
-Retained qualification controls and cold builds can exceed the ten-minute budget
-even after package balancing. Same-commit cache hits cannot establish new-commit
-cold-build performance.
+The successful Node 24/26 shard-only baseline completed in 18m09s
+([run 42272195529](https://github.com/microsoft/TypeAgent/actions/runs/42272195529)).
+An opt-in native-cache cold-population run passed in 20m34s; the populated-key
+17m55s follow-up failed memory tests and is not a qualified speedup.
+These six-target experiments do not establish a twenty-minute result for all
+nine production targets, nor for the separately required Azure/.NET checks.
+Full default-scope latency must be measured on the rollout commit.
+
+The immediate target is approximately twenty-minute TypeScript validation, with
+fifteen minutes as the next iteration. Prioritize producer compilation, repeated
+consumer setup and root/remainder tails before adding more runner nodes: more
+test shards do not shorten those serial stages. Historical cold builds alone
+took 2.27-7.72 minutes. Same-commit cache hits cannot establish new-commit
+cold-build performance, and additional runners can increase total CI cost.
 
 A ten-minute gate needs a measured budget such as at most one minute of
 queue/setup, three minutes building, five minutes in the slowest parallel test
@@ -344,13 +348,7 @@ All-required-check latency also depends on completing the separately gated
 Azure live-test cutover; shortening this workflow alone does not establish a
 ten-minute complete CI gate.
 
-The successful Node 24/26 shard-only baseline completed in 18m09s
-([run 42272195529](https://github.com/microsoft/TypeAgent/actions/runs/42272195529)).
-That six-target experiment does not establish a twenty-minute result for all
-nine production targets, nor for the separately required Azure/.NET checks.
-Full default-scope latency must be measured on the rollout commit. Fifteen
-minutes remains a follow-up goal: prioritize producer compilation, repeated
-consumer setup and root/remainder tails before adding more runner nodes.
+No tests are moved out of required validation by this rollout.
 
 ### Measuring complete CI duration
 
