@@ -18,6 +18,9 @@ on:
       build_cache:
         type: boolean
         default: false
+      native_cache:
+        type: boolean
+        default: false
       compact_artifact:
         type: boolean
         default: false
@@ -49,6 +52,7 @@ jobs:
       - uses: ./.github/actions/fanout-setup
         with:
           node-version: ${{ inputs.version }}
+          native-cache: ${{ inputs.native_cache }}
       - name: Build memory service and its test-time client once
         run: npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep
       - name: Discover tests and fingerprint compiled outputs
@@ -72,6 +76,7 @@ jobs:
       - uses: ./.github/actions/fanout-setup
         with:
           node-version: ${{ inputs.version }}
+          native-cache: ${{ inputs.native_cache }}
       - name: Compute exact-source build cache identity
         id: cache_identity
         if: inputs.build_cache
@@ -164,6 +169,7 @@ jobs:
       - uses: ./.github/actions/fanout-setup
         with:
           node-version: ${{ inputs.version }}
+          native-cache: ${{ inputs.native_cache }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: fanout-${{ inputs.compact_artifact && format('remainder-{0}', matrix.group) || 'workspace' }}-${{ inputs.os }}-${{ inputs.version }}-${{ github.sha }}
@@ -202,6 +208,7 @@ jobs:
       - uses: ./.github/actions/fanout-setup
         with:
           node-version: ${{ inputs.version }}
+          native-cache: ${{ inputs.native_cache }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: fanout-workspace-${{ inputs.os }}-${{ inputs.version }}-${{ github.sha }}
@@ -249,6 +256,7 @@ jobs:
       - uses: ./.github/actions/fanout-setup
         with:
           node-version: ${{ inputs.version }}
+          native-cache: ${{ inputs.native_cache }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: fanout-${{ inputs.compact_artifact && 'packages' || 'workspace' }}-${{ inputs.os }}-${{ inputs.version }}-${{ github.sha }}
@@ -280,6 +288,7 @@ jobs:
       - uses: ./.github/actions/fanout-setup
         with:
           node-version: ${{ inputs.version }}
+          native-cache: ${{ inputs.native_cache }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: fanout-build-${{ inputs.os }}-${{ inputs.version }}-${{ github.sha }}

@@ -15,6 +15,9 @@ on:
       build_cache:
         type: boolean
         default: false
+      native_cache:
+        type: boolean
+        default: false
       compact_artifact:
         type: boolean
         default: false
@@ -41,6 +44,7 @@ jobs:
       - uses: ./.github/actions/fanout-setup
         with:
           node-version: "24.22.1"
+          native-cache: ${{ inputs.native_cache }}
       - name: Check platform-independent formatting and lint once
         working-directory: ts
         run: npm run lint
@@ -57,6 +61,7 @@ jobs:
       version: ${{ matrix.version }}
       include_controls: ${{ inputs.include_controls }}
       build_cache: ${{ inputs.build_cache }}
+      native_cache: ${{ inputs.native_cache }}
       compact_artifact: ${{ inputs.compact_artifact }}
       artifact_compression: ${{ inputs.artifact_compression }}
 

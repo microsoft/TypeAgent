@@ -7,6 +7,9 @@ inputs:
   node-version:
     required: true
     description: Exact Node.js version
+  native-cache:
+    default: "false"
+    description: Reuse runtime-specific pnpm native build side effects
 runs:
   using: composite
   steps:
@@ -25,19 +28,48 @@ runs:
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: ${{ inputs.node-version }}
-        cache: pnpm
+        cache: ${{ inputs.native-cache != 'true' && 'pnpm' || '' }}
+        package-manager-cache: false
         cache-dependency-path: ts/pnpm-lock.yaml
+    - name: Identify runtime-specific native store
+      id: native_identity
+      if: inputs.native-cache == 'true'
+      shell: pwsh
+      working-directory: ts
+      run: |
+        if (!$env:ImageOS -or !$env:ImageVersion) { throw 'Hosted runner image identity is required for native caching.' }
+        $store = pnpm store path --silent
+        if ($LASTEXITCODE -ne 0) { throw 'Unable to identify the pnpm store.' }
+        "store=$store" >> $env:GITHUB_OUTPUT
+        node -e "console.log('abi=' + process.versions.modules)" >> $env:GITHUB_OUTPUT
+        if ($LASTEXITCODE -ne 0) { throw 'Unable to identify the Node ABI.' }
+    - name: Restore runtime-specific pnpm native build side effects
+      if: inputs.native-cache == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.native_identity.outputs.store }}
+        key: fanout-native-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node-${{ inputs.node-version }}-abi-${{ steps.native_identity.outputs.abi }}-${{ hashFiles('ts/package.json', 'ts/pnpm-lock.yaml', 'ts/pnpm-workspace.yaml', 'ts/.pnpmfile.cjs') }}
+        # Seed a miss from the existing package store; pnpm selects only matching runtime side effects.
+        restore-keys: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('ts/pnpm-lock.yaml') }}
     - name: Install native dependencies with bounded visible retries
       shell: pwsh
       working-directory: ts
       run: |
+        $nativeCache = '${{ inputs.native-cache }}' -eq 'true'
         for ($attempt = 1; $attempt -le 3; $attempt++) {
           $retryArgs = @()
-          if ($attempt -gt 1) { $retryArgs = @('--force') }
+          if ($attempt -gt 1) { $retryArgs = @('--force', '--no-side-effects-cache') }
+          elseif ($nativeCache) { $retryArgs = @('--side-effects-cache') }
           pnpm install --frozen-lockfile --strict-peer-dependencies @retryArgs
           $status = $LASTEXITCODE
+          $stage = 'Dependency installation'
+          if ($status -eq 0 -and $nativeCache) {
+            node tools/scripts/ciVerifyNativeRuntime.mjs
+            $status = $LASTEXITCODE
+            $stage = 'Node/Electron native runtime verification'
+          }
           if ($status -eq 0) { exit 0 }
-          if ($attempt -eq 3) { throw "Dependency installation exhausted 3 attempts; last exit code $status." }
-          Write-Output "::warning::Dependency installation attempt $attempt failed (exit $status). Retrying with a forced reimport and native rebuild."
+          if ($attempt -eq 3) { throw "${stage} exhausted 3 attempts; last exit code $status." }
+          Write-Output "::warning::${stage} attempt $attempt failed (exit $status). Retrying with a forced reimport and uncached native rebuild."
           Start-Sleep -Seconds (5 * $attempt)
         }

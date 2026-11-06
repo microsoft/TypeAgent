@@ -25,6 +25,10 @@ on:
         description: Trial exact-source compilation caching (fanout experiment only)
         type: boolean
         default: false
+      fanout_native_cache:
+        description: Trial runtime-specific pnpm native build reuse (fanout experiment only)
+        type: boolean
+        default: false
       fanout_compact_artifact:
         description: Trial dependency-closure package and remainder artifacts (fanout experiment only)
         type: boolean
@@ -65,6 +69,7 @@ jobs:
       node_set: ${{ inputs.fanout_node_set }}
       include_controls: ${{ inputs.fanout_include_controls }}
       build_cache: ${{ inputs.fanout_build_cache }}
+      native_cache: ${{ inputs.fanout_native_cache }}
       compact_artifact: ${{ inputs.fanout_compact_artifact }}
       artifact_compression: ${{ inputs.fanout_artifact_compression }}
 
