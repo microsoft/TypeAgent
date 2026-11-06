@@ -249,8 +249,8 @@ inventories, selected packages, artifact fingerprints and producer provenance.
 Refresh the seed from hosted logs or downloaded `.partition.json` reports:
 
 ```powershell
-node tools\scripts\ciPackagePartitions.mjs profile <source-run-id> <windows-log> <linux-log>
-node tools\scripts\ciWorkspaceLanes.mjs profile <source-run-id> <first-pass-windows-log> <first-pass-linux-log>
+pnpm run ci:node tools\scripts\ciPackagePartitions.mjs profile <source-run-id> <windows-log> <linux-log>
+pnpm run ci:node tools\scripts\ciWorkspaceLanes.mjs profile <source-run-id> <first-pass-windows-log> <first-pass-linux-log>
 ```
 
 Local Windows/Node 24 execution discovered 147 dispatcher and 61 provider files.
@@ -335,7 +335,18 @@ An opt-in native-cache cold-population run passed in 20m34s; the populated-key
 17m55s follow-up failed memory tests and is not a qualified speedup.
 These six-target experiments do not establish a twenty-minute result for all
 nine production targets, nor for the separately required Azure/.NET checks.
-Full default-scope latency must be measured on the rollout commit.
+The first nine-target [PR run 42297124484](https://github.com/microsoft/TypeAgent/actions/runs/42297124484)
+took 23m52s and failed two Node 22 memory cases and two Windows installer
+fixtures. Qualification and all nine compatibility checks correctly failed.
+Those failures are repaired in the follow-up candidate; successful full
+default-scope latency still requires hosted qualification.
+
+That diagnostic run's critical Windows/Node 22 workspace producer spent 183s in
+setup, 544s building and 62s in post-setup cache work. The final remainder
+consumer spent another 171s in setup and 317s in its test step. The memory
+MCP-server package accounted for 228.396s of first-pass process time in that
+lane. Profile its file-level distribution before further partitioning; adding
+whole-package lanes cannot subdivide that package.
 
 The immediate target is approximately twenty-minute TypeScript validation, with
 fifteen minutes as the next iteration. Prioritize producer compilation, repeated
