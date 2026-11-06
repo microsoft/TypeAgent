@@ -16,6 +16,8 @@ import { FakeIndexedCorpusIndex } from "./fakeIndexedCorpusIndex.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { ViewHistory } from "../src/viewHistory.js";
 import { EventSegmentStore } from "../src/eventSegmentStore.js";
+import type { CorpusAccess } from "../src/corpusAccess.js";
+import { settleConsolidation } from "./wikiConsolidationFixtures.js";
 
 const jest = import.meta.jest;
 let graphReads = 0;
@@ -296,6 +298,119 @@ describe("bounded corpus graph service", () => {
         expect(concepts.concepts?.some((item) => item.nodeId === node.id)).toBe(
             true,
         );
+    });
+    test("consolidation waits for active maintenance after build receipts settle", async () => {
+        const corpusId = await corpus();
+        for (const family of ["wiki", "projects"] as const)
+            await service.maintainViews({
+                corpusId,
+                family,
+                operation: "pause",
+                expectedHead: (await service.listViews(corpusId)).head,
+            });
+        block = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const started = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        service["maintenance"].request(
+            corpusId,
+            "wiki",
+            undefined,
+            async () => {
+                entered?.();
+                await block;
+                await service.maintainViews({
+                    corpusId,
+                    family: "topics",
+                    operation: "pause",
+                    expectedHead: (await service.listViews(corpusId)).head,
+                });
+            },
+        );
+        await started;
+        let observed!: () => void;
+        const snapshotRead = new Promise<void>((resolve) => {
+            observed = resolve;
+        });
+        const list = service.listViews.bind(service);
+        const spy = jest
+            .spyOn(service, "listViews")
+            .mockImplementationOnce(async (id) => {
+                const snapshot = await list(id);
+                observed();
+                return snapshot;
+            });
+        let settled = false;
+        const waiting = settleConsolidation(service, corpusId).then(
+            (snapshot) => {
+                settled = true;
+                return snapshot;
+            },
+        );
+        try {
+            await snapshotRead;
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            expect(settled).toBe(false);
+            release?.();
+            const snapshot = await waiting;
+            expect(snapshot.head).toBe(
+                (await service.listViews(corpusId)).head,
+            );
+        } finally {
+            release?.();
+            spy.mockRestore();
+            await waiting;
+        }
+    });
+    test("pausing clears maintenance scheduled by an earlier queued write", async () => {
+        const corpusId = await corpus();
+        const expectedHead = (await service.listViews(corpusId)).head;
+        const access: CorpusAccess = service["corpusAccess"](corpusId);
+        block = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const earlier = access.write(async () => {
+            await block;
+            service["maintenance"].request(
+                corpusId,
+                "topics",
+                undefined,
+                async () => {
+                    throw new Error("Paused maintenance must not run");
+                },
+                1000,
+            );
+        });
+        let queued!: () => void;
+        const admission = new Promise<void>((resolve) => {
+            queued = resolve;
+        });
+        const write = access.write;
+        access.write = function <T>(operation: () => Promise<T>): Promise<T> {
+            queued();
+            return (write<T>).call(this, operation);
+        };
+        try {
+            const paused = service.maintainViews({
+                corpusId,
+                expectedHead,
+                family: "topics",
+                operation: "pause",
+            });
+            await admission;
+            release?.();
+            await earlier;
+            await paused;
+            expect(service.getMaintenanceStatus().pending).not.toContain(
+                `${corpusId}:topics`,
+            );
+        } finally {
+            release?.();
+            access.write = write;
+            await earlier;
+        }
     });
     test("twenty warm graph and support reads reuse projections without loading full view state and honor privacy gates", async () => {
         expect(

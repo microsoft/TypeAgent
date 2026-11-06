@@ -11971,11 +11971,14 @@ export class FileMemoryService
         const runtime = await this.requireViews(request.corpusId);
         if ("family" in request) {
             this.maintenance.cancel(request.corpusId, request.family);
-            return this.enqueueWrite(request.corpusId, () =>
-                request.family === "topics"
+            return this.enqueueWrite(request.corpusId, () => {
+                // Earlier queued writes may have scheduled work after the first cancellation.
+                if (request.operation === "pause")
+                    this.maintenance.cancel(request.corpusId, request.family);
+                return request.family === "topics"
                     ? this.maintainTopics(runtime, request)
-                    : this.maintainWikiFamily(runtime, request),
-            );
+                    : this.maintainWikiFamily(runtime, request);
+            });
         }
         return this.enqueueWrite(request.corpusId, async () => {
             const plan = await this.planMaintenanceLocked(

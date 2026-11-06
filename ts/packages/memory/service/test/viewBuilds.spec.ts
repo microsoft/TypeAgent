@@ -187,9 +187,13 @@ describe("human-added edge merge regressions", () => {
                     text: "Inspect pressure. Preserve approval boundaries. No verified resolution.",
                 },
             });
-            expect((await waitForMemoryJob(service, source.jobId)).state).toBe(
-                "complete",
-            );
+            expect(
+                (
+                    await waitForMemoryJob(service, source.jobId, {
+                        pollIntervalMs: 10,
+                    })
+                ).state,
+            ).toBe("complete");
             sources.push({
                 sourceId: source.sourceId,
                 revisionId: source.revisionId,
@@ -305,7 +309,11 @@ describe("human-added edge merge regressions", () => {
                 },
             });
             expect(
-                (await waitForMemoryJob(service, replacement.jobId)).state,
+                (
+                    await waitForMemoryJob(service, replacement.jobId, {
+                        pollIntervalMs: 10,
+                    })
+                ).state,
             ).toBe("complete");
             request.targets[0].definition.selector.sources[0] = {
                 sourceId: replacement.sourceId,
@@ -451,7 +459,7 @@ describe("durable draft builds and explicit edit merge", () => {
                 sourceModifiedAt: "2026-10-01T00:00:00Z",
             },
         });
-        await waitForMemoryJob(service, source.jobId);
+        await waitForMemoryJob(service, source.jobId, { pollIntervalMs: 10 });
         return {
             corpusId: corpus.corpusId,
             publication: false,
@@ -527,9 +535,13 @@ describe("durable draft builds and explicit edit merge", () => {
                 text: "Inspect pressure. Preserve approval boundaries. No verified resolution. This record replaces the earlier diagnostic record.",
             },
         });
-        expect((await waitForMemoryJob(service, replacement.jobId)).state).toBe(
-            "complete",
-        );
+        expect(
+            (
+                await waitForMemoryJob(service, replacement.jobId, {
+                    pollIntervalMs: 10,
+                })
+            ).state,
+        ).toBe("complete");
         await expect(service.getViewBuild(prior)).rejects.toThrow(
             "Retained build receipt source bodies are not authorized",
         );
@@ -598,7 +610,7 @@ describe("durable draft builds and explicit edit merge", () => {
                 capturedAt: "2026-10-04T00:00:00Z",
             },
         });
-        await waitForMemoryJob(service, extra.jobId);
+        await waitForMemoryJob(service, extra.jobId, { pollIntervalMs: 10 });
         const early = {
             ...request,
             bounds: { learnedBefore: "2026-10-03T00:00:00Z" },
@@ -1450,9 +1462,13 @@ describe("durable draft builds and explicit edit merge", () => {
                 expectedActiveRevisionId: captured.inputs[0].revisionId,
             },
         });
-        expect((await waitForMemoryJob(service, replaced.jobId)).state).toBe(
-            "complete",
-        );
+        expect(
+            (
+                await waitForMemoryJob(service, replaced.jobId, {
+                    pollIntervalMs: 10,
+                })
+            ).state,
+        ).toBe("complete");
         finish(output(captured));
         const job = await wait(admitted);
         expect(job.results[0].state).toBe("stale");

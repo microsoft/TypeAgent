@@ -1092,7 +1092,7 @@ describe("registered extension service lifecycle", () => {
                 },
             },
         });
-        await waitForMemoryJob(service, spoof.jobId);
+        await waitForMemoryJob(service, spoof.jobId, { pollIntervalMs: 10 });
         await service.refreshExtensionViews({ corpusId: corpus.corpusId });
         expect(fixture.calls()).toBe(1);
         const updated = await service.ingestDocument({
@@ -1108,7 +1108,7 @@ describe("registered extension service lifecycle", () => {
                 text: "Completed status with a new qualification.",
             },
         });
-        await waitForMemoryJob(service, updated.jobId);
+        await waitForMemoryJob(service, updated.jobId, { pollIntervalMs: 10 });
         await waitForCalls(2);
         const views = await service.listViews(corpus.corpusId);
         expect(views.views).toHaveLength(1);
@@ -1695,7 +1695,7 @@ process.stdout.write(JSON.stringify(allowed && request.sourceId !== denied));`,
                 },
                 pipeline: { mode: "content" },
             });
-            await waitForMemoryJob(service, job.jobId);
+            await waitForMemoryJob(service, job.jobId, { pollIntervalMs: 10 });
             const source = await service.getSource(
                 corpus.corpusId,
                 `source-${index}`,
@@ -2148,7 +2148,9 @@ process.stdout.write(JSON.stringify(allowed && request.sourceId !== denied));`,
                 },
                 pipeline: { mode: "content" },
             });
-            await waitForMemoryJob(service, ingestion.jobId);
+            await waitForMemoryJob(service, ingestion.jobId, {
+                pollIntervalMs: 10,
+            });
             const root = (await service.getSource(
                 corpus.corpusId,
                 "group-manifest",
