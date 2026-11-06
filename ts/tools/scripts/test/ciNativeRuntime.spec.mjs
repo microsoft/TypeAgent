@@ -130,12 +130,23 @@ function pnpm {
 ${identity.run}
 `,
             );
-            const environment = {
-                ...process.env,
+            const environment = Object.fromEntries(
+                Object.entries({
+                    ...process.env,
+                    IMAGEOS: "inherited-image",
+                    IMAGEVERSION: "inherited-version",
+                }).filter(
+                    ([name]) =>
+                        !["imageos", "imageversion"].includes(
+                            name.toLowerCase(),
+                        ),
+                ),
+            );
+            Object.assign(environment, {
                 ImageOS: "fixture-image",
                 ImageVersion: "20261106.1",
                 GITHUB_OUTPUT: output,
-            };
+            });
             if (missing) delete environment[missing];
             const result = spawnSync(
                 "pwsh",
