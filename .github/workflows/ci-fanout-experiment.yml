@@ -113,6 +113,7 @@ jobs:
     env:
       TYPEAGENT_FANOUT_NODE_SET: ${{ inputs.node_set }}
       TYPEAGENT_FANOUT_INCLUDE_CONTROLS: ${{ inputs.include_controls }}
+      pnpm_config_verify_deps_before_run: "false"
     defaults:
       run:
         working-directory: ts

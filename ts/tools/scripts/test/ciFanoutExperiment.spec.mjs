@@ -16,7 +16,7 @@ import {
     qualify,
     memoryTestSelection,
 } from "../ciFanoutExperiment.mjs";
-import { localTestCommands } from "../runLocalTestPackages.mjs";
+import { localTestCommands, spawnPnpm } from "../runLocalTestPackages.mjs";
 import { fanoutIncludesControl, fanoutNodes } from "../lib/ciFanoutTargets.mjs";
 
 const sha = "a".repeat(40);
@@ -530,6 +530,7 @@ test("manual Node and control choices reach matrices and every report collector"
     assert.deepEqual(experiment.jobs.qualification.env, {
         TYPEAGENT_FANOUT_NODE_SET: "${{ inputs.node_set }}",
         TYPEAGENT_FANOUT_INCLUDE_CONTROLS: "${{ inputs.include_controls }}",
+        pnpm_config_verify_deps_before_run: "false",
     });
     for (const nodeSet of ["all", "24-and-26"])
         assert.deepEqual(
@@ -1011,4 +1012,50 @@ test("orchestration entrypoints establish pnpm's shell-free package-script conte
     assert.equal(commands.length, 12);
     for (const command of commands)
         assert.match(command.trim(), /^pnpm run ci:node tools\/scripts\//);
+});
+
+test("qualification preserves pnpm context without installing workspace dependencies", (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-collector-"));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    fs.writeFileSync(
+        path.join(root, "package.json"),
+        JSON.stringify({
+            private: true,
+            scripts: { "ci:node": "node" },
+            dependencies: { "must-not-install": "file:./absent" },
+        }),
+    );
+    fs.writeFileSync(
+        path.join(root, "pnpm-workspace.yaml"),
+        "packages: []\nverifyDepsBeforeRun: install\n",
+    );
+    const setting = workflow("ci-fanout-experiment").jobs.qualification.env
+        .pnpm_config_verify_deps_before_run;
+    assert.equal(setting, "false");
+    const args = ["run", "ci:node", "-p", "process.env.npm_execpath"];
+    const run = (value) =>
+        spawnPnpm(args, {
+            cwd: root,
+            encoding: "utf8",
+            env: {
+                ...process.env,
+                pnpm_config_verify_deps_before_run: value,
+            },
+        });
+    const rejected = run("error");
+    assert.ifError(rejected.error);
+    assert.notEqual(rejected.status, 0);
+    assert.match(
+        rejected.stdout + rejected.stderr,
+        /ERR_PNPM_VERIFY_DEPS_BEFORE_RUN/,
+    );
+    const accepted = run(setting);
+    assert.ifError(accepted.error);
+    assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+    assert.match(
+        accepted.stdout.trim().split(/\r?\n/).at(-1),
+        /pnpm\.(?:mjs|cjs|js)$/,
+    );
+    assert.equal(fs.existsSync(path.join(root, "node_modules")), false);
+    assert.equal(fs.existsSync(path.join(root, "pnpm-lock.yaml")), false);
 });

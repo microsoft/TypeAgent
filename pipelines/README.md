@@ -191,6 +191,10 @@ This supplies pnpm's JavaScript CLI through `npm_execpath`, letting nested
 workspace discovery and partition tests invoke Node directly without a command
 shell on any platform. Bare `node` or `pnpm exec node` does not supply that
 package-script context and is not supported for these orchestration commands.
+The dependency-free qualification job sets
+`pnpm_config_verify_deps_before_run=false` so pnpm 11 does not implicitly install
+the entire workspace before reading reports. Producers and test consumers retain
+their normal dependency installation and verification.
 
 The `full-without-memory` test profile differs from `full` by exactly one pnpm
 filter excluding `@typeagent/memory-service`; it is used only by qualification
