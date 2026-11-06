@@ -14,6 +14,7 @@ import type {
     WikiSubjectAssessment,
 } from "../src/viewTypes.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { settleConsolidation } from "./wikiConsolidationFixtures.js";
 
 const subjects = Array.from({ length: 14 }, (_, index) => `mechanism ${index}`);
 
@@ -162,12 +163,7 @@ test.each(["semantic", "transient", "derivative"] as const)(
                 operation: "resume",
                 expectedHead: (await service.listViews(corpusId)).head,
             });
-            for (let attempt = 0; attempt < 500; attempt++) {
-                const status = await service.listViews(corpusId);
-                if (!status.wikiFamily?.pending) break;
-                await new Promise((resolve) => setTimeout(resolve, 20));
-            }
-            const settled = await service.listViews(corpusId);
+            const settled = await settleConsolidation(service, corpusId);
             if (settled.wikiFamily?.pending)
                 throw new Error(
                     JSON.stringify({
@@ -240,12 +236,7 @@ test.each(["semantic", "transient", "derivative"] as const)(
             }
             service = open();
             await service.initialize();
-            for (let attempt = 0; attempt < 500; attempt++) {
-                if (!(await service.listViews(corpusId)).wikiFamily?.pending)
-                    break;
-                await new Promise((resolve) => setTimeout(resolve, 20));
-            }
-            const recovered = await service.listViews(corpusId);
+            const recovered = await settleConsolidation(service, corpusId);
             expect(recovered.wikiFamily?.pending).toBe(false);
             expect(
                 recovered.views.map((view) => view.revisionId).sort(),

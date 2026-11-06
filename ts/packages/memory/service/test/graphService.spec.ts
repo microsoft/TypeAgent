@@ -412,6 +412,39 @@ describe("bounded corpus graph service", () => {
             await earlier;
         }
     });
+    test("pausing clears topic work scheduled while the committed snapshot publishes", async () => {
+        const corpusId = await corpus();
+        const expectedHead = (await service.listViews(corpusId)).head;
+        const access: CorpusAccess = service["corpusAccess"](corpusId);
+        const committed = access["committed"];
+        if (!committed)
+            throw new Error("Expected committed corpus publication");
+        const publish = committed.publish;
+        committed.publish = async function () {
+            await publish.call(this);
+            service["maintenance"].request(
+                corpusId,
+                "topics",
+                undefined,
+                async () => {},
+                1000,
+            );
+        };
+        try {
+            await service.maintainViews({
+                corpusId,
+                expectedHead,
+                family: "topics",
+                operation: "pause",
+            });
+            expect(service.getMaintenanceStatus().pending).not.toContain(
+                `${corpusId}:topics`,
+            );
+        } finally {
+            committed.publish = publish;
+            service["maintenance"].cancel(corpusId, "topics");
+        }
+    });
     test("twenty warm graph and support reads reuse projections without loading full view state and honor privacy gates", async () => {
         expect(
             (await service.getCapabilities()).features.scopedKnowledgeGraphs,

@@ -365,6 +365,40 @@ test("fan-out is manual opt-in and does not replace PR, main or queue validation
     ]);
 });
 
+test("Linux prerequisites bound apt network waits and propagate failures", () => {
+    const setup = yaml.load(
+        fs.readFileSync(
+            new URL(
+                "../../../../.github/actions/fanout-setup/action.yml",
+                import.meta.url,
+            ),
+            "utf8",
+        ),
+    );
+    const linux = setup.runs.steps.find(
+        (step) => step.if === "runner.os == 'Linux'",
+    );
+    assert.equal(linux.shell, "pwsh");
+    for (const protocol of ["http", "https"])
+        assert.ok(linux.run.includes(`Acquire::${protocol}::Timeout=30`));
+    assert.ok(linux.run.includes("Acquire::Retries=2"));
+    for (const command of [
+        "-o APT::Update::Error-Mode=any update",
+        "install -y libsecret-1-dev",
+    ])
+        assert.ok(
+            linux.run.includes(
+                `timeout --kill-after=15s 180s sudo apt-get @aptOptions ${command}`,
+            ),
+        );
+    assert.equal(
+        linux.run.match(
+            /if \(\$LASTEXITCODE -ne 0\) \{ exit \$LASTEXITCODE \}/g,
+        )?.length,
+        2,
+    );
+});
+
 test("test runners install native dependencies but never rebuild shared product output", () => {
     const experiment = workflow("ci-fanout-experiment");
     const target = workflow("ci-fanout-target");
