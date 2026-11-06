@@ -20,6 +20,33 @@ To use a saved macro:
    `get_macro_run` to check the run before doing anything else. Do not repeat the
    task through another tool: the first run may already have had effects.
 
+### Correcting a draft during review
+
+If a prepared macro has an obvious problem, describe the correction with
+`revise_macro`, supplying its `macroId`, exact current draft `version`, and
+plain-language `feedback`. For example: "Return only the title, not the entire
+tool response." The equivalent command is
+`@typeagent recipe revise <macroId> <version> <feedback>`.
+
+The revision job retains the original recording and earlier immutable drafts.
+It regenerates the macro and version-targeted grammar, then compiles and checks
+the program against independently derived fixtures that include the correction.
+The verifier does not see either draft's source. Corrections can adjust the
+macro's inputs, description and output within the supported recorded tool
+contracts; they cannot authorize new tools, effects, credentials or bypass checks.
+Unsupported changes fail explicitly instead of publishing a partial fix.
+
+Use `get_macro_learning_job` with the returned `jobId` to inspect progress.
+The equivalent command is `@typeagent recipe status <jobId>`.
+Only `needsReview` means the revised draft is ready to inspect. Review the
+returned version with `inspect_macro` and `validate_macro`, then explicitly
+approve that version with `approve_macro`. Revised drafts never auto-publish,
+even under Read-only or All. Earlier drafts cannot be approved while a
+correction is pending or after a newer draft is saved. Another correction can
+be requested after review is ready, or after a revision fails; feedback
+accumulates across revisions. Approved macros must be recorded again to change
+their behavior.
+
 In a configured host, a matching natural-language request can also run the current
 approved macro. See the [plugin setup guide](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/copilot-plugin/README.md#tool-composed-macros)
 for recording and learning commands.

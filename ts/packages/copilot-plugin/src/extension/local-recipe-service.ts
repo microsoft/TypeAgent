@@ -177,6 +177,7 @@ export async function createLocalRecipeService(
             manager.getMacroRequirements(request),
         validateMacro: (request) => manager.validateMacro(request),
         approveMacro: (request) => manager.approveMacro(request),
+        reviseMacro: (request) => manager.reviseMacro(request),
         disableMacro: (request) => manager.disableMacro(request),
         deleteMacro: (request) => manager.deleteMacro(request),
         runMacro: (request) => {
@@ -316,6 +317,18 @@ export async function createLocalRecipeService(
         ),
         approveMacro: operation(z.tuple([ref]), ([request]) =>
             connection.approveMacro(defined(request)),
+        ),
+        reviseMacro: operation(
+            z.tuple([
+                z
+                    .object({
+                        macroId: id,
+                        version: z.number().int().positive(),
+                        feedback: z.string().trim().min(1).max(16_384),
+                    })
+                    .strict(),
+            ]),
+            ([request]) => connection.reviseMacro(request),
         ),
         disableMacro: operation(
             z.tuple([z.object({ macroId: id }).strict()]),
