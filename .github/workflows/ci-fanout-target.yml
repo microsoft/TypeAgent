@@ -53,6 +53,7 @@ jobs:
         with:
           node-version: ${{ inputs.version }}
           native-cache: ${{ inputs.native_cache }}
+          save-native-cache: "true"
       - name: Build memory service and its test-time client once
         run: npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep
       - name: Discover tests and fingerprint compiled outputs

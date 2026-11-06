@@ -10,6 +10,9 @@ inputs:
   native-cache:
     default: "false"
     description: Reuse runtime-specific pnpm native build side effects
+  save-native-cache:
+    default: "false"
+    description: Publish verified native dependencies from the matching memory producer
 runs:
   using: composite
   steps:
@@ -46,8 +49,9 @@ runs:
         node -e "console.log('arch=' + process.arch); console.log('abi=' + process.versions.modules)" >> $env:GITHUB_OUTPUT
         if ($LASTEXITCODE -ne 0) { throw 'Unable to identify the Node ABI.' }
     - name: Restore runtime-specific pnpm native build side effects
+      id: native_store
       if: inputs.native-cache == 'true'
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.native_identity.outputs.store }}
         key: fanout-native-v2-${{ runner.os }}-${{ steps.native_identity.outputs.arch }}-${{ steps.native_identity.outputs.image }}-${{ steps.native_identity.outputs.image-version }}-node-${{ inputs.node-version }}-abi-${{ steps.native_identity.outputs.abi }}-${{ hashFiles('ts/package.json', 'ts/pnpm-lock.yaml', 'ts/pnpm-workspace.yaml', 'ts/.pnpmfile.cjs') }}
@@ -75,3 +79,9 @@ runs:
           Write-Output "::warning::${stage} attempt $attempt failed (exit $status). Retrying with a forced reimport and uncached native rebuild."
           Start-Sleep -Seconds (5 * $attempt)
         }
+    - name: Publish verified native dependencies once per target
+      if: inputs.native-cache == 'true' && inputs.save-native-cache == 'true' && steps.native_store.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.native_identity.outputs.store }}
+        key: ${{ steps.native_store.outputs.cache-primary-key }}

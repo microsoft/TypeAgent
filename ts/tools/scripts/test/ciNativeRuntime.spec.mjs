@@ -72,7 +72,7 @@ test("native reuse is explicit opt-in and forwarded to every fan-out install", (
 
 test("native stores isolate runtime, image, package-manager and build-policy identities", () => {
     const cache = setup.runs.steps.find((step) =>
-        step.uses?.startsWith("actions/cache@"),
+        step.uses?.startsWith("actions/cache/restore@"),
     );
     assert.equal(cache.if, "inputs.native-cache == 'true'");
     assert.equal(cache.with.path, "${{ steps.native_identity.outputs.store }}");
@@ -174,7 +174,7 @@ ${identity.run}
                 abi: process.versions.modules,
             });
             const cache = setup.runs.steps.find((step) =>
-                step.uses?.startsWith("actions/cache@"),
+                step.uses?.startsWith("actions/cache/restore@"),
             );
             const context = {
                 "runner.os": "fixtureOS",
@@ -216,6 +216,53 @@ test("SQLite probe performs actual native reads and writes in Node", () => {
     assert.match(result.sqliteVersion, /^\d+\.\d+\.\d+$/);
     assert.throws(() => probeSqlite(root, "electron"), /Wrong runtime/);
     assert.throws(() => probeSqlite(root, "unknown"), /Unknown native runtime/);
+});
+
+test("only each memory producer publishes the verified store before building, never workspace or consumers", () => {
+    const jobs = workflow("ci-fanout-target").jobs;
+    for (const [name, job] of Object.entries(jobs)) {
+        const prepare = job.steps.find(
+            (step) => step.uses === "./.github/actions/fanout-setup",
+        );
+        assert.equal(
+            prepare.with["save-native-cache"],
+            name === "build" ? "true" : undefined,
+        );
+    }
+    const analysis = workflow("ci-fanout-experiment").jobs.analysis;
+    assert.equal(
+        analysis.steps.find(
+            (step) => step.uses === "./.github/actions/fanout-setup",
+        ).with["save-native-cache"],
+        undefined,
+    );
+    const restore = setup.runs.steps.findIndex(
+        (step) => step.id === "native_store",
+    );
+    const installIndex = setup.runs.steps.indexOf(install);
+    const save = setup.runs.steps.findIndex((step) =>
+        step.uses?.startsWith("actions/cache/save@"),
+    );
+    assert.ok(restore < installIndex && installIndex < save);
+    assert.equal(setup.inputs["save-native-cache"].default, "false");
+    assert.equal(
+        setup.runs.steps[save].if,
+        "inputs.native-cache == 'true' && inputs.save-native-cache == 'true' && steps.native_store.outputs.cache-hit != 'true'",
+    );
+    assert.equal(
+        setup.runs.steps[save].with.path,
+        "${{ steps.native_identity.outputs.store }}",
+    );
+    assert.equal(
+        setup.runs.steps[save].with.key,
+        "${{ steps.native_store.outputs.cache-primary-key }}",
+    );
+    assert.equal(
+        setup.runs.steps.filter((step) =>
+            step.uses?.startsWith("actions/cache@"),
+        ).length,
+        0,
+    );
 });
 
 test("Node and Electron probes are separate processes with distinct runtime expectations", () => {
