@@ -41,16 +41,18 @@ runs:
         $store = pnpm store path --silent
         if ($LASTEXITCODE -ne 0) { throw 'Unable to identify the pnpm store.' }
         "store=$store" >> $env:GITHUB_OUTPUT
-        node -e "console.log('abi=' + process.versions.modules)" >> $env:GITHUB_OUTPUT
+        "image=$env:ImageOS" >> $env:GITHUB_OUTPUT
+        "image-version=$env:ImageVersion" >> $env:GITHUB_OUTPUT
+        node -e "console.log('arch=' + process.arch); console.log('abi=' + process.versions.modules)" >> $env:GITHUB_OUTPUT
         if ($LASTEXITCODE -ne 0) { throw 'Unable to identify the Node ABI.' }
     - name: Restore runtime-specific pnpm native build side effects
       if: inputs.native-cache == 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.native_identity.outputs.store }}
-        key: fanout-native-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node-${{ inputs.node-version }}-abi-${{ steps.native_identity.outputs.abi }}-${{ hashFiles('ts/package.json', 'ts/pnpm-lock.yaml', 'ts/pnpm-workspace.yaml', 'ts/.pnpmfile.cjs') }}
+        key: fanout-native-v2-${{ runner.os }}-${{ steps.native_identity.outputs.arch }}-${{ steps.native_identity.outputs.image }}-${{ steps.native_identity.outputs.image-version }}-node-${{ inputs.node-version }}-abi-${{ steps.native_identity.outputs.abi }}-${{ hashFiles('ts/package.json', 'ts/pnpm-lock.yaml', 'ts/pnpm-workspace.yaml', 'ts/.pnpmfile.cjs') }}
         # Seed a miss from the existing package store; pnpm selects only matching runtime side effects.
-        restore-keys: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('ts/pnpm-lock.yaml') }}
+        restore-keys: node-cache-${{ runner.os }}-${{ steps.native_identity.outputs.arch }}-pnpm-${{ hashFiles('ts/pnpm-lock.yaml') }}
     - name: Install native dependencies with bounded visible retries
       shell: pwsh
       working-directory: ts

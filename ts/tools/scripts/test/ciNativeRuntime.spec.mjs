@@ -78,9 +78,9 @@ test("native stores isolate runtime, image, package-manager and build-policy ide
     assert.equal(cache.with.path, "${{ steps.native_identity.outputs.store }}");
     for (const expression of [
         "runner.os",
-        "runner.arch",
-        "env.ImageOS",
-        "env.ImageVersion",
+        "steps.native_identity.outputs.arch",
+        "steps.native_identity.outputs.image",
+        "steps.native_identity.outputs.image-version",
         "inputs.node-version",
         "steps.native_identity.outputs.abi",
     ])
@@ -95,7 +95,7 @@ test("native stores isolate runtime, image, package-manager and build-policy ide
     }
     assert.equal(
         cache.with["restore-keys"],
-        "node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('ts/pnpm-lock.yaml') }}",
+        "node-cache-${{ runner.os }}-${{ steps.native_identity.outputs.arch }}-pnpm-${{ hashFiles('ts/pnpm-lock.yaml') }}",
     );
     const node = setup.runs.steps.find((step) =>
         step.uses?.startsWith("actions/setup-node@"),
@@ -107,6 +107,106 @@ test("native stores isolate runtime, image, package-manager and build-policy ide
     assert.equal(node.with["package-manager-cache"], false);
     assert.equal(cache["continue-on-error"], undefined);
 });
+
+for (const missing of [undefined, "ImageOS", "ImageVersion"]) {
+    test(`native cache identity executes with actual runner environment (${missing ?? "complete"})`, () => {
+        const directory = fs.mkdtempSync(
+            path.join(os.tmpdir(), "typeagent-native-identity-"),
+        );
+        try {
+            const output = path.join(directory, "outputs.txt");
+            const script = path.join(directory, "identity.ps1");
+            const identity = setup.runs.steps.find(
+                (step) => step.id === "native_identity",
+            );
+            fs.writeFileSync(
+                script,
+                `
+$ErrorActionPreference = 'Stop'
+function pnpm {
+  Write-Output 'fixture-store'
+  $global:LASTEXITCODE = 0
+}
+${identity.run}
+`,
+            );
+            const environment = {
+                ...process.env,
+                ImageOS: "fixture-image",
+                ImageVersion: "20261106.1",
+                GITHUB_OUTPUT: output,
+            };
+            if (missing) delete environment[missing];
+            const result = spawnSync(
+                "pwsh",
+                ["-NoProfile", "-NonInteractive", "-File", script],
+                {
+                    encoding: "utf8",
+                    env: environment,
+                    timeout: 30000,
+                },
+            );
+            assert.ifError(result.error);
+            if (missing) {
+                assert.notEqual(result.status, 0);
+                assert.match(
+                    result.stderr,
+                    /runner image identity is required/,
+                );
+                return;
+            }
+            assert.equal(result.status, 0, result.stderr);
+            const outputs = Object.fromEntries(
+                fs
+                    .readFileSync(output, "utf8")
+                    .trim()
+                    .split(/\r?\n/)
+                    .map((line) => {
+                        const equals = line.indexOf("=");
+                        return [line.slice(0, equals), line.slice(equals + 1)];
+                    }),
+            );
+            assert.deepEqual(outputs, {
+                store: "fixture-store",
+                image: "fixture-image",
+                "image-version": "20261106.1",
+                arch: process.arch,
+                abi: process.versions.modules,
+            });
+            const cache = setup.runs.steps.find((step) =>
+                step.uses?.startsWith("actions/cache@"),
+            );
+            const context = {
+                "runner.os": "fixtureOS",
+                "inputs.node-version": process.versions.node,
+                ...Object.fromEntries(
+                    Object.entries(outputs).map(([name, value]) => [
+                        `steps.native_identity.outputs.${name}`,
+                        value,
+                    ]),
+                ),
+            };
+            const key = cache.with.key.replace(
+                /\$\{\{\s*(.*?)\s*\}\}/g,
+                (_, expression) => {
+                    if (expression.startsWith("hashFiles("))
+                        return "a".repeat(64);
+                    assert.ok(
+                        Object.hasOwn(context, expression),
+                        `Unavailable expression context: ${expression}`,
+                    );
+                    return context[expression];
+                },
+            );
+            assert.equal(
+                key,
+                `fanout-native-v2-fixtureOS-${process.arch}-fixture-image-20261106.1-node-${process.versions.node}-abi-${process.versions.modules}-${"a".repeat(64)}`,
+            );
+        } finally {
+            fs.rmSync(directory, { recursive: true, force: true });
+        }
+    });
+}
 
 test("SQLite probe performs actual native reads and writes in Node", () => {
     const result = probeSqlite(root, "node");
