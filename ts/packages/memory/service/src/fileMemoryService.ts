@@ -1781,6 +1781,9 @@ export class FileMemoryService
                 } finally {
                     this.pendingReadCleanup.delete(corpusId);
                 }
+                // A reader may release while cleanup publication still holds the pending flag.
+                if (this.retiredCorpora.has(corpusId))
+                    this.scheduleReadCleanup(corpusId);
             },
         );
     }

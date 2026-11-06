@@ -135,18 +135,18 @@ jobs:
           path: ${{ runner.temp }}/fanout-results
           merge-multiple: true
       - name: Qualify selected memory shard inventories and optional control comparisons
-        run: node tools/scripts/ciFanoutExperiment.mjs aggregate
+        run: pnpm run ci:node tools/scripts/ciFanoutExperiment.mjs aggregate
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: fanout-partition-*
           path: ${{ runner.temp }}/fanout-partitions
           merge-multiple: true
       - name: Require exact dispatcher and provider partition coverage
-        run: node tools/scripts/ciPackagePartitions.mjs aggregate
+        run: pnpm run ci:node tools/scripts/ciPackagePartitions.mjs aggregate
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: fanout-lane-*
           path: ${{ runner.temp }}/fanout-lanes
           merge-multiple: true
       - name: Require exact remainder package and script coverage
-        run: node tools/scripts/ciWorkspaceLanes.mjs aggregate
+        run: pnpm run ci:node tools/scripts/ciWorkspaceLanes.mjs aggregate

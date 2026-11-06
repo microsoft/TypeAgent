@@ -14,6 +14,7 @@ import {
     localTestCommands,
     macosCompatibilitySuites,
     runLocalTestPackages,
+    spawnPnpm,
 } from "../runLocalTestPackages.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -292,4 +293,54 @@ test("profile runner preserves errors and invokes pnpm without shell interpolati
             }),
         error,
     );
+});
+
+test("nested pnpm preserves literal arguments and paths without invoking a shell", (t) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-pnpm-"));
+    t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+    const manager = path.join(directory, "manager & literal");
+    fs.mkdirSync(manager);
+    const cli = path.join(manager, "pnpm.mjs");
+    fs.writeFileSync(
+        cli,
+        "process.stdout.write(JSON.stringify(process.argv.slice(2)));",
+    );
+    const previous = process.env.npm_execpath;
+    t.after(() => {
+        if (previous === undefined) delete process.env.npm_execpath;
+        else process.env.npm_execpath = previous;
+    });
+    process.env.npm_execpath = cli;
+    const marker = path.join(directory, "injected.txt");
+    const args = [
+        "C:\\repo\\a&b",
+        "%PATH%",
+        'quote"literal',
+        "line\nliteral",
+        `x & echo injected > "${marker}"`,
+    ];
+    const result = spawnPnpm(args, { encoding: "utf8", shell: true });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), args);
+    assert.equal(fs.existsSync(marker), false);
+    const error = new Error("nested spawn failed");
+    assert.equal(spawnPnpm([], {}, () => ({ error })).error, error);
+    assert.equal(spawnPnpm([], {}, () => ({ status: 7 })).status, 7);
+});
+
+test("nested pnpm rejects missing or non-pnpm package-script context", (t) => {
+    const previous = process.env.npm_execpath;
+    t.after(() => {
+        if (previous === undefined) delete process.env.npm_execpath;
+        else process.env.npm_execpath = previous;
+    });
+    for (const cli of [undefined, process.execPath]) {
+        if (cli === undefined) delete process.env.npm_execpath;
+        else process.env.npm_execpath = cli;
+        assert.throws(
+            () => spawnPnpm([], {}, () => assert.fail("Must not spawn")),
+            /requires pnpm's JavaScript CLI/,
+        );
+    }
 });

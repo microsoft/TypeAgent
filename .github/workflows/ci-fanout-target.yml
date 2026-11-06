@@ -57,7 +57,7 @@ jobs:
       - name: Build memory service and its test-time client once
         run: npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep
       - name: Discover tests and fingerprint compiled outputs
-        run: node tools/scripts/ciFanoutExperiment.mjs create
+        run: pnpm run ci:node tools/scripts/ciFanoutExperiment.mjs create
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fanout-build-${{ inputs.os }}-${{ inputs.version }}-${{ github.sha }}
@@ -81,7 +81,7 @@ jobs:
       - name: Compute exact-source build cache identity
         id: cache_identity
         if: inputs.build_cache
-        run: node tools/scripts/ciBuildCache.mjs key
+        run: pnpm run ci:node tools/scripts/ciBuildCache.mjs key
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: build_cache
         if: inputs.build_cache
@@ -90,16 +90,16 @@ jobs:
           key: ${{ steps.cache_identity.outputs.key }}
       - name: Verify and restore coherent cached outputs
         if: inputs.build_cache && steps.build_cache.outputs.cache-hit == 'true'
-        run: node tools/scripts/ciBuildCache.mjs restore
+        run: pnpm run ci:node tools/scripts/ciBuildCache.mjs restore
       - name: Build workspace with normal fluid-build validation even on cache hits
         run: pnpm run build
       - name: Seal build outputs and incremental metadata for an exact-source cache
         if: inputs.build_cache && steps.build_cache.outputs.cache-hit != 'true'
-        run: node tools/scripts/ciBuildCache.mjs create
+        run: pnpm run ci:node tools/scripts/ciBuildCache.mjs create
       - name: Fingerprint workspace outputs and plan duration-balanced partitions
         env:
           TYPEAGENT_COMPACT_ARTIFACT: ${{ inputs.compact_artifact }}
-        run: node tools/scripts/ciPackagePartitions.mjs prepare
+        run: pnpm run ci:node tools/scripts/ciPackagePartitions.mjs prepare
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fanout-workspace-${{ inputs.os }}-${{ inputs.version }}-${{ github.sha }}
@@ -180,7 +180,7 @@ jobs:
           TYPEAGENT_REMAINDER_ARTIFACT_SCOPE: ${{ inputs.compact_artifact && 'remainder' || 'workspace' }}
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'typeagent-test.log'
-          node tools/scripts/ciWorkspaceLanes.mjs test ${{ matrix.group }} 2>&1 | Tee-Object -FilePath $log
+          pnpm run ci:node tools/scripts/ciWorkspaceLanes.mjs test ${{ matrix.group }} 2>&1 | Tee-Object -FilePath $log
           exit $LASTEXITCODE
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -215,7 +215,7 @@ jobs:
           name: fanout-workspace-${{ inputs.os }}-${{ inputs.version }}-${{ github.sha }}
           path: ts
       - name: Verify workspace runtime closure without rebuilding
-        run: node tools/scripts/ciPackagePartitions.mjs verify
+        run: pnpm run ci:node tools/scripts/ciPackagePartitions.mjs verify
       - name: Profile independent root-unit and memory-quality phases
         env:
           TYPEAGENT_TEST_PHASE: scripts
@@ -265,7 +265,7 @@ jobs:
       - name: Test duration-balanced dispatcher and provider groups with retries
         env:
           TYPEAGENT_PARTITION_ARTIFACT_SCOPE: ${{ inputs.compact_artifact && 'packages' || 'workspace' }}
-        run: node tools/scripts/ciPackagePartitions.mjs test ${{ matrix.group }}
+        run: pnpm run ci:node tools/scripts/ciPackagePartitions.mjs test ${{ matrix.group }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -295,7 +295,7 @@ jobs:
           name: fanout-build-${{ inputs.os }}-${{ inputs.version }}-${{ github.sha }}
           path: ts
       - name: Verify and test downloaded outputs without rebuilding
-        run: node tools/scripts/ciFanoutExperiment.mjs test ${{ matrix.group }}
+        run: pnpm run ci:node tools/scripts/ciFanoutExperiment.mjs test ${{ matrix.group }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

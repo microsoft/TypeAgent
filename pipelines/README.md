@@ -186,6 +186,12 @@ Chained/non-Jest package phases
 remain intact. Platform-independent formatting and lint run once in a separate
 blocking analysis job.
 
+CI orchestration uses `pnpm run ci:node tools/scripts/<script>.mjs ...`.
+This supplies pnpm's JavaScript CLI through `npm_execpath`, letting nested
+workspace discovery and partition tests invoke Node directly without a command
+shell on any platform. Bare `node` or `pnpm exec node` does not supply that
+package-script context and is not supported for these orchestration commands.
+
 The `full-without-memory` test profile differs from `full` by exactly one pnpm
 filter excluding `@typeagent/memory-service`; it is used only by qualification
 legacy memory-only remainders. The new `fanout-remainder` profile additionally

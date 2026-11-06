@@ -6,15 +6,21 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { partitionPackages } from "./lib/ciTestPartitions.mjs";
-import { windowsPnpmCommand } from "./lib/testRetry.mjs";
 
 export function spawnPnpm(args, options, run = spawnSync) {
-    const windows = process.platform === "win32";
-    return run(
-        windows ? (process.env.ComSpec ?? "cmd.exe") : "pnpm",
-        windows ? ["/d", "/v:off", "/s", "/c", windowsPnpmCommand(args)] : args,
-        { ...options, ...(windows ? { windowsVerbatimArguments: true } : {}) },
-    );
+    const pnpmPath = process.env.npm_execpath;
+    if (!pnpmPath || !/^pnpm\.(?:mjs|cjs|js)$/i.test(path.basename(pnpmPath))) {
+        throw new Error(
+            "The CI runner requires pnpm's JavaScript CLI; use pnpm run ci:node.",
+        );
+    }
+    if (!fs.statSync(pnpmPath).isFile()) {
+        throw new Error("The pnpm JavaScript CLI must be a file.");
+    }
+    return run(process.execPath, [pnpmPath, ...args], {
+        ...options,
+        shell: false,
+    });
 }
 
 export const macosCompatibilitySuites = [

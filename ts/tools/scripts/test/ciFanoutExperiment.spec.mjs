@@ -987,3 +987,28 @@ test("memory producers never wait for or run non-memory builds or tests", () => 
         ),
     );
 });
+
+test("orchestration entrypoints establish pnpm's shell-free package-script context", () => {
+    const scripts = JSON.parse(
+        fs.readFileSync(
+            new URL("../../../package.json", import.meta.url),
+            "utf8",
+        ),
+    ).scripts;
+    assert.equal(scripts["ci:node"], "node");
+    const commands = ["ci-fanout-target", "ci-fanout-experiment"].flatMap(
+        (name) =>
+            Object.values(workflow(name).jobs).flatMap((job) =>
+                (job.steps ?? []).flatMap((step) =>
+                    (step.run ?? "")
+                        .split("\n")
+                        .filter((line) =>
+                            /tools\/scripts\/ci\w+\.mjs/.test(line),
+                        ),
+                ),
+            ),
+    );
+    assert.equal(commands.length, 12);
+    for (const command of commands)
+        assert.match(command.trim(), /^pnpm run ci:node tools\/scripts\//);
+});

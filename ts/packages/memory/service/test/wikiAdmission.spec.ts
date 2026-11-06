@@ -40,9 +40,9 @@ import {
     prepareWikiContribution,
 } from "../src/viewSynthesis.js";
 import {
-    authoredRelationships,
-    derivedDefinitionInput,
-} from "../src/viewRelationships.js";
+    changeFamily,
+    editPausedConsolidationDraft,
+} from "./wikiConsolidationFixtures.js";
 
 function input(viewId = "candidate"): ViewBuildSnapshot {
     const citation = {
@@ -1591,12 +1591,7 @@ test.each(["evidence", "canonical-context", "legacy"] as const)(
             const maintain = async (
                 operation: "pause" | "resume" | "update",
             ) => {
-                const result = await service.maintainViews({
-                    corpusId,
-                    family: "wiki",
-                    operation,
-                    expectedHead: (await service.listViews(corpusId)).head,
-                });
+                const result = await changeFamily(service, corpusId, operation);
                 await finish(result.job);
             };
             await maintain("pause");
@@ -1627,17 +1622,14 @@ test.each(["evidence", "canonical-context", "legacy"] as const)(
             const beforeEdit = assessed;
             expect(beforeEdit).toBeGreaterThan(0);
             const canonical = (await service.listViews(corpusId)).views[0];
-            const content = structuredClone(canonical.content);
-            content.summary += " Human editorial qualification.";
-            await service.saveViewDraft({
+            await editPausedConsolidationDraft(
+                service,
                 corpusId,
-                viewId: canonical.viewId,
-                definition: derivedDefinitionInput(canonical),
-                content,
-                relationships: authoredRelationships(canonical),
-                expectedHead: (await service.listViews(corpusId)).head,
-                expectedVersion: canonical.version,
-            });
+                canonical.viewId,
+                (content) => {
+                    content.summary += " Human editorial qualification.";
+                },
+            );
             await service.close();
             service = open();
             await maintain("resume");
