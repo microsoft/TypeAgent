@@ -302,28 +302,34 @@ test.each(["semantic", "transient", "derivative"] as const)(
     },
 );
 
-test.each(["maintenance", "build"] as const)(
+test.each(["maintenance", "queued", "build"] as const)(
     "consolidation polling does not materialize inventories during active %s work",
     async (kind) => {
         let checks = 0;
         let builds = 0;
         let inventories = 0;
         const service: Parameters<typeof settleConsolidation>[0] = {
-            getMaintenanceStatus: () => ({
-                mode: "automatic",
-                paused: false,
-                settled: false,
-                pending: [],
-                running:
-                    kind === "maintenance" && checks++ < 2
-                        ? ["corpus:committed-read-cleanup"]
-                        : [],
-                failures: [],
-                deferred: [],
-                coalesced: 0,
-            }),
+            getMaintenanceStatus: () => {
+                const active = kind !== "build" && checks++ < 2;
+                return {
+                    mode: "automatic",
+                    paused: false,
+                    settled: false,
+                    pending:
+                        kind === "queued" && active
+                            ? ["corpus:committed-read-cleanup"]
+                            : [],
+                    running:
+                        kind === "maintenance" && active
+                            ? ["corpus:committed-read-cleanup"]
+                            : [],
+                    failures: [],
+                    deferred: [],
+                    coalesced: 0,
+                };
+            },
             listViewBuilds: async () => {
-                if (kind === "maintenance") {
+                if (kind !== "build") {
                     expect(checks).toBeGreaterThan(2);
                     return [];
                 }
@@ -357,5 +363,66 @@ test.each(["maintenance", "build"] as const)(
             views: [],
         });
         expect(inventories).toBe(1);
+    },
+);
+
+test("consolidation polling rechecks queued maintenance after reading an inventory", async () => {
+    let inventories = 0;
+    let queuedChecks = 0;
+    const service: Parameters<typeof settleConsolidation>[0] = {
+        getMaintenanceStatus: () => ({
+            mode: "automatic",
+            paused: false,
+            settled: false,
+            pending:
+                inventories === 1 && queuedChecks++ < 2
+                    ? ["corpus:committed-read-cleanup"]
+                    : [],
+            running: [],
+            failures: [],
+            deferred: [],
+            coalesced: 0,
+        }),
+        listViewBuilds: async () => [],
+        listViews: async () => ({
+            head: ++inventories === 1 ? "before" : "settled",
+            views: [],
+        }),
+    };
+    expect(await settleConsolidation(service, "corpus")).toEqual({
+        head: "settled",
+        views: [],
+    });
+    expect(inventories).toBe(2);
+});
+
+test.each(["deferred", "failed", "paused", "manual"] as const)(
+    "consolidation polling permits unchanged %s maintenance without running it",
+    async (kind) => {
+        const key = "corpus:wiki";
+        const service: Parameters<typeof settleConsolidation>[0] = {
+            getMaintenanceStatus: () => ({
+                mode: kind === "manual" ? "manual" : "automatic",
+                paused: kind === "paused",
+                settled: false,
+                pending: [key],
+                running: [],
+                failures:
+                    kind === "failed"
+                        ? [{ key, error: "Synthetic parked failure" }]
+                        : [],
+                deferred:
+                    kind === "deferred"
+                        ? [{ key, reason: "Synthetic unchanged input" }]
+                        : [],
+                coalesced: 0,
+            }),
+            listViewBuilds: async () => [],
+            listViews: async () => ({ head: "parked", views: [] }),
+        };
+        expect(await settleConsolidation(service, "corpus")).toEqual({
+            head: "parked",
+            views: [],
+        });
     },
 );

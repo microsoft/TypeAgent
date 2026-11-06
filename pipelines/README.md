@@ -342,8 +342,19 @@ nine production targets, nor for the separately required Azure/.NET checks.
 The first nine-target [PR run 42297124484](https://github.com/microsoft/TypeAgent/actions/runs/42297124484)
 took 23m52s and failed two Node 22 memory cases and two Windows installer
 fixtures. Qualification and all nine compatibility checks correctly failed.
-Those failures are repaired in the follow-up candidate; successful full
-default-scope latency still requires hosted qualification.
+The repaired [nine-target run 42303655771](https://github.com/microsoft/TypeAgent/actions/runs/42303655771)
+passed in 21m01s with independently qualified 36 memory, 48 partition and 27 lane
+reports. Its [20m29s repeat](https://github.com/microsoft/TypeAgent/actions/runs/42307785264)
+failed on remaining restart-head and paused-draft fixture races. These are not
+repeated successful latency samples.
+
+Consolidation fixtures now wait for runnable queued maintenance as well as
+running work before and after reading inventories, preserving deferred, failed,
+paused and manual work semantics. Paused draft edits refresh their inventory
+and cloned content on bounded optimistic-head conflicts; other errors and
+exhaustion propagate. Deterministic regressions preserve restart-head assertions,
+original content and maintenance-release behavior. The final candidate requires
+its own complete hosted qualification.
 
 That diagnostic run's critical Windows/Node 22 workspace producer spent 183s in
 setup, 544s building and 62s in post-setup cache work. The final remainder

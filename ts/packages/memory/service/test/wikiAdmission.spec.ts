@@ -112,6 +112,73 @@ function page(viewId = "canonical"): ViewVersion {
         provenance: "generated",
     };
 }
+
+test.each(["head", "exhausted", "other"] as const)(
+    "paused consolidation draft edits handle %s conflicts without changing the original version",
+    async (mode) => {
+        const current = page();
+        const original = current.content.summary;
+        const saved = structuredClone(current);
+        saved.content.summary += " Editorial edit.";
+        let attempts = 0;
+        let releases = 0;
+        const failure = new Error(
+            mode === "other"
+                ? "Synthetic validation failure"
+                : "View history head conflict",
+        );
+        const service: Parameters<typeof editPausedConsolidationDraft>[0] = {
+            deferMaintenance: () => () => {
+                releases++;
+            },
+            getMaintenanceStatus: () => ({
+                mode: "automatic",
+                paused: true,
+                settled: false,
+                pending: ["corpus:committed-read-cleanup"],
+                running: [],
+                failures: [],
+                deferred: [],
+                coalesced: 0,
+            }),
+            listViewBuilds: async () => [],
+            listViews: async () => ({
+                head: `head-${attempts}`,
+                views: [current],
+                wikiFamily: { enabled: false, pending: false },
+            }),
+            saveViewDraft: async (request) => {
+                expect(request.expectedHead).toBe(`head-${attempts}`);
+                expect(request.expectedVersion).toBe(current.version);
+                expect(request.content.summary).toBe(saved.content.summary);
+                attempts++;
+                if (mode !== "head" || attempts === 1) throw failure;
+                return { commitId: "saved", version: saved };
+            },
+        };
+        const result = editPausedConsolidationDraft(
+            service,
+            "corpus",
+            current.viewId,
+            (content) => {
+                content.summary += " Editorial edit.";
+            },
+        );
+        if (mode === "head") {
+            await expect(result).resolves.toEqual({
+                commitId: "saved",
+                version: saved,
+            });
+            expect(attempts).toBe(2);
+        } else {
+            await expect(result).rejects.toBe(failure);
+            expect(attempts).toBe(mode === "exhausted" ? 20 : 1);
+        }
+        expect(current.content.summary).toBe(original);
+        expect(releases).toBe(1);
+    },
+);
+
 function covered(): WikiSubjectAssessment {
     return {
         disposition: "covered",
