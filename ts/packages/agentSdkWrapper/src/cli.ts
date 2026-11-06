@@ -97,7 +97,7 @@ interface CliOptions {
  */
 function parseArgs(): CliOptions {
     const args = process.argv.slice(2);
-    let model = "claude-sonnet-4-5-20250929";
+    let model = "claude-sonnet-5-5";
     let debug = false;
     let enableCache = true;
     let tools: string[] = [];
@@ -115,7 +115,7 @@ function parseArgs(): CliOptions {
             case "-m":
                 const modelArg = args[++i]?.toLowerCase();
                 if (modelArg === "sonnet") {
-                    model = "claude-sonnet-4-5-20250929";
+                    model = "claude-sonnet-5-5";
                 } else if (modelArg === "opus") {
                     model = "claude-opus-4-5-20251101";
                 } else {
@@ -151,7 +151,7 @@ Usage: agent-sdk-wrapper [options]
 
 Options:
   -m, --model <name>     Specify the model to use (default: sonnet)
-                         - sonnet: Claude Sonnet 4.5
+                         - sonnet: Claude Sonnet 5.5
                          - opus: Claude Opus 4.5
                          - or provide a full model ID
   -d, --debug           Enable debug logging with cache timing information

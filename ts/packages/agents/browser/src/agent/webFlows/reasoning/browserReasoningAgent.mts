@@ -30,7 +30,7 @@ const PAGE_LOAD_TIMEOUT_MS = 5000; // 5 second timeout for page loads
 
 const MCP_SERVER_NAME = "browser-tools";
 const COPILOT_TIMEOUT_MS = 2_147_483_647;
-const DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
+const DEFAULT_CLAUDE_MODEL = "claude-sonnet-5-5";
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
     if (signal?.aborted) {
