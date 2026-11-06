@@ -138,6 +138,17 @@ export function validateSchema(
                 );
             }
             break;
+        case "true":
+        case "false":
+            if (actual !== (expected.type === "true")) {
+                if (coerce && actual === expected.type) {
+                    return expected.type === "true";
+                }
+                throw new Error(
+                    `${errorName(name)} is not ${expected.type}, got ${typeof actual} instead`,
+                );
+            }
+            break;
         default:
             if (typeof actual !== expected.type) {
                 if (coerce && typeof actual === "string") {

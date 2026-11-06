@@ -91,11 +91,13 @@ export type JsonSchemaReference = {
 };
 
 export type JsonSchemaTrue = {
-    type: "true";
+    type: "boolean";
+    enum: [true];
     description?: string;
 };
 
 export type JsonSchemaFalse = {
-    type: "false";
+    type: "boolean";
+    enum: [false];
     description?: string;
 };
