@@ -62,15 +62,33 @@ test("the final collector discovers exact package scripts without installing nat
         path.join(directory, "package.json"),
         JSON.stringify({ name: "test-package", version: "1.0.0", scripts }),
     );
-    const inventory = readWorkspace(root);
-    assert.deepEqual(
-        inventory.map((pkg) => ({
-            name: pkg.name,
-            directory: pkg.directory,
-            scripts: pkg.scripts,
-        })),
-        [{ name: "test-package", directory: "packages/test-package", scripts }],
+    const aliasParent = fs.mkdtempSync(
+        path.join(os.tmpdir(), "typeagent-collector-alias-"),
     );
+    t.after(() => fs.rmSync(aliasParent, { recursive: true, force: true }));
+    const alias = path.join(aliasParent, "workspace");
+    fs.symlinkSync(
+        root,
+        alias,
+        process.platform === "win32" ? "junction" : "dir",
+    );
+    for (const directory of [root, alias]) {
+        const inventory = readWorkspace(directory);
+        assert.deepEqual(
+            inventory.map((pkg) => ({
+                name: pkg.name,
+                directory: pkg.directory,
+                scripts: pkg.scripts,
+            })),
+            [
+                {
+                    name: "test-package",
+                    directory: "packages/test-package",
+                    scripts,
+                },
+            ],
+        );
+    }
     assert.equal(fs.existsSync(path.join(root, "node_modules")), false);
 });
 

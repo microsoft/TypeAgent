@@ -23,8 +23,9 @@ const root = path.resolve(
 const profilePath = path.join(root, "tools/scripts/ciRemainderDurations.json");
 
 export function readWorkspace(directory) {
+    const workspaceRoot = fs.realpathSync.native(directory);
     const result = spawnPnpm(["-r", "list", "--depth", "-1", "--json"], {
-        cwd: directory,
+        cwd: workspaceRoot,
         encoding: "utf8",
         maxBuffer: 16 * 1024 * 1024,
         stdio: ["ignore", "pipe", "inherit"],
@@ -32,10 +33,11 @@ export function readWorkspace(directory) {
     if (result.error) throw result.error;
     assert.equal(result.status, 0, "Could not discover pnpm workspace");
     return JSON.parse(result.stdout)
-        .filter((pkg) => path.resolve(pkg.path) !== path.resolve(directory))
-        .map((pkg) => {
+        .map((pkg) => fs.realpathSync.native(pkg.path))
+        .filter((packageDirectory) => packageDirectory !== workspaceRoot)
+        .map((packageDirectory) => {
             const relative = path
-                .relative(directory, pkg.path)
+                .relative(workspaceRoot, packageDirectory)
                 .split(path.sep)
                 .join("/");
             assert.ok(
@@ -45,7 +47,10 @@ export function readWorkspace(directory) {
                 "Package outside workspace",
             );
             const manifest = JSON.parse(
-                fs.readFileSync(path.join(pkg.path, "package.json"), "utf8"),
+                fs.readFileSync(
+                    path.join(packageDirectory, "package.json"),
+                    "utf8",
+                ),
             );
             return {
                 ...manifest,

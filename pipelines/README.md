@@ -267,6 +267,8 @@ The manual fan-out dispatch also accepts:
   Root and UI consumers retain the full artifact until their smaller closures
   are independently qualified. Consumer scope, exact inventory, script selection,
   SHA/OS/Node/ABI/lockfile and hashes remain blocking checks.
+  Workspace discovery compares canonical filesystem paths so temp-directory
+  aliases and Windows junctions do not invalidate those containment checks.
 - `fanout_artifact_compression=0|3|6` (default 6): controlled compression A/B
   measurements. Compare producer upload plus consumer extraction/verification,
   not archive bytes alone.
