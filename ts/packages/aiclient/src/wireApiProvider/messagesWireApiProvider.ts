@@ -196,6 +196,10 @@ export class MessagesWireApiProvider implements ProviderAdapter {
     }
 
     createStreamDecoder(): StreamDecoder {
+        // message_start carries the input/cache counts; message_delta carries
+        // the cumulative output count. Report one combined usage at the end so
+        // callers that sum usage per piece don't count the input twice.
+        let startUsage: Message["usage"] | undefined;
         return {
             push: (raw: string): StreamPiece => {
                 const evt = JSON.parse(raw) as RawMessageStreamEvent;
@@ -208,13 +212,27 @@ export class MessagesWireApiProvider implements ProviderAdapter {
                     piece.text = (evt.delta as TextDelta).text;
                 }
 
-                if (evt.type === "message_delta") {
+                if (evt.type === "message_start") {
+                    startUsage = evt.message.usage;
+                } else if (evt.type === "message_delta") {
                     if (evt.delta.stop_reason === "max_tokens") {
                         throw new Error(incompleteOutputMessage);
                     }
-                    piece.usage = usageFromMessagesUsage(evt.usage);
-                } else if (evt.type === "message_start") {
-                    piece.usage = usageFromMessagesUsage(evt.message.usage);
+                    piece.usage = usageFromMessagesUsage({
+                        input_tokens:
+                            evt.usage.input_tokens ??
+                            startUsage?.input_tokens ??
+                            null,
+                        output_tokens: evt.usage.output_tokens,
+                        cache_creation_input_tokens:
+                            evt.usage.cache_creation_input_tokens ??
+                            startUsage?.cache_creation_input_tokens ??
+                            null,
+                        cache_read_input_tokens:
+                            evt.usage.cache_read_input_tokens ??
+                            startUsage?.cache_read_input_tokens ??
+                            null,
+                    });
                 }
 
                 return piece;
