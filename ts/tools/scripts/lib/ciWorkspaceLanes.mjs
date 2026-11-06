@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { fanoutNodes } from "./ciFanoutTargets.mjs";
 import {
     balanceTests,
     partitionPackages,
@@ -147,17 +148,22 @@ export function packageTimingsFromLog(text) {
     return timings;
 }
 
-export function qualifyLanes(reports, sha, plans) {
+export function qualifyLanes(reports, sha, plans, nodeSet) {
+    const nodes = fanoutNodes(nodeSet);
     assert.equal(
         reports.length,
-        27,
-        "Expected 24 full remainder lanes and three macOS compatibility lanes",
+        nodes.length *
+            Object.values(plans).reduce(
+                (count, plan) => count + plan.groups.length,
+                0,
+            ),
+        "Expected every full remainder and macOS compatibility lane for selected Nodes",
     );
     const summary = [];
     for (const platform of ["linux", "win32", "darwin"]) {
         const plan = plans[platform];
         validateLanePlan(plan);
-        for (const node of ["v22.23.4", "v24.22.1", "v26.12.1"]) {
+        for (const node of nodes) {
             const selected = reports.filter(
                 (report) =>
                     report.platform === platform && report.node === node,

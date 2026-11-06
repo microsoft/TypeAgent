@@ -12,6 +12,9 @@ on:
       version:
         type: string
         required: true
+      include_controls:
+        type: boolean
+        default: true
       build_cache:
         type: boolean
         default: false
@@ -267,7 +270,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ["1", "2", "3", "4", control]
+        group: ${{ inputs.include_controls && fromJSON('["1","2","3","4","control"]') || fromJSON('["1","2","3","4"]') }}
     runs-on: ${{ inputs.os }}
     timeout-minutes: 65
     steps:

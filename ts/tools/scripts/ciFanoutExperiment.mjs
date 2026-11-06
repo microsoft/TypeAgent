@@ -9,12 +9,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { localTestCommands } from "./runLocalTestPackages.mjs";
 import { partitionPackages } from "./lib/ciTestPartitions.mjs";
+import { fanoutIncludesControl, fanoutNodes } from "./lib/ciFanoutTargets.mjs";
 
 const manifestName = "ci-fanout-manifest.json";
 const packagePath = "packages/memory/service";
 const groups = ["1", "2", "3", "4", "control"];
 const platforms = ["linux", "win32", "darwin"];
-const nodes = ["v22.23.4", "v24.22.1", "v26.12.1"];
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const portable = (value) => value.split(path.sep).join("/");
 
@@ -236,67 +236,111 @@ export function stageArtifact(root, manifest, directory) {
     );
 }
 
-export function qualify(reports, sha) {
+export function qualify(
+    reports,
+    sha,
+    { nodeSet, includeControls = fanoutIncludesControl() } = {},
+) {
+    const nodes = fanoutNodes(nodeSet);
+    assert.equal(typeof includeControls, "boolean");
+    const expectedGroups = groups.filter(
+        (group) => includeControls || group !== "control",
+    );
     assert.equal(
         reports.length,
-        platforms.length * nodes.length * groups.length,
-        "Expected four shards and a control per supported OS/Node",
+        platforms.length * nodes.length * expectedGroups.length,
+        "Expected every selected shard and optional control per selected OS/Node",
     );
     return platforms.flatMap((platform) =>
-        nodes.map((node) => qualifyTarget(reports, sha, platform, node)),
+        nodes.map((node) =>
+            qualifyTarget(reports, sha, platform, node, expectedGroups),
+        ),
     );
 }
 
-function qualifyTarget(reports, sha, platform, node) {
+function qualifyTarget(reports, sha, platform, node, expectedGroups) {
     const selected = reports.filter(
         (report) => report.platform === platform && report.node === node,
     );
     assert.deepEqual(
         selected.map((report) => report.group).sort(),
-        [...groups].sort(),
+        [...expectedGroups].sort(),
     );
     const control = selected.find((report) => report.group === "control");
+    const reference = control ?? selected[0];
     for (const report of selected) {
         assert.equal(report.sha, sha, "Result SHA mismatch");
         assert.equal(
             report.manifestHash,
-            control.manifestHash,
+            reference.manifestHash,
             "Mixed build artifacts",
         );
         assert.equal(report.exitCode, 0, "Failed test process");
         assert.equal(report.success, true, "Unsuccessful Jest result");
         assert.ok(Number.isFinite(report.elapsedMs) && report.elapsedMs > 0);
-        assert.deepEqual(report.expectedTests, control.expectedTests);
+        assert.deepEqual(report.expectedTests, reference.expectedTests);
     }
-    assert.ok(control.expectedTests.length > 0);
+    assert.ok(reference.expectedTests.length > 0);
     assert.equal(
-        new Set(control.expectedTests).size,
-        control.expectedTests.length,
+        new Set(reference.expectedTests).size,
+        reference.expectedTests.length,
     );
-    assert.deepEqual([...control.files].sort(), control.expectedTests);
+    if (control)
+        assert.deepEqual([...control.files].sort(), reference.expectedTests);
     const shards = selected.filter((report) => report.group !== "control");
     assert.deepEqual(
         shards.flatMap((report) => report.files).sort(),
-        control.expectedTests,
+        reference.expectedTests,
     );
-    assert.deepEqual(
-        shards.flatMap((report) => report.outcomes).sort(),
-        [...control.outcomes].sort(),
-        "Control/shard test outcomes differ",
-    );
-    assert.ok(control.outcomes.length > 0, "No test assertions reported");
+    const outcomes = shards.flatMap((report) => report.outcomes);
+    if (control) {
+        assert.deepEqual(
+            [...outcomes].sort(),
+            [...control.outcomes].sort(),
+            "Control/shard test outcomes differ",
+        );
+        assert.ok(control.outcomes.length > 0, "No test assertions reported");
+    } else {
+        qualifyShardOutcomes(shards);
+    }
     return {
         platform,
         node,
-        files: control.files.length,
-        assertions: control.outcomes.length,
-        controlMs: control.elapsedMs,
+        files: reference.expectedTests.length,
+        assertions: outcomes.length,
+        skippedAssertions: outcomes.filter(
+            (outcome) => JSON.parse(outcome)[2] !== "passed",
+        ).length,
+        controlMs: control?.elapsedMs ?? null,
         slowestShardMs: Math.max(...shards.map((report) => report.elapsedMs)),
         shardProcessMs: shards.reduce(
             (sum, report) => sum + report.elapsedMs,
             0,
         ),
     };
+}
+
+function qualifyShardOutcomes(shards) {
+    for (const report of shards) {
+        const files = new Set();
+        for (const encoded of report.outcomes) {
+            const outcome = JSON.parse(encoded);
+            assert.ok(Array.isArray(outcome) && outcome.length === 3);
+            const [file, name, status] = outcome;
+            assert.ok(report.files.includes(file), "Assertion outside shard");
+            assert.ok(typeof name === "string" && name.length > 0);
+            assert.ok(
+                ["passed", "pending", "todo"].includes(status),
+                "Unsuccessful assertion outcome",
+            );
+            files.add(file);
+        }
+        assert.deepEqual(
+            [...files].sort(),
+            [...report.files].sort(),
+            "Missing shard assertions",
+        );
+    }
 }
 
 export function memoryTestSelection(root, platform = process.platform) {
@@ -435,13 +479,16 @@ function main() {
                 fs.appendFileSync(
                     process.env.GITHUB_STEP_SUMMARY,
                     "## Memory-service fan-out qualification\n\n" +
+                        (fanoutIncludesControl()
+                            ? "Includes unsharded control/outcome comparisons.\n\n"
+                            : "Shard-only inventory qualification; unsharded controls were not run and equivalence is not measured.\n\n") +
                         "Test-process timings only; excludes build, install, artifact transfer and queue delay.\n\n" +
-                        "| OS | Node | Files | Assertions | Control (s) | Slowest shard (s) | Sum of shards (s) |\n" +
-                        "|---|---|---:|---:|---:|---:|---:|\n" +
+                        "| OS | Node | Files | Assertions | Skipped | Control (s) | Slowest shard (s) | Sum of shards (s) |\n" +
+                        "|---|---|---:|---:|---:|---:|---:|---:|\n" +
                         summary
                             .map(
                                 (row) =>
-                                    `| ${row.platform} | ${row.node} | ${row.files} | ${row.assertions} | ${(row.controlMs / 1000).toFixed(1)} | ${(row.slowestShardMs / 1000).toFixed(1)} | ${(row.shardProcessMs / 1000).toFixed(1)} |`,
+                                    `| ${row.platform} | ${row.node} | ${row.files} | ${row.assertions} | ${row.skippedAssertions} | ${row.controlMs === null ? "not run" : (row.controlMs / 1000).toFixed(1)} | ${(row.slowestShardMs / 1000).toFixed(1)} | ${(row.shardProcessMs / 1000).toFixed(1)} |`,
                             )
                             .join("\n") +
                         "\n",

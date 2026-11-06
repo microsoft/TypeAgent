@@ -16,6 +16,7 @@ import {
     memoryTestSelection,
 } from "../ciFanoutExperiment.mjs";
 import { localTestCommands } from "../runLocalTestPackages.mjs";
+import { fanoutIncludesControl, fanoutNodes } from "../lib/ciFanoutTargets.mjs";
 
 const sha = "a".repeat(40);
 const spec = "packages/memory/service/dist/test/example.spec.js";
@@ -245,6 +246,152 @@ test("qualification checks complete shard inventories and control assertion outc
     );
 });
 
+test("target selection is explicit and rejects unknown or empty configurations", () => {
+    assert.deepEqual(fanoutNodes("all"), ["v22.23.4", "v24.22.1", "v26.12.1"]);
+    assert.deepEqual(fanoutNodes("24-and-26"), ["v24.22.1", "v26.12.1"]);
+    for (const value of ["", "unknown", "[]"])
+        assert.throws(() => fanoutNodes(value), /Unknown/);
+    assert.equal(fanoutIncludesControl("true"), true);
+    assert.equal(fanoutIncludesControl("false"), false);
+    for (const value of ["", "0", "unknown"])
+        assert.throws(() => fanoutIncludesControl(value), /Invalid/);
+});
+
+const shardOptions = { nodeSet: "24-and-26", includeControls: false };
+function shardReports() {
+    return reports().filter(
+        (row) => row.node !== "v22.23.4" && row.group !== "control",
+    );
+}
+
+test("selected-node shard-only qualification requires all six targets without claiming control equivalence", () => {
+    const rows = shardReports();
+    assert.equal(rows.length, 24);
+    const summary = qualify(rows, sha, shardOptions);
+    assert.equal(summary.length, 6);
+    for (const row of summary) {
+        assert.equal(row.controlMs, null);
+        assert.equal(row.files, 4);
+        assert.equal(row.assertions, 4);
+        assert.equal(row.skippedAssertions, 0);
+    }
+    assert.equal(
+        qualify(
+            reports().filter((row) => row.node !== "v22.23.4"),
+            sha,
+            { nodeSet: "24-and-26" },
+        ).length,
+        6,
+        "Selected Nodes can still be qualified with controls",
+    );
+    assert.throws(() => qualify(rows, sha));
+    assert.throws(() => qualify(reports(), sha, shardOptions));
+    assert.equal(
+        qualify(
+            reports().filter((row) => row.group !== "control"),
+            sha,
+            { includeControls: false },
+        ).length,
+        9,
+        "Control exclusion is independent of Node selection",
+    );
+    assert.throws(() =>
+        qualify(rows, sha, { ...shardOptions, includeControls: "false" }),
+    );
+});
+
+test("shard-only qualification exposes existing skipped assertions rather than counting them as passes", () => {
+    const rows = shardReports();
+    rows[0].outcomes = [JSON.stringify(["test-1", "assertion", "pending"])];
+    assert.equal(qualify(rows, sha, shardOptions)[0].skippedAssertions, 1);
+});
+
+for (const [name, change] of [
+    ["missing shard", (rows) => rows.pop()],
+    [
+        "unselected Node",
+        (rows) => {
+            rows[0].node = "v22.23.4";
+        },
+    ],
+    [
+        "unexpected control",
+        (rows) => {
+            rows[0].group = "control";
+        },
+    ],
+    [
+        "wrong SHA",
+        (rows) => {
+            rows[0].sha = "b".repeat(40);
+        },
+    ],
+    [
+        "mixed artifact",
+        (rows) => {
+            rows[0].manifestHash = "different";
+        },
+    ],
+    [
+        "failed process",
+        (rows) => {
+            rows[0].exitCode = 1;
+        },
+    ],
+    [
+        "unsuccessful result",
+        (rows) => {
+            rows[0].success = false;
+        },
+    ],
+    [
+        "missing file",
+        (rows) => {
+            rows[0].files = [];
+        },
+    ],
+    [
+        "duplicate file",
+        (rows) => {
+            rows[0].files.push("test-2");
+        },
+    ],
+    [
+        "missing assertions",
+        (rows) => {
+            rows[0].outcomes = [];
+        },
+    ],
+    [
+        "malformed assertion",
+        (rows) => {
+            rows[0].outcomes = ["not JSON"];
+        },
+    ],
+    [
+        "failed assertion",
+        (rows) => {
+            rows[0].outcomes = [
+                JSON.stringify(["test-1", "assertion", "failed"]),
+            ];
+        },
+    ],
+    [
+        "assertion outside shard",
+        (rows) => {
+            rows[0].outcomes = [
+                JSON.stringify(["test-2", "assertion", "passed"]),
+            ];
+        },
+    ],
+]) {
+    test(`shard-only qualification rejects ${name}`, () => {
+        const rows = shardReports();
+        change(rows);
+        assert.throws(() => qualify(rows, sha, shardOptions));
+    });
+}
+
 for (const [name, change] of [
     ["missing/cancelled shard", (rows) => rows.pop()],
     [
@@ -341,6 +488,61 @@ function workflow(name) {
     );
 }
 
+function matrixValue(expression, inputs) {
+    return vm.runInNewContext(expression.slice(3, -2), {
+        inputs,
+        fromJSON: JSON.parse,
+    });
+}
+
+test("experimental Node and control choices reach matrices and every report collector without changing defaults", () => {
+    const main = workflow("build-ts");
+    const experiment = workflow("ci-fanout-experiment");
+    const target = workflow("ci-fanout-target");
+    const inputs = main.on.workflow_dispatch.inputs;
+    assert.deepEqual(inputs.fanout_node_set.options, ["all", "24-and-26"]);
+    assert.equal(inputs.fanout_node_set.default, "all");
+    assert.equal(inputs.fanout_include_controls.default, true);
+    assert.equal(experiment.on.workflow_call.inputs.node_set.default, "all");
+    assert.equal(
+        experiment.on.workflow_call.inputs.include_controls.default,
+        true,
+    );
+    assert.equal(target.on.workflow_call.inputs.include_controls.default, true);
+    assert.equal(
+        main.jobs.fanout_experiment.with.node_set,
+        "${{ inputs.fanout_node_set }}",
+    );
+    assert.equal(
+        main.jobs.fanout_experiment.with.include_controls,
+        "${{ inputs.fanout_include_controls }}",
+    );
+    assert.equal(
+        experiment.jobs.targets.with.include_controls,
+        "${{ inputs.include_controls }}",
+    );
+    assert.deepEqual(experiment.jobs.qualification.env, {
+        TYPEAGENT_FANOUT_NODE_SET: "${{ inputs.node_set }}",
+        TYPEAGENT_FANOUT_INCLUDE_CONTROLS: "${{ inputs.include_controls }}",
+    });
+    for (const nodeSet of ["all", "24-and-26"])
+        assert.deepEqual(
+            matrixValue(experiment.jobs.targets.strategy.matrix.version, {
+                node_set: nodeSet,
+            }),
+            fanoutNodes(nodeSet).map((node) => node.slice(1)),
+        );
+    for (const includeControls of [true, false])
+        assert.deepEqual(
+            matrixValue(target.jobs.test.strategy.matrix.group, {
+                include_controls: includeControls,
+            }),
+            includeControls
+                ? ["1", "2", "3", "4", "control"]
+                : ["1", "2", "3", "4"],
+        );
+});
+
 test("fan-out is manual opt-in and does not replace PR, main or queue validation", () => {
     const main = workflow("build-ts");
     assert.equal(
@@ -417,7 +619,9 @@ test("test runners install native dependencies but never rebuild shared product 
         'npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep',
     );
     assert.deepEqual(
-        experiment.jobs.targets.strategy.matrix.version,
+        matrixValue(experiment.jobs.targets.strategy.matrix.version, {
+            node_set: "all",
+        }),
         workflow("build-ts").jobs.build_ts.strategy.matrix.version,
     );
     assert.equal(
@@ -446,13 +650,12 @@ test("test runners install native dependencies but never rebuild shared product 
         ).with.path,
         "${{ runner.temp }}/fanout-build",
     );
-    assert.deepEqual(target.jobs.test.strategy.matrix.group, [
-        "1",
-        "2",
-        "3",
-        "4",
-        "control",
-    ]);
+    assert.deepEqual(
+        matrixValue(target.jobs.test.strategy.matrix.group, {
+            include_controls: true,
+        }),
+        ["1", "2", "3", "4", "control"],
+    );
     assert.equal(target.jobs.test.needs, "build");
     assert.equal(target.jobs.test.strategy["fail-fast"], false);
     const commands = target.jobs.test.steps

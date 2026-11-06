@@ -3,6 +3,7 @@
 
 import assert from "node:assert/strict";
 import { MAX_TEST_RETRIES } from "./testRetry.mjs";
+import { fanoutNodes } from "./ciFanoutTargets.mjs";
 
 export const partitionPackages = {
     dispatcher: {
@@ -126,15 +127,16 @@ export function runPartitionAttempts(files, run) {
     };
 }
 
-export function qualifyPartitions(reports, sha) {
+export function qualifyPartitions(reports, sha, nodeSet) {
+    const nodes = fanoutNodes(nodeSet);
     assert.equal(
         reports.length,
-        48,
-        "Expected two packages, two OSes, three Nodes and four groups",
+        2 * 2 * nodes.length * 4,
+        "Expected two packages, two OSes, selected Nodes and four groups",
     );
     const summary = [];
     for (const platform of ["linux", "win32"]) {
-        for (const node of ["v22.23.4", "v24.22.1", "v26.12.1"]) {
+        for (const node of nodes) {
             for (const target of Object.keys(partitionPackages)) {
                 const rows = reports.filter(
                     (row) =>

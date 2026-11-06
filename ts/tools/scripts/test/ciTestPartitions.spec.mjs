@@ -158,6 +158,19 @@ test("aggregation requires all 48 exact package partitions and reports first-pas
     assert.equal(summary[0].firstPassFailures, 1);
 });
 
+test("selected-node package aggregation requires exactly 32 reports and rejects incomplete or extra targets", () => {
+    const sha = "a".repeat(40);
+    const rows = reports().filter((row) => row.node !== "v22.23.4");
+    assert.equal(rows.length, 32);
+    assert.equal(qualifyPartitions(rows, sha, "24-and-26").length, 8);
+    assert.throws(() => qualifyPartitions(rows, sha));
+    assert.throws(() => qualifyPartitions(reports(), sha, "24-and-26"));
+    assert.throws(() => qualifyPartitions(rows.slice(1), sha, "24-and-26"));
+    const wrongNode = structuredClone(rows);
+    wrongNode[0].node = "v22.23.4";
+    assert.throws(() => qualifyPartitions(wrongNode, sha, "24-and-26"));
+});
+
 for (const [name, change] of [
     ["missing report", (rows) => rows.pop()],
     [
