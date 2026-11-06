@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       fanout_experiment:
-        description: Qualify full-workspace builds/tests with memory-test fan-out instead of the normal matrix
+        description: Use sharded CI (disable for a manual legacy-matrix rollback)
         type: boolean
-        default: false
+        default: true
       fanout_node_set:
         description: Node versions to qualify (fanout experiment only)
         type: choice
@@ -20,7 +20,7 @@ on:
       fanout_include_controls:
         description: Include duplicate unsharded memory controls (fanout experiment only)
         type: boolean
-        default: true
+        default: false
       fanout_build_cache:
         description: Trial exact-source compilation caching (fanout experiment only)
         type: boolean
@@ -60,21 +60,75 @@ env:
   NODE_OPTIONS: --max_old_space_size=8192
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      required: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        if: github.event_name == 'pull_request'
+        id: filter
+        with:
+          filters: |
+            ts:
+              - "ts/**"
+              - ".github/workflows/build-ts.yml"
+              - ".github/workflows/ci-fanout-*.yml"
+              - ".github/actions/fanout-setup/**"
+      - name: Record coverage selection
+        shell: pwsh
+        env:
+          CI_COVERAGE_REQUIRED: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        run: Write-Output "TypeScript CI required=$env:CI_COVERAGE_REQUIRED"
+
   fanout_experiment:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_experiment }}
+    needs: changes
+    if: ${{ needs.changes.outputs.required == 'true' && github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.fanout_experiment) }}
     permissions:
       contents: read
     uses: ./.github/workflows/ci-fanout-experiment.yml
     with:
-      node_set: ${{ inputs.fanout_node_set }}
-      include_controls: ${{ inputs.fanout_include_controls }}
-      build_cache: ${{ inputs.fanout_build_cache }}
-      native_cache: ${{ inputs.fanout_native_cache }}
-      compact_artifact: ${{ inputs.fanout_compact_artifact }}
-      artifact_compression: ${{ inputs.fanout_artifact_compression }}
+      node_set: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_node_set || 'all' }}
+      include_controls: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_include_controls }}
+      build_cache: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_build_cache }}
+      native_cache: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_native_cache }}
+      compact_artifact: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_compact_artifact }}
+      artifact_compression: ${{ inputs.fanout_artifact_compression || '6' }}
 
   build_ts:
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.fanout_experiment }}
+    # Preserve required matrix check names; execution is qualified upstream.
+    if: ${{ always() }}
+    needs: [changes, fanout_experiment, build_ts_legacy]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ github.event_name == 'schedule' && fromJSON('["macos-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
+        version: ${{ github.event_name == 'workflow_dispatch' && inputs.fanout_experiment && inputs.fanout_node_set == '24-and-26' && fromJSON('["24.22.1","26.12.1"]') || fromJSON('["22.23.4","24.22.1","26.12.1"]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require successful complete CI coverage
+        shell: pwsh
+        env:
+          CI_CHANGES_RESULT: ${{ needs.changes.result }}
+          CI_COVERAGE_REQUIRED: ${{ needs.changes.outputs.required }}
+          CI_USE_LEGACY: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.fanout_experiment) }}
+          CI_SHARDED_RESULT: ${{ needs.fanout_experiment.result }}
+          CI_LEGACY_RESULT: ${{ needs.build_ts_legacy.result }}
+        run: |
+          if ($env:CI_CHANGES_RESULT -ne 'success') { throw "Coverage selection did not succeed: $env:CI_CHANGES_RESULT" }
+          if ($env:CI_COVERAGE_REQUIRED -eq 'false') { Write-Output 'No TypeScript or sharded CI paths changed'; exit 0 }
+          if ($env:CI_COVERAGE_REQUIRED -ne 'true') { throw 'Missing coverage selection' }
+          if ($env:CI_USE_LEGACY -notin @('true', 'false')) { throw 'Missing CI strategy selection' }
+          $result = if ($env:CI_USE_LEGACY -eq 'true') { $env:CI_LEGACY_RESULT } else { $env:CI_SHARDED_RESULT }
+          if ($result -ne 'success') { throw "Required CI coverage did not succeed: $result" }
+
+  build_ts_legacy:
+    needs: changes
+    if: ${{ needs.changes.outputs.required == 'true' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.fanout_experiment)) }}
     strategy:
       fail-fast: false
       matrix:

@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-name: Build/test fan-out qualification
+name: Sharded TypeScript CI
 
 on:
   workflow_call:
@@ -11,7 +11,7 @@ on:
         default: "all"
       include_controls:
         type: boolean
-        default: true
+        default: false
       build_cache:
         type: boolean
         default: false
@@ -47,7 +47,47 @@ jobs:
           native-cache: ${{ inputs.native_cache }}
       - name: Check platform-independent formatting and lint once
         working-directory: ts
-        run: npm run lint
+        shell: pwsh
+        env:
+          CI_EVENT_NAME: ${{ github.event_name }}
+          CI_BASE_REF: ${{ github.base_ref }}
+        run: |
+          if ($env:CI_EVENT_NAME -eq 'pull_request') {
+            git fetch --no-tags origin $env:CI_BASE_REF
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            node tools/scripts/prettier-changed.mjs --base "origin/$env:CI_BASE_REF"
+          } else {
+            npm run lint
+          }
+          exit $LASTEXITCODE
+      - name: Complexity ratchet
+        if: github.event_name == 'pull_request'
+        working-directory: ts
+        shell: pwsh
+        env:
+          CI_BASE_REF: ${{ github.base_ref }}
+        run: npm run code-complexity -- --ratchet --base "origin/$env:CI_BASE_REF" --cyclomatic 25 --cognitive 30 --new-file-cyclomatic 25 --new-file-cognitive 30
+      - name: Lint ratchet
+        if: github.event_name == 'pull_request'
+        working-directory: ts
+        shell: pwsh
+        env:
+          CI_BASE_REF: ${{ github.base_ref }}
+        run: npm run code-lint -- --ratchet --base "origin/$env:CI_BASE_REF"
+      - name: Circular dependency ratchet
+        if: github.event_name == 'pull_request'
+        working-directory: ts
+        shell: pwsh
+        env:
+          CI_BASE_REF: ${{ github.base_ref }}
+        run: npm run code-circular -- --ratchet --base "origin/$env:CI_BASE_REF" --exceptions-file tools/scripts/code/circular-baseline-exception.json
+      - name: Test debt gate
+        if: github.event_name == 'pull_request'
+        working-directory: ts
+        shell: pwsh
+        env:
+          CI_BASE_REF: ${{ github.base_ref }}
+        run: npm run code-debt -- --gate --base "origin/$env:CI_BASE_REF"
 
   targets:
     strategy:

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -488,34 +489,39 @@ function workflow(name) {
     );
 }
 
-function matrixValue(expression, inputs) {
+function matrixValue(expression, inputs, github = {}, required = "true") {
     return vm.runInNewContext(expression.slice(3, -2), {
         inputs,
+        github,
+        needs: { changes: { outputs: { required } } },
         fromJSON: JSON.parse,
     });
 }
 
-test("experimental Node and control choices reach matrices and every report collector without changing defaults", () => {
+test("manual Node and control choices reach matrices and every report collector", () => {
     const main = workflow("build-ts");
     const experiment = workflow("ci-fanout-experiment");
     const target = workflow("ci-fanout-target");
     const inputs = main.on.workflow_dispatch.inputs;
     assert.deepEqual(inputs.fanout_node_set.options, ["all", "24-and-26"]);
     assert.equal(inputs.fanout_node_set.default, "all");
-    assert.equal(inputs.fanout_include_controls.default, true);
+    assert.equal(inputs.fanout_include_controls.default, false);
     assert.equal(experiment.on.workflow_call.inputs.node_set.default, "all");
     assert.equal(
         experiment.on.workflow_call.inputs.include_controls.default,
-        true,
+        false,
     );
-    assert.equal(target.on.workflow_call.inputs.include_controls.default, true);
+    assert.equal(
+        target.on.workflow_call.inputs.include_controls.default,
+        false,
+    );
     assert.equal(
         main.jobs.fanout_experiment.with.node_set,
-        "${{ inputs.fanout_node_set }}",
+        "${{ github.event_name == 'workflow_dispatch' && inputs.fanout_node_set || 'all' }}",
     );
     assert.equal(
         main.jobs.fanout_experiment.with.include_controls,
-        "${{ inputs.fanout_include_controls }}",
+        "${{ github.event_name == 'workflow_dispatch' && inputs.fanout_include_controls }}",
     );
     assert.equal(
         experiment.jobs.targets.with.include_controls,
@@ -543,28 +549,196 @@ test("experimental Node and control choices reach matrices and every report coll
         );
 });
 
-test("fan-out is manual opt-in and does not replace PR, main or queue validation", () => {
+test("sharded CI is the default with all supported targets and unchanged scheduled policy", () => {
     const main = workflow("build-ts");
     assert.equal(
         main.on.workflow_dispatch.inputs.fanout_experiment.default,
-        false,
+        true,
     );
     for (const trigger of ["push", "pull_request", "merge_group", "schedule"]) {
         assert.ok(main.on[trigger]);
     }
-    assert.equal(
-        main.jobs.fanout_experiment.if,
-        "${{ github.event_name == 'workflow_dispatch' && inputs.fanout_experiment }}",
+    for (const event of [
+        "push",
+        "pull_request",
+        "merge_group",
+        "schedule",
+        "workflow_dispatch",
+    ]) {
+        const github = { event_name: event };
+        const inputs = { fanout_experiment: true, fanout_node_set: "all" };
+        assert.equal(
+            matrixValue(main.jobs.fanout_experiment.if, inputs, github),
+            event !== "schedule",
+        );
+        assert.equal(
+            matrixValue(main.jobs.build_ts_legacy.if, inputs, github),
+            event === "schedule",
+        );
+        assert.deepEqual(
+            matrixValue(
+                main.jobs.build_ts.strategy.matrix.version,
+                inputs,
+                github,
+            ),
+            ["22.23.4", "24.22.1", "26.12.1"],
+        );
+        assert.deepEqual(
+            matrixValue(main.jobs.build_ts.strategy.matrix.os, inputs, github),
+            event === "schedule"
+                ? ["macos-latest"]
+                : ["ubuntu-latest", "windows-latest", "macos-latest"],
+        );
+        assert.equal(
+            matrixValue(
+                main.jobs.fanout_experiment.with.node_set,
+                inputs,
+                github,
+            ),
+            "all",
+        );
+    }
+    const github = { event_name: "workflow_dispatch" };
+    const selected = { fanout_experiment: true, fanout_node_set: "24-and-26" };
+    assert.deepEqual(
+        matrixValue(
+            main.jobs.build_ts.strategy.matrix.version,
+            selected,
+            github,
+        ),
+        ["24.22.1", "26.12.1"],
     );
     assert.equal(
-        main.jobs.build_ts.if,
-        "${{ github.event_name != 'workflow_dispatch' || !inputs.fanout_experiment }}",
+        matrixValue(
+            main.jobs.build_ts_legacy.if,
+            { fanout_experiment: false },
+            github,
+        ),
+        true,
     );
-    assert.deepEqual(main.jobs.build_ts.strategy.matrix.version, [
-        "22.23.4",
-        "24.22.1",
-        "26.12.1",
+    assert.equal(
+        matrixValue(
+            main.jobs.fanout_experiment.if,
+            { fanout_experiment: false },
+            github,
+        ),
+        false,
+    );
+    assert.equal(main.jobs.build_ts.if, "${{ always() }}");
+    assert.deepEqual(main.jobs.build_ts.needs, [
+        "changes",
+        "fanout_experiment",
+        "build_ts_legacy",
     ]);
+    assert.equal(main.jobs.build_ts["runs-on"], "ubuntu-latest");
+});
+
+for (const legacy of [false, true]) {
+    for (const result of ["success", "failure", "cancelled", "skipped", ""]) {
+        test(`required matrix checks fail closed: legacy=${legacy}, result=${result || "missing"}`, () => {
+            const step = workflow("build-ts").jobs.build_ts.steps[0];
+            const child = spawnSync(
+                "pwsh",
+                ["-NoProfile", "-NonInteractive", "-Command", step.run],
+                {
+                    encoding: "utf8",
+                    timeout: 15_000,
+                    env: {
+                        ...process.env,
+                        CI_CHANGES_RESULT: "success",
+                        CI_COVERAGE_REQUIRED: "true",
+                        CI_USE_LEGACY: String(legacy),
+                        CI_SHARDED_RESULT: legacy ? "success" : result,
+                        CI_LEGACY_RESULT: legacy ? result : "success",
+                    },
+                },
+            );
+            assert.ifError(child.error);
+            assert.equal(
+                child.status === 0,
+                result === "success",
+                child.stderr,
+            );
+        });
+    }
+}
+
+test("documentation-only PRs skip work only after a successful explicit path decision", () => {
+    const main = workflow("build-ts");
+    const event = { event_name: "pull_request" };
+    for (const strategy of ["fanout_experiment", "build_ts_legacy"]) {
+        assert.equal(
+            matrixValue(main.jobs[strategy].if, {}, event, "false"),
+            false,
+        );
+        assert.equal(main.jobs[strategy].needs, "changes");
+    }
+    const filter = main.jobs.changes.steps.find((step) => step.id === "filter");
+    assert.equal(filter["continue-on-error"], undefined);
+    for (const path of [
+        "ts/**",
+        ".github/workflows/build-ts.yml",
+        ".github/workflows/ci-fanout-*.yml",
+        ".github/actions/fanout-setup/**",
+    ]) {
+        assert.ok(filter.with.filters.includes(`"${path}"`));
+    }
+    for (const [result, decision, passed] of [
+        ["success", "false", true],
+        ["failure", "false", false],
+        ["success", "", false],
+    ]) {
+        const child = spawnSync(
+            "pwsh",
+            [
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                main.jobs.build_ts.steps[0].run,
+            ],
+            {
+                encoding: "utf8",
+                timeout: 15_000,
+                env: {
+                    ...process.env,
+                    CI_CHANGES_RESULT: result,
+                    CI_COVERAGE_REQUIRED: decision,
+                    CI_SHARDED_RESULT: "skipped",
+                    CI_LEGACY_RESULT: "skipped",
+                },
+            },
+        );
+        assert.ifError(child.error);
+        assert.equal(child.status === 0, passed, child.stderr);
+    }
+});
+
+test("sharded PR analysis retains changed formatting and all four ratchets", () => {
+    const steps = workflow("ci-fanout-experiment").jobs.analysis.steps;
+    const format = steps.find((step) => step.env?.CI_EVENT_NAME);
+    assert.ok(
+        format.run.includes("git fetch --no-tags origin $env:CI_BASE_REF"),
+    );
+    assert.ok(
+        format.run.includes(
+            'prettier-changed.mjs --base "origin/$env:CI_BASE_REF"',
+        ),
+    );
+    assert.ok(format.run.includes("npm run lint"));
+    for (const command of [
+        "code-complexity",
+        "code-lint",
+        "code-circular",
+        "code-debt",
+    ]) {
+        const gates = steps.filter((step) =>
+            step.run?.includes(`npm run ${command} `),
+        );
+        assert.equal(gates.length, 1, command);
+        assert.equal(gates[0].if, "github.event_name == 'pull_request'");
+        assert.equal(gates[0].env.CI_BASE_REF, "${{ github.base_ref }}");
+        assert.ok(gates[0].run.includes('--base "origin/$env:CI_BASE_REF"'));
+    }
 });
 
 test("Linux prerequisites bound apt network waits and propagate failures", () => {
@@ -622,7 +796,7 @@ test("test runners install native dependencies but never rebuild shared product 
         matrixValue(experiment.jobs.targets.strategy.matrix.version, {
             node_set: "all",
         }),
-        workflow("build-ts").jobs.build_ts.strategy.matrix.version,
+        workflow("build-ts").jobs.build_ts_legacy.strategy.matrix.version,
     );
     assert.equal(
         experiment.jobs.targets.uses,
@@ -679,7 +853,9 @@ test("platform-independent analysis runs once and remains blocking", () => {
     const experiment = workflow("ci-fanout-experiment");
     const analysis = experiment.jobs.analysis;
     assert.equal(analysis.strategy, undefined);
-    assert.ok(analysis.steps.some((step) => step.run === "npm run lint"));
+    assert.ok(
+        analysis.steps.some((step) => step.run?.includes("npm run lint")),
+    );
     assert.equal(
         workflow("ci-fanout-target").jobs.build.steps.some(
             (step) => step.run === "npm run lint",

@@ -198,25 +198,38 @@ export async function ingestFixture(
     expect((await waitForMemoryJob(service, job.jobId)).state).toBe("complete");
 }
 export async function settleConsolidation(
-    service: FileMemoryService,
+    service: Pick<
+        FileMemoryService,
+        "listViewBuilds" | "listViews" | "getMaintenanceStatus"
+    >,
     corpusId: string,
     allowDecision = false,
 ) {
     for (let attempt = 0; attempt < 1000; attempt++) {
-        const jobs = await service.listViewBuilds(corpusId);
-        // A committed read can finish on the snapshot from before an active writer.
         const maintenance = service.getMaintenanceStatus();
-        const snapshot = await service.listViews(corpusId);
+        const running = maintenance.running.some((key) =>
+            key.startsWith(`${corpusId}:`),
+        );
+        const jobs =
+            running && attempt < 999
+                ? []
+                : await service.listViewBuilds(corpusId);
         const decision =
             allowDecision &&
             jobs.some((job) =>
                 job.results.some((result) => result.state === "conflicted"),
             );
+        const building = jobs.some((job) => job.state === "running");
+        // Avoid repeatedly materializing inventories while writers are still building them.
+        if (attempt < 999 && (running || building)) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            continue;
+        }
+        // A committed read can finish on the snapshot from before an active writer.
+        const snapshot = await service.listViews(corpusId);
         if (
-            !jobs.some((job) => job.state === "running") &&
-            !maintenance.running.some((key) =>
-                key.startsWith(`${corpusId}:`),
-            ) &&
+            !building &&
+            !running &&
             !service
                 .getMaintenanceStatus()
                 .running.some((key) => key.startsWith(`${corpusId}:`)) &&

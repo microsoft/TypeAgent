@@ -18,7 +18,7 @@ import {
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 
-test("workflow retains blocking Linux/Windows, macOS compatibility, and full nightly/manual coverage", () => {
+test("legacy rollback retains its full matrix and nightly/manual coverage", () => {
     const workflow = yaml.load(
         fs.readFileSync(
             new URL(
@@ -29,7 +29,7 @@ test("workflow retains blocking Linux/Windows, macOS compatibility, and full nig
         ),
     );
     assert.equal(workflow.on.schedule[0].cron, "17 8 * * *");
-    const job = workflow.jobs.build_ts;
+    const job = workflow.jobs.build_ts_legacy;
     const step = job.steps.find((step) => step.name === "Test");
     const evaluate = (expression, event, os) =>
         vm.runInNewContext(expression.slice(3, -2), {

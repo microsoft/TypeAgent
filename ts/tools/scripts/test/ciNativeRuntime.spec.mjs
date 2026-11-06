@@ -46,7 +46,7 @@ test("native reuse is explicit opt-in and forwarded to every fan-out install", (
     assert.equal(setup.inputs["native-cache"].default, "false");
     assert.equal(
         main.jobs.fanout_experiment.with.native_cache,
-        "${{ inputs.fanout_native_cache }}",
+        "${{ github.event_name == 'workflow_dispatch' && inputs.fanout_native_cache }}",
     );
     assert.equal(
         experiment.jobs.targets.with.native_cache,
@@ -62,12 +62,14 @@ test("native reuse is explicit opt-in and forwarded to every fan-out install", (
         );
     }
     assert.equal(
-        main.jobs.build_ts.steps.find((step) =>
+        main.jobs.build_ts_legacy.steps.find((step) =>
             step.uses?.startsWith("actions/setup-node@"),
         ).with.cache,
         "pnpm",
     );
-    assert.ok(!JSON.stringify(main.jobs.build_ts).includes("native_cache"));
+    assert.ok(
+        !JSON.stringify(main.jobs.build_ts_legacy).includes("native_cache"),
+    );
 });
 
 test("native stores isolate runtime, image, package-manager and build-policy identities", () => {

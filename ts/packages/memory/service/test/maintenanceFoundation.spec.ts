@@ -79,6 +79,7 @@ test.each(["semantic", "transient", "derivative"] as const)(
         const root = await mkdtemp(
             path.join(os.tmpdir(), "memory-foundation-"),
         );
+
         const calls = new Map<string, number>();
         let rejectTarget = true;
         const adapter = {
@@ -298,5 +299,63 @@ test.each(["semantic", "transient", "derivative"] as const)(
             await service.close();
             await rm(root, { recursive: true, force: true });
         }
+    },
+);
+
+test.each(["maintenance", "build"] as const)(
+    "consolidation polling does not materialize inventories during active %s work",
+    async (kind) => {
+        let checks = 0;
+        let builds = 0;
+        let inventories = 0;
+        const service: Parameters<typeof settleConsolidation>[0] = {
+            getMaintenanceStatus: () => ({
+                mode: "automatic",
+                paused: false,
+                settled: false,
+                pending: [],
+                running:
+                    kind === "maintenance" && checks++ < 2
+                        ? ["corpus:committed-read-cleanup"]
+                        : [],
+                failures: [],
+                deferred: [],
+                coalesced: 0,
+            }),
+            listViewBuilds: async () => {
+                if (kind === "maintenance") {
+                    expect(checks).toBeGreaterThan(2);
+                    return [];
+                }
+                return [
+                    {
+                        jobId: "build",
+                        corpusId: "corpus",
+                        fingerprint: "input",
+                        request: {
+                            corpusId: "corpus",
+                            expectedHead: null,
+                            targets: [],
+                        },
+                        actor: "fixture",
+                        createdAt: "",
+                        updatedAt: "",
+                        state: builds++ < 2 ? "running" : "complete",
+                        results: [],
+                        publication: false,
+                    },
+                ];
+            },
+            listViews: async () => {
+                inventories++;
+                if (kind === "build") expect(builds).toBe(3);
+                return { head: null, views: [] };
+            },
+        };
+        expect(await settleConsolidation(service, "corpus")).toEqual({
+            head: null,
+            views: [],
+        });
+        expect(inventories).toBe(1);
     },
 );

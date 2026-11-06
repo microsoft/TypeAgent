@@ -14,7 +14,7 @@ on:
         required: true
       include_controls:
         type: boolean
-        default: true
+        default: false
       build_cache:
         type: boolean
         default: false

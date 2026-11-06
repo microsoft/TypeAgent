@@ -131,19 +131,29 @@ These checks do not authenticate, fetch keys, call models, or validate Azure
 service-connection permissions. Azure-side validation and a real pipeline run
 remain rollout requirements.
 
-## GitHub build/test fan-out qualification
+## GitHub sharded build/test CI
 
-This is an opt-in qualification, not a replacement for required checks. It
+Sharded CI is the default for PRs, main pushes, merge queues and manual runs. It
 exercises all supported OS/Node targets without Azure access or model keys.
 Its test selections match normal gating: full Linux/Windows coverage and the
 existing minimal macOS compatibility suites, not full macOS package tests.
+The daily schedule retains the legacy macOS-only full-test matrix. Local test
+defaults are unchanged. Documentation-only PRs keep their fast path; changes
+to TypeScript or the sharded workflows/action require complete validation.
 
-From GitHub Actions, manually run **build-ts** on the candidate branch with
-`fanout_experiment` checked, or use:
+From GitHub Actions, manually run **build-ts** with its default inputs, or use:
 
 ```powershell
-gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <candidate-branch> -f fanout_experiment=true
+gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <candidate-branch>
 ```
+
+The historical `fanout_experiment` input is retained for compatibility. Set it
+to false on a manual dispatch to roll back to the original full matrix.
+The nine protected `build_ts (OS, Node)` check names remain blocking: lightweight
+compatibility jobs require the entire selected strategy to succeed, rejecting
+failed, cancelled, skipped or missing coverage. Only a successful explicit
+documentation-only path decision permits a no-op check. Branch protection is
+not changed. PR formatting and all four ratchets run once in sharded analysis.
 
 The reusable `ci-fanout-experiment.yml` calls `ci-fanout-target.yml` independently
 for each combination of Ubuntu, Windows and macOS with Node
@@ -186,8 +196,8 @@ suites are selected explicitly for both memory discovery and shard/control
 execution; the full memory-service inventory is used only on Linux/Windows.
 The remainder and memory selections together equal the existing 13-suite macOS
 compatibility selection. Missing compiled compatibility suites fail explicitly.
-Default local and required CI selections, including full normal scheduled/manual
-runs outside qualification, are unchanged.
+Local selections are unchanged. Scheduled runs and explicit manual legacy
+rollbacks retain full macOS testing; ordinary sharded CI keeps minimal macOS coverage.
 
 Each producer uploads compiled `dist` outputs and a manifest containing the exact source SHA, lockfile hash,
 OS/architecture, Node/ABI, output hashes, and the complete selected Jest spec inventory.
@@ -197,18 +207,20 @@ Dependencies and credential files are not uploaded.
 
 Fresh test runners install their own native dependencies, restore only matching
 outputs, verify the manifest, and run memory-service Jest specs without rebuilding.
-Four file-level shards and an unsharded control consume the same per-OS/Node
-artifact. All nine toolchain combinations must report, giving 45 memory-test
-reports. Artifact and result names include Node versions to prevent collisions.
-The experiment permits all 45 memory-test runners concurrently; actual
-organization/OS runner capacity can still queue them. Controls
-intentionally add qualification cost and are not proposed as permanent gating
-jobs. Each memory group waits only for its matching target's memory producer.
+Four file-level shards consume the same per-OS/Node artifact. All nine toolchain
+combinations must report, giving 36 memory-test reports. Artifact and result
+names include Node versions to prevent collisions. Actual organization/OS
+runner capacity can still queue jobs. Duplicate unsharded controls are disabled
+by default; set `fanout_include_controls=true` for a manual equivalence experiment,
+which requires 45 reports. `fanout_node_set=24-and-26` is a manual experiment only;
+production PR/push/merge-queue coverage always retains Node 22, 24 and 26.
+Each memory group waits only for its matching target's memory producer.
 Likewise, workspace consumers wait only for their matching workspace producer:
 there are no cross-OS/Node producer barriers. A failed target blocks final
 qualification without skipping successful targets' independent measurements.
-The complete graph has 125 executable jobs, up from 98, so runner capacity and
-the additional native installations must be measured.
+Default full-scope validation has 126 executable jobs, including path selection
+and nine compatibility checks. Runner capacity and repeated native installations
+must be measured rather than assuming unlimited parallelism.
 
 Runner-local dependency installation retries visibly up to three times, with
 bounded backoff and forced reimport/rebuild after a failed attempt. Frozen
@@ -224,7 +236,7 @@ or lifecycle assumptions change. Consumers check the restored inventory against
 fresh discovery. Failed files get up to two serial, fresh-process, no-cache
 retries; all attempt JSON and new per-file timings are uploaded. Retry-only
 successes remain visible. Qualification requires all 48 package reports in
-addition to the 45 memory comparisons, 27 exact remainder reports and successful
+addition to the 36 memory reports (45 with controls), 27 exact remainder reports and successful
 analysis, build, root and Linux UI jobs. Remainder reports preserve full script
 inventories, selected packages, artifact fingerprints and producer provenance.
 
@@ -257,6 +269,12 @@ The manual fan-out dispatch also accepts:
   explicitly. Native dependencies, broker binaries outside `dist`, credentials
   and fluid-build completion receipts are not cached. This conservative prototype
   helps same-commit reruns, not the first cold build of a new commit.
+- `fanout_native_cache=true` (default false): runtime/image-specific pnpm
+  side-effect reuse, with real Node and Electron SQLite write/read probes.
+  Exactly one producer saves each key. Failed installation or runtime probes
+  trigger visible bounded uncached reimport; exhaustion fails the job. Hosted
+  trials eliminated Windows/Linux source rebuilds but have not established a
+  successful net workflow speedup, so this is not enabled by default.
 - `fanout_compact_artifact=true` (default false): separate dispatcher/provider
   and whole-package remainder payloads derived from each consumer's complete
   transitive workspace dependency inventory, including test and optional
@@ -273,7 +291,8 @@ The manual fan-out dispatch also accepts:
   measurements. Compare producer upload plus consumer extraction/verification,
   not archive bytes alone.
 
-These options affect only manual fan-out qualification, never normal CI.
+These options remain opt-in for manual experiments; default sharded CI leaves
+build caching, native side-effect reuse and compact artifacts disabled.
 More consumers can increase total transfer volume even when individual payloads
 shrink. Neither caching nor compact artifacts are promoted without hosted
 matrix qualification and measured critical-path/cost results.
@@ -294,9 +313,9 @@ mixed artifacts, missing/duplicate test files, and differences between control
 and sharded assertion identities and outcomes. Parameterized test names must be
 deterministic across runners; use fixed fixtures rather than clock-derived values.
 The collector does not normalize away differing assertion names. Memory
-shards/controls intentionally do not retry: qualification must expose initial
+shards/controls intentionally do not retry: validation must expose initial
 outcome differences. Existing retries are preserved for the remaining packages;
-integrating memory retries into a production fan-out gate remains a rollout gate.
+memory failures remain blocking rather than being hidden by automatic reruns.
 Its summary reports test-process timings only;
 use job/step timings separately for build, dependency setup, artifact transfer,
 queue delay, and runner cost. One run is functional qualification, not proof of
@@ -325,16 +344,13 @@ All-required-check latency also depends on completing the separately gated
 Azure live-test cutover; shortening this workflow alone does not establish a
 ten-minute complete CI gate.
 
-Normal PR, main, merge-group, scheduled, and default manual `build-ts` behavior
-remains unchanged, including all supported Node versions and macOS coverage.
-Compared with the first memory-only experiment, the candidate now runs the other
-workspace phases and all supported toolchains as well. This is source-level
-coverage wiring, not a claim that hosted equivalence or latency qualification has
-passed. Do not enable it as a required gate until repeated clean hosted runs
-validate selections, runtime closure, native dependencies, outcomes and complete
-wall time, and memory retry/reporting semantics and required-check migration are
-implemented. Keep the existing nine `build_ts` check names and macOS
-compatibility/nightly policy during that migration.
+The successful Node 24/26 shard-only baseline completed in 18m09s
+([run 42272195529](https://github.com/microsoft/TypeAgent/actions/runs/42272195529)).
+That six-target experiment does not establish a twenty-minute result for all
+nine production targets, nor for the separately required Azure/.NET checks.
+Full default-scope latency must be measured on the rollout commit. Fifteen
+minutes remains a follow-up goal: prioritize producer compilation, repeated
+consumer setup and root/remainder tails before adding more runner nodes.
 
 ### Measuring complete CI duration
 

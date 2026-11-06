@@ -331,14 +331,14 @@ describe("bounded corpus graph service", () => {
         );
         await started;
         let observed!: () => void;
-        const snapshotRead = new Promise<void>((resolve) => {
+        const maintenanceRead = new Promise<void>((resolve) => {
             observed = resolve;
         });
-        const list = service.listViews.bind(service);
+        const status = service.getMaintenanceStatus.bind(service);
         const spy = jest
-            .spyOn(service, "listViews")
-            .mockImplementationOnce(async (id) => {
-                const snapshot = await list(id);
+            .spyOn(service, "getMaintenanceStatus")
+            .mockImplementationOnce(() => {
+                const snapshot = status();
                 observed();
                 return snapshot;
             });
@@ -350,7 +350,7 @@ describe("bounded corpus graph service", () => {
             },
         );
         try {
-            await snapshotRead;
+            await maintenanceRead;
             await new Promise<void>((resolve) => setImmediate(resolve));
             expect(settled).toBe(false);
             release?.();
