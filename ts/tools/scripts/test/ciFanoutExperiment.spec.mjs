@@ -367,74 +367,73 @@ test("fan-out is manual opt-in and does not replace PR, main or queue validation
 
 test("test runners install native dependencies but never rebuild shared product output", () => {
     const experiment = workflow("ci-fanout-experiment");
+    const target = workflow("ci-fanout-target");
     assert.deepEqual(Object.keys(experiment.on), ["workflow_call"]);
     assert.deepEqual(experiment.permissions, { contents: "read" });
-    assert.deepEqual(experiment.jobs.build.strategy.matrix.os, [
+    assert.deepEqual(target.permissions, { contents: "read" });
+    assert.deepEqual(experiment.jobs.targets.strategy.matrix.os, [
         "ubuntu-latest",
         "windows-latest",
         "macos-latest",
     ]);
     assert.equal(
-        experiment.jobs.build.steps.find((step) =>
+        target.jobs.build.steps.find((step) =>
             step.name?.startsWith("Build memory service"),
         ).run,
         'npm exec --no -- fluid-build "^@typeagent/memory-client$" -t build --dep',
     );
     assert.deepEqual(
-        experiment.jobs.build.strategy.matrix.version,
+        experiment.jobs.targets.strategy.matrix.version,
         workflow("build-ts").jobs.build_ts.strategy.matrix.version,
     );
-    assert.deepEqual(
-        experiment.jobs.test.strategy.matrix.version,
-        experiment.jobs.build.strategy.matrix.version,
+    assert.equal(
+        experiment.jobs.targets.uses,
+        "./.github/workflows/ci-fanout-target.yml",
     );
-    assert.deepEqual(
-        experiment.jobs.test.strategy.matrix.os,
-        experiment.jobs.build.strategy.matrix.os,
-    );
-    for (const job of ["build", "test"]) {
+    for (const job of Object.values(target.jobs)) {
+        assert.equal(job["runs-on"], "${{ inputs.os }}");
         assert.equal(
-            experiment.jobs[job].steps.find((step) =>
-                step.uses?.startsWith("actions/setup-node@"),
+            job.steps.find(
+                (step) => step.uses === "./.github/actions/fanout-setup",
             ).with["node-version"],
-            "${{ matrix.version }}",
+            "${{ inputs.version }}",
         );
+        assert.equal(
+            job.strategy?.matrix.os,
+            undefined,
+            "A target must not introduce another OS-wide barrier",
+        );
+        assert.equal(job.strategy?.matrix.version, undefined);
+        assert.equal(job["continue-on-error"], undefined);
     }
     assert.equal(
-        experiment.jobs.build.steps.find((step) =>
+        target.jobs.build.steps.find((step) =>
             step.uses?.startsWith("actions/upload-artifact@"),
         ).with.path,
         "${{ runner.temp }}/fanout-build",
     );
-    assert.deepEqual(experiment.jobs.test.strategy.matrix.group, [
+    assert.deepEqual(target.jobs.test.strategy.matrix.group, [
         "1",
         "2",
         "3",
         "4",
         "control",
     ]);
-    assert.equal(experiment.jobs.test.needs, "build");
-    assert.equal(experiment.jobs.test.strategy["max-parallel"], 45);
-    assert.equal(experiment.jobs.test.strategy.fail_fast, undefined);
-    assert.equal(experiment.jobs.test.strategy["fail-fast"], false);
-    const commands = experiment.jobs.test.steps
+    assert.equal(target.jobs.test.needs, "build");
+    assert.equal(target.jobs.test.strategy["fail-fast"], false);
+    const commands = target.jobs.test.steps
         .map((step) => step.run ?? "")
         .join("\n");
-    assert.match(commands, /pnpm install --frozen-lockfile/);
     assert.match(commands, /ciFanoutExperiment.mjs test/);
     assert.doesNotMatch(commands, /fluid-build|run build|getKeys/);
     assert.equal(experiment.jobs.qualification.if, "always()");
     assert.deepEqual(experiment.jobs.qualification.needs, [
         "analysis",
-        "build",
-        "test",
-        "workspace_build",
-        "remainder",
-        "package_partitions",
+        "targets",
     ]);
     assert.ok(
         experiment.jobs.qualification.steps.some((step) =>
-            step.if?.includes("needs.test.result != 'success'"),
+            step.if?.includes("needs.targets.result != 'success'"),
         ),
     );
 });
@@ -445,7 +444,9 @@ test("platform-independent analysis runs once and remains blocking", () => {
     assert.equal(analysis.strategy, undefined);
     assert.ok(analysis.steps.some((step) => step.run === "npm run lint"));
     assert.equal(
-        experiment.jobs.build.steps.some((step) => step.run === "npm run lint"),
+        workflow("ci-fanout-target").jobs.build.steps.some(
+            (step) => step.run === "npm run lint",
+        ),
         false,
     );
     assert.ok(
@@ -456,31 +457,26 @@ test("platform-independent analysis runs once and remains blocking", () => {
 });
 
 test("qualification preserves gated platform selections, script retries and Linux UI tests", () => {
-    const experiment = workflow("ci-fanout-experiment");
+    const experiment = workflow("ci-fanout-target");
     const steps = experiment.jobs.remainder.steps;
     const testStep = steps.find((step) =>
-        step.name?.startsWith("Test remaining packages"),
+        step.name?.startsWith("Test duration-balanced whole-package"),
     );
-    for (const os of ["Linux", "Windows", "macOS"]) {
+    for (const os of ["ubuntu-latest", "windows-latest", "macos-latest"]) {
         assert.equal(
             vm.runInNewContext(
-                testStep.env.TYPEAGENT_TEST_PROFILE.slice(3, -2),
-                {
-                    runner: { os },
-                },
+                experiment.env.TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS.slice(
+                    3,
+                    -2,
+                ),
+                { inputs: { os } },
             ),
-            os === "macOS" ? "macos-compat-without-memory" : "fanout-remainder",
+            os === "windows-latest" ? "1" : "0",
         );
     }
-    assert.match(testStep.run, /runTestLocalWithSummary.mjs/);
+    assert.match(testStep.run, /ciWorkspaceLanes.mjs test/);
     assert.match(testStep.run, /exit \$LASTEXITCODE/);
-    assert.equal(
-        testStep.env.TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS,
-        workflow("build-ts").jobs.build_ts.steps.find(
-            (step) => step.name === "Test",
-        ).env.TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS,
-    );
-    const ui = steps.find(
+    const ui = experiment.jobs.roots.steps.find(
         (step) => step.name === "UI tests (requires display)",
     );
     assert.equal(ui.if, "runner.os == 'Linux'");
@@ -493,17 +489,17 @@ test("qualification preserves gated platform selections, script retries and Linu
         step.uses?.startsWith("actions/download-artifact@"),
     );
     assert.equal(buildArtifact.with.name, download.with.name);
-    assert.match(buildArtifact.with.name, /matrix.version/);
+    assert.match(buildArtifact.with.name, /inputs.version/);
     assert.match(
         experiment.jobs.test.steps.find((step) =>
             step.uses?.startsWith("actions/upload-artifact@"),
         ).with.name,
-        /matrix.version/,
+        /inputs.version/,
     );
 });
 
 test("memory producers never wait for or run non-memory builds or tests", () => {
-    const jobs = workflow("ci-fanout-experiment").jobs;
+    const jobs = workflow("ci-fanout-target").jobs;
     assert.equal(jobs.build.needs, undefined);
     assert.equal(jobs.workspace_build.needs, undefined);
     const memoryCommands = jobs.build.steps
@@ -523,7 +519,7 @@ test("memory producers never wait for or run non-memory builds or tests", () => 
         workspaceCommands,
         /runTestLocalWithSummary|ciPackagePartitions.mjs test/,
     );
-    for (const name of ["remainder", "package_partitions"]) {
+    for (const name of ["remainder", "package_partitions", "roots"]) {
         assert.equal(jobs[name].needs, "workspace_build");
         const commands = jobs[name].steps
             .map((step) => step.run ?? "")
@@ -532,50 +528,49 @@ test("memory producers never wait for or run non-memory builds or tests", () => 
         const download = jobs[name].steps.find((step) =>
             step.uses?.startsWith("actions/download-artifact@"),
         );
-        assert.equal(
-            download.with.name,
-            jobs.workspace_build.steps.find((step) =>
-                step.uses?.startsWith("actions/upload-artifact@"),
-            ).with.name,
-        );
+        if (["roots", "ui"].includes(name))
+            assert.equal(
+                download.with.name,
+                jobs.workspace_build.steps.find((step) =>
+                    step.uses?.startsWith("actions/upload-artifact@"),
+                ).with.name,
+            );
     }
-    assert.deepEqual(jobs.package_partitions.strategy.matrix.os, [
-        "ubuntu-latest",
-        "windows-latest",
-    ]);
+    assert.equal(jobs.package_partitions.if, "inputs.os != 'macos-latest'");
     assert.deepEqual(jobs.package_partitions.strategy.matrix.group, [
         "1",
         "2",
         "3",
         "4",
     ]);
+    assert.equal(jobs.roots.if, undefined);
     assert.equal(
-        jobs.package_partitions.steps.find((step) =>
-            step.name?.startsWith("Test duration-balanced"),
-        ).env.TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS,
-        jobs.remainder.steps.find((step) =>
-            step.name?.startsWith("Test remaining"),
-        ).env.TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS,
+        jobs.roots.steps.find((step) =>
+            step.name?.startsWith("Profile independent"),
+        ).env.TYPEAGENT_TEST_PHASE,
+        "scripts",
     );
-    assert.deepEqual(
-        jobs.remainder.strategy.matrix.os,
-        jobs.build.strategy.matrix.os,
+    assert.equal(
+        jobs.remainder.strategy.matrix.group,
+        '${{ inputs.os == \'macos-latest\' && fromJSON(\'["1"]\') || fromJSON(\'["1","2","3","4"]\') }}',
     );
-    assert.deepEqual(
-        jobs.workspace_build.strategy.matrix.os,
-        jobs.build.strategy.matrix.os,
-    );
+    const qualification = workflow("ci-fanout-experiment").jobs.qualification;
     assert.ok(
-        jobs.qualification.steps.findIndex((step) =>
+        qualification.steps.findIndex((step) =>
             step.name?.startsWith("Reject failed"),
         ) <
-            jobs.qualification.steps.findIndex((step) =>
+            qualification.steps.findIndex((step) =>
                 step.uses?.startsWith("actions/download-artifact@"),
             ),
     );
     assert.ok(
-        jobs.qualification.steps.some((step) =>
+        qualification.steps.some((step) =>
             step.run?.includes("ciPackagePartitions.mjs aggregate"),
+        ),
+    );
+    assert.ok(
+        qualification.steps.some((step) =>
+            step.run?.includes("ciWorkspaceLanes.mjs aggregate"),
         ),
     );
 });

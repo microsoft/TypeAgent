@@ -42,7 +42,7 @@ function outputPath(value) {
     return parts;
 }
 
-function outputs(root, relative = "", insideDist = false) {
+export function outputs(root, relative = "", insideDist = false) {
     const files = [];
     for (const entry of fs.readdirSync(path.join(root, relative), {
         withFileTypes: true,
@@ -64,7 +64,7 @@ function outputs(root, relative = "", insideDist = false) {
     return files.sort();
 }
 
-function identity(root, sha) {
+export function identity(root, sha) {
     assert.match(sha, /^[a-f0-9]{40}$/);
     return {
         sha,
@@ -76,13 +76,55 @@ function identity(root, sha) {
     };
 }
 
-export function createManifest(root, sha, tests, scope = "memory") {
+export function verifyCheckout(root, sha) {
+    assert.match(sha, /^[a-f0-9]{40}$/);
+    assert.equal(
+        execFileSync("git", ["rev-parse", "HEAD"], {
+            cwd: root,
+            encoding: "utf8",
+        }).trim(),
+        sha,
+        "Checkout does not match the candidate SHA",
+    );
+}
+
+function scopedOutputs(root, scope, directories) {
+    const files = outputs(root);
+    if (!["packages", "remainder"].includes(scope)) return files;
     assert.ok(
-        ["memory", "workspace"].includes(scope),
+        Array.isArray(directories) && directories.length > 0,
+        "Empty runtime closure",
+    );
+    assert.equal(new Set(directories).size, directories.length);
+    for (const directory of directories) {
+        outputPath(`${directory}/dist/index.js`);
+        assert.ok(
+            !directory.split("/").includes("dist"),
+            "Invalid package directory",
+        );
+    }
+    return files.filter(
+        (file) =>
+            (scope === "remainder" || !file.endsWith(".tsbuildinfo")) &&
+            directories.some((directory) =>
+                file.startsWith(`${directory}/dist/`),
+            ),
+    );
+}
+
+export function createManifest(
+    root,
+    sha,
+    tests,
+    scope = "memory",
+    directories,
+) {
+    assert.ok(
+        ["memory", "workspace", "packages", "remainder"].includes(scope),
         "Unknown artifact scope",
     );
     assert.ok(
-        scope === "workspace" || tests.length > 0,
+        ["workspace", "remainder"].includes(scope) || tests.length > 0,
         "Empty test inventory",
     );
     assert.equal(
@@ -90,7 +132,7 @@ export function createManifest(root, sha, tests, scope = "memory") {
         tests.length,
         "Duplicate discovered tests",
     );
-    const files = outputs(root).map((name) => {
+    const files = scopedOutputs(root, scope, directories).map((name) => {
         const bytes = fs.readFileSync(path.join(root, name));
         return { path: name, size: bytes.length, sha256: digest(bytes) };
     });
@@ -111,20 +153,33 @@ export function createManifest(root, sha, tests, scope = "memory") {
     return {
         version: 1,
         scope,
+        ...(["packages", "remainder"].includes(scope) ? { directories } : {}),
         ...identity(root, sha),
         files,
         tests: [...tests].sort(),
     };
 }
 
-export function verifyManifest(root, sha, manifest, scope = "memory") {
+export function verifyManifest(
+    root,
+    sha,
+    manifest,
+    scope = "memory",
+    producer = false,
+) {
+    assert.ok(
+        ["memory", "workspace", "packages", "remainder"].includes(scope),
+        "Unknown artifact scope",
+    );
     assert.equal(manifest.version, 1);
     assert.equal(manifest.scope, scope, "Artifact scope mismatch");
     for (const [key, value] of Object.entries(identity(root, sha))) {
         assert.equal(manifest[key], value, `Artifact ${key} mismatch`);
     }
     assert.ok(manifest.files.length > 0);
-    assert.ok(scope === "workspace" || manifest.tests.length > 0);
+    assert.ok(
+        ["workspace", "remainder"].includes(scope) || manifest.tests.length > 0,
+    );
     assert.equal(new Set(manifest.tests).size, manifest.tests.length);
     for (const file of manifest.files) {
         const parts = outputPath(file.path);
@@ -140,10 +195,13 @@ export function verifyManifest(root, sha, manifest, scope = "memory") {
         assert.equal(bytes.length, file.size, `Artifact size: ${file.path}`);
         assert.equal(digest(bytes), file.sha256, `Artifact hash: ${file.path}`);
     }
+    const inventory = manifest.files.map((file) => file.path).sort();
     assert.deepEqual(
-        outputs(root),
-        manifest.files.map((file) => file.path).sort(),
+        scopedOutputs(root, scope, manifest.directories),
+        inventory,
     );
+    if (!producer && ["packages", "remainder"].includes(scope))
+        assert.deepEqual(outputs(root), inventory);
     for (const test of manifest.tests) {
         outputPath(test);
         assert.ok(
@@ -164,7 +222,7 @@ export function stageArtifact(root, manifest, directory) {
         !fs.existsSync(directory),
         "Artifact staging directory must be new",
     );
-    verifyManifest(root, manifest.sha, manifest, manifest.scope);
+    verifyManifest(root, manifest.sha, manifest, manifest.scope, true);
     fs.mkdirSync(directory, { recursive: true });
     for (const file of manifest.files) {
         const parts = outputPath(file.path);
@@ -327,14 +385,7 @@ function main() {
         "../..",
     );
     const sha = process.env.GITHUB_SHA;
-    assert.equal(
-        execFileSync("git", ["rev-parse", "HEAD"], {
-            cwd: root,
-            encoding: "utf8",
-        }).trim(),
-        sha,
-        "Checkout does not match the candidate SHA",
-    );
+    verifyCheckout(root, sha);
     assert.ok(
         process.env.RUNNER_TEMP,
         "RUNNER_TEMP is required for CI artifacts",

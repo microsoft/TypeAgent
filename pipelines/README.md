@@ -145,17 +145,17 @@ From GitHub Actions, manually run **build-ts** on the candidate branch with
 gh workflow run build-ts.yml --repo microsoft/TypeAgent --ref <candidate-branch> -f fanout_experiment=true
 ```
 
-The reusable `ci-fanout-experiment.yml` builds the memory-client dependency
-closure first for each combination of Ubuntu, Windows and macOS with Node
+The reusable `ci-fanout-experiment.yml` calls `ci-fanout-target.yml` independently
+for each combination of Ubuntu, Windows and macOS with Node
 22.23.4, 24.22.1 and 26.12.1. This includes the client's compiled view protocol
 dynamically imported by memory-service tests. It fingerprints and uploads that
 small runtime closure and then finishes. It does not build the remaining
 workspace or run non-memory tests, and does not depend on those jobs.
 Unrelated application bundles are not uploaded to memory-only consumers.
 
-An independent `workspace_build` matrix builds the workspace once per OS/Node
+Within each target, an independent `workspace_build` job builds the workspace once
 and publishes a fingerprinted compiled-output artifact and partition plan.
-`remainder` and `package_partitions` consume matching outputs without rebuilding;
+`remainder`, `package_partitions` and `roots` jobs consume matching outputs without rebuilding;
 they never gate the memory consumers. The full workspace payload intentionally
 trades transfer/storage for avoiding repeated builds: the validated local payload
 was 614 MiB across 15,128 files. Its new hosted transfer and verification costs
@@ -165,8 +165,14 @@ Linux/Windows remainder jobs exclude memory service, dispatcher and default agen
 provider. Dispatcher/provider files run in four duration-balanced groups per
 OS/Node, only on Linux/Windows. macOS remainder jobs retain exactly the eight
 non-memory compatibility suites; no full dispatcher/provider partitions run there.
-Remainder jobs use the existing retry harness and retain root script and
-memory-quality phases, with UI tests on Linux. Chained/non-Jest package phases
+The 77 remaining Linux/Windows packages use four deterministic, duration-balanced
+whole-package lanes per target, with the original package concurrency of three
+inside each lane. The canonical macOS compatibility selection uses one lane.
+Remainder jobs use the existing retry harness. Root script and memory-quality
+tests run independently of package tests on every target; their subphase timings
+are reported separately while retaining the original short-circuit failure policy.
+Linux UI tests follow the root phases, reusing that consumer's setup and artifact.
+Chained/non-Jest package phases
 remain intact. Platform-independent formatting and lint run once in a separate
 blocking analysis job.
 
@@ -197,8 +203,17 @@ reports. Artifact and result names include Node versions to prevent collisions.
 The experiment permits all 45 memory-test runners concurrently; actual
 organization/OS runner capacity can still queue them. Controls
 intentionally add qualification cost and are not proposed as permanent gating
-jobs. The memory matrix waits only for the memory build matrix, not workspace
-builds, remaining tests or package partitions.
+jobs. Each memory group waits only for its matching target's memory producer.
+Likewise, workspace consumers wait only for their matching workspace producer:
+there are no cross-OS/Node producer barriers. A failed target blocks final
+qualification without skipping successful targets' independent measurements.
+The complete graph has 125 executable jobs, up from 98, so runner capacity and
+the additional native installations must be measured.
+
+Runner-local dependency installation retries visibly up to three times, with
+bounded backoff and forced reimport/rebuild after a failed attempt. Frozen
+lockfiles, strict peers and the repository's native install-script policy remain
+in force. Exhaustion fails the job; installation failures are not suppressed.
 
 Dispatcher/provider groups use a deterministic longest-processing-time-first
 plan seeded from hosted per-file Linux/Windows timings. Missing timing entries
@@ -209,13 +224,15 @@ or lifecycle assumptions change. Consumers check the restored inventory against
 fresh discovery. Failed files get up to two serial, fresh-process, no-cache
 retries; all attempt JSON and new per-file timings are uploaded. Retry-only
 successes remain visible. Qualification requires all 48 package reports in
-addition to the 45 memory comparisons and successful analysis, build and
-remainder jobs.
+addition to the 45 memory comparisons, 27 exact remainder reports and successful
+analysis, build, root and Linux UI jobs. Remainder reports preserve full script
+inventories, selected packages, artifact fingerprints and producer provenance.
 
 Refresh the seed from hosted logs or downloaded `.partition.json` reports:
 
 ```powershell
 node tools\scripts\ciPackagePartitions.mjs profile <source-run-id> <windows-log> <linux-log>
+node tools\scripts\ciWorkspaceLanes.mjs profile <source-run-id> <first-pass-windows-log> <first-pass-linux-log>
 ```
 
 Local Windows/Node 24 execution discovered 147 dispatcher and 61 provider files.
@@ -223,9 +240,51 @@ All four combined groups passed on their first attempt: 6,277 assertions passed
 and 371 were reported pending/skipped under the existing test conditions.
 Combined package execution took 92.0-112.4 seconds per group, excluding build,
 consumer setup, artifact verification and discovery. These local measurements
-are not hosted CI wall-clock evidence. The checked-in seed still uses the
-61 hosted observations; all 208 local per-file timings were retained separately,
-not mixed into a profile attributed to the hosted run.
+are not hosted CI wall-clock evidence. Both checked-in profiles now use hosted
+run 42129894103: all 208 dispatcher/provider files and all 77 remaining packages.
+First-pass and retry timings must be profiled separately.
+
+### Optional build and artifact experiments
+
+The manual fan-out dispatch also accepts:
+
+- `fanout_build_cache=true` (default false): coherent `dist` outputs and
+  incremental metadata keyed to the exact source SHA, lockfile, package manager,
+  OS/architecture, Node/ABI and hosted runner image version. Compiler, generator
+  and .NET inputs are pinned by the source/lockfile and stock runner-image keys.
+  There are no cross-commit prefix restores. A hit is integrity-checked before
+  restoration, and the normal full build still runs. Missing/corrupt caches fail
+  explicitly. Native dependencies, broker binaries outside `dist`, credentials
+  and fluid-build completion receipts are not cached. This conservative prototype
+  helps same-commit reruns, not the first cold build of a new commit.
+- `fanout_compact_artifact=true` (default false): separate dispatcher/provider
+  and whole-package remainder payloads derived from each consumer's complete
+  transitive workspace dependency inventory, including test and optional
+  dependencies and built-in agents. The node-provider test agent loaded by
+  relative path is included explicitly. Generated assets and source maps remain;
+  dispatcher/provider payloads omit incremental metadata, while remainder lanes
+  retain it because whole-package tests can invoke the compiler.
+  Root and UI consumers retain the full artifact until their smaller closures
+  are independently qualified. Consumer scope, exact inventory, script selection,
+  SHA/OS/Node/ABI/lockfile and hashes remain blocking checks.
+- `fanout_artifact_compression=0|3|6` (default 6): controlled compression A/B
+  measurements. Compare producer upload plus consumer extraction/verification,
+  not archive bytes alone.
+
+These options affect only manual fan-out qualification, never normal CI.
+More consumers can increase total transfer volume even when individual payloads
+shrink. Neither caching nor compact artifacts are promoted without hosted
+matrix qualification and measured critical-path/cost results.
+
+Local Windows/Node 24 candidate validation passed all 208 dispatcher/provider
+specs and all 77 remaining packages from clean scoped restores. The compact
+dispatcher/provider payload is 155.15 MiB versus 614.19 MiB for the full local
+workspace; the 150 MiB investigation target remains unmet. Remainder dependency
+closures vary substantially and are not all comparably small. Coherent cache
+restoration followed by the normal full build passed, including native broker
+publication. The complete root phases passed (511 unit tests, five existing
+skips, then 282 memory-quality tests). These are functional local results,
+not hosted cold-build, Linux/macOS/UI or end-to-end latency qualification.
 
 The final qualification rejects missing, failed, cancelled or skipped analysis,
 producer or consumer work,
@@ -243,13 +302,16 @@ a 30-minute full merge gate or a statistically established speedup.
 
 ### Ten-minute target
 
-Ten minutes is a target, not a result of this change. A low-confidence planning
-range is 25-40 minutes for qualification with unsharded controls, or 20-30 minutes
-for a future control-free gate with the current cold builds and remainder path.
-Neither range includes a guarantee about runner queues, new workspace artifact
-transfer or unrelated required checks. Recalibrate from clean hosted runs.
-The earlier Windows path spent about 11 minutes in setup/build before testing;
-the previous unsharded Windows memory control alone took about 17 minutes.
+Ten minutes is a target, not a result of this change. The last hosted baseline
+lasted 32m42s and failed on a native dependency download, skipping the memory
+matrix; it is not a successful full-coverage timing result. These graph changes
+remove measured cross-target waits of up to 7.17 minutes and isolate the
+10.20-13.28-minute Windows remainder package phases, but their new hosted
+makespan is still unmeasured. Cold build steps previously took 2.27-7.72 minutes;
+an earlier unsharded Windows memory control alone took about 17 minutes.
+Retained qualification controls and cold builds can exceed the ten-minute budget
+even after package balancing. Same-commit cache hits cannot establish new-commit
+cold-build performance.
 
 A ten-minute gate needs a measured budget such as at most one minute of
 queue/setup, three minutes building, five minutes in the slowest parallel test

@@ -48,20 +48,49 @@ try {
         },
         () => {
             console.error("\nROOT SCRIPT TEST PHASE");
-            const result = runPnpm(
-                ["run", "test:local:scripts"],
-                firstDirectory,
-            );
-            checkInfrastructureFailure(result);
-            const status = result.status ?? 1;
+            const started = Date.now();
+            const status = runScriptTests();
+            console.error(`Root phase elapsed: ${Date.now() - started}ms`);
             reportPhase("Root script tests", status);
             return status;
         },
+        process.env.TYPEAGENT_TEST_PHASE ?? "all",
     );
 } finally {
     for (const directory of failureDirectories) {
         fs.rmSync(directory, { recursive: true, force: true });
     }
+}
+
+function runScriptTests() {
+    let commands = ["test:local:scripts"];
+    if (process.env.TYPEAGENT_TEST_PHASE === "scripts") {
+        const scripts = JSON.parse(
+            fs.readFileSync(path.join(workspaceRoot, "package.json"), "utf8"),
+        ).scripts;
+        if (
+            scripts["test:local:scripts"] !==
+                `${scripts["test:local:script-unit"]} && pnpm run test:memory-quality` ||
+            scripts["pretest:local:scripts"] ||
+            scripts["posttest:local:scripts"] ||
+            scripts["pretest:local:script-unit"] ||
+            scripts["posttest:local:script-unit"]
+        ) {
+            throw new Error(
+                "Root script contract changed; requalify separate phase profiling.",
+            );
+        }
+        commands = ["test:local:script-unit", "test:memory-quality"];
+    }
+    for (const command of commands) {
+        const started = Date.now();
+        const result = runPnpm(["run", command], firstDirectory);
+        const infrastructureFailure = checkInfrastructureFailure(result);
+        const status = infrastructureFailure ? 1 : (result.status ?? 1);
+        console.error(`${command}: ${Date.now() - started}ms, exit ${status}`);
+        if (status !== 0) return status;
+    }
+    return 0;
 }
 
 function checkInfrastructureFailure(result) {

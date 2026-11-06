@@ -12,6 +12,19 @@ on:
         description: Qualify full-workspace builds/tests with memory-test fan-out instead of the normal matrix
         type: boolean
         default: false
+      fanout_build_cache:
+        description: Trial exact-source compilation caching (fanout experiment only)
+        type: boolean
+        default: false
+      fanout_compact_artifact:
+        description: Trial dependency-closure package and remainder artifacts (fanout experiment only)
+        type: boolean
+        default: false
+      fanout_artifact_compression:
+        description: Artifact compression level (fanout experiment only)
+        type: choice
+        options: ["0", "3", "6"]
+        default: "6"
   schedule:
     - cron: "17 8 * * *"
   push:
@@ -39,6 +52,10 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/ci-fanout-experiment.yml
+    with:
+      build_cache: ${{ inputs.fanout_build_cache }}
+      compact_artifact: ${{ inputs.fanout_compact_artifact }}
+      artifact_compression: ${{ inputs.fanout_artifact_compression }}
 
   build_ts:
     if: ${{ github.event_name != 'workflow_dispatch' || !inputs.fanout_experiment }}

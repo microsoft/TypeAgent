@@ -13,6 +13,96 @@ const runner = fileURLToPath(
 );
 
 for (const scenario of [
+    { phase: "workspace", commands: ["test:local:packages"], status: 0 },
+    {
+        phase: "scripts",
+        commands: ["test:local:script-unit", "test:memory-quality"],
+        status: 0,
+    },
+    {
+        phase: "scripts",
+        failed: "test:local:script-unit",
+        commands: ["test:local:script-unit"],
+        status: 1,
+    },
+    {
+        phase: "scripts",
+        failed: "test:memory-quality",
+        commands: ["test:local:script-unit", "test:memory-quality"],
+        status: 1,
+    },
+    { phase: "scripts", hook: true, commands: [], status: 1 },
+]) {
+    test(`isolated phase ${scenario.phase}, failure=${scenario.failed ?? "none"}, hook=${scenario.hook ?? false}`, (t) => {
+        const root = fs.mkdtempSync(
+            path.join(
+                path.dirname(runner),
+                "test",
+                ".typeagent isolated phases & fixtures-",
+            ),
+        );
+        t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+        fs.writeFileSync(
+            path.join(root, "package.json"),
+            JSON.stringify({
+                scripts: {
+                    "test:local:script-unit": "synthetic unit command",
+                    "test:local:scripts":
+                        "synthetic unit command && pnpm run test:memory-quality",
+                    ...(scenario.hook
+                        ? { "pretest:local:script-unit": "must not bypass" }
+                        : {}),
+                },
+            }),
+        );
+        const fake = path.join(root, "fake.mjs");
+        fs.writeFileSync(
+            fake,
+            `#!/usr/bin/env node
+import fs from "node:fs";
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.ISOLATED_PHASE_CALLS, JSON.stringify(args) + "\\n");
+process.exitCode = args.includes(process.env.ISOLATED_PHASE_FAILURE) ? 1 : 0;
+`,
+        );
+        if (process.platform === "win32") {
+            fs.writeFileSync(
+                path.join(root, "pnpm.cmd"),
+                `@"${process.execPath}" "${fake}" %*\r\n`,
+            );
+        } else {
+            fs.copyFileSync(fake, path.join(root, "pnpm"));
+            fs.chmodSync(path.join(root, "pnpm"), 0o755);
+        }
+        const log = path.join(root, "calls.jsonl");
+        const result = spawnSync(process.execPath, [runner], {
+            cwd: root,
+            encoding: "utf8",
+            env: {
+                ...process.env,
+                PATH: `${root}${path.delimiter}${process.env.PATH}`,
+                TYPEAGENT_TEST_PHASE: scenario.phase,
+                ISOLATED_PHASE_CALLS: log,
+                ISOLATED_PHASE_FAILURE: scenario.failed ?? "",
+                GITHUB_ACTIONS: "true",
+                GITHUB_STEP_SUMMARY: path.join(root, "summary.md"),
+            },
+        });
+        assert.ifError(result.error);
+        assert.equal(result.status, scenario.status, result.stderr);
+        const calls = fs.existsSync(log)
+            ? fs.readFileSync(log, "utf8").trim().split("\n").map(JSON.parse)
+            : [];
+        assert.deepEqual(
+            calls,
+            scenario.commands.map((command) => ["run", command]),
+        );
+        if (scenario.hook)
+            assert.match(result.stderr, /Root script contract changed/);
+    });
+}
+
+for (const scenario of [
     {
         name: "passed package remains in retry union",
         initial: 1,
@@ -165,6 +255,7 @@ process.exitCode = status;
                 ...process.env,
                 PATH: `${root}${path.delimiter}${process.env.PATH}`,
                 GITHUB_ACTIONS: "true",
+                TYPEAGENT_TEST_PHASE: "all",
                 GITHUB_STEP_SUMMARY: path.join(root, "summary.md"),
                 TEST_PHASE_SCENARIO: JSON.stringify(scenario),
                 TEST_PHASE_ROOT: root,

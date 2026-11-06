@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,7 @@ import {
     createManifest,
     verifyManifest,
     stageArtifact,
+    verifyCheckout,
 } from "./ciFanoutExperiment.mjs";
 import {
     balanceTests,
@@ -20,7 +21,10 @@ import {
     timingsFromLog,
     validatePartitions,
 } from "./lib/ciTestPartitions.mjs";
-import { MAX_TEST_RETRIES, windowsPnpmCommand } from "./lib/testRetry.mjs";
+import { MAX_TEST_RETRIES } from "./lib/testRetry.mjs";
+import { spawnPnpm } from "./runLocalTestPackages.mjs";
+import { createRemainderPlan, readWorkspace } from "./ciWorkspaceLanes.mjs";
+import { runtimeClosure } from "./lib/ciWorkspaceLanes.mjs";
 
 const root = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -122,6 +126,8 @@ function prepare(sha) {
     );
     manifest.plans = plans;
     manifest.profileSource = profile.source;
+    const packages = readWorkspace(root);
+    manifest.remainder = createRemainderPlan(packages);
     stageArtifact(
         root,
         manifest,
@@ -130,12 +136,83 @@ function prepare(sha) {
     console.log(
         `Workspace payload: ${manifest.files.length} files, ${manifest.files.reduce((sum, file) => sum + file.size, 0)} bytes.`,
     );
+    if (process.env.TYPEAGENT_COMPACT_ARTIFACT === "true" && plans.length > 0) {
+        const compact = createManifest(
+            root,
+            sha,
+            manifest.tests,
+            "packages",
+            runtimeClosure(
+                packages,
+                Object.values(partitionPackages).map(({ name }) => name),
+            ),
+        );
+        compact.plans = plans;
+        compact.profileSource = profile.source;
+        stageArtifact(
+            root,
+            compact,
+            path.join(process.env.RUNNER_TEMP, "fanout-package-build"),
+        );
+        console.log(
+            `Package payload (maps retained): ${compact.files.length} files, ${compact.files.reduce((sum, file) => sum + file.size, 0)} bytes.`,
+        );
+    }
+    if (process.env.TYPEAGENT_COMPACT_ARTIFACT === "true") {
+        for (const [index, group] of manifest.remainder.groups.entries()) {
+            const compact = createManifest(
+                root,
+                sha,
+                [],
+                "remainder",
+                runtimeClosure(packages, group.files),
+            );
+            compact.remainder = manifest.remainder;
+            compact.remainderGroup = String(index + 1);
+            compact.workspaceHash = createHash("sha256")
+                .update(
+                    fs.readFileSync(
+                        path.join(
+                            process.env.RUNNER_TEMP,
+                            "fanout-workspace-build",
+                            "ci-fanout-manifest.json",
+                        ),
+                    ),
+                )
+                .digest("hex");
+            stageArtifact(
+                root,
+                compact,
+                path.join(
+                    process.env.RUNNER_TEMP,
+                    `fanout-remainder-build-${index + 1}`,
+                ),
+            );
+            console.log(
+                `Remainder ${index + 1} payload (maps retained): ${compact.files.length} files, ${compact.files.reduce((sum, file) => sum + file.size, 0)} bytes.`,
+            );
+        }
+    }
 }
 
 function restored(sha) {
     const bytes = fs.readFileSync(path.join(root, "ci-fanout-manifest.json"));
     const manifest = JSON.parse(bytes);
-    verifyManifest(root, sha, manifest, "workspace");
+    verifyManifest(
+        root,
+        sha,
+        manifest,
+        process.env.TYPEAGENT_PARTITION_ARTIFACT_SCOPE ?? "workspace",
+    );
+    if (manifest.scope === "packages")
+        assert.deepEqual(
+            manifest.directories,
+            runtimeClosure(
+                readWorkspace(root),
+                Object.values(partitionPackages).map(({ name }) => name),
+            ),
+            "Runtime dependency closure changed",
+        );
     assert.deepEqual(
         manifest.plans.map((plan) => plan.target),
         process.platform === "darwin" ? [] : Object.keys(partitionPackages),
@@ -161,15 +238,9 @@ function attempt(target, files, output, retry) {
         ...files.map((file) => path.join(root, file)),
         ...(retry ? ["--no-cache"] : []),
     ];
-    const windows = process.platform === "win32";
-    const command = windows ? (process.env.ComSpec ?? "cmd.exe") : "pnpm";
-    const commandArgs = windows
-        ? ["/d", "/v:off", "/s", "/c", windowsPnpmCommand(args)]
-        : args;
-    const result = spawnSync(command, commandArgs, {
+    const result = spawnPnpm(args, {
         cwd: path.join(root, partitionPackages[target].directory),
         stdio: "inherit",
-        ...(windows ? { windowsVerbatimArguments: true } : {}),
     });
     if (result.error) throw result.error;
     assert.equal(result.signal, null, "Package partition interrupted");
@@ -265,9 +336,14 @@ function profileLogs(run, files) {
     const timings = {};
     for (const file of files) {
         const text = fs.readFileSync(file, "utf8");
-        const observed = file.endsWith(".json")
-            ? JSON.parse(text).timings
-            : timingsFromLog(text);
+        const report = file.endsWith(".json") ? JSON.parse(text) : undefined;
+        if (report)
+            assert.equal(
+                report.firstPassSucceeded,
+                true,
+                "Profile first-pass and retry timings separately",
+            );
+        const observed = report ? report.timings : timingsFromLog(text);
         assert.ok(
             observed && Object.keys(observed).length > 0,
             "Missing per-file timings",
@@ -305,14 +381,7 @@ function main() {
         return;
     }
     const sha = process.env.GITHUB_SHA;
-    assert.equal(
-        execFileSync("git", ["rev-parse", "HEAD"], {
-            cwd: root,
-            encoding: "utf8",
-        }).trim(),
-        sha,
-        "Checkout does not match candidate SHA",
-    );
+    verifyCheckout(root, sha);
     assert.ok(process.env.RUNNER_TEMP, "RUNNER_TEMP is required");
     const directory = path.join(process.env.RUNNER_TEMP, "fanout-partitions");
     switch (command) {

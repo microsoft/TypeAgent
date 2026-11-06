@@ -6,6 +6,16 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { partitionPackages } from "./lib/ciTestPartitions.mjs";
+import { windowsPnpmCommand } from "./lib/testRetry.mjs";
+
+export function spawnPnpm(args, options, run = spawnSync) {
+    const windows = process.platform === "win32";
+    return run(
+        windows ? (process.env.ComSpec ?? "cmd.exe") : "pnpm",
+        windows ? ["/d", "/v:off", "/s", "/c", windowsPnpmCommand(args)] : args,
+        { ...options, ...(windows ? { windowsVerbatimArguments: true } : {}) },
+    );
+}
 
 export const macosCompatibilitySuites = [
     {
@@ -39,7 +49,50 @@ export const macosCompatibilitySuites = [
     },
 ];
 
-export function localTestCommands(profile, root, workspaceConcurrency = 3) {
+function laneCommand(root, workspaceConcurrency, packages) {
+    const excluded = [
+        "@typeagent/memory-service",
+        ...Object.values(partitionPackages).map(({ name }) => name),
+    ];
+    if (
+        !Array.isArray(packages) ||
+        packages.length === 0 ||
+        new Set(packages).size !== packages.length ||
+        packages.some(
+            (name) =>
+                typeof name !== "string" ||
+                name.includes("...") ||
+                !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(
+                    name,
+                ) ||
+                excluded.includes(name),
+        )
+    ) {
+        throw new Error("Invalid fan-out remainder package selection.");
+    }
+    return [
+        {
+            cwd: root,
+            args: [
+                "-r",
+                "--no-bail",
+                "--no-sort",
+                "--stream",
+                `--workspace-concurrency=${workspaceConcurrency}`,
+                ...packages.map((name) => `--filter=${name}`),
+                "run",
+                "test:local",
+            ],
+        },
+    ];
+}
+
+export function localTestCommands(
+    profile,
+    root,
+    workspaceConcurrency = 3,
+    packages,
+) {
     if (
         !Number.isSafeInteger(workspaceConcurrency) ||
         workspaceConcurrency < 1
@@ -47,6 +100,9 @@ export function localTestCommands(profile, root, workspaceConcurrency = 3) {
         throw new Error(
             "TYPEAGENT_TEST_WORKSPACE_CONCURRENCY must be a positive safe integer.",
         );
+    }
+    if (profile === "fanout-lane") {
+        return laneCommand(root, workspaceConcurrency, packages);
     }
     if (["full", "full-without-memory", "fanout-remainder"].includes(profile)) {
         return [
@@ -108,9 +164,15 @@ export function runLocalTestPackages({
     root,
     pnpmPath,
     workspaceConcurrency = 3,
+    packages,
     run = spawnSync,
 }) {
-    const commands = localTestCommands(profile, root, workspaceConcurrency);
+    const commands = localTestCommands(
+        profile,
+        root,
+        workspaceConcurrency,
+        packages,
+    );
     if (!pnpmPath || !fs.existsSync(pnpmPath)) {
         throw new Error("Run local package tests through pnpm run.");
     }
@@ -158,5 +220,8 @@ if (
         workspaceConcurrency: Number(
             process.env.TYPEAGENT_TEST_WORKSPACE_CONCURRENCY ?? "3",
         ),
+        packages: process.env.TYPEAGENT_TEST_PACKAGES_JSON
+            ? JSON.parse(process.env.TYPEAGENT_TEST_PACKAGES_JSON)
+            : undefined,
     });
 }
